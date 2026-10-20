@@ -215,16 +215,16 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, screen, HUD and input
 
 10. ☑ C10 The virtual theater screen for menus, boards and cinemas
-11. ◐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
+11. ☑ C11 `DeviceKind.Xr`, XR actions and the screen pointer
 12. ☑ C12 The cockpit-locked HUD panel
 13. ☑ C13 World-tied markers and the edge-marker ring
    ☑ C13b The gunsight reticle collimated at infinity in VR
-14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
+14. ☑ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 ### Wave D, cutscenes, comfort and performance
 
-15. ◐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
-16. ◐ D16 Comfort: fades, tunnel vignette, render-scale slider
+15. ☑ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
+16. ☑ D16 Comfort: fades, tunnel vignette, render-scale slider
 17. ☑ D17 Port the screen-space effects to multiview
 18. ☑ D18 Performance pass to the 90 Hz budget
 19. ☑ D19 Spyglass as a binocular quad
@@ -1827,11 +1827,11 @@ fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with c
 goldens 29/29 hash-identical. At the headset (steps 8, 9, 26 and 28 of E21's batch, VDXR at 90 Hz;
 9 and 26 on SteamVR at 120 Hz): every check above passed, Built-in's moot.
 
-## C11 ◐ `DeviceKind.Xr`, XR actions and the screen pointer
+## C11 ☑ `DeviceKind.Xr`, XR actions and the screen pointer
 
-**Outcome: built and pinned on the stand-in; the bindings on Touch controllers and the pointer's
-feel passed at the headset, a trigger bound to a flight action among them; the controllers-off
-check is still to judge.** The two hand controllers are one device in the binding seam
+**Outcome: built and pinned on the stand-in; the bindings on Touch controllers, the pointer's
+feel and the controllers-off hand-over passed at the headset, a trigger bound to a flight action
+among them.** The two hand controllers are one device in the binding seam
 (`DeviceKind.Xr`, appended), shipped on three flight actions, all on the left hand, rebindable on
 both Controls pages under a headset. The right hand's laser points and clicks on the theater screen
 through C10's seam, and every polled reader takes it through one pointer source. The project ships
@@ -1958,7 +1958,9 @@ app, Touch controllers on):
   left stick click recenters: pass (VDXR).
 - (6) The pointer's feel (beam and dot size and colour, steadiness, click latency): all fine, the
   values stay as built.
-- (7) Both controllers off, the beam gone: not judged.
+- (7) Controllers off (step 40, VDXR): the right one gone hands the laser to the left; both gone
+  leave no beam or dot, nothing clicks, and the desktop mouse drives the screen; a woken controller
+  draws its beam again: pass.
 
 **⚠ Traps.**
 - Do not read a hand's inputs without its profile check: OpenXR stops writing an unbound tracker,
@@ -1975,7 +1977,7 @@ passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 
 `c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
 hash-identical on two goldens re-runs (#114's pattern). At the headset (step 26 of E21's batch on
 VDXR at 90 Hz and SteamVR at 120 Hz): checks 1, 3 to 6 passed, check 4's trigger half on SteamVR
-after `5b33804c9`; owed: check 7.
+after `5b33804c9`; check 7 at step 40 on VDXR.
 
 ## C12 ☑ The cockpit-locked HUD panel
 
@@ -2448,7 +2450,7 @@ skipped with clean engine errors, goldens 32/32 hash-identical. At the headset (
 of E21's batch, VDXR at 90 Hz; steps 7 and 9 on SteamVR at 120 Hz): every check above passed, with
 the red index mark and the smaller ring of `0a620d47d` and the eye of `a97fd1caa`.
 
-## C14 ◐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
+## C14 ☑ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 **Goal.** Two parts. (1) The sun's lens flare is computed in angles and drawn in the world: the core
 and the three ghost rings as billboards at sky-dome distance along the line from the sun direction
@@ -2582,8 +2584,9 @@ world rig's wash and the director's `LeavingFade`; the flat canvas layers are un
 gain is read from `GraphicsMode.Enhanced` each tick, so a live switch to Original drops it to 1.
 **At the headset** (E21's batch, step 17, C3 Enhanced near the sun, VDXR at 90 Hz): the VR flare
 keeps its rings, the author's choice over the core and wash alone. The near quads showed no defect
-through the batch (the fades in D16, the cloud whiteout in B8). **Owed to the author:** a look at
-the gain montage (`montage-C14b-overview.png`) to confirm the rings; no verdict on it was found.
+through the batch (the fades in D16, the cloud whiteout in B8). The gain montage, re-shot on the
+merged tree (the six poses, `--screen-flare` against the world rig, flat Enhanced on C3): the
+author judged the rings to read right at 2.5/2.5/2.0, so the gain stays.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
@@ -2626,17 +2629,17 @@ clean engine errors, goldens 27/27 hash-identical.
 **Verified.** The complete battery on the merged tree with B7 and the C14 follow-up: build PASS,
 units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
 hash-identical. At the headset (step 17 of E21's batch, VDXR 1.0.10 at 90 Hz): the rings stay in
-VR; the gain montage's look is still owed.
+VR; the gain montage's rings passed.
 With the review fixes (the flare's own layers, the headset boot's recovery, the start-failure notice): the
 complete battery on the merged tree, build PASS, units 6531 passed 3 skipped, engine 552 passed 2
 skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
 
 # Wave D, cutscenes, comfort and performance
 
-## D15 ◐ Cutscenes as a stereo 3D-cinema pair on the theater screen
+## D15 ☑ Cutscenes as a stereo 3D-cinema pair on the theater screen
 
-**Outcome: built and pinned on the stand-in; the window feel and the comfort of the depth passed at
-the headset; the intro without its letterbox bars is still to see there.** A presenting cutscene under VR plays on the theater screen in
+**Outcome: built and pinned on the stand-in; the window feel, the comfort of the depth and the
+intro without its letterbox bars passed at the headset.** A presenting cutscene under VR plays on the theater screen in
 the full dark surround: two cameras on the authored camera, the runtime's IPD apart, each eye's
 picture picked by `VIEW_INDEX` in the board's 4:3 rect, converged on the letterbox card so the bars
 stand on the screen plane. The XR origin no longer takes the cutscene camera's heading (B9's arm);
@@ -2765,12 +2768,13 @@ stay as built. Not repeated on SteamVR.
 **Verified.** The complete battery on the merged tree with D15 and C12: build PASS, units 6462
 passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
 hash-identical. At the headset (steps 26 and 29 of E21's batch, VDXR 1.0.10 at 90 Hz, 2112x2304
-per eye): checks 1 to 6 passed with the bars; the intro without them (`07b0b2417`) is owed.
+per eye): checks 1 to 6 passed with the bars; the intro without them (`07b0b2417`) passed at
+step 41.
 
-## D16 ◐ Comfort: fades, tunnel vignette, render-scale slider
+## D16 ☑ Comfort: fades, tunnel vignette, render-scale slider
 
-**Outcome: built and pinned on the stand-in; the fades, the vignette and the render scale passed at
-the headset, the vignette after a fix; the mission end's fade is still to see there.** Every cut the headset sees lands on a
+**Outcome: built and pinned on the stand-in; the fades, the mission end's fade, the vignette and
+the render scale passed at the headset, the vignette after a fix.** Every cut the headset sees lands on a
 black frame. A cut the game makes (`XrRig.Cut`: a respawn, a crash, a new aircraft, a static
 camera's re-site, the camera taken by another owner or handed back, so a cutscene's take and
 hand-back) snaps to black on its own frame and clears over 0.3 s. A view key (`F8`, D-pad down, the
@@ -2917,7 +2921,8 @@ At the headset (E21's batch; VDXR at 90 Hz, step 18 again on SteamVR at 120 Hz):
 errors, goldens 35/35 hash-identical. A first run on the tree without the exit fix crashed one shard
 at quit after a passing report. At the headset (steps 18, 21 to 23, 26 and 29 of E21's batch, VDXR
 1.0.10 at 90 Hz; step 18 on SteamVR at 120 Hz): checks 1 to 4 and 5's rows and live render scale
-passed, the vignette after `efbf65f35`; the mission end's 2 s fade is owed.
+passed, the vignette after `efbf65f35`; the mission end's 2 s fade passed at step 41 (C3 M01,
+the player's crash ending the mission).
 
 ## D17 ☑ Port the screen-space effects to multiview
 
@@ -3472,7 +3477,7 @@ exit 0. At the headset (step 30 of E21's batch on VDXR 1.0.10 at 90 Hz, the stor
 ## E21 ◐ At-the-headset playtests on both runtimes
 
 **Outcome: the headset batch is flown on both runtimes and its verdicts are recorded per item;
-network play in VR and a few looks are still owed.**
+network play in VR is still owed.**
 
 **Goal.** The author has flown each mode in VR on VDXR and on Steam Link/SteamVR and judged comfort,
 controller binding, the theater screen, the HUD and the cutscene window.
@@ -3485,7 +3490,8 @@ controller binding, the theater screen, the HUD and the cutscene window.
   performance (D18); 7-17 the cockpit, gunsight, HUD panel, markers, spyglass, sprites and flare;
   18-25 views and comfort; 26-29 menus, controllers, a cinema and a cutscene; 30 the per-plane
   tuning (E20); 31-34 the render thread, the runtime's recenter and the VR mode option; 35-37 the
-  sunny maps. Step 27 (Built-in) was dropped with Built-in itself; C3's sun (step 35) was judged at
+  sunny maps; 38 Look Forward and Look Back recentering; 39 the flat flare's live swap on `G`; 40
+  the controllers off; 41 a campaign intro without bars and the mission end's fade. Step 27 (Built-in) was dropped with Built-in itself; C3's sun (step 35) was judged at
   step 17. Under SteamVR steps 31, 32, 7, 9, 26 and 18 were repeated and passed; step 31's
   recenter and parallax were not tried there (step 32's recenter was).
 - **Modes flown.** Free flight on C1, C3, C4 and C5; a dogfight against attacking Furies; the stunt
@@ -3507,8 +3513,7 @@ controller binding, the theater screen, the HUD and the cutscene window.
   over the dash; the flat view's eye and gunsight offset is not fixed; the compass and sight-edge
   flicker about 67 km from the map centre is ignored for now and not filed; the Godot 4.7.2
   upgrade is deferred, possibly to 4.8.
-- **Still owed.** Network play in VR; the controllers-off check (C11); the intro without its letterbox bars (D15); a campaign mission's 2 s end fade (D16);
-  the C14 gain montage, a flat look. SteamVR repeated only steps 7, 9, 18, 26, 31 and 32, so the
+- **Still owed.** Network play in VR. SteamVR repeated only steps 7, 9, 18, 26, 31 and 32, so the
   cutscene window, among others, was seen on VDXR alone.
 
 **Approach.** The checks ran as one scripted batch in place of `playtest` issues, each verdict
