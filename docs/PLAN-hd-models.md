@@ -24,9 +24,9 @@ its items come from this session's analysis of the code and are not re-verified 
 
 - **[cloud]**: needs no game data. The code and its proof are engine-free unit tests or a suite over
   `--synthetic-data` with a generated `.glb`, so it can be done in a cloud session.
-  ⚠ The cloud container this plan was written in has neither `dotnet` nor Godot nor `pwsh`;
-  a cloud session either gets an environment that installs them, or its item lands as code and is
-  verified by the next local `.\RunTests.ps1`. <TODO: decide which, and record the environment setup>
+  A cloud session installs the .NET 8 SDK, PowerShell 7 and CI's Godot build through the
+  SessionStart hook `.claude/hooks/cloud-setup.sh`, so it runs the units and the CI tier; the
+  windowed battery and goldens wait for the next local `.\RunTests.ps1`.
 - **[local]**: needs the player's install and `extracted/` (real planes, real chapter worlds, the
   8-chapter regression, a look at the screen), so it runs on the development machine.
 
@@ -141,8 +141,7 @@ so two files sharing a key resolve by name: `foo.gltf` beats `foo.glb`, and in a
 
 **Verified.** In a cloud container, on the tree carrying A1, A2 and A3: `dotnet build
 CSVM/CSVM.sln` with 0 warnings and the full unit run (6351 passed, 0 failed, 314 skipped) green.
-The `.ps1` gates and an in-game launch were not run. <TODO: run the content gate and one launch
-with a pack folder locally.>
+The `.ps1` gates and an in-game launch were not run. Locally, the content gate ran on every later landing commit, and the wave C items launched the game with pack folders.
 
 **Original approach (kept for reference).**
 
@@ -180,8 +179,7 @@ and textures stay in separate folders.
 
 **Verified.** In a cloud container, on the tree carrying A1, A2 and A3: `dotnet build
 CSVM/CSVM.sln` with 0 warnings and the full unit run (6351 passed, 0 failed, 314 skipped) green.
-The `.ps1` gates and an in-game launch were not run. <TODO: run the content gate and one launch
-with a pack folder locally.>
+The `.ps1` gates and an in-game launch were not run. Locally, the content gate ran on every later landing commit, and the wave C items launched the game with pack folders.
 
 **Original approach (kept for reference).**
 
@@ -221,7 +219,7 @@ sideless rudder kind.
 
 **Verified.** In a cloud container: `dotnet build CSVM/CSVM.sln` with 0 warnings, 28 `PlaneRig`
 tests and the full unit run (6342 passed, 0 failed, 314 skipped) green. The `.ps1` gates were
-checked by hand only. <TODO: run the content gate locally.>
+checked by hand only. Locally, the content gate ran on every later landing commit.
 
 **Owed.** The schema has no permanent home a pack author can read; the type's doc comment lists
 the sections only. Answered by D31: the pack-author reference is `docs/formats/model-packs.md`,
@@ -319,9 +317,7 @@ through `SharedMesh`. Suite `hd-model-swap` (CI tier), shown to fail with the ho
 removed. Replacement surfaces still wear the imported `StandardMaterial3D` until B13.
 
 **Verified.** In a cloud container: build, format, StyleCop and the five gate scripts clean; 6357
-unit tests pass; the CI tier 195 passed, 0 failed. <TODO: locally, the full `RunTests.ps1` with
-goldens (the no-pack path should leave every golden unchanged) and the terrain rule against real
-chapters; clutter replacement has no suite, since the synthetic data has no clutter templates.>
+unit tests pass; the CI tier 195 passed, 0 failed. Locally, the complete battery left every golden unchanged with no pack, the 8-chapter regression matched main, and C23's painted pack over C1 turned only non-terrain parts. Clutter replacement has no suite, since the synthetic data has no clutter templates.
 
 **Original approach (kept for reference).**
 
@@ -367,8 +363,7 @@ pass 0, file order as the within-mesh rank. CLAMP reads each replacement surface
 of it, a graphics-mode switch and `SceneBuilder.Repaint`, and was shown to fail four ways.
 
 **Verified.** In a cloud container: build, format, StyleCop and the five gate scripts clean; 6359
-unit tests pass; the CI tier 195 passed, 0 failed. <TODO: locally, goldens with no pack, a look at a
-replaced prop under fog and through a mode switch.> The real livery through `PlanePainter` is
+unit tests pass; the CI tier 195 passed, 0 failed. Locally, goldens with no pack are unchanged; a look at a replaced prop under fog and through a mode switch is owed at the controls. The real livery through `PlanePainter` is
 answered by D31: a texture-named replacement surface wears every livery the original does.
 
 **Owed.** <TODO: decide each: a `MASK` `alphaCutoff` other than 0.5 is not honoured (the shader's
@@ -528,7 +523,7 @@ and at the rank cap (97 of the 307 models' bases sit there) it z-fights. Followi
 pending a world-prop round trip (C23), since a texture worn both as base and as overlay has no one
 pass.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Original approach (kept for reference).**
 
@@ -572,7 +567,7 @@ trip packs one copy of the unedited file per meshed node, named for it (`planes/
 rewrite), `hd-model-swap` (an exported crate wears its original material, red without the naming) and
 `hd-model-mesh-import` (the `.001` fallback, red without it).
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Owed.** The draw-priority TODO is answered by B16: a replacement surface takes its texture's
 original priority, and the Bloodhawk's logos survive the round trip. A chapter key replaces every node
@@ -637,7 +632,7 @@ curves scale the replacement as they scale the original base (radius 0.12 m for 
 `bsplsh`), so a pack authors the base at that size. The weapon breadcrumbs print how many meshes came
 from the pack.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Original approach (kept for reference).**
 
@@ -685,7 +680,7 @@ painted pack); an unedited C5 `g14324` (an overlay texture also worn as base) an
 (`no_clutter` ranked before clear) render 0 pixels apart from no pack at the node stage and close up.
 This answers C22's flyout export TODO and B16's deferred overlay fork.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Ruling.** Effects are sited from the gamez box, the same box the gameplay readers measure, so a
 replacement never moves fire or smoke from where the original puts them. Siting from the drawn box
@@ -752,7 +747,7 @@ build (0.15 to 0.18 ms for the original's 1,098 triangles, 2.4 ms for the full 4
 replacement). `hd-model-swap` checks the airframe file, an empty file and a bare and chapter file,
 red with the key guard removed and with the pack mesh ignored.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Original approach (kept for reference).**
 
@@ -790,7 +785,7 @@ gun log and the rocket launch log now carry the launch point in the airframe's f
 used here and the one C26's owed check needs. A moved firepoint moves the tracer origin and gun
 convergence; under C26's ruling that stays with the owner's rig.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Original approach (kept for reference).**
 
@@ -834,7 +829,7 @@ owner's plane wears that machine's rig, so a rocket can leave from a place other
 drawn there. The alternatives (draw-only weapon markers as `vr_cockpits.json`'s store offsets do,
 ignoring the rig in network play, a hash that refuses a mismatch) were declined.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Owed.** Two local instances, host with a rig moving `firepoint1` and `pylon1`, guest with
 `--no-hd-models`: the host's tracers and rockets leave from the moved points on both screens, the
@@ -888,7 +883,7 @@ painted Fortune skin the export embedded. A blake flight crash with four Blender
 their paint is traced to code, not seen. The pack-author constraint and the rest of the pack format
 are written up in `docs/formats/model-packs.md`, which answers A3's documentation TODO.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree: the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical), and the 8-chapter `--freecam` regression with no pack matched main in every chapter (node, mesh and sprite counts, log lines, WARN set and screenshot).
 
 **Original approach (kept for reference).**
 
