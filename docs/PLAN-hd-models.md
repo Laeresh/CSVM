@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ [cloud] glTF mesh import with winding reversal and a shared cache
 12. ☐ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
 13. ☐ [cloud] code, [local] look: material mapping onto the remake's shaders
-14. ☐ [cloud] Apply `rig.json` to the built plane
+14. ☑ [cloud] Apply `rig.json` to the built plane
 15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
 
 ### Wave C, content paths (all [local])
@@ -347,7 +347,32 @@ material; local look at a replaced prop under fog and through a graphics-mode sw
 
 **⚠ Traps.** <TODO: none known yet>.
 
-## B14 ☐ [cloud] Apply `rig.json` to the built plane
+## B14 ☑ [cloud] Apply `rig.json` to the built plane
+
+**Landed.** `CSVM/src/Mech3/PlaneRigPatch.cs`, run inside `PlaneBuilder.Build` after
+`BuildSubtree`, so every caller (human, AI, labs, probes) gets it: markers move or are added (only
+`firepoint1..8`, `pylon1..8`, `target` and the reference markers), prop and surface overrides are
+stamped, flares chosen; then `CockpitCameraOffset` is read (the rig's `cockpit_camera` if given),
+the interior mounts and the flare walk runs. Callers' `Loadout.Bind` sees the patched tree. A bad
+rig frees the node and throws `InvalidDataException` naming the source and entry. The airframe key
+is the model node (`player_bhawk`); `HdModels.RigFor` reads `planes/<model node>/rig.json`, the one
+`.json` the pack index accepts. The four open fields: `hinge.*` and prop axes are plane frame,
+converted to node-local, a hinge axis read as a line so its direction never flips deflection; a
+flare's side comes from its plane-frame x, and a rig side replaces that side's flare; a prop on a
+node `PropParts` gives no spin needs both `axis` and `deg_per_sec`; rudder `side` has no effect.
+`PropAnimator` turns a tilted rig axis about its own line. Rig surfaces skip the `InNumbering` stop.
+Suite `plane-rig` (CI tier), shown to fail with the hinge pivot or prop override broken.
+
+**Verified.** In a cloud container on the merged tree: build, format, StyleCop and the five gate
+scripts clean; 6357 unit tests pass; Godot import clean; the CI tier 194 passed, 0 failed.
+
+**Owed.** <TODO: which `wing_flare` is port on real data; the fuel-leak def's
+`Suspend("wing_flare2")` acts on the darkened original when a rig replaces that flare, decide
+whether it should follow the rig's node.> A bad `rig.json` fails the plane build, which is
+Decision 8; <TODO: decide whether a menu launch should report it and fall back instead.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** After `PlaneBuilder.Build` and before `Loadout.Bind`, the rig moves markers, adds marker
 nodes the loadout names, and feeds prop, surface and flare overrides to their classifiers.

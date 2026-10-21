@@ -31,7 +31,7 @@ internal sealed class PackIndex : IDisposable
         return c != 0 ? c : StringComparer.Ordinal.Compare(a, b);
     };
 
-    private readonly Dictionary<string, (ZipArchive? Zip, string Path, string Extension)> _byKey = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (ZipArchive? Zip, string Path, string Extension, string Pack)> _byKey = new(StringComparer.Ordinal);
     private readonly List<ZipArchive> _zips = new();
 
     private PackIndex(string? root)
@@ -44,6 +44,9 @@ internal sealed class PackIndex : IDisposable
 
     /// <summary>How many keys the folder offers.</summary>
     public int Count => _byKey.Count;
+
+    /// <summary>Every key the folder offers, in no set order.</summary>
+    public IEnumerable<string> Keys => _byKey.Keys;
 
     /// <summary>An index of no folder, for a launch that reads none.</summary>
     public static PackIndex Empty() => new(null);
@@ -95,6 +98,13 @@ internal sealed class PackIndex : IDisposable
     public PackEntry? Find(string key) =>
         _byKey.TryGetValue(key, out var source)
             ? new PackEntry(source.Extension, source.Zip == null ? source.Path : null)
+            : null;
+
+    /// <summary>Where the file under <paramref name="key"/> is read from, as a message names it.
+    /// That is its path on disk, or the zip's path and the entry inside it. Null for no file.</summary>
+    public string? Origin(string key) =>
+        _byKey.TryGetValue(key, out var source)
+            ? source.Zip == null ? source.Path : $"{source.Pack}:{source.Path}"
             : null;
 
     /// <summary>The bytes of the file under <paramref name="key"/>, or null.</summary>
@@ -170,6 +180,6 @@ internal sealed class PackIndex : IDisposable
             return;
         }
 
-        _byKey[key] = (zip, path, ext);
+        _byKey[key] = (zip, path, ext, file.Pack);
     }
 }

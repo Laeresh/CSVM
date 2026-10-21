@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
 
@@ -183,10 +184,9 @@ public sealed class PlaneBuilder
     public string? SkinPrefix => _skinPrefix;
 
     /// <summary>The plane-local offset of this aircraft's authored <c>cockpit_camera</c> marker
-    /// (docs/formats/markers.md), read the same way <see cref="MarkerRig"/> reads weapon markers,
-    /// accumulated from below the plane root, skipping the cockpit-interior/wreck subtrees that
-    /// may carry their own same-named node. Zero before <see cref="Build"/> runs, and the
-    /// original's own fallback for a plane with no such node
+    /// (docs/formats/markers.md), read as <see cref="MarkerRig.FindNamedMarker"/> reads it. A plane
+    /// rig's <c>cockpit_camera</c> position replaces the marker's. Zero before <see cref="Build"/>
+    /// runs, and the original's own fallback for a plane with no such node
     /// (docs/org/cameraViews.md, "Where the first-person camera sits").</summary>
     public Vector3 CockpitCameraOffset { get; private set; }
 
@@ -249,18 +249,41 @@ public sealed class PlaneBuilder
     public static Transform3D StereoMount(Vector3 marker, float metresPerUnit) =>
         new(Basis.Identity.Scaled(Vector3.One * metresPerUnit), marker - (marker * metresPerUnit));
 
-    /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
+    /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk"), with the model
+    /// pack's <c>rig.json</c> for that node applied (<see cref="PlaneRigPatch"/>). Throws
+    /// <see cref="System.IO.InvalidDataException"/> for a rig that fails its checks.</summary>
     public Node3D Build(string rootName)
     {
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
         EnsurePainter(root);
-        CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
         var built = _scene.BuildSubtree(root, Skip)!;
+        FlareChoice? flares = null;
+        try
+        {
+            // ⚠ Patch before anything reads a marker or classifies a part. The camera read, the
+            // interior mount, the flare walk and every caller's animators and loadout bind follow it.
+            if (PlaneRigPatch.Load(HdModels.Current, rootName) is { } rig)
+            {
+                flares = PlaneRigPatch.Apply(rig, built, _gamez, root);
+                CockpitCameraOffset = PlaneRigPatch.MarkerPosition(rig, "cockpit_camera")
+                    ?? MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
+            }
+            else
+            {
+                CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
+            }
+        }
+        catch
+        {
+            built.Free();
+            throw;
+        }
+
         // ⚠ Before the flare/panel walk, not after: that walk is what hides and collects the two
         // cockpit damage panels (pcdp4/pcdp6), which live inside the interior.
         MountCockpitInterior(built, root);
-        CollectWingFlares(built);
+        CollectWingFlares(built, flares);
         return built;
     }
 
@@ -369,12 +392,17 @@ public sealed class PlaneBuilder
     }
 
     // Hides and re-skins the wingtip flares (WingLights.cs), and in the same walk collects
-    // the flight build's damage panels: torn pdpN hidden, healthy pdpN_h as built.
-    private void CollectWingFlares(Node node)
+    // the flight build's damage panels: torn pdpN hidden, healthy pdpN_h as built. A rig's
+    // flare choice adds its nodes to the name match and darkens the originals it replaced.
+    private void CollectWingFlares(Node node, FlareChoice? rig)
     {
         if (node is Node3D n3d)
         {
-            if (WingLights.IsFlare(n3d.Name))
+            if (rig != null && rig.Displaced.Contains(n3d))
+            {
+                n3d.Visible = false;
+            }
+            else if (WingLights.IsFlare(n3d.Name) || (rig != null && rig.Flares.Contains(n3d)))
             {
                 n3d.Visible = false;
                 foreach (var child in n3d.GetChildren())
@@ -406,7 +434,7 @@ public sealed class PlaneBuilder
             }
         }
         foreach (var child in node.GetChildren())
-            CollectWingFlares(child);
+            CollectWingFlares(child, rig);
     }
 
     // Builds the interior on its own pass, since the depth bias must know the mount scale. The flat

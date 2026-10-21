@@ -45,35 +45,41 @@ public sealed class PropAnimator
 
     private static void Collect(Node node, List<Spinner> spinners)
     {
-        if (node is Node3D n3d && PropParts.Spin(PropParts.Classify(n3d.Name), out var axis, out var deg))
-            spinners.Add(new Spinner(n3d, axis * Mathf.DegToRad(deg)));
+        if (node is Node3D n3d && PropParts.Spin(n3d, out var axis, out var deg))
+            spinners.Add(new Spinner(n3d, axis, Mathf.DegToRad(deg)));
         foreach (var child in node.GetChildren())
             Collect(child, spinners);
     }
 
-    // One spinning disc: its rest pose and rate (radians/second, local axes),
-    // accumulated total time. Recomputes an absolute pose from rest every Advance
-    // via SpinMotion.ComposeSpin rather than stepping `RotateObjectLocal`,
-    // so a long session cannot drift, same reasoning as `SpinMotion` itself.
+    // One spinning disc: its rest pose, axis, rate and accumulated time. Each Advance recomputes an
+    // absolute pose from rest rather than stepping `RotateObjectLocal`, so a long session cannot drift.
+    // A plane rig's axis may lean off every local axis, where ComposeSpin's per-axis steps would
+    // wobble. That axis turns about its one line instead, the same rotation for a single axis.
     private sealed class Spinner
     {
         private readonly Node3D _node;
         private readonly Basis _rest;
-        private readonly Vector3 _rate; // radians/second, local axes
+        private readonly Vector3 _axis; // local, unit length
+        private readonly float _rate;   // radians/second about _axis
+        private readonly bool _single;  // the axis is one local axis, ComposeSpin's case
         private float _t;
 
-        public Spinner(Node3D node, Vector3 rateRadPerSec)
+        public Spinner(Node3D node, Vector3 axis, float rateRadPerSec)
         {
             _node = node;
             _rest = node.Transform.Basis;
+            _axis = axis;
             _rate = rateRadPerSec;
+            _single = (axis.X == 0f ? 0 : 1) + (axis.Y == 0f ? 0 : 1) + (axis.Z == 0f ? 0 : 1) == 1;
         }
 
         public void Advance(float dt)
         {
             _t += dt;
             var xf = _node.Transform;
-            xf.Basis = SpinMotion.ComposeSpin(_rest, _rate, _t);
+            xf.Basis = _single
+                ? SpinMotion.ComposeSpin(_rest, _axis * _rate, _t)
+                : _rest.Rotated((_rest * _axis).Normalized(), _rate * _t);
             _node.Transform = xf;
         }
     }

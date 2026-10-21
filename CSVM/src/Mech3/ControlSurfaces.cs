@@ -16,6 +16,16 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class ControlSurfaces
 {
+    /// <summary>The meta a plane rig stamps on a surface it names: its <see cref="Kind"/> as an int.
+    /// A node carrying it stands outside <see cref="InNumbering"/> (<see cref="PlaneRigPatch"/>).</summary>
+    public const string KindMeta = "rig_surface_kind";
+
+    /// <summary>The rig's hinge axis on that node, node-local and unit length; absent keeps <see cref="HingeAxis(Kind)"/>.</summary>
+    public const string HingeAxisMeta = "rig_hinge_axis";
+
+    /// <summary>The rig's hinge point on that node, node-local; absent keeps the node's origin.</summary>
+    public const string HingePivotMeta = "rig_hinge_pivot";
+
     // Digits are required on the bare rudder form: "l_rudder"/"r_rudder" without digits are hinge
     // parent groups (e.g. Fury, Peacemaker), not the deflecting mesh node.
     private static readonly Regex AileronRe = new("^([lr])_aileron[0-9]+$", RegexOptions.IgnoreCase);
@@ -26,6 +36,14 @@ public static class ControlSurfaces
     // Side matters on the elevators too: the original mixes a differential roll term into them,
     // so left and right settle at different angles for the same stick.
     public enum Kind { None, AileronLeft, AileronRight, ElevatorLeft, ElevatorRight, Rudder }
+
+    /// <summary>A built node's kind: the rig's when one is stamped on it, else its Godot name's.</summary>
+    public static Kind Classify(Node3D node) =>
+        node.HasMeta(KindMeta) ? (Kind)node.GetMeta(KindMeta).AsInt32() : Classify(node.Name);
+
+    /// <summary>A built node's node-local hinge axis: the rig's when stamped, else its kind's.</summary>
+    public static Vector3 HingeAxis(Node3D node, Kind kind) =>
+        node.HasMeta(HingeAxisMeta) ? node.GetMeta(HingeAxisMeta).AsVector3() : HingeAxis(kind);
 
     public static Kind Classify(string name)
     {

@@ -1258,7 +1258,8 @@ Spins the flying aircraft's prop and rotor blur discs. `Build` collects every no
 classifies (rest pose plus rate, radians per second about local axes) and `Advance` recomputes each
 disc's absolute pose from its stored rest pose through `SpinMotion.ComposeSpin`, the same
 accumulate-from-rest decode `AnimRuntime` plays the ambient world's `XYZ_ROTATION` spins through, so
-a long flight session cannot drift. `FlightController` drives it throttle-scaled with a
+a long flight session cannot drift. A plane rig's axis off every local axis turns about its own line
+instead (`Mech3/PlaneRigPatch.cs`). `FlightController` drives it throttle-scaled with a
 `PropIdleSpin` floor and zero while crashed. `--fly` only; the static viewer keeps the still disc.
 
 ## src/Flight/Airframe/PropellerSlot.cs
@@ -1312,7 +1313,7 @@ node takes which slot: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Airframe/ControlSurfaceAnimator.cs
 The node side of `ControlSurfaceMix`: collects every classified surface the original's numbered
-lists reach (`ControlSurfaces.InNumbering`) and poses it absolutely
+lists reach (`ControlSurfaces.InNumbering`), plus every surface a plane rig names, turning about the rig's hinge (`Mech3/PlaneRigPatch.cs`), and poses it absolutely
 (`Basis = base · Rot(hingeAxis, slotAngle · scale)`) from its build-time local basis rather than
 accumulating, owning the two frame flips the original has no need of, a mount rotated by yaw π and a
 nose-mounted canard that raises the nose the other way. A surface inside the cockpit interior turns

@@ -145,7 +145,7 @@ re-liveries the built plane in place, `BuildDestroyed` builds the wreck subtree 
 plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanels` and
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
-(`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
+(`PropParts.cs`); `Build` applies the model pack's `rig.json` to the built tree (`PlaneRigPatch.cs`), then reads `CockpitCameraOffset` off the `cockpit_camera` marker or the rig's position for it, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
 mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt, or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`) and draws the sight's reticle collimated (`GunsightReticle.cs`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/CockpitPlate.cs
@@ -220,7 +220,8 @@ Classifies a plane's propeller and rotor subnodes by name (`staticpropN`/`static
 `nitropropN`, `propN`/`propNb`, `rotorN`/`rotorNb`) and supplies each spinning kind's local axis
 and rate: the `XYZ_ROTATION` values from `plane_props.json` (`spinprops`) and `autogyro.json`
 (`agyro_rotors`), props spinning about local Z and rotors about local Y. Units and keys:
-[../formats/anim-definitions.md](../formats/anim-definitions.md). `PlaneBuilder.cs` is the one caller.
+[../formats/anim-definitions.md](../formats/anim-definitions.md). `Spin(Node3D)` reads a plane rig's
+stamped axis and rate first (`PlaneRigPatch.cs`). Read `PlaneBuilder.cs` and `Flight/Airframe/PropAnimator.cs` next.
 
 ## src/Mech3/ControlSurfaces.cs
 Classifies a plane's control-surface mesh nodes and their hinge axes: the deflecting node
@@ -229,7 +230,7 @@ hinge parent group whose transform places and orients the hinge line, ailerons a
 hinging about local X and rudders about local Y. The name patterns are the original's own six
 `sprintf` node lists, which is why the elevators classify per side: they carry a differential roll
 term. `InNumbering` keeps the lists' stop at the first missing index over the whole plane,
-`cockpit1` included; the `_rotate` and digitless names are remake-only widenings outside it. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
+`cockpit1` included; the `_rotate` and digitless names are remake-only widenings outside it. A plane rig's stamped kind, hinge axis and hinge point (`PlaneRigPatch.cs`) win over the name, outside the numbering. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
 
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
@@ -507,8 +508,16 @@ The engine-free reader for an airframe's `rig.json`: marker positions in the mar
 overrides (axis, rate, blur disc), control-surface overrides (kind, side, hinge) and the two
 wingtip flare nodes. Every section is optional and an absent entry keeps the original's value. It
 owns the load-time checks that need no built plane (keys, finite numbers, axes, pylon number and
-side); node names are checked where the rig is applied. Read `MarkerRig.cs`, `PropParts.cs`,
-`ControlSurfaces.cs` and `WingLights.cs` next for what each override replaces.
+side); node names are checked where the rig is applied, `PlaneRigPatch.cs`. Read `MarkerRig.cs`,
+`PropParts.cs`, `ControlSurfaces.cs` and `WingLights.cs` next for what each override replaces.
+
+## src/Mech3/PlaneRigPatch.cs
+Applies a `PlaneRig` to a freshly built plane, inside `PlaneBuilder.Build` and so before any marker
+read or `Loadout.Bind`. It moves marker nodes, adds a firepoint, pylon or reference marker the model
+lacks under `markers`, stamps prop and surface overrides as metas `PropParts` and `ControlSurfaces`
+read, and picks the flare set, each original flare's side read off its plane-frame x. Rig vectors are
+plane-frame and become node-local here. A name the model lacks outside its alternate-state subtrees
+throws naming the file and entry. Rigs come from `Extraction/HdModels.cs`'s `RigFor`, keyed by model node.
 
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,

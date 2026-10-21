@@ -12,6 +12,13 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class PropParts
 {
+    /// <summary>The meta a plane rig stamps on a node it spins: the node-local axis, unit length.
+    /// With <see cref="SpinRateMeta"/> it replaces the name class's spin (<see cref="PlaneRigPatch"/>).</summary>
+    public const string SpinAxisMeta = "rig_spin_axis";
+
+    /// <summary>The rig's spin rate on the same node, degrees per second about <see cref="SpinAxisMeta"/>.</summary>
+    public const string SpinRateMeta = "rig_spin_deg";
+
     // Settled fact, not a TUNE: the authored spin_rotorN/spin_rotorNb rates from
     // plane_props.json (spinprops) and autogyro.json (agyro_rotors). PropAnimator converts
     // them the same way AnimDefs.Spin converts the ambient world's XYZ_ROTATION spins
@@ -60,5 +67,19 @@ public static class PropParts
             _ => (Vector3.Zero, 0f),
         };
         return degPerSec != 0f;
+    }
+
+    /// <summary>A built node's spin: the rig's override when one is stamped on it, else its Godot
+    /// name's class through <see cref="Spin(Kind, out Vector3, out float)"/>.</summary>
+    public static bool Spin(Node3D node, out Vector3 axis, out float degPerSec)
+    {
+        if (node.HasMeta(SpinAxisMeta) && node.HasMeta(SpinRateMeta))
+        {
+            axis = node.GetMeta(SpinAxisMeta).AsVector3();
+            degPerSec = node.GetMeta(SpinRateMeta).AsSingle();
+            return degPerSec != 0f;
+        }
+
+        return Spin(Classify(node.Name), out axis, out degPerSec);
     }
 }

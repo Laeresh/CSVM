@@ -184,6 +184,7 @@ public static class SuiteCatalog
         "pause-board",
         "pause-preferences-live-options",
         "perf-hud-layout",
+        "plane-rig",
         "plane-shader-reuse",
         "plane-wobble-walk",
         "puffer-distance-fade",

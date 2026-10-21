@@ -93,6 +93,55 @@ public class HdModelsTests
     }
 
     [Fact]
+    public void AnAirframeRigIsReadOnlyAsPlanesAirframeRigJsonAndNamesItsSource()
+    {
+        var root = TestData.TempDir();
+        var dir = Path.Combine(root, "HDModels");
+        Zip(Path.Combine(dir, "a.zip"),
+            ("a/planes/Player_BHawk/RIG.json", "zip rig"),
+            ("a/planes/player_bhawk/rig.glb", "rig mesh"),
+            ("a/planes/player_bhawk/notes.json", "stray"),
+            ("a/planes/rig.json", "stray"),
+            ("a/planes/player_fury/extra/rig.json", "stray"),
+            ("a/rig.json", "stray"));
+        Directory.CreateDirectory(Path.Combine(dir, "b_loose", "planes", "player_fury"));
+        var loose = Path.Combine(dir, "b_loose", "planes", "player_fury", "rig.json");
+        File.WriteAllText(loose, "loose rig");
+
+        using var hd = HdModels.Open(root, "HDModels");
+
+        Assert.Equal(1, hd.Count);
+        Assert.Equal(2, hd.RigCount);
+        var zipped = hd.RigFor("PLAYER_BHAWK")!.Value;
+        Assert.Equal("zip rig", Text(zipped.Bytes));
+        Assert.Equal(Path.Combine(dir, "a.zip") + ":a/planes/Player_BHawk/RIG.json", zipped.Source);
+        Assert.Equal("loose rig", Text(hd.RigFor("player_fury")!.Value.Bytes));
+        Assert.Equal(loose, hd.RigFor("player_fury")!.Value.Source);
+        Assert.Null(hd.RigFor("player_kestrel"));
+        Assert.Null(hd.RigFor(""));
+
+        // A model node named rig is a model, never the rig, and a rig is never a model.
+        Assert.Equal("rig mesh", Text(hd.For("rig", airframe: "player_bhawk")));
+        Assert.Null(hd.For("rig", airframe: "player_fury"));
+        Assert.Null(hd.For("notes", airframe: "player_bhawk"));
+    }
+
+    [Fact]
+    public void ALaterPackWinsAnAirframesRig()
+    {
+        var root = TestData.TempDir();
+        var dir = Path.Combine(root, "HDModels");
+        Zip(Path.Combine(dir, "a.zip"), ("a/planes/player_bhawk/rig.json", "first"));
+        Zip(Path.Combine(dir, "b.zip"), ("b/planes/player_bhawk/rig.json", "second"));
+
+        using var hd = HdModels.Open(root, "HDModels");
+
+        Assert.Equal(1, hd.RigCount);
+        Assert.Equal("second", Text(hd.RigFor("player_bhawk")!.Value.Bytes));
+        Assert.Null(HdModels.Open(root, "").RigFor("player_bhawk"));
+    }
+
+    [Fact]
     public void NoFolderOrAnEmptyNameReadsNoPack()
     {
         var root = TestData.TempDir();

@@ -442,6 +442,7 @@
     "pause-world-icons": 0.913,
     "perf-hud-layout": 0.023,
     "persist-chain-kill": 1.516,
+    "plane-rig": 0.379,
     "plane-shader-reuse": 0.287,
     "plane-wobble-walk": 0.438,
     "player-destroy-choreography": 1.848,
