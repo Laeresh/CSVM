@@ -69,7 +69,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
 **Data paths, override where the extraction is read from**
-`--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--hd` · `--messages`
+`--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--hd` · `--hd-models` · `--no-hd-models` · `--messages`
 
 **Extraction, build `extracted/` from an original install and exit**
 `--extract` · `--extract-force` · `--extract-unzip` · `--extract-allow-missing` · `--unzbd`
@@ -382,6 +382,8 @@ flags and 225 bullet lines**.
 - `--sounds=` (default extracted/soundsh.zip)
 - `--zip-assets` (**read the `.zip` archives even where `--extract-unzip` left an unpacked sibling folder**, the asset shape an exported build ships. Process-wide: it flips `SessionPaths.ForceZipped` before the first path resolves, so the chapter gamez, texture and zrdr paths, the sounds archive and the menu pages' own lookups all take it. A path that only ever had the folder still resolves to the folder: the flag narrows the choice rather than adding a requirement. **Use it before shipping a build**, since the two shapes do not fail alike (INSTR-46))
 - `--hd=<folder>` (**the HD texture pack folder**, under the data root unless rooted, default `HD`, also config.json's `textures.hd`; empty reads none. Drop a pack's release zips there unchanged, `Extraction/HdTextures.cs` has the matching rules. A `--det` run, and so every `--screenshot=` and `--run-tests` run, reads no pack unless this flag names one)
+- `--hd-models=<folder>` (**the HD model pack folder**, under the data root unless rooted, default `HDModels`, also config.json's `models.hd`; empty reads none. `.glb` files are read from zips and subfolders, `.gltf` from subfolders only; `Extraction/HdModels.cs` has the key rules. Separate from the `--hd=` folder. A `--det` run reads no model pack unless this flag names one)
+- `--no-hd-models` (**read no model pack**, whatever `--hd-models=` or `models.hd` names, in either argument order)
 - `--messages=` (default extracted/messages.json, the string table resolving targets.json `MSG_*` keys for objective marker text)
 - `--extract=<install>` (**extract an original install into `<data-root>/extracted/` and exit**, before any world or menu loads: the ZBD archives through unzbd, then the `.rof` UI resources, both stamped. Prints a summary and exits 0, or 1 on any failure, including a folder that is not an install or lacks any of the 184 archives `ZbdManifest` expects. The install may be the disc, its `GAME` folder or an `.iso` (laid out by `unzbd cs disc`). A ZBD failure stops the run before the `.rof` half. No window opens, even without `--headless`. Does not remember the install for menus. `ExtractionRun`)
 - `--extract-force` (with `--extract`, **re-extract archives the stamp calls up to date**; without it an unchanged archive is skipped. Ignored with a warning when `--extract` is absent)

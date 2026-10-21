@@ -162,14 +162,28 @@ and the `--zip-assets` switch that inverts it. A chapter or mission in either ca
 `Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
 the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 
+## src/Extraction/PackIndex.cs
+The enumeration both HD pack folders share: every zip and subfolder under the folder read in place,
+in name order, each with its own top folder dropped and filtered to the caller's extensions. Files
+within one pack also load in name order, and a later file wins its key. The caller's key function
+names or refuses each file, and the index owns the open zips and the locked read. Engine-free; read
+`HdTextures.cs` and `HdModels.cs` next. Coverage: `CSVM.Tests/PackIndexTests.cs`.
+
 ## src/Extraction/HdTextures.cs
-The index of HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a
-`--det` run reads none unless `--hd=` names one). Every zip and subfolder there is read in place, in
-name order, a later one winning. Each drops its own top folder: a path left with a folder replaces
+The HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a `--det` run
+reads none unless `--hd=` names one), over `PackIndex.cs`. A path left with a folder replaces
 that file under `extracted/`, matched without case or extension, and a bare name replaces that world
 texture in every archive. `C3/rtexture12/cliff01.png` therefore beats `cliff01.png` in C3 alone,
 the way a pack carries a chapter's own version of a name chapters share. Engine-free; `Mech3/HdArt.cs`
 decodes and sizes what it returns. Coverage: `CSVM.Tests/HdTexturesTests.cs`.
+
+## src/Extraction/HdModels.cs
+The HD model packs in `<dataRoot>/HDModels` (`models.hd`, `--hd-models=`, off with
+`--no-hd-models`; a `--det` run reads none unless the flag names one), over `PackIndex.cs`. It maps a
+gamez node name to a `.glb` from a zip or subfolder, or a loose `.gltf` with its path, by airframe
+(`planes/<airframe>/<node>`), chapter (`C3/<node>`) or bare name, the more specific winning. Names
+match without case or a trailing `.flt`. Engine-free, and kept apart from the texture folder.
+Coverage: `CSVM.Tests/HdModelsTests.cs`.
 
 ## src/Extraction/ExtractionStamp.cs
 Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version

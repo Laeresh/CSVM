@@ -87,8 +87,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, pack and rig readers (all [cloud])
 
-1. ☐ [cloud] Shared pack index out of `HdTextures`
-2. ☐ [cloud] `HdModels` lookup, keys and launch settings
+1. ☑ [cloud] Shared pack index out of `HdTextures`
+2. ☑ [cloud] `HdModels` lookup, keys and launch settings
 3. ☑ [cloud] `PlaneRig` reader and validation
 
 ### Wave B, engine hooks (code [cloud], look [local])
@@ -129,7 +129,22 @@ worktrees. B14 and C24 both edit `Mech3/PlaneBuilder.cs`, and B14 also touches `
 
 # Wave A, pack and rig readers
 
-## A1 ☐ [cloud] Shared pack index out of `HdTextures`
+## A1 ☑ [cloud] Shared pack index out of `HdTextures`
+
+**Landed.** `CSVM/src/Extraction/PackIndex.cs` (internal) with `CSVM.Tests/PackIndexTests.cs`.
+`Open` takes the accepted extensions and a key function that names or refuses each file; the index
+owns the open zips, the locked read and the unreadable-zip warning. `HdTextures` keeps its public
+API and log line. Files within one pack now also load in name order (case-insensitive, then exact),
+so two files sharing a key resolve by name: `foo.gltf` beats `foo.glb`, and in a texture pack
+`x.png` beats `x.jpg`, where that order was undefined before.
+
+**Verified.** In a cloud container, on the tree carrying A1, A2 and A3: `dotnet build
+CSVM/CSVM.sln` with 0 warnings and the full unit run (6351 passed, 0 failed, 314 skipped) green.
+The `.ps1` gates and an in-game launch were not run. <TODO: run the content gate and one launch
+with a pack folder locally.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** One engine-free index enumerates a pack folder's folders and zips (name order, later wins,
 top folder dropped, keys without case or extension) for any set of accepted extensions; `HdTextures`
@@ -151,7 +166,24 @@ log, setting or behaviour change.
 **⚠ Traps.** `KeyOf` drops the extension so `.png` matches `.JPG`; for models that same rule would
 let `foo.gltf` and `foo.glb` collide, so the later-wins rule must decide, not enumeration luck.
 
-## A2 ☐ [cloud] `HdModels` lookup, keys and launch settings
+## A2 ☑ [cloud] `HdModels` lookup, keys and launch settings
+
+**Landed.** `CSVM/src/Extraction/HdModels.cs` with `CSVM.Tests/HdModelsTests.cs`;
+`HdModels.For(node, chapter, airframe)` returns `HdModel(Bytes, IsGlb, GltfPath)`. Precedence:
+airframe key, then chapter key, then bare name. Names are lowercased and a trailing `.flt` is
+dropped from node and file name alike. A `.gltf` in a zip is refused with a warning and displaces
+nothing. Flags follow `--hd=`: default `HDModels`, config.json `models.hd`, `--hd-models=`, no pack
+under `--det` unless the flag names one; `--no-hd-models` beats any folder in either argument
+order. Wired in `Launcher` after the texture packs; nothing reads it yet (B12). Decision 2: models
+and textures stay in separate folders.
+
+**Verified.** In a cloud container, on the tree carrying A1, A2 and A3: `dotnet build
+CSVM/CSVM.sln` with 0 warnings and the full unit run (6351 passed, 0 failed, 314 skipped) green.
+The `.ps1` gates and an in-game launch were not run. <TODO: run the content gate and one launch
+with a pack folder locally.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** `HdModels.Current` answers "is there a replacement for this node" by chapter, by airframe
 and by bare name, from `HDModels` or `--hd-models=`, off under `--no-hd-models`, and logs

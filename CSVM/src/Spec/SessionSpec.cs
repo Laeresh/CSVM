@@ -1190,6 +1190,14 @@ public sealed record SessionSpec
     /// reads no pack. Null when absent, which leaves config.json's <c>textures.hd</c>.</summary>
     public string? Hd { get; private set; }
 
+    /// <summary><c>--hd-models=</c>: the HD model pack folder, under the data root unless rooted.
+    /// Empty reads no pack. Null when absent, which leaves config.json's <c>models.hd</c>.</summary>
+    public string? HdModels { get; private set; }
+
+    /// <summary><c>--no-hd-models</c>: read no model pack, whatever <see cref="HdModels"/> or
+    /// config.json names.</summary>
+    public bool NoHdModels { get; private set; }
+
     /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
@@ -1767,6 +1775,8 @@ public sealed record SessionSpec
             else if (arg == "--no-vsync") { s.NoVsync = true; }
             else if (arg == "--zip-assets") { s.ZipAssets = true; }
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
+            else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
+            else if (arg == "--no-hd-models") { s.NoHdModels = true; }
             else if (arg.StartsWith("--hitch-inject="))
             {
                 (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =

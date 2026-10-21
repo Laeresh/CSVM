@@ -963,6 +963,9 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, `.rof` half, stamps) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
 - `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
 - `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
+- `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
+- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: `extracted/` paths and world texture names, a chapter's own entry beating the bare name.
+- `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
 - `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
 ### `src/Net/`, the network seam

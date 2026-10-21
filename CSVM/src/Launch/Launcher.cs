@@ -494,6 +494,11 @@ public partial class Launcher : Node3D
         {
             HdTextures.Current = HdTextures.Open(dataRoot, hdFolder);
         }
+        // The model packs follow the same rule, and --no-hd-models beats every folder name.
+        if (!_spec.NoHdModels && (_spec.HdModels ?? (_spec.Det ? null : Config.GetString("models.hd", "HDModels"))) is { } modelFolder)
+        {
+            HdModels.Current = HdModels.Open(dataRoot, modelFolder);
+        }
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
         _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec);

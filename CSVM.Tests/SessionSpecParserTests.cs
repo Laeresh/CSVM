@@ -518,4 +518,18 @@ public class SessionSpecParserTests
         Assert.Equal("mask.png", spec.OceanMaskPath);
         Assert.True(spec.Fly);
     }
+
+    /// <summary><c>--hd-models=</c> names the model folder, empty naming none, and absent leaves
+    /// config.json's; <c>--no-hd-models</c> is its own switch, so it holds in either order.</summary>
+    [Fact]
+    public void TheModelFolderFlagsParse()
+    {
+        var bare = SessionSpec.Parse(new[] { "--fly" });
+        Assert.Null(bare.HdModels);
+        Assert.False(bare.NoHdModels);
+        Assert.Equal("MyModels", SessionSpec.Parse(new[] { "--hd-models=MyModels" }).HdModels);
+        Assert.Equal("", SessionSpec.Parse(new[] { "--hd-models=" }).HdModels);
+        Assert.True(SessionSpec.Parse(new[] { "--no-hd-models", "--hd-models=MyModels" }).NoHdModels);
+        Assert.Null(SessionSpec.Parse(new[] { "--hd=Packs" }).HdModels);
+    }
 }
