@@ -784,9 +784,12 @@ models", is the reference.
   the card's texture on a quad at its real size beside the model, unlit as the game draws it, one
   orthographic camera and one sun, from eye level (`_side`) and from 35° above (`_above`), plus the
   model's atlas (`_atlas`). Scratch only, never committed.
-- **firtree1 (C1)**: a six-sided trunk, a six-sided dark core, and 15 whorls of drooping fronds (5 to
-  7 a whorl) whose tips follow the card's silhouette. **758 triangles**, 1281 vertices,
-  8.5 × 8.3 × 17.39 m, a 102 KB GLB.
+- **firtree1 (C1)**: a six-sided trunk in the lower crown only, a six-sided foliage core that runs
+  up to 16 m, 165 drooping clumps on a jittered golden-angle spiral (no whorls), spread by crown
+  girth with a floor so the top keeps its share, their tips on the card's silhouette, and two
+  crossed fronds as the leader. A clump is lit on its ridge, dark where its sides hang, with
+  yellow-green specks of new growth toward its tip. **1400 triangles**, 2323 vertices,
+  8.1 × 7.8 × 17.39 m, a 138 KB GLB.
 
 **Model recommendation.** Opus for a new species: the work is a look iterated against renders, and
 D33 adds palms and bushes the fir's builder does not cover. A mid-tier model can rerun or retune an
