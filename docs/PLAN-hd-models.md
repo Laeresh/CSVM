@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, engine hooks (code [cloud], look [local])
 
-11. ☐ [cloud] glTF mesh import with winding reversal and a shared cache
+11. ☑ [cloud] glTF mesh import with winding reversal and a shared cache
 12. ☐ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
 13. ☐ [cloud] code, [local] look: material mapping onto the remake's shaders
 14. ☐ [cloud] Apply `rig.json` to the built plane
@@ -259,7 +259,24 @@ numbers, a zero axis and unknown section keys. Name checks against the plane's n
 
 # Wave B, engine hooks
 
-## B11 ☐ [cloud] glTF mesh import with winding reversal and a shared cache
+## B11 ☑ [cloud] glTF mesh import with winding reversal and a shared cache
+
+**Landed.** `CSVM/src/Mech3/HdModelMeshes.cs`: `HdModelMeshes.Current.For(node, chapter, airframe)`
+returns a shared `ArrayMesh` or null, cached per `HdModels` pack key under a lock (a failed import is
+cached as null and logs one warning). It reads the parsed `GltfState` from `AppendFromBuffer` and
+generates no scene, so names stay the file's own (`GltfNode.OriginalName`). Node rule: the first
+glTF node whose name matches through `HdModels.NodeKey`, its own mesh, else its one mesh-bearing
+child (where the exporter puts it), else the file's only mesh. Each triangle surface's indices are
+reversed (an unindexed surface gets identity indices first); the mesh is rebuilt from
+`ImporterMesh.GetSurfaceArrays`, because `GetMesh()` compresses positions by up to 1/65536 of the
+extent. Materials are carried across untouched for B13. `HdModels` gains `KeyFor` and a public
+`Read`. Suite `hd-model-mesh-import` (CI tier) round-trips a `.glb` and a loose `.gltf` exactly.
+
+**Verified.** In a cloud container on the merged tree: build, format, StyleCop and the five gate
+scripts clean; 6355 unit tests pass; the CI tier 193 passed, 0 failed.
+
+**Original approach (kept for reference).**
+
 
 **Goal.** A pack file's mesh for a given node name comes back as an `ArrayMesh` in the original's
 winding, built once per key and shared by every instance.

@@ -183,7 +183,8 @@ The HD model packs in `<dataRoot>/HDModels` (`models.hd`, `--hd-models=`, off wi
 gamez node name to a `.glb` from a zip or subfolder, or a loose `.gltf` with its path, by airframe
 (`planes/<airframe>/<node>`), chapter (`C3/<node>`) or bare name, the more specific winning. Names
 match without case or a trailing `.flt`. Engine-free, and kept apart from the texture folder.
-Coverage: `CSVM.Tests/HdModelsTests.cs`.
+`KeyFor` names the pack key a node resolves to without reading it, which `Mech3/HdModelMeshes.cs`
+caches on. Coverage: `CSVM.Tests/HdModelsTests.cs`.
 
 ## src/Extraction/ExtractionStamp.cs
 Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version

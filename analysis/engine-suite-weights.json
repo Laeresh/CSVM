@@ -255,6 +255,7 @@
     "ground-contact-core": 0.022,
     "gun-voice-reach": 1.83,
     "hangar-door-wake": 2.993,
+    "hd-model-mesh-import": 0.15,
     "heat-shimmer": 0.044,
     "hostile-marker-hud": 0.453,
     "hud-auto-dock-line": 0.008,

@@ -41,7 +41,7 @@ public sealed class HdModels : IDisposable
     /// rooted; empty when the folder is absent. Packs load in name order and a later one wins.</summary>
     public static HdModels Open(string dataRoot, string folder)
     {
-        var index = PackIndex.Open(dataRoot, folder, Extensions, KeyFor);
+        var index = PackIndex.Open(dataRoot, folder, Extensions, KeyOfFile);
         if (index.Root is { } root)
         {
             Log.Info("world", $"HD models: {index.Count} replacements from {root}");
@@ -53,7 +53,12 @@ public sealed class HdModels : IDisposable
     /// <summary>The replacement for the gamez node named <paramref name="node"/>, or null. The
     /// airframe's own key beats the chapter's, which beats the bare name. Pass the chapter folder
     /// (<c>C3</c>) for a chapter's gamez and the airframe for the planes gamez.</summary>
-    public HdModel? For(string node, string? chapter = null, string? airframe = null)
+    public HdModel? For(string node, string? chapter = null, string? airframe = null) =>
+        KeyFor(node, chapter, airframe) is { } key ? Read(key) : null;
+
+    /// <summary>The pack key <see cref="For"/> would read for the node, or null, without reading the
+    /// file. Every node resolving to one key gets the same replacement.</summary>
+    public string? KeyFor(string node, string? chapter = null, string? airframe = null)
     {
         if (_index.Count == 0 || node.Length == 0)
         {
@@ -61,10 +66,16 @@ public sealed class HdModels : IDisposable
         }
 
         string name = NodeKey(node);
-        return (airframe is { Length: > 0 } ? Read("planes/" + airframe.ToLowerInvariant() + "/" + name) : null)
-            ?? (chapter is { Length: > 0 } ? Read(chapter.ToLowerInvariant() + "/" + name) : null)
-            ?? Read(name);
+        return (airframe is { Length: > 0 } ? Known("planes/" + airframe.ToLowerInvariant() + "/" + name) : null)
+            ?? (chapter is { Length: > 0 } ? Known(chapter.ToLowerInvariant() + "/" + name) : null)
+            ?? Known(name);
     }
+
+    /// <summary>The replacement under the pack key <paramref name="key"/>, or null.</summary>
+    public HdModel? Read(string key) =>
+        _index.Find(key) is { } entry && _index.Read(key) is { } bytes
+            ? new HdModel(bytes, entry.Extension == ".glb", entry.Extension == ".gltf" ? entry.LoosePath : null)
+            : null;
 
     public void Dispose() => _index.Dispose();
 
@@ -73,7 +84,7 @@ public sealed class HdModels : IDisposable
     internal static string NodeKey(string node) => DropFlt(node.ToLowerInvariant());
 
     // A .gltf names its buffers by relative path, which a zip entry has no folder to resolve against.
-    private static string? KeyFor(PackFile file)
+    private static string? KeyOfFile(PackFile file)
     {
         if (file.InZip && file.RelativePath.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
         {
@@ -87,8 +98,5 @@ public sealed class HdModels : IDisposable
     private static string DropFlt(string key) =>
         key.EndsWith(Flt, StringComparison.Ordinal) ? key[..^Flt.Length] : key;
 
-    private HdModel? Read(string key) =>
-        _index.Find(key) is { } entry && _index.Read(key) is { } bytes
-            ? new HdModel(bytes, entry.Extension == ".glb", entry.Extension == ".gltf" ? entry.LoosePath : null)
-            : null;
+    private string? Known(string key) => _index.Find(key) != null ? key : null;
 }

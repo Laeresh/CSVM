@@ -36,6 +36,10 @@ public class HdModelsTests
         Assert.Equal("bare prop", Text(hd.For("prop1", airframe: "fury")));
         Assert.Null(hd.For("hangar", chapter: "C3"));
         Assert.Null(hd.For(""));
+        Assert.Equal("c3/tower", hd.KeyFor("TOWER", chapter: "C3"));
+        Assert.Equal("planes/bhawk/prop1", hd.KeyFor("prop1.flt", chapter: "c3", airframe: "BHawk"));
+        Assert.Equal("tower", hd.KeyFor("tower", chapter: "C5"));
+        Assert.Null(hd.KeyFor("hangar", chapter: "C3"));
 
         var model = hd.For("tower")!.Value;
         Assert.True(model.IsGlb);
