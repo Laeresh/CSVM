@@ -247,24 +247,33 @@ internal static class PlaneRigSuites
     }
 
     // Each rig names one thing the model cannot honour, and the build must refuse it by file and entry.
+    // A firepoint the model lacks is refused too, read on a copy of the airframe with one cut away.
     private static void CheckRefused(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string spinName)
     {
-        var cases = new (string Label, string Json, string Entry)[]
+        var cut = GameZ.Load(ctx.PlanesGamezPath);
+        string? lacking = CutFirepoint(cut, plane);
+        ctx.Check(lacking != null, $"{plane} carries a firepoint to cut for the added-firepoint case");
+        var cases = new List<(string Label, string Json, string Entry, GameZ Gamez)>
         {
-            ("unknown-prop", """{ "props": [ { "node": "no_such_node", "axis": [0, 0, 1], "deg_per_sec": 10 } ] }""", "props[0] (no_such_node)"),
-            ("unknown-surface", """{ "surfaces": [ { "node": "no_such_node", "kind": "rudder" } ] }""", "surfaces[0] (no_such_node)"),
-            ("unknown-flare", """{ "flares": { "right": "no_such_node" } }""", "flares.right"),
-            ("unknown-marker", """{ "markers": { "no_such_marker": [0, 0, 0] } }""", "markers.no_such_marker"),
-            ("spin-unspecified", $$"""{ "props": [ { "node": "{{spinName}}", "axis": [0, 0, 1] } ] }""", $"props[0] ({spinName})"),
+            ("unknown-prop", """{ "props": [ { "node": "no_such_node", "axis": [0, 0, 1], "deg_per_sec": 10 } ] }""", "props[0] (no_such_node)", planesGamez),
+            ("unknown-surface", """{ "surfaces": [ { "node": "no_such_node", "kind": "rudder" } ] }""", "surfaces[0] (no_such_node)", planesGamez),
+            ("unknown-flare", """{ "flares": { "right": "no_such_node" } }""", "flares.right", planesGamez),
+            ("unknown-marker", """{ "markers": { "no_such_marker": [0, 0, 0] } }""", "markers.no_such_marker", planesGamez),
+            ("spin-unspecified", $$"""{ "props": [ { "node": "{{spinName}}", "axis": [0, 0, 1] } ] }""", $"props[0] ({spinName})", planesGamez),
         };
-        foreach (var (label, json, entry) in cases)
+        if (lacking != null)
+        {
+            cases.Add(("added-firepoint", $$"""{ "markers": { "{{lacking}}": [0, 0, -1] } }""", $"markers.{lacking}", cut));
+        }
+
+        foreach (var (label, json, entry, gamez) in cases)
         {
             using var pack = Pack(ctx, label, plane, json);
             string file = Path.Combine(PackRoot(ctx, label), "HDModels", "pack", "planes", plane, "rig.json");
             string? error = null;
             try
             {
-                Build(ctx, planesGamez, textures, pack, plane, out _).Free();
+                Build(ctx, gamez, textures, pack, plane, out _).Free();
             }
             catch (InvalidDataException e)
             {
@@ -274,6 +283,33 @@ internal static class PlaneRigSuites
             ctx.Check(error != null && error.Contains(file, StringComparison.Ordinal) && error.Contains(entry, StringComparison.Ordinal),
                 $"a {label} rig fails the build naming the file and '{entry}': {error ?? "no error"}");
         }
+    }
+
+    // Renames the airframe's highest firepoint out of the marker set, so the model lacks it; null when it has none.
+    private static string? CutFirepoint(GameZ gamez, string plane)
+    {
+        var stack = new Stack<int>(gamez.FindByName(plane)?.Children ?? new List<int>());
+        GameZNode? best = null;
+        while (stack.Count > 0)
+        {
+            var node = gamez.Nodes[stack.Pop()];
+            if (MarkerRig.Classify(node.Name, out var kind, out int ord) && kind == MarkerRig.MarkerKind.Firepoint
+                && (best == null || (MarkerRig.Classify(best.Name, out _, out int had) && ord > had)))
+            {
+                best = node;
+            }
+
+            node.Children.ForEach(stack.Push);
+        }
+
+        if (best == null)
+        {
+            return null;
+        }
+
+        string name = best.Name;
+        best.Name = name + "_cut";
+        return name;
     }
 
     private static Node3D Build(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels pack, string plane, out PlaneBuilder builder)

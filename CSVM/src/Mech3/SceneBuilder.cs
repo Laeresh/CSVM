@@ -80,6 +80,10 @@ public sealed class SceneBuilder
     /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
     public static readonly StringName SurfaceMeta = "csky_surface";
 
+    /// <summary>Meta key a replaced mesh instance holds its gamez model under, read through
+    /// <see cref="GameplayMesh"/>.</summary>
+    public static readonly StringName GamezMeshMeta = "csvm_gamez_mesh";
+
     /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
     /// type id (<see cref="GameZMaterial.SoilId"/>). Every polygon in the body shares it, since
     /// bodies are split by soil as well as class (<see cref="CollidersForMesh"/>). A different
@@ -682,6 +686,11 @@ void fragment() {
     /// <summary>Whether a struck collider's node accepts a crater, the original's
     /// <c>CAN_MODIFY</c> gate read off <see cref="CanModifyMeta"/>.</summary>
     public static bool CanModify(Node? collider) => collider != null && collider.HasMeta(CanModifyMeta);
+
+    /// <summary>The mesh a plane's hulls and a shootable round's box read from <paramref name="instance"/>.
+    /// It is the gamez model a replacement draws over, else the drawn mesh. ⚠ Never read a hull or hit box off <c>Mesh</c>; a pack would reshape it.</summary>
+    public static Mesh? GameplayMesh(MeshInstance3D instance) =>
+        instance.HasMeta(GamezMeshMeta) ? instance.GetMeta(GamezMeshMeta).As<Mesh>() : instance.Mesh;
 
     /// <summary>The one billboard rule, read straight from the gamez model: is this a flat card the
     /// engine turns toward the camera? Every caller goes through this. Null when the extraction
@@ -1304,7 +1313,10 @@ void fragment() {
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
                 if (replacement != null)
+                {
                     ReplacedMeshCount++;
+                    mi.SetMeta(GamezMeshMeta, GetMesh(node.MeshIndex, forceDoubleSided, forceLit));
+                }
                 if (collidable)
                     AttachCollision(n3d, node.MeshIndex, node.CanModify);
             }

@@ -132,7 +132,7 @@ public sealed class PlaneCollider
             {
                 // GetFaces yields triangle surfaces only (3 verts per face), so the
                 // point-sprite "lights" instances contribute nothing anyway.
-                if (mi.Mesh is { } mesh)
+                if (SceneBuilder.GameplayMesh(mi) is { } mesh)
                 {
                     var faces = mesh.GetFaces();
                     for (int i = 0; i + 2 < faces.Length; i += 3)

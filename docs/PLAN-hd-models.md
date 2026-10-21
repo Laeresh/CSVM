@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ [local] World props and destructibles in every damage state
 24. ☐ [local] Plane airframes without livery
 25. ☐ [local] Rig on a real airframe
-26. ☐ [cloud] code, [local] two-instance check: pack and rig agreement in network play
+26. ◐ [cloud] code, [local] two-instance check: pack and rig agreement in network play
 
 ### Wave D, livery
 
@@ -400,8 +400,8 @@ material; local look at a replaced prop under fog and through a graphics-mode sw
 ## B14 ☑ [cloud] Apply `rig.json` to the built plane
 
 **Landed.** `CSVM/src/Mech3/PlaneRigPatch.cs`, run inside `PlaneBuilder.Build` after
-`BuildSubtree`, so every caller (human, AI, labs, probes) gets it: markers move or are added (only
-`firepoint1..8`, `pylon1..8`, `target` and the reference markers), prop and surface overrides are
+`BuildSubtree`, so every caller (human, AI, labs, probes) gets it: markers move, and only `target`
+and the reference markers may be added (an added firepoint would arm an AI gun), prop and surface overrides are
 stamped, flares chosen; then `CockpitCameraOffset` is read (the rig's `cockpit_camera` if given),
 the interior mounts and the flare walk runs. Callers' `Loadout.Bind` sees the patched tree. A bad
 rig frees the node and throws `InvalidDataException` naming the source and entry. The airframe key
@@ -593,7 +593,31 @@ launch point and the muzzle, and the marker overlay shows it.
 **⚠ Traps.** Firepoints move gun convergence and the tracer origin; that is a gameplay change and
 belongs to C26's rules in network play.
 
-## C26 ☐ [cloud] code, [local] two-instance check: pack and rig agreement in network play
+## C26 ◐ [cloud] code, [local] two-instance check: pack and rig agreement in network play
+
+**Landed so far.** A different rig cannot desynchronise a match, since every outcome a rig could
+move is decided on one machine and its result crosses the wire. A round's origin and direction ride
+`FireMessage` from the shooter's own firepoint or pylon (`FlightController.cs:3164`, `:3204`), and
+a remote copy spawns at that origin, never at its own marker (`Launch/SessionNet.cs:937`). The
+shooter's machine decides a hit and sends it reliably (`SessionNet.cs:944`). The host flies the AI
+with the host's rig (`AiFireMessage` carries the origin). `target`, `ground_level` and `ladder_pos`
+have no reader outside the overlay; props, surfaces, flares, exhaust and `cockpit_camera` are drawn
+only. What a rig difference changes is the look of someone else's plane on this machine: its
+mounted stores, props, surfaces and flares, and a launched rocket leaving from the owner's pylon
+rather than from the store this machine drew. Two leaks of a pack into gameplay, found on the way,
+are fixed: a plane's hulls (`PlaneCollider`, the terrain sweep and the hit body) and a shootable
+round's hit box were read off the drawn mesh, so a replacement reshaped them; they now read the
+gamez model a replacement draws over (`SceneBuilder.GameplayMesh`). A rig could add a firepoint
+the airframe lacks, and `Loadout.BindAi` arms an AI over every firepoint on the tree; a rig now
+adds only `target` and the reference markers. Suites `hd-model-swap` and `plane-rig` read both and
+fail with either fix removed. A model pack therefore needs nothing in network play.
+<TODO: the user's choice of rule for a rig's weapon markers in network play (each seat its own,
+VR-style drawn-only, ignored, or refused on mismatch).>
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** Two seats with different rigs either agree on one (the host's) or refuse to start, so a
 moved firepoint cannot desynchronise a match.

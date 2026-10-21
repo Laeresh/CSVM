@@ -1341,13 +1341,13 @@ body from its pylon immediately rather than queueing it, so the weapon lab's reb
 leave the old ordnance hanging beside the new. `--fly` only. In a stereo seat each body also gets a copy built through the stereo interior's shader and hung on `XrCockpit.Hang`, steady and stencilled beside the interior's wing, at the place the plane's `vr_cockpits.json` store fields give it; the body leaves the pilot's pane through `CockpitVisibility.Reseat`, and the pylon, the launch point, stays put.
 
 ## src/Flight/Airframe/PlaneCollider.cs
-Derives up to sixteen plane-frame convex hulls from the built model's mesh triangles alone, with no
-per-plane data: region clipping partitioning the airframe on x and z (fuselage out to the wing band,
-tail inside that band and aft, wing outboard), greedy volume-guided refinement cutting one or two
-parallel planes per axis (the double cut separates bilateral pairs such as twin fins), then one
-`ConvexHull` per refined piece, judged on the pieces' boxes so a hull never moves a cut or a name.
-Single-sourced: the terrain sweep casts these hulls and `AircraftBody` mounts the same
-`ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
+Derives up to sixteen plane-frame convex hulls from the built model's gamez mesh triangles alone
+(`SceneBuilder.GameplayMesh`, never a pack's replacement), with no per-plane data: region clipping
+partitioning the airframe on x and z (fuselage out to the wing band, tail inside that band and aft,
+wing outboard), greedy volume-guided refinement cutting one or two parallel planes per axis (the
+double cut separates twin fins), then one `ConvexHull` per refined piece, judged on the pieces'
+boxes so a hull never moves a cut or a name. Single-sourced: the terrain sweep casts these hulls
+and `AircraftBody` mounts the same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
 `airframe-hull-coverage` suite measures; `docs/org/weaponRay.md` holds what they present over the mesh.
 
 ## src/Flight/Airframe/ConvexHull.cs

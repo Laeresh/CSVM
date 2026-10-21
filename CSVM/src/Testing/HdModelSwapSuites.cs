@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
@@ -62,7 +63,7 @@ internal static class HdModelSwapSuites
     [Suite("hd-model-swap",
         "a model pack replacement swaps the mesh SceneBuilder draws for a world node by its chapter key, "
         + "a plane node by its airframe key and a flyout body node by its bare name; each keeps its "
-        + "name and index metas, transform, colliders and node_bias as built without the pack; a "
+        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls stay the gamez model's; a "
         + "terrain tile, a facade and a glow sprite named in the pack keep their gamez models, an "
         + "unrelated node is untouched, and a builder with no chapter or airframe replaces nothing. "
         + "A replaced surface wears the remake's shader: a glTF material named after an original "
@@ -183,6 +184,9 @@ internal static class HdModelSwapSuites
             var others = Nodes(packed).Where(n => DrawnMesh(n) != null && AnimRuntime.NameOf(n) != planeNode).ToList();
             ctx.Check(others.Count > 0 && others.All(n => !ReferenceEquals(DrawnMesh(n), mesh)),
                 $"the {others.Count} other mesh nodes of {ctx.PlaneName} keep their gamez models");
+            string hulls = Hulls(plain);
+            ctx.Check(hulls.Length > 0 && hulls == Hulls(packed),
+                $"{ctx.PlaneName}'s collision hulls are the gamez model's, built as without the pack");
         }
         finally
         {
@@ -387,6 +391,9 @@ internal static class HdModelSwapSuites
                 .All(i => drawn.SurfaceGetMaterial(i) is ShaderMaterial m && ShaderTwins.IsTracked(m)),
             $"{label}: every replaced surface wears a tracked remake shader, no StandardMaterial3D");
         ctx.Check(DrawnMesh(a)?.GetAabb() != expected?.GetAabb(), $"{label}: draws the gamez model without the pack");
+        var gameplay = MeshChild(b) is { } instance ? SceneBuilder.GameplayMesh(instance) : null;
+        ctx.Check(gameplay != null && gameplay.GetAabb() == DrawnMesh(a)?.GetAabb(),
+            $"{label}: the hulls and hit boxes read the gamez model");
         ctx.Check(MeshChild(b)?.Position == Vector3.Zero, $"{label}: the replacement's instance sits at the node origin");
         SameRest(ctx, a, b, label);
     }
@@ -639,6 +646,11 @@ internal static class HdModelSwapSuites
 
     private static Node3D? ByIndex(Node3D root, int index) =>
         Nodes(root).FirstOrDefault(n => n.GetMeta(AnimRuntime.IndexMeta).AsInt32() == index);
+
+    // Every hull of the plane's collider, its placement and points, as one comparable string.
+    private static string Hulls(Node3D plane) =>
+        string.Join("|", PlaneCollider.Build(plane)?.Parts.Select(p => $"{p.Name}@{p.Local.Origin}:{string.Join(";", p.Hull.Points)}")
+            ?? Array.Empty<string>());
 
     private static MeshInstance3D? MeshChild(Node3D? node) => node?.GetNodeOrNull<MeshInstance3D>("mesh");
 

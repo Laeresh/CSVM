@@ -2322,9 +2322,9 @@ public sealed partial class ProjectilePool : Node3D
         {
             if (node is Node3D n3d && node != model)
                 xf *= n3d.Transform;
-            if (node is MeshInstance3D { Mesh: not null } mi)
+            if (node is MeshInstance3D mi && SceneBuilder.GameplayMesh(mi) is { } mesh)
             {
-                var local = xf * mi.Mesh.GetAabb();
+                var local = xf * mesh.GetAabb();
                 box = any ? box.Merge(local) : local;
                 any = true;
             }

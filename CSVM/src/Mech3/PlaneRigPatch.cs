@@ -11,18 +11,14 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Applies an airframe's <see cref="PlaneRig"/> to its freshly built tree, before anything reads a
-/// marker or classifies a part. It moves marker nodes, adds a weapon or reference marker the model
-/// lacks, and stamps prop and surface overrides as the metas <see cref="PropParts"/> and
+/// marker or classifies a part. It moves marker nodes and adds a target or reference marker the
+/// model lacks. It stamps prop and surface overrides as the metas <see cref="PropParts"/> and
 /// <see cref="ControlSurfaces"/> read. Rig vectors are plane-frame, below the root, and are turned
 /// into each node's own frame here. A name the model does not carry is an <see cref="InvalidDataException"/>
 /// naming the rig file and entry. ⚠ Do not let it change what a plane carries; a pylon keeps its side.
 /// </summary>
 public static class PlaneRigPatch
 {
-    /// <summary>The original's firepoint count per airframe, the most a rig can name
-    /// (docs/formats/markers.md, Firepoints).</summary>
-    public const int MaxFirepoint = 8;
-
     // The non-weapon nodes of the original's markers group (docs/formats/markers.md, Marker group),
     // which a rig may add to a model that lacks one.
     private static readonly HashSet<string> ReferenceMarkers = new(StringComparer.OrdinalIgnoreCase)
@@ -222,15 +218,12 @@ public static class PlaneRigPatch
         return new FlareChoice(chosen, displaced);
     }
 
-    private static bool MayAdd(string name)
-    {
-        if (MarkerRig.Classify(name, out var kind, out int ordinal))
-        {
-            return kind != MarkerRig.MarkerKind.Firepoint || (ordinal >= 1 && ordinal <= MaxFirepoint);
-        }
-
-        return ReferenceMarkers.Contains(name);
-    }
+    // ⚠ Never add a firepoint or pylon. Loadout.BindAi arms an AI over every one the tree carries,
+    // so each added one is an added gun or store.
+    private static bool MayAdd(string name) =>
+        MarkerRig.Classify(name, out var kind, out _)
+            ? kind == MarkerRig.MarkerKind.Target
+            : ReferenceMarkers.Contains(name);
 
     // The built nodes the rig names: every one, since gamez names repeat; none when this build skipped them.
     private static List<Node3D> Find(PlaneRig rig, string label, string name, HashSet<string> known, Dictionary<string, List<Node3D>> byName)
