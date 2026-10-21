@@ -1488,7 +1488,8 @@ internal static class WorldAndToolSuites
     // entry here is C1's shipped list with a turn and a wide jitter, so the mirror and the clamp act.
     [Suite("clutter-rich-variation",
         "a vegetation entry leaves C1's Original stamps and fades bit-identical and bakes each listed kind a Rich variant index-aligned with them, "
-        + "mirrored about as often as its turn asks, the same on a second build; retuning one kind moves no other kind's Rich stamp")]
+        + "mirrored about as often as its turn asks, the same on a second build; retuning one kind moves no other kind's Rich stamp; "
+        + "each Rich card shader is its Original text plus the sway, sun-side and contact-shadow lines")]
     internal static void ClutterRichVariation(TestContext ctx)
     {
         const string chapter = "C1";
@@ -1527,7 +1528,7 @@ internal static class WorldAndToolSuites
         var other = Take(new ClutterBuilder(gamez, textures, null, props, null, retuned), names);
         ctx.Same(bare.Count, rich.Count, $"the same kinds are exported with and without the entry");
 
-        int moved = 0, listed = 0, stamps = 0, mirrored = 0, differs = 0, unequal = 0, shifted = 0;
+        int moved = 0, listed = 0, stamps = 0, mirrored = 0, differs = 0, unequal = 0, shifted = 0, shaded = 0;
         for (int k = 0; k < Mathf.Min(bare.Count, rich.Count); k++)
         {
             var a = bare[k];
@@ -1543,6 +1544,21 @@ internal static class WorldAndToolSuites
                 continue;
             }
             listed++;
+            // The Rich card is the Original card's text plus the mirror, the sway, the sun side and
+            // the contact shadow, and nothing else.
+            string original = (b.Material as ShaderMaterial)?.Shader?.Code ?? "";
+            string richCode = (variant.Material as ShaderMaterial)?.Shader?.Code ?? "";
+            bool carries = richCode.Contains("csky_time", System.StringComparison.Ordinal)
+                && richCode.Contains("csky_sun_dir", System.StringComparison.Ordinal)
+                && richCode.Contains("v_up", System.StringComparison.Ordinal)
+                && !original.Contains("csky_time", System.StringComparison.Ordinal)
+                && !original.Contains("v_sun", System.StringComparison.Ordinal)
+                && original.Length > 0
+                && richCode.Replace(ClutterBuilder.RichDecls, "", System.StringComparison.Ordinal)
+                    .Replace(ClutterBuilder.RichVertexLines, "", System.StringComparison.Ordinal)
+                    .Replace(ClutterBuilder.RichFragmentLines, "", System.StringComparison.Ordinal) == original;
+            shaded += carries ? 1 : 0;
+            ctx.Check(carries, $"{b.Texture}'s Rich card shader is its Original text plus the Rich sway, sun-side and contact lines");
             ctx.Check(variant.Placements.Count == b.Placements.Count && variant.Colors?.Count == b.Placements.Count,
                 $"{b.Texture}'s Rich variant is index-aligned ({variant.Placements.Count} placements, {variant.Colors?.Count} colours of {b.Placements.Count})");
             for (int i = 0; i < variant.Placements.Count; i++)
@@ -1561,6 +1577,10 @@ internal static class WorldAndToolSuites
         ctx.Check(mirrored > stamps * 0.45f && mirrored < stamps * 0.55f, $"a turn of 90 mirrors about half the cards ({mirrored} of {stamps})");
         ctx.Same(0, unequal, $"a second build bakes the same Rich variant");
         ctx.Same(0, shifted, $"retuning bush1 leaves every other kind's Rich stamps and colours as they were");
+        ctx.Same(listed, shaded, $"every listed kind's Rich card carries the sway, sun-side and contact lines over its Original text");
+        int unlistedRich = rich.Count(k => k.Rich == null && k.Material is ShaderMaterial m
+            && (m.Shader?.Code?.Contains("csky_time", System.StringComparison.Ordinal) ?? false));
+        ctx.Same(0, unlistedRich, $"no unlisted card's shader sways");
     }
 
     // A decoration model is a node chain, and the mesh node under its `.flt` top may translate.

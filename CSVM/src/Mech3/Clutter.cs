@@ -32,6 +32,30 @@ public sealed class ClutterBuilder
     /// reading a single shape.</summary>
     public static readonly StringName CollisionCellMeta = "csvm_clutter_cell";
 
+    // The Rich card's declarations: the sim clock its sway reads and its height and sun-side varyings.
+    // The Rich lines are emitted into the Rich variant alone, so the Original card's text never changes.
+    internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_up;\nvarying float v_side;\nvarying flat float v_sun;";
+
+    // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
+    // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
+    // It goes back through the face, so a hidden stamp's keep still collapses it. Periods of 12 s and
+    // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the planted point.
+    internal const string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
+        + "    v_up = VERTEX.y > 0.01 ? 1.0 : 0.0;\n"
+        + "    v_side = sign(VERTEX.x);\n"
+        + "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0);\n"
+        + "    vec2 breeze = vec2(0.9397, 0.3420);\n"
+        + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
+        + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
+        + "    float lean = 0.006 + gust * (0.012 + 0.010 * flutter);\n"
+        + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
+
+    // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
+    // The gain is full from a sixth of the card's width off its axis, where the foliage sits.
+    // Nothing drops below the Original look. The lowest 18 % of the card darkens at the ground.
+    internal const string RichFragmentLines =
+        "    ALBEDO *= (1.0 + 0.8 * max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0)) * mix(0.6, 1.0, smoothstep(0.0, 0.18, v_up));\n";
+
     // The sprite shader's distance-fog block, emitted only into the fogged variant.
     private const string FogLines =
         "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
@@ -47,10 +71,6 @@ public sealed class ClutterBuilder
     // the archive calls the card's alpha hard: a cut through soft ink both erases what sits under
     // the threshold and solidifies what sits above it, and the original cuts nothing at all.
     private const string ScissorLine = "    ALPHA_SCISSOR_THRESHOLD = 0.5;\n";
-
-    // The Rich card's horizontal mirror, a negative X axis on its instance basis. Emitted into the
-    // Rich variant alone, so the Original card's shader text never changes.
-    private const string MirrorLine = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n";
 
     // The seed of the substitute/scale stream: the constant the original seeds its own world
     // build with, borrowed as a label rather than as a claim, our PRNG, traversal and draw count
@@ -919,7 +939,7 @@ public sealed class ClutterBuilder
         #include "res://shaders/csky_instance_uniforms.gdshaderinc"
 
         varying flat float v_alpha;
-        {{volumeDecls}}
+        {{volumeDecls}}{{(rich ? RichDecls : "")}}
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
@@ -931,7 +951,7 @@ public sealed class ClutterBuilder
             float live = step(1e-12, dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz));
             float keep = step(0.004, v_alpha) * live;
         {{FaceBasisLines(spherical)}}
-        {{(rich ? MirrorLine : "")}}    VERTEX = (VIEW_MATRIX * vec4(origin + face * VERTEX * keep, 1.0)).xyz;
+        {{(rich ? RichVertexLines : "")}}    VERTEX = (VIEW_MATRIX * vec4(origin + face * VERTEX * keep, 1.0)).xyz;
         }
 
         void fragment() {
@@ -940,7 +960,7 @@ public sealed class ClutterBuilder
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
-        {{(fogged ? FogLines : "")}}{{volumeFragment}}{{SceneBuilder.TintLine}}
+        {{(rich ? RichFragmentLines : "")}}{{(fogged ? FogLines : "")}}{{volumeFragment}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
         {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}
         """;

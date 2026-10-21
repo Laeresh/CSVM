@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
 2. ☑ The vegetation sidecar: per-chapter kind list and values, read under Rich
 3. ◐ Per-stamp jitter, rotation and tint for listed kinds
-4. ☐ Card shading: wind sway, sun-side shading, contact shadow
+4. ◐ Card shading: wind sway, sun-side shading, contact shadow
 5. ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 6. ☑ The lab's paint tool: texture picks and a brush mask
 7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
@@ -386,20 +386,64 @@ repeat falls to Waves B and C.
 
 **Verified.** <pending orchestrator run>
 
-## A4 ☐ Card shading: wind sway, sun-side shading, contact shadow
+## A4 ◐ Card shading: wind sway, sun-side shading, contact shadow
 
 **Goal.** Under Rich, cards sway in a wind, brighten on their sun side, and sit on a soft contact
 shadow.
 
-**Evidence (confidence: lead-only).** The card shader is generated in `ShaderCode`
-(`Clutter.cs:814`) with its facing in `FaceBasisLines` (`:865`).
+**Evidence (confidence: traced-to-code for the sources, lead-only for the look).** The card shader
+is generated in `ShaderCode` (`Clutter.cs`) with its facing in `FaceBasisLines`. Every listed card
+is a one-quad CylindricalY card with its pivot at the base centre: C1's `firtree1` spans y 0 to
+17.83 and x ±5.01, `bush2` y 0 to 3.35 (`extracted/C1/gamez/models.json`), so a vertex is either at
+the base or at the top. The authored wind is the puffer wind (`WorldWind`, `weather.zrd`'s `WIND`
+block): C1 and C1B author a 2 m/s updraft and a gust whose magnitude steps 5 m/s a frame with no
+`dt`, which would jitter a tree, and no shader reads it. The Enhanced ocean runs its own fixed wind
+bearing (`SeaState.WindDeg`) baked into its shader. Animated shaders read `csky_time`
+(`csky_time.gdshaderinc`, `ShaderTime`), the session's sim clock, so a `--det` frame is a function
+of its frame count. The sun is the `csky_sun_dir` global (toward the sun, `WeatherRig.WriteSunDirection`)
+with the zone's `SUNLIGHT_DIFFUSE` in `csky_sun_light.y`, which the Enhanced puffer and fog-volume
+cards already read.
 
-**Approach.** Emit the three as a Rich-only variant of the card shader. <TODO: the wind source
-(a global, or WeatherRig), and whether the contact shadow is a ground decal or a card-base darkening.>
+**Approach.** Landed as three Rich-only line groups in the card shader, beside A3's mirror
+(`ClutterBuilder.RichDecls`, `RichVertexLines`, `RichFragmentLines`). The Original card's text is
+unchanged, and an unlisted kind never takes the Rich variant.
 
-**Model recommendation.** <TODO>
+- *Wind source:* the remake's own breeze, not `WorldWind`: a fixed bearing 20° from +X toward +Z
+  (the ocean's default), in the shader text. Time is `csky_time`, so the sway is deterministic under
+  `--det` and freezes with a halted clock. The card leans about its base (`VERTEX.y` scales it, so
+  the base stays planted): a 0.006 rad mean lean, plus a gust (12 s period, rolling across the forest
+  along the bearing at about 10 m/s) of up to 0.012 rad and a per-tree flutter (3 s) of ±0.010 rad
+  times the gust. A 17.8 m fir's top moves at most about half a metre. The phase is a dot of the
+  planted point with a fixed vector, no random draw. Both periods divide `ShaderTime.RolloverSecs`,
+  so the clock's hourly wrap shows no jump. The lean is applied in world axes and folded back
+  through the face (`transpose(face)`), so the card's existing `* keep` still collapses a hidden or
+  cratered stamp.
+- *Sun-side shading:* the half of the card facing the sun's bearing (its horizontal direction, so a
+  high sun still gives a side) gains up to 0.8 in linear, times `dot(face[0], bearing)` and the
+  zone's diffuse clamped to 1. The gain is full from a sixth of the card's width off its axis,
+  since the foliage sits near the axis and a ramp to the quad's edge left it at a few percent. The
+  shadow side keeps the Original look: nothing is darkened. A zone with no diffuse (a night or cloud
+  zone authoring `SUNLIGHT_DIFFUSE` 0) gets no gain.
+- *Contact shadow:* the cheaper option, a card-base darkening, prototyped and kept: the lowest 18 % of
+  the card's height darkens to 0.6 at its foot. A height fraction rather than metres, so a bush and a
+  fir both darken at their foot. No ground decal: the ground texture already paints a dark blob under
+  each original tree, and a decal would double it.
 
-**Verify.** <TODO>
+The constants are in the shader text, not the sidecar; the lab gains them only if the look asks for
+per-chapter tuning.
+
+**Model recommendation.** Opus: the shading is small, but holding the Original text, the live
+switch's twins and the hidden-stamp collapse at once is the work.
+
+**Verify.** Engine: `clutter-rich-variation` checks every listed kind's Rich card shader is its
+Original text plus exactly the three Rich line groups (so the Original text is untouched) and that
+it reads `csky_time`, `csky_sun_dir` and the height varying; no unlisted card's shader sways. The
+targeted suites `clutter-*`, `graphics-vegetation-quality`, `graphics-shader-twins`,
+`graphics-retext-compiles`, `graphics-live-switch`, `graphics-view-distance` and `crater-carve`
+pass. Goldens: every Faithful and Original shot holds; the Enhanced shots on listed chapters that
+A3 moved stay moved, and no other shot moves. The look is a montage judged by you: Original, Rich
+before A4 and Rich with A4 at C1 from 600 m and 300 m, a C2 pose, two C1 poses at tree height (one
+looking along the sun's bearing, one across it), and a 3 s sway strip under `--det`.
 
 **⚠ Traps.**
 - Never declare an instance uniform below `csky_instance_uniforms.gdshaderinc` (`Clutter.cs:829`).
@@ -407,6 +451,10 @@ shadow.
 - A hidden or cratered stamp has a zero basis that the vertex stage reads (`Clutter.cs:841`); sway
   must not revive it.
 - A live mode switch must find the other variant's compiled shader (ShaderTwins, `Clutter.cs:70`).
+- The sun-side gain is a multiply on near-black foliage, so a gain that reads as large in the text
+  moves a dark crown by a few sRGB levels; judge it at a pose across the sun's bearing, never along it.
+
+**Verified.** <pending orchestrator run>
 
 ## A5 ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 
@@ -810,7 +858,8 @@ POSITION y from 0 to 17.39; a second run writes the same bytes. The look is your
 
 **Ruling (yours, from the first renders).** The pipeline stands; the look iterates. The next pass
 makes the crown shaggier and less tiered and lighter, with the card's yellow-green highlights, and
-hides the bare trunk in the upper half.
+hides the bare trunk in the upper half. On the second pass's renders: good enough to carry D32's
+handover, judged again in game.
 
 **Verified.** <pending orchestrator run>
 
