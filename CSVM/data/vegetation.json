@@ -3,135 +3,135 @@
   "C1": {
     "kinds": {
       "firtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "firtree2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "dougfirtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "bush1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "bush2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       }
     }
   },
   "C1B": {
     "kinds": {
       "bush1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "bush2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "dougfirtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       }
     }
   },
   "C2": {
     "kinds": {
       "palmtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "palmtree2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "palmtree3.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "spruce.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "brush1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "brush2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "brush3.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "brush4.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       }
     }
   },
   "C3": {
     "kinds": {
       "palmtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "palmtree2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "palmtree3.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       }
     }
   },
   "C4": {
     "kinds": {
       "firtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "firtree2.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "dougfirtree1.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       },
       "spruce.flt": {
-        "jitter_uv": 0.05,
-        "tint": 0.05,
-        "brightness": 0.1
+        "yaw_deg": 90,
+        "tint": 0.1,
+        "brightness": 0.2
       }
     }
   }

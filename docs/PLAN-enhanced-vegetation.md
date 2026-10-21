@@ -156,8 +156,9 @@ each owns its own module. D36 waits for every look item. Each wave's budget item
 ## A1 ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
 
 **Goal.** A Vegetation Quality word setting in the video options, Original or Rich, that only acts
-under Enhanced and switches live without a relaunch. Rich is the desktop default; the Deck and
-Linux default to Original.
+under Enhanced and switches live without a relaunch. Rich is the desktop default; the Deck, Linux
+and an integrated GPU default to Original (Water Quality's rule; the integrated-GPU half is your
+ruling, beyond Decision 3's Deck and Linux).
 
 **Evidence (confidence: traced-to-code).** The pattern to copy is Water Quality from PLAN-enhanced-ocean
 (`git log --grep=PLAN-enhanced-ocean`); the live clutter path already exists:
@@ -343,7 +344,7 @@ worst unmoved, so no stamp is dropped or added. A solid kind is never given a va
   yaw is invisible. `yaw_deg` stays the field and maps to a horizontal mirror with probability
   `yaw_deg`/180, carried as a negative X axis on the Rich instance basis. A Rich twin of the card
   shader (key bit 32) reads that sign and flips the card's X; the Original shader text is
-  unchanged. The shipped `yaw_deg` stays 0.
+  unchanged.
 - *Live switch:* `ClutterInstances` keeps the Rich variant as a layout of its own beside the
   Original cells, and `Recut` picks it from `RichOn`, so a live move swaps nodes. A hidden or
   cratered stamp carries across as the same move off the other variant's authored transform.
@@ -376,6 +377,12 @@ by you.
   the variation must be in the placements, not added in the shader, or the copies differ.
 - A card's `scale_range` draw is in its instance basis, which the card shader replaces, so no card
   draws its scale today; the Rich mirror reads only the X axis's sign for that reason.
+
+**Ruling (yours, from the montage).** The ground texture paints a dark blob under each original
+tree, and a jitter of 0.05 repeats carries the cards off their blobs. The shipped entries carry no
+jitter: `yaw_deg` 90 (half the cards mirrored), `tint` 0.1, `brightness` 0.2. The jitter stays a
+field for the lab and for remake-added stamps, which have no painted blob. Breaking the layout's
+repeat falls to Waves B and C.
 
 **Verified.** <pending orchestrator run>
 
@@ -779,6 +786,10 @@ POSITION y from 0 to 17.39; a second run writes the same bytes. The look is your
   sky only; D32's handover must be judged in game.
 - A card name is not a species across chapters: size and texture differ per chapter, so a
   generator gains a `CARDS` entry (and its own look check) per chapter.
+
+**Ruling (yours, from the first renders).** The pipeline stands; the look iterates. The next pass
+makes the crown shaggier and less tiered and lighter, with the card's yellow-green highlights, and
+hides the bare trunk in the upper half.
 
 **Verified.** <pending orchestrator run>
 
