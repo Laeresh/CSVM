@@ -685,10 +685,11 @@ This answers C22's flyout export TODO and B16's deferred overlay fork.
 
 **Verified.** <pending orchestrator run>
 
-**Owed.** Effect siting is the user's fork: it now reads the gamez box with the gameplay readers.
-It differs from the drawn box only where an anchor's origin falls outside that box (absolute-
-modelled nodes and destroyed-part groups such as C1's `aagun35`); a 3x `aagun35` destroyed state
-moves its death smoke 3.5 m down to the node origin when sited off the drawn box.
+**Ruling.** Effects are sited from the gamez box, the same box the gameplay readers measure, so a
+replacement never moves fire or smoke from where the original puts them. Siting from the drawn box
+was declined; it differs only where an anchor's origin falls outside that box (absolute-modelled
+nodes and destroyed-part groups such as C1's `aagun35`), where a 3x `aagun35` destroyed state would
+move its death smoke 3.5 m down to the node origin.
 
 **Original approach (kept for reference).**
 
