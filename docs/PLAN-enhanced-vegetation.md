@@ -411,9 +411,10 @@ unchanged, and an unlisted kind never takes the Rich variant.
 - *Wind source:* the remake's own breeze, not `WorldWind`: a fixed bearing 20° from +X toward +Z
   (the ocean's default), in the shader text. Time is `csky_time`, so the sway is deterministic under
   `--det` and freezes with a halted clock. The card leans about its base (`VERTEX.y` scales it, so
-  the base stays planted): a 0.006 rad mean lean, plus a gust (12 s period, rolling across the forest
-  along the bearing at about 10 m/s) of up to 0.012 rad and a per-tree flutter (3 s) of ±0.010 rad
-  times the gust. A 17.8 m fir's top moves at most about half a metre. The phase is a dot of the
+  the base stays planted): a 0.012 rad mean lean, plus a gust (12 s period, rolling across the forest
+  along the bearing at about 10 m/s) of up to 0.024 rad and a per-tree flutter (3 s) of ±0.020 rad
+  times the gust (doubled at your request after the first montage). A 17.8 m fir's top moves at
+  most about one metre. The phase is a dot of the
   planted point with a fixed vector, no random draw. Both periods divide `ShaderTime.RolloverSecs`,
   so the clock's hourly wrap shows no jump. The lean is applied in world axes and folded back
   through the face (`transpose(face)`), so the card's existing `* keep` still collapses a hidden or

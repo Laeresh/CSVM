@@ -47,7 +47,7 @@ public sealed class ClutterBuilder
         + "    vec2 breeze = vec2(0.9397, 0.3420);\n"
         + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
         + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
-        + "    float lean = 0.006 + gust * (0.012 + 0.010 * flutter);\n"
+        + "    float lean = 0.012 + gust * (0.024 + 0.020 * flutter);\n"
         + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
