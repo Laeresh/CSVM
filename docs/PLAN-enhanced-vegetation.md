@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, near
 
-31. ☐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
+31. ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
 32. ☐ Near-radius 3D draw with a dither handover to the card
 33. ☐ Look-alike models for every listed card species
 34. ☐ Ground cover prototype: new-art grass and crop cards
@@ -682,23 +682,65 @@ fixed seed), and whether it reuses `PlaceOnTriangle` or a sibling.>
 
 # Wave D, near
 
-## D31 ☐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
+## D31 ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
 
 **Goal.** A Blender Python script per species that an agent runs headless to produce a glTF model
 and a render beside the original card, for your judgement.
 
 **Evidence (confidence: measured for the tools).** Blender 4.3, 4.4 and 5.2 are installed under
-`C:\Program Files\Blender Foundation`. Decision 17.
+`C:\Program Files\Blender Foundation`. Decision 17. None of the three bundles Sapling Tree Gen (no
+`addons_core` entry; it became an online extension in 4.2). 5.2.1 LTS runs `--background
+--factory-startup` cleanly, EEVEE included, and its glTF exporter writes `alphaMode: MASK` from a
+Round node on the alpha. C1's `firtree1.flt` card is a 10.026 × 17.834 m CylindricalY quad, pivot at
+its base centre, textured `firtree1.tif` (128 × 128); its opaque silhouette is about 7 m wide at the
+base and tapers to a point at 17.4 m, mean colour a very dark green. The model flag `lighting` is
+false, so the card draws unlit.
 
-**Approach.** <TODO: the Blender version to pin, the repo location for scripts and models, the
-generator (the bundled Sapling add-on or hand-built geometry), scale and pivot conventions.>
+**Approach.** Landed as the pipeline and its first species; [`tooling.md`](tooling.md), "Vegetation
+models", is the reference.
 
-**Model recommendation.** <TODO>
+- **Blender 5.2** (5.2.1 LTS): the newest installed, a long-term-support line, already the version
+  `CSVM/data/cloud_puffs/render_cloud_puffs.py` names, and clean headless.
+- **Location.** `CSVM/data/vegetation_models/<model>.py`, one generator per card species, plus the
+  shared `veg_blender.py`. Output `CSVM/data/vegetation_models/<chapter>/<model>.glb.bin`, committed
+  as the cloud puffs' `.png.bin` are: Godot imports no `.bin`, so there is no `.import` file to
+  commit, and the export's `data/*.bin` filter packs it. D32 loads it with
+  `GltfDocument.AppendFromBuffer`. A rerun is byte-identical. The chapter folder is there because a
+  model name carries a different card per chapter (`firtree1` is 10 × 18 m on C1, 10 × 13 m on C4).
+- **Generator: hand-built `bmesh` geometry** and a texture drawn with numpy in the script, so the run
+  needs no download and the model holds no pixel of the original. One mesh, one material, one 256 ×
+  256 atlas (fronds, a core patch, a bark patch), alpha MASK, double-sided, so an instanced draw is
+  one surface.
+- **Conventions.** Metres; pivot at the trunk base on the ground; Y up in the GLB (Blender's Z up,
+  converted by the exporter); sized to the card it replaces. Each generator holds its card sizes and
+  stops if the extracted card differs. Normals are bent out from the trunk axis and up, so the crown
+  shades as a volume.
+- **The render** (`--render`, which `MakeVegetationModel.ps1` passes, into `.scratch/vegetation/`):
+  the card's texture on a quad at its real size beside the model, unlit as the game draws it, one
+  orthographic camera and one sun, from eye level (`_side`) and from 35° above (`_above`), plus the
+  model's atlas (`_atlas`). Scratch only, never committed.
+- **firtree1 (C1)**: a six-sided trunk, a six-sided dark core, and 15 whorls of drooping fronds (5 to
+  7 a whorl) whose tips follow the card's silhouette. **758 triangles**, 1281 vertices,
+  8.5 × 8.3 × 17.39 m, a 102 KB GLB.
 
-**Verify.** <TODO>
+**Model recommendation.** Opus for a new species: the work is a look iterated against renders, and
+D33 adds palms and bushes the fir's builder does not cover. A mid-tier model can rerun or retune an
+existing generator.
 
-**⚠ Traps.** The models are new art made by the remake; nothing traced from the original's textures
-ships as a model texture without a copyright check.
+**Verify.** `.\MakeVegetationModel.ps1 -Species firtree1` exits 0 with Blender headless and no Godot
+launch; the GLB's JSON reads one mesh with one primitive, `alphaMode: MASK`, `doubleSided: true`,
+POSITION y from 0 to 17.39; a second run writes the same bytes. The look is yours: the `_side` and
+`_above` renders of `firtree1` beside its card.
+
+**⚠ Traps.**
+- The models are new art made by the remake; nothing traced from the original's textures ships as a
+  model texture without a copyright check. The card texture goes into the scratch render only.
+- The card draws unlit and the model is lit, so the render's brightness match holds for its sun and
+  sky only; D32's handover must be judged in game.
+- A card name is not a species across chapters: size and texture differ per chapter, so a
+  generator gains a `CARDS` entry (and its own look check) per chapter.
+
+**Verified.** <pending orchestrator run>
 
 ## D32 ☐ Near-radius 3D draw with a dither handover to the card
 
