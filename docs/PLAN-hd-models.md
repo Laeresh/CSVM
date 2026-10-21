@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, content paths (all [local])
 
 21. ☑ [local] Round-trip proof on a real plane and a real world prop
-22. ◐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
+22. ☑ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 23. ☐ [local] World props and destructibles in every damage state
 24. ☐ [local] Plane airframes without livery
 25. ☐ [local] Rig on a real airframe
@@ -573,9 +573,9 @@ rewrite), `hd-model-swap` (an exported crate wears its original material, red wi
 **Verified.** <pending orchestrator run>
 
 **Owed.** The draw-priority TODO is answered by B16: a replacement surface takes its texture's
-original priority, and the Bloodhawk's logos survive the round trip. <TODO: a chapter key replaces every
-node of that name: C1 has 74 nodes named `part1` over 47 models, so an unedited destructible export
-keyed by part names would replace the parts of every other destructible (C23).>
+original priority, and the Bloodhawk's logos survive the round trip. A chapter key replaces every node
+of that name (C1 has 74 nodes named `part1` over 47 models); C22's scoped key answers it: a destructible's
+root file (`C1/<root>.glb`) reaches only that root's parts.
 
 **Original approach (kept for reference).**
 
@@ -599,9 +599,26 @@ names, so an unedited export's surfaces take B13's non-original path rather than
 texture's material; name each exported material after its texture, without the extension, since
 Godot's writer turns a dot in a material name into an underscore.
 
-## C22 ◐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
+## C22 ☑ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 
-**Finding.** "No new code beyond B12" is disproved. Every weapon root (the 17 `FLYOUT` models, `gunshell`,
+**Landed.** A pack key is scoped to the subtree root. `SceneBuilder` asks the file of a node's nearest
+gamez ancestor first (`HdModelMeshes.Scoped`), then the node's own key, so `he_rocket.glb` holding `g12`,
+`gunshell.glb` holding `g1` and `splash1.flt.glb` holding `splash1_base` replace those leaves under that
+root and no other node of the name. Inside a scope file a leaf matches its own name, the glTF node whose
+ancestors follow most of the gamez names between winning (two `part1` under `left` and `right`), with no
+whole-file or single-mesh fallback; B16's descendant exclusion and empty-node rule still apply. A
+meshless root draws nothing whatever its file holds. This answers C21's `part1` TODO. `EnsureSplashFade`
+twins every surface, so a multi-surface splash base fades whole. `hd-model-swap` gains a scope check
+(a meshless root over `g12` two levels down, `g13`, two `part1`; another root's `g12` and `g13`; a casing
+root's unnamed leaf), red three ways: ancestors skipped, path score dropped, whole-file fallback kept.
+Weapon lab in C1 and C3 (`wep_06`, `wep_00`) with a root pack: the flyout body, casing and splash base
+each log `1 from the model pack`, no world mesh is replaced, the pylon rockets lie along the rocket
+axis, and the unedited `--export-gltf --chapter=C1 --node=gunshell` file keeps all 24 captured frames
+md5-identical to no pack. `--export-gltf --node=he_rocket` writes an empty file (the node stage hides the
+prototype root and the exporter prunes hidden nodes), so the rocket pack was authored by hand in the
+exported frame <TODO: export a flyout prototype root>.
+
+**Finding (kept).** "No new code beyond B12" is disproved. Every weapon root (the 17 `FLYOUT` models, `gunshell`,
 `splash1.flt`, `bsplsh.flt`) is a meshless group in all eight chapters, so `he_rocket.glb` matches a node
 that draws nothing and replaces nothing (the pixels of a pack of root names equal those of no pack). The
 meshes sit on descendants with generic names: `he_rocket`, `flak`, `flash`, `beeper` and `scatter` draw
@@ -615,10 +632,8 @@ replaced, as B12 rules: the splash columns `splash1_splash`, `bsplsh_splash` (fa
 `bflare` (glow sprites). The weapon geometry is identical in all eight chapters, so the bare key is the
 right one. A replaced round's hit box keeps the gamez model (`SceneBuilder.GameplayMesh`). The splash
 curves scale the replacement as they scale the original base (radius 0.12 m for `splash1`, 0.95 m for
-`bsplsh`), so a pack authors the base at that size. Needed: a key scoped to the subtree root, so
-`he_rocket.glb` carries `g12` and `g13` by name for that root alone <TODO: the scoped-key change in
-`SceneBuilder`/`HdModelMeshes`, then re-run this item's captures>. The weapon breadcrumbs now print how
-many meshes came from the pack.
+`bsplsh`), so a pack authors the base at that size. The weapon breadcrumbs print how many meshes came
+from the pack.
 
 **Verified.** <pending orchestrator run>
 
@@ -660,6 +675,9 @@ states, compare effect positions with the original.
 **⚠ Traps.** A partial pack that replaces only the healthy state changes look on the first hit;
 this is expected and the pack author's choice, not an engine bug. Whether `Centre` should read the
 original mesh's box rather than the replacement's is undecided <TODO>.
+Known: part names repeat (`part1` on 74 C1 nodes over 47 models, and 10 times inside `refinery`), so key
+a destructible by its root (C22's scope): a root file reaches only its own parts, a repeated name inside
+one root resolves by the names between, and identical siblings of one parent take the first match.
 
 ## C24 ☐ [local] Plane airframes without livery
 

@@ -1517,23 +1517,41 @@ void fragment() {
     private ArrayMesh? Replacement(GameZNode node, int meshIndex, bool forceDoubleSided, bool forceLit,
         bool clutterFade = false)
     {
-        if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null)
-            || HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) == null)
+        if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null))
+            return null;
+        var shared = HdModelMeshes.Current;
+        // A failed import is null and draws the gamez model; an empty one draws nothing.
+        if (Imported(node, shared) is not { } imported || shared.SurfacesOf(imported) is not { } surfaces)
             return null;
         var mesh = _gamez.Meshes[meshIndex];
         if (GetCylindricalAxis(mesh) != CylAxis.None || IsGlowSpriteMesh(mesh) || UsesBillboardTexture(mesh)
             || !mesh.Polygons.Exists(p => !DrawsNothing(p.MaterialIndex))
             || KeepsOriginalMesh?.Invoke(node) == true)
             return null;
-        // A failed import is null and draws the gamez model; an empty one draws nothing.
-        var shared = HdModelMeshes.Current;
-        if (shared.For(node.Name, HdChapter, HdAirframe, DescendantNames(node)) is not { } imported
-            || shared.SurfacesOf(imported) is not { } surfaces)
-            return null;
         var key = (imported, meshIndex, forceDoubleSided, forceLit, clutterFade);
         if (!_replacementCache.TryGetValue(key, out var built))
             _replacementCache[key] = built = MappedReplacement(surfaces, shared, mesh, meshIndex, forceDoubleSided, forceLit, clutterFade);
         return built;
+    }
+
+    // The pack's import for a node: from the file of the nearest ancestor whose file names it, else
+    // from the node's own key. A generic name (`g12`, `part1`) then reaches only its own root's nodes.
+    // ⚠ Keep the ancestors first; a bare file of a generic name would otherwise win over the root's.
+    private ArrayMesh? Imported(GameZNode node, HdModelMeshes shared)
+    {
+        List<string>? owned = null;
+        var path = new List<string>();
+        int steps = 0;
+        for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
+        {
+            if (HdModels.Current.KeyFor(scope.Name, HdChapter, HdAirframe) != null
+                && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
+                return scoped;
+            path.Insert(0, scope.Name);
+        }
+        return HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) != null
+            ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
+            : null;
     }
 
     // The names of the gamez nodes below `node`. A glTF subtree named after one is that node's to draw.

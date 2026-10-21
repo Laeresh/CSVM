@@ -242,6 +242,14 @@ public sealed class GameZ
         return 0;
     }
 
+    /// <summary>The node whose children list holds <paramref name="node"/>, or null for a root.</summary>
+    public GameZNode? ParentOf(GameZNode node)
+    {
+        EnsureParentMap();
+        int p = node.Index >= 0 && node.Index < _parent!.Length ? _parent[node.Index] : -1;
+        return p >= 0 ? Nodes[p] : null;
+    }
+
     /// <summary>The world-space transform of a node, accumulated up its parent chain (the
     /// nodes.json children lists, parent is a flat list position, so we invert those).
     /// Nodes without a transformation contribute identity. Robust to nesting, though most

@@ -181,7 +181,7 @@ decodes and sizes what it returns. Coverage: `CSVM.Tests/HdTexturesTests.cs`.
 The HD model packs in `<dataRoot>/HDModels` (`models.hd`, `--hd-models=`, off with
 `--no-hd-models`; a `--det` run reads none unless the flag names one), over `PackIndex.cs`. It maps a
 gamez node name to a `.glb` from a zip or subfolder, or a loose `.gltf` with its path, by airframe
-(`planes/<airframe>/<node>`), chapter (`C3/<node>`) or bare name, the more specific winning. Names
+(`planes/<airframe>/<node>`), chapter (`C3/<node>`) or bare name, the more specific winning; a gamez ancestor's file comes first (`Mech3/SceneBuilder.cs`). Names
 match without case or a trailing `.flt`. `KeyFor` names the pack key a node resolves to without
 reading it, which `Mech3/HdModelMeshes.cs` caches on. An airframe is its model node
 (`player_bhawk`), and `RigFor` returns `planes/<airframe>/rig.json`, the one `.json` read, for

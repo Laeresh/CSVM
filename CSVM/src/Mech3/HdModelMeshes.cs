@@ -55,40 +55,19 @@ public sealed class HdModelMeshes
     /// for the node. Keys resolve as <see cref="HdModels.For"/> resolves them, and
     /// <paramref name="owned"/> names the gamez node's descendants, whose glTF subtrees are left out.
     /// ⚠ Do not edit the result; every node replaced from that key draws it.</summary>
-    public ArrayMesh? For(string node, string? chapter = null, string? airframe = null, IEnumerable<string>? owned = null)
-    {
-        if (_models.KeyFor(node, chapter, airframe) is not { } key)
-        {
-            return null;
-        }
+    public ArrayMesh? For(string node, string? chapter = null, string? airframe = null, IEnumerable<string>? owned = null) =>
+        _models.KeyFor(node, chapter, airframe) is { } key ? Cached(key, NodeOf(key), null, owned) : null;
 
-        var ownedKeys = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (string name in owned ?? Array.Empty<string>())
-        {
-            ownedKeys.Add(HdModels.NodeKey(name));
-        }
-
-        string cacheKey = ownedKeys.Count == 0 ? key : key + "\n" + string.Join("\n", ownedKeys);
-
-        // ⚠ Do not import outside the lock; two builders asking at once would each import and
-        // hand out two meshes for one key.
-        lock (_byKey)
-        {
-            if (!_byKey.TryGetValue(cacheKey, out var mesh))
-            {
-                var surfaces = Load(key, ownedKeys);
-                mesh = surfaces != null ? Build(surfaces) : null;
-                if (mesh != null)
-                {
-                    _surfaces[mesh] = surfaces!;
-                }
-
-                _byKey[cacheKey] = mesh;
-            }
-
-            return mesh;
-        }
-    }
+    /// <summary>The replacement for the gamez node named <paramref name="node"/> out of the pack file
+    /// of its ancestor <paramref name="scope"/>. Null when the scope has no file or the file names no
+    /// such node, since a scoped lookup has no whole-file fallback. The gamez names between scope and
+    /// node are <paramref name="path"/>. Of several glTF nodes of the name, the one whose ancestors
+    /// follow most of the path wins. Otherwise as <see cref="For"/>.</summary>
+    public ArrayMesh? Scoped(string scope, IEnumerable<string> path, string node, string? chapter = null,
+        string? airframe = null, IEnumerable<string>? owned = null) =>
+        _models.KeyFor(scope, chapter, airframe) is { } key
+            ? Cached(key, HdModels.NodeKey(node), path.Select(HdModels.NodeKey).ToArray(), owned)
+            : null;
 
     /// <summary><paramref name="source"/> as a mesh with every triangle surface's winding flipped,
     /// attributes and materials carried across. An unindexed surface gets the identity index list
@@ -275,6 +254,40 @@ public sealed class HdModelMeshes
         return suffixed;
     }
 
+    // The glTF node for the gamez node `nodeKey` under a scope, or -1. Its ancestors following most of
+    // `path` (the gamez names between scope and node) win, then an exact name, then file order.
+    private static int ScopedNode(Godot.Collections.Array<GltfNode> nodes, string nodeKey, string[] path)
+    {
+        int best = -1, bestScore = -1;
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            bool exact = HdModels.NodeKey(NameOf(nodes[i])) == nodeKey;
+            if (!exact && KeyOf(nodes[i]) != nodeKey)
+            {
+                continue;
+            }
+
+            // Walks up the file, matching the path from its nearest name, so a flat file scores 0.
+            int score = 0, step = 0;
+            for (int at = nodes[i].Parent, want = path.Length - 1; at >= 0 && at < nodes.Count && want >= 0 && step++ < nodes.Count; at = nodes[at].Parent)
+            {
+                if (KeyOf(nodes[at]) == path[want])
+                {
+                    want--;
+                    score++;
+                }
+            }
+
+            score = (score * 2) + (exact ? 1 : 0);
+            if (score > bestScore)
+            {
+                (best, bestScore) = (i, score);
+            }
+        }
+
+        return best;
+    }
+
     // Every mesh at or below `index`, placed by `at`, leaving out subtrees named in `owned`.
     private static void Collect(Godot.Collections.Array<GltfNode> nodes, Godot.Collections.Array<GltfMesh> meshes, int index,
         Transform3D at, ISet<string> owned, List<HdSurface> into, int depth = 0)
@@ -302,7 +315,7 @@ public sealed class HdModelMeshes
 
     // Read straight off the parsed state, not a generated scene. No node is built to be freed, and
     // the node names are the file's own.
-    private static HdSurface[]? Import(HdModel model, string nodeKey, string file, ISet<string> owned)
+    private static HdSurface[]? Import(HdModel model, string nodeKey, string[]? path, string file, ISet<string> owned)
     {
         var document = new GltfDocument();
         var state = new GltfState();
@@ -317,13 +330,19 @@ public sealed class HdModelMeshes
         var nodes = state.GetNodes();
         var meshes = state.GetMeshes();
         var surfaces = new List<HdSurface>();
-        int matched = MatchedNode(nodes, nodeKey);
+        int matched = path == null ? MatchedNode(nodes, nodeKey) : ScopedNode(nodes, nodeKey, path);
         if (matched >= 0)
         {
             // ⚠ Never apply the matched node's own transform. It is the gamez node's local
             // transform as exported, and the game places the node by it already.
             Collect(nodes, meshes, matched, Transform3D.Identity, owned, surfaces);
             return surfaces.ToArray();
+        }
+
+        // A scope file that does not name the node leaves it to its own key.
+        if (path != null)
+        {
+            return null;
         }
 
         foreach (int root in state.RootNodes)
@@ -343,8 +362,39 @@ public sealed class HdModelMeshes
         return surfaces.ToArray();
     }
 
+    private ArrayMesh? Cached(string key, string nodeKey, string[]? path, IEnumerable<string>? owned)
+    {
+        var ownedKeys = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (string name in owned ?? Array.Empty<string>())
+        {
+            ownedKeys.Add(HdModels.NodeKey(name));
+        }
+
+        string cacheKey = (path == null ? key : key + "\n@" + string.Join("/", path.Append(nodeKey)))
+            + (ownedKeys.Count == 0 ? string.Empty : "\n" + string.Join("\n", ownedKeys));
+
+        // ⚠ Do not import outside the lock; two builders asking at once would each import and
+        // hand out two meshes for one key.
+        lock (_byKey)
+        {
+            if (!_byKey.TryGetValue(cacheKey, out var mesh))
+            {
+                var surfaces = Load(key, nodeKey, path, ownedKeys);
+                mesh = surfaces != null ? Build(surfaces) : null;
+                if (mesh != null)
+                {
+                    _surfaces[mesh] = surfaces!;
+                }
+
+                _byKey[cacheKey] = mesh;
+            }
+
+            return mesh;
+        }
+    }
+
     // ⚠ Never throws: a broken pack file costs its own replacement, not the build that asked.
-    private HdSurface[]? Load(string key, ISet<string> owned)
+    private HdSurface[]? Load(string key, string nodeKey, string[]? path, ISet<string> owned)
     {
         if (_models.Read(key) is not { } model)
         {
@@ -355,7 +405,7 @@ public sealed class HdModelMeshes
         string file = model.GltfPath ?? key + (model.IsGlb ? ".glb" : ".gltf");
         try
         {
-            return Import(model, NodeOf(key), file, owned);
+            return Import(model, nodeKey, path, file, owned);
         }
         catch (Exception e)
         {

@@ -76,7 +76,9 @@ internal static class HdModelSwapSuites
         + "or unlit as glTF says, follows a graphics-mode switch, and the shared import keeps its own materials. "
         + "A glTF export of an original node, put unedited into the pack, wears that node's original material. "
         + "A decal surface draws at the highest priority its original polygons have, a matched node holding no "
-        + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model")]
+        + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model. "
+        + "A meshless root's file replaces the generic-named leaves below that root alone, a repeated name by the "
+        + "names between, before a leaf's own bare file, and never a leaf it does not name")]
     internal static void SwapSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -135,6 +137,128 @@ internal static class HdModelSwapSuites
         CheckPlane(ctx, planesGamez, textures, planeNode, none, models);
         CheckExportRoundTrip(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, root);
         CheckPriorityAndEmpty(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, models);
+        CheckScope(ctx, textures, root);
+    }
+
+    // A meshless root's file replaces the generic-named leaves below that root alone. Each leaf matches
+    // its own name, and a repeated name the names between. Elsewhere the same name keeps its gamez
+    // model or its own bare file. A leaf the root's file does not name keeps its gamez model.
+    private static void CheckScope(TestContext ctx, TextureArchive textures, string root)
+    {
+        var gamez = ScopeGamez();
+        string pack = Path.Combine(root, "Scoped", "pack");
+        var rocket = new Node3D { Name = "pack_scene" };
+        var l4 = Holder(rocket, "probe_l4", null);
+        Holder(l4, "g12", new Vector3(1, 1, 1));
+        Holder(rocket, "g13", new Vector3(2, 1, 1));
+        Holder(Holder(rocket, "left", null), "part1", new Vector3(3, 1, 1));
+        Holder(Holder(rocket, "right", null), "part1", new Vector3(4, 1, 1));
+        var shell = new Node3D { Name = "pack_scene" };
+        Holder(shell, "g1", new Vector3(5, 1, 1));
+        var bare = new Node3D { Name = "pack_scene" };
+        Holder(bare, "g13", new Vector3(6, 1, 1));
+        foreach (var (name, tree) in new[] { ("probe_rocket", rocket), ("probe_casing", shell), ("g13", bare) })
+        {
+            Directory.CreateDirectory(pack);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(tree, Path.Combine(pack, name + ".glb")), $"{name}.glb write result");
+            tree.Free();
+        }
+
+        var saved = HdModels.Current;
+        using var none = HdModels.Open(root, "no-such-pack");
+        using var models = HdModels.Open(root, "Scoped");
+        var built = new List<Node3D>();
+        try
+        {
+            Node3D Build(HdModels with, string name, out int replaced)
+            {
+                HdModels.Current = with;
+                var builder = new SceneBuilder(gamez, textures, fullbright: true, cullBackfaces: true) { HdChapter = Chapter };
+                var node = builder.BuildSubtree(gamez.FindByName(name)!)!;
+                replaced = builder.ReplacedMeshCount;
+                built.Add(node);
+                return node;
+            }
+
+            Vector3? Size(Node3D tree, string path) => DrawnMesh(tree.GetNodeOrNull<Node3D>(path))?.GetAabb().Size;
+            var packed = Build(models, "probe_rocket", out int rocketReplaced);
+            var plain = Build(none, "probe_rocket", out _);
+            ctx.Same(4, rocketReplaced, $"the root's file replaces its four leaves");
+            ctx.Check(MeshChild(packed) == null, $"the meshless root draws nothing with its file in the pack");
+            ctx.Check(Size(packed, "probe_l4/g12") == new Vector3(1, 1, 1) && Size(packed, "g13") == new Vector3(2, 1, 1),
+                $"g12 two levels down and g13 draw the root file's nodes of their names, before g13's own bare file");
+            ctx.Check(Size(packed, "left/part1") == new Vector3(3, 1, 1) && Size(packed, "right/part1") == new Vector3(4, 1, 1),
+                $"the two part1 leaves draw the file's part1 under their own parent's name");
+            var instance = MeshChild(packed.GetNodeOrNull<Node3D>("probe_l4/g12"));
+            ctx.Check(instance != null && SceneBuilder.GameplayMesh(instance)?.GetAabb() == DrawnMesh(plain.GetNodeOrNull<Node3D>("probe_l4/g12"))?.GetAabb(),
+                $"a scoped leaf's hit box reads the gamez model");
+
+            var other = Build(models, "probe_other", out int otherReplaced);
+            var otherPlain = Build(none, "probe_other", out _);
+            ctx.Same(1, otherReplaced, $"another root's leaves take only g13's own bare file");
+            ctx.Check(Size(other, "g12") == Size(otherPlain, "g12") && Size(other, "g13") == new Vector3(6, 1, 1),
+                $"another root's g12 keeps its gamez model and its g13 draws the bare g13 file");
+
+            var casing = Build(models, "probe_casing", out int casingReplaced);
+            var casingPlain = Build(none, "probe_casing", out _);
+            ctx.Same(1, casingReplaced, $"the casing root's one-mesh file replaces only the leaf it names");
+            ctx.Check(Size(casing, "g1") == new Vector3(5, 1, 1) && Size(casing, "probe_unnamed") == Size(casingPlain, "probe_unnamed"),
+                $"a leaf the root's file does not name keeps its gamez model, with no whole-file fallback");
+        }
+        finally
+        {
+            HdModels.Current = saved;
+            built.ForEach(n => n.Free());
+        }
+    }
+
+    // A glTF node named for a gamez node under `parent`, drawing a box of `size` from the origin, or none.
+    private static Node3D Holder(Node3D parent, string name, Vector3? size)
+    {
+        var holder = new Node3D { Name = name };
+        holder.SetMeta(AnimRuntime.NameMeta, name);
+        if (size is { } s)
+        {
+            var mesh = new ArrayMesh();
+            var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Mesh.ArrayType.Max);
+            arrays[(int)Mesh.ArrayType.Vertex] = new[] { Vector3.Zero, new Vector3(s.X, 0, 0), new Vector3(0, s.Y, 0), new Vector3(0, 0, s.Z) };
+            arrays[(int)Mesh.ArrayType.Index] = new[] { 0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2 };
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.SurfaceSetMaterial(0, new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.2f, 0.8f) });
+            holder.AddChild(new MeshInstance3D { Name = "mesh", Mesh = mesh });
+        }
+
+        parent.AddChild(holder);
+        return holder;
+    }
+
+    // Three meshless roots. The rocket holds g12 under a group, g13 and a part1 under each of two
+    // groups. Another root holds g12 and g13 too; the casing holds g1 and a leaf its file leaves out.
+    private static GameZ ScopeGamez()
+    {
+        var gamez = new GameZ();
+        gamez.Materials.Add(new GameZMaterial { Color = new Color(0.5f, 0.5f, 0.5f) });
+        int box = AddMesh(gamez, Box(new Vector3(-0.25f, -0.25f, -0.25f), new Vector3(0.25f, 0.25f, 0.25f)));
+        var rocket = AddNode(gamez, "probe_rocket", -1, Vector3.Zero);
+        var l4 = AddNode(gamez, "probe_l4", -1, Vector3.Zero);
+        Child(rocket, l4);
+        Child(l4, AddNode(gamez, "g12", box, Vector3.Zero));
+        Child(rocket, AddNode(gamez, "g13", box, new Vector3(0, 0, -2)));
+        foreach (string side in new[] { "left", "right" })
+        {
+            var group = AddNode(gamez, side, -1, new Vector3(side == "left" ? -2 : 2, 0, 0));
+            Child(rocket, group);
+            Child(group, AddNode(gamez, "part1", box, Vector3.Zero));
+        }
+
+        var other = AddNode(gamez, "probe_other", -1, new Vector3(10, 0, 0));
+        Child(other, AddNode(gamez, "g12", box, Vector3.Zero));
+        Child(other, AddNode(gamez, "g13", box, new Vector3(0, 0, 2)));
+        var casing = AddNode(gamez, "probe_casing", -1, new Vector3(-10, 0, 0));
+        Child(casing, AddNode(gamez, "g1", box, Vector3.Zero));
+        Child(casing, AddNode(gamez, "probe_unnamed", box, new Vector3(0, 2, 0)));
+        return gamez;
     }
 
     // A decal surface draws at its original polygons' priority, the highest where they differ, so it
