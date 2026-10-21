@@ -44,7 +44,7 @@ LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparen
 Imports a model pack's replacement mesh for a gamez node (`Extraction/HdModels.cs` finds the file)
 and caches it per pack key, a failed import as null, so every node replaced from one key shares one
 `ArrayMesh`. It reads the parsed `GltfState` without generating a scene, picks the mesh by the glTF
-node's original name, and reverses each triangle surface, since `GltfExporter` reversed it on the
+node's original name (else with Blender's `.001` repeat suffix dropped), and reverses each triangle surface, since `GltfExporter` reversed it on the
 way out ([../formats/gotchas.md](../formats/gotchas.md)). Surfaces come from the importer's own
 arrays, uncompressed, and keep the file's materials; `SurfacesOf` hands them out and `AlbedoOf` a mip-mapped copy of a
 material's base-colour texture. `Current` follows `HdModels.Current`. `SceneBuilder.cs` draws a copy of the result, under

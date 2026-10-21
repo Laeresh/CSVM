@@ -2082,6 +2082,8 @@ void fragment() {
             bool water = ClassifySurface(texName) == "water";
             bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
             var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase);
+            // The glTF export names its material from this, so a pack built from it maps back here.
+            textured.ResourceName = texName;
             if (keyed != null)
             {
                 bool scrolls = scroll != Vector2.Zero;

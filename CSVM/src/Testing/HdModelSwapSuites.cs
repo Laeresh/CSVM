@@ -69,7 +69,8 @@ internal static class HdModelSwapSuites
         + "A replaced surface wears the remake's shader: a glTF material named after an original "
         + "texture takes the very material an original surface of it takes, clamped by its own UVs, "
         + "and repaints with it; any other takes the file's base colour, two-sided, cutout, blended "
-        + "or unlit as glTF says, follows a graphics-mode switch, and the shared import keeps its own materials")]
+        + "or unlit as glTF says, follows a graphics-mode switch, and the shared import keeps its own materials. "
+        + "A glTF export of an original node, put unedited into the pack, wears that node's original material")]
     internal static void SwapSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -111,16 +112,47 @@ internal static class HdModelSwapSuites
             string file = Path.Combine(pack, key + ".glb");
             ctx.Same((long)Error.Ok, (long)WriteModel(file, key[(key.LastIndexOf('/') + 1)..], materials),
                 $"{key}.glb write result");
-            if (materials != null)
-            {
-                RestoreDot(file, SkinTiled);
-            }
         }
 
         using var none = HdModels.Open(root, "no-such-pack");
         using var models = HdModels.Open(root, "HDModels");
         CheckWorld(ctx, textures, weapon, none, models);
         CheckPlane(ctx, planesGamez, textures, planeNode, none, models);
+        CheckExportRoundTrip(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, root);
+    }
+
+    // The crate as a builder draws it, exported and put unedited into a pack under its own key. Its
+    // texture-named glTF material maps back to the very material the original surface wears.
+    private static void CheckExportRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels none, string root)
+    {
+        var builder = new SceneBuilder(gamez, textures, fullbright: true, cullBackfaces: true) { HdChapter = Chapter };
+        var node = gamez.Nodes[Index(gamez, Crate)];
+        var saved = HdModels.Current;
+        Node3D? original = null;
+        Node3D? replaced = null;
+        try
+        {
+            HdModels.Current = none;
+            original = builder.BuildSubtree(node);
+            ctx.Host.AddChild(original);
+            string file = Path.Combine(root, "RoundTrip", "pack", Chapter, Crate + ".glb");
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(original, file), $"the crate's export write result");
+            using var trip = HdModels.Open(root, "RoundTrip");
+            HdModels.Current = trip;
+            replaced = builder.BuildSubtree(node);
+            var skin = DrawnMesh(original)?.SurfaceGetMaterial(0);
+            var drawn = DrawnMesh(replaced);
+            ctx.Check(builder.ReplacedMeshCount == 1 && drawn != null && !ReferenceEquals(drawn, DrawnMesh(original))
+                    && drawn.GetSurfaceCount() == 1 && skin != null && ReferenceEquals(drawn.SurfaceGetMaterial(0), skin),
+                $"the exported crate's surface wears the very material its original {SkinTexture} surface wears");
+        }
+        finally
+        {
+            HdModels.Current = saved;
+            original?.Free();
+            replaced?.Free();
+        }
     }
 
     private static void CheckWorld(TestContext ctx, TextureArchive textures, WeaponDef weapon, HdModels none, HdModels models)
@@ -347,20 +379,6 @@ internal static class HdModelSwapSuites
             }, 1f),
             (new StandardMaterial3D { ResourceName = PackLamp, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded }, 1f),
         };
-    }
-
-    // Godot's glTF writer turns a material name's dot into an underscore, where Blender keeps it. The
-    // spelling is the same length, so the binary's chunk lengths stay valid.
-    private static void RestoreDot(string file, string name)
-    {
-        var bytes = File.ReadAllBytes(file);
-        var written = System.Text.Encoding.ASCII.GetBytes(name.Replace('.', '_'));
-        int at = bytes.AsSpan().IndexOf(written);
-        if (at >= 0)
-        {
-            System.Text.Encoding.ASCII.GetBytes(name).CopyTo(bytes, at);
-            File.WriteAllBytes(file, bytes);
-        }
     }
 
     private static string Code(ShaderMaterial material) => material.Shader?.Code ?? string.Empty;

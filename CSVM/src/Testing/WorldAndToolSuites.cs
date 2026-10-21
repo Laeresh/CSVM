@@ -100,17 +100,22 @@ internal static class WorldAndToolSuites
     // A subtree built in code the way SceneBuilder names it: two siblings sharing one gamez name and
     // names Godot sanitises. The re-read file must name every node as the data does. Able to fail:
     // without the exporter's rename the file holds "gear_flt" and an "@"-mangled second "wing".
+    // Each mesh wears a skin named for its texture as SceneBuilder names one; without the material
+    // rewrite the file holds "wing2", "wing3" and "cowl_".
     [Suite("gltf-export-names",
         "a glTF export names each node with its original gamez name, so two same-named siblings and "
         + "a name holding '.', ':' or '@' read back from the file as the data spells them, and the "
-        + "live subtree keeps its Godot names")]
+        + "live subtree keeps its Godot names; each material is named after its skin's texture "
+        + "without the extension, repeated, shared with a node or holding a '.'")]
     internal static void GltfExportNames(TestContext ctx)
     {
         string[] originals = { "probe_plane", "wing", "wing", "gear.flt", "hinge:l@1" };
+        string[] skins = { "", "wing.tif", "wing.tif", "cowl..tif", "probe_skin.tif" };
         var root = NamedProbeNode(originals[0], null);
         for (int i = 1; i < originals.Length; i++)
         {
-            root.AddChild(NamedProbeNode(originals[i], new BoxMesh()));
+            var skin = new ShaderMaterial { ResourceName = skins[i], Shader = new Shader { Code = "shader_type spatial;" } };
+            root.AddChild(NamedProbeNode(originals[i], new BoxMesh { Material = skin }));
         }
         ctx.Host.AddChild(root);
         var liveBefore = LiveNames(root);
@@ -135,6 +140,9 @@ internal static class WorldAndToolSuites
                 int got = fileNames.Count(n => n == name);
                 ctx.Same(want, got, $"file nodes named '{name}' (file=[{string.Join(", ", fileNames)}])");
             }
+            var materialNames = state.GetMaterials().Select(m => m.ResourceName).OrderBy(n => n, System.StringComparer.Ordinal);
+            string wantMaterials = string.Join(", ", skins.Skip(1).Select(Path.GetFileNameWithoutExtension).OrderBy(n => n, System.StringComparer.Ordinal));
+            ctx.Check(string.Join(", ", materialNames) == wantMaterials, $"file materials [{string.Join(", ", materialNames)}] are the skins' textures [{wantMaterials}]");
         }
         finally
         {

@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
@@ -16,6 +20,10 @@ namespace CSVM.Tooling;
 /// sanitised one, so a model pack built from an export matches node for node.</summary>
 public sealed class GltfExporter
 {
+    // "glTF" read as a little-endian word, and the binary header's size (magic, version, length).
+    private const uint GlbMagic = 0x46546C67;
+    private const int GlbHeader = 12;
+
     // The export still owed from the launch spec, cleared once written; null when no --export-gltf=.
     private string? _pendingPath;
 
@@ -132,6 +140,10 @@ public sealed class GltfExporter
             RestoreGamezNames(copy, state, state.GetNodes());
             err = doc.WriteToFilesystem(state, path);
         }
+        if (err == Error.Ok)
+        {
+            err = RestoreMaterialNames(path, state.GetMaterials());
+        }
         copy.QueueFree();
         if (err == Error.Ok)
         {
@@ -159,6 +171,60 @@ public sealed class GltfExporter
         foreach (var child in node.GetChildren())
         {
             RestoreGamezNames(child, state, nodes);
+        }
+    }
+
+    // Rewrites each material's name in the written file as the scene named it. The writer passes a
+    // material name through its node-name rules: a '.' turns '_', and a name already taken gets a
+    // number appended. Neither then names its texture.
+    private static Error RestoreMaterialNames(string path, Godot.Collections.Array<Material> materials)
+    {
+        string file = ProjectSettings.GlobalizePath(path);
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(file);
+            bool glb = bytes.Length >= GlbHeader + 8 && BitConverter.ToUInt32(bytes, 0) == GlbMagic;
+            int jsonLength = glb ? BitConverter.ToInt32(bytes, GlbHeader) : bytes.Length;
+            int jsonStart = glb ? GlbHeader + 8 : 0;
+            var json = JsonNode.Parse(bytes.AsSpan(jsonStart, jsonLength))!;
+            if (json["materials"] is not JsonArray written)
+            {
+                return Error.Ok;
+            }
+            for (int i = 0; i < written.Count && i < materials.Count; i++)
+            {
+                if (written[i] is JsonObject entry && materials[i]?.ResourceName is { Length: > 0 } name)
+                {
+                    entry["name"] = name;
+                }
+            }
+            byte[] text = Encoding.UTF8.GetBytes(json.ToJsonString());
+            if (!glb)
+            {
+                File.WriteAllBytes(file, text);
+                return Error.Ok;
+            }
+            // A GLB chunk is 4-byte aligned, and a JSON chunk pads with spaces.
+            int padded = (text.Length + 3) & ~3;
+            byte[] rest = bytes[(jsonStart + jsonLength)..];
+            using var output = new MemoryStream();
+            using var writer = new BinaryWriter(output);
+            writer.Write(GlbMagic);
+            writer.Write(BitConverter.ToUInt32(bytes, 4));
+            writer.Write(GlbHeader + 8 + padded + rest.Length);
+            writer.Write(padded);
+            writer.Write(BitConverter.ToUInt32(bytes, GlbHeader + 4));
+            writer.Write(text);
+            writer.Write(Enumerable.Repeat((byte)' ', padded - text.Length).ToArray());
+            writer.Write(rest);
+            writer.Flush();
+            File.WriteAllBytes(file, output.ToArray());
+            return Error.Ok;
+        }
+        catch (Exception e) when (e is IOException or JsonException or ArgumentException or UnauthorizedAccessException)
+        {
+            Log.Error("core", $"gltf export failed to name its materials ({e.GetType().Name}: {e.Message}): {file}");
+            return Error.FileCorrupt;
         }
     }
 
@@ -232,6 +298,8 @@ public sealed class GltfExporter
             bool twoSided = !reversed[i] || (shader.Shader?.Code ?? string.Empty).Contains("cull_disabled");
             var std = new StandardMaterial3D
             {
+                // The original texture without its extension, the name a model pack maps back by.
+                ResourceName = Path.GetFileNameWithoutExtension(shader.ResourceName),
                 AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
                 VertexColorUseAsAlbedo = true,
                 CullMode = twoSided ? BaseMaterial3D.CullModeEnum.Disabled : BaseMaterial3D.CullModeEnum.Back,

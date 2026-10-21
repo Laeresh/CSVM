@@ -19,6 +19,7 @@ namespace CSVM.Mech3;
 public sealed class HdModelMeshes
 {
     private static readonly object CurrentLock = new();
+    private static readonly System.Text.RegularExpressions.Regex BlenderRepeat = new(@"\.\d{3,}$");
     private static HdModelMeshes? _current;
 
     private readonly HdModels _models;
@@ -201,12 +202,24 @@ public sealed class HdModelMeshes
     private static string NameOf(GltfNode node) =>
         node.OriginalName is { Length: > 0 } original ? original : node.ResourceName;
 
-    // The mesh index for the gamez node `nodeKey` under the rule on the type, or -1.
+    // The mesh index for the gamez node `nodeKey` under the rule on the type, or -1. With no exact
+    // name, Blender's repeat suffix (`wing.001`) is dropped; no gamez name ends in a dot and digits.
     private static int MeshIndexFor(Godot.Collections.Array<GltfNode> nodes, int meshCount, string nodeKey)
+    {
+        int index = NamedMeshIndex(nodes, nodeKey, NameOf);
+        if (index < 0)
+        {
+            index = NamedMeshIndex(nodes, nodeKey, node => BlenderRepeat.Replace(NameOf(node), string.Empty));
+        }
+
+        return index >= 0 ? index : meshCount == 1 ? 0 : -1;
+    }
+
+    private static int NamedMeshIndex(Godot.Collections.Array<GltfNode> nodes, string nodeKey, Func<GltfNode, string> name)
     {
         foreach (var node in nodes)
         {
-            if (HdModels.NodeKey(NameOf(node)) != nodeKey)
+            if (HdModels.NodeKey(name(node)) != nodeKey)
             {
                 continue;
             }
@@ -232,7 +245,7 @@ public sealed class HdModelMeshes
             }
         }
 
-        return meshCount == 1 ? 0 : -1;
+        return -1;
     }
 
     // Read straight off the parsed state, not a generated scene. No node is built to be freed, and

@@ -71,10 +71,10 @@ Exports any `Node3D` subtree to glTF: mesh, live material state, no animation an
 `Export(node, path)` works on a throwaway `Utils/SceneCopy`, frees hidden `Node3D`s (damage is baked by
 `Visible`) and the point-sprite `"lights"`, and converts every shader skin to a `StandardMaterial3D` over
 reversed winding (`docs/formats/gotchas.md`: unreversed, this data exports inside out). Each file node
-takes its scene node's original gamez name (`cs_name` meta), so a model pack matches node for node.
-Format is extension-driven (`.glb` default). `ExportSet` writes several subtrees under one root at their
-world transforms. `ExportToExports`/`ExportSetToExports` name a timestamped `Exports/` GLB. The viewer's
-`--export-gltf=` one-shot and F10, and NodeLab's selection and export set actions, share that writer.
+takes its original gamez name (`cs_name` meta) and each material its skin's texture without the extension,
+both set past the writer's renaming, so a model pack matches node for node and texture for texture.
+`.glb` by default. `ExportSet` writes several subtrees under one root at world transforms; `Export*ToExports`
+names a timestamped `Exports/` GLB, the writer `--export-gltf=`, F10 and NodeLab's export actions share.
 
 ## src/Tooling/SyntheticData.cs
 `--synthetic-data`'s tree: an `extracted/` of invented records and code-generated files written into

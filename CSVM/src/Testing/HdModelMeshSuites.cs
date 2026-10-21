@@ -21,8 +21,8 @@ internal static class HdModelMeshSuites
     [Suite("hd-model-mesh-import",
         "a mesh written by the glTF exporter into a model pack comes back through HdModelMeshes with "
         + "the source's vertex positions and triangle winding on every surface, from a .glb and a "
-        + "loose .gltf, picked out by node name from a file holding a second mesh, and imported once "
-        + "per pack key")]
+        + "loose .gltf, picked out by node name from a file holding a second mesh, also when Blender "
+        + "has suffixed that name .001, and imported once per pack key")]
     internal static void ImportRoundTrip(TestContext ctx)
     {
         string root = Path.Combine(ctx.ScratchDir, "hd-model-mesh-import");
@@ -33,12 +33,16 @@ internal static class HdModelMeshSuites
 
         string pack = Path.Combine(root, "HDModels", "pack");
         Directory.CreateDirectory(Path.Combine(pack, "c3"));
+        Directory.CreateDirectory(Path.Combine(pack, "c5"));
         var source = ProbeMesh();
         var scene = PackScene(source);
         try
         {
             ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "probe.glb")), $"glb write result");
             ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "c3", "probe.gltf")), $"gltf write result");
+            // The probe as Blender re-exports a repeated object: renamed with a numeric suffix.
+            scene.GetNode("probe").SetMeta(AnimRuntime.NameMeta, "probe.001");
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "c5", "probe.glb")), $"suffixed glb write result");
         }
         finally
         {
@@ -59,6 +63,7 @@ internal static class HdModelMeshSuites
             var gltf = meshes.For("probe", chapter: "C3");
             SameGeometry(ctx, source, gltf, "loose gltf");
             ctx.Check(gltf != null && !ReferenceEquals(gltf, glb), $"the chapter key imports its own file");
+            SameGeometry(ctx, source, meshes.For("probe", chapter: "C5"), "a node named probe.001 beside a decoy");
 
             HdModels.Current = models;
             var shared = HdModelMeshes.Current.For("probe");

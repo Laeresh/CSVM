@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, content paths (all [local])
 
-21. ☐ [local] Round-trip proof on a real plane and a real world prop
+21. ☑ [local] Round-trip proof on a real plane and a real world prop
 22. ☐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 23. ☐ [local] World props and destructibles in every damage state
 24. ☐ [local] Plane airframes without livery
@@ -495,7 +495,30 @@ the names back; local `--dump-markers` against `planes.zbd`>.
 
 # Wave C, content paths
 
-## C21 ☐ [local] Round-trip proof on a real plane and a real world prop
+## C21 ☑ [local] Round-trip proof on a real plane and a real world prop
+
+**Landed.** `SceneBuilder` names each textured material after its texture, and `GltfExporter` names
+each exported material after that texture without the extension. Godot's writer renames a material as
+it renames a node (`.` to `_`, a number appended to a name any node, mesh or material already took:
+`wing2`, `cowl_`), so the exporter rewrites the material names in the written file's JSON. An unedited
+export now maps back through B13's original-texture path. `HdModelMeshes` drops a Blender repeat suffix
+(`wing.001`) when no glTF node name matches exactly; no gamez name ends in a dot and digits. The round
+trip packs one copy of the unedited file per meshed node, named for it (`planes/player_bhawk/<node>.glb`,
+`C1/<node>.glb`), since a key names one node, not a file of many. `--export-gltf=` with `--chapter=` and
+`--node=` exports a world subtree. Suites: `gltf-export-names` (material names, red without the
+rewrite), `hd-model-swap` (an exported crate wears its original material, red without the naming) and
+`hd-model-mesh-import` (the `.001` fallback, red without it).
+
+**Verified.** <pending orchestrator run>
+
+**Owed.** <TODO: decide how a replacement surface takes the original's draw priority. B13 draws every
+replacement surface at priority 0, so the Bloodhawk's logos (`blo_noselogo`, `blo_winglogo`, priority
+1 and 2 polygons coplanar with the skin) vanish under the skin after the round trip; the firehouse,
+which has none, differs by 6 edge pixels in a whole C1 frame.> <TODO: a chapter key replaces every
+node of that name: C1 has 74 nodes named `part1` over 47 models, so an unedited destructible export
+keyed by part names would replace the parts of every other destructible (C23).>
+
+**Original approach (kept for reference).**
 
 **Goal.** An F10 or NodeLab export, put unedited into a pack, renders as the original did.
 
