@@ -48,9 +48,15 @@ internal static class HdModelSwapSuites
     // The side of pack_paint's own base-colour texture.
     private const int PaintSide = 8;
 
+    // pack_paint's MASK cutoff.
+    private const float PaintCutoff = 0.25f;
+
     // The partition grid of the suite's world: four cells of 100 m a side.
     private const float Cell = 100f;
     private const int Cells = 4;
+
+    // The baseColorFactor pack_paint's texture is multiplied by.
+    private static readonly Color PaintFactor = new(0.5f, 0.75f, 1f, 0.8f);
 
     // A box's six faces as indices into its eight corners, each wound as the data winds a face seen
     // from outside (the synthetic airframes' rule).
@@ -72,8 +78,9 @@ internal static class HdModelSwapSuites
         + "unrelated node is untouched, and a builder with no chapter or airframe replaces nothing. "
         + "A replaced surface wears the remake's shader: a glTF material named after an original "
         + "texture takes the very material an original surface of it takes, clamped by its own UVs, "
-        + "and repaints with it; any other takes the file's base colour, two-sided, cutout, blended "
-        + "or unlit as glTF says, follows a graphics-mode switch, and the shared import keeps its own materials. "
+        + "and repaints with it, unlit where the file says so; any other takes the file's base colour times its texture, "
+        + "two-sided, cut at its alphaCutoff, blended or unlit as glTF says, follows a graphics-mode switch, and the "
+        + "shared import keeps its own materials. Replacement surfaces count in the surface census and drop under --hide-alpha. "
         + "A glTF export of an original node, put unedited into the pack, wears that node's original material. "
         + "A decal surface draws at the highest priority its original polygons have, a matched node holding no "
         + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model. "
@@ -535,10 +542,51 @@ internal static class HdModelSwapSuites
                 && mats[3].GetShaderParameter("albedo_color").AsColor().A < 1f,
             $"a BLEND material blends, at its own base colour");
         ctx.Check(Unlit(mats[4]) && !Unlit(mats[3]), $"a KHR_materials_unlit material is unlit, any other lit");
+        ctx.Check(Unlit(mats[1]) && !Unlit(mats[0]),
+            $"a texture-named surface with KHR_materials_unlit is unlit on a lit model, one without it keeps the model's lighting");
+        float cutoff = mats[2].GetShaderParameter("alpha_cutoff").AsSingle();
+        ctx.Check(Code(mats[2]).Contains("ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;", StringComparison.Ordinal) && Mathf.Abs(cutoff - PaintCutoff) < 1e-4f,
+            $"a MASK material cuts at its file's alphaCutoff {PaintCutoff}, read {cutoff}");
+        var factor = mats[2].GetShaderParameter("albedo_color").AsColor();
+        bool near = Mathf.Abs(factor.R - PaintFactor.R) + Mathf.Abs(factor.G - PaintFactor.G) + Mathf.Abs(factor.B - PaintFactor.B)
+            + Mathf.Abs(factor.A - PaintFactor.A) < 4e-3f;
+        ctx.Check(Code(mats[2]).Contains("base_col *= albedo_color;", StringComparison.Ordinal) && near,
+            $"a textured material draws its texture times its baseColorFactor {PaintFactor}, read {factor}");
 
         CheckSharedUntouched(ctx, shared, drawn, new HdModelMeshes(models).For(ReplacedWorld, Chapter));
         CheckModeSwitch(ctx, mats);
         CheckRepaint(ctx, gamez, textures, models);
+        CheckCensus(ctx, gamez, textures, models);
+    }
+
+    // The shed's replacement surfaces count in the census as original surfaces do. Two clamp (the
+    // clamped skin and pack_paint), one cuts out (pack_paint) and one blends (pack_glass). A hidden
+    // transparency class drops its replacement surfaces.
+    private static void CheckCensus(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels models)
+    {
+        var builder = new SceneBuilder(gamez, textures, fullbright: true, cullBackfaces: true)
+        {
+            HdChapter = Chapter,
+            HiddenAlpha = SceneBuilder.TransparencyClass.BlendSurface | SceneBuilder.TransparencyClass.ScissorSurface,
+        };
+        var saved = HdModels.Current;
+        HdModels.Current = models;
+        Node3D? shed = null;
+        try
+        {
+            int clamped = SceneBuilder.ClampedSurfaceTotal + SceneBuilder.EdgeClampedSurfaceTotal;
+            shed = builder.BuildSubtree(gamez.Nodes[Index(gamez, ReplacedWorld)]);
+            clamped = SceneBuilder.ClampedSurfaceTotal + SceneBuilder.EdgeClampedSurfaceTotal - clamped;
+            ctx.Check(builder.ReplacedMeshCount == 1 && clamped == 2 && builder.ScissorSurfaceCount == 1 && builder.BlendSurfaceCount == 1,
+                $"the replacement's surfaces count in the census: {clamped} clamped, {builder.ScissorSurfaceCount} cut out, {builder.BlendSurfaceCount} blended");
+            ctx.Check(DrawnMesh(shed)?.GetSurfaceCount() == 3,
+                $"hiding the blended and cutout classes drops those two replacement surfaces, {DrawnMesh(shed)?.GetSurfaceCount()} of 5 left");
+        }
+        finally
+        {
+            HdModels.Current = saved;
+            shed?.Free();
+        }
     }
 
     // The shared import against a fresh import of the same file: no builder edited it.
@@ -634,11 +682,12 @@ internal static class HdModelSwapSuites
         return new[]
         {
             (new StandardMaterial3D { ResourceName = SkinClamped }, 1f),
-            (new StandardMaterial3D { ResourceName = SkinTiled }, 2f),
+            (new StandardMaterial3D { ResourceName = SkinTiled, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded }, 2f),
             (new StandardMaterial3D
             {
-                ResourceName = PackPaint, AlbedoTexture = TextureUpload.Create(image),
+                ResourceName = PackPaint, AlbedoTexture = TextureUpload.Create(image), AlbedoColor = PaintFactor,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled, Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor,
+                AlphaScissorThreshold = PaintCutoff,
             }, 1f),
             (new StandardMaterial3D
             {

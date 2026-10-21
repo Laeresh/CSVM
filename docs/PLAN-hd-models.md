@@ -99,6 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ [cloud] Apply `rig.json` to the built plane
 15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
 16. ☑ [local] Replacement draw priority and multi-mesh import
+17. ☑ [local] Replacement material gaps
 18. ☑ [local] Rig fallback on a menu launch and the fuel leak's flare
 
 ### Wave C, content paths (all [local])
@@ -367,10 +368,9 @@ of it, a graphics-mode switch and `SceneBuilder.Repaint`, and was shown to fail 
 unit tests pass; the CI tier 195 passed, 0 failed. Locally, goldens with no pack are unchanged; a look at a replaced prop under fog and through a mode switch is owed at the controls. The real livery through `PlanePainter` is
 answered by D31: a texture-named replacement surface wears every livery the original does.
 
-**Owed.** <TODO: decide each: a `MASK` `alphaCutoff` other than 0.5 is not honoured (the shader's
-threshold is fixed); `baseColorFactor` is ignored on a textured surface (no tint uniform);
-`KHR_materials_unlit` is ignored on a texture-named surface; replacement surfaces are outside the
-surface census and `HiddenAlpha`.>
+**Owed.** The four material gaps (a `MASK` `alphaCutoff` other than 0.5, `baseColorFactor` on a
+textured surface, `KHR_materials_unlit` on a texture-named surface, replacement surfaces outside the
+surface census and `HiddenAlpha`) are answered by B17: all four are honoured.
 
 **Original approach (kept for reference).**
 
@@ -551,6 +551,52 @@ round trip with the decal pixels gone; a suite importing a two-mesh file with a 
 **⚠ Traps.** The exporter writes the gamez node's local transform on the matched node, and the game
 applies it again, so it must not be applied twice. The exporter also writes a part's moving gamez
 children under it, so "every mesh below" has to stop at them.
+
+## B17 ☑ [local] Replacement material gaps
+
+**Landed.** A non-original replacement surface sets a new bias-shader key bit, `replacement`, and
+only it: its variant declares `albedo_color` beside the texture and multiplies the sample by it
+(`baseColorFactor`, alpha included), and cuts a scissor at an `alpha_cutoff` uniform set from the
+importer's `alpha_scissor_threshold` (`alphaCutoff`). No original material sets the bit, and every
+other line of the generator emits what it did: 2,097,152 original variants (every combination of
+17 flags and four edge clamps, the three remaining flags all off and all on, both modes) were
+compared text for text against the unchanged generator in a throwaway suite, and none differed. A texture-named surface whose file carries `KHR_materials_unlit` is
+unlit on a model the original lights, and one without it keeps the model's lighting. The reasoning:
+`lighting` is a per-model flag, and `GltfExporter` writes a texture-named material lit (no
+extension), so an unedited export never carries it; the extension is always an author's explicit
+choice for that surface, while its absence says nothing (Blender writes it only for a material
+set up as unlit). The material is the original cache's entry for that texture at `lit: false`, the one an
+unlit original model's surface of that texture wears, so no original material changes. The file's
+`alphaMode`, `alphaCutoff` and factor stay ignored on a texture-named surface, since an export
+writes it opaque and white whatever the original's alpha class. Replacement surfaces now pass
+through `CountSurface`, which `BuildMesh` shares: the UV-clamped and edge-clamped totals, the blend,
+scissor and ground-layer counts, and the `HiddenAlpha` drop. `hd-model-swap` adds five checks (the
+cutoff, the factor, the texture-named unlit, the census, the `--hide-alpha` drop), each red with its
+change switched off.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
+**Goal.** Close the four gaps B13 left: a `MASK` surface cuts at the file's `alphaCutoff`, a
+textured non-original surface draws its texture times `baseColorFactor`, `KHR_materials_unlit`
+reaches a texture-named surface, and replacement surfaces take part in the surface census and
+`HiddenAlpha` the way an original surface does.
+
+**Evidence (confidence: traced).** `PackMaterial` hands `BiasMaterial` no colour for a textured
+surface and the bias shader writes `ALPHA_SCISSOR_THRESHOLD = 0.5`; `MappedReplacement` passes the
+gamez model's `lighting` to `GetMaterial`; `BuildMesh` alone counts `ClampedSurfaceTotal`,
+`EdgeClampedSurfaceTotal` and the blend and scissor counts and drops a `HiddenAlpha` class, so C21
+saw the UV-clamped and edge-clamped totals drop with a pack.
+
+**Approach.** The user's ruling: fix all four now, with no change to any original surface's shader
+or material. A key bit only replacement materials set carries the cutoff and factor uniforms.
+
+**Verify.** `hd-model-swap` checks for each gap, each shown red without its change; the bias
+shader text of every original variant hashed before and after the change.
+
+**⚠ Traps.** An original material is shared through the material cache with every surface of that
+texture, so nothing per-replacement may be written onto it.
 
 ## B18 ☑ [local] Rig fallback on a menu launch and the fuel leak's flare
 

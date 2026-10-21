@@ -1595,21 +1595,29 @@ void fragment() {
                 || source?.CullMode == BaseMaterial3D.CullModeEnum.Disabled;
             var uvs = surface.Arrays[(int)Mesh.ArrayType.TexUV];
             var unitAxes = UvAxesWithinUnitSquare(uvs.VariantType == Variant.Type.PackedVector2Array ? uvs.AsVector2Array() : null);
+            // KHR_materials_unlit arrives as the unshaded mode. An export never writes it, so it is the
+            // author's word for this surface; without it the model's lighting holds. forceLit wins.
+            bool fileUnlit = source?.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded;
             Material material;
+            bool clampUv;
+            UvClampAxes edgeClamp;
             if (OriginalMaterialFor(source?.ResourceName, mesh) is var (original, priority) && original >= 0)
             {
                 if (DrawsNothing(original))
                     continue;
-                var (clampUv, edgeClamp) = ClampFor(unitAxes, scroll);
+                (clampUv, edgeClamp) = ClampFor(unitAxes, scroll);
                 material = GetMaterial(original, priority, rank, noClutter: false, doubleSided, scroll, clampUv,
-                    lit, fogged, pass: 0, edgeClamp, clutterFade);
+                    lit && (forceLit || !fileUnlit), fogged, pass: 0, edgeClamp, clutterFade);
             }
             else
             {
-                // KHR_materials_unlit arrives as the unshaded mode. Lit is the default, and forceLit wins.
-                material = PackMaterial(source, shared.AlbedoOf(source), rank, doubleSided, unitAxes,
-                    forceLit || source?.ShadingMode != BaseMaterial3D.ShadingModeEnum.Unshaded, fogged, clutterFade);
+                var tex = shared.AlbedoOf(source);
+                (clampUv, edgeClamp) = tex != null ? ClampFor(unitAxes, Vector2.Zero) : (false, UvClampAxes.None);
+                // A non-original surface is lit by default, whatever the model's flag.
+                material = PackMaterial(source, tex, rank, doubleSided, clampUv, edgeClamp, forceLit || !fileUnlit, fogged, clutterFade);
             }
+            if (!CountSurface(material, clampUv, edgeClamp))
+                continue;
             result.AddSurfaceFromArrays(surface.Primitive, surface.Arrays);
             int added = result.GetSurfaceCount() - 1;
             result.SurfaceSetName(added, surface.Name);
@@ -1659,24 +1667,23 @@ void fragment() {
             ? (-1, 0) : (found, priority ?? 0);
     }
 
-    // A replacement surface whose glTF material names no original texture: the file's base colour in
-    // the remake's shader. Flags come from the standard glTF fields as the importer maps them.
-    // BLEND arrives as alpha or depth-prepass transparency; MASK is the scissor, at the shader's 0.5.
+    // A replacement surface whose glTF material names no original texture. It wears the file's base
+    // colour, times its texture if any, in the bias shader's replacement variant. BLEND arrives as
+    // alpha or depth-prepass transparency; MASK is the scissor, cut at the file's alphaCutoff.
     private Material PackMaterial(BaseMaterial3D? source, ImageTexture? tex, int rank, bool doubleSided,
-        UvClampAxes unitAxes, bool lit, bool fogged, bool clutterFade)
+        bool clampUv, UvClampAxes edgeClamp, bool lit, bool fogged, bool clutterFade)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var (clampUv, edgeClamp) = tex != null ? ClampFor(unitAxes, Vector2.Zero) : (false, UvClampAxes.None);
         var key = ((Material?)source, rank, doubleSided, clampUv, edgeClamp, lit, fogged, clutterFade);
         if (_packMaterialCache.TryGetValue(key, out var cached))
             return cached;
         var transparency = source?.Transparency ?? BaseMaterial3D.TransparencyEnum.Disabled;
         bool blend = transparency is BaseMaterial3D.TransparencyEnum.Alpha or BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
         bool scissor = transparency is BaseMaterial3D.TransparencyEnum.AlphaScissor or BaseMaterial3D.TransparencyEnum.AlphaHash;
-        // A texture is drawn as it is; the shader has no tint uniform beside it.
-        Color? color = tex == null ? source?.AlbedoColor ?? Colors.White : null;
-        var material = BiasMaterial(priority: 0, rank, noClutter: false, doubleSided, tex, color, blend, scissor,
-            Vector2.Zero, clampUv, lit, fogged, pass: 0, edgeClamp, clutterFade);
+        var material = BiasMaterial(priority: 0, rank, noClutter: false, doubleSided, tex, source?.AlbedoColor ?? Colors.White,
+            blend, scissor, Vector2.Zero, clampUv, lit, fogged, pass: 0, edgeClamp, clutterFade, replacement: true);
+        if (scissor)
+            material.SetShaderParameter("alpha_cutoff", source?.AlphaScissorThreshold ?? 0.5f);
         _packMaterialCache[key] = material;
         return material;
     }
@@ -1827,10 +1834,6 @@ void fragment() {
             // Wrapping is what produces the hairline seams on a surface mapped once (see ClampFor).
             var (clampUv, edgeClamp) = ClampFor(UvAxesWithinUnitSquare(polys, pass), scroll);
 
-            if (clampUv)
-                ClampedSurfaceTotal++;
-            else if (edgeClamp != UvClampAxes.None)
-                EdgeClampedSurfaceTotal++;
             // The glow/cylindrical paths take only the full clamp: their quads' UVs are
             // authored inside the unit square, so the partial case cannot arise there. They also
             // carry no clutter fade: no 3D decoration in the install is a glow or a facade.
@@ -1838,16 +1841,7 @@ void fragment() {
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
                 : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade,
                     groundLayer: _fullbright && !clutterFade && !forceLit && !doubleSided && !billboardMesh && LiesFlat(mesh, polys));
-            var alpha = _materialAlpha.TryGetValue(surfaceMaterial, out var known) ? known : TransparencyClass.None;
-            if (alpha == TransparencyClass.BlendSurface)
-                BlendSurfaceCount++;
-            if (alpha == TransparencyClass.BlendSurface && surfaceMaterial.RenderPriority == GroundLayerRenderPriority)
-                GroundLayerSurfaceCount++;
-            else if (alpha == TransparencyClass.ScissorSurface)
-                ScissorSurfaceCount++;
-            // ⚠ Drop the surface, never hide the instance. The group is one of several on a shared
-            // mesh, and the classes are isolated from each other, not from the world.
-            if (alpha != TransparencyClass.None && HiddenAlpha.HasFlag(alpha))
+            if (!CountSurface(surfaceMaterial, clampUv, edgeClamp))
                 continue;
             // What SurfaceTool.Commit does, with the arrays kept for the world's merge. Commit adds
             // no surface for a group that emitted no triangle, so neither does this.
@@ -1864,6 +1858,25 @@ void fragment() {
             }
         }
         return arrayMesh;
+    }
+
+    // Counts one surface into the clamp and transparency census, and says whether it is built: false
+    // for a class HiddenAlpha leaves out. Original and replacement surfaces both pass through here.
+    // ⚠ Drop the surface, never hide the instance; the classes isolate from each other, not the world.
+    private bool CountSurface(Material material, bool clampUv, UvClampAxes edgeClamp)
+    {
+        if (clampUv)
+            ClampedSurfaceTotal++;
+        else if (edgeClamp != UvClampAxes.None)
+            EdgeClampedSurfaceTotal++;
+        var alpha = _materialAlpha.TryGetValue(material, out var known) ? known : TransparencyClass.None;
+        if (alpha == TransparencyClass.BlendSurface)
+            BlendSurfaceCount++;
+        if (alpha == TransparencyClass.BlendSurface && material.RenderPriority == GroundLayerRenderPriority)
+            GroundLayerSurfaceCount++;
+        else if (alpha == TransparencyClass.ScissorSurface)
+            ScissorSurfaceCount++;
+        return alpha == TransparencyClass.None || !HiddenAlpha.HasFlag(alpha);
     }
 
     // The UV scroll rate for one model: the caller's per-model override if it has one, else the
@@ -2171,14 +2184,16 @@ void fragment() {
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false,
+        bool replacement = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
         if (tex == null)
             edgeClamp = UvClampAxes.None;
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
-            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase));
+            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
+            replacement));
         NoteAlpha(mat, blend, scissor);
         if (XrPreciseInterior && (blend || XrUnderInterior))
             mat.RenderPriority = XrInteriorBlendPriority;
@@ -2213,11 +2228,11 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
-    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior.
+    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false, bool water = false, bool oceanBase = false)
+        bool clutterFade = false, bool water = false, bool oceanBase = false, bool replacement = false)
     {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
@@ -2239,13 +2254,14 @@ void fragment() {
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
-            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0);
+            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement),
+                "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -2258,7 +2274,7 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false)
+        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2361,8 +2377,11 @@ void fragment() {
         // inset by half a texel so no bilinear tap can cross the edge and wrap.
         if (textured && edgeClamp != UvClampAxes.None)
             sb.AppendLine("uniform vec2 uv_edge_inset = vec2(0.0);");
-        if (!textured)
+        // A replacement's textured surface also takes its glTF baseColorFactor here, the texture's multiplier.
+        if (!textured || replacement)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
+        if (scissor && replacement)
+            sb.AppendLine("uniform float alpha_cutoff = 0.5;");
         // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
@@ -2473,6 +2492,8 @@ void fragment() {{");
                 : scroll ? $"    vec4 base_col = {SampleAlbedo("UV + scroll_rate * csky_time")};"
                 : $"    vec4 base_col = {SampleAlbedo("UV")};");
         }
+        if (textured && replacement)
+            sb.AppendLine("    base_col *= albedo_color;");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         // Per-mission SUNLIGHT dimming (world/deck/clutter), skipped for a model authored
@@ -2536,7 +2557,7 @@ void fragment() {{");
         else if (underInterior)
             sb.AppendLine("    ALPHA = 1.0;");
         if (scissor)
-            sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+            sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)
             sb.AppendLine(CoverageLines);
         sb.AppendLine("}");

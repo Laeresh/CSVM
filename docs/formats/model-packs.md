@@ -70,20 +70,26 @@ A glTF material falls in one of two kinds, decided by its name.
 last dot dropped (`blo_wing`, `blo_wing.tif`, Blender's `blo_wing.001`), is a texture of the gamez
 node's own polygons or of the gamez material table. The surface then wears exactly the material an
 original surface of that texture wears: the archive's texture (or the HD texture pack's), the
-livery, a texture flipbook, the alpha class, the gamez model's lighting, fog and scroll. Only the
-glTF's `doubleSided` is read from the file. The file's own image and colour are ignored. It draws at
+livery, a texture flipbook, the alpha class, the gamez model's lighting, fog and scroll. Two fields
+are read from the file: `doubleSided`, and `KHR_materials_unlit`, which makes the surface unlit on a
+model the original lights (absent, the surface keeps the model's lighting). The file's own image,
+colour, `alphaMode` and `alphaCutoff` are ignored, since an export writes a texture-named material
+opaque, white and lit whatever the original's alpha class and lighting. It draws at
 the highest priority of the node's own polygons wearing that texture, so a decal on the original's
 coplanar decal polygons stays over the skin; a texture the node's own polygons do not wear draws at
 priority 0.
 
 **Any other name.** The surface wears the remake's shader with the file's base-colour texture, or
-its base colour when it has no texture. It fogs, takes world light and follows a graphics-mode switch
+its base colour when it has no texture. A textured surface draws the texture times `baseColorFactor`,
+alpha included, as glTF specifies. It fogs, takes world light and follows a graphics-mode switch
 like any surface, but no livery or texture pack reaches it. Flags come from the standard glTF
-fields: `doubleSided`, `alphaMode` `MASK` (cut at 0.5, `alphaCutoff` is not read) and `BLEND`, and
-`KHR_materials_unlit`. It draws at priority 0.
+fields: `doubleSided`, `alphaMode` `MASK` (cut at the file's `alphaCutoff`, 0.5 when absent) and
+`BLEND`, and `KHR_materials_unlit`. It draws at priority 0.
 
 Within one mesh, surfaces draw in the file's surface order. A one-sided surface is culled like a
-one-sided original.
+one-sided original. Replacement surfaces count in the world's surface census as original ones do
+(the load log's UV-clamped and edge-clamped totals, and the blended and cutout counts), and
+`--hide-alpha` drops a blended or cutout replacement surface with its class.
 
 ### Liveries
 
@@ -192,5 +198,8 @@ than the one this machine draws its store on.
   copy with its wing materials renamed keeps on its wings the painted skin the export embedded.
 - The `rig.json` schema and its checks are CSVM's own; the marker frame and pylon sides are the
   original's ([markers.md](markers.md)).
-- `alphaCutoff`, `baseColorFactor` on a textured surface and `KHR_materials_unlit` on a
-  texture-named surface are not read.
+- What Godot's importer gives the builder: `alphaCutoff` as the alpha scissor threshold,
+  `baseColorFactor` as the albedo colour (sRGB, so the shader's `source_color` reads it back linear,
+  as the texture), `KHR_materials_unlit` as the unshaded mode. `GltfExporter` writes a texture-named
+  material with no alpha mode, a white factor and no unlit extension, so an unedited export maps back
+  to the original's material in every field read.
