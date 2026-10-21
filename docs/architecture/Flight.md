@@ -1699,13 +1699,13 @@ overload writes into a caller's buffer, for the per-frame raster.
 
 ## src/Flight/Airframe/GroundShadowSilhouette.cs
 One caster's shape: the triangles of the node the original rasterises, read off the gamez model
-under a model pack replacement (`SceneBuilder.GameplayMesh`), taken once, and the 64x64 coverage
+under a model pack replacement (`SceneBuilder.GameplayMesh`), or a pack's own
+`planes/<airframe>/shadow` mesh in place of the still airframe, taken once, and the 64x64 coverage
 texture rebuilt from them each frame. Each propeller or rotor blur disc is its own group, re-posed
 from its live node so it turns in the shadow without re-reading the model. Pose, flattening and the
 footprint collapse into one affine map per group, and the fill is an incremental edge walk with its
-bounds hand-inlined, which holds a debug-build raster near a third of a millisecond per aircraft at
-that size. The mask is readable as data (`CoveredAt`), which is how the suites pin a shape no
-ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
+bounds hand-inlined. The mask is readable as data (`CoveredAt`), which is how the suites pin a
+shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/Airframe/GroundShadowPass.cs
 The drawing half: one modulating quad per live aircraft, rebuilt from the rule each rendered frame,

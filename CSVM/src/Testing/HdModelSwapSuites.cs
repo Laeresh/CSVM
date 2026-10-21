@@ -67,7 +67,7 @@ internal static class HdModelSwapSuites
     [Suite("hd-model-swap",
         "a model pack replacement swaps the mesh SceneBuilder draws for a world node by its chapter key, "
         + "a plane node by its airframe key and a flyout body node by its bare name; each keeps its "
-        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls, ground shadow and damage-panel centre stay the gamez model's; a "
+        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls, ground shadow and damage-panel centre stay the gamez model's, unless the airframe's own shadow file (never a bare or chapter one) gives the shadow's still shape; a "
         + "terrain tile, a facade and a glow sprite named in the pack keep their gamez models, an "
         + "unrelated node is untouched, and a builder with no chapter or airframe replaces nothing. "
         + "A replaced surface wears the remake's shader: a glTF material named after an original "
@@ -135,6 +135,7 @@ internal static class HdModelSwapSuites
         using var models = HdModels.Open(root, "HDModels");
         CheckWorld(ctx, textures, weapon, none, models);
         CheckPlane(ctx, planesGamez, textures, planeNode, none, models);
+        CheckPackShadow(ctx, planesGamez, textures, root, none);
         CheckExportRoundTrip(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, root);
         CheckPriorityAndEmpty(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, models);
         CheckScope(ctx, textures, root);
@@ -428,6 +429,61 @@ internal static class HdModelSwapSuites
             HdModels.Current = saved;
             plain.Free();
             packed.Free();
+        }
+    }
+
+    // A pack's planes/<airframe>/shadow file stands in for the airframe's triangles, blur discs kept.
+    // An empty one leaves the discs alone. A bare or chapter
+    // shadow file is a world prop's and leaves the gamez mask.
+    private static void CheckPackShadow(TestContext ctx, GameZ planesGamez, TextureArchive textures, string root, HdModels none)
+    {
+        string node = GroundShadowSilhouette.PackShadowNode;
+        string own = $"planes/{ctx.PlaneName}/{node}";
+        string Pack(string name, string key) => Path.Combine(root, name, "pack", key);
+        ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowOwn", own + ".glb"), node), $"{own}.glb write result");
+        ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowWorld", node + ".glb"), node), $"bare {node}.glb write result");
+        ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowWorld", $"{Chapter}/{node}.glb"), node), $"{Chapter}/{node}.glb write result");
+        Directory.CreateDirectory(Path.GetDirectoryName(Pack("ShadowEmpty", own))!);
+        File.WriteAllText(Pack("ShadowEmpty", own + ".gltf"),
+            $"{{\"asset\":{{\"version\":\"2.0\"}},\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"name\":\"{node}\"}}]}}");
+
+        var model = BuildPlane(planesGamez, textures, ctx.PlaneName, none);
+        var saved = HdModels.Current;
+        GroundShadowSilhouette Shape(string? folder)
+        {
+            using var pack = HdModels.Open(root, folder ?? "no-such-pack");
+            HdModels.Current = pack;
+            var shape = GroundShadowSilhouette.For(model, false);
+            shape.Raster(new Transform3D(Basis.Identity, new Vector3(0f, 20f, 0f)), 0f, Vector3.Down, shape.Box);
+            return shape;
+        }
+
+        bool SameMask(GroundShadowSilhouette a, GroundShadowSilhouette b) =>
+            Enumerable.Range(0, 64 * 64).All(i => a.CoveredAt((i % 64 + 0.5f) / 64f, (i / 64 + 0.5f) / 64f)
+                == b.CoveredAt((i % 64 + 0.5f) / 64f, (i / 64 + 0.5f) / 64f));
+
+        try
+        {
+            var gamez = Shape(null);
+            var world = Shape("ShadowWorld");
+            var empty = Shape("ShadowEmpty");
+            var file = Shape("ShadowOwn");
+            ctx.Check(world.TriangleCount == gamez.TriangleCount && world.Box == gamez.Box && SameMask(world, gamez),
+                $"a bare and a chapter {node} file leave {ctx.PlaneName}'s shadow the gamez model's, {world.TriangleCount} triangles of {gamez.TriangleCount}");
+            ctx.Check(gamez.TurningCount > 0 && empty.TurningCount == gamez.TurningCount && empty.TriangleCount < gamez.TriangleCount,
+                $"an empty {own} file leaves the {empty.TurningCount} blur discs' {empty.TriangleCount} triangles of {gamez.TriangleCount}");
+            // The written mesh is a tetrahedron over (0,0,0), (2,0,0), (0,3,0) and (0,0,1).
+            var tetra = new Aabb(Vector3.Zero, new Vector3(2f, 3f, 1f));
+            var centroid = new Vector2(2f / 3f, 1f / 3f);
+            ctx.Check(file.TriangleCount == empty.TriangleCount + 4 && file.Box.Encloses(tetra)
+                    && file.CoveredAt((centroid.X - file.Box.Position.X) / file.Box.Size.X, (centroid.Y - file.Box.Position.Z) / file.Box.Size.Z)
+                    && !SameMask(file, gamez),
+                $"{own} stands in for the airframe: {file.TriangleCount} triangles, the file's own covered and the mask unlike the gamez one");
+        }
+        finally
+        {
+            HdModels.Current = saved;
+            model.Free();
         }
     }
 

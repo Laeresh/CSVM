@@ -698,10 +698,23 @@ frame per aircraft for a 44,793-triangle pack against 0.15 ms for the original. 
 logs how many wreck pieces came from the pack. `hd-model-swap` asserts the shadow's triangles and
 box and a panel's pairing centre are the gamez model's, red with either change reverted.
 
-**Verified.** <pending orchestrator run>
+**Ruling on the ground shadow.** A pack may ship its own low-poly shadow mesh beside the model;
+without one the original outline is used. Rasterising the full replacement is declined for cost.
 
-**Owed.** The shadow is the user's fork: (b) keeps the original outline (implemented) or (a)
-follows the replacement's. <TODO: the user's ruling.>
+**Landed (shadow mesh).** The file is `planes/<airframe>/shadow.glb` (or `.gltf`), in the
+airframe's frame. `shadow` is the name of every player airframe's gamez software-path card (ten
+meshed, the Brigand's meshless), which `PlaneBuilder` never builds, so no drawn replacement shares
+the key. `GroundShadowSilhouette` reads it through `HdModelMeshes.For` only when
+`HdModels.KeyFor` resolves the airframe key itself; a bare or chapter `shadow` file belongs to a
+world prop and is ignored. The mesh stands in for the still airframe's triangles and box, and the
+propeller and rotor blur discs stay the built model's groups; an empty file leaves the discs alone,
+and a failed import keeps the gamez outline. The Corvette autogyro packs carry a 999-triangle
+Decimate of the car and mast: the mask follows the car, and the raster costs 0.17 ms in a debug
+build (0.15 to 0.18 ms for the original's 1,098 triangles, 2.4 ms for the full 44,793-triangle
+replacement). `hd-model-swap` checks the airframe file, an empty file and a bare and chapter file,
+red with the key guard removed and with the pack mesh ignored.
+
+**Verified.** <pending orchestrator run>
 
 **Original approach (kept for reference).**
 
