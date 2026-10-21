@@ -70,6 +70,23 @@ public sealed class VegetationEntry
         return null;
     }
 
+    /// <summary>A copy with <paramref name="model"/>'s <paramref name="field"/> at <paramref name="value"/>,
+    /// clamped into the field's range, the lab's slider edit. Throws for a model the entry does not list,
+    /// since a slider exists only for a listed kind.</summary>
+    public VegetationEntry With(string model, VegetationKind.Field field, float value)
+    {
+        var kinds = new List<VegetationKind>(Kinds);
+        int i = kinds.FindIndex(k => string.Equals(k.Model, model, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            throw new ArgumentException($"'{model}' is not a listed kind", nameof(model));
+        kinds[i] = field.With(kinds[i], Math.Clamp(value, 0f, field.Max));
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = kinds, Sets = Sets, Picks = Picks };
+    }
+
+    /// <summary>A copy with the variation stream's seed salt at <paramref name="seed"/>.</summary>
+    public VegetationEntry WithSeed(int seed) =>
+        new() { Seed = seed, Mask = Mask, Kinds = Kinds, Sets = Sets, Picks = Picks };
+
     /// <summary>The vegetation set picked for a ground texture, or null when the texture has no pick.</summary>
     public VegetationSet? SetFor(string texture)
     {

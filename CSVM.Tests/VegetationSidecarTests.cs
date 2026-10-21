@@ -180,5 +180,36 @@ public sealed class VegetationSidecarTests
         Assert.Equal(text, File.ReadAllText(path));
     }
 
+    /// <summary>A lab slider moves one field of one kind, held in the field's range, and leaves the rest
+    /// of the entry as it was. The seed moves alone too. The entry Save then writes reads back as the
+    /// edit, and the other chapters stay as shipped.</summary>
+    [Fact]
+    public void ALabEditChangesOneValueAndSavesAsEdited()
+    {
+        string shipped = File.ReadAllText(ShippedPath);
+        var loaded = VegetationSidecar.Parse(shipped);
+        var c1 = loaded.For("C1");
+        var tint = VegetationKind.Fields.Single(f => f.Key == "tint");
+        var yaw = VegetationKind.Fields.Single(f => f.Key == "yaw_deg");
+
+        var firBefore = c1.Find("firtree1.flt");
+        var edit = c1.With("FIRTREE1.FLT", tint, 0.3f).With("bush1.flt", yaw, 400f).WithSeed(42);
+        Assert.Same(firBefore, c1.Find("firtree1.flt"));
+        Assert.Equal(0.3f, edit.Find("firtree1.flt")!.Tint);
+        Assert.Equal(180f, edit.Find("bush1.flt")!.YawDeg);
+        Assert.Equal(42, edit.Seed);
+        Assert.Equal(c1.Kinds.Select(k => k.Model), edit.Kinds.Select(k => k.Model));
+        Assert.Equal(c1.Find("firtree2.flt"), edit.Find("firtree2.flt"));
+        Assert.Equal(c1.Find("firtree1.flt")! with { Tint = 0.3f }, edit.Find("firtree1.flt"));
+        Assert.Throws<System.ArgumentException>(() => c1.With("resbuild01.flt", tint, 0.1f));
+
+        string written = VegetationSidecar.WithEntry(shipped, "C1", edit);
+        var back = VegetationSidecar.Parse(written);
+        Assert.Empty(back.Warnings);
+        Assert.Equal(42, back.For("C1").Seed);
+        Assert.Equal(edit.Kinds, back.For("C1").Kinds);
+        Assert.All(VegetationSidecar.Chapters.Where(c => c != "C1"), c => Assert.Equal(loaded.For(c).Kinds, back.For(c).Kinds));
+    }
+
     private static string Lf(string text) => text.Replace("\r\n", "\n");
 }

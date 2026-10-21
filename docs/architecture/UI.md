@@ -920,6 +920,15 @@ this chapter's differing fields through `Effects/OceanSeas.cs` into the source t
 exported build. The sliders take no keyboard focus and the freecam looks on the right button. `--debug-ocean` is
 the scripted twin, checked at launch by `SessionSpec`.
 
+## src/UI/Labs/VegetationLab.cs
+The vegetation lab (Shift+F2), the ocean lab's twin for `Mech3/VegetationSidecar.cs`, built by `InspectionLabs.BuildVegetationLab`
+in `--freecam` on a vegetation chapter alone; no session calls it until one can rebuild the clutter from an entry. A panel down
+the right edge holds the seed and one slider per `VegetationKind.Fields` value of each listed kind, beside its saved value. An
+edit is a new `VegetationEntry` (`With`, `WithSeed`) handed to the session's callback on release or a quarter second after a
+click, so a drag rebuilds no clutter per frame. Revert to saved, and Save, which writes the entry through `VegetationSidecar.Save`
+into the source tree's file, refuses a file it cannot parse and is off in an exported build. The status line compares the text
+Save would write, so a slider dragged back reads as saved. No flag twins it; a suite drives `Set`, `SetSeed`, `RevertToSaved`.
+
 ## src/UI/Labs/WorldDamageLab.cs
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
 the selection holds, each with live HP, and a slider with kill and reset on the one a weapon hit

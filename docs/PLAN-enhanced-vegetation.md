@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
 3. ☐ Per-stamp jitter, rotation and tint for listed kinds
 4. ☐ Card shading: wind sway, sun-side shading, contact shadow
-5. ☐ Vegetation lab in `--freecam`: live values saved to the sidecar
+5. ◐ Vegetation lab in `--freecam`: live values saved to the sidecar
 6. ☐ The lab's paint tool: texture picks and a brush mask
 7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
 
@@ -361,22 +361,57 @@ shadow.
   must not revive it.
 - A live mode switch must find the other variant's compiled shader (ShaderTwins, `Clutter.cs:70`).
 
-## A5 ☐ Vegetation lab in `--freecam`: live values saved to the sidecar
+## A5 ◐ Vegetation lab in `--freecam`: live values saved to the sidecar
 
 **Goal.** A lab panel in `--freecam` with live sliders for the sidecar's values that rebuilds the
 clutter and saves the chapter's entry to the sidecar.
 
-**Evidence (confidence: lead-only).** Decision 8; the ocean lab is the precedent
-(`git log --grep=E41`).
+**Evidence (confidence: traced-to-code for the precedent).** Decision 8. The ocean lab
+(`CSVM/src/UI/Labs/OceanLab.cs`, `git log --grep=E41`) is a `Node` built by
+`InspectionLabs.BuildOceanLab` in `--freecam` alone, toggled by Shift+F1, applying an edit through a
+session callback on slider release or 0.25 s after a click, and saving through `OceanSeas.Save` to
+the path `SourceTreePath()` gives (null in an export, which turns Save off). Its Save keeps the file:
+the writer parses with the loader's options and throws `InvalidDataException` on a file it cannot
+read, which the lab shows as "save refused" and leaves the file alone (`git log --grep="review 2"`).
+`VegetationSidecar.WithEntry`/`Save` already behave the same way (A2).
 
-**Approach.** <TODO: reuse the ocean lab's panel and save path.>
+**Approach.** The mechanism is landed: `CSVM/src/UI/Labs/VegetationLab.cs`, the ocean lab's panel
+copied, toggled by Shift+F2 (no flight or freecam control reads `F2`). It holds the chapter's seed
+(a 0 to 999 slider, wider when the saved seed is larger) and one slider per `VegetationKind.Fields`
+value of each listed kind, plus Revert to saved and Save. An edit is a new `VegetationEntry` from
+`VegetationEntry.With(model, field, value)` (clamped; an unlisted model throws) or `WithSeed`, handed
+to an `Action<VegetationEntry>` on the same release/0.25 s timing, so a drag rebuilds no clutter per
+frame. `InspectionLabs.BuildVegetationLab(saved, apply)` builds it in `--freecam` on C1, C1B, C2, C3
+or C4 only. The lab holds no clutter and knows nothing of Vegetation Quality.
 
-**Model recommendation.** <TODO>
+**Wiring (lands after A1, with or after A3).** `GameSession`, beside its `BuildOceanLab` call, loads
+`VegetationSidecar.Load().For(_spec.Chapter)` into a session field and calls
+`_labs!.BuildVegetationLab(saved, ApplyVegetation)`. `ApplyVegetation(entry)` stores the entry as the
+session's drawn one and re-bakes the Rich placement lists from it, then recuts (A1's live switch is a
+recut over index-aligned Original and Rich lists, never a rebuild of the clutter root); under
+Original the recut draws nothing new, so a later switch to Rich draws the edit. The same commit adds the
+Shift+F2 row to `docs/controls.md` (the lab is unreachable until then, so the row waits) and a
+`vegetation-lab` engine suite on the `ocean-lab` pattern: one lab in an Enhanced Rich `--freecam` C1
+session and none in `--fly`; `Set` and `SetSeed` reach the rebuilt clutter; `RevertToSaved` restores
+the opening placements.
 
-**Verify.** <TODO>
+**Model recommendation.** Sonnet for the mechanism (a copy of the ocean lab on a landed reader and
+writer); the wiring wants Opus, since the rebuild touches `Clutter.cs`'s live path and the goldens.
 
-**⚠ Traps.** Save through `AtomicFile` with explicit UTF-8, as every repo writer does. <TODO: confirm
-the ocean lab's save path, "Save keeps the file" (`git log --grep="review 2"`).>
+**Verify.** `VegetationSidecarTests.ALabEditChangesOneValueAndSavesAsEdited`: a slider edit moves one
+value of one kind, clamped, and leaves the rest of the entry; the seed moves alone; the entry Save
+writes reads back as the edit with every other chapter as shipped. The existing Save tests cover the
+file kept on a refused Save. The panel itself is checked by the wiring's `vegetation-lab` suite and a
+look at the controls.
+
+**⚠ Traps.**
+- Save through `AtomicFile` with explicit UTF-8, as every repo writer does; `VegetationSidecar.Save`
+  does, and refuses a file it cannot parse rather than replacing it with one chapter.
+- Save writes the whole entry, so `sets`, `picks` and `mask` must ride along in the edited entry:
+  `With`/`WithSeed` copy them, and A6's paint edits must go through the same entry.
+- A yaw on a card is invisible (A2's note): the `yaw_deg` sliders move nothing on screen until D32 or
+  a mirror in A3.
+- The ocean lab sits on the same right edge; both open at once overlap. Open one at a time.
 
 ## A6 ☐ The lab's paint tool: texture picks and a brush mask
 
