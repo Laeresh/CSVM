@@ -141,7 +141,7 @@ public sealed class ClutterActivation
         }
         if (shown)
         {
-            mm.SetInstanceTransform(i, export.Placements[i]);
+            mm.SetInstanceTransform(i, mm.Authored(i));
             SetCollider(export, i, enabled: true);
             _hidden[k][i] = false;
             HiddenCount--;

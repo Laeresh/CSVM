@@ -48,6 +48,10 @@ public sealed class ClutterBuilder
     // the threshold and solidifies what sits above it, and the original cuts nothing at all.
     private const string ScissorLine = "    ALPHA_SCISSOR_THRESHOLD = 0.5;\n";
 
+    // The Rich card's horizontal mirror, a negative X axis on its instance basis. Emitted into the
+    // Rich variant alone, so the Original card's shader text never changes.
+    private const string MirrorLine = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n";
+
     // The seed of the substitute/scale stream: the constant the original seeds its own world
     // build with, borrowed as a label rather than as a claim, our PRNG, traversal and draw count
     // all differ, so the sequences cannot and do not agree. What IS reproduced is the property
@@ -101,20 +105,31 @@ public sealed class ClutterBuilder
     // logs. Replaced per Build, never accumulated across two.
     private LatticeStats _stats = new();
 
+    // The chapter's vegetation entry, null on a chapter that carries none. The lab replaces it.
+    private VegetationEntry? _vegetation;
+
+    // Every kept card stamp in walk order, which the Rich bake replays. Null without a vegetation entry.
+    private List<RichStamp>? _stamps;
+
+    // Parallel to ExportedKinds: the kind each export draws, and which of its meshes.
+    private List<(Kind Kind, int Part)> _exportedFrom = new();
+
     /// <param name="scene">The world's SceneBuilder for the 3D decorations; null leaves only sprites.</param>
     /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for
     /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
     /// at its authored model and size, never fading, rather than throwing.</param>
-    /// <param name="fogVolumes">The chapter's armed fog volumes; a stamp inside one carries its row
-    /// in the fade vector's w (<see cref="FogVolumeRow"/>).</param>
+    /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param>
+    /// <param name="vegetation">The chapter's vegetation entry; its listed kinds get a Rich variant.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
-        ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null)
+        ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null,
+        VegetationEntry? vegetation = null)
     {
         _gamez = gamez;
         _textures = textures;
         _scene = scene;
         _props = props;
         _fogVolumes = fogVolumes ?? Array.Empty<FogVolumeBox>();
+        _vegetation = vegetation;
     }
 
     /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
@@ -422,8 +437,10 @@ public sealed class ClutterBuilder
 
         ResolveProperties(templates);
         _stats = new LatticeStats();
+        _stamps = _vegetation != null ? new List<RichStamp>() : null;
         PlaceOnWorld(templates, worldName);
         _stats.Report();
+        BakeRich();
 
         var root = new Node3D { Name = "clutter" };
         var parts = new List<string>();
@@ -446,9 +463,12 @@ public sealed class ClutterBuilder
                 continue;
             var mesh = (ArrayMesh)mmi.Multimesh!.Mesh;
             var material = mmi.MaterialOverride;
-            var drawn = Drawn(root, mmi, kind.Instances, kind.Fades);
+            var rich = RichVariantOf(kind);
+            var drawn = ClutterInstances.Draw(root, mmi, kind.Instances, kind.Fades, rich);
             exported.Add(new KindExport
             {
+                Rich = rich,
+                Model = kind.Model,
                 Texture = kind.Label,
                 Mesh = mesh,
                 Material = material,
@@ -521,7 +541,28 @@ public sealed class ClutterBuilder
         }
         Summary = string.Join(", ", parts);
         ExportedKinds = exported.Count > 0 ? exported : null;
+        _exportedFrom = exportedFrom;
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
+    }
+
+    /// <summary>Bakes the Rich variant again from <paramref name="entry"/> and draws every kind under
+    /// it, the lab's live edit. A kind it lists gains or keeps a variant, one it drops loses it. The
+    /// map edge's copies follow through <see cref="MapEdgeExtender.FollowVegetation"/>, which the
+    /// session calls. A build on a chapter with no vegetation entry recorded no stamps and ignores it.</summary>
+    public void ApplyVegetation(VegetationEntry entry)
+    {
+        if (_stamps == null || ExportedKinds == null)
+            return;
+        _vegetation = entry;
+        BakeRich();
+        for (int k = 0; k < ExportedKinds.Count; k++)
+        {
+            var (kind, part) = _exportedFrom[k];
+            var export = ExportedKinds[k];
+            export.Rich = part == 0 ? RichVariantOf(kind) : null;
+            export.Instances?.SetRich(export.Rich);
+        }
+        Recut();
     }
 
     /// <summary>Hides each stamp of the last Build while its stamping world node is not visible.
@@ -545,6 +586,17 @@ public sealed class ClutterBuilder
     private static ClutterInstances Drawn(Node3D root, MultiMeshInstance3D whole,
         IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades) =>
         ClutterInstances.Draw(root, whole, placements, fades);
+
+    // The kind's Rich variant, null for a kind the entry does not list. Its material is made on first
+    // use, so a session that never lists the kind compiles no Rich card shader for it.
+    private static ClutterInstances.Stamps? RichVariantOf(Kind kind)
+    {
+        if (kind.RichInstances == null)
+            return null;
+        kind.RichMaterial ??= kind.MakeRichMaterial?.Invoke();
+        return new ClutterInstances.Stamps(kind.RichInstances, kind.RichColors, kind.RichMaterial);
+    }
+
 
     // Any billboard kind is a placeable card: C1's CylindricalY trees and bushes, and C5's
     // SphericalY poleflare glows beside their CylindricalY lightpole posts.
@@ -573,7 +625,8 @@ public sealed class ClutterBuilder
     // clutter rotate and stretch with the painted ground, and a fixed grid loses C1 most of its trees.
     private static void PlaceOnTriangle(Template template, Vector3 a, Vector3 b, Vector3 c,
         Vector2 uva, Vector2 uvb, Vector2 uvc, int owner, HashSet<(int, int, int)> seen,
-        LatticeStats stats, Random rng, Random fadeRng, IReadOnlyList<FogVolumeBox> fogVolumes)
+        LatticeStats stats, Random rng, Random fadeRng, IReadOnlyList<FogVolumeBox> fogVolumes,
+        List<RichStamp>? stamps)
     {
         // ⚠ Guard world area and UV area independently. Neither implies the other, and a strip
         // artifact with healthy UVs and no world area plants a row of trees along a line.
@@ -664,6 +717,8 @@ public sealed class ClutterBuilder
                         // ⚠ Both branches carry the mesh lift. It is where the decoration's own
                         // chain puts the drawn mesh, so dropping it buries C5's lamp glow in the road.
                         var lift = basis * cell.MeshLift;
+                        if (!target.Solid)
+                            stamps?.Add(new RichStamp(target, target.Instances.Count, tri, cu, cv, scale, lift));
                         target.Instances.Add(target.Solid
                             ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.OnQuad.Origin.Y, p.Z) + lift)
                             : new Transform3D(basis, p + lift));
@@ -829,7 +884,7 @@ public sealed class ClutterBuilder
     // authored flags, emitted as variants so a lit, fogged kind gets the base form.
     // ⚠ A blended card takes depth_prepass_alpha, never depth_draw_never: a kind is one MultiMesh,
     // one draw in buffer order, so a card writing no depth is painted over by every later card.
-    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false)
     {
         // Enhanced only: a blended card draws after the fog volume's body, so it greys itself.
         bool volumeFog = blend && fogged && GraphicsMode.Enhanced;
@@ -872,7 +927,7 @@ public sealed class ClutterBuilder
             float live = step(1e-12, dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz));
             float keep = step(0.004, v_alpha) * live;
         {{FaceBasisLines(spherical)}}
-            VERTEX = (VIEW_MATRIX * vec4(origin + face * VERTEX * keep, 1.0)).xyz;
+        {{(rich ? MirrorLine : "")}}    VERTEX = (VIEW_MATRIX * vec4(origin + face * VERTEX * keep, 1.0)).xyz;
         }
 
         void fragment() {
@@ -1012,6 +1067,37 @@ public sealed class ClutterBuilder
             return solid;
         }
         return null;
+    }
+
+    // Replays the kept card stamps in walk order on the Rich stream, drawing for each stamp whose
+    // landing kind is listed. Index-aligned with each kind's Instances, and never touching them, so
+    // the Original stamp stays bit for bit. Each listed stamp takes the same draw count.
+    private void BakeRich()
+    {
+        if (_vegetation is not { } entry || _stamps == null)
+            return;
+        foreach (var kind in _allKinds)
+        {
+            // ⚠ Never list a solid decoration: its collider is placed from the Original stamp.
+            kind.Veg = kind.Solid ? null : entry.Find(kind.Model);
+            kind.RichInstances = kind.Veg != null ? new Transform3D[kind.Instances.Count] : null;
+            kind.RichColors = kind.Veg != null ? new Color[kind.Instances.Count] : null;
+        }
+        var rng = new Random(VegetationVariation.Seed(PlacementSeed, entry.Seed));
+        int baked = 0, mirrored = 0, clamped = 0;
+        foreach (var s in _stamps)
+        {
+            if (s.Target.Veg is not { } veg)
+                continue;
+            var v = VegetationVariation.Draw(s.Tri, s.U, s.V, veg, rng);
+            var basis = Basis.Identity.Scaled(new Vector3(v.Mirror ? -s.Scale : s.Scale, s.Scale, s.Scale));
+            s.Target.RichInstances![s.Index] = new Transform3D(basis, s.Tri.World(v.U, v.V) + s.Lift);
+            s.Target.RichColors![s.Index] = v.Tint;
+            baked++;
+            mirrored += v.Mirror ? 1 : 0;
+            clamped += v.Clamped ? 1 : 0;
+        }
+        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} seed={entry.Seed}");
     }
 
     // The templates.zrd per-kind properties attached to the parsed kinds, and every `substitute`
@@ -1217,7 +1303,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 2]],
-                        uvs[i], uvs[i + 1], uvs[i + 2], owner, seen, _stats, rng, fadeRng, _fogVolumes);
+                        uvs[i], uvs[i + 1], uvs[i + 2], owner, seen, _stats, rng, fadeRng, _fogVolumes, _stamps);
             }
             else
             {
@@ -1226,23 +1312,24 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[0]],
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        uvs[0], uvs[i], uvs[i + 1], owner, seen, _stats, rng, fadeRng, _fogVolumes);
+                        uvs[0], uvs[i], uvs[i + 1], owner, seen, _stats, rng, fadeRng, _fogVolumes, _stamps);
             }
         }
     }
 
     // ---------------------------------------------------------------- rendering
 
-    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend. Next free bit is 32.
+    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend, 32 rich. Next free bit is 64.
     // ⚠ Keep the graphics mode out of the key: the cutout variant's coverage lines follow it
     // through ShaderTwins, one process-lifetime pair per key.
-    private ModeShader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
+    private ModeShader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0)
+            | (rich ? 32 : 0);
         ShaderTwins.EnsureCurrent();
         if (!SpriteShaders.TryGetValue(key, out var twins))
         {
-            SpriteShaders[key] = twins = ShaderTwins.Make(() => ShaderCode(lit, fogged, clampUv, spherical, blend),
+            SpriteShaders[key] = twins = ShaderTwins.Make(() => ShaderCode(lit, fogged, clampUv, spherical, blend, rich),
                 "clutter-sprite", $"clutter-sprite:{key:x}");
         }
         return twins;
@@ -1268,10 +1355,17 @@ public sealed class ClutterBuilder
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
-        var mat = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv,
-            kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend));
+        bool spherical = kind.Billboard == SceneBuilder.BillboardKind.Spherical;
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv, spherical, blend));
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
+        kind.MakeRichMaterial = () =>
+        {
+            var rich = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv, spherical, blend, rich: true));
+            if (tex != null)
+                rich.SetShaderParameter("albedo_tex", tex);
+            return rich;
+        };
 
         var mm = InstancedMesh(kind, BuildSpriteMesh(kind.MeshIndex));
 
@@ -1471,6 +1565,7 @@ public sealed class ClutterBuilder
     public sealed class KindExport
     {
         public string Texture = "";
+        public string Model = "";   // the decoration model name the vegetation sidecar keys on
         public ArrayMesh Mesh = null!;
         public Material? Material;
         public bool Solid;
@@ -1487,6 +1582,10 @@ public sealed class ClutterBuilder
 
         // The map's own drawn instances of these placements, indexed as Placements is.
         public ClutterInstances? Instances;
+
+        // The Rich variant of Placements, null for a kind the vegetation entry does not list. The
+        // map edge's copies take it while VegetationQualitySetting.RichOn.
+        public ClutterInstances.Stamps? Rich;
 
         // Parallel to Placements, solid kinds in a collidable build only: the region body and
         // shape slot each placement's shared shape was attached at.
@@ -1774,7 +1873,21 @@ public sealed class ClutterBuilder
         // through SceneBuilder's materials, which read them themselves).
         public bool Lit = true;
         public bool Fogged = true;
+
+        // The vegetation entry's values for this model, null when the entry does not list it. The
+        // Rich arrays are parallel to Instances and null with it.
+        public VegetationKind? Veg;
+        public Transform3D[]? RichInstances;
+        public Color[]? RichColors;
+
+        // The Rich card material, made on first use (a card kind only).
+        public Func<Material>? MakeRichMaterial;
+        public Material? RichMaterial;
     }
+
+    // One kept card stamp as the Rich bake replays it: its kind and index, its triangle and texture
+    // coordinate. The scale and mesh lift are the ones its Original transform took.
+    private sealed record RichStamp(Kind Target, int Index, UvTriangle Tri, double U, double V, float Scale, Vector3 Lift);
 
     // A template carries no metric size at all: the lattice spacing comes from the WORLD
     // POLYGON's UVs, so the only thing a template needs to know about its quad is which texture

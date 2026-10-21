@@ -414,8 +414,10 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-vegetation-quality",
         "the clutter's Rich vegetation follows a live Vegetation Quality change in an Enhanced flight: "
         + "on at rich, off after a live move to original and on again after a move back, off across a "
-        + "live switch to Original with the word still rich and on again back in Enhanced; with no "
-        + "Rich look yet, every live move leaves the clutter's sprite count and its cells as built")]
+        + "live switch to Original with the word still rich and on again back in Enhanced; a live move to "
+        + "original draws other transforms and no instance colour on the map and past its edge, and every "
+        + "move back to Rich draws the first build's transforms and colours exactly, over the same sprite count; "
+        + "a live re-bake from another seed draws other Rich stamps and one from the shipped entry the first build's")]
     internal static void VegetationQualityClutter(TestContext ctx)
     {
         RequireData(ctx);
@@ -435,23 +437,37 @@ internal static class GraphicsSwitchSuites
 
                 int sprites = clutter.InstanceCount;
                 var built = Cells(live);
-                ctx.Check(VegetationQualitySetting.RichOn && built.Cells > 0,
-                    $"a session built at rich reads Rich vegetation on over its clutter cells ({built})");
+                var builtDraw = DrawnStamps(live);
+                ctx.Check(VegetationQualitySetting.RichOn && built.Cells > 0 && builtDraw.Colored > 0 && builtDraw.EdgeColored > 0,
+                    $"a session built at rich draws the Rich variant over its clutter cells and past the map edge ({built}, {builtDraw})");
                 ApplyVegetation(live, VegetationQualitySetting.Original);
-                var original = Cells(live);
+                var original = DrawnStamps(live);
                 ctx.Check(!VegetationQualitySetting.RichOn, $"a live move to original turns it off");
-                ctx.Check(original.Text == built.Text && clutter.InstanceCount == sprites,
-                    $"and leaves the clutter as built ({clutter.InstanceCount} of {sprites} sprites, {original} against {built})");
+                ctx.Check(clutter.InstanceCount == sprites && original.Stamps.Count == builtDraw.Stamps.Count
+                    && !original.Stamps.SequenceEqual(builtDraw.Stamps) && original.Colored == 0 && original.EdgeColored == 0,
+                    $"and draws other transforms with no instance colour over the same stamps ({clutter.InstanceCount} of {sprites} sprites, {original} against {builtDraw})");
                 ApplyVegetation(live, VegetationQualitySetting.Rich);
-                var again = Cells(live);
-                ctx.Check(VegetationQualitySetting.RichOn && again.Text == built.Text,
-                    $"and a move back to rich turns it on again over the same cells ({again})");
+                var again = DrawnStamps(live);
+                ctx.Check(VegetationQualitySetting.RichOn && Cells(live).Text == built.Text && again.Stamps.SequenceEqual(builtDraw.Stamps)
+                    && again.EdgeColored == builtDraw.EdgeColored,
+                    $"and a move back to rich draws the first build's transforms and colours exactly ({again})");
+                var shipped = Mech3.VegetationSidecar.Load().For("C1");
+                live.Session.ApplyVegetation(new Mech3.VegetationEntry { Seed = shipped.Seed + 1, Kinds = shipped.Kinds });
+                Step(live);
+                var reseeded = DrawnStamps(live);
+                live.Session.ApplyVegetation(shipped);
+                Step(live);
+                var rebaked = DrawnStamps(live);
+                ctx.Check(!reseeded.Stamps.SequenceEqual(builtDraw.Stamps) && rebaked.Stamps.SequenceEqual(builtDraw.Stamps)
+                    && rebaked.EdgeColored == builtDraw.EdgeColored,
+                    $"a live re-bake on another seed draws other Rich stamps, and one on the shipped entry draws the first build's again ({reseeded}, {rebaked})");
                 Switch(live, enhanced: false);
                 ctx.Check(!VegetationQualitySetting.RichOn && VegetationQualitySetting.Word == VegetationQualitySetting.Rich,
                     $"a live switch to Original turns it off with the word still {VegetationQualitySetting.Word}");
                 Switch(live, enhanced: true);
-                ctx.Check(VegetationQualitySetting.RichOn && Cells(live).Text == built.Text,
-                    $"and back in Enhanced it is on over the first build's cells again");
+                ctx.Check(VegetationQualitySetting.RichOn && Cells(live).Text == built.Text
+                    && DrawnStamps(live).Stamps.SequenceEqual(builtDraw.Stamps),
+                    $"and back in Enhanced it draws the first build's Rich stamps over its cells again");
             }
             finally
             {
@@ -1930,6 +1946,48 @@ internal static class GraphicsSwitchSuites
         return new CellReading(ranges.Count, ranges.Count(r => r > 0f), ranges.Count > 0 ? ranges.Max() : 0f, text, edgeMax);
     }
 
+    // Every stamp the map's clutter cells draw, sorted, read off their buffers in world space. Each
+    // carries its basis' X axis and its instance colour, white without one. Beside it, the cells
+    // drawing an instance colour on the map and past its edge.
+    private static DrawnReading DrawnStamps(Rig rig)
+    {
+        rig.Session.EdgeExtender?.Update(rig.Session.EdgeExtender.BeyondCorner);
+        var stamps = new List<(float, float, float, float, float, float, float)>();
+        int colored = 0, edgeColored = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is not MultiMeshInstance3D { Multimesh: { } mm } mmi || mmi.IsQueuedForDeletion())
+                return;
+            if (Under(mmi, "map_edge"))
+            {
+                edgeColored += mm.UseColors ? 1 : 0;
+                return;
+            }
+            if (!UnderClutter(mmi))
+                return;
+            colored += mm.UseColors ? 1 : 0;
+            for (int i = 0; i < mm.InstanceCount; i++)
+            {
+                var xf = mm.GetInstanceTransform(i);
+                var o = mmi.Position + xf.Origin;
+                var c = mm.UseColors ? mm.GetInstanceColor(i) : Colors.White;
+                stamps.Add((o.X, o.Y, o.Z, xf.Basis.X.X, c.R, c.G, c.B));
+            }
+        });
+        stamps.Sort();
+        return new DrawnReading(stamps, colored, edgeColored);
+    }
+
+    private static bool Under(Node node, string name)
+    {
+        for (var at = node.GetParent(); at != null; at = at.GetParent())
+        {
+            if (at.Name == name)
+                return true;
+        }
+        return false;
+    }
+
     private static bool UnderClutter(Node node)
     {
         for (var at = node.GetParent(); at != null; at = at.GetParent())
@@ -2116,6 +2174,12 @@ internal static class GraphicsSwitchSuites
     {
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
             $"{Cells} cell(s), {Ranged} ranged, farthest {MaxRange:0} m, edge farthest {EdgeMax:0} m");
+    }
+
+    private sealed record DrawnReading(List<(float, float, float, float, float, float, float)> Stamps, int Colored, int EdgeColored)
+    {
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Stamps.Count} stamps drawn, {Colored} coloured cell(s), {EdgeColored} coloured edge kind(s)");
     }
 
     private sealed record VertexReading(int Nodes, int Materials, long Vertices, string Text)

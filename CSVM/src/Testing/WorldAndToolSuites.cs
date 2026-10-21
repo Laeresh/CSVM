@@ -1483,6 +1483,86 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
+    // The Rich variant is baked off its own stream beside the Original stamps. A vegetation entry must
+    // leave every Original transform and fade exactly where a build without one places it. The
+    // entry here is C1's shipped list with a turn and a wide jitter, so the mirror and the clamp act.
+    [Suite("clutter-rich-variation",
+        "a vegetation entry leaves C1's Original stamps and fades bit-identical and bakes each listed kind a Rich variant index-aligned with them, "
+        + "mirrored about as often as its turn asks, the same on a second build; retuning one kind moves no other kind's Rich stamp")]
+    internal static void ClutterRichVariation(TestContext ctx)
+    {
+        const string chapter = "C1";
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+
+        var gamez = GameZ.Load(gamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        var names = ClutterBuilder.TemplateNames(ctx.InterpPath, chapter);
+        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var shipped = VegetationSidecar.Load().For(chapter);
+        ctx.Check(shipped.Kinds.Count > 0, $"the shipped sidecar lists {chapter}'s vegetation ({shipped.Kinds.Count} kinds)");
+        var turned = new VegetationEntry
+        {
+            Kinds = shipped.Kinds.Select(k => k with { JitterUv = 0.3f, YawDeg = 90f }).ToList(),
+        };
+        var retuned = new VegetationEntry
+        {
+            Kinds = turned.Kinds.Select(k => k.Model == "bush1.flt" ? k with { JitterUv = 0.05f, Tint = 0.5f } : k).ToList(),
+        };
+
+        static List<ClutterBuilder.KindExport> Take(ClutterBuilder builder, IReadOnlyList<string> names)
+        {
+            var root = builder.Build(names);
+            var exports = builder.ExportedKinds?.ToList() ?? new List<ClutterBuilder.KindExport>();
+            root?.Free();
+            return exports;
+        }
+
+        var bare = Take(new ClutterBuilder(gamez, textures, null, props), names);
+        var rich = Take(new ClutterBuilder(gamez, textures, null, props, null, turned), names);
+        var again = Take(new ClutterBuilder(gamez, textures, null, props, null, turned), names);
+        var other = Take(new ClutterBuilder(gamez, textures, null, props, null, retuned), names);
+        ctx.Same(bare.Count, rich.Count, $"the same kinds are exported with and without the entry");
+
+        int moved = 0, listed = 0, stamps = 0, mirrored = 0, differs = 0, unequal = 0, shifted = 0;
+        for (int k = 0; k < Mathf.Min(bare.Count, rich.Count); k++)
+        {
+            var a = bare[k];
+            var b = rich[k];
+            for (int i = 0; i < Mathf.Min(a.Placements.Count, b.Placements.Count); i++)
+                moved += a.Placements[i] != b.Placements[i] || a.Fades[i] != b.Fades[i] ? 1 : 0;
+            moved += a.Placements.Count != b.Placements.Count ? 1 : 0;
+            bool isListed = turned.Find(b.Model) != null;
+            ctx.Check(a.Rich == null, $"a build without an entry bakes no Rich variant ({a.Texture})");
+            if (b.Rich is not { } variant)
+            {
+                ctx.Check(!isListed, $"an exported kind without a Rich variant is not listed ({b.Texture})");
+                continue;
+            }
+            listed++;
+            ctx.Check(variant.Placements.Count == b.Placements.Count && variant.Colors?.Count == b.Placements.Count,
+                $"{b.Texture}'s Rich variant is index-aligned ({variant.Placements.Count} placements, {variant.Colors?.Count} colours of {b.Placements.Count})");
+            for (int i = 0; i < variant.Placements.Count; i++)
+            {
+                stamps++;
+                mirrored += variant.Placements[i].Basis.X.X < 0f ? 1 : 0;
+                differs += variant.Placements[i].Origin != b.Placements[i].Origin ? 1 : 0;
+                unequal += again[k].Rich?.Placements[i] != variant.Placements[i] || again[k].Rich?.Colors?[i] != variant.Colors![i] ? 1 : 0;
+                if (!string.Equals(b.Model, "bush1.flt", System.StringComparison.OrdinalIgnoreCase))
+                    shifted += other[k].Rich?.Placements[i] != variant.Placements[i] || other[k].Rich?.Colors?[i] != variant.Colors![i] ? 1 : 0;
+            }
+        }
+        ctx.Same(0, moved, $"the entry leaves every Original transform and fade where a build without it puts them");
+        ctx.Check(listed > 0 && stamps > 0, $"the listed kinds carry a Rich variant ({listed} kinds, {stamps} stamps)");
+        ctx.Check(differs > stamps / 2, $"the jitter moves most Rich stamps off the Original point ({differs} of {stamps})");
+        ctx.Check(mirrored > stamps * 0.45f && mirrored < stamps * 0.55f, $"a turn of 90 mirrors about half the cards ({mirrored} of {stamps})");
+        ctx.Same(0, unequal, $"a second build bakes the same Rich variant");
+        ctx.Same(0, shifted, $"retuning bush1 leaves every other kind's Rich stamps and colours as they were");
+    }
+
     // A decoration model is a node chain, and the mesh node under its `.flt` top may translate.
     // C5's w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same
     // build with that chain transform cleared. The control both fails able and shows the move is

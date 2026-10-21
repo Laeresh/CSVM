@@ -52,6 +52,9 @@ public sealed partial class MapEdgeExtender : Node3D
 
     private static readonly Color InMapTint = new(0.80f, 0.80f, 0.85f);
 
+    // A Rich copy's card mirrored as its source stamp is.
+    private static readonly Basis MirroredCard = Basis.FromScale(new Vector3(-1f, 1f, 1f));
+
     // Alpha 0 is the shader's identity mix, exactly the untinted world (same convention as
     // ClassOverlay).
     private static readonly Color Untinted = new(0f, 0f, 0f, 0f);
@@ -106,6 +109,9 @@ public sealed partial class MapEdgeExtender : Node3D
 
     private int _blockCells = 1;
     private bool _repeat = true;
+
+    // Whether the live copies draw the Rich variant, so a live Vegetation Quality move rebuilds them.
+    private bool _rich = VegetationQualitySetting.RichOn;
     private bool _tinted;
     // Starts true so the FIRST window build is timed too: it builds the whole window from nothing,
     // which is the same work an F15 fold change costs. That makes the hitch a measured number in
@@ -304,14 +310,7 @@ public sealed partial class MapEdgeExtender : Node3D
         _blockCells = blockCells;
         _repeat = repeat;
         _foldChanged = true;
-        foreach (var (_, node) in _live)
-            node.QueueFree();
-        _live.Clear();
-        _copies.Clear();
-        _draws.Clear();
-        // Forces the next Update past its no-op check, which rebuilds the window around the
-        // unchanged focus.
-        _centerCells.Clear();
+        DropWindow();
     }
 
     /// <summary>Show or hide the tile-grid tints on the extension cells. Cheap, it re-stamps a
@@ -403,12 +402,21 @@ public sealed partial class MapEdgeExtender : Node3D
     /// map's own clutter cells do the same after a live switch or View Distance change.</summary>
     public void FollowClutterFade()
     {
+        if (_rich != VegetationQualitySetting.RichOn)
+        {
+            _rich = VegetationQualitySetting.RichOn;
+            RedrawRichCopies();
+        }
         foreach (var draws in _draws.Values)
         {
             foreach (var draw in draws)
                 draw.ApplyRange();
         }
     }
+
+    /// <summary>The clutter's Rich variant was baked again (<see cref="ClutterBuilder.ApplyVegetation"/>),
+    /// so the window's copies are built again from it at the next <see cref="Update"/>.</summary>
+    public void FollowVegetation() => DropWindow();
 
     /// <summary>Builds the extender for a world, or null when it carries no usable area/partition
     /// grid. <paramref name="clutter"/> lets the extension grow the same decorations the map
@@ -499,6 +507,47 @@ public sealed partial class MapEdgeExtender : Node3D
     private (int, int) CellOf(Vector3 p) => (
         Mathf.FloorToInt((p.X - _x0) / _tileX),
         Mathf.FloorToInt((p.Z - _z0) / _tileZ));
+
+    // Frees every live cell, out of the tree at once so no walk this frame meets it. The next Update
+    // finds no window and builds one around the same focus.
+    private void DropWindow()
+    {
+        foreach (var (_, node) in _live)
+        {
+            RemoveChild(node);
+            node.QueueFree();
+        }
+        _live.Clear();
+        _copies.Clear();
+        _draws.Clear();
+        _centerCells.Clear();
+    }
+
+    // Builds each live cell's copies of the kinds with a Rich variant again, in the variant now
+    // drawn. The ground and every other copy stand, so a live Vegetation Quality move costs no tile.
+    private void RedrawRichCopies()
+    {
+        foreach (var (at, cell) in _live)
+        {
+            var (sx, fx) = FoldAxis(at.Item1, _cols, _blockCells, _repeat);
+            var (sz, fz) = FoldAxis(at.Item2, _rows, _blockCells, _repeat);
+            if (!_sprites.TryGetValue((sx, sz), out var sprites)
+                || !_draws.TryGetValue(at, out var draws) || !_copies.TryGetValue(at, out var copies))
+                continue;
+            draws.RemoveAll(d =>
+            {
+                if (_clutter![d.Kind].Rich == null)
+                    return false;
+                cell.RemoveChild(d.Node);
+                d.Node.QueueFree();
+                return true;
+            });
+            copies.RemoveAll(c => _clutter![c.Kind].Rich != null);
+            var rich = sprites.FindAll(s => _clutter![s.Kind].Rich != null);
+            if (rich.Count > 0)
+                copies.AddRange(AddCellClutter(cell, MirrorTransform(at.Item1, at.Item2, sx, fx, sz, fz), rich, draws));
+        }
+    }
 
     // ---------------------------------------------------------------- cell building
 
@@ -607,8 +656,10 @@ public sealed partial class MapEdgeExtender : Node3D
         {
             if (!byKind.TryGetValue(kind, out var list))
                 byKind[kind] = list = new List<(Transform3D, Color, int)>();
-            list.Add((_clutter![kind].Solid ? mirror * xf
-                : new Transform3D(Basis.Identity, mirror * xf.Origin), fade, source));
+            // A Rich card keeps its own mirror, which the card shader reads off the basis' X axis.
+            var placed = (_rich ? _clutter![kind].Rich?.Placements[source] : null) ?? xf;
+            list.Add((_clutter![kind].Solid ? mirror * placed
+                : new Transform3D(placed.Basis.X.X < 0f ? MirroredCard : Basis.Identity, mirror * placed.Origin), fade, source));
         }
 
         // One body for the whole cell's buildings, named so a crash log locates the cell.
@@ -633,9 +684,11 @@ public sealed partial class MapEdgeExtender : Node3D
                 foreach (var (xf, _, _) in placements)
                     PhysicsServer3D.BodyAddShape(bodyRid, shapeRid, xf);
             }
+            var rich = _rich ? kind.Rich : null;
             var mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = rich?.Colors != null,
                 UseCustomData = true,   // before InstanceCount, or the fade has no slot
                 Mesh = kind.Mesh,
                 InstanceCount = placements.Count,
@@ -643,6 +696,8 @@ public sealed partial class MapEdgeExtender : Node3D
             for (int i = 0; i < placements.Count; i++)
             {
                 mm.SetInstanceTransform(i, placements[i].Xf);
+                if (rich?.Colors is { } colors)
+                    mm.SetInstanceColor(i, colors[placements[i].Source]);
                 mm.SetInstanceCustomData(i, placements[i].Fade);
                 var copy = new ClutterCopy(mm, i, kindIndex, placements[i].Source, placements[i].Xf,
                     bodyRid, firstSlot < 0 ? -1 : firstSlot + i);
@@ -653,7 +708,7 @@ public sealed partial class MapEdgeExtender : Node3D
             var mmi = new MultiMeshInstance3D
             {
                 Multimesh = mm,
-                MaterialOverride = kind.Material,
+                MaterialOverride = rich?.Material ?? kind.Material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 // The billboard shader swings verts outside the AABB, and a scale_range draw can
                 // make a card up to 3× its authored width, ClutterBuilder measured the margin
@@ -663,7 +718,7 @@ public sealed partial class MapEdgeExtender : Node3D
             };
             if (kind.Solid)
                 mmi.SetInstanceShaderParameter("node_bias", kind.NodeBias);
-            var draw = EdgeDraw.Of(mmi, kind.Mesh.GetAabb(), placements);
+            var draw = EdgeDraw.Of(mmi, kindIndex, kind.Mesh.GetAabb(), placements);
             draw.ApplyRange();
             draws.Add(draw);
             cell.AddChild(mmi);
@@ -1007,9 +1062,9 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // One copied kind's node in a cell, with its stamps' farthest fade and the radius of their
     // bounds. Under Enhanced the node stops drawing past that fade, as a map clutter cell does.
-    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, float Far2, float Radius, bool NeverFades)
+    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, int Kind, float Far2, float Radius, bool NeverFades)
     {
-        public static EdgeDraw Of(MultiMeshInstance3D node, Aabb meshBox,
+        public static EdgeDraw Of(MultiMeshInstance3D node, int kind, Aabb meshBox,
             List<(Transform3D Xf, Color Fade, int Source)> placements)
         {
             Aabb? bounds = null;
@@ -1023,7 +1078,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 neverFades |= fade.G <= 0f;
             }
             float radius = (bounds!.Value.Size * 0.5f).Length() + node.ExtraCullMargin;
-            return new EdgeDraw(node, far2, radius, neverFades);
+            return new EdgeDraw(node, kind, far2, radius, neverFades);
         }
 
         public void ApplyRange() => Node.VisibilityRangeEnd = ClutterInstances.RangeEnd(

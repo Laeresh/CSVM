@@ -106,8 +106,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, pattern
 
 1. ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
-2. ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
-3. ☐ Per-stamp jitter, rotation and tint for listed kinds
+2. ☑ The vegetation sidecar: per-chapter kind list and values, read under Rich
+3. ◐ Per-stamp jitter, rotation and tint for listed kinds
 4. ☐ Card shading: wind sway, sun-side shading, contact shadow
 5. ◐ Vegetation lab in `--freecam`: live values saved to the sidecar
 6. ◐ The lab's paint tool: texture picks and a brush mask
@@ -221,7 +221,7 @@ draws nothing different yet.
 
 **Verified.** <pending orchestrator run>
 
-## A2 ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
+## A2 ☑ The vegetation sidecar: per-chapter kind list and values, read under Rich
 
 **Goal.** A shipped per-chapter JSON that names the vegetation kinds and carries their tuned values;
 under Rich the clutter reads it, under Original nothing reads it.
@@ -287,7 +287,7 @@ The shipped values are modest starting points (`jitter_uv` 0.05, `tint` 0.05, `b
 (`Clutter.cs:869`), so a yaw on a card is invisible: it reaches the eye only through D32's 3D models,
 or through a horizontal mirror if A3 maps the yaw's sign onto one.
 
-**Wiring (lands with A3).** `WorldSession.Build` loads `VegetationSidecar.Load().For(o.Chapter)`
+**Wiring (landed with A3, see A3's Approach).** `WorldSession.Build` loads `VegetationSidecar.Load().For(o.Chapter)`
 beside `ClutterTemplateSpec.Load` in every session and passes it to a new optional `ClutterBuilder`
 parameter. The Rich placements are baked at build beside the Original ones whatever the word, since
 a live switch to Rich recuts rather than rebuilds (A1's Approach); the Original draw never reads
@@ -311,7 +311,7 @@ A3's, since nothing reads the file until the wiring lands.
 **⚠ Traps.** Key by model name, not by mesh index: C5 ships one building as several meshes, and a
 substitution target resolves to one model however many templates mention it (`Clutter.cs:1001`).
 
-## A3 ☐ Per-stamp jitter, rotation and tint for listed kinds
+## A3 ◐ Per-stamp jitter, rotation and tint for listed kinds
 
 **Goal.** Under Rich, each listed stamp moves by a small offset, turns and takes a slight tint and
 brightness, so the template's layout no longer repeats visibly from altitude.
@@ -323,12 +323,48 @@ already runs on its own stream so a fade A/B leaves species and scale alone (`Cl
 
 **Approach.** Draw the Rich variation from a stream of its own on a fixed seed, after the point is
 kept and after the substitute/scale/fade draws, so Original's streams are untouched. Jitter in UV
-units, so it follows the painted ground. Carry the tint in per-instance data. <TODO: which instance
-slot the tint goes in, given custom data already carries the fade (`Clutter.cs:791`).>
+units, so it follows the painted ground. Carry the tint in per-instance data.
 
-**Model recommendation.** <TODO>
+The lattice walk records every kept card stamp (its kind and index, triangle, texture coordinate,
+scale and mesh lift) when the chapter has a vegetation entry, and `ClutterBuilder.BakeRich` replays
+them in walk order once the walk ends. A stamp whose landing kind (`target`) is listed draws
+`VegetationVariation.DrawsPerStamp` values from a `Random` seeded from `PlacementSeed`, a fixed Rich
+label and the entry's `seed`, whatever its values: two jitters, the mirror, brightness, three tint
+channels, and A6's mask keep draw, reserved and unread. The result is a Rich transform and colour
+per Original stamp, index-aligned (`KindExport.Rich`); the Original transforms, fades and streams
+are not touched. A jitter that leaves the source triangle is halved until it is back inside, at
+worst unmoved, so no stamp is dropped or added. A solid kind is never given a variant.
 
-**Verify.** <TODO: a montage from altitude over C1, Original against Rich, judged by you.>
+- *Tint slot:* the MultiMesh instance colour. Custom data holds the fade in all four channels, and
+  Godot multiplies an instance colour into the card shader's `COLOR` before the vertex stage, which
+  the shader already linearises and multiplies into the albedo. The Rich cells' MultiMeshes take
+  `UseColors`; the Original ones do not, so no Original buffer changes.
+- *Turn:* every listed kind is a CylindricalY card whose shader replaces the instance basis, so a
+  yaw is invisible. `yaw_deg` stays the field and maps to a horizontal mirror with probability
+  `yaw_deg`/180, carried as a negative X axis on the Rich instance basis. A Rich twin of the card
+  shader (key bit 32) reads that sign and flips the card's X; the Original shader text is
+  unchanged. The shipped `yaw_deg` stays 0.
+- *Live switch:* `ClutterInstances` keeps the Rich variant as a layout of its own beside the
+  Original cells, and `Recut` picks it from `RichOn`, so a live move swaps nodes. A hidden or
+  cratered stamp carries across as the same move off the other variant's authored transform.
+  `MapEdgeExtender` rebuilds only the listed kinds' copies in each live cell on a move.
+- *Lab hook:* `GameSession.ApplyVegetation(entry)` (through `ClutterBuilder.ApplyVegetation` and
+  `MapEdgeExtender.FollowVegetation`) re-bakes from a new entry and recuts, with no lab caller yet.
+
+**Model recommendation.** Opus: the item is a design across the builder, the drawn layouts and the
+map edge, with three bit-identity constraints to hold at once.
+
+**Verify.** Units: `VegetationVariationTests` (the jitter stays in its triangle and is clamped,
+never dropped; a fixed draw count whatever the values; a zero entry is the Original stamp; the
+mirror rate and tint ranges; the seed). Engine: `clutter-rich-variation` (a C1 entry leaves every
+Original transform and fade bit-identical, bakes index-aligned variants, mirrors half the cards at
+a turn of 90, and retuning one kind moves no other); `graphics-vegetation-quality` (a live move to
+original draws other transforms and no instance colour, on the map and past its edge, a move back
+draws the first build's exactly, and a re-bake through `ApplyVegetation` from the shipped entry
+does too). The 8-chapter `--freecam` regression in Faithful and in Enhanced at both words, zero
+errors and equal counts. Original and Faithful goldens hold; the Enhanced goldens on chapters with
+listed kinds move, re-pinned at A7. A montage from altitude over C1, Original against Rich, judged
+by you.
 
 **⚠ Traps.**
 - Never add a world grid or a world-space offset (`Clutter.cs:17`, `:554`); jitter in texture space.
@@ -338,6 +374,10 @@ slot the tint goes in, given custom data already carries the fade (`Clutter.cs:7
   counts that, so clamp or re-test.
 - The exported placements feed MapEdgeExtender's copies past the map edge (`Clutter.cs:455`), so
   the variation must be in the placements, not added in the shader, or the copies differ.
+- A card's `scale_range` draw is in its instance basis, which the card shader replaces, so no card
+  draws its scale today; the Rich mirror reads only the X axis's sign for that reason.
+
+**Verified.** <pending orchestrator run>
 
 ## A4 ☐ Card shading: wind sway, sun-side shading, contact shadow
 

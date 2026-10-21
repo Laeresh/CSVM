@@ -962,6 +962,14 @@ public partial class GameSession : Node3D
     /// through. The graphics-mode switch recuts them too.</summary>
     public void FollowVegetationQuality() => FollowClutterFade();
 
+    /// <summary>Bakes the clutter's Rich variant again from <paramref name="entry"/>, the vegetation
+    /// lab's live edit, and draws it with the map edge's copies (<see cref="ClutterBuilder.ApplyVegetation"/>).</summary>
+    public void ApplyVegetation(VegetationEntry entry)
+    {
+        _clutter?.ApplyVegetation(entry);
+        _edgeExtender?.FollowVegetation();
+    }
+
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
     /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
     /// writes put back defaults the zone's sky colour, energies and shadow distance overwrite.

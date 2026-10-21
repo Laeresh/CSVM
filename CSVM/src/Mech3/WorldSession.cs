@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Utils;
 using Godot;
 
@@ -177,7 +178,12 @@ public sealed class WorldSession
             // order, a walk of gamez.Nodes, which SkyStage's census for WeatherRig repeats exactly.
             var fogVolumes = FogVolumeSpec.Load(o.ChapterZrdrPath) is { FogZoneArmed: true }
                 ? FogVolumeSpec.VolumesOf(gamez) : null;
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes);
+            // Read whatever the Vegetation Quality: the Rich variant is baked beside the Original
+            // stamps so a live move recuts. A chapter with no ground to list bakes none.
+            var vegetation = VegetationSidecar.Load();
+            bool listsVegetation = VegetationSidecar.Chapters.Contains(o.Chapter, StringComparer.OrdinalIgnoreCase);
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes,
+                listsVegetation ? vegetation.For(o.Chapter) : null);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);

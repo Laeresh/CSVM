@@ -260,7 +260,7 @@ A rolling window of repeated border tiles and clutter continuing the world past 
 window per session shared by every player camera and diffed only on a cell crossing. Clutter copies
 grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade thresholds and
 drawing only while `ClutterActivation` shows that stamp; under Enhanced each copied kind's node
-stops at its farthest fade (`ClutterInstances.RangeEnd`, `FollowClutterFade`).
+stops at its farthest fade (`ClutterInstances.RangeEnd`, `FollowClutterFade`). Under `VegetationQualitySetting.RichOn` a listed kind's copies take its Rich variant, a live move rebuilds only those copies in each live cell, and `FollowVegetation` rebuilds the window after a re-bake.
 `ClassifyGroundMesh`, `IsCompletionStrip` and `FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`;
 `--dump-tilegrid` writes the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and the per-chapter fold
 measurements: [../formats/world-structure.md](../formats/world-structure.md). Read `Clutter.cs` next.
@@ -273,7 +273,7 @@ MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` say
 data under `EffectsLevel`, with the row of the armed fog volume it stands in as the vector's w (`FogVolumeRow`, 0 outside them), which an Enhanced blended card reads to grey over its stretch inside that volume (`csky_fog_volume.gdshaderinc`), and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post. A solid decoration's chain carries SEVERAL meshes, which `ExtraMeshes` collects (nearest LOD only, each in the drawn mesh's frame) so `Kind.ExtraParts` draws and collides the whole building: 12 of C5's city blocks hold two street walls and a roof cap on further nodes, and drawing the first mesh alone leaves them open on two sides.
-`Recut` draws every kind again after a live graphics-mode switch or View Distance change, and the sprite shaders follow the mode as `SceneBuilder.RegenerableShader` twins. Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
+`Recut` draws every kind again after a live graphics-mode switch or View Distance change, and the sprite shaders follow the mode as `SceneBuilder.RegenerableShader` twins. Given a vegetation entry (`WorldSession` passes the sidecar's for C1, C1B, C2, C3 and C4, whatever the Vegetation Quality), the walk records every kept card stamp, and `BakeRich` replays them in walk order on a stream of its own (`VegetationVariation`), giving each kind the entry lists a Rich variant index-aligned with its Original stamps (`KindExport.Rich`): a jittered transform clamped into the source triangle, a negative X axis for a mirrored card, and an instance colour. The Original transforms, fades and streams are untouched, and a solid kind is never listed. The Rich card shader is the Original one plus a line reading the mirror off the instance basis, a separate twin key. `ApplyVegetation` bakes again from a new entry and recuts, the lab's live edit. Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterActivation.cs
 Keeps every clutter stamp drawn exactly while the world node it was stamped from is visible in the
@@ -284,14 +284,9 @@ its basis and switches off its shared shape as a crater's victim does, and a sho
 what this hid. `Version` lets `MapEdgeExtender`'s copies follow their source stamps. Read `ClutterCull.cs`.
 
 ## src/Mech3/ClutterInstances.cs
-One clutter kind's drawn instances behind the kind's own placement index. The faithful path keeps
-the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it into square map
-cells about twice the kind's farthest fade across, each its own node with a visibility range at that
-fade, so a pane draws only the cells in reach instead of every stamp in the chapter. Reads and
-writes take the clutter root's frame and are mirrored here, which keeps `ClutterActivation`, the
-suites and `ClutterCull`'s writes off the cells. Both layouts' buffers are kept once made, so
-`Recut` after a live mode switch or View Distance change swaps nodes and writes only the stamps
-since hidden or flattened; a new cell edge is cut with one buffer upload per cell. Read `Clutter.cs`.
+One clutter kind's drawn instances behind the kind's own placement index. The faithful path keeps the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it into square map cells about twice the kind's farthest fade across, each its own node with a visibility range at that fade, so a pane draws only the cells in reach instead of every stamp in the chapter.
+Reads and writes take the clutter root's frame and are mirrored here, which keeps `ClutterActivation`, the suites and `ClutterCull`'s writes off the cells. Both layouts' buffers are kept once made, so `Recut` after a live mode switch or View Distance change swaps nodes and writes only the stamps since hidden or flattened; a new cell edge is cut with one buffer upload per cell.
+A listed vegetation kind's Rich variant (`Stamps`: transforms, instance colours, the Rich material) is cut into cells of its own and drawn while `VegetationQualitySetting.RichOn`, so the variant is part of the layout `Recut` compares. A hidden or flattened stamp carries over to the other variant as the same move off its authored transform (`Authored`), and `SetRich` replaces the variant. Read `Clutter.cs`.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
@@ -308,7 +303,10 @@ The shipped per-chapter vegetation list, `CSVM/data/vegetation.json`, read throu
 `seed` salts the variation's fixed stream, `mask` names the brush mask relative to `CSVM/data`, `sets` are named lists of listed kinds and `picks` give a ground texture a set; a set member that is not listed and a pick naming no set are dropped.
 `VegetationEntry.Find` answers null for a model that is not vegetation, which keeps the faithful stamp; a chapter with no entry is `VegetationEntry.Empty`. `With`, `WithSeed`, `WithMask` and `WithPick` are the vegetation lab's edits: one listed kind's value (clamped), the seed, the mask path, or a texture's pick, which reuses a set with exactly the listed kinds it names or adds one named by joining them with `+`, drops an unlisted model, and removes the pick when none is left.
 An unknown chapter or key, a bad value and a clamped value are each a `world` warning. `WithEntry` rewrites one chapter's entry in place for the lab's Save through `AtomicFile`, writing only nonzero values, keeping every other key and its order, and refusing a file it cannot parse.
-Every listed name is pinned against its chapter's `templates.zrd` in `VegetationSidecarTests`. Read `Clutter.cs` next.
+Every listed name is pinned against its chapter's `templates.zrd` in `VegetationSidecarTests`. `WorldSession` reads it in every session and hands the chapter's entry to `ClutterBuilder`. Read `VegetationVariation.cs` next.
+
+## src/Mech3/VegetationVariation.cs
+One listed stamp's Rich variation, pure: `jitter_uv` moves its texture coordinate by a symmetric draw per UV axis and halves the move until the source triangle holds it (never dropped, at worst unmoved); `yaw_deg` mirrors the card horizontally with probability `yaw_deg`/180, since a CylindricalY card's shader replaces the instance basis and shows no yaw; `tint` and `brightness` give the instance colour. Every stamp takes `DrawsPerStamp` draws whatever its values, the last the brush mask's keep draw, so a value or mask edit reshuffles no other stamp. `Seed` mixes the placement seed, a fixed Rich label and the entry's `seed`. Pinned in `VegetationVariationTests`. Read `Clutter.cs` next.
 
 ## src/Mech3/VegetationMask.cs
 A chapter's vegetation brush mask, which gates and scales the density of listed vegetation under Rich and never places a stamp. The file is raw bytes, a square of `Side` × `Side` (1024 for a new mask, about 12 m a texel on a 12 km chapter and 16 m on C3's 16 km), at `CSVM/data/vegetation/<chapter>.bin` (`PathFor`), which the export's `data/*.bin` filter packs as it does `cloud_puffs/*.png.bin`; raw bytes because Godot imports no `.bin`, so the file is read back as written. The square covers the `world1` node's `area` (`left`/`top`/`right`/`bottom`, -12288 to 0 on C1, C1B, C2 and C4, -16384 to 0 on C3, read from each chapter's `gamez/nodes.json`), the same rectangle the map edge's tile grid divides: row 0 along the lowest Z, column 0 along the lowest X.
