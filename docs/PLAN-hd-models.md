@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ [local] World props and destructibles in every damage state
 24. ☐ [local] Plane airframes without livery
 25. ☐ [local] Rig on a real airframe
-26. ◐ [cloud] code, [local] two-instance check: pack and rig agreement in network play
+26. ☑ [cloud] code, [local] two-instance check: pack and rig agreement in network play
 
 ### Wave D, livery
 
@@ -593,7 +593,7 @@ launch point and the muzzle, and the marker overlay shows it.
 **⚠ Traps.** Firepoints move gun convergence and the tracer origin; that is a gameplay change and
 belongs to C26's rules in network play.
 
-## C26 ◐ [cloud] code, [local] two-instance check: pack and rig agreement in network play
+## C26 ☑ [cloud] code, [local] two-instance check: pack and rig agreement in network play
 
 **Landed so far.** A different rig cannot desynchronise a match, since every outcome a rig could
 move is decided on one machine and its result crosses the wire. A round's origin and direction ride
@@ -611,10 +611,19 @@ gamez model a replacement draws over (`SceneBuilder.GameplayMesh`). A rig could 
 the airframe lacks, and `Loadout.BindAi` arms an AI over every firepoint on the tree; a rig now
 adds only `target` and the reference markers. Suites `hd-model-swap` and `plane-rig` read both and
 fail with either fix removed. A model pack therefore needs nothing in network play.
-<TODO: the user's choice of rule for a rig's weapon markers in network play (each seat its own,
-VR-style drawn-only, ignored, or refused on mismatch).>
+
+**Ruling.** Each seat uses its own rig, with no network code. An owner's guns and launch points sit
+where the owner's rig puts them, and every machine sees those shots alike; on another machine the
+owner's plane wears that machine's rig, so a rocket can leave from a place other than the store
+drawn there. The alternatives (draw-only weapon markers as `vr_cockpits.json`'s store offsets do,
+ignoring the rig in network play, a hash that refuses a mismatch) were declined.
 
 **Verified.** <pending orchestrator run>
+
+**Owed.** Two local instances, host with a rig moving `firepoint1` and `pylon1`, guest with
+`--no-hd-models`: the host's tracers and rockets leave from the moved points on both screens, the
+guest draws the host's store at the original `pylon1`, each hit scores once on both, no errors;
+then swap roles.
 
 **Original approach (kept for reference).**
 
