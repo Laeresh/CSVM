@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
@@ -11,10 +12,7 @@ namespace CSVM.Mech3;
 /// file and shared by every caller, a failed import as null. The mesh comes back in the original's winding, which glTF cannot
 /// carry, so every triangle surface is reversed on the way in (docs/formats/gotchas.md). Surface
 /// materials stay as the file set them; a builder draws a copy under its own (<see cref="SurfacesOf"/>).
-/// Inside a file the mesh is the one on the glTF node named like the gamez node, compared as
-/// <see cref="HdModels"/> compares names. A named node without a mesh lends its one direct child's
-/// mesh, since <see cref="SceneBuilder"/> and so the exporter put it there.
-/// A file holding exactly one mesh is that mesh, whatever its nodes are named.
+/// Which meshes of a file merge, and how they are placed, is the rule in docs/architecture/Mech3.md.
 /// </summary>
 public sealed class HdModelMeshes
 {
@@ -53,29 +51,39 @@ public sealed class HdModelMeshes
     }
 
     /// <summary>The replacement mesh for the gamez node named <paramref name="node"/>, or null when
-    /// the pack has none or its file failed to import. Keys resolve as <see cref="HdModels.For"/>
-    /// resolves them. ⚠ Do not edit the result; every node replaced from that key draws it.</summary>
-    public ArrayMesh? For(string node, string? chapter = null, string? airframe = null)
+    /// the pack has none or its file failed to import. An empty mesh means the file draws nothing
+    /// for the node. Keys resolve as <see cref="HdModels.For"/> resolves them, and
+    /// <paramref name="owned"/> names the gamez node's descendants, whose glTF subtrees are left out.
+    /// ⚠ Do not edit the result; every node replaced from that key draws it.</summary>
+    public ArrayMesh? For(string node, string? chapter = null, string? airframe = null, IEnumerable<string>? owned = null)
     {
         if (_models.KeyFor(node, chapter, airframe) is not { } key)
         {
             return null;
         }
 
+        var ownedKeys = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (string name in owned ?? Array.Empty<string>())
+        {
+            ownedKeys.Add(HdModels.NodeKey(name));
+        }
+
+        string cacheKey = ownedKeys.Count == 0 ? key : key + "\n" + string.Join("\n", ownedKeys);
+
         // ⚠ Do not import outside the lock; two builders asking at once would each import and
         // hand out two meshes for one key.
         lock (_byKey)
         {
-            if (!_byKey.TryGetValue(key, out var mesh))
+            if (!_byKey.TryGetValue(cacheKey, out var mesh))
             {
-                var surfaces = Load(key);
+                var surfaces = Load(key, ownedKeys);
                 mesh = surfaces != null ? Build(surfaces) : null;
                 if (mesh != null)
                 {
                     _surfaces[mesh] = surfaces!;
                 }
 
-                _byKey[key] = mesh;
+                _byKey[cacheKey] = mesh;
             }
 
             return mesh;
@@ -85,7 +93,7 @@ public sealed class HdModelMeshes
     /// <summary><paramref name="source"/> as a mesh with every triangle surface's winding flipped,
     /// attributes and materials carried across. An unindexed surface gets the identity index list
     /// first. Other primitives pass through unflipped, and blend shapes and LODs are dropped.</summary>
-    internal static ArrayMesh Reversed(ImporterMesh source) => Build(ReversedSurfaces(source));
+    internal static ArrayMesh Reversed(ImporterMesh source) => Build(ReversedSurfaces(source, Transform3D.Identity).ToArray());
 
     /// <summary>The surfaces <paramref name="mesh"/> was built from, in surface order, or null for a
     /// mesh this cache did not import. ⚠ Do not edit them; they are the shared mesh's own.</summary>
@@ -119,24 +127,65 @@ public sealed class HdModelMeshes
         }
     }
 
-    private static HdSurface[] ReversedSurfaces(ImporterMesh source)
+    private static IEnumerable<HdSurface> ReversedSurfaces(ImporterMesh source, Transform3D at)
     {
+        // A mirroring transform reverses the winding itself.
+        bool mirrored = at.Basis.Determinant() < 0;
         // Built from the importer's own arrays, not its GetMesh(). That compresses the attributes,
         // moving every vertex by up to 1/65536 of the mesh's extent.
-        var surfaces = new HdSurface[source.GetSurfaceCount()];
-        for (int i = 0; i < surfaces.Length; i++)
+        for (int i = 0; i < source.GetSurfaceCount(); i++)
         {
             var arrays = source.GetSurfaceArrays(i);
             var primitive = source.GetSurfacePrimitiveType(i);
-            if (primitive == Mesh.PrimitiveType.Triangles)
+            if (at != Transform3D.Identity)
+            {
+                Place(arrays, at, mirrored);
+            }
+
+            if (primitive == Mesh.PrimitiveType.Triangles && !mirrored)
             {
                 arrays[(int)Mesh.ArrayType.Index] = ReversedIndices(arrays);
             }
 
-            surfaces[i] = new HdSurface(primitive, arrays, source.GetSurfaceName(i), source.GetSurfaceMaterial(i));
+            yield return new HdSurface(primitive, arrays, source.GetSurfaceName(i), source.GetSurfaceMaterial(i));
+        }
+    }
+
+    // Moves a surface's positions, normals and tangents by `at`.
+    private static void Place(Godot.Collections.Array arrays, Transform3D at, bool mirrored)
+    {
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        for (int v = 0; v < vertices.Length; v++)
+        {
+            vertices[v] = at * vertices[v];
         }
 
-        return surfaces;
+        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+        if (arrays[(int)Mesh.ArrayType.Normal].VariantType == Variant.Type.PackedVector3Array)
+        {
+            var normalBasis = at.Basis.Inverse().Transposed();
+            var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+            for (int n = 0; n < normals.Length; n++)
+            {
+                normals[n] = (normalBasis * normals[n]).Normalized();
+            }
+
+            arrays[(int)Mesh.ArrayType.Normal] = normals;
+        }
+
+        if (arrays[(int)Mesh.ArrayType.Tangent].VariantType == Variant.Type.PackedFloat32Array)
+        {
+            var tangents = arrays[(int)Mesh.ArrayType.Tangent].AsFloat32Array();
+            for (int t = 0; t + 3 < tangents.Length; t += 4)
+            {
+                var axis = (at.Basis * new Vector3(tangents[t], tangents[t + 1], tangents[t + 2])).Normalized();
+                (tangents[t], tangents[t + 1], tangents[t + 2]) = (axis.X, axis.Y, axis.Z);
+                // The bitangent sign flips with the handedness.
+                tangents[t + 3] = mirrored ? -tangents[t + 3] : tangents[t + 3];
+            }
+
+            arrays[(int)Mesh.ArrayType.Tangent] = tangents;
+        }
     }
 
     private static ArrayMesh Build(HdSurface[] surfaces)
@@ -202,55 +251,58 @@ public sealed class HdModelMeshes
     private static string NameOf(GltfNode node) =>
         node.OriginalName is { Length: > 0 } original ? original : node.ResourceName;
 
-    // The mesh index for the gamez node `nodeKey` under the rule on the type, or -1. With no exact
-    // name, Blender's repeat suffix (`wing.001`) is dropped; no gamez name ends in a dot and digits.
-    private static int MeshIndexFor(Godot.Collections.Array<GltfNode> nodes, int meshCount, string nodeKey)
+    // A glTF node's name as a gamez key. Blender's repeat suffix (`wing.001`) is dropped; no gamez
+    // name ends in a dot and digits.
+    private static string KeyOf(GltfNode node) => HdModels.NodeKey(BlenderRepeat.Replace(NameOf(node), string.Empty));
+
+    // The first glTF node named for the gamez node `nodeKey`, an exact name before a suffixed one, or -1.
+    private static int MatchedNode(Godot.Collections.Array<GltfNode> nodes, string nodeKey)
     {
-        int index = NamedMeshIndex(nodes, nodeKey, NameOf);
-        if (index < 0)
+        int suffixed = -1;
+        for (int i = 0; i < nodes.Count; i++)
         {
-            index = NamedMeshIndex(nodes, nodeKey, node => BlenderRepeat.Replace(NameOf(node), string.Empty));
+            if (HdModels.NodeKey(NameOf(nodes[i])) == nodeKey)
+            {
+                return i;
+            }
+
+            if (suffixed < 0 && KeyOf(nodes[i]) == nodeKey)
+            {
+                suffixed = i;
+            }
         }
 
-        return index >= 0 ? index : meshCount == 1 ? 0 : -1;
+        return suffixed;
     }
 
-    private static int NamedMeshIndex(Godot.Collections.Array<GltfNode> nodes, string nodeKey, Func<GltfNode, string> name)
+    // Every mesh at or below `index`, placed by `at`, leaving out subtrees named in `owned`.
+    private static void Collect(Godot.Collections.Array<GltfNode> nodes, Godot.Collections.Array<GltfMesh> meshes, int index,
+        Transform3D at, ISet<string> owned, List<HdSurface> into, int depth = 0)
     {
-        foreach (var node in nodes)
+        // ⚠ Keep the depth stop; a file whose children loop would otherwise overflow the stack.
+        if (depth > nodes.Count)
         {
-            if (HdModels.NodeKey(name(node)) != nodeKey)
-            {
-                continue;
-            }
-
-            if (node.Mesh >= 0)
-            {
-                return node.Mesh;
-            }
-
-            // The writer renames a repeated name, so the child is found by its mesh, not as "mesh".
-            int lent = -1;
-            foreach (int child in node.Children)
-            {
-                if (child >= 0 && child < nodes.Count && nodes[child].Mesh >= 0)
-                {
-                    lent = lent == -1 ? nodes[child].Mesh : -2;
-                }
-            }
-
-            if (lent >= 0)
-            {
-                return lent;
-            }
+            return;
         }
 
-        return -1;
+        var node = nodes[index];
+        if (node.Mesh >= 0 && node.Mesh < meshes.Count && meshes[node.Mesh].Mesh is { } mesh)
+        {
+            into.AddRange(ReversedSurfaces(mesh, at));
+        }
+
+        foreach (int child in node.Children)
+        {
+            if (child >= 0 && child < nodes.Count && !owned.Contains(KeyOf(nodes[child])))
+            {
+                Collect(nodes, meshes, child, at * nodes[child].Xform, owned, into, depth + 1);
+            }
+        }
     }
 
     // Read straight off the parsed state, not a generated scene. No node is built to be freed, and
     // the node names are the file's own.
-    private static HdSurface[]? Import(HdModel model, string nodeKey, string file)
+    private static HdSurface[]? Import(HdModel model, string nodeKey, string file, ISet<string> owned)
     {
         var document = new GltfDocument();
         var state = new GltfState();
@@ -262,20 +314,37 @@ public sealed class HdModelMeshes
             return null;
         }
 
+        var nodes = state.GetNodes();
         var meshes = state.GetMeshes();
-        int index = MeshIndexFor(state.GetNodes(), meshes.Count, nodeKey);
-        if (index < 0 || index >= meshes.Count || meshes[index].Mesh is not { } imported
-            || imported.GetSurfaceCount() == 0)
+        var surfaces = new List<HdSurface>();
+        int matched = MatchedNode(nodes, nodeKey);
+        if (matched >= 0)
+        {
+            // ⚠ Never apply the matched node's own transform. It is the gamez node's local
+            // transform as exported, and the game places the node by it already.
+            Collect(nodes, meshes, matched, Transform3D.Identity, owned, surfaces);
+            return surfaces.ToArray();
+        }
+
+        foreach (int root in state.RootNodes)
+        {
+            if (root >= 0 && root < nodes.Count && !owned.Contains(KeyOf(nodes[root])))
+            {
+                Collect(nodes, meshes, root, nodes[root].Xform, owned, surfaces);
+            }
+        }
+
+        if (surfaces.Count == 0)
         {
             Log.Warn("world", $"HD model import failed (no mesh for node {nodeKey} among {meshes.Count}): {file}");
             return null;
         }
 
-        return ReversedSurfaces(imported);
+        return surfaces.ToArray();
     }
 
     // ⚠ Never throws: a broken pack file costs its own replacement, not the build that asked.
-    private HdSurface[]? Load(string key)
+    private HdSurface[]? Load(string key, ISet<string> owned)
     {
         if (_models.Read(key) is not { } model)
         {
@@ -286,7 +355,7 @@ public sealed class HdModelMeshes
         string file = model.GltfPath ?? key + (model.IsGlb ? ".glb" : ".gltf");
         try
         {
-            return Import(model, NodeOf(key), file);
+            return Import(model, NodeOf(key), file, owned);
         }
         catch (Exception e)
         {

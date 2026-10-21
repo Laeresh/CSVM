@@ -98,6 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ [cloud] code, [local] look: material mapping onto the remake's shaders
 14. ☑ [cloud] Apply `rig.json` to the built plane
 15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
+16. ☑ [local] Replacement draw priority and multi-mesh import
 
 ### Wave C, content paths (all [local])
 
@@ -493,6 +494,66 @@ the names back; local `--dump-markers` against `planes.zbd`>.
 
 **⚠ Traps.** <TODO: none known yet>.
 
+## B16 ☑ [local] Replacement draw priority and multi-mesh import
+
+**Landed.** A replacement surface named after an original texture draws at the highest priority of
+the node's own polygons wearing that texture, base or overlay pass (`SceneBuilder.OriginalMaterialFor`
+returns it); a non-original material stays at 0. `HdModelMeshes` merges every mesh at or below the
+matched glTF node, placed by the transforms of the nodes below it and never by the matched node's
+own; a subtree named after one of the gamez node's descendants is left out, because the exporter
+writes a part's moving children under it (the Bloodhawk's `tail` holds `lrudder1` and `g443`), and a
+naive merge would draw them twice, the copy frozen. With no matching node, every mesh in the file
+merges from the scene roots. A mirroring transform keeps the file's winding; normals and tangents
+follow the transform. A matched node with no mesh below it is an empty mesh: the instance stays, with
+a surface-less mesh, `GamezMeshMeta` and its colliders, so the node draws nothing and keeps every
+binding, while a failed import still warns and draws the original. The import is cached per pack key
+and descendant-name set, and a builder's replacement per shared import. Suites: `hd-model-swap` (a
+decal at priorities 1 and 2 over a priority-0 skin, a node hidden by an empty file, a file with no
+usable mesh), red with the priority forced to 0 and with the empty fallback restored;
+`hd-model-mesh-import` (a turned and a mirrored child, a gamez-owned child left out, the root
+fallback, an empty node), red with child transforms dropped, with the descendant exclusion removed
+and with the mirror reversal removed. C21's Bloodhawk round trip: the front viewer pose is now
+md5-identical with and without the pack (C21: 936 decal pixels), and the below pose differs in 13
+pixels, 10 by one level and 3 silhouette pixels by up to 22 (C21: 3391).
+
+Findings on the rest of the draw order. Planes carry no overlay pass and no `no_clutter` polygon.
+Across the eight chapters 307 models carry overlay passes, and on 11 of them an overlay texture is
+also a base texture of the same model; 273 models carry `no_clutter` polygons, 253 of them mixed
+with clear ones. A replacement surface for an overlay texture now takes its polygons' priority
+but draws at pass 0 and ties its base at that priority, so only the file-order rank keeps it on top,
+and at the rank cap (97 of the 307 models' bases sit there) it z-fights. Following the pass and the
+`no_clutter` layer the same way is the same small change in `OriginalMaterialFor`; it was left out
+pending a world-prop round trip (C23), since a texture worn both as base and as overlay has no one
+pass.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
+**Goal.** A replacement keeps the original's decals over its skin, a third-party file of many meshes
+under a node hierarchy imports as one part, and a pack can hide a node without a dummy triangle.
+
+**Evidence (confidence: traced).** C21 measured the Bloodhawk round trip losing `blo_noselogo` and
+`blo_winglogo`, coplanar polygons at priority 1 and 2 over the skin, because B13 draws every
+replacement surface at priority 0 (`SceneBuilder.MappedReplacement`). Model 189 wears `blo_winglogo`
+at 1 and 2 and `blo_wing` at 0 and 1 (`extracted/planes/models.json`). A Sketchfab car of 15 meshes
+under a Z-up root matrix failed with `no mesh for node nose among 15`, since B11 takes one glTF mesh
+and applies no node transform. `HdModelMeshes.Import` refused a mesh with no surfaces and
+`MappedReplacement` fell back to the original when no surface was left.
+
+**Approach.** The user's ruling: a material named after an original texture takes the priority of
+that node's own polygons with that texture, the highest where it has two; any other keeps 0. Merge
+every mesh at or below the matched node with the transforms below it, never the node's own; with no
+match, merge the file from its roots. A matched node with no mesh means draw nothing, distinct from a
+failed import.
+
+**Verify.** `hd-model-swap` with a synthetic decal shown red without the change; C21's Bloodhawk
+round trip with the decal pixels gone; a suite importing a two-mesh file with a rotated child.
+
+**⚠ Traps.** The exporter writes the gamez node's local transform on the matched node, and the game
+applies it again, so it must not be applied twice. The exporter also writes a part's moving gamez
+children under it, so "every mesh below" has to stop at them.
+
 # Wave C, content paths
 
 ## C21 ☑ [local] Round-trip proof on a real plane and a real world prop
@@ -511,10 +572,8 @@ rewrite), `hd-model-swap` (an exported crate wears its original material, red wi
 
 **Verified.** <pending orchestrator run>
 
-**Owed.** <TODO: decide how a replacement surface takes the original's draw priority. B13 draws every
-replacement surface at priority 0, so the Bloodhawk's logos (`blo_noselogo`, `blo_winglogo`, priority
-1 and 2 polygons coplanar with the skin) vanish under the skin after the round trip; the firehouse,
-which has none, differs by 6 edge pixels in a whole C1 frame.> <TODO: a chapter key replaces every
+**Owed.** The draw-priority TODO is answered by B16: a replacement surface takes its texture's
+original priority, and the Bloodhawk's logos survive the round trip. <TODO: a chapter key replaces every
 node of that name: C1 has 74 nodes named `part1` over 47 models, so an unedited destructible export
 keyed by part names would replace the parts of every other destructible (C23).>
 

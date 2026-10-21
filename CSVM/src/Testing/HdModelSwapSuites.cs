@@ -30,9 +30,13 @@ internal static class HdModelSwapSuites
     private const string FlyoutBody = "probe_flyout_body";
     private const string FlyoutFin = "probe_flyout_fin";
     private const string Crate = "probe_crate";
+    private const string Sign = "probe_sign";
+    private const string Hidden = "probe_hidden";
+    private const string Unmatched = "probe_unmatched";
 
-    // An original texture of the synthetic C1 archive, as a gamez material names it.
+    // Original textures of the synthetic C1 archive, as a gamez material names them.
     private const string SkinTexture = "probe_skin.tif";
+    private const string DecalTexture = "probe_panel.tif";
 
     // The replaced shed's glTF materials, one surface each, in file order.
     private const string SkinClamped = "PROBE_SKIN";
@@ -70,7 +74,9 @@ internal static class HdModelSwapSuites
         + "texture takes the very material an original surface of it takes, clamped by its own UVs, "
         + "and repaints with it; any other takes the file's base colour, two-sided, cutout, blended "
         + "or unlit as glTF says, follows a graphics-mode switch, and the shared import keeps its own materials. "
-        + "A glTF export of an original node, put unedited into the pack, wears that node's original material")]
+        + "A glTF export of an original node, put unedited into the pack, wears that node's original material. "
+        + "A decal surface draws at the highest priority its original polygons have, a matched node holding no "
+        + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model")]
     internal static void SwapSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -114,12 +120,74 @@ internal static class HdModelSwapSuites
                 $"{key}.glb write result");
         }
 
+        ctx.Same((long)Error.Ok, (long)WriteModel(Path.Combine(pack, Chapter, Sign + ".glb"), Sign, SignMaterials()), $"{Sign}.glb write result");
+        // Godot's writer gives a meshless file an empty buffer its reader refuses, so these two are
+        // written by hand: one node each, no mesh.
+        foreach (var (file, node) in new[] { (Hidden, Hidden), (Unmatched, "probe_other") })
+        {
+            File.WriteAllText(Path.Combine(pack, Chapter, file + ".gltf"),
+                $"{{\"asset\":{{\"version\":\"2.0\"}},\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"name\":\"{node}\"}}]}}");
+        }
+
         using var none = HdModels.Open(root, "no-such-pack");
         using var models = HdModels.Open(root, "HDModels");
         CheckWorld(ctx, textures, weapon, none, models);
         CheckPlane(ctx, planesGamez, textures, planeNode, none, models);
         CheckExportRoundTrip(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, root);
+        CheckPriorityAndEmpty(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, models);
     }
+
+    // A decal surface draws at its original polygons' priority, the highest where they differ, so it
+    // stays over the skin. A file whose matched node holds no mesh hides the node and keeps its
+    // bindings. A file with neither that node nor a mesh fails, and the gamez model draws.
+    private static void CheckPriorityAndEmpty(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels none, HdModels models)
+    {
+        var plainBuilder = new SceneBuilder(gamez, textures, fullbright: true, cullBackfaces: true) { HdChapter = Chapter };
+        var packedBuilder = new SceneBuilder(gamez, textures, fullbright: true, cullBackfaces: true) { HdChapter = Chapter };
+        var saved = HdModels.Current;
+        var built = new List<Node3D>();
+        Node3D Build(SceneBuilder builder, HdModels pack, string name)
+        {
+            HdModels.Current = pack;
+            var node = builder.BuildSubtree(gamez.Nodes[Index(gamez, name)])!;
+            ctx.Host.AddChild(node);
+            built.Add(node);
+            return node;
+        }
+
+        try
+        {
+            var sign = DrawnMesh(Build(packedBuilder, models, Sign));
+            float Bias(int surface) => (sign!.SurfaceGetMaterial(surface) as ShaderMaterial)?.GetShaderParameter("depth_bias").AsSingle() ?? float.NaN;
+            ctx.Check(sign != null && sign.GetSurfaceCount() == 2
+                    && Bias(0) < packedBuilder.PriorityBias(1)
+                    && Bias(1) >= packedBuilder.PriorityBias(2) && Bias(1) < packedBuilder.PriorityBias(3),
+                $"the skin surface draws at its polygons' priority 0 and the decal at the higher of its 1 and 2");
+
+            var plain = Build(plainBuilder, none, Hidden);
+            var hidden = Build(packedBuilder, models, Hidden);
+            var instance = MeshChild(hidden);
+            ctx.Check(DrawnMesh(hidden)?.GetSurfaceCount() == 0 && instance != null
+                    && SceneBuilder.GameplayMesh(instance)?.GetAabb() == DrawnMesh(plain)?.GetAabb(),
+                $"a matched node holding no mesh draws nothing, and its hulls and hit boxes read the gamez model");
+            SameRest(ctx, plain, hidden, $"hidden {Hidden}");
+
+            KeptNode(ctx, Build(plainBuilder, none, Unmatched), Build(packedBuilder, models, Unmatched), Index(gamez, Unmatched), null,
+                $"{Unmatched} with an unusable file");
+        }
+        finally
+        {
+            HdModels.Current = saved;
+            built.ForEach(n => n.Free());
+        }
+    }
+
+    // The sign's glTF materials: its skin, then its decal.
+    private static (StandardMaterial3D, float)[] SignMaterials() => new[]
+    {
+        (new StandardMaterial3D { ResourceName = Path.GetFileNameWithoutExtension(SkinTexture) }, 1f),
+        (new StandardMaterial3D { ResourceName = Path.GetFileNameWithoutExtension(DecalTexture) }, 1f),
+    };
 
     // The crate as a builder draws it, exported and put unedited into a pack under its own key. Its
     // texture-named glTF material maps back to the very material the original surface wears.
@@ -595,6 +663,22 @@ internal static class HdModelSwapSuites
         var flyout = AddNode(gamez, flyoutModel, -1, Vector3.Zero);
         Child(flyout, AddNode(gamez, FlyoutBody, body, Vector3.Zero));
         Child(flyout, AddNode(gamez, FlyoutFin, fin, new Vector3(0.6f, 0, 0.4f)));
+
+        // Outside the world: a skinned box with a decal at two priorities on its front face. Two
+        // plain boxes take an empty and an unusable pack file.
+        gamez.Materials.Add(new GameZMaterial { TextureName = DecalTexture });
+        var signMesh = Box(new Vector3(-1, 0, -0.2f), new Vector3(1, 1, 0.2f), material: 1);
+        foreach (int priority in new[] { 1, 2 })
+        {
+            var decal = new GameZPolygon { MaterialIndex = 2, Priority = priority };
+            decal.VertexIndices.AddRange(signMesh.Polygons[0].VertexIndices);
+            decal.UvCoords = new List<Vector2> { new(0, 1), new(1, 1), new(1, 0), new(0, 0) };
+            signMesh.Polygons.Add(decal);
+        }
+
+        AddNode(gamez, Sign, AddMesh(gamez, signMesh), Vector3.Zero);
+        AddNode(gamez, Hidden, AddMesh(gamez, Box(new Vector3(-1, 0, -1), new Vector3(1, 1, 1))), Vector3.Zero);
+        AddNode(gamez, Unmatched, AddMesh(gamez, Box(new Vector3(-1, 0, -1), new Vector3(1, 1, 1))), Vector3.Zero);
         return gamez;
     }
 

@@ -496,7 +496,7 @@ void fragment() {
     private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
     // A model pack replacement as this builder draws it: the shared import's surfaces under this
     // builder's materials. The model index is in the key because its render flags reach the materials.
-    private readonly Dictionary<(string PackKey, int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _replacementCache = new();
+    private readonly Dictionary<(ArrayMesh Import, int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh> _replacementCache = new();
     // A replacement surface's material when its glTF material names no original texture, keyed by
     // the imported material itself. Every other component picks a shader variant or a bias.
     private readonly Dictionary<(Material? Source, int Rank, bool DoubleSided, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, bool ClutterFade), Material> _packMaterialCache = new();
@@ -1315,7 +1315,8 @@ void fragment() {
                 if (replacement != null)
                 {
                     ReplacedMeshCount++;
-                    mi.SetMeta(GamezMeshMeta, GetMesh(node.MeshIndex, forceDoubleSided, forceLit));
+                    if (GetMesh(node.MeshIndex, forceDoubleSided, forceLit) is { } gamezMesh)
+                        mi.SetMeta(GamezMeshMeta, gamezMesh);
                 }
                 if (collidable)
                     AttachCollision(n3d, node.MeshIndex, node.CanModify);
@@ -1517,30 +1518,42 @@ void fragment() {
         bool clutterFade = false)
     {
         if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null)
-            || HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) is not { } packKey)
+            || HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) == null)
             return null;
         var mesh = _gamez.Meshes[meshIndex];
         if (GetCylindricalAxis(mesh) != CylAxis.None || IsGlowSpriteMesh(mesh) || UsesBillboardTexture(mesh)
             || !mesh.Polygons.Exists(p => !DrawsNothing(p.MaterialIndex))
             || KeepsOriginalMesh?.Invoke(node) == true)
             return null;
-        var key = (packKey, meshIndex, forceDoubleSided, forceLit, clutterFade);
-        if (_replacementCache.TryGetValue(key, out var cached))
-            return cached;
+        // A failed import is null and draws the gamez model; an empty one draws nothing.
         var shared = HdModelMeshes.Current;
-        var built = shared.For(node.Name, HdChapter, HdAirframe) is { } imported
-            && shared.SurfacesOf(imported) is { } surfaces
-            ? MappedReplacement(surfaces, shared, mesh, meshIndex, forceDoubleSided, forceLit, clutterFade)
-            : null;
-        _replacementCache[key] = built;
+        if (shared.For(node.Name, HdChapter, HdAirframe, DescendantNames(node)) is not { } imported
+            || shared.SurfacesOf(imported) is not { } surfaces)
+            return null;
+        var key = (imported, meshIndex, forceDoubleSided, forceLit, clutterFade);
+        if (!_replacementCache.TryGetValue(key, out var built))
+            _replacementCache[key] = built = MappedReplacement(surfaces, shared, mesh, meshIndex, forceDoubleSided, forceLit, clutterFade);
         return built;
+    }
+
+    // The names of the gamez nodes below `node`. A glTF subtree named after one is that node's to draw.
+    private IEnumerable<string> DescendantNames(GameZNode node)
+    {
+        foreach (int child in node.Children)
+        {
+            if (child < 0 || child >= _gamez.Nodes.Count)
+                continue;
+            yield return _gamez.Nodes[child].Name;
+            foreach (string name in DescendantNames(_gamez.Nodes[child]))
+                yield return name;
+        }
     }
 
     // The shared import's surfaces under this builder's materials, in a mesh of this builder's own.
     // ⚠ Never set a material on the shared mesh; every builder replacing from that key reads it.
-    // Draw order: priority 0, no no_clutter layer, pass 0, and the file's surface order as the rank.
-    // A replacement has no polygons to carry the original's priorities; node_bias applies as built.
-    private ArrayMesh? MappedReplacement(IReadOnlyList<HdSurface> surfaces, HdModelMeshes shared, GameZMesh mesh,
+    // Draw order: an original texture's priority on this model (else 0), no no_clutter layer, pass
+    // 0, and the file's surface order as the rank. The node's bias applies as built.
+    private ArrayMesh MappedReplacement(IReadOnlyList<HdSurface> surfaces, HdModelMeshes shared, GameZMesh mesh,
         int meshIndex, bool forceDoubleSided, bool forceLit, bool clutterFade)
     {
         // The model's own render flags, as its original surfaces take them.
@@ -1559,12 +1572,12 @@ void fragment() {
             var uvs = surface.Arrays[(int)Mesh.ArrayType.TexUV];
             var unitAxes = UvAxesWithinUnitSquare(uvs.VariantType == Variant.Type.PackedVector2Array ? uvs.AsVector2Array() : null);
             Material material;
-            if (OriginalMaterialFor(source?.ResourceName, mesh) is var original && original >= 0)
+            if (OriginalMaterialFor(source?.ResourceName, mesh) is var (original, priority) && original >= 0)
             {
                 if (DrawsNothing(original))
                     continue;
                 var (clampUv, edgeClamp) = ClampFor(unitAxes, scroll);
-                material = GetMaterial(original, priority: 0, rank, noClutter: false, doubleSided, scroll, clampUv,
+                material = GetMaterial(original, priority, rank, noClutter: false, doubleSided, scroll, clampUv,
                     lit, fogged, pass: 0, edgeClamp, clutterFade);
             }
             else
@@ -1578,27 +1591,32 @@ void fragment() {
             result.SurfaceSetName(added, surface.Name);
             result.SurfaceSetMaterial(added, material);
         }
-        return result.GetSurfaceCount() > 0 ? result : null;
+        // ⚠ Never fall back to the gamez model here: no surface left means the pack draws nothing.
+        return result;
     }
 
     // The gamez material an original surface skinned with the texture `name` takes, or -1: the node's
     // own model first, then the whole table. Matched as the archive matches, without case or extension.
-    // A sprite texture is no match, since its material is a camera-facing billboard.
-    private int OriginalMaterialFor(string? name, GameZMesh mesh)
+    // A sprite texture is no match, since its material is a camera-facing billboard. The priority is
+    // the highest of this model's polygons wearing it, base or overlay, else 0.
+    private (int Material, int Priority) OriginalMaterialFor(string? name, GameZMesh mesh)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return -1;
+            return (-1, 0);
         string stem = System.IO.Path.GetFileNameWithoutExtension(name.Trim());
+        bool Wears(int material) => material >= 0 && material < _gamez.Materials.Count
+            && _gamez.Materials[material].TextureName is { } texName
+            && string.Equals(System.IO.Path.GetFileNameWithoutExtension(texName.Trim()), stem, StringComparison.OrdinalIgnoreCase);
         int found = -1;
+        int? priority = null;
         foreach (var poly in mesh.Polygons)
         {
-            if (poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
-                && _gamez.Materials[poly.MaterialIndex].TextureName is { } texName
-                && string.Equals(System.IO.Path.GetFileNameWithoutExtension(texName.Trim()), stem, StringComparison.OrdinalIgnoreCase))
-            {
-                found = poly.MaterialIndex;
-                break;
-            }
+            int worn = Wears(poly.MaterialIndex) ? poly.MaterialIndex
+                : poly.OverlayPasses?.Find(p => Wears(p.MaterialIndex))?.MaterialIndex ?? -1;
+            if (worn < 0)
+                continue;
+            found = found < 0 ? worn : found;
+            priority = Math.Max(priority ?? int.MinValue, poly.Priority);
         }
         if (found < 0)
         {
@@ -1614,7 +1632,7 @@ void fragment() {
             found = _materialByTexture.TryGetValue(stem, out int index) ? index : -1;
         }
         return found >= 0 && _billboardTexture != null && _gamez.Materials[found].TextureName is { } tex && _billboardTexture(tex)
-            ? -1 : found;
+            ? (-1, 0) : (found, priority ?? 0);
     }
 
     // A replacement surface whose glTF material names no original texture: the file's base colour in

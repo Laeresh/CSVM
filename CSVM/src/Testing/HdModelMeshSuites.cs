@@ -22,7 +22,10 @@ internal static class HdModelMeshSuites
         "a mesh written by the glTF exporter into a model pack comes back through HdModelMeshes with "
         + "the source's vertex positions and triangle winding on every surface, from a .glb and a "
         + "loose .gltf, picked out by node name from a file holding a second mesh, also when Blender "
-        + "has suffixed that name .001, and imported once per pack key")]
+        + "has suffixed that name .001, and imported once per pack key. Every mesh below the matched node "
+        + "merges, placed by the transforms below it (a turned and a mirrored child), leaving out a subtree "
+        + "named for a gamez descendant; a file with no node of the name merges whole from its roots, and "
+        + "a matched node with no mesh below it is an empty mesh")]
     internal static void ImportRoundTrip(TestContext ctx)
     {
         string root = Path.Combine(ctx.ScratchDir, "hd-model-mesh-import");
@@ -79,6 +82,110 @@ internal static class HdModelMeshSuites
         var expected = new List<Vector3[]> { new[] { V(2, 0, 0), V(0, 1, 0), V(0, 0, 0) } };
         ctx.Check(SameTriangles(expected, Triangles(unindexed, 0)),
             $"an unindexed surface is reversed through an identity index list");
+        CheckMerge(ctx, root, source);
+    }
+
+    // A file of several meshes under a node hierarchy. The matched node's subtree merges, placed by
+    // the transforms below it. A file with no matching node merges whole from its roots.
+    private static void CheckMerge(TestContext ctx, string root, ArrayMesh probe)
+    {
+        string pack = Path.Combine(root, "Merged", "pack");
+        var part = DecoyMesh();
+        var scene = AssemblyScene(probe, part, out var assembly, out var turned, out var mirrored);
+        try
+        {
+            foreach (string file in new[] { "assembly.glb", "c7/unnamed.glb", "c8/empty_part.glb" })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(pack, file))!);
+                ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, file)), $"{file} write result");
+            }
+        }
+        finally
+        {
+            scene.Free();
+        }
+
+        using var models = HdModels.Open(root, "Merged");
+        var meshes = new HdModelMeshes(models);
+        var merged = meshes.For("assembly", owned: new[] { "hinge" });
+        ctx.Check(merged?.GetSurfaceCount() == 4, $"the matched node's own mesh (2 surfaces) and two children's merge, the gamez-owned child left out (got {merged?.GetSurfaceCount()})");
+        if (merged?.GetSurfaceCount() == 4)
+        {
+            ctx.Check(SameTriangles(Triangles(probe, 0), Triangles(merged, 0)) && SameTriangles(Triangles(probe, 1), Triangles(merged, 1)),
+                $"the matched node's own transform is not applied, so its mesh is exact");
+            ctx.Check(Near(Placed(part, turned, mirrored: false), Triangles(merged, 2)),
+                $"a rotated child's mesh is placed by its transform, winding kept");
+            ctx.Check(Near(Placed(part, mirrored, mirrored: true), Triangles(merged, 3)),
+                $"a mirrored child's mesh is placed by its transform, its visible side kept");
+        }
+
+        ctx.Same(5, meshes.For("assembly")?.GetSurfaceCount() ?? -1, $"without gamez descendants every child merges");
+        var whole = meshes.For("unnamed", chapter: "C7");
+        ctx.Check(whole?.GetSurfaceCount() == 5 && Near(Placed(probe, assembly, mirrored: false, surface: 0), Triangles(whole, 0)),
+            $"a file with no node of the name merges every mesh, placed from the scene roots");
+        var empty = meshes.For("empty_part", chapter: "C8");
+        ctx.Check(empty != null && empty.GetSurfaceCount() == 0, $"a matched node with nothing below it is an empty mesh, not a failure");
+    }
+
+    // A part of several meshes: its own on the exporter's "mesh" child, then a turned and a mirrored
+    // part. A child named for a gamez descendant comes last, and an empty node sits beside it.
+    private static Node3D AssemblyScene(ArrayMesh probe, ArrayMesh part, out Transform3D assembly, out Transform3D turned, out Transform3D mirrored)
+    {
+        var root = new Node3D { Name = "assembly_scene" };
+        var node = new Node3D { Name = "assembly", Position = V(7, 0, 0) };
+        node.AddChild(new MeshInstance3D { Name = "mesh", Mesh = probe });
+        var arm = new Node3D { Name = "arm", Position = V(0, 1, 0), Rotation = V(0, Mathf.Pi / 2, 0) };
+        arm.AddChild(new MeshInstance3D { Name = "mesh", Mesh = part });
+        var mirror = new Node3D { Name = "mirror", Position = V(0, 0, 2), Scale = V(-1, 1, 1) };
+        mirror.AddChild(new MeshInstance3D { Name = "mesh", Mesh = part });
+        var hinge = new Node3D { Name = "hinge" };
+        hinge.AddChild(new MeshInstance3D { Name = "mesh", Mesh = part });
+        node.AddChild(arm);
+        node.AddChild(mirror);
+        node.AddChild(hinge);
+        root.AddChild(node);
+        root.AddChild(new Node3D { Name = "empty_part" });
+        (assembly, turned, mirrored) = (node.Transform, arm.Transform, mirror.Transform);
+        return root;
+    }
+
+    // A surface's triangles in the data's winding after `at`. A mirror turns the corner order over.
+    private static List<Vector3[]> Placed(ArrayMesh mesh, Transform3D at, bool mirrored, int surface = 0)
+    {
+        var placed = new List<Vector3[]>();
+        foreach (var corners in Triangles(mesh, surface))
+        {
+            var moved = new[] { at * corners[0], at * corners[1], at * corners[2] };
+            placed.Add(mirrored ? new[] { moved[2], moved[1], moved[0] } : moved);
+        }
+
+        return placed;
+    }
+
+    // Each wanted triangle against the got one at any rotation of its corners, within float noise.
+    private static bool Near(List<Vector3[]> want, List<Vector3[]> got)
+    {
+        if (want.Count != got.Count)
+        {
+            return false;
+        }
+
+        for (int t = 0; t < want.Count; t++)
+        {
+            bool any = false;
+            for (int r = 0; r < 3 && !any; r++)
+            {
+                any = want[t][0].DistanceTo(got[t][r]) < 1e-4f && want[t][1].DistanceTo(got[t][(r + 1) % 3]) < 1e-4f
+                    && want[t][2].DistanceTo(got[t][(r + 2) % 3]) < 1e-4f;
+            }
+
+            if (!any)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void SameGeometry(TestContext ctx, ArrayMesh source, ArrayMesh? imported, string label)
