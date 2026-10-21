@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ [local] Round-trip proof on a real plane and a real world prop
 22. ☑ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 23. ☐ [local] World props and destructibles in every damage state
-24. ☐ [local] Plane airframes without livery
+24. ☑ [local] Plane airframes without livery
 25. ☐ [local] Rig on a real airframe
 26. ☑ [cloud] code, [local] two-instance check: pack and rig agreement in network play
 
@@ -679,7 +679,31 @@ Known: part names repeat (`part1` on 74 C1 nodes over 47 models, and 10 times in
 a destructible by its root (C22's scope): a root file reaches only its own parts, a repeated name inside
 one root resolves by the names between, and identical siblings of one parent take the first match.
 
-## C24 ☐ [local] Plane airframes without livery
+## C24 ☑ [local] Plane airframes without livery
+
+**Landed.** A replacement airframe needs no new binding code: every animator, toggle and builder
+binds the node, which the replacement leaves as built. A test pack replaced all 51 meshed nodes of
+`player_bhawk` (gamez geometry pushed 3 cm out along its normals, one flat colour per part under a
+material named after no texture, the props as two-blade bars); a flight build draws 38 of them and
+`BuildDestroyed` the four wreck pieces. The ailerons, rudder and canard elevators deflect about the
+original hinge (full roll, pitch and yaw move each replacement as its gamez model moves, the
+ailerons' hinge-line vertices by 1 mm), the props spin at their own rates, the torn panels and
+healthy twins toggle under `--damage=`, and the wreck pieces are the pack's. There is no LOD swap
+to follow: `SceneBuilder` keeps only LOD groups whose range starts at 0 (`nearest` and `l12` on the
+Bloodhawk), so a pack entry for `fuse02`..`wing04` never draws. Two more readers took the drawn mesh
+and now take the gamez model (`SceneBuilder.GameplayMesh`): `DamageVisuals` pairs each healthy skin
+with its torn panel by mesh centre, and a pack moved that centre (the corvette autogyro pack lost
+the `pdp3`/`pdp3_h` pair); `GroundShadowSilhouette` rasterised the replacement, which cost 2.4 ms a
+frame per aircraft for a 44,793-triangle pack against 0.15 ms for the original. `BuildDestroyed`
+logs how many wreck pieces came from the pack. `hd-model-swap` asserts the shadow's triangles and
+box and a panel's pairing centre are the gamez model's, red with either change reverted.
+
+**Verified.** <pending orchestrator run>
+
+**Owed.** The shadow is the user's fork: (b) keeps the original outline (implemented) or (a)
+follows the replacement's. <TODO: the user's ruling.>
+
+**Original approach (kept for reference).**
 
 **Goal.** A replacement airframe flies with its control surfaces, props, damage panels and wreck
 working, in a fixed paint.

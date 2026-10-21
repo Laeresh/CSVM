@@ -225,9 +225,11 @@ public sealed class GroundShadowSilhouette
             within = Transform3D.Identity;
         }
 
-        if (node is MeshInstance3D instance && instance.Mesh is { } mesh)
+        // The gamez model under a model pack replacement, so the outline and its cost stay the
+        // original's. This raster runs on the CPU every frame, and a pack mesh can carry 40 times more.
+        if (node is MeshInstance3D instance && Mech3.SceneBuilder.GameplayMesh(instance) is { } mesh)
         {
-            var local = instance.GetAabb();
+            var local = mesh.GetAabb();
             var here = new Aabb(at * local.GetEndpoint(0), Vector3.Zero);
             for (int i = 1; i < 8; i++)
                 here = here.Expand(at * local.GetEndpoint(i));

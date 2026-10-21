@@ -328,9 +328,14 @@ public sealed class PlaneBuilder
         if (found == null)
             return null;
         _scene.HdAirframe = rootName;
+        int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(found.Value.Node, _ => false);
         if (built != null)
             built.Transform = found.Value.Acc;
+        if (_scene.ReplacedMeshCount > replacedBefore)
+        {
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} wreck piece mesh(es) of {rootName} drawn from the model pack");
+        }
         return built;
     }
 

@@ -67,7 +67,7 @@ internal static class HdModelSwapSuites
     [Suite("hd-model-swap",
         "a model pack replacement swaps the mesh SceneBuilder draws for a world node by its chapter key, "
         + "a plane node by its airframe key and a flyout body node by its bare name; each keeps its "
-        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls stay the gamez model's; a "
+        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls, ground shadow and damage-panel centre stay the gamez model's; a "
         + "terrain tile, a facade and a glow sprite named in the pack keep their gamez models, an "
         + "unrelated node is untouched, and a builder with no chapter or airframe replaces nothing. "
         + "A replaced surface wears the remake's shader: a glTF material named after an original "
@@ -411,6 +411,17 @@ internal static class HdModelSwapSuites
             string hulls = Hulls(plain);
             ctx.Check(hulls.Length > 0 && hulls == Hulls(packed),
                 $"{ctx.PlaneName}'s collision hulls are the gamez model's, built as without the pack");
+            var plainShadow = GroundShadowSilhouette.For(plain, false);
+            var packedShadow = GroundShadowSilhouette.For(packed, false);
+            ctx.Check(plainShadow.TriangleCount > 0 && packedShadow.TriangleCount == plainShadow.TriangleCount && packedShadow.Box == plainShadow.Box,
+                $"{ctx.PlaneName}'s ground shadow rasterises the gamez model, {plainShadow.TriangleCount} triangles without the pack and {packedShadow.TriangleCount} with it");
+            var replaced = Nodes(packed).First(n => AnimRuntime.NameOf(n) == planeNode && DrawnMesh(n) != null);
+            var original = ByIndex(plain, replaced.GetMeta(AnimRuntime.IndexMeta).AsInt32());
+            var plainCentre = Vector3.Inf;
+            bool centred = DamageVisuals.TryMeshCenter(replaced, packed, out var packedCentre)
+                && original != null && DamageVisuals.TryMeshCenter(original, plain, out plainCentre);
+            ctx.Check(centred && packedCentre.IsEqualApprox(plainCentre),
+                $"a damage panel pairs by the gamez model's centre: {planeNode} at {packedCentre} with the pack, {plainCentre} without");
         }
         finally
         {

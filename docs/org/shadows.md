@@ -297,6 +297,11 @@ from this page and where it departs:
   outline for a closed hull and differs only where a model's faces are inconsistently wound; and a
   hidden node rasterises nothing while still widening the bounding box, so a torn damage panel or
   the player's own interior cockpit mesh casts no silhouette.
+- **A model pack replacement casts the original's silhouette.** The triangles and the box are read
+  off the gamez model a replacement draws over (`SceneBuilder.GameplayMesh`), so the shadow keeps
+  the original outline and the original triangle count. The raster runs on the CPU per aircraft per
+  frame: a 44,793-triangle third-party autogyro replacement measured 2.4 ms a raster in a debug
+  build against 0.15 ms for the autogyro's own 1,098 triangles.
 - **The live texture is 64 texels on a side where the original rasters 32**, the one size in the
   port that is a choice rather than a decode. The original's step is coarse under the player's own
   aircraft, whose footprint grows to 3× as it climbs, and at the controls that reads blocky. The

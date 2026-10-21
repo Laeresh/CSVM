@@ -1454,8 +1454,8 @@ authored anim through `DamageEffectSink`, the player rig's own runtime. Staging 
 ladder entry and cleared on the upward crossing, so a repair un-stages and the entry can fire
 again. `RigAnimFor` is a curated membership test over the effect catalogue, which is what keeps a
 cockpit gauge def from ever playing on an airframe, and the panel-pairing traps sit on
-`PairHealthySkins`. The cockpit-interior twins ride the same panel table as their exterior
-partners, so no separate cockpit rule exists. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+`PairHealthySkins`, which pairs by the gamez model even under a model pack replacement. The
+cockpit twins ride their exterior partners' panel table. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/Airframe/EffectCatalogue.cs
 The record of which authored anims are playable effects and what their defs need staged: the name
@@ -1698,14 +1698,14 @@ overload writes into a caller's buffer, for the per-frame raster.
 `CSVM.Tests/GroundShadowLawTests` pins the numbers. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/Airframe/GroundShadowSilhouette.cs
-One caster's shape: the triangles of the node the original rasterises, taken once, and the 64x64
-coverage texture rebuilt from them each frame. The airframe's triangles are held still in the
-aircraft's frame; each propeller or rotor blur disc is its own group, re-posed from its live node so
-it turns in the shadow without re-reading the model. Pose, flattening and the footprint collapse
-into one affine map per group, so a vertex costs two dot products, and the fill is an incremental
-edge walk with its bounds hand-inlined, which holds a debug-build raster near a third of a
-millisecond per aircraft at that size. The mask is readable as data (`CoveredAt`), which is how the
-suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
+One caster's shape: the triangles of the node the original rasterises, read off the gamez model
+under a model pack replacement (`SceneBuilder.GameplayMesh`), taken once, and the 64x64 coverage
+texture rebuilt from them each frame. Each propeller or rotor blur disc is its own group, re-posed
+from its live node so it turns in the shadow without re-reading the model. Pose, flattening and the
+footprint collapse into one affine map per group, and the fill is an incremental edge walk with its
+bounds hand-inlined, which holds a debug-build raster near a third of a millisecond per aircraft at
+that size. The mask is readable as data (`CoveredAt`), which is how the suites pin a shape no
+ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/Airframe/GroundShadowPass.cs
 The drawing half: one modulating quad per live aircraft, rebuilt from the rule each rendered frame,
