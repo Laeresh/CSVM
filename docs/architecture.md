@@ -531,7 +531,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/MenuHost.cs`, the process-lifetime host: it selects, shows and ticks the presentation and owns everything a switch outlives.
 - `src/UI/Menu/IMenuFeature.cs`, the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs`, the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
-- `src/UI/Menu/MenuNoticeFeature.cs`, one launcher notice the active presentation shows once at its next show: VR mode's fall back to flat.
+- `src/UI/Menu/MenuNoticeFeature.cs`, one launcher notice the active presentation shows once at its next show: VR mode's fall back to flat, an aircraft flown without its bad rig.
 - `src/UI/Menu/MenuCommands.cs`, one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
 - `src/UI/Menu/IMenuAudio.cs`, the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs`, the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.

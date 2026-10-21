@@ -134,12 +134,14 @@ optional, and an absent one keeps the original's value. Vectors are metres in th
 | `markers` | Marker name to position. Moves any marker the airframe has. It may add `target`, `cockpit_camera`, `exhaust1`, `exhaust2`, `ground_level`, `ladder_pos` or `cf_light` when the model lacks one, never a firepoint or pylon. `pylon1` to `pylon8` only, an odd pylon at x < 0 and an even one at x > 0 (none on the centreline). Moving `cockpit_camera` moves the first-person eye. |
 | `props` | `node`, and optional `axis` (plane frame, any length but not zero), `deg_per_sec` and `blur` (whether the node is a blur disc). A node the original does not spin needs both `axis` and `deg_per_sec`. |
 | `surfaces` | `node`, `kind` (`aileron`, `elevator`, `rudder`), `side` (`left` or `right`, required except on a rudder, where it changes nothing), and an optional `hinge` with `origin` and `axis` in the plane frame. Without a hinge the surface turns about the original's hinge parent and node-local axis, so a replacement mesh must sit in that frame. |
-| `flares` | `left` and `right`: the nodes the wingtip lamps light. A side not given keeps the original's flare for that side. |
+| `flares` | `left` and `right`: the nodes the wingtip lamps light. A side not given keeps the original's flare for that side. An original flare's side is its position, not its digit: `wing_flare1` is port on every airframe that has flares except the Warhawk, where it is starboard (the Bloodhawk and the autogyro carry none). A rig flare takes over every effect aimed at the original it replaced, so the fuel leak, which darkens `wing_flare2`, darkens the rig's flare on that side. |
 
 A rig says where, never what: guns, calibres, ammunition, pylon count and pylon side stay the
 original's and the save's. Validation is loud: an unknown key, a non-finite number, a zero axis, a
 name defined twice, a pylon out of range or on the wrong side, or a node the airframe lacks fails
-the aircraft's build with a message naming the file and the entry.
+the aircraft's build with a message naming the file and the entry. A flight launched from the menu
+is the exception: it logs that error, tells the player at the menu's next show, and flies the
+aircraft without its rig, none of the rig's entries applied.
 
 ## Reader rules and edge cases
 

@@ -34,8 +34,10 @@ internal static class PlaneRigSuites
         "missing reference marker and moves cockpit_camera, read after the patch; a rig prop spins " +
         "about its own plane-frame axis, an unclassified one included; a rig surface deflects about " +
         "its plane-frame hinge; a rig flare side replaces the original flare on that side by " +
-        "position; the wing split and every pylon's side are unchanged; and a rig naming a node " +
-        "the model lacks fails the build with an error naming the file and the entry")]
+        "position, and the fuel leak's wing_flare2 darkens the rig flare standing for it; the wing " +
+        "split and every pylon's side are unchanged; a rig naming a node the model lacks fails the " +
+        "build with an error naming the file and the entry; and on a player's launch the same rig " +
+        "posts one notice and builds the original airframe, none of its entries applied")]
     internal static void PlaneRigSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -175,7 +177,109 @@ internal static class PlaneRigSuites
         }
 
         CheckFlares(ctx, planesGamez, textures, plane, pylon1);
+        CheckLeakFlare(ctx, planesGamez, textures);
         CheckRefused(ctx, planesGamez, textures, plane, spinName);
+        CheckPlayerFallback(ctx, planesGamez, textures, plane, pylon1, camera);
+    }
+
+    // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes
+    // dark, and with no rig wing_flare2 itself is.
+    private static void CheckLeakFlare(TestContext ctx, GameZ planesGamez, TextureArchive textures)
+    {
+        string flarePlane = Tooling.SyntheticPlane.Fighter;
+        if (planesGamez.FindByName(flarePlane) == null)
+        {
+            return;
+        }
+
+        string side, standIn;
+        using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
+        {
+            var bare = Build(ctx, planesGamez, textures, none, flarePlane, out var bareBuilder);
+            try
+            {
+                side = MarkerAt(bare, "wing_flare2").X < 0f ? "left" : "right";
+                var plain = PlainMeshNodes(bare);
+                ctx.Check(plain.Count > 0, $"{flarePlane} carries a plain mesh node to stand in for a flare");
+                if (plain.Count == 0)
+                {
+                    return;
+                }
+
+                standIn = AnimRuntime.NameOf(plain[0]);
+                CheckLeak(ctx, bareBuilder, "wing_flare2", "with no rig");
+            }
+            finally
+            {
+                bare.Free();
+            }
+        }
+
+        using var pack = Pack(ctx, "leak-flare", flarePlane, $$"""{ "flares": { "{{side}}": "{{standIn}}" } }""");
+        var model = Build(ctx, planesGamez, textures, pack, flarePlane, out var builder);
+        try
+        {
+            CheckLeak(ctx, builder, standIn, $"with {standIn} rigged as the {side} flare");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
+    private static void CheckLeak(TestContext ctx, PlaneBuilder builder, string dark, string what)
+    {
+        var blinker = WingLightBlinker.Build(builder.WingFlares, AnimRuntime.HighLod);
+        blinker?.Suspend("wing_flare2");
+        blinker?.Advance(0.001);
+        var lit = builder.WingFlares.Where(f => f.Visible).Select(AnimRuntime.NameOf).ToList();
+        var unlit = builder.WingFlares.Where(f => !f.Visible).Select(AnimRuntime.NameOf).ToList();
+        ctx.Check(lit.Count > 0 && unlit.Count > 0 && unlit.All(n => n == dark) && lit.All(n => n != dark),
+            $"{what}, the fuel leak's wing_flare2 darkens {dark}: lit [{string.Join(",", lit)}], dark [{string.Join(",", unlit)}]");
+    }
+
+    // A player's launch reports a bad rig once and builds the original airframe. The valid entries
+    // ahead of the bad one change nothing; with no notice set the same rig fails the build.
+    private static void CheckPlayerFallback(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, Vector3 pylon1, Vector3 camera)
+    {
+        string json = $$"""
+            { "markers": { "pylon1": {{Json(pylon1 + new Vector3(-1f, 0f, 0f))}}, "cockpit_camera": [0, 5, 0] },
+              "surfaces": [ { "node": "no_such_node", "kind": "rudder" } ] }
+            """;
+        using var pack = Pack(ctx, "player-fallback", plane, json);
+        string? error = null;
+        try
+        {
+            Build(ctx, planesGamez, textures, pack, plane, out _).Free();
+        }
+        catch (InvalidDataException e)
+        {
+            error = e.Message;
+        }
+
+        ctx.Check(error?.Contains("surfaces[0] (no_such_node)", StringComparison.Ordinal) == true,
+            $"with no player notice set, the rig fails the build: {error ?? "no error"}");
+
+        var notices = new List<string>();
+        PlaneRigPatch.PlayerNotice = notices.Add;
+        Node3D? model = null;
+        try
+        {
+            model = Build(ctx, planesGamez, textures, pack, plane, out var builder);
+            ctx.Check(notices.Count == 1 && notices[0].Contains(plane, StringComparison.Ordinal),
+                $"a player's launch posts one notice naming {plane}: [{string.Join(" | ", notices)}]");
+            ctx.Check(MarkerAt(model, "pylon1").DistanceTo(pylon1) < PosTolerance && builder.CockpitCameraOffset.DistanceTo(camera) < PosTolerance,
+                $"it builds the original airframe, the rig's moved pylon1 and camera left out {MarkerAt(model, "pylon1")} vs {pylon1}");
+        }
+        catch (InvalidDataException e)
+        {
+            ctx.Check(false, $"a player's launch builds {plane} without the bad rig: {e.Message}");
+        }
+        finally
+        {
+            PlaneRigPatch.PlayerNotice = null;
+            model?.Free();
+        }
     }
 
     private static void CheckSpins(TestContext ctx, Node3D model, string spinName, Vector3 spinAxis, bool hasProp1)

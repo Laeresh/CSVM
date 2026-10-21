@@ -99,6 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ [cloud] Apply `rig.json` to the built plane
 15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
 16. ☑ [local] Replacement draw priority and multi-mesh import
+18. ☑ [local] Rig fallback on a menu launch and the fuel leak's flare
 
 ### Wave C, content paths (all [local])
 
@@ -413,10 +414,10 @@ Suite `plane-rig` (CI tier), shown to fail with the hinge pivot or prop override
 **Verified.** In a cloud container on the merged tree: build, format, StyleCop and the five gate
 scripts clean; 6357 unit tests pass; Godot import clean; the CI tier 194 passed, 0 failed.
 
-**Owed.** <TODO: which `wing_flare` is port on real data; the fuel-leak def's
-`Suspend("wing_flare2")` acts on the darkened original when a rig replaces that flare, decide
-whether it should follow the rig's node.> A bad `rig.json` fails the plane build, which is
-Decision 8; <TODO: decide whether a menu launch should report it and fall back instead.>
+**Owed.** Answered by B18: `wing_flare1` is port on every airframe that carries flares except the
+Warhawk, where it is starboard, and the fuel leak's `Suspend("wing_flare2")` now darkens the rig
+flare standing for it. A bad `rig.json` fails the plane build, which is Decision 8, except on a
+player's menu launch, which reports it and builds without the rig (B18).
 
 **Original approach (kept for reference).**
 
@@ -550,6 +551,56 @@ round trip with the decal pixels gone; a suite importing a two-mesh file with a 
 **⚠ Traps.** The exporter writes the gamez node's local transform on the matched node, and the game
 applies it again, so it must not be applied twice. The exporter also writes a part's moving gamez
 children under it, so "every mesh below" has to stop at them.
+
+## B18 ☑ [local] Rig fallback on a menu launch and the fuel leak's flare
+
+**Landed.** The seam is the launcher's menu entry: `Launcher.EnterMenu`, which every player launch
+(launchscreen, campaign cabin, multiplayer lobby) passes and no lab, probe, suite or command-line run
+does, sets `PlaneRigPatch.PlayerNotice` to post through `MenuNoticeFeature`, the game's one
+player notice, which Original raises as its warning box at the menu's next show. With it set,
+`PlaneBuilder.Build` catches a rig's `InvalidDataException`, logs it as an error naming the file and
+entry, posts one line naming the airframe, and keeps the tree as built, with the original markers,
+camera, props, surfaces and flares. Null keeps Decision 8's throw. `PlaneRigPatch.Apply` now checks every entry
+before its first edit (each edit is queued and run after the last check), so no rig is ever half
+applied. The fuel leak: `PlaneRigPatch` stamps a rig flare node with the names of the originals it
+replaced (`WingLights.StandsForMeta`), and `WingLightBlinker.Suspend` matches a lamp by its own
+name or those (`WingLights.AnswersTo`), so the leak's unchanged `Suspend("wing_flare2")` darkens
+the visible flare; with no rig nothing changes. The port fact, from the plane-frame positions in
+`extracted/planes/nodes.json` (local transforms composed below each airframe root): `wing_flare1`
+sits at x < 0 (port) under `player_pfighter`, `player_fbrand`, `player_brigand`, `player_fury`,
+`player_avenger`, `player_kestrel`, `player_peacemaker` and `player_balmoral`, their cutscene twins
+and `anim_bloodhawk`; under `player_warhawk` (and `warhawk`) `wing_flare1` is at x = +8.21 and
+`wing_flare2` at −8.20, so the digit is not the side. `player_bhawk` and
+`player_autogyro` carry no flares. Suite `plane-rig` gains both sides: the fallback (a rig moving
+`pylon1` and `cockpit_camera` ahead of an unknown surface throws with no notice set, and with one
+set posts one notice and builds the original pylon and camera) and the leak follow (a plain mesh
+rigged as wing_flare2's side goes dark on the suspend while the other flare blinks; without a rig
+wing_flare2 itself does).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
+**Goal.** A bad `rig.json` on a player's launch is reported and the plane flies without it, and the
+fuel leak darkens the flare a rig made visible.
+
+**Evidence (confidence: traced).** B14's Owed TODOs. `PlaneBuilder.Build` freed the tree and
+rethrew; a menu launch's build failure returned to the top level with the failed-build box
+(`Launcher.RunOwedLaunch`). `WorldEffectsFactory.WireDamageStages` calls
+`WingLights?.Suspend("wing_flare2")` on `player_fuelleak`, and `Suspend` matched by node name, so a
+displaced original (never a lamp) matched nothing.
+
+**Approach.** The user's rulings: labs, probes, tests and dev runs keep the throw; a normal player
+launch logs the error naming the file and entry, shows a one-line notice through the existing
+mechanism and builds the plane without the rig, never half applied. The leak's flare resolves
+through `PlaneRigPatch`'s flare choice. Settle which of `wing_flare1/2` is port on real data.
+
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
+
+**Verify.** `plane-rig` red without the fallback and without the follow; PlaneRig units.
+
+**⚠ Traps.** `Apply` edited the tree section by section, so a late bad entry left earlier markers
+moved; the fallback needs every check ahead of every edit.
 
 # Wave C, content paths
 

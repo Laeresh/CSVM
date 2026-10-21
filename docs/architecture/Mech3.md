@@ -147,7 +147,7 @@ re-liveries the built plane in place, `BuildDestroyed` builds the wreck subtree 
 plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanels` and
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
-(`PropParts.cs`); `Build` and `BuildDestroyed` resolve model pack replacements under the airframe's model node (each logs how many drew), `Build` applies the model pack's `rig.json` to the built tree (`PlaneRigPatch.cs`), then reads `CockpitCameraOffset` off the `cockpit_camera` marker or the rig's position for it, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
+(`PropParts.cs`); `Build` and `BuildDestroyed` resolve model pack replacements under the airframe's model node (each logs how many drew), `Build` applies the model pack's `rig.json` to the built tree (`PlaneRigPatch.cs`; a bad rig throws, or with `PlaneRigPatch.PlayerNotice` set is logged, reported there and left out), then reads `CockpitCameraOffset` off the `cockpit_camera` marker or the rig's position for it, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
 mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt, or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`) and draws the sight's reticle collimated (`GunsightReticle.cs`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/CockpitPlate.cs
@@ -240,7 +240,9 @@ texture (oil_liteflare), the warm-amber flash colour (0.88, 0.78, 0.36 = wing_li
 LIGHT_STATE COLOR), the blink period (1.5 s = its LOOP SEQUENCE_OFFSET) and the point-light range
 (0.5-1.25 m, also LIGHT_STATE). PlaneBuilder hides and re-skins the flares (additive tint, posed
 through `csky_facade_spherical` as the SphericalY facade model 1261 is, never Godot's billboard
-mode); WingLightBlinker flashes them and emits a matching OmniLight3D per side.
+mode); WingLightBlinker flashes them and emits a matching OmniLight3D per side. `AnswersTo` is
+how a def's flare name finds its lamp: the node's own name, or an original a plane rig's flare
+replaced. The digit is not the side (`wing_flare1` is starboard on the Warhawk).
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): the World node's children plus every partition-referenced
@@ -517,10 +519,11 @@ side); node names are checked where the rig is applied, `PlaneRigPatch.cs`. Read
 Applies a `PlaneRig` to a freshly built plane, inside `PlaneBuilder.Build` and so before any marker
 read or `Loadout.Bind`. It moves marker nodes, adds a `target` or reference marker the model lacks
 under `markers` (never a firepoint or pylon, since `Loadout.BindAi` arms an AI over every one the
-tree carries), stamps prop and surface overrides as metas `PropParts` and `ControlSurfaces`
-read, and picks the flare set, each original flare's side read off its plane-frame x. Rig vectors are
-plane-frame and become node-local here. A name the model lacks outside its alternate-state subtrees
-throws naming the file and entry. Rigs come from `Extraction/HdModels.cs`'s `RigFor`, keyed by model node.
+tree carries), stamps prop and surface overrides as metas `PropParts` and `ControlSurfaces` read, and
+picks the flare set by each original's plane-frame x, a rig flare stamped with the originals it replaced
+(`WingLights.StandsForMeta`). Rig vectors are plane-frame and become node-local here. A name the model
+lacks outside its alternate-state subtrees throws naming the file and entry, every check before the first
+edit; `PlayerNotice`, set by the launcher's menu entry, makes `Build` report it and build without the rig. Rigs come from `HdModels.RigFor`.
 
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,

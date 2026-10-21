@@ -1326,10 +1326,10 @@ Flashes the wingtip flares for `FlashDuration` (about one frame of the original'
 `WingLights.BlinkPeriod`, and toggles a matching `OmniLight3D` per flare, its range and colour from
 `WingLights`, on the same window. Gated on the session's ANIMATION_LOD quality flag: below HIGH the
 flares and lights stay off for the instance's life, which is the def's own low-detail branch.
-`Reset` restarts the cycle with everything off and hands every suspended lamp back.
-`Suspend(flareName)` hands one named lamp to whatever just deactivated it, which is how the fuel
-leak's one-way `OBJECT_ACTIVE_STATE` deactivation survives the blink cycle; a suspended lamp is
-skipped in `Advance`. Advanced each `_Process`, frozen while paused or crashed; `--fly` only.
+`Reset` restarts the cycle with everything off and hands every suspended lamp back. `Suspend(flareName)`
+hands one named lamp, or a plane rig's flare that replaced it (`WingLights.AnswersTo`), to whatever
+just deactivated it, which is how the fuel leak's one-way `OBJECT_ACTIVE_STATE` deactivation survives
+the blink cycle; `Advance` skips it. Advanced each `_Process`, frozen while paused or crashed; `--fly` only.
 
 ## src/Flight/Weapons/PylonOrdnance.cs
 The rockets mounted under a plane's wings. `Build` instances ONE flyout model body per loaded pylon

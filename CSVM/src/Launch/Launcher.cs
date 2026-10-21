@@ -1468,6 +1468,8 @@ public partial class Launcher : Node3D
     private void EnterMenu()
     {
         _menuDriven = true;
+        // A player's flight survives a bad rig.json, flying without it; every other launch keeps the throw.
+        Mech3.PlaneRigPatch.PlayerNotice = message => _menu.Host?.Features.Get<MenuNoticeFeature>().Post(message);
         if (_spec.PlaysBootSequence)
         {
             _audio.PlayBoot(() => ShowMenu(MenuReturnDestination.TopLevel));

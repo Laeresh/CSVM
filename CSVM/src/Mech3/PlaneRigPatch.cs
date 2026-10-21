@@ -33,6 +33,11 @@ public static class PlaneRigPatch
         "cockpit1", "cockpit2", "destroyed", "player_damage_off",
     };
 
+    /// <summary>Where a bad rig goes on a player's launch, which then builds the plane without it.
+    /// Null keeps the loud throw, for labs, probes, suites and command-line runs. The launcher sets
+    /// it on entering the menu (<c>PlaneBuilder.Build</c> reads it).</summary>
+    public static Action<string>? PlayerNotice { get; set; }
+
     /// <summary>The pack's rig for the airframe whose model node is <paramref name="airframe"/>,
     /// parsed and load-checked; null when the pack has none.</summary>
     public static PlaneRig? Load(HdModels models, string airframe)
@@ -63,16 +68,19 @@ public static class PlaneRigPatch
 
     /// <summary>Applies <paramref name="rig"/> to <paramref name="built"/>, the tree built from
     /// <paramref name="root"/>, and returns the wingtip flare nodes it chooses. A name the model
-    /// carries in a subtree this build skipped is accepted and changes nothing.</summary>
+    /// carries in a subtree this build skipped is accepted and changes nothing. Every entry is
+    /// checked before the first edit, so a rig that throws leaves the tree as built.</summary>
     public static FlareChoice Apply(PlaneRig rig, Node3D built, GameZ gamez, GameZNode root)
     {
         var known = ModelNames(gamez, root);
         var byName = new Dictionary<string, List<Node3D>>(StringComparer.OrdinalIgnoreCase);
         Index(built, byName);
-        int added = MoveMarkers(rig, built, known, byName);
-        StampProps(rig, built, known, byName);
-        StampSurfaces(rig, built, known, byName);
-        var flares = ChooseFlares(rig, built, known, byName);
+        var edits = new List<Action>();
+        int added = MoveMarkers(rig, built, known, byName, edits);
+        StampProps(rig, built, known, byName, edits);
+        StampSurfaces(rig, built, known, byName, edits);
+        var flares = ChooseFlares(rig, built, known, byName, edits);
+        edits.ForEach(edit => edit());
         Log.Info("world", $"plane rig {rig.SourceName}: {rig.Markers.Count} markers ({added} added), {rig.Props.Count} props, {rig.Surfaces.Count} surfaces, {flares.Flares.Count} flares");
         return flares;
     }
@@ -96,7 +104,7 @@ public static class PlaneRigPatch
 
     // A marker moves to its rig position by rewriting its local origin under the parent's plane frame.
     // A missing one is added under the markers group, so Loadout's cs_name walk finds it like any other.
-    private static int MoveMarkers(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName)
+    private static int MoveMarkers(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
     {
         int added = 0;
         foreach (var (name, pos) in rig.Markers)
@@ -105,16 +113,18 @@ public static class PlaneRigPatch
             {
                 var node = nodes[0];
                 var parent = node.GetParent() as Node3D ?? built;
-                node.Position = PlaneFrame(parent, built).AffineInverse() * pos;
+                edits.Add(() => node.Position = PlaneFrame(parent, built).AffineInverse() * pos);
             }
             else if (MayAdd(name))
             {
                 var parent = byName.TryGetValue("markers", out var groups) ? groups[0] : built;
-                var marker = new Node3D { Name = name };
-                marker.SetMeta(AnimRuntime.NameMeta, name);
-                parent.AddChild(marker);
-                marker.Position = PlaneFrame(parent, built).AffineInverse() * pos;
-                byName[name] = new List<Node3D> { marker };
+                edits.Add(() =>
+                {
+                    var marker = new Node3D { Name = name };
+                    marker.SetMeta(AnimRuntime.NameMeta, name);
+                    parent.AddChild(marker);
+                    marker.Position = PlaneFrame(parent, built).AffineInverse() * pos;
+                });
                 added++;
             }
             else if (!known.Contains(name))
@@ -128,7 +138,7 @@ public static class PlaneRigPatch
 
     // A prop on a spinning name class keeps that class's axis and rate where the rig is silent. Blur
     // picks the family's blur disc or main disc. Any other node spins only as the rig spells out.
-    private static void StampProps(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName)
+    private static void StampProps(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
     {
         for (int i = 0; i < rig.Props.Count; i++)
         {
@@ -153,39 +163,46 @@ public static class PlaneRigPatch
 
             foreach (var node in Find(rig, label, prop.Node, known, byName))
             {
-                node.SetMeta(PropParts.SpinAxisMeta, prop.Axis is { } a ? ToNodeAxis(PlaneFrame(node, built), a) : axis);
-                node.SetMeta(PropParts.SpinRateMeta, prop.DegPerSec ?? rate);
+                edits.Add(() =>
+                {
+                    node.SetMeta(PropParts.SpinAxisMeta, prop.Axis is { } a ? ToNodeAxis(PlaneFrame(node, built), a) : axis);
+                    node.SetMeta(PropParts.SpinRateMeta, prop.DegPerSec ?? rate);
+                });
             }
         }
     }
 
     // The hinge is written plane-frame and stored node-local, the frame the animator turns a surface in.
     // ⚠ Rudder side stays without effect: the classifier has one sideless rudder kind.
-    private static void StampSurfaces(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName)
+    private static void StampSurfaces(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
     {
         for (int i = 0; i < rig.Surfaces.Count; i++)
         {
             var surface = rig.Surfaces[i];
             foreach (var node in Find(rig, Label("surfaces", i, surface.Node), surface.Node, known, byName))
             {
-                var frame = PlaneFrame(node, built);
-                node.SetMeta(ControlSurfaces.KindMeta, (int)surface.ClassifierKind);
-                if (surface.HingeAxis is { } axis)
+                edits.Add(() =>
                 {
-                    node.SetMeta(ControlSurfaces.HingeAxisMeta, ToNodeAxis(frame, axis));
-                }
+                    var frame = PlaneFrame(node, built);
+                    node.SetMeta(ControlSurfaces.KindMeta, (int)surface.ClassifierKind);
+                    if (surface.HingeAxis is { } axis)
+                    {
+                        node.SetMeta(ControlSurfaces.HingeAxisMeta, ToNodeAxis(frame, axis));
+                    }
 
-                if (surface.HingeOrigin is { } origin)
-                {
-                    node.SetMeta(ControlSurfaces.HingePivotMeta, frame.AffineInverse() * origin);
-                }
+                    if (surface.HingeOrigin is { } origin)
+                    {
+                        node.SetMeta(ControlSurfaces.HingePivotMeta, frame.AffineInverse() * origin);
+                    }
+                });
             }
         }
     }
 
     // Each original flare's side is read off its plane-frame x, port below zero, never off its digit.
-    // A rig side replaces that side's original flares, which then stay dark.
-    private static FlareChoice ChooseFlares(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName)
+    // A rig side replaces that side's original flares, which then stay dark. Its node carries their
+    // names, so an anim def darkening one by name darkens the flare standing for it.
+    private static FlareChoice ChooseFlares(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
     {
         var chosen = new HashSet<Node3D>();
         var displaced = new HashSet<Node3D>();
@@ -194,6 +211,7 @@ public static class PlaneRigPatch
             return new FlareChoice(chosen, displaced);
         }
 
+        var replaced = new[] { new List<string>(), new List<string>() };
         foreach (var list in byName.Values)
         {
             foreach (var node in list)
@@ -201,16 +219,26 @@ public static class PlaneRigPatch
                 if (WingLights.IsFlare(node.Name))
                 {
                     bool port = PlaneFrame(node, built).Origin.X < 0f;
-                    ((port ? rig.LeftFlare : rig.RightFlare) == null ? chosen : displaced).Add(node);
+                    if ((port ? rig.LeftFlare : rig.RightFlare) == null)
+                    {
+                        chosen.Add(node);
+                    }
+                    else
+                    {
+                        displaced.Add(node);
+                        replaced[port ? 0 : 1].Add(node.Name.ToString());
+                    }
                 }
             }
         }
 
-        foreach (var (side, name) in new[] { ("flares.left", rig.LeftFlare), ("flares.right", rig.RightFlare) })
+        foreach (var (side, name, names) in new[] { ("flares.left", rig.LeftFlare, replaced[0]), ("flares.right", rig.RightFlare, replaced[1]) })
         {
             if (name != null)
             {
-                chosen.UnionWith(Find(rig, side, name, known, byName));
+                var nodes = Find(rig, side, name, known, byName);
+                chosen.UnionWith(nodes);
+                edits.Add(() => nodes.ForEach(n => n.SetMeta(WingLights.StandsForMeta, names.ToArray())));
             }
         }
 

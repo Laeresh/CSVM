@@ -251,7 +251,8 @@ public sealed class PlaneBuilder
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk"), with the model
     /// pack's <c>rig.json</c> for that node applied (<see cref="PlaneRigPatch"/>). Throws
-    /// <see cref="System.IO.InvalidDataException"/> for a rig that fails its checks.</summary>
+    /// <see cref="System.IO.InvalidDataException"/> for a rig that fails its checks, unless
+    /// <see cref="PlaneRigPatch.PlayerNotice"/> is set: then it reports there and builds without the rig.</summary>
     public Node3D Build(string rootName)
     {
         var root = _gamez.FindByName(rootName)
@@ -281,6 +282,14 @@ public sealed class PlaneBuilder
             {
                 CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
             }
+        }
+        catch (System.IO.InvalidDataException e) when (PlaneRigPatch.PlayerNotice is { } notice)
+        {
+            // A player's launch flies the original airframe; Apply edits nothing before its last check.
+            Log.Error("world", $"{e.Message}; {rootName} is built without its rig");
+            notice($"The model pack's rig for {rootName} has an error, so that aircraft flies without it. The log names the file and the entry.");
+            flares = null;
+            CockpitCameraOffset = MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
         }
         catch
         {
