@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, livery
 
-31. ☐ [local] Liveries on replacement planes
+31. ☑ [local] Liveries on replacement planes
 
 ## Dependency and parallelism notes
 
@@ -224,7 +224,8 @@ tests and the full unit run (6342 passed, 0 failed, 314 skipped) green. The `.ps
 checked by hand only. <TODO: run the content gate locally.>
 
 **Owed.** The schema has no permanent home a pack author can read; the type's doc comment lists
-the sections only. <TODO: decide where the pack-author documentation lives.>
+the sections only. Answered by D31: the pack-author reference is `docs/formats/model-packs.md`,
+which carries the `rig.json` schema and its checks.
 
 **Original approach (kept for reference).**
 
@@ -367,8 +368,8 @@ of it, a graphics-mode switch and `SceneBuilder.Repaint`, and was shown to fail 
 
 **Verified.** In a cloud container: build, format, StyleCop and the five gate scripts clean; 6359
 unit tests pass; the CI tier 195 passed, 0 failed. <TODO: locally, goldens with no pack, a look at a
-replaced prop under fog and through a mode switch, and a real livery through `PlanePainter` (the
-synthetic tree has no paintable airframe).>
+replaced prop under fog and through a mode switch.> The real livery through `PlanePainter` is
+answered by D31: a texture-named replacement surface wears every livery the original does.
 
 **Owed.** <TODO: decide each: a `MASK` `alphaCutoff` other than 0.5 is not honoured (the shader's
 threshold is fixed); `baseColorFactor` is ignored on a textured surface (no tint uniform);
@@ -859,7 +860,37 @@ carries per-seat data, and whether shot origins are simulated per seat or sent>.
 
 # Wave D, livery
 
-## D31 ☐ [local] Liveries on replacement planes
+## D31 ☑ [local] Liveries on replacement planes
+
+**Ruling.** UV-compatible, no paint-format extension. A replacement's painted surfaces keep the
+material names of the original skin and decal textures and UVs laid out like the original's, so the
+existing painter applies; a model that does not keeps its own fixed paint. A pack shipping its own
+region masks or decal placement was declined.
+
+**Landed.** No code: B13's original-texture path already routes a texture-named replacement surface
+through `GetMaterial`, so the painter's substitution and `SceneBuilder.Repaint`'s registry reach it
+like an original surface. Every path a livery takes builds through `PlaneBuilder` on one builder
+with the painter: the flown aircraft, the viewer's livery lab (`Repaint`), AI aircraft (a shared
+painter per airframe and scheme), a network seat (its livery travels in `NetPlaneBuild` and is
+painted on each machine over that machine's pack), the damage panels and `BuildDestroyed`'s wreck
+pieces. The hangar's paint screen previews the original's 2D `PX_ICON` art and never shows a model;
+the cutscene stand-ins `AircraftStage` builds have no airframe key and are never replaced (B12).
+Measured on the Bloodhawk with C21's unedited export: hughes, blake (decals 36/3/3) and fortune
+(48/7/16) parked at a three-quarter pose, blake in flight (C1 chase) and the livery lab stepping
+blake to fortune all match no pack within one level per pixel (13 to 120 pixels); from below 16
+silhouette pixels differ by more than 2, the same 16 as unpainted (B16's residual). The same export
+as one root file (`planes/player_bhawk/player_bhawk.glb`, C22's scope) is md5-identical to one copy
+per node. A copy edited in headless Blender (the pilot body widened 1.25x, every other part pushed
+2 cm out, UVs kept, Blender's `.001` material suffixes dropped by the extension rule) takes hughes and
+blake on the new shape; the same copy with its `blo_wing*` materials renamed keeps on its wings the
+painted Fortune skin the export embedded. A blake flight crash with four Blender-built wreck pieces
+(gamez UVs, texture-named materials) logs all four drawn from the pack; the fireball hides them, so
+their paint is traced to code, not seen. The pack-author constraint and the rest of the pack format
+are written up in `docs/formats/model-packs.md`, which answers A3's documentation TODO.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A replacement airframe can wear the original's liveries.
 

@@ -337,6 +337,10 @@ where the two agree on dimensions, so `SceneBuilder`'s blend-vs-scissor choice s
 Decals are unchanged: `<prefix>_noselogo`/`_taillogo`/`_winglogo` swap for the numbered decal
 via `TextureArchive.FindByDecalIndex`.
 
+A model pack's replacement airframe takes the same paint only where its surfaces keep the original
+skin and decal texture names and UVs laid out like the original's; any other surface keeps its own
+fixed paint ([model-packs.md](model-packs.md), Liveries).
+
 ### Which `.BM` a model texture is painted from
 
 The original does not derive one name from the other. `FUN_00401e80` walks a static per-airframe
