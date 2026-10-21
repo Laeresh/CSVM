@@ -494,6 +494,14 @@ plane and `PlayerAirframes` is the model to display list; together they are the 
 skipping the alternate-state subtrees so a plane whose interior or wreck carries a same-named node
 still resolves to the authored one in the top-level `markers` group.
 
+## src/Mech3/PlaneRig.cs
+The engine-free reader for an airframe's `rig.json`: marker positions in the marker frame, prop
+overrides (axis, rate, blur disc), control-surface overrides (kind, side, hinge) and the two
+wingtip flare nodes. Every section is optional and an absent entry keeps the original's value. It
+owns the load-time checks that need no built plane (keys, finite numbers, axes, pylon number and
+side); node names are checked where the rig is applied. Read `MarkerRig.cs`, `PropParts.cs`,
+`ControlSurfaces.cs` and `WingLights.cs` next for what each override replaces.
+
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,
 events, and the SI-script pool, where `Script(index)` parses lazily in `metadata.json` order. The

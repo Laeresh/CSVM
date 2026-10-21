@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ [cloud] Shared pack index out of `HdTextures`
 2. ☐ [cloud] `HdModels` lookup, keys and launch settings
-3. ☐ [cloud] `PlaneRig` reader and validation
+3. ☑ [cloud] `PlaneRig` reader and validation
 
 ### Wave B, engine hooks (code [cloud], look [local])
 
@@ -177,7 +177,24 @@ name, and a `.gltf` inside a zip being refused>.
 **⚠ Traps.** <TODO: decide whether one folder may carry both textures and models; Decision 2 leaves
 it open.> How `.flt` is normalised in a key is not settled.
 
-## A3 ☐ [cloud] `PlaneRig` reader and validation
+## A3 ☑ [cloud] `PlaneRig` reader and validation
+
+**Landed.** `CSVM/src/Mech3/PlaneRig.cs` (`Load`, `Parse`) with `CSVM.Tests/PlaneRigTests.cs`.
+Every section is optional and absent reads as null or empty. Unknown keys, non-finite numbers (after
+narrowing to float), zero axes, duplicate names, `pylonN` outside 1..8 and a pylon on the wrong side
+throw `InvalidDataException` naming the source and entry. A pylon at x == 0 is rejected, since the
+centreline belongs to neither wing. Rudder `side` is optional, because `ControlSurfaces` has one
+sideless rudder kind.
+
+**Verified.** In a cloud container: `dotnet build CSVM/CSVM.sln` with 0 warnings, 28 `PlaneRig`
+tests and the full unit run (6342 passed, 0 failed, 314 skipped) green. The `.ps1` gates were
+checked by hand only. <TODO: run the content gate locally.>
+
+**Owed.** The schema has no permanent home a pack author can read; the type's doc comment lists
+the sections only. <TODO: decide where the pack-author documentation lives.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** A `rig.json` beside an airframe's models parses into markers, props, surfaces and flares,
 and every rule of Decisions 6 and 8 that needs no built tree is enforced at load.
@@ -303,7 +320,12 @@ consulted before name matching. Read `cockpit_camera` after the patch, not befor
 firepoint moves the muzzle midpoint, an override prop spins about its axis, the hangar wing split
 (`Loadout.WingPylons`) is unchanged>.
 
-**⚠ Traps.** `InNumbering` stops at the first missing index over the whole plane (`ControlSurfaces`
+**⚠ Traps.** A3's reader stores four fields without meaning, and B14 decides each: which frame
+`hinge.origin` and `hinge.axis` are in (`ControlSurfaces` models only a node-local axis, the hinge
+position coming from the parent group); which of `wing_flare1/2` is port (`WingLights` matches by
+prefix only); a rig prop on a node whose name `PropParts` does not classify has no default axis or
+rate, so it may need a `prop`/`rotor` kind field; rudder `side` changes nothing today.
+`InNumbering` stops at the first missing index over the whole plane (`ControlSurfaces`
 entry); rig entries must not be subject to that stop, and names must stay subject to it. The
 `cockpit_camera` read today happens inside `Build` (`PlaneBuilder.cs:258`), so the patch order
 matters.
