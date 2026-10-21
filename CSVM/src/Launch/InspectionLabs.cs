@@ -392,18 +392,18 @@ internal sealed class InspectionLabs
 
     /// <summary>The vegetation lab (Shift+F2), in <c>--freecam</c> on a vegetation chapter alone. It puts
     /// the chapter's sidecar entry on sliders, hands each edit to <paramref name="apply"/>, and saves
-    /// into the shipped file. The paint tool brushes <paramref name="mask"/> and picks through
-    /// <paramref name="layersAt"/>; each is off when null.</summary>
+    /// into the shipped file. The paint tool finds the ground through <paramref name="groundHit"/>, brushes
+    /// <paramref name="mask"/> and picks through <paramref name="layersAt"/>; each is off when null.</summary>
     public void BuildVegetationLab(VegetationEntry saved, Action<VegetationEntry> apply,
         VegetationMask? mask = null, Action<VegetationMask>? applyMask = null,
-        Func<Vector3, IReadOnlyList<GroundLayer>>? layersAt = null)
+        Func<Vector3, IReadOnlyList<GroundLayer>>? layersAt = null, Func<Vector3, Vector3, Vector3?>? groundHit = null)
     {
         var spec = _in.Spec;
         string chapter = spec.Chapter.ToUpperInvariant();
         if (!spec.Freecam || !VegetationSidecar.Chapters.Contains(chapter))
             return;
         string? savePath = VegetationSidecar.SourceTreePath();
-        _in.WorldRoot.AddChild(new VegetationLab(chapter, saved, apply, savePath, mask, applyMask, layersAt));
+        _in.WorldRoot.AddChild(new VegetationLab(chapter, saved, apply, savePath, mask, applyMask, layersAt, groundHit));
         Log.Info("ui", $"vegetation lab ready (Shift+F2), save {savePath ?? "off in an exported build"}");
     }
 

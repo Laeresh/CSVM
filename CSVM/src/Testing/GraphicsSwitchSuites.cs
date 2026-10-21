@@ -704,7 +704,9 @@ internal static class GraphicsSwitchSuites
         + "stamp and moves none; a Clear stroke zero-scales the listed Rich stamps inside its radius and no other, which "
         + "draw nothing under rich and draw again after a live move to original, and a stamp it dropped stays hidden "
         + "through the activation's hide and show and through a crater, across a live move both ways; a cleared map hides "
-        + "every copy past its edge; a Neutral stroke and a revert each draw the first build's stamps exactly; Save "
+        + "every copy past its edge; a Neutral stroke and a revert each draw the first build's stamps exactly; through the "
+        + "pane's input, with no world collider, the brush ring stands on the ground under the cursor at the brush radius and "
+        + "hides off the brush, over the panel, the sky and a closed lab, and a held Clear stroke drops the stamps under it; Save "
         + "writes the edit and the mask to a temp copy and leaves the shipped files alone")]
     internal static void VegetationLabEdits(TestContext ctx)
     {
@@ -830,6 +832,7 @@ internal static class GraphicsSwitchSuites
                         && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
                     $"a revert after a stroke draws the first build's Rich stamps exactly, its mask neutral again");
 
+                ScreenStroke(ctx, freecam, lab, kinds, opening, at, Radius, 2f * texel, report);
                 CraterThroughDrop(ctx, freecam, lab, kinds, at, Radius, Radius - (2f * texel), report);
                 ctx.Check(Enumerable.Range(0, kinds.Count).All(k => kinds[k].Placements.SequenceEqual(originals[k])),
                     $"no edit moves an Original placement");
@@ -1841,6 +1844,98 @@ internal static class GraphicsSwitchSuites
         ctx.Check(hiddenRich && hiddenOriginal && shownOriginal && droppedRich,
             $"a dropped {kinds[k].Model} stamp hides with its node '{node.Name}' under rich ({hiddenRich}), stays hidden after a live move to original ({hiddenOriginal}), draws when the node shows there ({shownOriginal}), and stays dropped through a hide and show back under rich ({droppedRich})");
         report.AppendLine(CultureInfo.InvariantCulture, $"activation: {kinds[k].Model} stamp {i} of node '{node.Name}'");
+    }
+
+    // The paint tool driven through the pane's input, in a session that builds no world collider.
+    // The ring follows the hover at the brush radius and hides off the brush, the panel, the sky and a closed lab.
+    // A held Clear stroke drops the listed Rich stamps under the cursor alone.
+    private static void ScreenStroke(TestContext ctx, Rig rig, UI.Labs.VegetationLab lab, IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds,
+        List<(Transform3D[] Xf, Color[] Colors)?> opening, Vector3 at, float radius, float margin, StringBuilder report)
+    {
+        int colliders = NodesOf<CollisionObject3D>(rig.Session).Count(c => (c.CollisionLayer & Flight.Airframe.CollisionLayers.World) != 0);
+        var camera = rig.Pane.GetCamera3D();
+        if (camera == null || ClutterRoot(rig.Session) is not { } root)
+        {
+            ctx.Check(false, $"the --freecam pane has a camera and a clutter root to aim the paint tool with");
+            return;
+        }
+        var stamp = root.GlobalTransform * at;
+        var screen = new Vector2(120f, 240f);
+        // Steeply down, then slid along that pixel's ray until it passes through the stamp, left of the panel.
+        camera.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(Mathf.DegToRad(-75f), 0f, 0f)), Vector3.Zero);
+        camera.GlobalPosition = stamp - (camera.ProjectRayNormal(screen) * 600f);
+        void Push(InputEvent e) => rig.Pane.PushInput(e, true);
+        void Move(Vector2 p) => Push(new InputEventMouseMotion { Position = p, GlobalPosition = p });
+        bool RingAt(out Vector3 hit)
+        {
+            hit = lab.Ring?.GlobalPosition ?? Vector3.Zero;
+            return lab.Ring is { Visible: true } r && Mathf.IsEqualApprox(r.Basis.Scale.X, radius) && Flat(hit, stamp) < 5f;
+        }
+
+        lab.Tool = UI.Labs.VegetationLab.PaintTool.Brush;
+        lab.Brush = Mech3.VegetationBrush.Clear;
+        lab.BrushRadius = radius;
+        lab.BrushStrength = 1f;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        Move(screen);
+        long firstMs = watch.ElapsedMilliseconds;
+        bool hovered = RingAt(out var ground);
+        watch.Restart();
+        const int Rays = 20;
+        for (int i = 0; i < Rays; i++)
+            Move(screen);
+        double rayMs = watch.Elapsed.TotalMilliseconds / Rays;
+        ctx.Check(colliders == 0 && hovered,
+            $"with {colliders} world collider(s), as --freecam builds, a hover in Brush stands the ring on the ground under the cursor at the brush radius ({Flat(ground, stamp):0.0} m from the aimed stamp; first ray with the triangle build {firstMs} ms, then {rayMs:0.00} ms a ray)");
+
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = screen, GlobalPosition = screen });
+        Move(screen);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = screen, GlobalPosition = screen });
+        Step(rig);
+        var centre = root.GlobalTransform.AffineInverse() * ground;
+        var now = RichOf(kinds);
+        int dropped = 0, wrong = 0;
+        for (int k = 0; k < kinds.Count; k++)
+        {
+            if (opening[k] is not { } open)
+                continue;
+            for (int i = 0; i < open.Xf.Length; i++)
+            {
+                float d = Flat(open.Xf[i].Origin, centre);
+                bool zero = now[k]!.Value.Xf[i].Basis.Determinant() == 0f;
+                if (d < radius - margin)
+                    dropped += zero ? 1 : 0;
+                if ((d < radius - margin && !zero) || (d > radius + margin && now[k]!.Value.Xf[i] != open.Xf[i]))
+                    wrong++;
+            }
+        }
+        ctx.Check(dropped > 0 && wrong == 0,
+            $"a left-button stroke through the pane's input drops the {dropped} listed Rich stamps under the cursor and no other ({wrong} wrong)");
+
+        Move(new Vector2(500f, 240f));
+        bool overPanel = lab.Ring is { Visible: false };
+        Move(screen);
+        lab.Tool = UI.Labs.VegetationLab.PaintTool.Pick;
+        Move(screen);
+        bool offBrush = lab.Ring is { Visible: false };
+        lab.Tool = UI.Labs.VegetationLab.PaintTool.Brush;
+        camera.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(Mathf.DegToRad(80f), 0f, 0f)), camera.GlobalPosition);
+        Move(screen);
+        bool overSky = lab.Ring is { Visible: false };
+        string skyHit = overSky ? "" : $" at {lab.Ring?.GlobalPosition}";
+        camera.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(Mathf.DegToRad(-75f), 0f, 0f)), camera.GlobalPosition);
+        Move(screen);
+        bool back = RingAt(out _);
+        lab.Toggle();
+        bool closed = lab.Ring is { Visible: false };
+        lab.Toggle();
+        ctx.Check(overPanel && offBrush && overSky && back && closed,
+            $"the ring hides over the panel ({overPanel}), off the brush ({offBrush}), over the sky ({overSky}{skyHit}) and with the lab closed ({closed}), and stands again on the ground ({back})");
+
+        lab.Tool = UI.Labs.VegetationLab.PaintTool.Off;
+        lab.RevertToSaved();
+        Step(rig);
+        report.AppendLine(CultureInfo.InvariantCulture, $"screen stroke: {colliders} world colliders, ground {ground} for stamp {stamp}, first ray {firstMs} ms, {rayMs:0.00} ms a ray, {dropped} dropped");
     }
 
     // A crater on a dropped stamp counts nothing and leaves it drawing nothing under rich, and flattens it for original.

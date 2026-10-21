@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using CSVM.Flight.Airframe;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -27,8 +27,8 @@ public sealed partial class VegetationLab : Node
     // A seed slider's reach; any integer is a seed, and a larger saved one widens it.
     private const int SeedSpan = 999;
 
-    // Past the far side of the largest chapter, as the weapon lab's pick ray.
-    private const float RayLength = 40000f;
+    // The brush ring's segments.
+    private const int RingSegments = 64;
 
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
     private static readonly Color Dim = new(0.62f, 0.62f, 0.68f);
@@ -37,6 +37,7 @@ public sealed partial class VegetationLab : Node
     private readonly Action<VegetationEntry> _apply;
     private readonly Action<VegetationMask>? _applyMask;
     private readonly Func<Vector3, IReadOnlyList<GroundLayer>>? _layersAt;
+    private readonly Func<Vector3, Vector3, Vector3?>? _groundHit;
     private readonly string? _savePath;
     private readonly List<(string Model, VegetationKind.Field Field, HSlider Slider, Label Value)> _rows = new();
     private readonly HashSet<string> _pickKinds = new(StringComparer.OrdinalIgnoreCase);
@@ -47,6 +48,8 @@ public sealed partial class VegetationLab : Node
     private VegetationMask? _mask;
     private bool _maskEdited;
     private CanvasLayer? _layer;
+    private Control? _panel;
+    private MeshInstance3D? _ring;
     private HSlider? _seedSlider;
     private Label? _seedValue;
     private Label? _status;
@@ -56,19 +59,19 @@ public sealed partial class VegetationLab : Node
     private float _pending = -1f;
     private string _note = "";
 
-    // The paint tool's input, read on the next physics frame, where the world's ray query is safe.
-    private Vector2? _aim;
     private bool _stroking;
-    private bool _strokeEnded;
 
     /// <summary>A lab over <paramref name="chapter"/>'s vegetation: <paramref name="saved"/> is the file's
     /// entry and the panel's start. <paramref name="apply"/> hands an edit to the session, which rebuilds
     /// the clutter from it. A null <paramref name="savePath"/> turns Save off.
-    /// The paint tool's brush needs <paramref name="mask"/> and its pick <paramref name="layersAt"/>.</summary>
+    /// The paint tool rays the ground under the cursor through <paramref name="groundHit"/> (origin and
+    /// direction in, nearest world point out). Its brush needs <paramref name="mask"/> and its pick
+    /// <paramref name="layersAt"/>.</summary>
     public VegetationLab(string chapter, VegetationEntry saved, Action<VegetationEntry> apply, string? savePath,
         VegetationMask? mask = null, Action<VegetationMask>? applyMask = null,
-        Func<Vector3, IReadOnlyList<GroundLayer>>? layersAt = null)
+        Func<Vector3, IReadOnlyList<GroundLayer>>? layersAt = null, Func<Vector3, Vector3, Vector3?>? groundHit = null)
     {
+        _groundHit = groundHit;
         _chapter = chapter;
         _saved = saved;
         _edit = saved;
@@ -118,10 +121,19 @@ public sealed partial class VegetationLab : Node
     /// <summary>The chapter's entry as the file holds it, after any Save.</summary>
     public VegetationEntry Saved => _saved;
 
+    /// <summary>The brush's ring on the ground under the cursor, null until the brush first hovers.</summary>
+    public MeshInstance3D? Ring => _ring;
+
     public override void _Ready()
     {
         SetProcess(false);
-        SetPhysicsProcess(false);
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        // Before the panel takes the motion, so the ring leaves the ground as the cursor enters the panel.
+        if (@event is InputEventMouseMotion motion && !_stroking)
+            Hover(motion.Position);
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -139,46 +151,24 @@ public sealed partial class VegetationLab : Node
         {
             if (button.Pressed)
             {
-                _aim = GetViewport().GetMousePosition();
                 _stroking = Tool == PaintTool.Brush;
+                Use(button.Position);
             }
             else if (_stroking)
             {
                 _stroking = false;
-                _strokeEnded = true;
+                ApplyMask();
             }
         }
-        else if (_stroking && @event is InputEventMouseMotion)
+        else if (_stroking && @event is InputEventMouseMotion motion)
         {
-            _aim = GetViewport().GetMousePosition();
+            Use(motion.Position);
         }
         else
         {
             return;
         }
-        SetPhysicsProcess(true);
         GetViewport().SetInputAsHandled();
-    }
-
-    public override void _PhysicsProcess(double delta)
-    {
-        if (_aim is { } screen)
-        {
-            _aim = null;
-            if (GroundUnder(screen) is { } point)
-            {
-                if (Tool == PaintTool.Pick)
-                    Pick(point, _pickKinds);
-                else if (Tool == PaintTool.Brush)
-                    Paint(point, Brush, BrushRadius, BrushStrength);
-            }
-        }
-        if (_strokeEnded)
-        {
-            _strokeEnded = false;
-            ApplyMask();
-        }
-        SetPhysicsProcess(_stroking);
     }
 
     public override void _Process(double delta)
@@ -199,6 +189,8 @@ public sealed partial class VegetationLab : Node
             BuildUi();
         _open = !_open;
         _layer!.Visible = _open;
+        if (_ring != null)
+            _ring.Visible = false;
         if (_open)
             SyncRows();
         Log.Info("ui", $"vegetation lab {(_open ? "open" : "closed")} {_chapter}, {_edit.Kinds.Count} kind(s), seed {_edit.Seed}");
@@ -392,6 +384,7 @@ public sealed partial class VegetationLab : Node
 
         // Down the right edge as the ocean lab is; the node lab owns the left.
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
+        _panel = panel;
         panel.SetAnchorsPreset(Control.LayoutPreset.RightWide);
         panel.OffsetLeft = -392;
         panel.OffsetRight = -8;
@@ -450,8 +443,8 @@ public sealed partial class VegetationLab : Node
     {
         rows.AddChild(new Label { Text = "PAINT", Modulate = Amber });
         var tool = Choice(Enum.GetNames<PaintTool>(), (int)Tool, i => Tool = (PaintTool)i);
-        tool.SetItemDisabled((int)PaintTool.Pick, _layersAt == null);
-        tool.SetItemDisabled((int)PaintTool.Brush, _mask == null);
+        tool.SetItemDisabled((int)PaintTool.Pick, _layersAt == null || _groundHit == null);
+        tool.SetItemDisabled((int)PaintTool.Brush, _mask == null || _groundHit == null);
         rows.AddChild(tool);
 
         rows.AddChild(Small("Pick: a click gives the texture under the cursor the checked kinds; none checked removes its pick.", Dim));
@@ -474,27 +467,84 @@ public sealed partial class VegetationLab : Node
         rows.AddChild(_picksText);
 
         rows.AddChild(Small("Brush: hold the left button; the clutter follows on release.", Dim));
-        rows.AddChild(Choice(Enum.GetNames<VegetationBrush>(), (int)Brush, i => Brush = (VegetationBrush)i));
+        // The density rule never adds an original stamp, so a Thicken stroke shows nothing yet.
+        var thickenNote = Small("Thicken adds no trees until Wave C's added stamps exist; it is stored in the mask. Original trees can only be thinned or cleared.", Dim);
+        thickenNote.Visible = Brush == VegetationBrush.Thicken;
+        rows.AddChild(Choice(Enum.GetNames<VegetationBrush>(), (int)Brush, i =>
+        {
+            Brush = (VegetationBrush)i;
+            thickenNote.Visible = Brush == VegetationBrush.Thicken;
+        }));
+        rows.AddChild(thickenNote);
         AddPlainSlider(rows, "radius (m)", 10f, 2000f, 10f, () => BrushRadius, v => BrushRadius = v);
         AddPlainSlider(rows, "strength", 0.05f, 1f, 0.05f, () => BrushStrength, v => BrushStrength = v);
     }
 
-    // The world point under a screen position, from the world colliders alone; null over the sky.
+    // The world point under a screen position, from the world's own triangles; null over the sky.
+    // Never the physics ray: a --freecam world builds no colliders.
     private Vector3? GroundUnder(Vector2 screen)
     {
         var camera = GetViewport().GetCamera3D();
-        if (camera == null)
-            return null;
-        var from = camera.ProjectRayOrigin(screen);
-        var query = PhysicsRayQueryParameters3D.Create(from, from + (camera.ProjectRayNormal(screen) * RayLength), CollisionLayers.World);
-        var hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count == 0)
+        return camera == null ? null : _groundHit?.Invoke(camera.ProjectRayOrigin(screen), camera.ProjectRayNormal(screen));
+    }
+
+    // A pick, or a dab where the ring stands, at the ground under a screen position.
+    private void Use(Vector2 screen)
+    {
+        if ((Tool == PaintTool.Brush ? Hover(screen) : GroundUnder(screen)) is not { } point)
         {
             _note = "nothing under the cursor";
             UpdateStatus();
-            return null;
         }
-        return hit["position"].AsVector3();
+        else if (Tool == PaintTool.Pick)
+        {
+            Pick(point, _pickKinds);
+        }
+        else
+        {
+            Paint(point, Brush, BrushRadius, BrushStrength);
+        }
+    }
+
+    // Moves the brush's ring to the ground under a screen position, or hides it off the brush, over the
+    // panel or over the sky. Returns the ground point it stands on.
+    private Vector3? Hover(Vector2 screen)
+    {
+        bool overPanel = _panel != null && _panel.GetGlobalRect().HasPoint(screen);
+        var point = _open && Tool == PaintTool.Brush && !overPanel ? GroundUnder(screen) : null;
+        if (point is { } p)
+        {
+            _ring ??= NewRing();
+            ((StandardMaterial3D)_ring.MaterialOverride).AlbedoColor = Brush switch
+            {
+                VegetationBrush.Clear => new Color(1f, 0.25f, 0.2f),
+                VegetationBrush.Thin => Amber,
+                VegetationBrush.Thicken => new Color(0.35f, 1f, 0.4f),
+                _ => Colors.White,
+            };
+            _ring.Transform = new Transform3D(Basis.FromScale(new Vector3(BrushRadius, 1f, BrushRadius)), p);
+        }
+        if (_ring != null)
+            _ring.Visible = point != null;
+        return point;
+    }
+
+    // A unit circle in the XZ plane, scaled to the radius where it stands. Flat at the hit's height and
+    // drawn through the ground, so a hill never hides it. Tagged so the freecam's selection skips it.
+    private MeshInstance3D NewRing()
+    {
+        var ring = SelectionService.NewBoxInstance("brush_ring", Colors.White, priority: 10);
+        var mesh = (ImmediateMesh)ring.Mesh;
+        mesh.SurfaceBegin(Mesh.PrimitiveType.LineStrip);
+        for (int i = 0; i <= RingSegments; i++)
+        {
+            float a = Mathf.Tau * i / RingSegments;
+            mesh.SurfaceAddVertex(new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)));
+        }
+        mesh.SurfaceEnd();
+        ring.SetMeta(SelectionService.OverlayMeta, true);
+        AddChild(ring);
+        return ring;
     }
 
     private void AddSeedRow(VBoxContainer rows)

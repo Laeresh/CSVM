@@ -32,6 +32,29 @@ public sealed class VegetationGroundTests
         Assert.Null(VegetationGround.Decorating(VegetationGround.LayersAt(gamez, new Vector3(25f, 0f, 5f))));
     }
 
+    /// <summary>A ray meets the nearest solid triangle ahead from either side. It misses past an edge,
+    /// behind its origin, along a face and through a cloud.</summary>
+    [Fact]
+    public void ARayMeetsTheNearestTriangleAhead()
+    {
+        // A cloud above the first square builds no collider, so the ray passes it.
+        var gamez = World();
+        gamez.Materials.Add(new GameZMaterial { TextureName = "cloud1" });
+        var sky = new GameZMesh();
+        Quad(sky, 4, 0f, 900f, noClutter: false);
+        gamez.Meshes.Add(sky);
+        gamez.Nodes[0].Children.Add(gamez.Nodes.Count);
+        gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "cloudparent", MeshIndex = 1 });
+        var tris = VegetationGround.Triangles(gamez);
+        Assert.Equal(4 * 2 * 3, tris.Length);
+        Near(new Vector3(5f, 50f, 5f), VegetationGround.RayHit(tris, new Vector3(5f, 100f, 5f), Vector3.Down));
+        Near(new Vector3(5f, 0f, 5f), VegetationGround.RayHit(tris, new Vector3(5f, -10f, 5f), Vector3.Up));
+        Near(new Vector3(8f, 50f, 5f), VegetationGround.RayHit(tris, new Vector3(0f, 58f, 5f), new Vector3(1f, -1f, 0f).Normalized()));
+        Assert.Null(VegetationGround.RayHit(tris, new Vector3(15f, 100f, 5f), Vector3.Down));
+        Assert.Null(VegetationGround.RayHit(tris, new Vector3(5f, 100f, 5f), Vector3.Up));
+        Assert.Null(VegetationGround.RayHit(tris, new Vector3(-5f, 0f, 5f), Vector3.Right));
+    }
+
     // One world node over one mesh. A flagged overlay lies a few centimetres above its base over x in [0, 10].
     // A lone flagged quad covers x in [20, 30], and a hilltop sits 50 m above the first square.
     private static GameZ World()
@@ -51,6 +74,9 @@ public sealed class VegetationGroundTests
         gamez.Meshes.Add(mesh);
         return gamez;
     }
+
+    private static void Near(Vector3 expected, Vector3? hit) =>
+        Assert.True(hit is { } h && h.DistanceTo(expected) < 1e-3f, $"expected {expected}, hit {hit}");
 
     private static void Quad(GameZMesh mesh, int material, float x0, float y, bool noClutter)
     {

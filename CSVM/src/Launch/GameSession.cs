@@ -871,7 +871,18 @@ public partial class GameSession : Node3D
             _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
         var gamez = state.Gamez;
         if (_clutter?.Vegetation is { } vegetation)
-            _labs!.BuildVegetationLab(vegetation, ApplyVegetation, _clutter.Mask, ApplyVegetationMask, p => VegetationGround.LayersAt(gamez, p));
+        {
+            // Built on the paint tool's first ray, so a session that never paints never pays for it.
+            var ground = new Lazy<Vector3[]>(() =>
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var triangles = VegetationGround.Triangles(gamez);
+                Log.Info("ui", $"vegetation lab: {triangles.Length / 3} ground triangles in {watch.ElapsedMilliseconds} ms");
+                return triangles;
+            });
+            _labs!.BuildVegetationLab(vegetation, ApplyVegetation, _clutter.Mask, ApplyVegetationMask,
+                p => VegetationGround.LayersAt(gamez, p), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
+        }
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.

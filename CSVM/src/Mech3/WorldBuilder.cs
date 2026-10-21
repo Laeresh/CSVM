@@ -479,7 +479,7 @@ public sealed class WorldBuilder
     public Node3D BuildNode(GameZ gamez, GameZNode node)
     {
         var root = new Node3D { Name = "world1" };
-        var built = _scene.BuildSubtree(node, skip: null, collisionSkip: NoCollisionNode);
+        var built = _scene.BuildSubtree(node, skip: null, collisionSkip: n => NoCollisionNode(_gamez, n));
         if (built != null)
         {
             built.Transform = gamez.WorldTransformOf(node);
@@ -596,6 +596,14 @@ public sealed class WorldBuilder
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || IsFogVolumeNode(n);
 
+    // Rendered but not solid, subtree-inherited: sky/cloud surfaces, billboards, and any node the
+    // gamez flags `intersect_surface` false. That flag is the original's own collision-participation
+    // record (docs/formats/gamez.md); honouring it is what lets a plane fly through debris and the
+    // C3 spiderweb. Terrain, water, buildings, zeppelins and trains stay solid.
+    // The vegetation lab's ground ray skips the same nodes, so it stops where a collider would.
+    internal static bool NoCollisionNode(GameZ gamez, GameZNode n) =>
+        !n.IntersectSurface || MeshUsesTexture(gamez, n, IsNonSolidSkyTexture) || IsBillboardNode(gamez, n);
+
     /// <summary>Whether one world mesh is ground that casts no sun shadow: a sheet of nothing but
     /// water, or a ground tile carrying no building wall. The original's world casts no sun shadow
     /// at all, and Enhanced keeps that for the ground. Under a low sun, Godot's soft filter makes a
@@ -704,6 +712,38 @@ public sealed class WorldBuilder
     private static bool IsNonSolidSkyTexture(string tex) =>
         IsCloudOrSkyTexture(tex)
         && !tex.StartsWith("skywal", StringComparison.OrdinalIgnoreCase);
+
+    // A billboard is a flat card the engine turns toward the camera, so its collider would be a
+    // phantom wall wherever the card faces. Asked of the gamez model itself rather
+    // than a poly-count and texture-name heuristic, which leaves tree cards and multi-poly facades
+    // solid. The classifier is per MESH and this predicate per NODE, hence the MeshIndex hop.
+    private static bool IsBillboardNode(GameZ gamez, GameZNode n)
+    {
+        if (n.MeshIndex < 0 || n.MeshIndex >= gamez.Meshes.Count)
+            return false;
+        var mesh = gamez.Meshes[n.MeshIndex];
+        return SceneBuilder.ClassifyBillboard(mesh) is { } kind
+            ? kind != SceneBuilder.BillboardKind.None
+            // Legacy v0.6.1 extraction: no ModelType, so fall back to the flare-sprite rule
+            // rather than guessing.
+            : mesh.Polygons.Count == 1 && MeshUsesTexture(gamez, n, IsFlareTexture);
+    }
+
+    // True if any of the node's own-mesh polygons is skinned with a texture matching the predicate.
+    private static bool MeshUsesTexture(GameZ gamez, GameZNode n, Func<string, bool> match)
+    {
+        if (n.MeshIndex < 0 || n.MeshIndex >= gamez.Meshes.Count)
+            return false;
+        foreach (var poly in gamez.Meshes[n.MeshIndex].Polygons)
+        {
+            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count)
+                continue;
+            var tex = gamez.Materials[poly.MaterialIndex].TextureName;
+            if (tex != null && match(tex))
+                return true;
+        }
+        return false;
+    }
 
     // Union of the subtree's mesh AABBs in `xf`'s frame, null when it draws nothing. Computed from
     // the built meshes so it does not depend on the world being in the scene tree yet.
@@ -990,29 +1030,6 @@ public sealed class WorldBuilder
         return result;
     }
 
-    // Rendered but not solid, subtree-inherited: sky/cloud surfaces, billboards, and any node the
-    // gamez flags `intersect_surface` false. That flag is the original's own collision-participation
-    // record (docs/formats/gamez.md); honouring it is what lets a plane fly through debris and the
-    // C3 spiderweb. Terrain, water, buildings, zeppelins and trains stay solid.
-    private bool NoCollisionNode(GameZNode n) =>
-        !n.IntersectSurface || MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n);
-
-    // A billboard is a flat card the engine turns toward the camera, so its collider would be a
-    // phantom wall wherever the card happens to be facing. Asked of the gamez model itself rather
-    // than a poly-count and texture-name heuristic, which leaves tree cards and multi-poly facades
-    // solid. The classifier is per MESH and this predicate per NODE, hence the MeshIndex hop.
-    private bool IsBillboardNode(GameZNode n)
-    {
-        if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
-            return false;
-        var mesh = _gamez.Meshes[n.MeshIndex];
-        return SceneBuilder.ClassifyBillboard(mesh) is { } kind
-            ? kind != SceneBuilder.BillboardKind.None
-            // Legacy v0.6.1 extraction: no ModelType, so fall back to the flare-sprite rule
-            // rather than guessing.
-            : mesh.Polygons.Count == 1 && MeshUsesTexture(n, IsFlareTexture);
-    }
-
     // True when the node's model is one flat horizontal quad, reporting its altitude and its
     // world-space x/z footprint, the instance-side wrapper FindCloudDeck (below) walks with.
     private bool FlatTile(GameZNode n, out float altitude, out float x0, out float z0,
@@ -1104,22 +1121,6 @@ public sealed class WorldBuilder
         CloudDeckZoneId = deckZone ?? -1;
     }
 
-    // True if any of the node's own-mesh polygons is skinned with a texture matching the predicate.
-    private bool MeshUsesTexture(GameZNode n, Func<string, bool> match)
-    {
-        if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
-            return false;
-        foreach (var poly in _gamez.Meshes[n.MeshIndex].Polygons)
-        {
-            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
-                continue;
-            var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
-            if (tex != null && match(tex))
-                return true;
-        }
-        return false;
-    }
-
     private void Add(Node3D root, Node3D deck, int nodeIndex)
     {
         if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
@@ -1129,7 +1130,7 @@ public sealed class WorldBuilder
         // ⚠ Deck tiles are the one exception to the world's backface culling: authored
         // single-sided, but flown through, so the quad reads from both faces (weather.md has the
         // other two). applyActive starts EVERY node of the subtree at its own record's ACTIVE bit.
-        var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
+        var built = _scene.BuildSubtree(node, SkipWorldNode, n => NoCollisionNode(_gamez, n),
             forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck, applyActive: true);
         if (built != null)
         {

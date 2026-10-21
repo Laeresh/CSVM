@@ -555,7 +555,8 @@ are separate meshes from the textured ground, so the texture comes from walking 
   joining them with `+`; no listed kind removes the pick. `WithMask` sets the path.
 - **The lab**: a PAINT section with a tool choice (Off, Pick, Brush), a checkbox per listed kind for
   a pick, the chapter's picks, and the brush mode with radius (10 to 2000 m) and strength sliders. A
-  left click off the panel rays the world colliders on the next physics frame. A pick applies at
+  left click off the panel rays the world's own triangles (`VegetationGround.RayHit`), and a ring of
+  the brush radius follows the cursor on the ground while the brush is chosen. A pick applies at
   once through the A5 callback. A brush paints while held and hands the mask to its own callback on
   release, so a stroke rebakes nothing per frame; the first dab names `vegetation/<chapter>.bin` in
   the entry. Save writes the mask, then the entry; Revert restores both.
@@ -573,7 +574,8 @@ are separate meshes from the textured ground, so the texture comes from walking 
 - An unlisted kind takes no Rich draw and no sample (Decision 10). Original draws its own list and
   never reads the mask. C21's added stamps call `Keeps(…, added: true)` with one draw each.
 - `GameSession` passes `BuildVegetationLab(saved, ApplyVegetation, mask, ApplyVegetationMask,
-  p => VegetationGround.LayersAt(gamez, p))`; `ApplyVegetationMask(mask)` stores the mask as the
+  p => VegetationGround.LayersAt(gamez, p), (from, dir) => VegetationGround.RayHit(triangles, from, dir))`,
+  the triangles built once on first use; `ApplyVegetationMask(mask)` stores the mask as the
   session's drawn one, re-bakes the Rich lists as `ApplyVegetation` does, and recuts.
 - Picks feed nothing until C21 reads `entry.SetFor(texture)` per polygon, behind the `no_clutter`
   gate as the faithful stamp is.
@@ -603,8 +605,10 @@ strip, a thinned edge) is a montage judged by you.
   decorating layer's texture, and an added stamp still obeys the flag per polygon.
 - Draw the keep draw for every listed stamp whatever the mask holds, and drop by a zero basis, never
   by removal: either mistake reshuffles or misaligns every later stamp.
-- The physics ray can stop on a solid decoration's collider (a C2 building); the brush paints at
-  that XZ and a pick reads the ground beneath, which is what is wanted.
+- The ground ray can stop on a solid decoration (a C2 building roof); the brush paints at that XZ
+  and a pick reads the ground beneath, which is what is wanted.
+- The lab must never depend on the world colliders: `--freecam` builds none, so a physics ray finds
+  nothing under the cursor there.
 
 **Wiring landed.** `WorldSession` loads the mask beside the sidecar, `ClutterBuilder.BakeRich` (where
 A3 put the Rich draws, not `PlaceOnTriangle`) reads the reserved keep draw against it, a dropped stamp
