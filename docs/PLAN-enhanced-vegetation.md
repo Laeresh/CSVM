@@ -73,8 +73,9 @@ From [`analysis/veg-ground-survey/FINDINGS.md`](../analysis/veg-ground-survey/FI
 | C5 | city blocks, all templated | none |
 
 **No grass, reed or crop card exists anywhere in the install**; the smallest plant cards are C2's
-`brush1/2` (~2.4 × 2.1 m). Every sprite card is CylindricalY. Unplaced cards worth reusing: C3's
-`palm2`/`palm3`, C4's second `firtree2`. The original's own variation keys (`translate_uv_range`,
+`brush1/2` (~2.4 × 2.1 m). Every sprite card is CylindricalY. C3's `palmtree2`/`palmtree3` and C4's
+`firtree2` already draw, as substitution targets of `palmtree1` (4:4:4) and `firtree1` (9:5); C4
+also places `spruce.flt`. The original's own variation keys (`translate_uv_range`,
 `rotation_range`, `align_normal`, the slope pair) are decoded and authored by no chapter
 ([`org/clutter.md`](org/clutter.md), "The kind block").
 
@@ -105,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, pattern
 
 1. ☐ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
-2. ☐ The vegetation sidecar: per-chapter kind list and values, read under Rich
+2. ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
 3. ☐ Per-stamp jitter, rotation and tint for listed kinds
 4. ☐ Card shading: wind sway, sun-side shading, contact shadow
 5. ☐ Vegetation lab in `--freecam`: live values saved to the sidecar
@@ -175,21 +176,90 @@ recut (A3's variation lives in instance data) or must rebuild the clutter root.>
 
 **⚠ Traps.** Original must stay bit-identical: an Original golden that moves is a defect.
 
-## A2 ☐ The vegetation sidecar: per-chapter kind list and values, read under Rich
+## A2 ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
 
 **Goal.** A shipped per-chapter JSON that names the vegetation kinds and carries their tuned values;
 under Rich the clutter reads it, under Original nothing reads it.
 
-**Evidence (confidence: lead-only).** Decision 4. `ocean_seas.json` is the precedent
-(`git log --grep=E41`). Kinds are keyed by model name (`Kind.Model`, `Clutter.cs:961`), which is
-what the original's own `templates.zrd` keys on ([`org/clutter.md`](org/clutter.md)).
+**Evidence (confidence: traced-to-code for the keys and the kind lists).** Decision 4.
+`ocean_seas.json` is the precedent (`git log --grep=E41`). Kinds are keyed by model name
+(`Kind.Model`, `Clutter.cs:1741`), which is what the original's own `templates.zrd` keys on
+([`org/clutter.md`](org/clutter.md)), with the `.flt` suffix. The lists are read from each chapter's
+`extracted/<C>/zrdr/templates.zrd.json`, and every listed model was checked in the chapter's gamez
+to be a one-polygon Facade card, CylindricalY:
 
-**Approach.** <TODO: the schema (kind list, jitter, tint, mask path, texture picks) and where the
-file ships.>
+| Chapter | Listed kinds | Left out |
+|---|---|---|
+| C1 | `firtree1`, `firtree2`, `dougfirtree1`, `bush1`, `bush2` | none |
+| C1B | `bush1`, `bush2`, `dougfirtree1` | none |
+| C2 | `palmtree1`, `palmtree2`, `palmtree3`, `spruce`, `brush1`, `brush2`, `brush3`, `brush4` | `filmbuild01`..`09`, `resbuild01`..`27`, `c_studebaker1`..`6` (solid, `Default` model type) |
+| C3 | `palmtree1`, `palmtree2`, `palmtree3` | none |
+| C4 | `firtree1`, `firtree2`, `dougfirtree1`, `spruce` | none |
 
-**Model recommendation.** <TODO>
+C3's `palmtree2` and `palmtree3` are not unplaced: `palmtree1` rolls to each a third of the time
+([`formats/templates.md`](formats/templates.md), "The extra blocks are substitution targets"), so
+they already draw today. C4's `spruce` has a block and is placed directly, though the survey's card
+sizes leave it out. Every substitution target of a listed source is itself listed.
 
-**Verify.** <TODO>
+**Approach.** `CSVM/data/vegetation.json`, read by `CSVM/src/Mech3/VegetationSidecar.cs` and
+shipped in the pck by the existing `data/*.json` export filter. The shape:
+
+```json
+{
+  "_about": "prose",
+  "C1": {
+    "seed": 0,
+    "mask": "vegetation/C1.png",
+    "kinds": {
+      "firtree1.flt": { "jitter_uv": 0.05, "yaw_deg": 0, "tint": 0.05, "brightness": 0.1 },
+      "bush1.flt": {}
+    },
+    "sets": { "hedge": ["bush1.flt", "bush2.flt"] },
+    "picks": { "terpat03": "hedge" }
+  }
+}
+```
+
+- The chapter keys are C1, C1B, C2, C3 and C4; any other is a warning and ignored, so C5's blocks
+  cannot be listed.
+- `kinds` is the list Decision 4 asks for. A model absent from it is not vegetation and keeps the
+  faithful stamp. Each value is a symmetric per-stamp spread, 0 when absent: `jitter_uv` in texture
+  repeats per UV axis (0 to 0.5), `yaw_deg` (0 to 180), `tint` as a per-channel colour multiplier
+  spread (0 to 0.5), `brightness` as an all-channel one (0 to 0.5). A load clamps into those ranges
+  and warns.
+- `seed` is an integer salt for the Rich variation's fixed stream (the plan's fixed-seed default:
+  identical on every launch and machine); the lab can change it to reroll one chapter.
+- `mask` (A6) is the brush mask's path relative to `CSVM/data`, empty or absent for none.
+- `sets` and `picks` (A6, C21) are empty for now. A set is a named list of listed kinds, and a member
+  that is not listed is dropped with a warning, so a pick can never stamp a city block or a car. A
+  pick maps a ground texture name to a set; a pick naming no set is dropped.
+- The writer (`WithEntry`, `Save`) replaces one chapter's entry in place, writes only nonzero values,
+  keeps every other key and its order, skips comments as the read does, refuses a file it cannot
+  parse, and writes through `AtomicFile` (BOM-less UTF-8).
+
+The shipped values are modest starting points (`jitter_uv` 0.05, `tint` 0.05, `brightness` 0.1,
+`yaw_deg` 0) for the user to tune in A5. ⚠ A CylindricalY card's shader replaces the instance basis
+(`Clutter.cs:869`), so a yaw on a card is invisible: it reaches the eye only through D32's 3D models,
+or through a horizontal mirror if A3 maps the yaw's sign onto one.
+
+**Wiring (lands with A3).** `WorldSession.Build` loads `VegetationSidecar.Load().For(o.Chapter)`
+beside `ClutterTemplateSpec.Load` when Vegetation Quality resolves Rich, and passes it to a new
+optional `ClutterBuilder` parameter (null under Original, so nothing reads the file). At the end of
+`ResolveProperties`, after minting, each kind in `_allKinds` takes `entry.Find(kind.Model)`, null
+for an unlisted kind. `PlaceOnTriangle` applies the variation of the kind the stamp lands in
+(`target`), drawn from a third `Random` seeded from `PlacementSeed`, a fixed Rich constant and
+`entry.Seed`, after the substitute, scale and fade draws, and for every kept listed stamp before any
+mask drop, so a mask edit does not reshuffle the other stamps.
+
+**Model recommendation.** Sonnet: a reader and writer on the `OceanSeas` pattern plus a data list
+read off the extracted files; no judgement call beyond the schema.
+
+**Verify.** `VegetationSidecarTests`: the shipped file reads clean and has every chapter with
+ground; every listed model is in its chapter's `templates.zrd` (an extracted-data fact); no C2
+building or car is listed; a mistake is one warning; a clamp is reported; sets keep only listed
+kinds and picks need a set; Save round-trips, leaves the shipped file byte-identical when saving
+what was loaded, and refuses a file it cannot read. The Original check (every golden unchanged) is
+A3's, since nothing reads the file until the wiring lands.
 
 **⚠ Traps.** Key by model name, not by mesh index: C5 ships one building as several meshes, and a
 substitution target resolves to one model however many templates mention it (`Clutter.cs:1001`).
@@ -368,8 +438,8 @@ D31's models).>
 **Goal.** C3's `forest1`/`cliff1` canopy gains a volume with depth, and its transition textures
 (`cliff1_toptrans`, `cliff1_sidetrans`, `cliff1_watertrans2`) carry palm1, palm2 and palm3.
 
-**Evidence (confidence: measured areas, lead-only look).** The survey table above; palm2/palm3 are
-in C3's gamez unplaced. Decision 11.
+**Evidence (confidence: measured areas, lead-only look).** The survey table above; palmtree2/palmtree3
+draw today as palmtree1's substitution targets. Decision 11.
 
 **Approach.** The B14 technique fed by the C3 mask from texture picks; palms through A6's texture
 picks. <TODO>

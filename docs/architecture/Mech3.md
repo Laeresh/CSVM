@@ -302,6 +302,14 @@ over a reader list, so all eight chapters pin off engine (`CSVM.Tests/ClutterTem
 `FadeThresholds`, the pure per-stamp `(near squared, far squared, reciprocal)` the fade shaders
 read. Schema, offsets, the per-chapter census and the keying rules: [../formats/templates.md](../formats/templates.md). Read `Clutter.cs` next.
 
+## src/Mech3/VegetationSidecar.cs
+The shipped per-chapter vegetation list, `CSVM/data/vegetation.json`, read through `res://` under the Rich Vegetation Quality only. One object per chapter with ground (`Chapters`: C1, C1B, C2, C3, C4; C5 is refused, so no city block can be listed) holding
+`kinds`, the vegetation decoration models keyed by the model name `templates.zrd` and `ClutterBuilder`'s `Kind.Model` use (`firtree1.flt`), each with its per-stamp spreads (`VegetationKind.Fields`: `jitter_uv` in texture repeats per UV axis, `yaw_deg`, `tint` per colour channel, `brightness`), zero when absent.
+`seed` salts the variation's fixed stream, `mask` names the brush mask relative to `CSVM/data`, `sets` are named lists of listed kinds and `picks` give a ground texture a set; a set member that is not listed and a pick naming no set are dropped.
+`VegetationEntry.Find` answers null for a model that is not vegetation, which keeps the faithful stamp; a chapter with no entry is `VegetationEntry.Empty`.
+An unknown chapter or key, a bad value and a clamped value are each a `world` warning. `WithEntry` rewrites one chapter's entry in place for the lab's Save through `AtomicFile`, writing only nonzero values, keeping every other key and its order, and refusing a file it cannot parse.
+Every listed name is pinned against its chapter's `templates.zrd` in `VegetationSidecarTests`. Read `Clutter.cs` next.
+
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
 `LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the

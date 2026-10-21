@@ -1,0 +1,138 @@
+{
+  "_about": "The Enhanced Rich vegetation per chapter (src/Mech3/VegetationSidecar.cs, docs/architecture/Mech3.md). 'kinds' lists the decoration models that are vegetation, by the model name templates.zrd uses; every model not listed keeps the original's stamp. A kind's values are per-stamp spreads, each 0 when absent: jitter_uv (texture repeats per UV axis, 0..0.5), yaw_deg (0..180), tint (per colour channel, 0..0.5), brightness (0..0.5). 'seed' salts the variation's fixed stream; 'mask' is the brush mask beside this file; 'sets' name lists of listed kinds and 'picks' give a ground texture a set. Under the Original setting nothing reads this file. The vegetation lab writes one chapter's entry here when run from the source tree.",
+  "C1": {
+    "kinds": {
+      "firtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "firtree2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "dougfirtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "bush1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "bush2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      }
+    }
+  },
+  "C1B": {
+    "kinds": {
+      "bush1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "bush2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "dougfirtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      }
+    }
+  },
+  "C2": {
+    "kinds": {
+      "palmtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "palmtree2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "palmtree3.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "spruce.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "brush1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "brush2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "brush3.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "brush4.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      }
+    }
+  },
+  "C3": {
+    "kinds": {
+      "palmtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "palmtree2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "palmtree3.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      }
+    }
+  },
+  "C4": {
+    "kinds": {
+      "firtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "firtree2.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "dougfirtree1.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      },
+      "spruce.flt": {
+        "jitter_uv": 0.05,
+        "tint": 0.05,
+        "brightness": 0.1
+      }
+    }
+  }
+}

@@ -67,6 +67,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClutterActivation.cs`, draws each clutter stamp only while the world node it was stamped from is visible.
 - `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell.
 - `src/Mech3/ClutterTemplates.cs`, the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
+- `src/Mech3/VegetationSidecar.cs`, the shipped per-chapter vegetation list in `CSVM/data/vegetation.json`: the Rich variation per listed model, read with warnings, one chapter's entry written by the vegetation lab.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs`, zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/GamePath.cs`, splits a path out of game data on `\` and `/` alike on every host, where `System.IO.Path` splits `\` on Windows only.
