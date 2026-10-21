@@ -15,7 +15,9 @@ landing gate for any change under `CSVM/`.
 - When delegating to a subagent, use a cheaper model tier where appropriate, for example for
   exploration.
 - **Hooks** (`.claude/settings.json`). At session start in a Claude Code cloud container,
-  `.claude/hooks/cloud-setup.sh` installs the .NET 8 SDK; locally it does nothing. Before a shell command: (1) a shell-syntax guard (a
+  `.claude/hooks/cloud-setup.sh` installs the .NET 8 SDK, PowerShell 7 and CI's Godot build
+  (`~/godot/`), so the gates, unit tests and `RunCiSuites.ps1` run there; locally it does nothing.
+  Before a shell command: (1) a shell-syntax guard (a
   PowerShell here-string sent to Bash, a heredoc or `/dev/null` sent to PowerShell); (2) the Bash
   guard, [`CheckBashCommand.ps1`](CheckBashCommand.ps1): on Windows, Bash runs only `git` and
   `gh`, optionally piped into `head`, `tail`, `grep`, `wc`, `sort` or `uniq`, and everything else
