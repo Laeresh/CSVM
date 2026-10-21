@@ -692,6 +692,12 @@ void fragment() {
     public static Mesh? GameplayMesh(MeshInstance3D instance) =>
         instance.HasMeta(GamezMeshMeta) ? instance.GetMeta(GamezMeshMeta).As<Mesh>() : instance.Mesh;
 
+    /// <summary>The local box a site, a zone, a range gate or an effect measures
+    /// <paramref name="instance"/> by: its gamez model's under a replacement, else its own.</summary>
+    public static Aabb GameplayAabb(VisualInstance3D instance) =>
+        instance.HasMeta(GamezMeshMeta) && instance.GetMeta(GamezMeshMeta).As<Mesh>() is { } gamez
+            ? gamez.GetAabb() : instance.GetAabb();
+
     /// <summary>The one billboard rule, read straight from the gamez model: is this a flat card the
     /// engine turns toward the camera? Every caller goes through this. Null when the extraction
     /// carries no <c>ModelType</c> (a legacy tree) and means "apply your own fallback", which the

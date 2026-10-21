@@ -104,7 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ [local] Round-trip proof on a real plane and a real world prop
 22. ☑ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
-23. ☐ [local] World props and destructibles in every damage state
+23. ☑ [local] World props and destructibles in every damage state
 24. ☑ [local] Plane airframes without livery
 25. ☐ [local] Rig on a real airframe
 26. ☑ [cloud] code, [local] two-instance check: pack and rig agreement in network play
@@ -616,7 +616,7 @@ each log `1 from the model pack`, no world mesh is replaced, the pylon rockets l
 axis, and the unedited `--export-gltf --chapter=C1 --node=gunshell` file keeps all 24 captured frames
 md5-identical to no pack. `--export-gltf --node=he_rocket` writes an empty file (the node stage hides the
 prototype root and the exporter prunes hidden nodes), so the rocket pack was authored by hand in the
-exported frame <TODO: export a flyout prototype root>.
+exported frame (C23 makes `--node=he_rocket` export the prototype).
 
 **Finding (kept).** "No new code beyond B12" is disproved. Every weapon root (the 17 `FLYOUT` models, `gunshell`,
 `splash1.flt`, `bsplsh.flt`) is a meshless group in all eight chapters, so `he_rocket.glb` matches a node
@@ -655,7 +655,42 @@ Tracers (`CrossedStreakMesh`, `Projectile.cs:1967`) and muzzle flashes (facades)
 **⚠ Traps.** `--stage=empty` builds no chapter gamez, so rockets there fly without a body
 (`docs/cli.md`); test in a chapter.
 
-## C23 ☐ [local] World props and destructibles in every damage state
+## C23 ☑ [local] World props and destructibles in every damage state
+
+**Landed.** A destructible's states are nodes only at healthy and destroyed: no `DAMAGE_SEQUENCE`
+in the install switches a node (0 of 1544 compiled, 0 of 102 reader-source), so "damaged" is the
+healthy mesh with its stage puffers. C1's water tower `ap_h2otwr1` (`h2twr_healthy`, then
+`h2twr_destroyed` holding `h2twr_dbase`, `h2twr_middle`, `h2twr_upper`) keyed by its root
+(`C1/ap_h2otwr1.glb`, one colour per state, painted in headless Blender) replaces 4 of its 5 meshes
+(`g1182` is a cylindrical facade, never replaced) in every state; the smoke and fire stages sit where
+they sit without the pack, and the destroyed parts fly as the originals do. The unedited export keeps
+the healthy, smoke and fire frames within 1 pixel of 2 levels and the flying parts within 13 pixels,
+against md5-identical no-pack repeats. `--export-gltf --node=` now writes the subject even when its
+own reset state switched it off (the flyout templates' `RESET_STATE` does), and keeps every hidden
+gamez node below it, marked hidden through an optional `KHR_node_visibility`, so a destructible's
+destroyed state reaches the file (Blender 5.2 imports them shown; the pack import ignores
+visibility). The F10 plane export still prunes hidden nodes to bake its damage. Every box gameplay
+measures reads the gamez model through `SceneBuilder.GameplayAabb`: `DestructibleRegistry`'s
+`Centre` (targeting, aim assist, zeppelin parts), `ObjectiveSites` (markers and target points),
+`ObjectZoneGate` (an object's cloud-band zone), `WorldBuilder`'s unplaced-entity box and
+`SubtreeBounds` (the range gate and `NODE_UNDERCOVER` origin, and effect siting with them).
+`hd-model-swap` checks the centre, site and effect box of a replaced subtree (red with
+`GameplayAabb` reading the drawn mesh); `gltf-export-names` checks an all-states export (red with
+hidden nodes pruned, and with the subject left hidden). The `--node=` stage logs its replacement
+count. Overlay passes: no change. Every model whose overlay group would tie its own base at the
+rank cap in a replacement (23 in C1, C2, C5) is a terrain tile B12 never replaces (each checked with a
+painted pack); an unedited C5 `g14324` (an overlay texture also worn as base) and C2 `g36347`
+(`no_clutter` ranked before clear) render 0 pixels apart from no pack at the node stage and close up.
+This answers C22's flyout export TODO and B16's deferred overlay fork.
+
+**Verified.** <pending orchestrator run>
+
+**Owed.** Effect siting is the user's fork: it now reads the gamez box with the gameplay readers.
+It differs from the drawn box only where an anchor's origin falls outside that box (absolute-
+modelled nodes and destroyed-part groups such as C1's `aagun35`); a 3x `aagun35` destroyed state
+moves its death smoke 3.5 m down to the node origin when sited off the drawn box.
+
+**Original approach (kept for reference).**
 
 **Goal.** A destructible's healthy, damaged and destroyed nodes can each be replaced, and fire and
 smoke still appear in the right place.

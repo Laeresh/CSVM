@@ -106,9 +106,11 @@ internal static class WorldAndToolSuites
         "a glTF export names each node with its original gamez name, so two same-named siblings and "
         + "a name holding '.', ':' or '@' read back from the file as the data spells them, and the "
         + "live subtree keeps its Godot names; each material is named after its skin's texture "
-        + "without the extension, repeated, shared with a node or holding a '.'")]
+        + "without the extension, repeated, shared with a node or holding a '.'; an all-states "
+        + "export keeps a hidden subject shown and its hidden damage state written hidden")]
     internal static void GltfExportNames(TestContext ctx)
     {
+        GltfExportAllStates(ctx);
         string[] originals = { "probe_plane", "wing", "wing", "gear.flt", "hinge:l@1" };
         string[] skins = { "", "wing.tif", "wing.tif", "cowl..tif", "probe_skin.tif" };
         var root = NamedProbeNode(originals[0], null);
@@ -4005,6 +4007,39 @@ internal static class WorldAndToolSuites
 
     // One Node3D holding its gamez name in NameMeta under the sanitised Godot name SceneBuilder
     // gives it, plus a mesh child.
+    // A --node= stage's tree: a subject its reset state switched off, under a bare root, holding a
+    // shown healthy part and a hidden damaged one. Able to fail: pruning every hidden node writes
+    // a file with neither part, and leaving the subject hidden writes it hidden.
+    private static void GltfExportAllStates(TestContext ctx)
+    {
+        var root = new Node3D { Name = "world1" };
+        var subject = NamedProbeNode("probe_tower", null);
+        subject.Visible = false;
+        var damaged = NamedProbeNode("probe_damaged", new BoxMesh());
+        damaged.Visible = false;
+        subject.AddChild(NamedProbeNode("probe_healthy", new BoxMesh()));
+        subject.AddChild(damaged);
+        root.AddChild(subject);
+        ctx.Host.AddChild(root);
+        string path = Path.Combine(ctx.ScratchDir, "gltf-export-states.glb");
+        try
+        {
+            Directory.CreateDirectory(ctx.ScratchDir);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(root, path, allStates: true), $"all-states export write result");
+            ctx.Check(!subject.Visible && !damaged.Visible, $"the live subject and damaged part stay hidden");
+            var state = new GltfState();
+            ctx.Same((long)Error.Ok, (long)new GltfDocument().AppendFromFile(path, state), $"all-states re-import read result");
+            var visible = state.GetNodes().ToDictionary(n => n.OriginalName, n => n.Visible);
+            string seen = string.Join(", ", visible.Select(p => $"{p.Key}={p.Value}"));
+            ctx.Check(visible.GetValueOrDefault("probe_tower") && visible.GetValueOrDefault("probe_healthy"), $"subject and healthy part written shown [{seen}]");
+            ctx.Check(visible.TryGetValue("probe_damaged", out bool shown) && !shown, $"damaged part written hidden [{seen}]");
+        }
+        finally
+        {
+            root.Free();
+        }
+    }
+
     private static Node3D NamedProbeNode(string original, Mesh? mesh)
     {
         var node = new Node3D { Name = original.Replace('.', '_').Replace(':', '_').Replace('@', '_') };

@@ -32,11 +32,12 @@ public sealed class GltfExporter
         _pendingPath = spec.ExportGltfPath;
     }
 
-    /// <summary>Write the plane subtree to <paramref name="path"/> as glTF, format chosen by the
-    /// extension (<c>.glb</c> self-contained binary, <c>.gltf</c> JSON + external buffers/images;
-    /// anything else defaults to <c>.glb</c>). Reads the live scene through a duplicate, so the
-    /// on-screen plane is untouched. Returns the write <see cref="Error"/>.</summary>
-    public static Error Export(Node3D? plane, string path)
+    /// <summary>Write the plane subtree to <paramref name="path"/> as glTF, format by extension:
+    /// <c>.glb</c> binary, <c>.gltf</c> JSON with external buffers, anything else <c>.glb</c>. Reads the live scene through a duplicate, so the
+    /// on-screen plane is untouched. With <paramref name="allStates"/> a hidden gamez node is kept
+    /// and marked hidden, so a destructible's damage states reach the file, and the top gamez nodes
+    /// are shown. Returns the write <see cref="Error"/>.</summary>
+    public static Error Export(Node3D? plane, string path, bool allStates = false)
     {
         if (plane == null || string.IsNullOrEmpty(path))
         {
@@ -46,7 +47,12 @@ public sealed class GltfExporter
         // Copied so material overrides and node pruning below never touch the live tree. The copy
         // shares the ArrayMesh resources, so the winding fix builds a new mesh rather than editing
         // one, and skins are overridden on the NODE.
-        return Write(SceneCopy.Of(plane), path);
+        var copy = SceneCopy.Of(plane);
+        if (allStates)
+        {
+            ShowSubjects(copy);
+        }
+        return Write(copy, path, allStates);
     }
 
     /// <summary>Writes several live subtrees into one glTF under a single root, each at its world
@@ -101,7 +107,9 @@ public sealed class GltfExporter
         {
             return;
         }
-        var err = Export(plane, _pendingPath);
+        // A --node= subject's own reset state may switch it off (a flyout template waits for its
+        // launch). Its damage states wait hidden for their hits.
+        var err = Export(plane, _pendingPath, allStates: spec.NodeName != null);
         _pendingPath = null;
         tree.Quit(err == Error.Ok ? 0 : 1);
     }
@@ -128,11 +136,12 @@ public sealed class GltfExporter
     }
 
     // Bakes and writes a detached copy, then frees it. The copy is never in the scene tree.
-    private static Error Write(Node3D copy, string path)
+    private static Error Write(Node3D copy, string path, bool allStates = false)
     {
-        BakeAndConvert(copy);
+        BakeAndConvert(copy, allStates);
         path = ResolvePath(NormalizeExtension(path));
-        var doc = new GltfDocument();
+        // Optional, so an importer without KHR_node_visibility still reads the file, all states shown.
+        var doc = new GltfDocument { VisibilityMode = GltfDocument.VisibilityModeEnum.IncludeOptional };
         var state = new GltfState();
         var err = doc.AppendFromScene(copy, state);
         if (err == Error.Ok)
@@ -228,23 +237,39 @@ public sealed class GltfExporter
         }
     }
 
-    // Bake the current damage/flare state and drop non-geometry: free every hidden
-    // `Node3D` (torn/healthy panel twins and off wing-flares are toggled purely by
-    // `Visible`) and every point-sprite `"lights"` instance, then convert each surviving
-    // mesh's shader skins to a `StandardMaterial3D` glTF can serialize.
-    private static void BakeAndConvert(Node copy)
+    // Bakes the current damage and flare state, which panel twins and wing flares hold in `Visible`:
+    // frees every hidden `Node3D` and every point-sprite `"lights"` instance. Each
+    // surviving mesh's shader skins become a `StandardMaterial3D` glTF can serialize. With allStates
+    // a hidden gamez node stays, written hidden.
+    private static void BakeAndConvert(Node copy, bool allStates)
     {
         var toFree = new List<Node>();
-        Collect(copy, toFree);
+        Collect(copy, toFree, allStates);
         foreach (var n in toFree)
         {
             n.Free();
         }
     }
 
-    private static void Collect(Node node, List<Node> toFree)
+    // Shows each gamez node with no gamez ancestor, the subject the export was asked for.
+    private static void ShowSubjects(Node node)
     {
-        if (node is Node3D { Visible: false })
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D shown && child.HasMeta(Mech3.AnimRuntime.NameMeta))
+            {
+                shown.Visible = true;
+            }
+            else
+            {
+                ShowSubjects(child);
+            }
+        }
+    }
+
+    private static void Collect(Node node, List<Node> toFree, bool allStates)
+    {
+        if (node is Node3D { Visible: false } && !(allStates && node.HasMeta(Mech3.AnimRuntime.NameMeta)))
         {
             toFree.Add(node);
             return; // its subtree goes with it, don't recurse into a pruned branch
@@ -262,7 +287,7 @@ public sealed class GltfExporter
         }
         foreach (var child in node.GetChildren())
         {
-            Collect(child, toFree);
+            Collect(child, toFree, allStates);
         }
     }
 

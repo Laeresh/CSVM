@@ -291,7 +291,7 @@ public sealed class ObjectiveSites
     {
         if (node is MeshInstance3D { Mesh: not null } mesh)
         {
-            var box = mesh.GlobalTransform * mesh.GetAabb();
+            var box = mesh.GlobalTransform * SceneBuilder.GameplayAabb(mesh);
             merged = merged?.Merge(box) ?? box;
         }
 
@@ -323,7 +323,7 @@ public sealed class ObjectiveSites
     {
         if (node is MeshInstance3D { Mesh: not null } mesh)
         {
-            into.Add((mesh, mesh.GetAabb()));
+            into.Add((mesh, SceneBuilder.GameplayAabb(mesh)));
         }
 
         int children = node.GetChildCount();

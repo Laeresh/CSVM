@@ -139,7 +139,7 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
 take, their table unedited, and the empty stage's Capture the Flag arena passes its own node finder. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
-a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state and whether its node is switched on; a roster block that flags itself
+a site tracks a moving node (a replacement measured by its gamez model) and reads `Live` off its `DestructibleRegistry` state and whether its node is switched on; a roster block that flags itself
 rides its own aeroplane. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/Campaign/CampaignHumanField.cs
@@ -637,7 +637,7 @@ did. `WeatherRig.cs` fills it each frame; a session teardown and the test harnes
 
 ## src/Session/Objectives/ObjectZoneGate.cs
 The per-object half of the zone gate, ticked by `WeatherRig` over the session's aircraft and
-zeppelins. Each frame an object's merged world extent is judged against the cloud band's midpoint
+zeppelins. Each frame an object's merged world extent (a replacement's gamez model) is judged against the cloud band's midpoint
 (`Effects/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
 so a camera on the far side of the band does not draw it at all, which is the original's per-object
 zone assignment plus its camera zone gate. The extent is measured once per root because an airframe

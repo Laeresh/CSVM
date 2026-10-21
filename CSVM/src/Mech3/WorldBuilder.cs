@@ -505,11 +505,16 @@ public sealed class WorldBuilder
                 _cell = CellOf(n);
                 break;
             }
+        int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(node, skip: null, collisionSkip: NoCollisionNode);
         if (built != null)
         {
             built.Transform = gamez.WorldTransformOf(node);
             root.AddChild(built);
+        }
+        if (_scene.ReplacedMeshCount > replacedBefore)
+        {
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {node.Name} drawn from the model pack");
         }
         return root;
     }
@@ -766,7 +771,7 @@ public sealed class WorldBuilder
         Aabb? total = null;
         if (node is MeshInstance3D { Mesh: not null } mi)
         {
-            total = xf * mi.GetAabb();
+            total = xf * SceneBuilder.GameplayAabb(mi);
         }
         foreach (var child in node.GetChildren())
         {

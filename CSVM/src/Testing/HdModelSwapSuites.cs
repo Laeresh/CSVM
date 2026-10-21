@@ -78,7 +78,8 @@ internal static class HdModelSwapSuites
         + "A decal surface draws at the highest priority its original polygons have, a matched node holding no "
         + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model. "
         + "A meshless root's file replaces the generic-named leaves below that root alone, a repeated name by the "
-        + "names between, before a leaf's own bare file, and never a leaf it does not name")]
+        + "names between, before a leaf's own bare file, and never a leaf it does not name; the replaced "
+        + "subtree's target centre, objective site and effect box read the gamez models")]
     internal static void SwapSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -193,6 +194,13 @@ internal static class HdModelSwapSuites
             var instance = MeshChild(packed.GetNodeOrNull<Node3D>("probe_l4/g12"));
             ctx.Check(instance != null && SceneBuilder.GameplayMesh(instance)?.GetAabb() == DrawnMesh(plain.GetNodeOrNull<Node3D>("probe_l4/g12"))?.GetAabb(),
                 $"a scoped leaf's hit box reads the gamez model");
+            ctx.Host.AddChild(packed);
+            ctx.Host.AddChild(plain);
+            var registry = new DestructibleRegistry();
+            Vector3 Centre(Node3D tree) => registry.Register(new AnimDefinition { Name = tree.GetInstanceId().ToString() }, tree, 10f).Centre;
+            ctx.Check(SubtreeBounds.WorldAabb(packed) == SubtreeBounds.WorldAabb(plain), $"a replaced subtree's effect and range box reads the gamez models {SubtreeBounds.WorldAabb(packed)} vs {SubtreeBounds.WorldAabb(plain)}");
+            ctx.Check(Centre(packed) == Centre(plain) && Session.Objectives.ObjectiveSites.SiteAnchor(packed) == Session.Objectives.ObjectiveSites.SiteAnchor(plain),
+                $"a replaced destructible's target centre and objective site read the gamez models {Centre(packed)} vs {Centre(plain)}");
 
             var other = Build(models, "probe_other", out int otherReplaced);
             var otherPlain = Build(none, "probe_other", out _);

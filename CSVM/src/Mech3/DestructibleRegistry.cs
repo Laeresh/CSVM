@@ -334,7 +334,7 @@ public sealed class DestructibleRegistry
         {
             if (node is MeshInstance3D { Mesh: not null } mesh)
             {
-                var box = toRoot * mesh.GetAabb();
+                var box = toRoot * SceneBuilder.GameplayAabb(mesh);
                 merged = merged?.Merge(box) ?? box;
             }
 

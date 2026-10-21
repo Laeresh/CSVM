@@ -116,7 +116,7 @@ public sealed class ObjectZoneGate
             bool any = false;
             foreach (var mesh in meshes)
             {
-                var local = (toRoot * mesh.GlobalTransform) * mesh.GetAabb();
+                var local = (toRoot * mesh.GlobalTransform) * SceneBuilder.GameplayAabb(mesh);
                 extent = any ? extent.Merge(local) : local;
                 any = true;
             }

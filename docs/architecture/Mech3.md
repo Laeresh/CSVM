@@ -756,7 +756,7 @@ anchor)` pair seeded from the authored `HEALTH`, plus a coarse healthy/damaged/d
 `DamageStage`. Built in `AnimRuntime`'s bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`,
 damaged via `DamageAt`. `Resolve(struck)` climbs to the nearest claiming pool, which answers for its damage node and
 everything under it (what the original stamps its handler over) and, through its anchor alone, for nothing. `Instance`
-carries its `Centre` (the damage node's box centre, the one position every reader takes) and that centre's
+carries its `Centre` (the damage node's gamez box centre, a replacement's ignored, the one position every reader takes) and that centre's
 `Velocity` (stepped by `ZeppelinRuntime` for a zeppelin's zones, else zero), a mission record's fields (`Team`,
 `Owner`, `Gasbag`, `Dormant`, `Reseed`), and the anchor's name and gamez ancestors for `TargetPool`, cached under the parent's id. Schema: docs/formats/destructibles.md; teams, position and velocity docs/org/targeting.md.
 
@@ -861,8 +861,9 @@ seam without naming the renderer; `Effects/Puffer.cs` integrates it. Keys: [../f
 
 ## src/Mech3/SubtreeBounds.cs
 A built subtree's world-space extent, the union of its own mesh boxes (`WorldAabb`), skipping any
-node marked `OverlayMeta` so a tool's drawing parked on an object never grows its box. Shared by
-`AnimRuntime`'s effect siting and the inspect tools behind `UI/Screens/SelectionService.cs`.
+node marked `OverlayMeta` so a tool's drawing parked on an object never grows its box. A model pack
+replacement is measured by its gamez model (`SceneBuilder.GameplayAabb`). Shared by `AnimRuntime`'s
+range gates, `NODE_UNDERCOVER` origin and effect siting, and the inspect tools behind `UI/Screens/SelectionService.cs`.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop, or a wing-walk

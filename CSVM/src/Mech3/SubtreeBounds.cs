@@ -34,9 +34,9 @@ public static class SubtreeBounds
             {
                 return; // a tool's drawing parked on this object is not part of its extent
             }
-            if (n is MeshInstance3D { Mesh: { } mesh } mi)
+            if (n is MeshInstance3D { Mesh: not null } mi)
             {
-                var local = mesh.GetAabb();
+                var local = SceneBuilder.GameplayAabb(mi);
                 if (local.Size.LengthSquared() > 1e-9f)
                 {
                     var box = mi.GlobalTransform * local;
