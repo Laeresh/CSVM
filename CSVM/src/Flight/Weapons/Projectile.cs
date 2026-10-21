@@ -1224,6 +1224,7 @@ public sealed partial class ProjectilePool : Node3D
             {
                 XrPreciseInterior = true,
                 XrUnderInterior = true,
+                HdChapter = _flyoutScene.HdChapter,
             };
 
         // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not

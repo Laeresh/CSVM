@@ -256,6 +256,7 @@
     "gun-voice-reach": 1.83,
     "hangar-door-wake": 2.993,
     "hd-model-mesh-import": 0.15,
+    "hd-model-swap": 0.3,
     "heat-shimmer": 0.044,
     "hostile-marker-hud": 0.453,
     "hud-auto-dock-line": 0.008,

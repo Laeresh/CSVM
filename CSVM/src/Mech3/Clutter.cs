@@ -288,7 +288,7 @@ public sealed class ClutterBuilder
     /// the whole chain, so these are the rest of the building.
     /// ⚠ LOD alternates are excluded here exactly as <see cref="SceneBuilder"/> excludes them
     /// (nearest level only), or a block would draw its far silhouette inside itself.</summary>
-    public static List<(int MeshIndex, Transform3D Local)> ExtraMeshes(
+    public static List<(int MeshIndex, Transform3D Local, int NodeIndex)> ExtraMeshes(
         GameZ gamez, GameZNode deco, GameZNode drawn)
     {
         var found = new List<(GameZNode Node, Transform3D Xf)>();
@@ -300,14 +300,14 @@ public sealed class ClutterBuilder
             foreach (var c in deco.Children)
                 if (c >= 0 && c < gamez.Nodes.Count)
                     Walk(gamez.Nodes[c], Transform3D.Identity);
-        var parts = new List<(int, Transform3D)>();
+        var parts = new List<(int, Transform3D, int)>();
         int at = found.FindIndex(f => f.Node.Index == drawn.Index);
         if (at < 0)
             return parts;
         var toLocal = found[at].Xf.AffineInverse();
         foreach (var (node, xf) in found)
             if (node.Index != drawn.Index)
-                parts.Add((node.MeshIndex, toLocal * xf));
+                parts.Add((node.MeshIndex, toLocal * xf, node.Index));
         return parts;
 
         void Walk(GameZNode node, Transform3D xf)
@@ -431,6 +431,7 @@ public sealed class ClutterBuilder
         var exportedMesh = new List<int>();   // parallel: each export's decoration MeshIndex
         var exportedFrom = new List<(Kind Kind, int Part)>();   // parallel: 0 its own mesh, 1+ ExtraParts
         var solidKinds = new List<Kind>();
+        int replacedBefore = _scene?.ReplacedMeshCount ?? 0;
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
         BlendCardKinds = ScissorCardKinds = 0;
         SolidCollisionShapes = SolidCollisionInstances = SolidCollisionOneSidedTriangles = 0;
@@ -472,9 +473,9 @@ public sealed class ClutterBuilder
                 // Exported too, so MapEdgeExtender's copies past the map edge are whole buildings.
                 for (int part = 0; part < kind.ExtraParts.Count; part++)
                 {
-                    var (meshIndex, local) = kind.ExtraParts[part];
+                    var (meshIndex, local, nodeIndex) = kind.ExtraParts[part];
                     var placements = Composed(kind.Instances, local);
-                    if (BuildSolidPart(kind, meshIndex, placements) is not { } partMmi)
+                    if (BuildSolidPart(kind, meshIndex, nodeIndex, placements) is not { } partMmi)
                         continue;
                     var partMesh = (ArrayMesh)partMmi.Multimesh!.Mesh;
                     var partMaterial = partMmi.MaterialOverride;
@@ -518,6 +519,10 @@ public sealed class ClutterBuilder
                 if (slots.TryGetValue(exportedFrom[i].Kind, out var kindSlots))
                     exported[i].Colliders = kindSlots[exportedFrom[i].Part];
             }
+        }
+        if (_scene != null && _scene.ReplacedMeshCount > replacedBefore)
+        {
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} clutter decoration mesh(es) drawn from the model pack");
         }
         Summary = string.Join(", ", parts);
         ExportedKinds = exported.Count > 0 ? exported : null;
@@ -1301,7 +1306,7 @@ public sealed class ClutterBuilder
     {
         // The clutter-fade variant of the world materials: the same surfaces, plus the per-instance
         // distance fade the sprite shader carries, so a city block fades like the card beside it.
-        var mesh = _scene?.SharedMesh(kind.MeshIndex, clutterFade: true);
+        var mesh = _scene?.SharedMesh(kind.MeshIndex, clutterFade: true, node: _gamez.Nodes[kind.NodeIndex]);
         if (mesh == null)
             return null;
         var mm = InstancedMesh(kind, mesh);
@@ -1319,9 +1324,9 @@ public sealed class ClutterBuilder
     // One further mesh of a decoration's chain, drawn over the kind's own stamps already moved
     // into that mesh's frame. Same materials, same fades and the same draw-order bias as the
     // mesh it belongs with, because it is one building, not a second decoration.
-    private MultiMeshInstance3D? BuildSolidPart(Kind kind, int meshIndex, List<Transform3D> placements)
+    private MultiMeshInstance3D? BuildSolidPart(Kind kind, int meshIndex, int nodeIndex, List<Transform3D> placements)
     {
-        var mesh = _scene?.SharedMesh(meshIndex, clutterFade: true);
+        var mesh = _scene?.SharedMesh(meshIndex, clutterFade: true, node: _gamez.Nodes[nodeIndex]);
         if (mesh == null)
             return null;
         var mm = new MultiMesh
@@ -1358,7 +1363,7 @@ public sealed class ClutterBuilder
         foreach (var kind in kinds)
         {
             Shape(kind.MeshIndex);
-            foreach (var (meshIndex, _) in kind.ExtraParts)
+            foreach (var (meshIndex, _, _) in kind.ExtraParts)
                 Shape(meshIndex);
         }
 
@@ -1380,7 +1385,7 @@ public sealed class ClutterBuilder
         foreach (var kind in kinds)
         {
             var parts = slots[kind] = new List<(Rid, int)?[]> { Attach(kind.MeshIndex, kind.Instances) };
-            foreach (var (meshIndex, local) in kind.ExtraParts)
+            foreach (var (meshIndex, local, _) in kind.ExtraParts)
                 parts.Add(Attach(meshIndex, Composed(kind.Instances, local)));
         }
         return slots;
@@ -1734,7 +1739,7 @@ public sealed class ClutterBuilder
         // of it. C5's cb15a hangs two street walls and a roof cap off `o2` and `g8`, and loses
         // them when only the `Default` mesh is drawn. Empty for a card and for a single-mesh
         // decoration (docs/formats/clutter.md).
-        public readonly List<(int MeshIndex, Transform3D Local)> ExtraParts = new();
+        public readonly List<(int MeshIndex, Transform3D Local, int NodeIndex)> ExtraParts = new();
 
         public int MeshIndex;
         public int NodeIndex;                    // a representative decoration node (draw order)

@@ -114,6 +114,7 @@ public static class SuiteCatalog
         "graze-bounce",
         "ground-contact-core",
         "hd-model-mesh-import",
+        "hd-model-swap",
         "heat-shimmer",
         "hostile-marker-hud",
         "hud-auto-dock-line",

@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, engine hooks (code [cloud], look [local])
 
 11. ☑ [cloud] glTF mesh import with winding reversal and a shared cache
-12. ☐ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
+12. ☑ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
 13. ☐ [cloud] code, [local] look: material mapping onto the remake's shaders
 14. ☑ [cloud] Apply `rig.json` to the built plane
 15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
@@ -300,7 +300,29 @@ draw interiors over exteriors and make back-to-back pairs z-fight (`gotchas.md`)
 `Utils/SceneCopy` entry before duplicating any generated node; `Duplicate()` crashes under the
 separate render thread.
 
-## B12 ☐ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
+## B12 ☑ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
+
+**Landed.** `SceneBuilder.FillSubtree` asks `Replacement(node, meshIndex)` before `GetMesh`, and
+`SharedMesh` does when given the node; only the drawn mesh changes, and the colliders keep reading
+the gamez model. The key context is two fields set before building, like `MissionSlot`:
+`HdChapter` (`WorldSession` sets the chapter folder, so flyout bodies, pylon ordnance, the casing and
+splash models built on the world's builder get it) and `HdAirframe` (`PlaneBuilder.Build` and
+`BuildDestroyed` set the model node). A builder with neither replaces nothing (cockpit interior,
+cutscene props, test builders). Never replaced: billboards, glow sprites, single-axis facades, a node
+whose original draws nothing, the horizon dome, cloud and sky meshes (`skywal*` walls excepted),
+open-sea meshes, and terrain: `CAN_MODIFY` nodes, all-water meshes, cell-sized ground tiles
+(`MapEdgeExtender.ClassifyGroundMesh`) and border strips (`IsCompletionStrip`). With no pack the cost
+is one `HdModels.Current.Count` check per meshed node. Clutter solids and their extra parts replace
+through `SharedMesh`. Suite `hd-model-swap` (CI tier), shown to fail with the hook or the exclusions
+removed. Replacement surfaces still wear the imported `StandardMaterial3D` until B13.
+
+**Verified.** In a cloud container: build, format, StyleCop and the five gate scripts clean; 6357
+unit tests pass; the CI tier 195 passed, 0 failed. <TODO: locally, the full `RunTests.ps1` with
+goldens (the no-pack path should leave every golden unchanged) and the terrain rule against real
+chapters; clutter replacement has no suite, since the synthetic data has no clutter templates.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** Any node `SceneBuilder` builds draws its replacement when the pack has one, which by
 itself covers world props, planes, rockets, pylon ordnance, the gun casing and the splash models.

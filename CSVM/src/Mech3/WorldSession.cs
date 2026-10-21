@@ -123,6 +123,7 @@ public sealed class WorldSession
         // A mission-structure node authors an owner per mission of the chapter, so the build has
         // to know which mission it is standing in before it stamps any team.
         builder.MissionSlot = GameZ.MissionSlotOf(o.Mission);
+        builder.HdChapter = o.Chapter;
         s.Builder = builder;
         // every chapter has exactly one world node; --node= replaces it with one named subtree
         var root = o.NodeSubtree is { } only

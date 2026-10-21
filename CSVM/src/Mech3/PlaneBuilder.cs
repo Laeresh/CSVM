@@ -257,7 +257,15 @@ public sealed class PlaneBuilder
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
         EnsurePainter(root);
+        // Every node under the root resolves its model pack replacement under this airframe.
+        _scene.HdAirframe = rootName;
+        int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(root, Skip)!;
+        if (_scene.ReplacedMeshCount > replacedBefore)
+        {
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {rootName} drawn from the model pack");
+        }
+
         FlareChoice? flares = null;
         try
         {
@@ -319,6 +327,7 @@ public sealed class PlaneBuilder
             Search(_gamez.Nodes[c], Transform3D.Identity);
         if (found == null)
             return null;
+        _scene.HdAirframe = rootName;
         var built = _scene.BuildSubtree(found.Value.Node, _ => false);
         if (built != null)
             built.Transform = found.Value.Acc;

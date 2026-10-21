@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
 
@@ -342,6 +343,20 @@ public sealed class SceneBuilder
     /// build that throws before it returns its root. Null outside that suite.</summary>
     internal Action<Node3D>? NodeMade;
 
+    /// <summary>The chapter folder as <c>extracted/</c> spells it (<c>C3</c>), under which this
+    /// builder's nodes look up model pack replacements (<see cref="HdModels.For"/>). Set before
+    /// building. ⚠ A builder with neither this nor <see cref="HdAirframe"/> set draws no replacement.</summary>
+    internal string? HdChapter;
+
+    /// <summary>The airframe, as its model node (<c>player_bhawk</c>), under which every node of
+    /// the next build looks up its replacement. <see cref="PlaneBuilder"/> sets it per build.</summary>
+    internal string? HdAirframe;
+
+    /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
+    /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
+    /// for. Null keeps none.</summary>
+    internal Predicate<GameZNode>? KeepsOriginalMesh;
+
     private const string LightShaderCode = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
@@ -563,6 +578,10 @@ void fragment() {
     private enum CylAxis { None, Y, X }
 
     public int MeshInstanceCount { get; private set; }
+
+    /// <summary>Meshes this builder drew from the model pack instead of the gamez model: mesh
+    /// instances, plus each <see cref="SharedMesh"/> request a replacement answered.</summary>
+    public int ReplacedMeshCount { get; private set; }
 
     /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>.</summary>
     public int ShadowlessMeshCount { get; private set; }
@@ -808,16 +827,23 @@ void fragment() {
     }
 
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's
-    /// shared cache and carrying this builder's materials. Exists for
-    /// <see cref="ClutterBuilder"/>'s 3D-decoration path, which draws one MultiMesh over this single
-    /// mesh; the transform, the <c>node_bias</c> instance uniform and the collider are the caller's.
+    /// cache with its materials, for <see cref="ClutterBuilder"/>'s 3D-decoration MultiMesh. The
+    /// transform, <c>node_bias</c> and collider are the caller's.
     /// The override flags share <see cref="BuildSubtree"/>'s cache; <paramref name="clutterFade"/>
-    /// selects the bias shader's per-instance fade variant over the MultiMesh custom data.</summary>
+    /// selects the bias shader's per-instance fade variant over the MultiMesh custom data. Given the
+    /// <paramref name="node"/> carrying the model, a model pack replacement answers instead.</summary>
     internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
-        bool clutterFade = false) =>
-        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count
-            ? GetMesh(meshIndex, forceDoubleSided, forceLit, clutterFade)
-            : null;
+        bool clutterFade = false, GameZNode? node = null)
+    {
+        if (meshIndex < 0 || meshIndex >= _gamez.Meshes.Count)
+            return null;
+        if (node != null && Replacement(node, meshIndex) is { } replacement)
+        {
+            ReplacedMeshCount++;
+            return replacement;
+        }
+        return GetMesh(meshIndex, forceDoubleSided, forceLit, clutterFade);
+    }
 
     /// <summary>An untextured quad-frame mesh carrying the SAME fog-pipelined material a
     /// <c>Colored</c> polygon with no material entry gets, for <see cref="WorldBuilder"/>'s
@@ -1201,7 +1227,10 @@ void fragment() {
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
             && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
-            var mesh = GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
+            // Only the drawn mesh changes. The node, its metas, bias, layer, shadow and colliders
+            // stay the original's, and the colliders keep reading the gamez model.
+            var replacement = Replacement(node, node.MeshIndex);
+            var mesh = replacement ?? GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
@@ -1221,10 +1250,13 @@ void fragment() {
                 }
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
-                if (_meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
+                // ⚠ Never move a replacement by it; that pivot belongs to the original's quad.
+                if (replacement == null && _meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
                     mi.Position = pivot;
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
+                if (replacement != null)
+                    ReplacedMeshCount++;
                 if (collidable)
                     AttachCollision(n3d, node.MeshIndex, node.CanModify);
             }
@@ -1415,6 +1447,23 @@ void fragment() {
         }
         _lightMeshCache[meshIndex] = mesh;
         return mesh;
+    }
+
+    // The model pack's mesh for a node in place of its gamez model, or null.
+    // ⚠ Keep the pack's count first: with no pack a build pays that one check per meshed node.
+    // ⚠ Never replace a sprite or facade; its shader turns the original quad about its own pivot.
+    // A node the original draws nothing for keeps drawing nothing, so its colliders stay as built.
+    private ArrayMesh? Replacement(GameZNode node, int meshIndex)
+    {
+        if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null)
+            || HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) == null)
+            return null;
+        var mesh = _gamez.Meshes[meshIndex];
+        if (GetCylindricalAxis(mesh) != CylAxis.None || IsGlowSpriteMesh(mesh) || UsesBillboardTexture(mesh)
+            || !mesh.Polygons.Exists(p => !DrawsNothing(p.MaterialIndex))
+            || KeepsOriginalMesh?.Invoke(node) == true)
+            return null;
+        return HdModelMeshes.Current.For(node.Name, HdChapter, HdAirframe);
     }
 
     private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
