@@ -362,8 +362,8 @@ public sealed class PlaneRig
         new($"plane rig '{source}': {label}: {problem}");
 }
 
-/// <summary>One prop override. Null fields keep what the original gives the node's name class:
-/// <see cref="PropParts.Spin"/>'s axis and rate, and the blur disc of a <c>propNb</c>/<c>rotorNb</c>
+/// <summary>One prop override. A null field keeps the default of the node's name class. That is the
+/// axis and rate of <see cref="PropParts.Spin"/>, or the blur disc of a <c>propNb</c>/<c>rotorNb</c>
 /// name (<see cref="PropParts.Kind.PropGhost"/>).</summary>
 public sealed record RigProp(string Node, Vector3? Axis, float? DegPerSec, bool? Blur);
 

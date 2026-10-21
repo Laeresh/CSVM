@@ -7,8 +7,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The model folder's lookup rules: the airframe, chapter and bare keys and their precedence, the
-/// <c>.flt</c> rule, and a <c>.gltf</c> read only from a loose folder.
+/// The model folder's lookup rules: the three keys and their precedence, the <c>.flt</c> rule, and
+/// a <c>.gltf</c> read only from a loose folder.
 /// </summary>
 public class HdModelsTests
 {

@@ -6,12 +6,12 @@ using CSVM.Utils;
 
 namespace CSVM.Extraction;
 
-/// <summary>One file a pack offers, as a key function sees it: the pack it came from (a subfolder or
-/// a <c>.zip</c>), its path with the pack's top folder dropped, and whether it sits in a zip.</summary>
+/// <summary>One file a pack offers, as a key function sees it. It names its pack (a subfolder or a
+/// <c>.zip</c>), its path without the pack's top folder, and whether it sits in a zip.</summary>
 internal readonly record struct PackFile(string Pack, string RelativePath, bool InZip);
 
-/// <summary>Where one indexed file is read from: its lower-case extension, and its path on disk
-/// when it is a loose file rather than a zip entry.</summary>
+/// <summary>Where one indexed file is read from: its lower-case extension, and for a loose file
+/// its path on disk.</summary>
 internal readonly record struct PackEntry(string Extension, string? LoosePath);
 
 /// <summary>
@@ -82,8 +82,8 @@ internal sealed class PackIndex : IDisposable
     }
 
     /// <summary><c>rimage\C1M1.PNG</c> to <c>rimage/c1m1</c>: case and extension never decide a
-    /// match, since the texture packs write <c>.png</c> over originals that are <c>.JPG</c>,
-    /// <c>.TGA</c> and <c>.TIF</c>.</summary>
+    /// match. Texture packs write <c>.png</c> over originals in <c>.JPG</c>, <c>.TGA</c> and
+    /// <c>.TIF</c>.</summary>
     public static string KeyOf(string relativePath)
     {
         string unix = relativePath.Replace('\\', '/');

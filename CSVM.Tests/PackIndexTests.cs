@@ -8,8 +8,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The pack folder enumeration both HD lookups share: zips and subfolders in name order, each
-/// pack's top folder dropped, the extension filter, and a later file winning its key by name.
+/// The pack folder enumeration both HD lookups share. Zips and subfolders load in name order with
+/// their top folder dropped, filtered by extension, and a later file wins its key.
 /// </summary>
 public class PackIndexTests
 {

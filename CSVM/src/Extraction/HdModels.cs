@@ -4,19 +4,19 @@ using CSVM.Utils;
 
 namespace CSVM.Extraction;
 
-/// <summary>One replacement model: its bytes, whether they are a binary <c>.glb</c>, and for a loose
-/// <c>.gltf</c> its path on disk, so the importer can resolve the buffers and images beside it.</summary>
+/// <summary>One replacement model: its bytes and whether they are a binary <c>.glb</c>. A loose
+/// <c>.gltf</c> also carries its path, so the importer can resolve the files beside it.</summary>
 public readonly record struct HdModel(byte[] Bytes, bool IsGlb, string? GltfPath);
 
 /// <summary>
 /// Replacement meshes for gamez nodes, read through a <see cref="PackIndex"/> from the model folder
 /// (<c>models.hd</c>, <c>--hd-models=</c>, default <c>HDModels</c>). A <c>.glb</c> is read from zips
-/// and subfolders, a <c>.gltf</c> from subfolders only. After each pack's top folder, a key is
-/// <c>C3/he_rocket</c> for one chapter, <c>planes/bhawk/prop1</c> for one airframe, or a bare
-/// <c>he_rocket</c> everywhere. The more specific key wins.
+/// and subfolders, a <c>.gltf</c> from subfolders only. Below each pack's top folder a key names one
+/// chapter (<c>C3/he_rocket</c>), one airframe (<c>planes/bhawk/prop1</c>) or all (<c>he_rocket</c>).
+/// The more specific key wins.
 /// A node is its original gamez name, matched without case. A trailing <c>.flt</c> is dropped from
 /// the node name and the file name alike, so <c>he_rocket.glb</c> and <c>he_rocket.flt.glb</c> each
-/// replace <c>he_rocket</c> and <c>he_rocket.flt</c>. Engine-free.
+/// replace <c>he_rocket</c> and <c>he_rocket.flt</c>, engine-free.
 /// </summary>
 public sealed class HdModels : IDisposable
 {

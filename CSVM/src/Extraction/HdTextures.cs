@@ -6,8 +6,8 @@ using CSVM.Utils;
 namespace CSVM.Extraction;
 
 /// <summary>
-/// Higher-resolution replacements for the extracted art, read in place from the HD folder's zips
-/// and files (<c>textures.hd</c>, <c>--hd=</c>, default <c>HD</c>) through a <see cref="PackIndex"/>.
+/// Higher-resolution replacements for the extracted art, read through a <see cref="PackIndex"/>
+/// from the HD folder (<c>textures.hd</c>, <c>--hd=</c>, default <c>HD</c>).
 /// Each pack's own top folder is dropped. A path left with a folder replaces that file under
 /// <c>extracted/</c>, matched without case or extension: <c>rimage/c1m1.png</c>,
 /// <c>C3/rtexture12/cliff01.png</c>. A bare name replaces that world texture in every archive.
