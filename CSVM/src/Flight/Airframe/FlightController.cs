@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.Bindings;
 using CSVM.Effects;
 using CSVM.Flight.Ai;
@@ -3174,7 +3175,8 @@ public partial class FlightController : Node3D
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
-                Log.Info("weapons", $"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal {g.Weapon.Id}) firing on {Name}");
+                string muzzles = string.Join(", ", g.Muzzles.Select(m => $"{AnimRuntime.NameOf(m)} {PlaneFramed(m.GlobalPosition)}"));
+                Log.Info("weapons", $"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal {g.Weapon.Id}) firing on {Name} from {muzzles}");
             }
         }
         if (outcome.RocketPylon >= 0)
@@ -3210,7 +3212,7 @@ public partial class FlightController : Node3D
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
-                Log.Info("weapons", $"rocket: {Name} launched {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
+                Log.Info("weapons", $"rocket: {Name} launched {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index} {PlaneFramed(hp.Pylon.GlobalPosition)}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
             }
         }
         // Exactly one of the two is built per rig, so both lines run and the null one no-ops: a pilot
@@ -3236,6 +3238,13 @@ public partial class FlightController : Node3D
             WeaponAudio?.PlayEmptyClip();
             Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty, empty-clip cue");
         }
+    }
+
+    // A launch point in the airframe's own frame, the one rig.json and --dump-markers use.
+    private string PlaneFramed(Vector3 world)
+    {
+        var p = PlaneModel?.ToLocal(world) ?? ToLocal(world);
+        return Log.Format($"({p.X:0.00},{p.Y:0.00},{p.Z:0.00})");
     }
 
     // Every slot back to its full load, the fire clocks and dry warnings reset, the gun loop off.

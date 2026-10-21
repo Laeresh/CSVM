@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 23. ☑ [local] World props and destructibles in every damage state
 24. ☑ [local] Plane airframes without livery
-25. ☐ [local] Rig on a real airframe
+25. ☑ [local] Rig on a real airframe
 26. ☑ [cloud] code, [local] two-instance check: pack and rig agreement in network play
 
 ### Wave D, livery
@@ -469,8 +469,9 @@ tier), shown to fail with the rename removed.
 
 **Verified.** In a cloud container on the merged tree: build, format, StyleCop and the five gate
 scripts clean; 6355 unit tests pass; the CI tier 191 passed with `lan-discovery` failing to bind
-its port while another agent's Godot held it, and passing alone on another port base. <TODO: run
-`--dump-markers` against the real `planes.zbd` locally.>
+its port while another agent's Godot held it, and passing alone on another port base.
+`--dump-markers=player_bhawk` against the real `planes.zbd` writes a template of all 17 markers,
+which C25's rig was edited from and which loads with 17 markers and none added.
 
 **Original approach (kept for reference).**
 
@@ -772,7 +773,25 @@ reads the replacement or keeps the original outline <TODO>.
 **⚠ Traps.** A surface mesh must sit in its hinge parent's frame or it swings about the wrong line;
 B14's `hinge` override is the escape when the model cannot follow that.
 
-## C25 ☐ [local] Rig on a real airframe
+## C25 ☑ [local] Rig on a real airframe
+
+**Landed.** A rig with no replacement model works on a stock airframe with no code change. A rig
+edited from `--dump-markers=player_bhawk`'s template moves `firepoint7` (the Bloodhawk's first gun
+group, with `firepoint8`) by (0, +0.5, −1.5) m and `pylon1` by (0, −0.5, −1.0) m. In a `--det` C1
+flight with `--fire --fire-rockets`, the plane-frame shot origins read (−3.22, 0.55, −1.49) for
+`firepoint7` and (−3.86, −0.63, 1.27) for the rocket launches from `pylon1`, against (−3.22, 0.05,
+0.01) and (−3.86, −0.13, 2.27) without the rig; `firepoint8` is unchanged. The mounted rocket hangs at
+the moved pylon, the muzzle flash leaves from the moved muzzle, and `--viewer --markers` draws both
+dots at their rig positions. The hangar split cannot move: `Loadout.WingPylons` reads only the
+`HardpointSpec`. `plane-rig` already pins the nodes the fire path reads (the bound `hp.Pylon`, the
+gun group's muzzles, which `FlightController` spawns from), so no suite was added. The first-round
+gun log and the rocket launch log now carry the launch point in the airframe's frame, the reading
+used here and the one C26's owed check needs. A moved firepoint moves the tracer origin and gun
+convergence; under C26's ruling that stays with the owner's rig.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A rig that moves a pylon and a firepoint on a real airframe moves the mounted rocket, the
 launch point and the muzzle, and the marker overlay shows it.
