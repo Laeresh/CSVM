@@ -21,6 +21,7 @@ public class OptionsChoicesTests
         Assert.False(choices.Live(ViewDistance.Lookup));
         Assert.False(choices.Live(ShadowQualitySetting.Lookup));
         Assert.False(choices.Live(WaterQualitySetting.Lookup));
+        Assert.False(choices.Live(VegetationQualitySetting.Lookup));
         Assert.True(choices.Live(RenderScaleSetting.Lookup));
         Assert.Equal(new WordValues(), choices.ToExit().Words);
 

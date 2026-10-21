@@ -347,10 +347,11 @@ per-machine enumerations. Every option page reads the saved options from the sto
 leaves through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so no
 option page writes the store itself. The graphics chooser covers `original` and `enhanced`, and the
 apply switches the running world at once (`Launch/LiveSettings.cs`), so its description owes no
-restart. The VIDEO page shows View Distance (`Utils/ViewDistance.cs`) as the last row of its dropdown
-window and Water Quality (`Utils/WaterQualitySetting.cs`) as the Ocean Waves box, both live under
-Enhanced and dead under Original; Water Quality's apply builds or drops the wave ocean on the flying
-world (see `docs/org/menu-inventory.md`, the Video row). A saved option that leaves the menu
+restart. The VIDEO page shows View Distance (`Utils/ViewDistance.cs`) and Vegetation
+(`Utils/VegetationQualitySetting.cs`) as rows of its dropdown window and Water Quality
+(`Utils/WaterQualitySetting.cs`) as the Ocean Waves box, all live under Enhanced and dead under
+Original; Water Quality's apply builds or drops the wave ocean on the flying world, and Vegetation's
+recuts its clutter (see `docs/org/menu-inventory.md`, the Video row). A saved option that leaves the menu
 unusable is recovered by deleting `user://options.json`: the store reads a missing file as empty,
 so every option falls back to its default.
 

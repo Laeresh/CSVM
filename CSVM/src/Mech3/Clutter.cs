@@ -532,7 +532,8 @@ public sealed class ClutterBuilder
 
     /// <summary>Draws every exported kind again under the graphics mode and the clutter fade scale
     /// standing now (<see cref="ClutterInstances.Recut"/>). A live mode switch calls it, and so does a
-    /// live View Distance change, which moves the cells' visibility ranges.</summary>
+    /// live View Distance change, which moves the cells' visibility ranges. A live Vegetation Quality
+    /// change calls it too (<see cref="VegetationQualitySetting.RichOn"/>).</summary>
     public void Recut()
     {
         foreach (var kind in ExportedKinds ?? System.Array.Empty<KindExport>())

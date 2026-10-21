@@ -957,6 +957,11 @@ public partial class GameSession : Node3D
     /// (<see cref="EnhancedLook.ApplyWaterQuality"/>). The graphics-mode switch follows it too.</summary>
     public void FollowWaterQuality() => FollowOcean();
 
+    /// <summary>A live Vegetation Quality change draws the clutter and the map edge's copies again
+    /// (<see cref="EnhancedLook.ApplyVegetationQuality"/>), the hook a Rich look reads the word
+    /// through. The graphics-mode switch recuts them too.</summary>
+    public void FollowVegetationQuality() => FollowClutterFade();
+
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
     /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
     /// writes put back defaults the zone's sky colour, energies and shadow distance overwrite.

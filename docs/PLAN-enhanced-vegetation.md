@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, pattern
 
-1. ☐ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
+1. ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
 2. ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
 3. ☐ Per-stamp jitter, rotation and tint for listed kinds
 4. ☐ Card shading: wind sway, sun-side shading, contact shadow
@@ -153,28 +153,73 @@ each owns its own module. D36 waits for every look item. Each wave's budget item
 
 # Wave A, pattern
 
-## A1 ☐ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
+## A1 ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
 
 **Goal.** A Vegetation Quality word setting in the video options, Original or Rich, that only acts
 under Enhanced and switches live without a relaunch. Rich is the desktop default; the Deck and
 Linux default to Original.
 
-**Evidence (confidence: lead-only).** The pattern to copy is Water Quality from PLAN-enhanced-ocean
+**Evidence (confidence: traced-to-code).** The pattern to copy is Water Quality from PLAN-enhanced-ocean
 (`git log --grep=PLAN-enhanced-ocean`); the live clutter path already exists:
-`EnhancedLook.FollowClutterFade` (`CSVM/src/Launch/EnhancedLook.cs:201`) and
-`ClutterBuilder.Recut` (`CSVM/src/Mech3/Clutter.cs:519`). Word settings register once and every
-settings site walks the registry (`git log --grep="#162"`). <TODO: where Water Quality is declared
-and how its platform default is chosen.>
+`EnhancedLook.FollowClutterFade` (`CSVM/src/Launch/EnhancedLook.cs`) and
+`ClutterBuilder.Recut` (`CSVM/src/Mech3/Clutter.cs`). Word settings register once and every
+settings site walks the registry (`git log --grep="#162"`). Water Quality is declared in
+`CSVM/src/Utils/WaterQualitySetting.cs` and registered in `Utils/WordSettings.cs`'s `All`. Its
+fallback is `FallbackFor(OperatingSystem.IsLinux(), ShadowQualitySetting.IntegratedGpu)`: the low
+word on Linux (which covers the Deck) or an integrated GPU, the high word otherwise, and the high
+word under `--det`. The options store, the flag parser, the Options pages, the launch resolve and
+the live apply all walk the registry, so a new setting is its own file, one registry line, one
+authored VIDEO row and its build added to `EnhancedLook.FollowWordSettings`.
 
-**Approach.** Register the word setting beside Water Quality; resolve it in `EnhancedLook` with the
-other Enhanced words; a live change rebuilds or recuts the clutter. <TODO: whether a live switch can
-recut (A3's variation lives in instance data) or must rebuild the clutter root.>
+**Approach.** `Utils/VegetationQualitySetting.cs` copies Water Quality: words `original`/`rich`,
+`--vegetation-quality=`, the saved `vegetationQuality` word, the `graphics.vegetationQuality` key,
+then the same machine fallback (Original on Linux or an integrated GPU, Rich otherwise and under
+`--det`). It is Enhanced-only on the Options rows and sits on the Original VIDEO page as a
+"Vegetation" dropdown under View Distance in the scrolled window. The clutter reads
+`VegetationQualitySetting.RichOn` (the word is `rich` and the mode is Enhanced), never the word,
+so Original mode stays Original whatever is saved. A live change runs
+`EnhancedLook.ApplyVegetationQuality`, from `FollowWordSettings`, which calls
+`GameSession.FollowVegetationQuality`: `ClutterBuilder.Recut` plus the map edge's
+`FollowClutterFade`. A mode switch already recuts both. At this item nothing reads `RichOn` past
+that hook, so the setting changes no pixel.
 
-**Model recommendation.** <TODO>
+*Recut, not rebuild.* A3's variation can switch live through a recut if A3 keeps the stamps
+index-aligned between Original and Rich. Three consumers bind to a kind's placement indices when
+the session loads: `ClutterActivation` (stamp to world node), `ClutterCull` (a crater's flattened
+stamps, kept in `ClutterInstances._moved`) and `MapEdgeExtender` (the copies past the map edge,
+built from `ExportedKinds`). A rebuild of the clutter root would have to rebind all three and
+carry over every stamp the world hid or a crater flattened, or lose them. So A3 bakes, per listed
+kind, a Rich placement and custom-data list beside the Original one, one entry per Original stamp:
+a jitter that would leave the source triangle is clamped back inside, never dropped, and no stamp
+is added. `ClutterInstances` keeps both in its prototype, and `Recut` takes the variant `RichOn`
+asks for. Today `Recut` returns early when the layout (whole or cells) stands, so the variant must
+join that test. The edge copies take the same variant in `FollowClutterFade`. A `_moved` stamp is
+zero-scaled, so it stays hidden under either variant. C21's added stamps have no Original index,
+so they belong in their own exports, shown or hidden by the same recut rather than mixed into an
+original kind's buffer.
 
-**Verify.** <TODO: the live-switch check; at minimum, Original leaves every golden unchanged.>
+**Model recommendation.** A mid-tier model suffices: the item is a copy of a registered pattern,
+and its one judgement (recut against rebuild) is recorded above.
 
-**⚠ Traps.** Original must stay bit-identical: an Original golden that moves is a defect.
+**Verify.** Units: `VegetationQualitySettingTests` (fallback per platform and GPU, `--det`, the
+precedence ladder, flag and options-file round trip),
+`GraphicsModeTests.RichVegetationNeedsEnhancedAndTheRichWord`, and the VIDEO page's row, walk and
+scroll tests in `OriginalOptionsTests` and `OptionsChoicesTests`. Engine:
+`graphics-vegetation-quality` on a C1 Enhanced flight, where `RichOn` follows a live
+original/rich move and a live mode switch both ways, and every live move leaves the clutter's
+sprite count and cells as built; `menu-original-tracer-core` walks the new row. Goldens: none may
+move. Under `--det` the word resolves to `rich`, so every Enhanced golden runs at Rich, which
+draws nothing different yet.
+
+**⚠ Traps.**
+- Original must stay bit-identical: an Original golden that moves is a defect.
+- Read `RichOn`, never `Word`: the saved word survives a switch to Original.
+- `--det` resolves to Rich, so from A3 on the Enhanced goldens move by design and are re-pinned
+  at A7; an Original golden moving is still a defect.
+- The VIDEO page's scrolled window grew a row (ten dropdowns over seven lines), which moves every
+  test that counts the window's scroll positions or walks past View Distance.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ◐ The vegetation sidecar: per-chapter kind list and values, read under Rich
 
@@ -243,8 +288,10 @@ The shipped values are modest starting points (`jitter_uv` 0.05, `tint` 0.05, `b
 or through a horizontal mirror if A3 maps the yaw's sign onto one.
 
 **Wiring (lands with A3).** `WorldSession.Build` loads `VegetationSidecar.Load().For(o.Chapter)`
-beside `ClutterTemplateSpec.Load` when Vegetation Quality resolves Rich, and passes it to a new
-optional `ClutterBuilder` parameter (null under Original, so nothing reads the file). At the end of
+beside `ClutterTemplateSpec.Load` in every session and passes it to a new optional `ClutterBuilder`
+parameter. The Rich placements are baked at build beside the Original ones whatever the word, since
+a live switch to Rich recuts rather than rebuilds (A1's Approach); the Original draw never reads
+them, and the Rich stream is separate, so Original stays bit-identical. At the end of
 `ResolveProperties`, after minting, each kind in `_allKinds` takes `entry.Find(kind.Model)`, null
 for an unlisted kind. `PlaceOnTriangle` applies the variation of the kind the stamp lands in
 (`target`), drawn from a third `Random` seeded from `PlacementSeed`, a fixed Rich constant and

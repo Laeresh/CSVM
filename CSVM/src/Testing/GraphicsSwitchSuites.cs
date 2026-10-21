@@ -15,9 +15,10 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The live graphics-mode switch, View Distance and Water Quality on whole flight sessions.
-/// Each runs through the one sequence the launcher runs (<see cref="EnhancedLook.Switch"/>,
-/// <see cref="EnhancedLook.ApplyViewDistance"/>, <see cref="EnhancedLook.ApplyWaterQuality"/>). A world switched away and
+/// <summary>The live graphics-mode switch, View Distance, Water Quality and Vegetation Quality on whole
+/// flight sessions. Each runs through the one sequence the launcher runs (<see cref="EnhancedLook.Switch"/>,
+/// <see cref="EnhancedLook.ApplyViewDistance"/>, <see cref="EnhancedLook.ApplyWaterQuality"/>,
+/// <see cref="EnhancedLook.ApplyVegetationQuality"/>). A world switched away and
 /// back must read as a fresh session in that mode. That covers the layers only one mode builds, the
 /// clutter's cells and ranges, and the shader text on every material. It covers the Environment's
 /// passes and the sun's shadow too. The pixels are the montage's, not this suite's.</summary>
@@ -406,6 +407,60 @@ internal static class GraphicsSwitchSuites
         finally
         {
             WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-vegetation-quality",
+        "the clutter's Rich vegetation follows a live Vegetation Quality change in an Enhanced flight: "
+        + "on at rich, off after a live move to original and on again after a move back, off across a "
+        + "live switch to Original with the word still rich and on again back in Enhanced; with no "
+        + "Rich look yet, every live move leaves the clutter's sprite count and its cells as built")]
+    internal static void VegetationQualityClutter(TestContext ctx)
+    {
+        RequireData(ctx);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            var live = Open(ctx, enhanced: true);
+            try
+            {
+                if (!live.Built || live.Session.Clutter is not { } clutter)
+                {
+                    ctx.Check(false, $"the Enhanced session builds with its clutter");
+                    return;
+                }
+
+                int sprites = clutter.InstanceCount;
+                var built = Cells(live);
+                ctx.Check(VegetationQualitySetting.RichOn && built.Cells > 0,
+                    $"a session built at rich reads Rich vegetation on over its clutter cells ({built})");
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                var original = Cells(live);
+                ctx.Check(!VegetationQualitySetting.RichOn, $"a live move to original turns it off");
+                ctx.Check(original.Text == built.Text && clutter.InstanceCount == sprites,
+                    $"and leaves the clutter as built ({clutter.InstanceCount} of {sprites} sprites, {original} against {built})");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                var again = Cells(live);
+                ctx.Check(VegetationQualitySetting.RichOn && again.Text == built.Text,
+                    $"and a move back to rich turns it on again over the same cells ({again})");
+                Switch(live, enhanced: false);
+                ctx.Check(!VegetationQualitySetting.RichOn && VegetationQualitySetting.Word == VegetationQualitySetting.Rich,
+                    $"a live switch to Original turns it off with the word still {VegetationQualitySetting.Word}");
+                Switch(live, enhanced: true);
+                ctx.Check(VegetationQualitySetting.RichOn && Cells(live).Text == built.Text,
+                    $"and back in Enhanced it is on over the first build's cells again");
+            }
+            finally
+            {
+                live.Close();
+            }
+        }
+        finally
+        {
+            VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
     }
@@ -1474,6 +1529,14 @@ internal static class GraphicsSwitchSuites
     {
         WaterQualitySetting.Resolve(word, null, null);
         EnhancedLook.ApplyWaterQuality(rig.Session);
+        Step(rig);
+    }
+
+    // A Vegetation Quality apply as the Options accept makes it, then the steps a reading waits for.
+    private static void ApplyVegetation(Rig rig, string word)
+    {
+        VegetationQualitySetting.Resolve(word, null, null);
+        EnhancedLook.ApplyVegetationQuality(rig.Session);
         Step(rig);
     }
 

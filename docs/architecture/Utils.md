@@ -367,6 +367,16 @@ the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the sto
 `Launch/LiveSettings.cs` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
 `Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. The VIDEO page shows it as the Ocean Waves box.
 
+## src/Utils/VegetationQualitySetting.cs
+The Enhanced vegetation's quality: `original`, the clutter as the faithful path stamps and draws it, or `rich`, the remake's
+richer vegetation over the same stamps (`docs/PLAN-enhanced-vegetation.md`). It resolves as `WaterQualitySetting` does: `--vegetation-quality=`,
+the saved `vegetationQuality` word, the `graphics.vegetationQuality` key, then `DefaultFor(det)`, `rich` under `--det` and otherwise
+`FallbackFor(linux, integrated)`, `original` on Linux (the Steam Deck) or an integrated GPU under `default_linux_or_integrated_gpu`.
+The clutter reads `RichOn`, the word and the Enhanced mode together, never the word alone, so the faithful path stays Original.
+A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/GameSession.cs` recut the clutter and the map edge's copies
+(`FollowVegetationQuality`); a mode switch recuts them too. Nothing reads `RichOn` yet beyond that hook. The VIDEO page shows it as
+the Vegetation dropdown under View Distance.
+
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports

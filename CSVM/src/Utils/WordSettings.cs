@@ -21,6 +21,7 @@ public static class WordSettings
         ShadowQualitySetting.Lookup,
         WaterQualitySetting.Lookup,
         ViewDistance.Lookup,
+        VegetationQualitySetting.Lookup,
     };
 
     /// <summary>The panes the running session draws, which a fallback may read. 1 until

@@ -173,6 +173,31 @@ public class GraphicsModeTests
         }
     }
 
+    /// <summary>The clutter reads Rich vegetation only under Enhanced and the rich word, both ways
+    /// across a live switch. The faithful path stays Original whatever is saved. Here rather than
+    /// in its own class, since the graphics mode is process-wide and this class owns its flips.</summary>
+    [Fact]
+    public void RichVegetationNeedsEnhancedAndTheRichWord()
+    {
+        string launched = VegetationQualitySetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            GraphicsMode.Set(true);
+            Assert.True(VegetationQualitySetting.RichOn);
+            GraphicsMode.Set(false);
+            Assert.False(VegetationQualitySetting.RichOn);
+            GraphicsMode.Set(true);
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
+            Assert.False(VegetationQualitySetting.RichOn);
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+            VegetationQualitySetting.Resolve(launched, null, null);
+        }
+    }
+
     private static CSVM.Effects.WeatherState.ZoneWeather Zone(Godot.Color fog)
         => new(fog, 1500f, 2250f, 0f, 1f, 2500f, 1f, Godot.Vector3.Zero, 1.5f, 0.5f, Godot.Colors.White, Godot.Colors.White);
 }

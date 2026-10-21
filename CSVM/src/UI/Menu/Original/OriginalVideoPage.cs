@@ -49,6 +49,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's view-distance dropdown, the last row of the scrolled window.</summary>
     public const string ViewDistanceKey = "VIEWDISTANCE";
 
+    /// <summary>The page's vegetation-quality dropdown, under View Distance in the scrolled window.</summary>
+    public const string VegetationQualityKey = "VEGETATIONQUALITY";
+
     /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
     public const string WaterQualityKey = "WATERQUALITY";
 
@@ -139,6 +142,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(AntiAliasingKey, CSVM.Utils.AntiAliasingSetting.Lookup, "Anti-aliasing"),
         Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality"),
         Word(ViewDistanceKey, CSVM.Utils.ViewDistance.Lookup, "View Distance"),
+        Word(VegetationQualityKey, CSVM.Utils.VegetationQualitySetting.Lookup, "Vegetation"),
         new(VrModeKey, "VR Mode", null,
             _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,
@@ -208,8 +212,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// left where it is, so picking Windowed or Fullscreen again gives the player it back.</summary>
     public bool ResolutionPinned => _choices.ResolutionPinned;
 
-    /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line, 1
-    /// with View Distance on the bottom one and 2 with VR Mode there.</summary>
+    /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line. On the
+    /// bottom line 1 puts View Distance, 2 Vegetation and 3 VR Mode.</summary>
     public int Top => _top;
 
     /// <summary>The graphics mode word the page would apply.</summary>

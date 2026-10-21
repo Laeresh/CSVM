@@ -207,12 +207,23 @@ public static class EnhancedLook
     }
 
     /// <summary>What the session builds from the word settings, followed on the running world. That is
-    /// the clutter fade at the View Distance reach and the wave ocean for the water word. A setting
+    /// the clutter fade at the View Distance reach, the wave ocean and the vegetation. A setting
     /// whose word changes another session build adds it here.</summary>
     public static void FollowWordSettings(GameSession? session)
     {
         FollowClutterFade(session);
         ApplyWaterQuality(session);
+        ApplyVegetationQuality(session);
+    }
+
+    /// <summary>The resolved <see cref="VegetationQualitySetting"/> word on the running world: the
+    /// session's clutter is drawn again, reading <see cref="VegetationQualitySetting.RichOn"/>.
+    /// Original mode draws the original's clutter whatever the word, and a later switch to Enhanced
+    /// recuts it under the word standing then.</summary>
+    public static void ApplyVegetationQuality(GameSession? session)
+    {
+        session?.FollowVegetationQuality();
+        Log.Info("world", $"vegetation quality: {VegetationQualitySetting.Word} (applied live, rich {(VegetationQualitySetting.RichOn ? "on" : "off")})");
     }
 
     /// <summary>The resolved <see cref="WaterQualitySetting"/> word on the running world: the session
