@@ -1230,13 +1230,14 @@ public sealed partial class ProjectilePool : Node3D
         // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not
         // obstruct another round or the world hit-test; mounted ordnance must not be shootable either),
         // and the world builder would otherwise attach one.
+        int replacedBefore = scene.ReplacedMeshCount;
         var inst = scene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
         if (inst != null)
             PoseAtResetState(inst, weapon);
         // Verification breadcrumb (once per model name): confirms the named prototype resolved and
         // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
         if (inst != null && _flyoutLogged.Add(modelName))
-            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
+            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es), {scene.ReplacedMeshCount - replacedBefore} from the model pack");
         return inst;
     }
 
@@ -2064,10 +2065,12 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (node == null)
             return false;
+        int replacedBefore = _flyoutScene.ReplacedMeshCount;
         var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
         if (inst == null)
             return false;
         int meshes = CountMeshes(inst);
+        int replaced = _flyoutScene.ReplacedMeshCount - replacedBefore;
         if (meshes == 0)
         {
             // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render, drop it
@@ -2115,7 +2118,7 @@ public sealed partial class ProjectilePool : Node3D
             AdvanceSplash(fx); // pose t=0 (the column at full authored scale) before the first tick
         _impactFx.Add(fx);
         if (_impactFxLogged.Add(animName))
-            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es){(animated ? $", splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
+            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es), {replaced} from the model pack{(animated ? $", splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
         return true;
     }
 
@@ -3092,7 +3095,8 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (_casingProto == null)
             return null;
-        var inst = _flyoutScene!.BuildSubtree(_casingProto, skip: null, collisionSkip: _ => true);
+        int replacedBefore = _flyoutScene!.ReplacedMeshCount;
+        var inst = _flyoutScene.BuildSubtree(_casingProto, skip: null, collisionSkip: _ => true);
         if (inst == null)
             return null;
         _casingModels.AddChild(inst);
@@ -3102,7 +3106,7 @@ public sealed partial class ProjectilePool : Node3D
         if (!_casingLogged)
         {
             _casingLogged = true;
-            Log.Info("weapons", $"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es)");
+            Log.Info("weapons", $"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es), {_flyoutScene.ReplacedMeshCount - replacedBefore} from the model pack");
         }
         var slot = new CasingSlot { Node = inst };
         _casings.Add(slot);

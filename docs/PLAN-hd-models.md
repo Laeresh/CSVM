@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, content paths (all [local])
 
 21. ☑ [local] Round-trip proof on a real plane and a real world prop
-22. ☐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
+22. ◐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 23. ☐ [local] World props and destructibles in every damage state
 24. ☐ [local] Plane airframes without livery
 25. ☐ [local] Rig on a real airframe
@@ -599,7 +599,30 @@ names, so an unedited export's surfaces take B13's non-original path rather than
 texture's material; name each exported material after its texture, without the extension, since
 Godot's writer turns a dot in a material name into an underscore.
 
-## C22 ☐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
+## C22 ◐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
+
+**Finding.** "No new code beyond B12" is disproved. Every weapon root (the 17 `FLYOUT` models, `gunshell`,
+`splash1.flt`, `bsplsh.flt`) is a meshless group in all eight chapters, so `he_rocket.glb` matches a node
+that draws nothing and replaces nothing (the pixels of a pack of root names equal those of no pack). The
+meshes sit on descendants with generic names: `he_rocket`, `flak`, `flash`, `beeper` and `scatter` draw
+`g12` and `g13`, `ap_rocket`, `incendiary` and `sonic` draw `main` and `g0`, the four gun rounds `g11`,
+`g10` and `rabbit_blur`, and `gunshell` draws `g1`. A pack keyed by those names does replace every path
+(pylons, rocket in flight, casing, splash base) in C1 and C3, but `g12` also names 15 to 25 meshed nodes
+per chapter (`wolf`, `paveway`, `fueltank`, `starflower` and world nodes) and `g1` names the letterbox.
+Unique names that work as they are: `atbody`, `atwings`, `leftwing`, `rightwing`, `atpayload`, `atprop`
+(torpedo), `flak_rocket` (`aaflak`), `cball`, `smokebomb`, `rapolys`, `splash1_base`, `bsplsh_base`. Never
+replaced, as B12 rules: the splash columns `splash1_splash`, `bsplsh_splash` (facades) and `sflsh`,
+`bflare` (glow sprites). The weapon geometry is identical in all eight chapters, so the bare key is the
+right one. A replaced round's hit box keeps the gamez model (`SceneBuilder.GameplayMesh`). The splash
+curves scale the replacement as they scale the original base (radius 0.12 m for `splash1`, 0.95 m for
+`bsplsh`), so a pack authors the base at that size. Needed: a key scoped to the subtree root, so
+`he_rocket.glb` carries `g12` and `g13` by name for that root alone <TODO: the scoped-key change in
+`SceneBuilder`/`HdModelMeshes`, then re-run this item's captures>. The weapon breadcrumbs now print how
+many meshes came from the pack.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A bare-name replacement of `he_rocket` (and the other flyout roots), `gunshell` and a
 splash model shows in every chapter, in flight and on the pylons.
