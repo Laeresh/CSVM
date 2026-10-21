@@ -420,15 +420,18 @@ unchanged, and an unlisted kind never takes the Rich variant.
   through the face (`transpose(face)`), so the card's existing `* keep` still collapses a hidden or
   cratered stamp.
 - *Sun-side shading:* the half of the card facing the sun's bearing (its horizontal direction, so a
-  high sun still gives a side) gains up to 0.8 in linear, times `dot(face[0], bearing)` and the
+  high sun still gives a side) gains up to (1.6, 1.5, 1.2) in linear, warmer in red so it reads as
+  lit rather than grey, times `dot(face[0], bearing)` and the
   zone's diffuse clamped to 1. The gain is full from a sixth of the card's width off its axis,
   since the foliage sits near the axis and a ramp to the quad's edge left it at a few percent. The
   shadow side keeps the Original look: nothing is darkened. A zone with no diffuse (a night or cloud
   zone authoring `SUNLIGHT_DIFFUSE` 0) gets no gain.
-- *Contact shadow:* the cheaper option, a card-base darkening, prototyped and kept: the lowest 18 % of
-  the card's height darkens to 0.6 at its foot. A height fraction rather than metres, so a bush and a
-  fir both darken at their foot. No ground decal: the ground texture already paints a dark blob under
-  each original tree, and a decal would double it.
+- *Contact shadow:* none. A card-base darkening (the lowest 18 % of the card to 0.6) was prototyped
+  and removed by your ruling: on/off captures at four close poses measured a 2-3.5 sRGB-level mean
+  change in a thin band inside the dark blob the ground texture already paints under each original
+  tree, invisible without an amplified diff. The same captures measured the first sun gain (0.8 in
+  linear) at a 3-6 level mean, reading as greyer foliage rather than a lit side, and you asked for
+  it stronger. A ground decal would double the painted blob.
 
 The constants are in the shader text, not the sidecar; the lab gains them only if the look asks for
 per-chapter tuning.
@@ -438,7 +441,7 @@ switch's twins and the hidden-stamp collapse at once is the work.
 
 **Verify.** Engine: `clutter-rich-variation` checks every listed kind's Rich card shader is its
 Original text plus exactly the three Rich line groups (so the Original text is untouched) and that
-it reads `csky_time`, `csky_sun_dir` and the height varying; no unlisted card's shader sways. The
+it reads `csky_time`, `csky_sun_dir` and the side varying; no unlisted card's shader sways. The
 targeted suites `clutter-*`, `graphics-vegetation-quality`, `graphics-shader-twins`,
 `graphics-retext-compiles`, `graphics-live-switch`, `graphics-view-distance` and `crater-carve`
 pass. Goldens: every Faithful and Original shot holds; the Enhanced shots on listed chapters that

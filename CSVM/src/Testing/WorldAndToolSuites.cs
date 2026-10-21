@@ -1489,7 +1489,7 @@ internal static class WorldAndToolSuites
     [Suite("clutter-rich-variation",
         "a vegetation entry leaves C1's Original stamps and fades bit-identical and bakes each listed kind a Rich variant index-aligned with them, "
         + "mirrored about as often as its turn asks, the same on a second build; retuning one kind moves no other kind's Rich stamp; "
-        + "each Rich card shader is its Original text plus the sway, sun-side and contact-shadow lines")]
+        + "each Rich card shader is its Original text plus the sway and sun-side lines")]
     internal static void ClutterRichVariation(TestContext ctx)
     {
         const string chapter = "C1";
@@ -1544,13 +1544,13 @@ internal static class WorldAndToolSuites
                 continue;
             }
             listed++;
-            // The Rich card is the Original card's text plus the mirror, the sway, the sun side and
-            // the contact shadow, and nothing else.
+            // The Rich card is the Original card's text plus the mirror, the sway and the sun side,
+            // and nothing else.
             string original = (b.Material as ShaderMaterial)?.Shader?.Code ?? "";
             string richCode = (variant.Material as ShaderMaterial)?.Shader?.Code ?? "";
             bool carries = richCode.Contains("csky_time", System.StringComparison.Ordinal)
                 && richCode.Contains("csky_sun_dir", System.StringComparison.Ordinal)
-                && richCode.Contains("v_up", System.StringComparison.Ordinal)
+                && richCode.Contains("v_side", System.StringComparison.Ordinal)
                 && !original.Contains("csky_time", System.StringComparison.Ordinal)
                 && !original.Contains("v_sun", System.StringComparison.Ordinal)
                 && original.Length > 0
@@ -1558,7 +1558,7 @@ internal static class WorldAndToolSuites
                     .Replace(ClutterBuilder.RichVertexLines, "", System.StringComparison.Ordinal)
                     .Replace(ClutterBuilder.RichFragmentLines, "", System.StringComparison.Ordinal) == original;
             shaded += carries ? 1 : 0;
-            ctx.Check(carries, $"{b.Texture}'s Rich card shader is its Original text plus the Rich sway, sun-side and contact lines");
+            ctx.Check(carries, $"{b.Texture}'s Rich card shader is its Original text plus the Rich sway and sun-side lines");
             ctx.Check(variant.Placements.Count == b.Placements.Count && variant.Colors?.Count == b.Placements.Count,
                 $"{b.Texture}'s Rich variant is index-aligned ({variant.Placements.Count} placements, {variant.Colors?.Count} colours of {b.Placements.Count})");
             for (int i = 0; i < variant.Placements.Count; i++)
@@ -1577,7 +1577,7 @@ internal static class WorldAndToolSuites
         ctx.Check(mirrored > stamps * 0.45f && mirrored < stamps * 0.55f, $"a turn of 90 mirrors about half the cards ({mirrored} of {stamps})");
         ctx.Same(0, unequal, $"a second build bakes the same Rich variant");
         ctx.Same(0, shifted, $"retuning bush1 leaves every other kind's Rich stamps and colours as they were");
-        ctx.Same(listed, shaded, $"every listed kind's Rich card carries the sway, sun-side and contact lines over its Original text");
+        ctx.Same(listed, shaded, $"every listed kind's Rich card carries the sway and sun-side lines over its Original text");
         int unlistedRich = rich.Count(k => k.Rich == null && k.Material is ShaderMaterial m
             && (m.Shader?.Code?.Contains("csky_time", System.StringComparison.Ordinal) ?? false));
         ctx.Same(0, unlistedRich, $"no unlisted card's shader sways");

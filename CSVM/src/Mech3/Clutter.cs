@@ -32,16 +32,15 @@ public sealed class ClutterBuilder
     /// reading a single shape.</summary>
     public static readonly StringName CollisionCellMeta = "csvm_clutter_cell";
 
-    // The Rich card's declarations: the sim clock its sway reads and its height and sun-side varyings.
+    // The Rich card's declarations: the sim clock its sway reads and its sun-side varyings.
     // The Rich lines are emitted into the Rich variant alone, so the Original card's text never changes.
-    internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_up;\nvarying float v_side;\nvarying flat float v_sun;";
+    internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_side;\nvarying flat float v_sun;";
 
     // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
     // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
     // It goes back through the face, so a hidden stamp's keep still collapses it. Periods of 12 s and
     // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the planted point.
     internal const string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
-        + "    v_up = VERTEX.y > 0.01 ? 1.0 : 0.0;\n"
         + "    v_side = sign(VERTEX.x);\n"
         + "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0);\n"
         + "    vec2 breeze = vec2(0.9397, 0.3420);\n"
@@ -51,10 +50,11 @@ public sealed class ClutterBuilder
         + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
-    // The gain is full from a sixth of the card's width off its axis, where the foliage sits.
-    // Nothing drops below the Original look. The lowest 18 % of the card darkens at the ground.
+    // Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
+    // so a smaller gain moved only a few sRGB levels. The gain is full a sixth of the card's width off
+    // its axis. No base darkening: the ground already paints a dark blob under each original tree.
     internal const string RichFragmentLines =
-        "    ALBEDO *= (1.0 + 0.8 * max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0)) * mix(0.6, 1.0, smoothstep(0.0, 0.18, v_up));\n";
+        "    ALBEDO *= 1.0 + max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0) * vec3(1.6, 1.5, 1.2);\n";
 
     // The sprite shader's distance-fog block, emitted only into the fogged variant.
     private const string FogLines =
