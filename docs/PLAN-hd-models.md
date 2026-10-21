@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ [cloud] glTF mesh import with winding reversal and a shared cache
 12. ☑ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
-13. ☐ [cloud] code, [local] look: material mapping onto the remake's shaders
+13. ☑ [cloud] code, [local] look: material mapping onto the remake's shaders
 14. ☑ [cloud] Apply `rig.json` to the built plane
 15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
 
@@ -347,7 +347,35 @@ nodes, or terrain. Count swaps for the log and the regression.
 replacement must not inherit an original pivot offset. How the builder knows its chapter or
 airframe for the key is not settled <TODO>.
 
-## B13 ☐ [cloud] code, [local] look: material mapping onto the remake's shaders
+## B13 ☑ [cloud] code, [local] look: material mapping onto the remake's shaders
+
+**Landed.** Each `SceneBuilder` draws its own copy of a replacement, built from the shared import's
+surface arrays (`HdModelMeshes.SurfacesOf`) under this builder's materials, cached by (pack key,
+gamez model, override flags); the shared mesh and its materials are never edited. A glTF material
+whose name (trimmed, extension dropped, case ignored) is a texture of the node's own polygons or the
+gamez material table goes through `GetMaterial`, the same cache as an original surface, so HD
+textures, liveries and flipbooks apply; it takes `lighting`, fog and scroll from the gamez model and
+sidedness from `doubleSided`. Any other material wears the remake shader with its own base-colour
+texture (a shared mip-mapped copy, `HdModelMeshes.AlbedoOf`) or colour. Flags come from the standard
+glTF fields as Godot 4.7 imports them: `doubleSided` to two-sided (else `cull_front`, as a one-sided
+original after the winding reversal), `alphaMode` `MASK` to scissor and `BLEND` (imported as
+`AlphaDepthPrePass`) to blend, `KHR_materials_unlit` to unlit; no `extras`. Draw order: priority 0,
+pass 0, file order as the within-mesh rank. CLAMP reads each replacement surface's own UVs
+(`UvAxesWithinUnitSquare(IReadOnlyList<Vector2>)`, `ClampFor`). The `hd-model-swap` suite covers all
+of it, a graphics-mode switch and `SceneBuilder.Repaint`, and was shown to fail four ways.
+
+**Verified.** In a cloud container: build, format, StyleCop and the five gate scripts clean; 6359
+unit tests pass; the CI tier 195 passed, 0 failed. <TODO: locally, goldens with no pack, a look at a
+replaced prop under fog and through a mode switch, and a real livery through `PlanePainter` (the
+synthetic tree has no paintable airframe).>
+
+**Owed.** <TODO: decide each: a `MASK` `alphaCutoff` other than 0.5 is not honoured (the shader's
+threshold is fixed); `baseColorFactor` is ignored on a textured surface (no tint uniform);
+`KHR_materials_unlit` is ignored on a texture-named surface; replacement surfaces are outside the
+surface census and `HiddenAlpha`.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** A replacement surface wears the same shader path as an original surface, so it fogs,
 fades, takes world light, follows a Classic/Enhanced switch and takes HD textures.
@@ -484,7 +512,10 @@ the 8-chapter regression with mesh and node counts unchanged.
 **⚠ Traps.** The export bakes damage by pruning hidden nodes (`GltfExporter` entry), so an exported
 plane lacks its damage panels; a round trip of the healthy state only is the expected result.
 Blender renames a repeated object name to `wing.001`, which the importer's `.flt` rule does not
-strip; decide whether the importer or the pack author handles it.
+strip; decide whether the importer or the pack author handles it. The exporter writes no material
+names, so an unedited export's surfaces take B13's non-original path rather than the original
+texture's material; name each exported material after its texture, without the extension, since
+Godot's writer turns a dot in a material name into an underscore.
 
 ## C22 ☐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 

@@ -58,6 +58,26 @@ public class UvClampTests
         Assert.Equal(UvClampAxes.None, SceneBuilder.UvAxesWithinUnitSquare(polys, 0));
     }
 
+    [Fact]
+    public void ASurfaceArrayFollowsTheSameRule()
+    {
+        // A model pack surface brings its own UV array, with no gamez polygon behind it.
+        Assert.Equal(UvClampAxes.Both, SceneBuilder.UvAxesWithinUnitSquare(new[] { new Vector2(0f, 0f), new Vector2(1f, 1f) }));
+        Assert.Equal(UvClampAxes.U, SceneBuilder.UvAxesWithinUnitSquare(new[] { new Vector2(0.5f, 0f), new Vector2(1f, 3.9f) }));
+        Assert.Equal(UvClampAxes.None, SceneBuilder.UvAxesWithinUnitSquare(new[] { new Vector2(2f, 0f), new Vector2(0f, -1f) }));
+        Assert.Equal(UvClampAxes.None, SceneBuilder.UvAxesWithinUnitSquare(System.Array.Empty<Vector2>()));
+        Assert.Equal(UvClampAxes.None, SceneBuilder.UvAxesWithinUnitSquare((IReadOnlyList<Vector2>?)null));
+    }
+
+    [Fact]
+    public void AScrollingAxisKeepsRepeating()
+    {
+        Assert.Equal((true, UvClampAxes.None), SceneBuilder.ClampFor(UvClampAxes.Both, Vector2.Zero));
+        Assert.Equal((false, UvClampAxes.V), SceneBuilder.ClampFor(UvClampAxes.Both, new Vector2(0.1f, 0f)));
+        Assert.Equal((false, UvClampAxes.U), SceneBuilder.ClampFor(UvClampAxes.U, Vector2.Zero));
+        Assert.Equal((false, UvClampAxes.None), SceneBuilder.ClampFor(UvClampAxes.None, Vector2.Zero));
+    }
+
     private static List<GameZPolygon> Poly(params (float U, float V)[] uvs)
     {
         var coords = new List<Vector2>();

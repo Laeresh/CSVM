@@ -8,9 +8,9 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// The replacement mesh for a gamez node, imported once per pack key from its <see cref="HdModels"/>
-/// file and shared by every caller. The mesh comes back in the original's winding, which glTF cannot
+/// file and shared by every caller, a failed import as null. The mesh comes back in the original's winding, which glTF cannot
 /// carry, so every triangle surface is reversed on the way in (docs/formats/gotchas.md). Surface
-/// materials stay as the file set them, and a failed import is cached as null.
+/// materials stay as the file set them; a builder draws a copy under its own (<see cref="SurfacesOf"/>).
 /// Inside a file the mesh is the one on the glTF node named like the gamez node, compared as
 /// <see cref="HdModels"/> compares names. A named node without a mesh lends its one direct child's
 /// mesh, since <see cref="SceneBuilder"/> and so the exporter put it there.
@@ -23,6 +23,10 @@ public sealed class HdModelMeshes
 
     private readonly HdModels _models;
     private readonly Dictionary<string, ArrayMesh?> _byKey = new();
+    // Each imported mesh's surfaces as built, so a builder copies them without reading the GPU back.
+    private readonly Dictionary<ArrayMesh, HdSurface[]> _surfaces = new(ReferenceEqualityComparer.Instance);
+    // Each imported base-colour texture's mip-mapped copy, made on first use.
+    private readonly Dictionary<Texture2D, ImageTexture?> _albedos = new(ReferenceEqualityComparer.Instance);
 
     public HdModelMeshes(HdModels models)
     {
@@ -63,7 +67,13 @@ public sealed class HdModelMeshes
         {
             if (!_byKey.TryGetValue(key, out var mesh))
             {
-                mesh = Load(key);
+                var surfaces = Load(key);
+                mesh = surfaces != null ? Build(surfaces) : null;
+                if (mesh != null)
+                {
+                    _surfaces[mesh] = surfaces!;
+                }
+
                 _byKey[key] = mesh;
             }
 
@@ -74,12 +84,46 @@ public sealed class HdModelMeshes
     /// <summary><paramref name="source"/> as a mesh with every triangle surface's winding flipped,
     /// attributes and materials carried across. An unindexed surface gets the identity index list
     /// first. Other primitives pass through unflipped, and blend shapes and LODs are dropped.</summary>
-    internal static ArrayMesh Reversed(ImporterMesh source)
+    internal static ArrayMesh Reversed(ImporterMesh source) => Build(ReversedSurfaces(source));
+
+    /// <summary>The surfaces <paramref name="mesh"/> was built from, in surface order, or null for a
+    /// mesh this cache did not import. ⚠ Do not edit them; they are the shared mesh's own.</summary>
+    internal IReadOnlyList<HdSurface>? SurfacesOf(ArrayMesh mesh)
+    {
+        lock (_byKey)
+        {
+            return _surfaces.TryGetValue(mesh, out var surfaces) ? surfaces : null;
+        }
+    }
+
+    /// <summary>A mip-mapped copy of <paramref name="material"/>'s base-colour texture, made once and
+    /// shared, or null when it has none. The importer decodes a glTF image without mipmaps, and the
+    /// remake's shaders sample through them. The imported texture is left as it is.</summary>
+    internal ImageTexture? AlbedoOf(BaseMaterial3D? material)
+    {
+        if (material?.AlbedoTexture is not { } source)
+        {
+            return null;
+        }
+
+        lock (_byKey)
+        {
+            if (!_albedos.TryGetValue(source, out var copy))
+            {
+                copy = Mipmapped(source);
+                _albedos[source] = copy;
+            }
+
+            return copy;
+        }
+    }
+
+    private static HdSurface[] ReversedSurfaces(ImporterMesh source)
     {
         // Built from the importer's own arrays, not its GetMesh(). That compresses the attributes,
         // moving every vertex by up to 1/65536 of the mesh's extent.
-        var result = new ArrayMesh { ResourceName = source.ResourceName };
-        for (int i = 0; i < source.GetSurfaceCount(); i++)
+        var surfaces = new HdSurface[source.GetSurfaceCount()];
+        for (int i = 0; i < surfaces.Length; i++)
         {
             var arrays = source.GetSurfaceArrays(i);
             var primitive = source.GetSurfacePrimitiveType(i);
@@ -88,12 +132,45 @@ public sealed class HdModelMeshes
                 arrays[(int)Mesh.ArrayType.Index] = ReversedIndices(arrays);
             }
 
-            result.AddSurfaceFromArrays(primitive, arrays);
-            result.SurfaceSetName(i, source.GetSurfaceName(i));
-            result.SurfaceSetMaterial(i, source.GetSurfaceMaterial(i));
+            surfaces[i] = new HdSurface(primitive, arrays, source.GetSurfaceName(i), source.GetSurfaceMaterial(i));
+        }
+
+        return surfaces;
+    }
+
+    private static ArrayMesh Build(HdSurface[] surfaces)
+    {
+        var result = new ArrayMesh();
+        for (int i = 0; i < surfaces.Length; i++)
+        {
+            result.AddSurfaceFromArrays(surfaces[i].Primitive, surfaces[i].Arrays);
+            result.SurfaceSetName(i, surfaces[i].Name);
+            result.SurfaceSetMaterial(i, surfaces[i].Material);
         }
 
         return result;
+    }
+
+    private static ImageTexture? Mipmapped(Texture2D source)
+    {
+        // ⚠ A copy: headless hands back the texture's own Image.
+        if (source.GetImage() is not { } image || image.IsEmpty())
+        {
+            return null;
+        }
+
+        var copy = (Image)image.Duplicate();
+        if (copy.IsCompressed())
+        {
+            copy.Decompress();
+        }
+
+        if (!copy.HasMipmaps())
+        {
+            copy.GenerateMipmaps();
+        }
+
+        return TextureUpload.Create(copy);
     }
 
     private static int[] ReversedIndices(Godot.Collections.Array arrays)
@@ -160,7 +237,7 @@ public sealed class HdModelMeshes
 
     // Read straight off the parsed state, not a generated scene. No node is built to be freed, and
     // the node names are the file's own.
-    private static ArrayMesh? Import(HdModel model, string nodeKey, string file)
+    private static HdSurface[]? Import(HdModel model, string nodeKey, string file)
     {
         var document = new GltfDocument();
         var state = new GltfState();
@@ -181,11 +258,11 @@ public sealed class HdModelMeshes
             return null;
         }
 
-        return Reversed(imported);
+        return ReversedSurfaces(imported);
     }
 
     // ⚠ Never throws: a broken pack file costs its own replacement, not the build that asked.
-    private ArrayMesh? Load(string key)
+    private HdSurface[]? Load(string key)
     {
         if (_models.Read(key) is not { } model)
         {
@@ -205,3 +282,7 @@ public sealed class HdModelMeshes
         }
     }
 }
+
+/// <summary>One imported surface as <see cref="HdModelMeshes"/> built it: winding already reversed,
+/// and the material as the glTF importer made it.</summary>
+internal sealed record HdSurface(Mesh.PrimitiveType Primitive, Godot.Collections.Array Arrays, string Name, Material? Material);
