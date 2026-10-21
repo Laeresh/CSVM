@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☐ Per-stamp jitter, rotation and tint for listed kinds
 4. ☐ Card shading: wind sway, sun-side shading, contact shadow
 5. ◐ Vegetation lab in `--freecam`: live values saved to the sidecar
-6. ☐ The lab's paint tool: texture picks and a brush mask
+6. ◐ The lab's paint tool: texture picks and a brush mask
 7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
 
 ### Wave B, mass
@@ -254,7 +254,7 @@ shipped in the pck by the existing `data/*.json` export filter. The shape:
   "_about": "prose",
   "C1": {
     "seed": 0,
-    "mask": "vegetation/C1.png",
+    "mask": "vegetation/C1.bin",
     "kinds": {
       "firtree1.flt": { "jitter_uv": 0.05, "yaw_deg": 0, "tint": 0.05, "brightness": 0.1 },
       "bush1.flt": {}
@@ -413,26 +413,95 @@ look at the controls.
   a mirror in A3.
 - The ocean lab sits on the same right edge; both open at once overlap. Open one at a time.
 
-## A6 ☐ The lab's paint tool: texture picks and a brush mask
+## A6 ◐ The lab's paint tool: texture picks and a brush mask
 
 **Goal.** In the lab you click a ground texture to give it a vegetation set, and brush a world-space
 mask that thins, thickens or clears listed vegetation, the original's stamps included.
 
-**Evidence (confidence: lead-only).** Decisions 9 and 10.
+**Evidence (confidence: traced-to-code for the bounds, the export and the pick's walk; lead-only for
+the look).** Decisions 9 and 10. Each vegetation chapter's gamez has one World node, `world1`, whose
+`area` is -12288 to 0 on both axes on C1, C1B, C2 and C4 and -16384 to 0 on C3
+(`extracted/<C>/gamez/nodes.json`); `MapEdgeExtender` and `WorldBuilder` read the same rectangle as
+Godot X and Z. The export's `data/*.bin` filter already ships `data/cloud_puffs/*.png.bin` from a
+subfolder, and Godot imports no `.bin`. No existing tool resolves a ground texture under a ray: the
+weapon lab rays the world colliders (`CollisionLayers.World`) for a point only, and the colliders
+are separate meshes from the textured ground, so the texture comes from walking the gamez polygons.
 
-**Approach.** Texture picks are entries in the sidecar. The mask is one image per chapter beside it;
-a stamp samples it at its world position and is dropped or kept by density. <TODO: mask resolution
-and world mapping; the brush UI; how a pick names a vegetation set.>
+**Approach.** The mechanism is landed as two modules and the lab's paint tool.
 
-**Model recommendation.** <TODO>
+- `Mech3/VegetationMask.cs`: the mask is raw bytes, a square of 1024 × 1024 for a new mask (about
+  12 m a texel on a 12 km chapter, 16 m on C3; any square file loads), at
+  `CSVM/data/vegetation/<chapter>.bin` (`PathFor`, the entry's `mask` value). Raw rather than PNG,
+  since a unit test can read and write it with no engine and the `data/*.bin` filter packs it
+  unimported, so an exported build ships it with no export change. The square covers `world1`'s
+  `area`, row 0 along the lowest Z and column 0 along the lowest X, sampled bilinearly between
+  texel centres and neutral outside the area. A byte over 128 is the density factor: 128 neutral,
+  0 bare, 255 nearly twice. A brush dab (`Stroke`) thickens or thins toward 255 or 0 by a strength
+  times a (1 − d²/r²)² falloff, or clears or restores neutral inside its radius. Save goes through
+  a new `AtomicFile.WriteAllBytes`.
+- **The density rule** (`VegetationMask.Keeps(density, draw, added)`): a stamp is kept when its
+  Rich draw is below the density, times one half for a stamp C21 adds. An original stamp is whole
+  at neutral or above and only thins, so a thickened mask changes nothing for it; C21 generates its
+  candidates at twice its intended density, a neutral mask shows half, and a thickened one shows up
+  to all. Thickening therefore never places.
+- `Mech3/VegetationGround.cs`: a pick reads the textured world polygons under the hit, walked as
+  `PlaceOnWorld` walks them, and names the first unflagged layer among those coplanar with the
+  nearest (within half a metre). On a flagged overlay with no base beneath, it names nothing.
+- **A pick** is `VegetationEntry.WithPick(texture, models)`: the checked kinds, reduced to listed
+  ones, reuse a set with exactly those members (a hand-written `hedge` survives) or add one named by
+  joining them with `+`; no listed kind removes the pick. `WithMask` sets the path.
+- **The lab**: a PAINT section with a tool choice (Off, Pick, Brush), a checkbox per listed kind for
+  a pick, the chapter's picks, and the brush mode with radius (10 to 2000 m) and strength sliders. A
+  left click off the panel rays the world colliders on the next physics frame. A pick applies at
+  once through the A5 callback. A brush paints while held and hands the mask to its own callback on
+  release, so a stroke rebakes nothing per frame; the first dab names `vegetation/<chapter>.bin` in
+  the entry. Save writes the mask, then the entry; Revert restores both.
 
-**Verify.** <TODO>
+**Wiring (lands with A3 and A5's wiring; the contract).**
+- `WorldSession.Build` loads `VegetationMask.Load(entry.Mask, world1.AreaLeft, AreaTop, AreaRight,
+  AreaBottom)` beside the sidecar and hands it to `ClutterBuilder` with the entry.
+- In `PlaceOnTriangle`, a stamp whose `target` is listed takes its Rich variation draws, a fixed
+  count per stamp, then **always one more draw** from the same Rich stream, the keep draw, whatever
+  the mask holds. The mask is sampled at the stamp's Rich world position (after the jitter) and
+  `Keeps(density, draw, added: false)` decides. The draw count per stamp never depends on the mask, so a mask
+  edit moves no other stamp. A dropped stamp stays in the Rich list at its index with a zero basis,
+  as a cratered stamp does, so `ClutterActivation`, `ClutterCull` and the map edge's copies bind
+  unchanged; the copies past the edge inherit their source's drop and never sample the mask.
+- An unlisted kind takes no Rich draw and no sample (Decision 10). Original draws its own list and
+  never reads the mask. C21's added stamps call `Keeps(…, added: true)` with one draw each.
+- `GameSession` passes `BuildVegetationLab(saved, ApplyVegetation, mask, ApplyVegetationMask,
+  p => VegetationGround.LayersAt(gamez, p))`; `ApplyVegetationMask(mask)` stores the mask as the
+  session's drawn one, re-bakes the Rich lists as `ApplyVegetation` does, and recuts.
+- Picks feed nothing until C21 reads `entry.SetFor(texture)` per polygon, behind the `no_clutter`
+  gate as the faithful stamp is.
+
+**Model recommendation.** The mechanism (pure modules and a lab panel) suits a mid-tier model. The
+wiring wants Opus: it rides A3's Rich bake in `Clutter.cs`, where one extra or missing draw moves
+the goldens.
+
+**Verify.** Units: `VegetationMaskTests` (neutral in and out of the area, the corner mapping, Clear
+and Neutral, the falloff, the atomic round trip, a non-square file refused, the density rule),
+`VegetationGroundTests` (layers nearest first, a flagged overlay gives the pick to its base, a
+flagged layer alone gives none) and
+`VegetationSidecarTests.APickGivesListedKindsAndSavesWithTheMask`. The wiring extends the
+`vegetation-lab` suite: a `Clear` stroke over a C1 forest point zero-scales the listed Rich stamps
+inside its radius and no other, leaves the Original list and every unlisted kind as built, and
+`RevertToSaved` restores them; a `Pick` on `terpat03` lands in the entry; and a stroke followed by
+`Neutral` gives back the opening Rich placements bit for bit. The first committed mask is checked in
+an export (`ExportRelease.ps1`, the pck lists `data/vegetation/<chapter>.bin`). The look (a cleared
+strip, a thinned edge) is a montage judged by you.
 
 **⚠ Traps.**
 - The mask gates and scales; it never places. Placement stays per texture repeat (no world grid).
-- The mask acts only on listed kinds: a C5 block or a C2 car must be unreachable by the brush.
+- The mask acts only on listed kinds: a C5 block or a C2 car must be unreachable by the brush. C5
+  has no entry and builds no lab, and an unlisted kind is never sampled.
 - `no_clutter` selects which coplanar layer decorates, it does not mean bare ground
-  ([`org/clutter.md`](org/clutter.md)); a pick must not be read as overriding it.
+  ([`org/clutter.md`](org/clutter.md)); a pick must not be read as overriding it. The pick names the
+  decorating layer's texture, and an added stamp still obeys the flag per polygon.
+- Draw the keep draw for every listed stamp whatever the mask holds, and drop by a zero basis, never
+  by removal: either mistake reshuffles or misaligns every later stamp.
+- The physics ray can stop on a solid decoration's collider (a C2 building); the brush paints at
+  that XZ and a pick reads the ground beneath, which is what is wanted.
 
 ## A7 ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
 

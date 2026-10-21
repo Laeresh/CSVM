@@ -20,6 +20,37 @@ public sealed class VegetationSidecarTests
 
     private static string ShippedPath => Path.Combine(TestData.RepoRoot, "CSVM", "data", "vegetation.json");
 
+    /// <summary>A pick gives a texture the listed kinds it names, reusing a set with those members, and an
+    /// unlisted model never reaches a set. No listed kind removes the pick, and Save keeps picks and mask.</summary>
+    [Fact]
+    public void APickGivesListedKindsAndSavesWithTheMask()
+    {
+        const string text = "{\n  \"C2\": {\n    \"kinds\": { \"brush1.flt\": {}, \"brush2.flt\": {}, \"palmtree1.flt\": {} },\n"
+            + "    \"sets\": { \"scrub\": [\"brush2.flt\", \"brush1.flt\"] },\n    \"picks\": {}\n  }\n}\n";
+        var entry = VegetationSidecar.Parse(text).For("C2");
+
+        var reused = entry.WithPick("grass1", new[] { "BRUSH1.flt", "brush2.flt", "resbuild01.flt" });
+        Assert.Equal("scrub", Assert.Single(reused.Picks).Set);
+        Assert.Single(reused.Sets);
+
+        var added = reused.WithPick("sand", new[] { "palmtree1.flt", "c_studebaker1.flt" });
+        Assert.Equal(new[] { "palmtree1.flt" }, added.SetFor("sand")!.Models);
+        Assert.Equal("palmtree1.flt", added.SetFor("sand")!.Name);
+        Assert.Equal("scrub", added.SetFor("grass1")!.Name);
+
+        var unpicked = added.WithPick("grass1", new[] { "resbuild01.flt" });
+        Assert.Null(unpicked.SetFor("grass1"));
+        Assert.NotNull(unpicked.SetFor("sand"));
+
+        var masked = added.WithMask(VegetationMask.PathFor("C2"));
+        string saved = VegetationSidecar.WithEntry(text, "C2", masked);
+        var back = VegetationSidecar.Parse(saved);
+        Assert.Empty(back.Warnings);
+        Assert.Equal("vegetation/C2.bin", back.For("C2").Mask);
+        Assert.Equal("palmtree1.flt", back.For("C2").SetFor("sand")!.Models[0]);
+        Assert.Equal(2, back.For("C2").Picks.Count);
+    }
+
     /// <summary>The shipped file reads clean and has an entry for every chapter with ground.</summary>
     [Fact]
     public void TheShippedFileReadsCleanAndNamesEveryChapterWithGround()

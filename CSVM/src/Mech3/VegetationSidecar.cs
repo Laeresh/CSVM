@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -86,6 +87,41 @@ public sealed class VegetationEntry
     /// <summary>A copy with the variation stream's seed salt at <paramref name="seed"/>.</summary>
     public VegetationEntry WithSeed(int seed) =>
         new() { Seed = seed, Mask = Mask, Kinds = Kinds, Sets = Sets, Picks = Picks };
+
+    /// <summary>A copy whose brush mask is <paramref name="mask"/>, a path relative to <c>CSVM/data</c>.</summary>
+    public VegetationEntry WithMask(string mask) =>
+        new() { Seed = Seed, Mask = mask, Kinds = Kinds, Sets = Sets, Picks = Picks };
+
+    /// <summary>A copy where <paramref name="texture"/> is picked for <paramref name="models"/>, the lab's pick.
+    /// A set with exactly those members is reused, or one named by joining them with <c>+</c> is added.
+    /// A model the entry does not list is dropped, and no listed model left removes the pick.</summary>
+    public VegetationEntry WithPick(string texture, IEnumerable<string> models)
+    {
+        var members = new List<string>();
+        foreach (var m in models)
+        {
+            if (Find(m) is { } kind && !members.Contains(kind.Model))
+                members.Add(kind.Model);
+        }
+
+        var picks = new List<TexturePick>(Picks);
+        picks.RemoveAll(p => string.Equals(p.Texture, texture, StringComparison.OrdinalIgnoreCase));
+        var sets = new List<VegetationSet>(Sets);
+        if (members.Count > 0)
+        {
+            var set = sets.Find(s => s.Models.Count == members.Count
+                && members.TrueForAll(m => s.Models.Contains(m, StringComparer.OrdinalIgnoreCase)));
+            if (set == null)
+            {
+                set = new VegetationSet(string.Join("+", members), members);
+                sets.RemoveAll(s => string.Equals(s.Name, set.Name, StringComparison.OrdinalIgnoreCase));
+                sets.Add(set);
+            }
+            picks.Add(new TexturePick(texture, set.Name));
+        }
+
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = picks };
+    }
 
     /// <summary>The vegetation set picked for a ground texture, or null when the texture has no pick.</summary>
     public VegetationSet? SetFor(string texture)

@@ -928,6 +928,7 @@ edit is a new `VegetationEntry` (`With`, `WithSeed`) handed to the session's cal
 click, so a drag rebuilds no clutter per frame. Revert to saved, and Save, which writes the entry through `VegetationSidecar.Save`
 into the source tree's file, refuses a file it cannot parse and is off in an exported build. The status line compares the text
 Save would write, so a slider dragged back reads as saved. No flag twins it; a suite drives `Set`, `SetSeed`, `RevertToSaved`.
+The paint tool takes a left click off the panel (`PaintTool`): `Pick` rays the world colliders on the next physics frame and gives the texture `Mech3/VegetationGround.cs` names under the hit (the coplanar layer that takes stamps, never a `no_clutter` overlay) the checked kinds through `VegetationEntry.WithPick`, applied at once; `Brush` dabs the session's `VegetationMask` while held (`Paint`, a radius and strength slider, `Thicken`, `Thin`, `Clear`, `Neutral`), names `vegetation/<chapter>.bin` in the entry, and hands the mask to its own callback on release (`ApplyMask`). Save writes the mask before the entry; Revert restores both. Each tool is off when the session hands no mask or no ground lookup.
 
 ## src/UI/Labs/WorldDamageLab.cs
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever

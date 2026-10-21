@@ -38,6 +38,21 @@ public static class AtomicFile
         File.Move(temp, path, overwrite: true);
     }
 
+    /// <summary>Writes <paramref name="bytes"/> to <paramref name="path"/> through <c>path.tmp</c>, as
+    /// <see cref="WriteAllText"/> does text.</summary>
+    public static void WriteAllBytes(string path, byte[] bytes)
+    {
+        if (IsUnread(path))
+        {
+            Log.Warn("core", $"file {path}: not saved, since this session could not read it and would replace it");
+            return;
+        }
+
+        string temp = path + ".tmp";
+        File.WriteAllBytes(temp, bytes);
+        File.Move(temp, path, overwrite: true);
+    }
+
     /// <summary>The text of <paramref name="path"/>, or null when there is no such file. A read that
     /// fails (a lock, a denied ACL) is logged and also answers null. The path then stays unwritable
     /// until a later read of it succeeds, so a transient failure costs one load, never the file.

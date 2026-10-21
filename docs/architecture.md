@@ -68,6 +68,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell.
 - `src/Mech3/ClutterTemplates.cs`, the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
 - `src/Mech3/VegetationSidecar.cs`, the shipped per-chapter vegetation list in `CSVM/data/vegetation.json`: the Rich variation per listed model, read with warnings, one chapter's entry written by the vegetation lab.
+- `src/Mech3/VegetationMask.cs`, a chapter's vegetation brush mask over the world area, raw bytes beside the sidecar: sampled per listed stamp, painted by the lab's brush, and the density rule that keeps or drops a stamp under Rich.
+- `src/Mech3/VegetationGround.cs`, the ground textures under a world point and the coplanar layer among them that takes stamps, what the vegetation lab's texture pick names.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs`, zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/GamePath.cs`, splits a path out of game data on `\` and `/` alike on every host, where `System.IO.Path` splits `\` on Windows only.
@@ -516,7 +518,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
-- `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, handed to the session, with Save into the vegetation sidecar.
+- `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
 - `src/UI/Labs/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/Labs/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
 - `src/UI/Labs/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.

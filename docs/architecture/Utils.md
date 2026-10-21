@@ -497,7 +497,7 @@ one `File.Move` with overwrite puts it over the target. A kill or a full disk mi
 leaves the previous file, or none on a first save, never a truncated one, which `File.WriteAllText`
 on the target would. A temp file a killed write left is overwritten by the next. IO failures reach
 the caller, since each store keeps its own policy for a failed save. The writers are the player-data
-stores and the two UPnP memories. The options, keymap and stick-profile stores also read through
+stores, the two UPnP memories and the labs' sidecars; `WriteAllBytes` is the same for bytes, the vegetation mask's. The options, keymap and stick-profile stores also read through
 `ReadAllText`: a failed read leaves the path unwritable until a reread succeeds, and `SetAside` moves
 a file their parser refuses to `.bad`, so defaults saved in its place never replace a hand edit.
 
