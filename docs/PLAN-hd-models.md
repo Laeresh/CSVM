@@ -143,7 +143,7 @@ the locked `Read`). Coverage is `CSVM.Tests/HdTexturesTests.cs`.
 by accepted extensions; `HdTextures` keeps `ForWorld`/`ForExtracted` over it. Pure refactor: no
 log, setting or behaviour change.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** `HdTexturesTests` pass unchanged; <TODO: name a new test of the index alone, e.g. a
 `.glb` filter over a temp folder and zip>.
@@ -169,7 +169,7 @@ whether it is `.glb` or `.gltf` (and the base path for a loose `.gltf`). Setting
 `--hd=` / `textures.hd` through `Spec/SessionSpec.cs` and `Launch/Launcher.cs`; `docs/cli.md` gets
 the flags.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: unit tests for each key form, `.flt` normalisation, a chapter key beating a bare
 name, and a `.gltf` inside a zip being refused>.
@@ -201,7 +201,7 @@ are the constants at `PropParts.cs:19` to `:22`. Proposed schema:
 original's value. Reject `pylon9+`, a pylon whose x sign disagrees with its parity, non-finite
 numbers, a zero axis and unknown section keys. Name checks against the plane's nodes wait for B14.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: unit tests for each rejection and for a partial file>.
 
@@ -224,7 +224,7 @@ the winding"; `docs/architecture/Tooling.md`, `GltfExporter`). Axes need no conv
 reverse each surface's indices, keep the result in a cache keyed by pack key. Free the generated
 scene after taking its meshes.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: a suite that writes a one-quad `.glb` with `GltfExporter`, re-imports it, and
 asserts the winding and vertex positions match the source mesh>.
@@ -250,7 +250,7 @@ and `:3094` (casing). Clutter solids go through `SharedMesh` (`SceneBuilder.cs:8
 they are. Never swap a billboard, glow sprite, cylindrical facade, the horizon, ocean or cloud
 nodes, or terrain. Count swaps for the log and the regression.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: a `--synthetic-data` suite with one replaced node asserting `NameMeta`,
 `IndexMeta`, the transform and the collider count are unchanged and the mesh is the pack's>.
@@ -274,7 +274,7 @@ as an original surface of that texture; any other name loads its base-colour tex
 (through `HdArt` decoding) into the same shader. <TODO: which per-surface flags (lighting,
 two-sided, alpha) a non-original material takes, and where they come from, glTF extras or defaults>.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: cloud suite asserting a replaced surface's material is a tracked `ShaderTwins`
 material; local look at a replaced prop under fog and through a graphics-mode switch>.
@@ -297,7 +297,7 @@ are `wing_flare1/2` (`WingLights.cs`).
 tree (Decision 8). Give `PropParts.Classify` and the control-surface collection an override table
 consulted before name matching. Read `cockpit_camera` after the patch, not before.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: synthetic-plane suite: a moved `pylon1` carries its rocket body there, a moved
 firepoint moves the muzzle midpoint, an override prop spins about its axis, the hangar wing split
@@ -322,7 +322,7 @@ are sanitised and renamed on sibling collisions (`SceneBuilder.cs:1122` `Sanitiz
 maps back) <TODO: confirm Godot's glTF writer exports node meta as extras in the engine version
 used>. Add a rig-template output to `--dump-markers`.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: synthetic suite exporting a subtree with two same-named siblings and reading
 the names back; local `--dump-markers` against `planes.zbd`>.
@@ -340,7 +340,7 @@ the names back; local `--dump-markers` against `planes.zbd`>.
 **Approach.** Export one airframe and one C-chapter prop, pack them, compare captures and counts
 with and without `--no-hd-models`.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: capture pose and the image-diff rule from `docs/verification.md` that applies>;
 the 8-chapter regression with mesh and node counts unchanged.
@@ -359,7 +359,7 @@ Tracers (`CrossedStreakMesh`, `Projectile.cs:1967`) and muzzle flashes (facades)
 
 **Approach.** No new code expected beyond B12; check each path in two chapters and the weapon lab.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO>
 
@@ -379,7 +379,7 @@ replacement moves the centre.
 **Approach.** Pick one multi-state destructible <TODO: which, in which chapter>, replace all its
 states, compare effect positions with the original.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO>
 
@@ -400,7 +400,7 @@ original rasterises.
 **Approach.** Replace the meshes of one airframe node by node; decide whether the ground shadow
 reads the replacement or keeps the original outline <TODO>.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO>
 
@@ -417,7 +417,7 @@ launch point and the muzzle, and the marker overlay shows it.
 
 **Approach.** Author a rig from B15's template, move one pylon and one firepoint, fly and look.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO>; the hangar's per-wing pylon counts are unchanged.
 
@@ -434,7 +434,7 @@ carries per-seat data, and whether shot origins are simulated per seat or sent>.
 
 **Approach.** <TODO: a pack/rig hash in the handshake, and the host-wins or refuse rule>.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO: two local instances, one with a rig, one without>.
 
@@ -454,7 +454,7 @@ pattern's region masks over the original UV layout and swaps the decal placehold
 original skins (no engine work, a hard authoring constraint), or let the pack ship its own region
 masks and decal placement (extends the paint format).
 
-**Model recommendation.** <TODO>
+**Model recommendation.** high (the Opus tier), the author's call for every item in this plan.
 
 **Verify.** <TODO>
 
