@@ -574,7 +574,7 @@ scissor and ground-layer counts, and the `HiddenAlpha` drop. `hd-model-swap` add
 cutoff, the factor, the texture-named unlit, the census, the `--hide-alpha` drop), each red with its
 change switched off.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the final plan tree the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical). The 8-chapter regression ran before this item; with no pack and no bad rig it changes no build, which the unchanged goldens confirm.
 
 **Original approach (kept for reference).**
 
@@ -623,7 +623,7 @@ set posts one notice and builds the original pylon and camera) and the leak foll
 rigged as wing_flare2's side goes dark on the suspend while the other flare blinks; without a rig
 wing_flare2 itself does).
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the final plan tree the complete `RunTests.ps1` passed (6903 units, 606 engine suites with errors clean, 38 goldens hash-identical). The 8-chapter regression ran before this item; with no pack and no bad rig it changes no build, which the unchanged goldens confirm.
 
 **Original approach (kept for reference).**
 
