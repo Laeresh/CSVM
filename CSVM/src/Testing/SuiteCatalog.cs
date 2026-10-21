@@ -109,6 +109,7 @@ public static class SuiteCatalog
         "forward-rotation",
         "gasbag-ordnance-gate",
         "gltf-export",
+        "gltf-export-names",
         "graphics-switch-cover",
         "graze-bounce",
         "ground-contact-core",

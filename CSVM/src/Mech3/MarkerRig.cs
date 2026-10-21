@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -291,6 +292,33 @@ public sealed class MarkerRig
         }
         return sb.ToString();
     }
+
+    /// <summary>A starting <c>rig.json</c> for this plane: a <c>markers</c> section holding every
+    /// marker's plane-frame position, in the schema <see cref="PlaneRig.Parse"/> reads. Props, surfaces
+    /// and flares are left out, since an absent section keeps the original's values.</summary>
+    public string FormatRigTemplate() => RigTemplate(Markers);
+
+    // A repeated name keeps its first position, since a rig names each marker once. Values print as
+    // the shortest text that reads back to the same float, so an unedited template moves nothing.
+    internal static string RigTemplate(IEnumerable<Marker> markers)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var lines = new List<string>();
+        foreach (var m in markers)
+        {
+            if (seen.Add(m.Name))
+            {
+                lines.Add($"    {JsonSerializer.Serialize(m.Name)}: [{Num(m.Local.X)}, {Num(m.Local.Y)}, {Num(m.Local.Z)}]");
+            }
+        }
+        var sb = new StringBuilder();
+        sb.Append("{\n  \"markers\": {");
+        sb.Append(lines.Count == 0 ? "" : "\n" + string.Join(",\n", lines) + "\n  ");
+        sb.Append("}\n}\n");
+        return sb.ToString();
+    }
+
+    private static string Num(float v) => v.ToString("R", CultureInfo.InvariantCulture);
 
     private static bool TrySuffix(string name, string prefix, out int ordinal)
     {

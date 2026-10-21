@@ -123,6 +123,55 @@ public class MarkerRigTests
         Assert.Equal(Vector3.Zero, MarkerRig.FindNamedMarker(gamez, "player_not_here", "cockpit_camera"));
     }
 
+    [Fact]
+    public void TheRigTemplateParsesAsAMarkersOnlyRigHoldingEveryMarker()
+    {
+        var rig = MarkerRig.Extract(GameZ.Load(TestData.Fixture("gamez-plane")), "probe_plane")!;
+        var parsed = PlaneRig.Parse(rig.FormatRigTemplate(), "template");
+        Assert.Equal(rig.Markers.Count, parsed.Markers.Count);
+        foreach (var m in rig.Markers)
+        {
+            Assert.Equal(m.Local, parsed.Markers[m.Name]);
+        }
+        Assert.Empty(parsed.Props);
+        Assert.Empty(parsed.Surfaces);
+        Assert.Null(parsed.LeftFlare);
+        Assert.Null(parsed.RightFlare);
+    }
+
+    [Fact]
+    public void TheRigTemplateReadsBackEveryFloatExactly()
+    {
+        // 0.1f and 1e-7f have no short decimal form; a fixed-point print would move them.
+        var markers = new[]
+        {
+            new MarkerRig.Marker("firepoint1", MarkerRig.MarkerKind.Firepoint, 1, new Vector3(0.1f, -1e-7f, -2.3456789f)),
+            new MarkerRig.Marker("pylon2", MarkerRig.MarkerKind.Pylon, 2, new Vector3(3.3333333f, -0f, 1234.5678f)),
+        };
+        var parsed = PlaneRig.Parse(MarkerRig.RigTemplate(markers), "template");
+        Assert.Equal(markers[0].Local, parsed.Markers["firepoint1"]);
+        Assert.Equal(markers[1].Local, parsed.Markers["pylon2"]);
+    }
+
+    [Fact]
+    public void ARepeatedMarkerNameKeepsItsFirstPositionSoTheTemplateStillParses()
+    {
+        var markers = new[]
+        {
+            new MarkerRig.Marker("target", MarkerRig.MarkerKind.Target, 0, new Vector3(0f, 1f, 0f)),
+            new MarkerRig.Marker("TARGET", MarkerRig.MarkerKind.Target, 0, new Vector3(9f, 9f, 9f)),
+        };
+        var parsed = PlaneRig.Parse(MarkerRig.RigTemplate(markers), "template");
+        Assert.Equal(new Vector3(0f, 1f, 0f), Assert.Single(parsed.Markers).Value);
+    }
+
+    [Fact]
+    public void AnEmptyRigTemplateStillParses()
+    {
+        var parsed = PlaneRig.Parse(MarkerRig.RigTemplate(System.Array.Empty<MarkerRig.Marker>()), "template");
+        Assert.Empty(parsed.Markers);
+    }
+
     private static MarkerRig.Marker Find(MarkerRig rig, string name)
     {
         foreach (var m in rig.Markers)

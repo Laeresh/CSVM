@@ -239,6 +239,7 @@
     "generator-sub-kill-disables-bay": 0.761,
     "generator-takeoff-run": 1.628,
     "gltf-export": 0.55,
+    "gltf-export-names": 0.05,
     "graphics-flare-switch": 5.85,
     "graphics-live-switch": 8.347,
     "graphics-ocean-switch": 11.4,

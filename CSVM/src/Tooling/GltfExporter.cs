@@ -12,7 +12,8 @@ namespace CSVM.Tooling;
 ///
 /// The viewer plane goes through the <c>--export-gltf=</c> CLI one-shot and F10; NodeLab can
 /// export its current selection, or its export set as one file. The work happens on a throwaway <see cref="SceneCopy"/>, so the live
-/// scene is never mutated.</summary>
+/// scene is never mutated. A file node takes the original gamez name, not Godot's
+/// sanitised one, so a model pack built from an export matches node for node.</summary>
 public sealed class GltfExporter
 {
     // The export still owed from the launch spec, cleared once written; null when no --export-gltf=.
@@ -128,6 +129,7 @@ public sealed class GltfExporter
         var err = doc.AppendFromScene(copy, state);
         if (err == Error.Ok)
         {
+            RestoreGamezNames(copy, state, state.GetNodes());
             err = doc.WriteToFilesystem(state, path);
         }
         copy.QueueFree();
@@ -140,6 +142,24 @@ public sealed class GltfExporter
             Log.Error("core", $"gltf export failed ({err}): {path}");
         }
         return err;
+    }
+
+    // Names each glTF node after the original gamez name its scene node carries in NameMeta. The
+    // writer gives every node a sanitised name unique in the file and exports no metadata but
+    // "extras". It does serialise a GltfNode's resource name verbatim, so a '.' or a repeated name
+    // survives when set here. A node with no NameMeta (a builder's "mesh" child) keeps the writer's.
+    private static void RestoreGamezNames(Node node, GltfState state, Godot.Collections.Array<GltfNode> nodes)
+    {
+        if (node.HasMeta(Mech3.AnimRuntime.NameMeta)
+            && node.GetMeta(Mech3.AnimRuntime.NameMeta).AsString() is { Length: > 0 } original
+            && state.GetNodeIndex(node) is var index && index >= 0 && index < nodes.Count)
+        {
+            nodes[index].ResourceName = original;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            RestoreGamezNames(child, state, nodes);
+        }
     }
 
     // Bake the current damage/flare state and drop non-geometry: free every hidden

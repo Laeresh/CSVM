@@ -68,13 +68,13 @@ export's executable) on the worker it lands on. F11 reads each pane's own camera
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.
-`Export(node, path)` works on a throwaway `node.Duplicate()`, frees hidden `Node3D`s (the panel/flare `Visible` toggles
-are how damage is baked) and the point-sprite `"lights"` instances, and converts every shader skin to a
-`StandardMaterial3D` over geometry with its winding reversed (`docs/formats/gotchas.md`: unreversed,
-this data exports inside out). Format is extension-driven (`.glb` default). `ExportSet` writes several
-subtrees under one root at their world transforms, dropping any an ancestor in the list carries.
-`ExportToExports`/`ExportSetToExports` name a timestamped `Exports/` GLB. The viewer's `--export-gltf=`
-one-shot and F10, and NodeLab's selection and export set actions, share that writer.
+`Export(node, path)` works on a throwaway `Utils/SceneCopy`, frees hidden `Node3D`s (damage is baked by
+`Visible`) and the point-sprite `"lights"`, and converts every shader skin to a `StandardMaterial3D` over
+reversed winding (`docs/formats/gotchas.md`: unreversed, this data exports inside out). Each file node
+takes its scene node's original gamez name (`cs_name` meta), so a model pack matches node for node.
+Format is extension-driven (`.glb` default). `ExportSet` writes several subtrees under one root at their
+world transforms. `ExportToExports`/`ExportSetToExports` name a timestamped `Exports/` GLB. The viewer's
+`--export-gltf=` one-shot and F10, and NodeLab's selection and export set actions, share that writer.
 
 ## src/Tooling/SyntheticData.cs
 `--synthetic-data`'s tree: an `extracted/` of invented records and code-generated files written into

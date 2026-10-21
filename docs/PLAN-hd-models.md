@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☐ [cloud] Mesh swap in `SceneBuilder.FillSubtree` and `SharedMesh`
 13. ☐ [cloud] code, [local] look: material mapping onto the remake's shaders
 14. ☐ [cloud] Apply `rig.json` to the built plane
-15. ☐ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
+15. ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
 
 ### Wave C, content paths (all [local])
 
@@ -362,7 +362,25 @@ entry); rig entries must not be subject to that stop, and names must stay subjec
 `cockpit_camera` read today happens inside `Build` (`PlaneBuilder.cs:258`), so the patch order
 matters.
 
-## B15 ☐ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
+## B15 ☑ [cloud] code, [local] check: exporter keeps gamez names; `--dump-markers` writes a rig template
+
+**Landed.** Godot 4.7's glTF writer exports no node metadata except a meta key literally named
+`extras`, and writes each node a sanitised name unique in the file, but serialises a `GltfNode`'s
+`ResourceName` verbatim. `GltfExporter.RestoreGamezNames` therefore sets each exported node's
+name to its `NameMeta` after `AppendFromScene`, so `.`, `:`, `@` and repeated siblings survive in
+the file. On import, `GenerateScene` sanitises again, but `GltfState.GetNodes()[i].OriginalName`
+holds the file's spelling, which B11 matches on. `--dump-markers` also writes
+`./.scratch/rigs/<model>/rig.json`, a markers-only template that `PlaneRig.Parse` reads back with
+every position unchanged (`MarkerRig.FormatRigTemplate`). New suite `gltf-export-names` (in the CI
+tier), shown to fail with the rename removed.
+
+**Verified.** In a cloud container on the merged tree: build, format, StyleCop and the five gate
+scripts clean; 6355 unit tests pass; the CI tier 191 passed with `lan-discovery` failing to bind
+its port while another agent's Godot held it, and passing alone on another port base. <TODO: run
+`--dump-markers` against the real `planes.zbd` locally.>
+
+**Original approach (kept for reference).**
+
 
 **Goal.** An exported plane or prop re-imports node for node, and `--dump-markers` can emit a
 starting `rig.json`.
@@ -401,6 +419,8 @@ the 8-chapter regression with mesh and node counts unchanged.
 
 **⚠ Traps.** The export bakes damage by pruning hidden nodes (`GltfExporter` entry), so an exported
 plane lacks its damage panels; a round trip of the healthy state only is the expected result.
+Blender renames a repeated object name to `wing.001`, which the importer's `.flt` rule does not
+strip; decide whether the importer or the pack author handles it.
 
 ## C22 ☐ [local] Weapons: rockets, pylon ordnance, gun casing, splash models
 
