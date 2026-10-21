@@ -55,6 +55,6 @@ public static class VegetationVariation
 
     /// <summary>One stamp's variation: its texture coordinate, its mirror and its instance colour.
     /// <c>Clamped</c> says the jitter was shortened to stay in the triangle. <c>Keep</c> is the uniform
-    /// draw in [0, 1) the brush mask keeps or drops the stamp by; nothing reads it yet.</summary>
+    /// draw in [0, 1) the brush mask keeps or drops the stamp by (<see cref="VegetationMask.Keeps"/>).</summary>
     public readonly record struct Stamp(double U, double V, bool Mirror, Color Tint, bool Clamped, double Keep);
 }

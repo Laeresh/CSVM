@@ -35,6 +35,9 @@ internal static class GraphicsSwitchSuites
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string FlatWaterChapter = "C2B";
 
+    // The chapter the vegetation lab suite edits: every one of its clutter kinds is listed.
+    private const string VegetationChapter = "C1";
+
     // The mission whose freighter cruises the ocean chapter trailing its wake sheets (startanims).
     private const string WakeMission = "M03";
 
@@ -690,6 +693,169 @@ internal static class GraphicsSwitchSuites
         finally
         {
             WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("vegetation-lab",
+        "the vegetation lab stands in an Enhanced --freecam C1 session at vegetation quality rich and nowhere in a --fly "
+        + "one, opened on the session's entry and a neutral mask: a tint edit of one kind re-bakes that kind's Rich colours "
+        + "alone and the drawn stamps follow, a seed edit rerolls every listed kind, and a pick names the texture under a "
+        + "stamp and moves none; a Clear stroke zero-scales the listed Rich stamps inside its radius and no other, which "
+        + "draw nothing under rich and draw again after a live move to original, and a stamp it dropped stays hidden "
+        + "through the activation's hide and show and through a crater, across a live move both ways; a cleared map hides "
+        + "every copy past its edge; a Neutral stroke and a revert each draw the first build's stamps exactly; Save "
+        + "writes the edit and the mask to a temp copy and leaves the shipped files alone")]
+    internal static void VegetationLabEdits(TestContext ctx)
+    {
+        RequireData(ctx, VegetationChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        var report = new StringBuilder();
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            var freecam = Open(ctx, enhanced: true, chapter: VegetationChapter, extra: "--freecam");
+            try
+            {
+                var labs = NodesOf<UI.Labs.VegetationLab>(freecam.Session);
+                if (!freecam.Built || labs.Count != 1 || freecam.Session.Clutter is not { ExportedKinds: { } kinds, Mask: { } mask })
+                {
+                    ctx.Check(false, $"the Enhanced --freecam {VegetationChapter} session builds one vegetation lab over its clutter and mask (built={freecam.Built}, {labs.Count} lab(s))");
+                    return;
+                }
+                var lab = labs[0];
+                var shipped = Mech3.VegetationSidecar.Load().For(VegetationChapter);
+                ctx.Check(!lab.IsOpen && EntryText(lab.Saved) == EntryText(shipped) && ReferenceEquals(lab.Mask, mask) && mask.IsNeutral(),
+                    $"the lab starts closed on the shipped {VegetationChapter} entry and the clutter's own mask, neutral");
+                lab.Toggle();
+                var opening = RichOf(kinds);
+                var originals = kinds.Select(k => k.Placements.ToArray()).ToList();
+                var openingDraw = DrawnStamps(freecam);
+                int edited = Enumerable.Range(0, kinds.Count).Where(k => opening[k] != null).MaxBy(k => opening[k]!.Value.Xf.Length);
+                string model = kinds[edited].Model;
+
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                lab.Set(model, "tint", lab.Edited.Find(model)!.Tint == 0.3f ? 0.4f : 0.3f);
+                long rebakeMs = watch.ElapsedMilliseconds;
+                Step(freecam);
+                var tinted = RichOf(kinds);
+                bool tintAlone = Enumerable.Range(0, kinds.Count).All(k => k == edited
+                    ? tinted[k]!.Value.Xf.SequenceEqual(opening[k]!.Value.Xf) && !tinted[k]!.Value.Colors.SequenceEqual(opening[k]!.Value.Colors)
+                    : SameRich(tinted[k], opening[k]));
+                ctx.Check(tintAlone && !DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
+                    $"a tint edit of {model} re-bakes its Rich colours alone, and the drawn stamps follow (re-bake {rebakeMs} ms)");
+                lab.SetSeed(lab.Saved.Seed + 1);
+                Step(freecam);
+                var reseeded = RichOf(kinds);
+                ctx.Check(Enumerable.Range(0, kinds.Count).All(k => opening[k] == null || !SameRich(reseeded[k], tinted[k])),
+                    $"a seed edit rerolls every listed kind");
+                lab.RevertToSaved();
+                Step(freecam);
+                ctx.Check(SameRich(RichOf(kinds), opening) && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
+                    $"a revert draws the first build's Rich stamps exactly");
+
+                int first = Array.FindIndex(opening[edited]!.Value.Xf, xf => xf.Basis.Determinant() != 0f);
+                var at = opening[edited]!.Value.Xf[first].Origin;
+                watch.Restart();
+                string? texture = lab.Pick(at, new[] { model });
+                long pickMs = watch.ElapsedMilliseconds;
+                Step(freecam);
+                ctx.Check(texture != null && lab.Edited.SetFor(texture)?.Models.Contains(model) == true && SameRich(RichOf(kinds), opening),
+                    $"a pick under a {model} stamp gives {texture ?? "nothing"} that kind and moves no stamp (pick and re-bake {pickMs} ms)");
+                lab.RevertToSaved();
+                Step(freecam);
+
+                // Two texels inside and outside the stroke, where the bilinear sample is wholly cleared or wholly neutral.
+                const float Radius = 300f;
+                float texel = (mask.MaxX - mask.MinX) / mask.Side;
+                lab.Paint(at, Mech3.VegetationBrush.Clear, Radius, 1f);
+                watch.Restart();
+                lab.ApplyMask();
+                long maskMs = watch.ElapsedMilliseconds;
+                Step(freecam);
+                var cleared = RichOf(kinds);
+                int inside = 0, wrong = 0;
+                for (int k = 0; k < kinds.Count; k++)
+                {
+                    if (opening[k] is not { } open)
+                    {
+                        wrong += SameRich(cleared[k], null) ? 0 : 1;
+                        continue;
+                    }
+                    var now = cleared[k]!.Value;
+                    wrong += now.Colors.SequenceEqual(open.Colors) ? 0 : 1;
+                    for (int i = 0; i < open.Xf.Length; i++)
+                    {
+                        float d = Flat(open.Xf[i].Origin, at);
+                        if (d < Radius - (2f * texel))
+                        {
+                            inside++;
+                            wrong += now.Xf[i].Basis.Determinant() == 0f && now.Xf[i].Origin == open.Xf[i].Origin ? 0 : 1;
+                        }
+                        else if (d > Radius + (2f * texel))
+                        {
+                            wrong += now.Xf[i] == open.Xf[i] ? 0 : 1;
+                        }
+                    }
+                }
+                var richDraw = DrawnStamps(freecam);
+                ctx.Check(inside > 0 && wrong == 0 && DrawnIn(richDraw, at, Radius - (2f * texel)) == 0,
+                    $"a Clear stroke zero-scales the {inside} listed Rich stamps inside its radius and no other, which draw nothing ({wrong} wrong, mask re-bake {maskMs} ms)");
+                ApplyVegetation(freecam, VegetationQualitySetting.Original);
+                int originalDrawn = DrawnIn(DrawnStamps(freecam), at, Radius - (2f * texel));
+                ctx.Check(originalDrawn > 0, $"after a live move to original the stamps there draw again ({originalDrawn})");
+                ApplyVegetation(freecam, VegetationQualitySetting.Rich);
+
+                ActivationThroughDrop(ctx, freecam, kinds, at, Radius - (2f * texel), report);
+
+                lab.Paint(at, Mech3.VegetationBrush.Neutral, Radius, 1f);
+                lab.ApplyMask();
+                Step(freecam);
+                ctx.Check(mask.IsNeutral() && SameRich(RichOf(kinds), opening) && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
+                    $"a Neutral stroke over it draws the first build's Rich stamps exactly");
+
+                var centre = new Vector3((mask.MinX + mask.MaxX) / 2f, 0f, (mask.MinZ + mask.MaxZ) / 2f);
+                lab.Paint(centre, Mech3.VegetationBrush.Clear, mask.MaxX - mask.MinX, 1f);
+                lab.ApplyMask();
+                Step(freecam);
+                var edge = freecam.Session.EdgeExtender;
+                edge?.Update(edge.BeyondCorner);
+                var (copies, hiddenCopies) = edge?.ClutterCopyCensus() ?? (0, 0);
+                ctx.Check(copies > 0 && hiddenCopies == copies,
+                    $"a cleared map hides every copy past its edge, each inheriting its source's drop ({hiddenCopies} of {copies} hidden)");
+                lab.RevertToSaved();
+                Step(freecam);
+                ctx.Check(lab.Mask is { } reverted && reverted.IsNeutral() && SameRich(RichOf(kinds), opening)
+                        && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
+                    $"a revert after a stroke draws the first build's Rich stamps exactly, its mask neutral again");
+
+                CraterThroughDrop(ctx, freecam, lab, kinds, at, Radius, Radius - (2f * texel), report);
+                ctx.Check(Enumerable.Range(0, kinds.Count).All(k => kinds[k].Placements.SequenceEqual(originals[k])),
+                    $"no edit moves an Original placement");
+                SaveToCopy(ctx, lab.Saved, model, at, mask, report);
+                report.AppendLine(CultureInfo.InvariantCulture, $"re-bake {rebakeMs} ms, pick and re-bake {pickMs} ms, mask re-bake {maskMs} ms, stroke at ({at.X:0}, {at.Z:0}) on {texture}");
+            }
+            finally
+            {
+                freecam.Close();
+            }
+
+            var fly = Open(ctx, enhanced: true, chapter: VegetationChapter, extra: "--fly");
+            try
+            {
+                ctx.Check(fly.Built && NodesOf<UI.Labs.VegetationLab>(fly.Session).Count == 0,
+                    $"a --fly {VegetationChapter} session builds no vegetation lab (built={fly.Built})");
+            }
+            finally
+            {
+                fly.Close();
+            }
+            ctx.WriteArtifact("test-vegetation-lab.txt", report.ToString());
+        }
+        finally
+        {
+            VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
     }
@@ -1590,6 +1756,152 @@ internal static class GraphicsSwitchSuites
                 labs.Add(lab);
         });
         return labs;
+    }
+
+    private static List<T> NodesOf<T>(Node root)
+        where T : Node
+    {
+        var found = new List<T>();
+        Walk(root, node =>
+        {
+            if (node is T t)
+                found.Add(t);
+        });
+        return found;
+    }
+
+    private static string EntryText(Mech3.VegetationEntry entry) => Mech3.VegetationSidecar.WithEntry(null, VegetationChapter, entry);
+
+    // Each export's Rich transforms and colours as baked now, null for a kind with no variant.
+    private static List<(Transform3D[] Xf, Color[] Colors)?> RichOf(IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds) =>
+        kinds.Select(k => k.Rich is { } r
+            ? ((Transform3D[], Color[])?)(r.Placements.ToArray(), r.Colors?.ToArray() ?? Array.Empty<Color>())
+            : null).ToList();
+
+    private static bool SameRich((Transform3D[] Xf, Color[] Colors)? a, (Transform3D[] Xf, Color[] Colors)? b) =>
+        a is not { } x ? b is null : b is { } y && x.Xf.SequenceEqual(y.Xf) && x.Colors.SequenceEqual(y.Colors);
+
+    private static bool SameRich(List<(Transform3D[] Xf, Color[] Colors)?> a, List<(Transform3D[] Xf, Color[] Colors)?> b) =>
+        a.Count == b.Count && a.Zip(b).All(p => SameRich(p.First, p.Second));
+
+    private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
+
+    // The drawn map stamps within a radius of a point that draw something.
+    private static int DrawnIn(DrawnReading reading, Vector3 at, float radius) =>
+        reading.Stamps.Count(s => s.Item4 != 0f && Flat(new Vector3(s.Item1, 0f, s.Item3), at) < radius);
+
+    // A stamp the mask dropped, inside the cleared disk and not hidden by its node: (export, placement), or null.
+    private static (int K, int I)? DroppedStamp(IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds,
+        Mech3.ClutterActivation? activation, Vector3 at, float inner, Func<int, bool> wanted)
+    {
+        for (int k = 0; k < kinds.Count; k++)
+        {
+            if (kinds[k].Rich is not { } rich || kinds[k].Instances == null)
+                continue;
+            for (int i = 0; i < rich.Placements.Count; i++)
+            {
+                if (rich.Placements[i].Basis.Determinant() == 0f && Flat(rich.Placements[i].Origin, at) < inner
+                    && activation?.IsHidden(k, i) != true && wanted(kinds[k].Owners[i]))
+                    return (k, i);
+            }
+        }
+        return null;
+    }
+
+    // A dropped stamp hidden with its node under rich stays hidden after a live move to original until the node shows.
+    // A hide and show back under rich leaves it dropped.
+    private static void ActivationThroughDrop(TestContext ctx, Rig rig, IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds,
+        Vector3 at, float inner, StringBuilder report)
+    {
+        var activation = rig.Session.Clutter?.Activation;
+        var owners = new Dictionary<int, Node3D>();
+        Walk(rig.Session, node =>
+        {
+            if (node is Node3D n && n.HasMeta(Mech3.AnimRuntime.IndexMeta))
+                owners.TryAdd(n.GetMeta(Mech3.AnimRuntime.IndexMeta).AsInt32(), n);
+        });
+        if (activation == null || DroppedStamp(kinds, activation, at, inner, o => owners.TryGetValue(o, out var n) && n.IsVisibleInTree()) is not { } found)
+        {
+            ctx.Check(false, $"a dropped stamp in the cleared disk has a shown stamping node (activation {(activation != null ? "bound" : "missing")})");
+            return;
+        }
+        var (k, i) = found;
+        var stamps = kinds[k].Instances!;
+        var node = owners[kinds[k].Owners[i]];
+        node.Visible = false;
+        bool hiddenRich = activation.IsHidden(k, i) && stamps.Moved(i);
+        ApplyVegetation(rig, VegetationQualitySetting.Original);
+        bool hiddenOriginal = stamps.GetInstanceTransform(i).Basis.Determinant() == 0f;
+        node.Visible = true;
+        bool shownOriginal = stamps.GetInstanceTransform(i) == kinds[k].Placements[i];
+        ApplyVegetation(rig, VegetationQualitySetting.Rich);
+        node.Visible = false;
+        node.Visible = true;
+        bool droppedRich = stamps.GetInstanceTransform(i).Basis.Determinant() == 0f && !stamps.Moved(i) && !activation.IsHidden(k, i);
+        ctx.Check(hiddenRich && hiddenOriginal && shownOriginal && droppedRich,
+            $"a dropped {kinds[k].Model} stamp hides with its node '{node.Name}' under rich ({hiddenRich}), stays hidden after a live move to original ({hiddenOriginal}), draws when the node shows there ({shownOriginal}), and stays dropped through a hide and show back under rich ({droppedRich})");
+        report.AppendLine(CultureInfo.InvariantCulture, $"activation: {kinds[k].Model} stamp {i} of node '{node.Name}'");
+    }
+
+    // A crater on a dropped stamp counts nothing and leaves it drawing nothing under rich, and flattens it for original.
+    private static void CraterThroughDrop(TestContext ctx, Rig rig, UI.Labs.VegetationLab lab,
+        IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds, Vector3 at, float radius, float inner, StringBuilder report)
+    {
+        lab.Paint(at, Mech3.VegetationBrush.Clear, radius, 1f);
+        lab.ApplyMask();
+        Step(rig);
+        if (ClutterRoot(rig.Session) is not { } root || DroppedStamp(kinds, rig.Session.Clutter?.Activation, at, inner, _ => true) is not { } found)
+        {
+            ctx.Check(false, $"a cleared disk holds a dropped stamp to crater");
+            return;
+        }
+        var (k, i) = found;
+        var stamps = kinds[k].Instances!;
+        var impact = root.GlobalTransform * kinds[k].Rich!.Placements[i].Origin;
+        int killed = Mech3.ClutterCull.Destroy(root, Mech3.CraterShape.At(impact, radius: 0.01f));
+        bool richHidden = stamps.GetInstanceTransform(i).Basis.Determinant() == 0f && stamps.Moved(i);
+        ApplyVegetation(rig, VegetationQualitySetting.Original);
+        bool originalHidden = stamps.GetInstanceTransform(i).Basis.Determinant() == 0f;
+        ApplyVegetation(rig, VegetationQualitySetting.Rich);
+        ctx.Check(killed == 0 && richHidden && originalHidden,
+            $"a crater on a dropped {kinds[k].Model} stamp counts nothing ({killed}), flattens it under rich ({richHidden}) and keeps it flattened after a live move to original ({originalHidden})");
+        report.AppendLine(CultureInfo.InvariantCulture, $"crater: {kinds[k].Model} stamp {i}, {killed} counted");
+    }
+
+    // Save from a lab of its own over a temp copy of the sidecar, so the shipped file and mask are never written.
+    private static void SaveToCopy(TestContext ctx, Mech3.VegetationEntry saved, string model, Vector3 at, Mech3.VegetationMask area, StringBuilder report)
+    {
+        string source = ProjectSettings.GlobalizePath("res://data/vegetation.json");
+        string shippedMask = ProjectSettings.GlobalizePath($"res://data/{Mech3.VegetationMask.PathFor(VegetationChapter)}");
+        byte[] sourceBytes = System.IO.File.ReadAllBytes(source);
+        bool maskBefore = System.IO.File.Exists(shippedMask);
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"csvm-vegetation-lab-{System.Environment.ProcessId}");
+        string copy = System.IO.Path.Combine(dir, "vegetation.json");
+        System.IO.Directory.CreateDirectory(dir);
+        System.IO.File.Copy(source, copy, overwrite: true);
+        var mask = Mech3.VegetationMask.Neutral(area.MinX, area.MinZ, area.MaxX, area.MaxZ, area.Side);
+        var lab = new UI.Labs.VegetationLab(VegetationChapter, saved, _ => { }, copy, mask, _ => { });
+        try
+        {
+            float tint = saved.Find(model)!.Tint == 0.3f ? 0.4f : 0.3f;
+            lab.Set(model, "tint", tint);
+            lab.Paint(at, Mech3.VegetationBrush.Clear, 100f, 1f);
+            string? written = lab.Save();
+            var back = Mech3.VegetationSidecar.Parse(System.IO.File.ReadAllText(copy)).For(VegetationChapter);
+            string maskFile = System.IO.Path.Combine(dir, back.Mask);
+            bool maskWritten = back.Mask == Mech3.VegetationMask.PathFor(VegetationChapter) && System.IO.File.Exists(maskFile)
+                && Mech3.VegetationMask.FromBytes(System.IO.File.ReadAllBytes(maskFile), area.MinX, area.MinZ, area.MaxX, area.MaxZ).At(at.X, at.Z) == 0f;
+            ctx.Check(written == copy && back.Find(model)?.Tint == tint && maskWritten,
+                $"Save writes the {model} tint and the painted mask into the temp copy (written {written ?? "nothing"}, mask {back.Mask})");
+            ctx.Check(System.IO.File.ReadAllBytes(source).SequenceEqual(sourceBytes) && System.IO.File.Exists(shippedMask) == maskBefore,
+                $"and leaves the shipped sidecar and mask alone");
+            report.AppendLine(CultureInfo.InvariantCulture, $"save: {copy}, mask {maskFile}");
+        }
+        finally
+        {
+            lab.Free();
+            System.IO.Directory.Delete(dir, recursive: true);
+        }
     }
 
     // The material every grid of the ocean shares.

@@ -657,9 +657,12 @@ public sealed partial class MapEdgeExtender : Node3D
             if (!byKind.TryGetValue(kind, out var list))
                 byKind[kind] = list = new List<(Transform3D, Color, int)>();
             // A Rich card keeps its own mirror, which the card shader reads off the basis' X axis.
-            var placed = (_rich ? _clutter![kind].Rich?.Placements[source] : null) ?? xf;
-            list.Add((_clutter![kind].Solid ? mirror * placed
-                : new Transform3D(placed.Basis.X.X < 0f ? MirroredCard : Basis.Identity, mirror * placed.Origin), fade, source));
+            // A stamp the mask dropped keeps its zero basis.
+            var rich = _rich ? _clutter![kind].Rich?.Placements[source] : null;
+            var placed = rich ?? xf;
+            var card = rich is { } r && r.Basis.Determinant() == 0f ? r.Basis
+                : placed.Basis.X.X < 0f ? MirroredCard : Basis.Identity;
+            list.Add((_clutter![kind].Solid ? mirror * placed : new Transform3D(card, mirror * placed.Origin), fade, source));
         }
 
         // One body for the whole cell's buildings, named so a crash log locates the cell.

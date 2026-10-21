@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using CSVM.Mech3;
 using Xunit;
@@ -93,6 +94,7 @@ public sealed class VegetationMaskTests
     public void TheDensityRuleThinsOriginalsAndScalesAddedStamps()
     {
         Assert.True(VegetationMask.Keeps(1f, 0.999f, added: false));
+        Assert.True(VegetationMask.Keeps(1f, Math.BitDecrement(1.0), added: false));
         Assert.True(VegetationMask.Keeps(1.99f, 0.999f, added: false));
         Assert.False(VegetationMask.Keeps(0f, 0f, added: false));
         Assert.True(VegetationMask.Keeps(0.5f, 0.49f, added: false));

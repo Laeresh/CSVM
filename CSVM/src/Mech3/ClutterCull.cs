@@ -124,8 +124,15 @@ internal static class ClutterCull
         var owner = s_owners.TryGetValue(mm, out var known) ? known : null;
         int placement = owner?.Placements?[i] ?? i;
         var placed = owner != null ? owner.Instances.LocalTransform(placement) : mm.GetInstanceTransform(i);
-        if (placed.Basis.Determinant() == 0f || !shape.Covers(toWorld * placed.Origin))
+        if (!shape.Covers(toWorld * placed.Origin))
         {
+            return 0;
+        }
+        if (placed.Basis.Determinant() == 0f)
+        {
+            // A Rich stamp the vegetation mask dropped is flattened uncounted, or a live move to Original draws it.
+            if (destroy && owner != null && !owner.Instances.Moved(placement))
+                owner.Instances.SetInstanceTransform(placement, owner.Instances.GetInstanceTransform(placement));
             return 0;
         }
         if (destroy && owner != null)

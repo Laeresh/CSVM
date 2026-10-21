@@ -141,18 +141,19 @@ public sealed class ClutterActivation
         }
         if (shown)
         {
-            mm.SetInstanceTransform(i, mm.Authored(i));
+            mm.Restore(i);
             SetCollider(export, i, enabled: true);
             _hidden[k][i] = false;
             HiddenCount--;
         }
         else
         {
-            var placed = mm.GetInstanceTransform(i);
-            if (placed.Basis.Determinant() == 0f)
+            if (mm.Moved(i))
             {
                 return; // a crater's victim, which nothing brings back
             }
+            // A stamp the vegetation mask dropped is hidden too, so a move to the Original variant keeps it hidden.
+            var placed = mm.GetInstanceTransform(i);
             mm.SetInstanceTransform(i, new Transform3D(placed.Basis.Scaled(Vector3.Zero), placed.Origin));
             SetCollider(export, i, enabled: false);
             _hidden[k][i] = true;

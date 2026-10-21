@@ -869,6 +869,9 @@ public partial class GameSession : Node3D
         FollowOcean();
         if (_oceanEligible && Effects.Ocean.Covers(_spec.Chapter))
             _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
+        var gamez = state.Gamez;
+        if (_clutter?.Vegetation is { } vegetation)
+            _labs!.BuildVegetationLab(vegetation, ApplyVegetation, _clutter.Mask, ApplyVegetationMask, p => VegetationGround.LayersAt(gamez, p));
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.
@@ -967,6 +970,14 @@ public partial class GameSession : Node3D
     public void ApplyVegetation(VegetationEntry entry)
     {
         _clutter?.ApplyVegetation(entry);
+        _edgeExtender?.FollowVegetation();
+    }
+
+    /// <summary>Bakes the clutter's Rich variant again under <paramref name="mask"/>, the vegetation lab's
+    /// brush stroke, as <see cref="ApplyVegetation"/> does for an entry.</summary>
+    public void ApplyVegetationMask(VegetationMask mask)
+    {
+        _clutter?.ApplyVegetationMask(mask);
         _edgeExtender?.FollowVegetation();
     }
 

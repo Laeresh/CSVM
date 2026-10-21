@@ -110,8 +110,9 @@ public sealed class VegetationMask
 
     /// <summary>Whether a listed stamp survives the mask. <paramref name="density"/> is <see cref="At"/>
     /// at the stamp and <paramref name="draw"/> its uniform draw in [0, 1) from the Rich stream.
-    /// A stamp the remake adds passes <paramref name="added"/> true. Original ignores the mask and never asks.</summary>
-    public static bool Keeps(float density, float draw, bool added) =>
+    /// A stamp the remake adds passes <paramref name="added"/> true. Original ignores the mask and never asks.
+    /// ⚠ Keep the draw a double: a draw just under 1 rounds to 1f and would drop a stamp at neutral.</summary>
+    public static bool Keeps(float density, double draw, bool added) =>
         draw < density * (added ? AddedNeutralShare : 1f);
 
     /// <summary>A copy of the texels, the file's bytes.</summary>

@@ -108,6 +108,9 @@ public sealed class ClutterBuilder
     // The chapter's vegetation entry, null on a chapter that carries none. The lab replaces it.
     private VegetationEntry? _vegetation;
 
+    // The chapter's brush mask, read by the Rich bake alone. Null bakes as a neutral one. The lab paints it.
+    private VegetationMask? _mask;
+
     // Every kept card stamp in walk order, which the Rich bake replays. Null without a vegetation entry.
     private List<RichStamp>? _stamps;
 
@@ -119,10 +122,10 @@ public sealed class ClutterBuilder
     /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
     /// at its authored model and size, never fading, rather than throwing.</param>
     /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param>
-    /// <param name="vegetation">The chapter's vegetation entry; its listed kinds get a Rich variant.</param>
+    /// <param name="vegetation">The chapter's vegetation entry; its listed kinds get a Rich variant that <paramref name="mask"/> thins.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
         ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null,
-        VegetationEntry? vegetation = null)
+        VegetationEntry? vegetation = null, VegetationMask? mask = null)
     {
         _gamez = gamez;
         _textures = textures;
@@ -130,6 +133,7 @@ public sealed class ClutterBuilder
         _props = props;
         _fogVolumes = fogVolumes ?? Array.Empty<FogVolumeBox>();
         _vegetation = vegetation;
+        _mask = mask;
     }
 
     /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
@@ -145,6 +149,12 @@ public sealed class ClutterBuilder
         /// <summary>The triangle's three world vertices are collinear or coincident.</summary>
         ZeroWorldArea,
     }
+
+    /// <summary>The vegetation entry the Rich variant was last baked from, null on a chapter with none.</summary>
+    public VegetationEntry? Vegetation => _vegetation;
+
+    /// <summary>The brush mask the Rich variant was last baked under, null for none.</summary>
+    public VegetationMask? Mask => _mask;
 
     /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
     public int InstanceCount { get; private set; }
@@ -549,20 +559,14 @@ public sealed class ClutterBuilder
     /// it, the lab's live edit. A kind it lists gains or keeps a variant, one it drops loses it. The
     /// map edge's copies follow through <see cref="MapEdgeExtender.FollowVegetation"/>, which the
     /// session calls. A build on a chapter with no vegetation entry recorded no stamps and ignores it.</summary>
-    public void ApplyVegetation(VegetationEntry entry)
+    public void ApplyVegetation(VegetationEntry entry) => Rebake(entry, _mask);
+
+    /// <summary>Bakes the Rich variant again under <paramref name="mask"/>, the lab's brush stroke, as
+    /// <see cref="ApplyVegetation"/> does for an entry.</summary>
+    public void ApplyVegetationMask(VegetationMask mask)
     {
-        if (_stamps == null || ExportedKinds == null)
-            return;
-        _vegetation = entry;
-        BakeRich();
-        for (int k = 0; k < ExportedKinds.Count; k++)
-        {
-            var (kind, part) = _exportedFrom[k];
-            var export = ExportedKinds[k];
-            export.Rich = part == 0 ? RichVariantOf(kind) : null;
-            export.Instances?.SetRich(export.Rich);
-        }
-        Recut();
+        if (_vegetation != null)
+            Rebake(_vegetation, mask);
     }
 
     /// <summary>Hides each stamp of the last Build while its stamping world node is not visible.
@@ -1069,9 +1073,28 @@ public sealed class ClutterBuilder
         return null;
     }
 
+    // The lab's edits: the Rich variant baked again and handed to each kind's drawn instances, then recut.
+    private void Rebake(VegetationEntry entry, VegetationMask? mask)
+    {
+        if (_stamps == null || ExportedKinds == null)
+            return;
+        _vegetation = entry;
+        _mask = mask;
+        BakeRich();
+        for (int k = 0; k < ExportedKinds.Count; k++)
+        {
+            var (kind, part) = _exportedFrom[k];
+            var export = ExportedKinds[k];
+            export.Rich = part == 0 ? RichVariantOf(kind) : null;
+            export.Instances?.SetRich(export.Rich);
+        }
+        Recut();
+    }
+
     // Replays the kept card stamps in walk order on the Rich stream, drawing for each stamp whose
     // landing kind is listed. Index-aligned with each kind's Instances, and never touching them, so
-    // the Original stamp stays bit for bit. Each listed stamp takes the same draw count.
+    // the Original stamp stays bit for bit. Each listed stamp takes the same draw count, the last the
+    // mask's keep draw. A stamp the mask drops keeps its index with a zero basis, as a cratered one does.
     private void BakeRich()
     {
         if (_vegetation is not { } entry || _stamps == null)
@@ -1084,20 +1107,23 @@ public sealed class ClutterBuilder
             kind.RichColors = kind.Veg != null ? new Color[kind.Instances.Count] : null;
         }
         var rng = new Random(VegetationVariation.Seed(PlacementSeed, entry.Seed));
-        int baked = 0, mirrored = 0, clamped = 0;
+        int baked = 0, mirrored = 0, clamped = 0, dropped = 0;
         foreach (var s in _stamps)
         {
             if (s.Target.Veg is not { } veg)
                 continue;
             var v = VegetationVariation.Draw(s.Tri, s.U, s.V, veg, rng);
             var basis = Basis.Identity.Scaled(new Vector3(v.Mirror ? -s.Scale : s.Scale, s.Scale, s.Scale));
-            s.Target.RichInstances![s.Index] = new Transform3D(basis, s.Tri.World(v.U, v.V) + s.Lift);
+            var origin = s.Tri.World(v.U, v.V) + s.Lift;
+            bool kept = _mask == null || VegetationMask.Keeps(_mask.At(origin.X, origin.Z), v.Keep, added: false);
+            s.Target.RichInstances![s.Index] = new Transform3D(kept ? basis : basis.Scaled(Vector3.Zero), origin);
             s.Target.RichColors![s.Index] = v.Tint;
             baked++;
             mirrored += v.Mirror ? 1 : 0;
             clamped += v.Clamped ? 1 : 0;
+            dropped += kept ? 0 : 1;
         }
-        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} seed={entry.Seed}");
+        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} mask_dropped={dropped} seed={entry.Seed}");
     }
 
     // The templates.zrd per-kind properties attached to the parsed kinds, and every `substitute`

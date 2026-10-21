@@ -175,13 +175,24 @@ public sealed class ClutterInstances
         return new Transform3D(local.Basis, local.Origin + _drawn.Offsets[c]);
     }
 
+    /// <summary>Whether the world has hidden or flattened placement <paramref name="i"/>. A Rich stamp the
+    /// vegetation mask dropped draws nothing too, and is not moved until the world moves it.</summary>
+    public bool Moved(int i) => _proto != null ? _moved.ContainsKey(i) : GetInstanceTransform(i).Basis.Determinant() == 0f;
+
+    /// <summary>Puts placement <paramref name="i"/> back on its authored transform, the world showing it again.</summary>
+    public void Restore(int i)
+    {
+        _moved.Remove(i);
+        _drawn.Write(i, Authored(i));
+    }
+
     /// <summary>Writes placement <paramref name="i"/>'s transform, given in the clutter root's
-    /// frame.</summary>
+    /// frame. A zero basis is always a move, even onto a stamp the mask dropped.</summary>
     public void SetInstanceTransform(int i, Transform3D placed)
     {
         if (_proto != null)
         {
-            if (placed == AuthoredList[i])
+            if (placed == AuthoredList[i] && placed.Basis.Determinant() != 0f)
                 _moved.Remove(i);
             else
                 _moved[i] = placed;
@@ -212,13 +223,13 @@ public sealed class ClutterInstances
         return fadeScaleSq > 0f ? Mathf.Sqrt(kindFar2 / fadeScaleSq) : 0f;
     }
 
-    // Carries every moved stamp across to the same move off the other variant's authored transform.
-    // A hidden or flattened stamp is a zero basis at its authored origin, so it stays one exactly.
+    // Carries every moved stamp across to the other variant. A hidden or flattened stamp is a zero
+    // basis at its authored origin, so it becomes one at the other's. ⚠ Never invert the authored
+    // transform: a stamp the mask dropped has a zero basis there.
     private void MoveTo(IReadOnlyList<Transform3D> to, bool rich)
     {
-        var from = AuthoredList;
         foreach (int i in new List<int>(_moved.Keys))
-            _moved[i] = to[i] * from[i].AffineInverse() * _moved[i];
+            _moved[i] = new Transform3D(to[i].Basis.Scaled(Vector3.Zero), to[i].Origin);
         _rich = rich;
     }
 

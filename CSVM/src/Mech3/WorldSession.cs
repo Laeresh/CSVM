@@ -180,10 +180,13 @@ public sealed class WorldSession
                 ? FogVolumeSpec.VolumesOf(gamez) : null;
             // Read whatever the Vegetation Quality: the Rich variant is baked beside the Original
             // stamps so a live move recuts. A chapter with no ground to list bakes none.
+            // The brush mask over the world node's area thins the Rich variant alone.
             var vegetation = VegetationSidecar.Load();
             bool listsVegetation = VegetationSidecar.Chapters.Contains(o.Chapter, StringComparer.OrdinalIgnoreCase);
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes,
-                listsVegetation ? vegetation.For(o.Chapter) : null);
+            var entry = listsVegetation ? vegetation.For(o.Chapter) : null;
+            var mask = entry != null && gamez.FindByName("world1") is { HasArea: true } area
+                ? VegetationMask.Load(entry.Mask, area.AreaLeft, area.AreaTop, area.AreaRight, area.AreaBottom) : null;
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes, entry, mask);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);

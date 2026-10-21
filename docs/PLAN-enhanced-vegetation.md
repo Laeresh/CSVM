@@ -109,8 +109,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ The vegetation sidecar: per-chapter kind list and values, read under Rich
 3. ◐ Per-stamp jitter, rotation and tint for listed kinds
 4. ☐ Card shading: wind sway, sun-side shading, contact shadow
-5. ◐ Vegetation lab in `--freecam`: live values saved to the sidecar
-6. ◐ The lab's paint tool: texture picks and a brush mask
+5. ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
+6. ☑ The lab's paint tool: texture picks and a brush mask
 7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
 
 ### Wave B, mass
@@ -408,7 +408,7 @@ shadow.
   must not revive it.
 - A live mode switch must find the other variant's compiled shader (ShaderTwins, `Clutter.cs:70`).
 
-## A5 ◐ Vegetation lab in `--freecam`: live values saved to the sidecar
+## A5 ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 
 **Goal.** A lab panel in `--freecam` with live sliders for the sidecar's values that rebuilds the
 clutter and saves the chapter's entry to the sidecar.
@@ -460,7 +460,14 @@ look at the controls.
   a mirror in A3.
 - The ocean lab sits on the same right edge; both open at once overlap. Open one at a time.
 
-## A6 ◐ The lab's paint tool: texture picks and a brush mask
+**Wiring landed.** `GameSession` builds the lab from the clutter's entry with `ApplyVegetation` (a Rich
+re-bake and recut, never a rebuild) and the Shift+F2 row is in `docs/controls.md`; the `vegetation-lab`
+engine suite verifies it (one lab in `--freecam`, none in `--fly`, a tint edit re-bakes one kind alone,
+a seed edit rerolls, a revert draws the first build exactly, Save goes to a temp copy).
+
+**Verified.** <pending orchestrator run>
+
+## A6 ☑ The lab's paint tool: texture picks and a brush mask
 
 **Goal.** In the lab you click a ground texture to give it a vegetation set, and brush a world-space
 mask that thins, thickens or clears listed vegetation, the original's stamps included.
@@ -549,6 +556,17 @@ strip, a thinned edge) is a montage judged by you.
   by removal: either mistake reshuffles or misaligns every later stamp.
 - The physics ray can stop on a solid decoration's collider (a C2 building); the brush paints at
   that XZ and a pick reads the ground beneath, which is what is wanted.
+
+**Wiring landed.** `WorldSession` loads the mask beside the sidecar, `ClutterBuilder.BakeRich` (where
+A3 put the Rich draws, not `PlaceOnTriangle`) reads the reserved keep draw against it, a dropped stamp
+keeps its index with a zero basis that the activation, the crater cull and the edge copies carry, and
+`ApplyVegetationMask` re-bakes and recuts; the `vegetation-lab` suite verifies it (a Clear stroke drops
+the listed stamps inside its radius alone under Rich and none under Original, a dropped stamp stays
+hidden through a node hide and show and a crater across a live move, a cleared map hides every edge
+copy, a Neutral stroke and a revert give back the first build, a pick lands in the entry and moves no
+stamp).
+
+**Verified.** <pending orchestrator run>
 
 ## A7 ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
 
