@@ -80,6 +80,12 @@ public sealed class StuntBotObjective
     /// <see cref="LeadInM"/>, metres (<see cref="Spread"/>). Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float LeadInSpreadM = 150f;
 
+    /// <summary>The shortest lead-in <see cref="Spread"/> draws, metres.</summary>
+    public const float ShortestLeadInM = LeadInM - LeadInSpreadM;
+
+    /// <summary>The order's reason while a bot steers in along its line, rather than going round.</summary>
+    public const string SteersIn = "steers for the zone";
+
     /// <summary>Remake-only rule: how far ahead along its approach line a bot aims, metres. It is longer
     /// than any plane's turn radius, so the bot settles onto the line rather than circling a point on it.
     /// A bot farther off the line than this aims as far ahead as it is off, meeting the line at 45 degrees.
@@ -89,6 +95,11 @@ public sealed class StuntBotObjective
     /// <summary>Remake-only rule: the fastest lock state <see cref="RailClears"/> flies from, m/s. A bot
     /// must lock no faster, or it outruns the check. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float TopLockSpeedMps = 135f;
+
+    /// <summary>Remake-only rule: a U-turn's width, metres, twice the widest turn radius a bot flies under
+    /// the 90 degree order. A bot going round turns in no nearer the entry than the shortest lead-in plus
+    /// this width. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float UTurnWidthM = 375f;
 
     // Remake-only rule: the sine of the bearing off the track's reverse inside which an aim counts as
     // dead astern, 30 degrees. Rule: docs/org/aiPilot.md "Stunt race bots".
@@ -140,6 +151,10 @@ public sealed class StuntBotObjective
     /// <summary>Whether the bot steers onto its own approach line. Off, it steers straight for the ribbon's
     /// lead-in point and ignores <see cref="Approach"/>, which a suite's control flies to show it circles.</summary>
     public bool OnLine { get; set; } = true;
+
+    /// <summary>The U-turn width a bot going round allows for, metres: <see cref="UTurnWidthM"/>. At 0 it
+    /// turns in at its own lead-in, which a test's control flies to show it goes round again.</summary>
+    public float UTurnWidth { get; init; } = UTurnWidthM;
 
     /// <summary>Whether a run may not enter a route from the end named, for now, as it may not from a
     /// refused one. Null shuts none. StuntRaceBots shuts an end that cannot see a structure to shoot.</summary>
@@ -324,13 +339,13 @@ public sealed class StuntBotObjective
         float above = CruiseAboveM * Mathf.Clamp(Flat(leadIn - at).Length() / lead, 0f, 1f);
         if (!OnLine)
         {
-            return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, "steers for the zone");
+            return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, SteersIn);
         }
 
         var aim = AimOnLine(entry, Line(into), at);
         var heading = Heading(aim - at, velocity, entry - at);
         return new StuntBotOrder(StuntBotLeg.Steer, next, at + (heading * LookAheadM) + (Vector3.Up * (entry.Y + above - at.Y)), _farEnd,
-            _inbound == true ? "steers for the zone" : "goes round for the zone");
+            _inbound == true ? SteersIn : "goes round for the zone");
     }
 
     /// <summary>A crash's return, or a rerun's: the next order picks its zone afresh, after any ride
@@ -392,12 +407,14 @@ public sealed class StuntBotObjective
         float along = to.Dot(line);
         float ahead = Mathf.Max(LookAheadM, (to - (line * along)).Length());
 
-        // Out once it would meet the line past the entry. In again once it is past its lead-in, by as much
-        // again as it is off the line beyond LookAheadM.
+        // Out once it would meet the line past the entry. In again past its lead-in and a U-turn's width past
+        // the shortest lead-in. Both go farther by as much as it is off the line beyond LookAheadM.
+        // ⚠ Do not drop the U-turn: it ends that far off the line, raising `ahead`, and the bot flies out again.
+        float turnIn = Mathf.Max(Approach.LeadInM, ShortestLeadInM + UTurnWidth);
         _inbound = _inbound switch
         {
             null or true => along - ahead >= 0f,
-            false => along >= Approach.LeadInM + ahead - LookAheadM,
+            false => along >= turnIn + ahead - LookAheadM,
         };
         return entry - (line * (_inbound.Value ? along - ahead : along + LookAheadM));
     }
