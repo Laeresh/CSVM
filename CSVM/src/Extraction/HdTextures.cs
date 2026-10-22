@@ -9,7 +9,7 @@ namespace CSVM.Extraction;
 /// Higher-resolution replacements for the extracted art, read through a <see cref="PackIndex"/>
 /// from the HD folder (<c>textures.hd</c>, <c>--hd=</c>, default <c>HD</c>).
 /// Each pack's own top folder is dropped. A path left with a folder replaces that file under
-/// <c>extracted/</c>, matched without case or extension: <c>rimage/c1m1.png</c>,
+/// <c>extracted/</c>, matched without case, its own extension first: <c>rimage/c1m1.png</c>,
 /// <c>C3/rtexture12/cliff01.png</c>. A bare name replaces that world texture in every archive.
 /// Engine-free; the callers decode and size what this returns.
 /// </summary>
@@ -64,9 +64,12 @@ public sealed class HdTextures : IDisposable
     }
 
     /// <summary>The replacement for the file at <paramref name="originalPath"/> under
-    /// <c>extracted/</c>, or null.</summary>
+    /// <c>extracted/</c>, or null. A pack file with the original's own extension beats one
+    /// without.</summary>
     public byte[]? ForExtracted(string originalPath) =>
-        _index.Count > 0 && Relative(originalPath) is { } rel ? _index.Read(PackIndex.KeyOf(rel)) : null;
+        _index.Count > 0 && Relative(originalPath) is { } rel
+            ? _index.ReadPath(rel) ?? _index.Read(PackIndex.KeyOf(rel))
+            : null;
 
     public void Dispose() => _index.Dispose();
 

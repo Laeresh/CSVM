@@ -174,7 +174,9 @@ The HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`
 reads none unless `--hd=` names one), over `PackIndex.cs`. A path left with a folder replaces
 that file under `extracted/`, matched without case or extension, and a bare name replaces that world
 texture in every archive. `C3/rtexture12/cliff01.png` therefore beats `cliff01.png` in C3 alone,
-the way a pack carries a chapter's own version of a name chapters share. Engine-free; `Mech3/HdArt.cs`
+the way a pack carries a chapter's own version of a name chapters share. A pack file carrying the
+original's own extension beats one that does not (`PackIndex.ReadPath`), so a pack can ship both
+`SB_03_01_BASE.png` (the scrapbook page) and `SB_03_01_BASE.jpg` (its zoom). Engine-free; `Mech3/HdArt.cs`
 decodes and sizes what it returns. Coverage: `CSVM.Tests/HdTexturesTests.cs`.
 
 ## src/Extraction/HdModels.cs

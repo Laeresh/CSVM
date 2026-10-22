@@ -32,6 +32,10 @@ internal sealed class PackIndex : IDisposable
     };
 
     private readonly Dictionary<string, (ZipArchive? Zip, string Path, string Extension, string Pack)> _byKey = new(StringComparer.Ordinal);
+
+    // The same files under their own path, extension kept. The scrapbook draws X.PNG on the page
+    // and X.JPG in the zoom, often different pictures, and a pack may ship both.
+    private readonly Dictionary<string, (ZipArchive? Zip, string Path, string Extension, string Pack)> _byPath = new(StringComparer.Ordinal);
     private readonly List<ZipArchive> _zips = new();
 
     private PackIndex(string? root)
@@ -108,9 +112,35 @@ internal sealed class PackIndex : IDisposable
             : null;
 
     /// <summary>The bytes of the file under <paramref name="key"/>, or null.</summary>
-    public byte[]? Read(string key)
+    public byte[]? Read(string key) => Read(_byKey, key);
+
+    /// <summary>The bytes of the file at <paramref name="relativePath"/> within its pack, matched
+    /// without case but with its extension, or null.</summary>
+    public byte[]? ReadPath(string relativePath) => Read(_byPath, PathKeyOf(relativePath));
+
+    public void Dispose()
     {
-        if (!_byKey.TryGetValue(key, out var source))
+        foreach (var zip in _zips)
+        {
+            zip.Dispose();
+        }
+
+        _zips.Clear();
+        _byKey.Clear();
+        _byPath.Clear();
+    }
+
+    private static string PathKeyOf(string relativePath) => relativePath.Replace('\\', '/').ToLowerInvariant();
+
+    private static string DropTop(string entryPath)
+    {
+        int slash = entryPath.IndexOf('/');
+        return slash < 0 ? entryPath : entryPath[(slash + 1)..];
+    }
+
+    private byte[]? Read(Dictionary<string, (ZipArchive? Zip, string Path, string Extension, string Pack)> map, string key)
+    {
+        if (!map.TryGetValue(key, out var source))
         {
             return null;
         }
@@ -129,23 +159,6 @@ internal sealed class PackIndex : IDisposable
             stream.CopyTo(bytes);
             return bytes.ToArray();
         }
-    }
-
-    public void Dispose()
-    {
-        foreach (var zip in _zips)
-        {
-            zip.Dispose();
-        }
-
-        _zips.Clear();
-        _byKey.Clear();
-    }
-
-    private static string DropTop(string entryPath)
-    {
-        int slash = entryPath.IndexOf('/');
-        return slash < 0 ? entryPath : entryPath[(slash + 1)..];
     }
 
     private void AddZip(string source, IReadOnlySet<string> extensions, Func<PackFile, string?> keyOf)
@@ -181,5 +194,6 @@ internal sealed class PackIndex : IDisposable
         }
 
         _byKey[key] = (zip, path, ext, file.Pack);
+        _byPath[PathKeyOf(file.RelativePath)] = (zip, path, ext, file.Pack);
     }
 }
