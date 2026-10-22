@@ -33,11 +33,24 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             : launch.Versus ? "Dogfight" : "Free Flight";
     }
 
+    /// <summary>The chapter and mode letter a Dogfight door's <c>:chapter:letter</c> suffix names.
+    /// A suffix leaving either out names C1, or a Deathmatch with nobody on a team.</summary>
+    public static (string Chapter, char Letter) MultiplayerDoor(string aid)
+    {
+        System.ArgumentNullException.ThrowIfNull(aid);
+        var parts = aid.Split(':');
+        return (
+            parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1",
+            parts.Length > 2 && parts[2].Length > 0 ? parts[2][0] : 'd');
+    }
+
     /// <summary>The load screen for the launch the spec describes. A campaign launch takes the
     /// original's chart sheet for the mission at <paramref name="missionSeq"/>, the spec's own
     /// position by default. Everything else takes its blackboard (docs/org/loading-screen.md).
-    /// <paramref name="teamedLobby"/> picks a Dogfight's team dialog.</summary>
-    public UI.Screens.LoadBoard LoadScreen(bool campaign, string? missionType, int? missionSeq, bool teamedLobby)
+    /// <paramref name="teamedLobby"/> picks a Dogfight's team dialog, and a door's
+    /// <paramref name="briefingKey"/> names that dialog outright.</summary>
+    public UI.Screens.LoadBoard LoadScreen(
+        bool campaign, string? missionType, int? missionSeq, bool teamedLobby, string? briefingKey = null)
     {
         // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
         // describes the flight. The chart sheet writes no words of ours at all.
@@ -45,7 +58,8 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         var sheet = campaign
             ? CampaignLoadSheet(missionSeq ?? spec.CampaignMissionSeq ?? 0)
             : null;
-        string? briefing = campaign || missionType != null ? null : LaunchBriefing(teamedLobby);
+        string? briefing = briefingKey
+            ?? (campaign || missionType != null ? null : LaunchBriefing(teamedLobby));
         var board = UI.Screens.LoadBoard.Build(
             paths.DataRoot, paths.ZrdrPath, paths.MessagesPath, campaign, subject, missionType, sheet, briefing);
         if (briefing != null)
@@ -83,8 +97,8 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         }
         else if (aid.StartsWith("pauseboard-mp", System.StringComparison.Ordinal))
         {
-            var parts = aid.Split(':');
-            ShowMultiplayerPauseSheet(parent, parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1");
+            var (chapter, letter) = MultiplayerDoor(aid);
+            ShowMultiplayerPauseSheet(parent, chapter, letter);
         }
         else if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
         {
@@ -202,11 +216,11 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
     }
 
-    // A Dogfight's pause sheet with no match behind it: a Deathmatch on that chapter's environment
-    // with nobody on a team. docs/org/pause-screen.md.
-    private void ShowMultiplayerPauseSheet(Node parent, string chapter)
+    // A Dogfight's pause sheet with no match behind it, for the mode the letter names on that
+    // chapter's environment. docs/org/pause-screen.md.
+    private void ShowMultiplayerPauseSheet(Node parent, string chapter, char letter)
     {
-        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, DogfightMissionType.Deathmatch, false) is not { } key)
+        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, letter) is not { } key)
         {
             Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
             return;

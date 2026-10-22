@@ -122,7 +122,8 @@ public sealed record PauseSheet(
             EscapeDialog.Label(messages, shared.Objectives?.TitleKey ?? string.Empty),
             labels,
             true,
-            LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages),
+            LoadScreens.OnBoard(
+                LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages), StripsTop(strips)),
             strips);
     }
 
@@ -155,6 +156,18 @@ public sealed record PauseSheet(
         strips.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoStrip(shared));
         labels.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoLabel);
         return (strips, labels);
+    }
+
+    // The strips' top edge, which no row of a multiplayer sheet may reach.
+    private static float StripsTop(IReadOnlyList<EscapeButton?> strips)
+    {
+        float top = float.PositiveInfinity;
+        foreach (var strip in strips)
+        {
+            top = strip is { } placed ? Math.Min(top, placed.At.Y) : top;
+        }
+
+        return top;
     }
 }
 

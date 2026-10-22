@@ -270,14 +270,18 @@ public static class LoadScreens
     /// <summary>The multiplayer dialog a Dogfight on <paramref name="chapter"/> names, keyed by the
     /// original's own number for the environment row and the mode letter. Null for a chapter none
     /// of the lobby's seven rows flies, which keeps the blackboard's heading.</summary>
-    public static string? MultiplayerKey(string chapter, Spec.DogfightMissionType type, bool teamed)
+    public static string? MultiplayerKey(string chapter, Spec.DogfightMissionType type, bool teamed) =>
+        MultiplayerKey(chapter, MultiplayerLetter(DogfightLobby.ModeOf(type, teamed)));
+
+    /// <summary>The multiplayer dialog for <paramref name="chapter"/>'s lobby row and a mode letter
+    /// already chosen, for a door naming the mode directly. Null for a chapter no row flies.</summary>
+    public static string? MultiplayerKey(string chapter, char letter)
     {
+        ArgumentNullException.ThrowIfNull(chapter);
         int environment = DogfightLobby.EnvironmentOf(chapter.ToUpperInvariant());
         return environment < 0
             ? null
-            : EscapeDialog.MultiplayerKey(
-                DogfightLobby.EnvironmentNumber(environment),
-                MultiplayerLetter(DogfightLobby.ModeOf(type, teamed)));
+            : EscapeDialog.MultiplayerKey(DogfightLobby.EnvironmentNumber(environment), letter);
     }
 
     /// <summary>The words one load screen writes. An Instant Action mission takes its dialog's four
@@ -325,6 +329,35 @@ public static class LoadScreens
         }
 
         return lines;
+    }
+
+    /// <summary>A multiplayer dialog's texts held on its board above <paramref name="clear"/>, the
+    /// top of the furniture under the last band. An unwrapped body text takes the widest wrap the
+    /// dialog's body texts author, and each column's lowest row is fitted to the room above
+    /// <paramref name="clear"/>. Both rules are remake-only (docs/org/loading-screen.md).</summary>
+    public static IReadOnlyList<BoardLine> OnBoard(IReadOnlyList<BoardLine> texts, float clear)
+    {
+        ArgumentNullException.ThrowIfNull(texts);
+        float measure = 0f;
+        foreach (var line in texts)
+        {
+            measure = line.Leading > 0f ? Math.Max(measure, line.Width) : measure;
+        }
+
+        var set = new List<BoardLine>(texts.Count);
+        foreach (var line in texts)
+        {
+            if (line.Leading <= 0f)
+            {
+                set.Add(line);
+                continue;
+            }
+
+            var row = line.Width > 0f ? line : line with { Width = measure };
+            set.Add(Lowest(texts, line) ? Settled(texts, row, clear) : row);
+        }
+
+        return set;
     }
 
     // The campaign screen, through the same drawer PauseScreens uses. It draws the chart at its
@@ -494,8 +527,50 @@ public static class LoadScreens
         return new ComposedBoard(
             pictures,
             Array.Empty<BoardStroke>(),
-            DialogTexts(zrdrPath, DialogFile, key, messages),
+            OnBoard(DialogTexts(zrdrPath, DialogFile, key, messages), ChalkBarY),
             Array.Empty<BoardPlaque>());
+    }
+
+    // Whether no body text stands lower in the row's own column. Only that row has the
+    // furniture under it rather than another row.
+    private static bool Lowest(IReadOnlyList<BoardLine> texts, BoardLine row)
+    {
+        foreach (var other in texts)
+        {
+            if (other.Leading > 0f && other.X == row.X && other.Y > row.Y)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // A row whose first line clears the furniture keeps its point. Its box is the room above the
+    // furniture, and the renderer shrinks the face to fit it. A row whose first line is under the
+    // furniture has no room there, so it stacks a pitch under the next row up.
+    private static BoardLine Settled(IReadOnlyList<BoardLine> texts, BoardLine row, float clear)
+    {
+        float y = row.Y;
+        if (y + row.Leading > clear)
+        {
+            // The pitch under that row assumes it takes one line; multiplayer-board measures it.
+            float above = float.NegativeInfinity;
+            foreach (var other in texts)
+            {
+                bool clears = other.Leading > 0f && other.X == row.X && other.Y + other.Leading <= clear;
+                above = clears ? Math.Max(above, other.Y) : above;
+            }
+
+            if (float.IsNegativeInfinity(above))
+            {
+                return row;
+            }
+
+            y = above + row.Leading;
+        }
+
+        return row with { Y = y, Height = clear - y };
     }
 
     // Every Text the named dialog's script places, in script order, as its own property dict. An

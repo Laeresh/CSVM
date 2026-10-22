@@ -321,6 +321,27 @@ runs a three-line blurb through the chalk rule under it, so the body widget carr
 13-pixel pitch and the renderer wraps to it rather than to the face's own metrics. Where the words
 break is still ours: a wider face takes a wider line.
 
+**Remake-only rule: a multiplayer body text the dialog leaves unwrapped takes the measure its
+wrapped ones author.** Measured off `OriginalScreenshots/IA LoadScreen.png` (the `d` family's
+blurb, footage rather than a decode), the original's `loadListbody` sets about 5.3 pixels a
+character, and the board's own face sets about 6.4. The authors wrapped exactly the rows their
+face could not fit in 400: in the `z` dialogs `OBJ3` (141 characters) and `OBJ4` (87) carry
+`wrap [400, 250]` and `OBJ2` (73) does not. In our face `OBJ2` and the 70-character
+crash-and-teamkill row run past the board's right edge at x 778. So `LoadScreens.OnBoard` gives
+every unwrapped `loadListbody` text of a multiplayer dialog the widest wrap the same dialog's body
+texts author, 400 on every one, which ends a row at the instruction column's x 360 by 760. A row the
+original set on one line can take two. Instant Action dialogs keep their authored widths: their
+unwrapped rows are win lines of at most 40 characters, which fit.
+
+**Remake-only rule: the lowest row of each column is fitted to the room above the furniture.**
+Wrapped to two lines at y 525, the `c` and `z` dialogs' crash-and-teamkill row would run into the
+bar at `564,546`, the propeller at `506,549` and the wing ornament along the frame's bottom edge.
+`LoadScreens.OnBoard` keeps the row at its authored point and boxes it to the 21 pixels above the
+bar's top; the renderer's fit (`ComposedBoardView.Fitted`) steps its face down a point at a time
+until its wrapped block fits. It fits on one line at 8 points (10.7 pixels against the body's 13),
+the fit's floor, and its point value stays at 13. The pause sheet uses the same rule above its
+strips, where the row's authored point is under them ([`pause-screen.md`](pause-screen.md)).
+
 **Free flight is ours rather than the original's**, and no shipped dialog describes it. It takes
 the mode's own name at `HEAD1`'s authored place and writes nothing else, since the nearest
 dialog, the `d` family's, would state a win condition it does not have.

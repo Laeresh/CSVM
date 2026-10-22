@@ -1327,9 +1327,9 @@ public partial class Launcher : Node3D
     }
 
     // The load screen over the whole window, on the board layer; what it draws is LaunchBoards'.
-    private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
+    private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null, string? briefing = null)
     {
-        var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight);
+        var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight, briefing);
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
@@ -1610,10 +1610,15 @@ public partial class Launcher : Node3D
         // first show until a launch takes it back (Utils/WorldBackdrop.cs).
         WorldBackdrop.Black(_env);
         string aid = _menu.Show(_cli, _spec, _buildStamp, destination);
-        // The load screen is up for two frames during a build and torn down before anything
-        // renders, so a shot of it needs a door of its own that leaves it standing. The campaign
-        // door's argument names the mission, the blackboard's the Instant Action mission type.
-        if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
+        // A build tears the load screen down before anything renders, so a shot needs a door that
+        // leaves it standing. The arguments: a campaign mission, an Instant Action mission type,
+        // or a Dogfight's chapter and mode letter.
+        if (aid.StartsWith("loadboard-mp", System.StringComparison.Ordinal))
+        {
+            var (chapter, letter) = LaunchBoards.MultiplayerDoor(aid);
+            ShowLoadScreen(false, null, briefing: UI.Screens.LoadScreens.MultiplayerKey(chapter, letter));
+        }
+        else if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
         {
             var parts = aid.Split(':');
             ShowLoadScreen(

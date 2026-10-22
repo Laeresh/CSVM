@@ -344,6 +344,41 @@ public class LoadScreensTests
         Assert.Equal("loadframempt2", board.Pictures[0].Art.Name);
     }
 
+    /// <summary>On a multiplayer board an unwrapped body row takes the dialog's widest body wrap.
+    /// Each column's lowest row keeps its point and is boxed to the room above the furniture.</summary>
+    [Fact]
+    public void ALowestRowWithRoomKeepsItsPointAndIsBoxedToTheFurniture()
+    {
+        var set = LoadScreens.OnBoard(Rows(), 546f);
+
+        Assert.Equal(new[] { 0f, 0f, 400f, 400f, 400f, 400f }, set.Select(l => l.Width));
+        Assert.Equal(new[] { 35f, 525f, 445f, 445f, 525f, 525f }, set.Select(l => l.Y));
+        Assert.Equal(new[] { 0f, 0f, 0f, 0f, 21f, 21f }, set.Select(l => l.Height));
+    }
+
+    /// <summary>A lowest row whose first line is under the furniture stacks a pitch under the next
+    /// row up in its own column. A title at the same height stays where it is.</summary>
+    [Fact]
+    public void ARowUnderTheFurnitureStacksUnderTheRowAboveInItsColumn()
+    {
+        var set = LoadScreens.OnBoard(Rows(), 510f);
+
+        Assert.Equal(new[] { 35f, 525f, 445f, 445f, 458f, 458f }, set.Select(l => l.Y));
+        Assert.Equal(52f, set[4].Height);
+    }
+
+    // A heading, a title level with the last row, then two rows of an instruction beside its
+    // points. The last row authors no wrap.
+    private static BoardLine[] Rows() => new[]
+    {
+        new BoardLine("HEAD", 60f, 35f, 0f, 17f, BoardInk.Heading),
+        new BoardLine("TITLE", 600f, 525f, 0f, 17f, BoardInk.Heading),
+        new BoardLine("row five", 360f, 445f, 400f, 13f, BoardInk.Row, Leading: 13f),
+        new BoardLine("2", 280f, 445f, 0f, 13f, BoardInk.Row, Leading: 13f),
+        new BoardLine("row six", 360f, 525f, 0f, 13f, BoardInk.Row, Leading: 13f),
+        new BoardLine("-2", 280f, 525f, 0f, 13f, BoardInk.Row, Leading: 13f),
+    };
+
     private static ComposedBoard Briefing(string key) =>
         LoadScreens.For(false, "DOGFIGHT", null, Zrdr(), MessagesPath(), briefing: key);
 

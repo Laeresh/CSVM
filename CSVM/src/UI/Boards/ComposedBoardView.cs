@@ -172,6 +172,33 @@ public sealed partial class ComposedBoardView : Control
         return rows * pitch;
     }
 
+    /// <summary>The box each of a line's wrapped lines draws in, in authored pixels. Each is its
+    /// own width, from the face's ascent above the baseline to its descent below. A pitched or
+    /// unwrapped line is broken and spaced as the draw breaks and spaces it.</summary>
+    public static IReadOnlyList<Rect2> LineBoxes(BoardFit fit, Font font, BoardLine line)
+    {
+        ArgumentNullException.ThrowIfNull(fit);
+        ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(line);
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
+        float pitch = line.Leading > 0f ? line.Leading : font.GetHeight(points) / fit.Scale;
+        IEnumerable<string> parts = line.Width > 0f
+            ? Wrap(font, line.Text, points, fit.Length(line.Width))
+            : new[] { line.Text };
+        float baseline = line.Y + (points / fit.Scale);
+        float ascent = font.GetAscent(points) / fit.Scale;
+        float tall = ascent + (font.GetDescent(points) / fit.Scale);
+        var boxes = new List<Rect2>();
+        foreach (var part in parts)
+        {
+            float wide = font.GetStringSize(part, HorizontalAlignment.Left, -1f, points).X / fit.Scale;
+            boxes.Add(new Rect2(line.X, baseline - ascent, wide, tall));
+            baseline += pitch;
+        }
+
+        return boxes;
+    }
+
     /// <summary>The line at the largest whole point size, its own or smaller, whose wrapped block
     /// fits <see cref="BoardLine.Height"/>. A line carrying no box, no wrap width or no words comes
     /// back as it stands. One that still will not fit at <see cref="MinBlockPoints"/> is returned
