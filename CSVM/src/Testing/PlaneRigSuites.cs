@@ -26,6 +26,9 @@ internal static class PlaneRigSuites
     private const float PosTolerance = 1e-3f;
     private const float AngleToleranceDeg = 0.5f;
 
+    // Metres: an unedited template differs from cockpit1 by the printed floats' rounding alone.
+    private const float TemplateTolerance = 1e-4f;
+
     // The two spins the suite reads, each over half a second. An unclassified node turns at this
     // invented rate, and the stock prop at its own.
     private const float SpinDegPerSec = 90f;
@@ -387,6 +390,42 @@ internal static class PlaneRigSuites
         CheckUnnamed(ctx, planesGamez, textures, plane, poses["speedometer"].Origin);
     }
 
+    // Each airframe's dumped rig copied unedited into a pack with no model, against its stock cockpit1.
+    // Able to fail: a template that skips the flat mount's head-pitch tilt moves every dial off its place.
+    [Suite("plane-rig-cockpit-template",
+        "every player airframe's --dump-markers rig.json, copied unedited into a pack with no model, " +
+        "passes its checks, makes a body cockpit, and transplants every gauge assembly and the sight glass " +
+        "to the plane-frame pose the stock cockpit1 drew it at, binding what the stock cockpit1 binds; " +
+        "it notes how far the stereo eye's mount puts each dial from the flat one")]
+    internal static void PlaneRigCockpitTemplate(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("speedometer");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        // The CLI's own source, then the run's plane where the player airframe list leaves it out.
+        var templates = Tooling.Probes.Markers(ctx.PlanesGamezPath, string.Empty).RigTemplates.ToList();
+        if (templates.All(t => t.Model != ctx.PlaneName) && MarkerRig.Extract(planesGamez, ctx.PlaneName) is { } own)
+        {
+            templates.Add((ctx.PlaneName, own.FormatRigTemplate()));
+        }
+
+        int withCockpit = 0;
+        foreach (var (plane, json) in templates)
+        {
+            if (MarkerRig.Extract(planesGamez, plane)?.Cockpit != null)
+            {
+                withCockpit++;
+                CheckTemplate(ctx, planesGamez, textures, plane, json);
+            }
+        }
+
+        ctx.Check(withCockpit > 0, $"{withCockpit} of {templates.Count} dumped airframes carry a cockpit1 and its template");
+    }
+
     // The dial keeps the interior's own materials and takes no shadow. Its layers keep the order the
     // bias gives them at any scale, since the bias is a fraction of view distance.
     private static void CheckDialLayers(TestContext ctx, PlaneBuilder builder, Node3D face, Node3D needle)
@@ -480,6 +519,102 @@ internal static class PlaneRigSuites
                 model.Free();
             }
         }
+    }
+
+    // One airframe's template build against its stock build: each assembly's plane-frame transform, the
+    // glass's plane-frame vertices and the bind. It notes the stereo mount's distance from the flat one.
+    private static void CheckTemplate(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string json)
+    {
+        var poses = new Dictionary<string, Transform3D>();
+        var stereoGap = new List<float>();
+        List<Vector3> stockGlass;
+        CockpitGauges? stock;
+        using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
+        {
+            var bare = Build(ctx, planesGamez, textures, none, plane, out var bareBuilder, cockpitInterior: true);
+            try
+            {
+                stock = CockpitGauges.Bind(bareBuilder);
+                var interior = bareBuilder.CockpitInterior!;
+                var stereo = PlaneBuilder.StereoMount(bareBuilder.CockpitCameraOffset, PlaneBuilder.InteriorScale);
+                foreach (var assembly in Named(interior, "gauges").First().GetChildren().OfType<Node3D>())
+                {
+                    poses[AnimRuntime.NameOf(assembly)] = PlaneRigPatch.PlaneFrame(assembly, bare);
+                    stereoGap.Add((stereo * PlaneRigPatch.PlaneFrame(assembly, interior)).Origin.DistanceTo(poses[AnimRuntime.NameOf(assembly)].Origin));
+                }
+
+                stockGlass = GlassVertices(interior, bare, bareBuilder);
+            }
+            finally
+            {
+                bare.Free();
+            }
+        }
+
+        using var pack = Pack(ctx, $"cockpit-template-{plane}", plane, json);
+        Node3D model;
+        PlaneBuilder builder;
+        try
+        {
+            model = Build(ctx, planesGamez, textures, pack, plane, out builder, cockpitInterior: true);
+        }
+        catch (InvalidDataException e)
+        {
+            ctx.Check(false, $"{plane}: the dumped rig loads and passes its checks: {e.Message}");
+            return;
+        }
+
+        try
+        {
+            var panel = builder.CockpitPanel;
+            var moved = panel == null ? new List<Node3D>() : Named(panel, "gauges").Take(1).SelectMany(g => g.GetChildren().OfType<Node3D>()).ToList();
+            ctx.Check(builder.Cockpit is { FromBody: true } && panel != null && moved.Count == poses.Count,
+                $"{plane}: the unedited template makes a body cockpit moving {moved.Count} of {poses.Count} assemblies");
+            float worstPos = 0f, worstBasis = 0f;
+            foreach (var assembly in moved)
+            {
+                var want = poses[AnimRuntime.NameOf(assembly)];
+                var got = PlaneRigPatch.PlaneFrame(assembly, model);
+                worstPos = Mathf.Max(worstPos, got.Origin.DistanceTo(want.Origin));
+                worstBasis = Mathf.Max(worstBasis, new[] { got.Basis.X - want.Basis.X, got.Basis.Y - want.Basis.Y, got.Basis.Z - want.Basis.Z }.Max(d => d.Length()));
+            }
+
+            ctx.Check(worstPos < TemplateTolerance && worstBasis < TemplateTolerance * PlaneBuilder.InteriorScale,
+                $"{plane}: every assembly stands where cockpit1 drew it, worst {worstPos * 1000f:0.####} mm and basis {worstBasis:0.#######}");
+            var glass = panel == null ? new List<Vector3>() : GlassVertices(panel, model, builder);
+            float worstGlass = glass.Count == stockGlass.Count ? glass.Zip(stockGlass, (a, b) => a.DistanceTo(b)).DefaultIfEmpty(0f).Max() : float.PositiveInfinity;
+            ctx.Check(stockGlass.Count > 0 && worstGlass < TemplateTolerance,
+                $"{plane}: the panel draws all {glass.Count} of cockpit1's {stockGlass.Count} glass vertices where cockpit1 drew them, worst {worstGlass * 1000f:0.####} mm");
+            var bind = CockpitGauges.Bind(builder);
+            ctx.Check(stock != null && bind != null && (bind.NeedleCount, bind.LampCount, bind.ReadoutCount, bind.BeltCount, bind.DamageZoneCount)
+                    == (stock.NeedleCount, stock.LampCount, stock.ReadoutCount, stock.BeltCount, stock.DamageZoneCount),
+                $"{plane}: the bind finds what the stock cockpit1's does, needles {bind?.NeedleCount}/{stock?.NeedleCount}");
+            ctx.Note($"{plane}: template off cockpit1 by {worstPos * 1000f:0.####} mm (assemblies) and {worstGlass * 1000f:0.####} mm (glass); the stereo mount puts the dials {stereoGap.Min() * 1000f:0} to {stereoGap.Max() * 1000f:0} mm from the flat mount's, eye {builder.CockpitCameraOffset}");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
+    // Every glass surface's vertices in the plane frame, in tree and surface order, as CutGlass walks them.
+    private static List<Vector3> GlassVertices(Node3D root, Node3D model, PlaneBuilder builder)
+    {
+        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        var found = new List<Vector3>();
+        foreach (var instance in root.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
+        {
+            for (int s = 0; s < (instance.Mesh?.GetSurfaceCount() ?? 0); s++)
+            {
+                if (instance.GetActiveMaterial(s) is { } material && glassIds.Contains(material.GetInstanceId()))
+                {
+                    var frame = PlaneRigPatch.PlaneFrame(instance, model);
+                    found.AddRange(instance.Mesh!.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Vertex].AsVector3Array().Select(v => frame * v));
+                }
+            }
+        }
+
+        return found;
     }
 
     // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes

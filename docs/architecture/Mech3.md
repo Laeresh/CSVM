@@ -510,12 +510,12 @@ in `UI/Boards/ComposedBoardView.cs`, which is why no JPEG decoder belongs here.
 ## src/Mech3/MarkerRig.cs
 A player airframe's weapon marker rig read from the planes.zbd GameZ: `Extract` walks a `player_*`
 root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and reports plane-frame
-positions plus co-located groups (two gun groups on one mount). `Format` prints one dump block per
-plane, `FormatRigTemplate` a markers-only starting `rig.json` for `PlaneRig`, and `PlayerAirframes`
-is the model to display list; together they are the instrument [../formats/markers.md](../formats/markers.md)
-regenerates from and the source `--dump-markers` and `UI/Overlays/MarkerOverlay.cs` share.
-`FindNamedMarker` reads one non-weapon node by name, skipping the alternate-state subtrees so a plane
-whose interior or wreck carries a same-named node resolves to the authored one in the `markers` group.
+positions plus co-located groups. `Format` prints one dump block per plane, and `PlayerAirframes` is
+the model to display list: the source [../formats/markers.md](../formats/markers.md), `--dump-markers`
+and `UI/Overlays/MarkerOverlay.cs` share. `FormatRigTemplate` writes the starting `rig.json`: every marker,
+and a body `cockpit` section from `CockpitPoses`, each `cockpit1` gauge assembly and the glass carried
+through `PlaneBuilder.InteriorToPlane` (the flat mount, never the stereo one) to where cockpit view drew it.
+`FindNamedMarker` reads one non-weapon node by name, skipping the alternate-state subtrees.
 
 ## src/Mech3/PlaneRig.cs
 The engine-free reader for an airframe's `rig.json`: marker positions in the marker frame, prop

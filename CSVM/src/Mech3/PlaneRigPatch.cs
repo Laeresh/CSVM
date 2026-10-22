@@ -147,6 +147,12 @@ public static class PlaneRigPatch
         }
     }
 
+    /// <summary>Whether the node's own mesh has a sight-glass polygon (<see cref="GunsightReticle.IsGlass"/>).</summary>
+    internal static bool HoldsGlass(GameZ gamez, GameZNode node) =>
+        node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count && gamez.Meshes[node.MeshIndex] is { } mesh
+        && mesh.Polygons.Exists(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
+            && gamez.Materials[p.MaterialIndex].TextureName is { } texture && GunsightReticle.IsGlass(texture));
+
     // A marker moves to its rig position by rewriting its local origin under the parent's plane frame.
     // A missing one is added under the markers group, so Loadout's cs_name walk finds it like any other.
     private static int MoveMarkers(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
@@ -311,11 +317,6 @@ public static class PlaneRigPatch
 
         return null;
     }
-
-    private static bool HoldsGlass(GameZ gamez, GameZNode node) =>
-        node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count && gamez.Meshes[node.MeshIndex] is { } mesh
-        && mesh.Polygons.Exists(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
-            && gamez.Materials[p.MaterialIndex].TextureName is { } texture && GunsightReticle.IsGlass(texture));
 
     // ⚠ Never add a firepoint or pylon. Loadout.BindAi arms an AI over every one the tree carries,
     // so each added one is an added gun or store.

@@ -131,7 +131,13 @@ for every aircraft.
 one `.json` a pack reads, and it needs no replacement model beside it. Every section and field is
 optional, and an absent one keeps the original's value. Vectors are metres in the plane frame
 ([markers.md](markers.md)): below the airframe root, nose -Z, right +X, up +Y.
-`--dump-markers` writes a starting file per airframe to `./.scratch/rigs/<model>/rig.json`.
+`--dump-markers` writes a starting file per airframe to `./.scratch/rigs/<model>/rig.json`. It holds
+every marker at the original's position and a `cockpit` section with `"from": "body"` that poses
+every gauge assembly and the sight glass where `cockpit1` drew it on the flat screen, with explicit
+`position`, `rotation` and `scale` (on the Brigand and the Firebrand the assembly holding the glass,
+`g730` or `g184`, stands in for `glass`). The dumped file is therefore not a no-op: copied unedited,
+it switches the airframe to a body cockpit, which draws the airframe from inside with the original's
+dials in place. Deleting the `cockpit` section keeps `cockpit1`.
 
 ```json
 {

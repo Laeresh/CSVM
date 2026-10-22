@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
 12. ☑ [local] Transplanted gauge assemblies and sight glass on the body
-13. ☐ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
+13. ☑ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
 14. ☐ [local] The Corvette's seat and dashboard
 
 ### Wave C, cockpit1 replacements
@@ -453,7 +453,46 @@ builder's bias is baked for 0.04; how the glass, a polygon of a larger mesh, is 
 (`InteriorMaterials`, `Mech3/PlaneBuilder.cs:208`); a transplant that rebuilds surfaces must keep
 them in that list or the belts and damage zones go silent (the bind's debug line counts them).
 
-## B13 ☐ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
+## B13 ☑ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
+
+**Landed.** `MarkerRig.Extract` (`Mech3/MarkerRig.cs`) also reads `CockpitPoses`, so every dumped
+`./.scratch/rigs/<model>/rig.json` of an airframe whose root has a `cockpit1` child carries
+`"cockpit": { "from": "body", "gauges": { ... } }`. `ProbeRunner.DumpMarkers` is unchanged.
+
+- **Poses.** Each child of `cockpit1`'s first `gauges` node (depth-first, as `CheckCockpit` and the
+  transplant find it), in file order, is its gamez locals below `cockpit1` carried through
+  `PlaneBuilder.InteriorToPlane` on the gamez `cockpit_camera`. `cockpit1`'s own local is left out, since
+  the built mount replaces it. The glass is `CockpitTransplant.GlassFrame(GunsightReticle.Find(...))`
+  through the same mount. Every entry writes `position`, `rotation` (YXZ degrees of the orthonormalised
+  basis) and `scale`, rounded to a micrometre, 1e-4 degree and 1e-7, so float noise such as `2E-14`
+  never reaches the author. Every dumped pose is a rotation times a uniform positive scale (0.04), so
+  the three fields express it exactly.
+- **Brigand and Firebrand.** An assembly holding a glass polygon (`PlaneRigPatch.HoldsGlass`, now
+  internal, over its subtree) stands in for `glass`, which is then not written. `g730` and `g184` each
+  hold every glass polygon their `cockpit1` has, so naming the holder draws the whole glass.
+- **Tests.** `MarkerRigTests`: a synthetic airframe's template poses each assembly and the glass
+  through the flat mount, skips `cockpit1`'s local, reads back through `CockpitTransplant.Posed`, and
+  passes `CheckCockpit`; a speedometer holding the glass replaces the key; the real-data theory over
+  the eleven player airframes checks names, `CheckCockpit`, uniform scale, read-back, and the holder's
+  whole glass. Suite `plane-rig-cockpit-template` (`Testing/PlaneRigSuites.cs`, install only) takes each
+  template from `Probes.Markers`, copies it unedited into a pack with no model, and builds every player
+  airframe against its stock `cockpit1` build: every assembly's plane-frame transform within 0.1 mm
+  (measured 0.0006 to 0.0007 mm), every glass vertex within 0.1 mm (measured at most 0.0009 mm), and
+  the same needle, lamp, readout, belt and zone counts.
+- **The look.** `.scratch/b13-shots/bloodhawk-stock-cockpit1.png` against
+  `bloodhawk-dumped-template-body.png`: by eye the dials sit at the same places; the template shot also
+  draws the Bloodhawk's own body around them, and its glass composites fainter, as B12 recorded.
+- **Flat eye against stereo eye (for D31).** `StereoMount` with the factor 1.0 every airframe has in
+  `vr_cockpits.json` puts each dial this far from the flat mount, before the headset's `eyeOffset`:
+  Bloodhawk 5 to 14 mm, Devastator 7 to 12, Fury 4 to 10, Hoplite 5 to 11, Hellhound 7 to 15,
+  Balmoral 5 to 11, Firebrand 26 to 59, Brigand 36 to 49, Peacemaker 72 to 73, Kestrel 85 to 89,
+  Warhawk 150 to 163, plus the flat mount's 4.7° head-pitch tilt the stereo mount lacks. The gap grows
+  with the marker's distance from the airframe origin (0.04 × marker), so D31 cannot take the
+  template's poses as they stand on the airframes whose marker sits far from the origin.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The dumped `rig.json` carries `cockpit: { from: "body", gauges: {...} }` with every
 assembly and the glass at the original's apparent place, in plane-frame metres.
