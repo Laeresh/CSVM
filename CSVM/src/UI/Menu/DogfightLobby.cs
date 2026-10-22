@@ -785,8 +785,11 @@ public sealed class DogfightLobby
     public bool SetBotCallsign(int id, string callsign) => EditsBots && _bots.Rename(id, callsign, PeopleNames());
 
     /// <summary>Puts bot row <paramref name="id"/> on one of the eleven stock airframes or on
-    /// <see cref="DogfightLobbySeat.RandomAirframe"/>.</summary>
-    public bool SetBotAirframe(int id, int airframe) => EditsBots && _bots.SetAirframe(id, airframe);
+    /// <see cref="DogfightLobbySeat.RandomAirframe"/>. Refused on an airframe the plane rules refuse
+    /// a person's stock pick of.</summary>
+    public bool SetBotAirframe(int id, int airframe) =>
+        EditsBots && (airframe == DogfightLobbySeat.RandomAirframe || _rules.AdmitsStock(airframe))
+        && _bots.SetAirframe(id, airframe);
 
     /// <summary>Sets bot row <paramref name="id"/>'s skill tier.</summary>
     public bool SetBotSkill(int id, NetBotSkill skill) => EditsBots && _bots.SetSkill(id, skill);
@@ -1291,6 +1294,14 @@ public sealed class DogfightLobby
             _rules = changed;
             _options = _options with { Epoch = NextEpoch() };
             _ready = false;
+            // A bot has no Ready for the rules to refuse, so its pick is reset here instead.
+            foreach (var bot in new List<DogfightBot>(_bots.Rows))
+            {
+                if (!bot.RandomPlane && !changed.AdmitsStock(bot.Airframe))
+                {
+                    _bots.SetAirframe(bot.Id, DogfightLobbySeat.RandomAirframe);
+                }
+            }
         }
 
         return true;

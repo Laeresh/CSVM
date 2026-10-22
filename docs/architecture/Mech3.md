@@ -204,7 +204,7 @@ shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 The militia table read once against `vehicle.json`, both halves off one parse: `PatternFor` is a
 militia's paint pattern (`MilitiaPaint`) and `DefFor` the def it flies an airframe as
 (`VehicleDefs.MilitiaDefFor`), null for Fortune Hunter, Broadway Bomber and a pair the install
-ships no def for. A bot seat is painted and armed through it, on every machine, by
+ships no def for, and `WeaponsFor` that def's weapons block. A bot seat is painted and armed through it, on every machine, by
 `Session/Roster/HumanFlightAdapter.cs`. `Empty` stands in for an install whose file cannot be read.
 Decode: [../formats/instant-action.md](../formats/instant-action.md).
 

@@ -186,6 +186,9 @@ public readonly record struct NetPlaneRules(bool AllowCustom, bool Outlawing, ul
         return PlaneRefusal.None;
     }
 
+    /// <summary>Whether these rules admit a stock pick of <paramref name="airframe"/>.</summary>
+    public bool AdmitsStock(int airframe) => Refuses(airframe, null) == PlaneRefusal.None;
+
     /// <summary>Whether any gun slot's ammunition is outlawed. An unpicked slot reads as its stock
     /// slug.</summary>
     public bool AmmoOutlawed(CoopFit fit)

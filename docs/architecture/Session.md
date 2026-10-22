@@ -593,7 +593,7 @@ bot field into seats: each bot a militia/airframe pair off the Instant Action mi
 torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
 unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
 `Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
-of a tier's effect. Only the host calls it; a guest reads the roster. Decodes:
+of a tier's effect. Under a lobby's outlaw list the draw passes over each airframe it refuses, asked as `AirframeAdmitted`, and each pair whose def it would strip, asked as `ArmsAdmitted`; a bot it leaves no airframe for is left out. `LegalFit` is the stock fit a bot flies under the list, each outlawed ammunition or rocket replaced by the first allowed one. Only the host calls it; a guest reads the roster. Decodes:
 [../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 
 ## src/Session/Roster/HumanFlightAdapter.cs

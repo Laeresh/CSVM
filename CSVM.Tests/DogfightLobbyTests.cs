@@ -1055,6 +1055,35 @@ public sealed class DogfightLobbyTests
         Assert.Equal(new[] { home, away }, host.Bots.Select(bot => bot.Team));
     }
 
+    // A bot's hand-set airframe answers to the outlaw list as a person's stock pick does. A bot has
+    // no Ready to refuse, so a rules change puts one on a now-outlawed airframe back on Random.
+    [Fact]
+    public void ABotsHandSetAirframeIsHeldToTheOutlawList()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.True(host.AddBot() && host.AddBot());
+        int fury = StockAirframes.IdOf("player_fury")!.Value;
+        int warhawk = StockAirframes.IdOf("player_warhawk")!.Value;
+        Assert.True(host.SetBotAirframe(host.Bots[0].Id, fury));
+        Assert.True(host.SetBotAirframe(host.Bots[1].Id, warhawk));
+
+        Assert.True(host.SetOutlawComponents(true));
+        Assert.True(host.SetOutlawed(NetPlaneRules.AirframeFlag + fury, true));
+        Assert.True(host.Bots[0].RandomPlane);
+        Assert.Equal(warhawk, host.Bots[1].Airframe);
+        Assert.False(host.SetBotAirframe(host.Bots[1].Id, fury));
+        Assert.Equal(warhawk, host.Bots[1].Airframe);
+
+        // A stock gun's calibre refuses the airframe too: the Warhawk's guns are .50 and .70.
+        Assert.True(host.SetOutlawed(NetPlaneRules.GunFlag + 2, true));
+        Assert.True(host.Bots[1].RandomPlane);
+
+        // ABLE-TO-FAIL CONTROL: with the list out of force the same picks take.
+        Assert.True(host.SetOutlawComponents(false));
+        Assert.True(host.SetBotAirframe(host.Bots[0].Id, fury));
+        Assert.True(host.SetBotAirframe(host.Bots[1].Id, warhawk));
+    }
+
     [Fact]
     public void ASoloHostsBotsOpenASecondTeamAndTheHostSetsTheOdds()
     {

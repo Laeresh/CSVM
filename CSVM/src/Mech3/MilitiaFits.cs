@@ -41,4 +41,9 @@ public sealed class MilitiaFits
     /// aircraft carry. Null where the militia names no pattern or the install ships no such def.</summary>
     public string? DefFor(string militia, string planeNode) =>
         PatternFor(militia) is { } pattern ? _defs.MilitiaDefFor(pattern, planeNode) : null;
+
+    /// <summary>The weapons block of the def <see cref="DefFor"/> names, empty where it names none.
+    /// </summary>
+    public IReadOnlyList<AiWeaponSlot> WeaponsFor(string militia, string planeNode) =>
+        DefFor(militia, planeNode) is { } def ? _defs.WeaponsOf(def) : Array.Empty<AiWeaponSlot>();
 }

@@ -1805,7 +1805,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.MessagesPath);
+        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.MessagesPath, _paths.ZrdrPath);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
