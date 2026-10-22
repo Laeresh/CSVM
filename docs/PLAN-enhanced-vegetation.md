@@ -50,7 +50,7 @@ the sidecar under Rich and nothing else; an Original golden that moves is a defe
 | 15 | Collision of 3D trees | **Not solid**, like the cards, so the setting is visual only and co-op peers on different settings play the same game |
 | 16 | 3D trees vs cards | **A Blender look-alike per card species within a near radius, dithering over to the original card beyond it**, on the same stamps |
 | 17 | Who models | **Agents, with scripted Blender run headless**, exporting glTF; you judge renders beside the card |
-| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; a wave that gives an entry to a chapter with co-op missions also measures a co-op host there (the method is `analysis/cm23-host-perf/FINDINGS.md`); the Deck stays Original until a Deck item measures it |
+| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; a co-op host adds network and simulation cost, which vegetation does not touch, so the per-chapter view is the co-op measure too; the Deck stays Original until a Deck item measures it |
 | 19 | Card shader upgrades (sway, sun-side shading, contact shadow) | **Wave A**, beside jitter and tint |
 
 Defaults set without a question, open to change: the variation comes from a fixed seed (identical on
