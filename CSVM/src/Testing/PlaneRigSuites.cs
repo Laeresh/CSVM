@@ -5,8 +5,11 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Testing;
@@ -180,6 +183,89 @@ internal static class PlaneRigSuites
         CheckLeakFlare(ctx, planesGamez, textures);
         CheckRefused(ctx, planesGamez, textures, plane, spinName);
         CheckPlayerFallback(ctx, planesGamez, textures, plane, pylon1, camera);
+    }
+
+    // A body cockpit read from two panes, the second standing for another pilot. Able to fail: a hide
+    // through Visible takes the hide node out of the second pane too. A section that never reaches the
+    // bind leaves the body hidden and the interior drawn, as cockpit1's view does.
+    [Suite("plane-rig-cockpit-body",
+        "a rig.json cockpit section with from body reaches PlaneBuilder.Cockpit and the pilot's " +
+        "visibility bind: in the Cockpit view the pilot's own pane draws the body but none of the " +
+        "hide node and none of the interior, a second pane still draws the hide node, nothing is " +
+        "hidden through Visible, Nose still drops the body, and an external pose draws all of it")]
+    internal static void PlaneRigCockpitBody(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+
+        // The hide node is a plain leaf of the body, read off a build with no pack.
+        string? hide;
+        using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
+        {
+            var bare = Build(ctx, planesGamez, textures, none, plane, out _, cockpitInterior: true);
+            hide = Named(bare, "healthy").Select(b => PlainMeshNodes(b).FirstOrDefault()).FirstOrDefault() is { } leaf
+                ? AnimRuntime.NameOf(leaf)
+                : null;
+            bare.Free();
+        }
+
+        ctx.Check(hide != null, $"{plane}'s healthy body carries a plain mesh leaf to hide");
+        if (hide == null)
+        {
+            return;
+        }
+
+        using var pack = Pack(ctx, "cockpit-body", plane, $$"""{ "cockpit": { "from": "body", "hide": ["{{hide}}"] } }""");
+        var model = Build(ctx, planesGamez, textures, pack, plane, out var builder, cockpitInterior: true);
+        var own = new Camera3D { Name = "pilot_pane", CullMask = SplitScreen.PlayerCullMask(0) };
+        var other = new Camera3D { Name = "other_pane", CullMask = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1), 1) };
+        try
+        {
+            ctx.Check(builder.Cockpit is { FromBody: true } section && section.Hide.Contains(hide),
+                $"PlaneBuilder.Cockpit carries the applied rig's body section hiding '{hide}'");
+            var view = CockpitVisibility.Bind(model, builder.CockpitInterior, 0, cockpit: builder.Cockpit);
+            SplitScreen.SeatAirframe(model, own, 0);
+            var interior = builder.CockpitInterior;
+            var body = Named(model, "healthy").FirstOrDefault();
+            var hidden = Named(model, hide).Where(n => interior?.IsAncestorOf(n) != true).ToList();
+            ctx.Check(view is { BodyCockpit: true } && body != null && hidden.Count > 0,
+                $"the bind is a body cockpit over the body and {hidden.Count} '{hide}' node(s)");
+            if (view == null || body == null || hidden.Count == 0)
+            {
+                return;
+            }
+
+            view.Apply(PilotViewMode.Cockpit, firstPerson: true);
+            var (shown, drawn) = WorldAndToolSuites.DrawnBy(body, own.CullMask);
+            int listed = hidden.Sum(n => WorldAndToolSuites.DrawnBy(n, own.CullMask).Shown);
+            ctx.Check(hidden.All(n => WorldAndToolSuites.DrawsNone(n, own.CullMask)),
+                $"Cockpit: the pilot's own pane leaves out the hide node");
+            ctx.Check(drawn > 0 && drawn + listed == shown,
+                $"…and draws the rest of the body, {drawn} of {shown} drawables with {listed} hidden");
+            ctx.Check(WorldAndToolSuites.DrawsNone(interior, own.CullMask),
+                $"…and none of the cockpit1 interior");
+            ctx.Check(WorldAndToolSuites.DrawsAll(body, other.CullMask) && hidden.All(n => WorldAndToolSuites.DrawsAll(n, other.CullMask)),
+                $"a second pane draws the whole body, the hide node included");
+            ctx.Check(body.Visible && hidden.All(n => n.Visible), $"nothing is hidden through Visible, which every pane shares");
+
+            view.Apply(PilotViewMode.Nose, firstPerson: true);
+            ctx.Check(WorldAndToolSuites.DrawsNone(body, own.CullMask) && WorldAndToolSuites.DrawsNone(interior, own.CullMask),
+                $"Nose is unchanged: the body and the interior leave the pilot's pane");
+            view.Apply(PilotViewMode.Cockpit, firstPerson: false);
+            ctx.Check(WorldAndToolSuites.DrawsAll(body, own.CullMask) && WorldAndToolSuites.DrawsNone(interior, own.CullMask),
+                $"an external pose draws the whole body again, the hide node included");
+        }
+        finally
+        {
+            model.Free();
+            own.Free();
+            other.Free();
+        }
     }
 
     // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes
@@ -416,13 +502,14 @@ internal static class PlaneRigSuites
         return name;
     }
 
-    private static Node3D Build(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels pack, string plane, out PlaneBuilder builder)
+    private static Node3D Build(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels pack, string plane, out PlaneBuilder builder,
+        bool cockpitInterior = false)
     {
         var saved = HdModels.Current;
         HdModels.Current = pack;
         try
         {
-            builder = new PlaneBuilder(gamez, textures, spinningProps: true);
+            builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: cockpitInterior);
             var model = builder.Build(plane);
             model.Name = $"rig_{plane}";
             return model;

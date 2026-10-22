@@ -213,10 +213,13 @@ internal sealed class HumanFlightAdapter
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
             raceGhost: _world.Racing || ghostSelf, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
         var planeModel = planeBuilder.Build(planeName);
-        // Before the ghost stamp, so the copies wear their originals' stamp. ponytail: none under the
-        // stereo path. Its lift draws the copies' flat shaders at the world origin. A stereo seat
-        // needs copies built through the interior's stereo variant.
-        var reseat = xrInterior ? null : CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
+        // D31 lifts this: under the stereo path a body cockpit still draws cockpit1.
+        var bodyCockpit = xrInterior ? null : planeBuilder.Cockpit;
+        // ponytail: none under the stereo path, whose lift draws the copies' flat shaders at the world
+        // origin. None in a body cockpit, whose outside parts are the real ones in view. Bound before
+        // the ghost stamp, so the copies wear their originals' stamp.
+        var reseat = xrInterior || bodyCockpit is { FromBody: true } ? null
+            : CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
 
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
@@ -242,7 +245,7 @@ internal sealed class HumanFlightAdapter
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
-                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden),
+                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden, bodyCockpit),
                 Interior = planeBuilder.CockpitInterior,
                 Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
@@ -256,7 +259,9 @@ internal sealed class HumanFlightAdapter
             ShippedSkins = swap is { ShippedSkins: true },
             Racing = _world.Racing,
         };
-        if (verbose && controller.Dressing.Visibility != null)
+        if (verbose && controller.Dressing.Visibility is { BodyCockpit: true })
+            Log.Info("flight", $"cockpit: '{planeName}' body cockpit, the model pack's airframe seen from the cockpit_camera marker, {bodyCockpit!.Hide.Count} hide name(s)");
+        else if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         if (controller.Dressing.Stereo != null)
             Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");

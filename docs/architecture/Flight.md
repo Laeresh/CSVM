@@ -295,7 +295,7 @@ draws `cockpit1` and hides the `healthy` body, Nose hides the interior, the body
 so a held look-behind brings the body back. The interior takes node visibility. The airframe groups
 move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
 that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them,
-and so do `CockpitReseat.Hidden` and the stores given to `Reseat` on the frames the interior is drawn. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+and so do `CockpitReseat.Hidden` and the stores given to `Reseat` on the frames the interior is drawn. A model pack's body cockpit (`Mech3.RigCockpit.FromBody`, `BodyCockpit`) keeps the body in Cockpit, hides the interior, and moves every airframe node its `hide` list names, found outside `cockpit*`, off the same layer; Nose and the external poses are unchanged. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/CockpitReseat.cs
 The remake-only fix for the Cockpit view's floating wingtip lights and prop discs, in both
@@ -304,15 +304,15 @@ stations (`PropSeats`) onto the interior while it is still a child of the plane 
 copies follow it into the cockpit pass, and lists open-air lights (`OpenAirFlares`) to hide. `Sync`
 mirrors each original's visibility and spin onto its copy; `FirstPersonDressing` calls it while the
 interior is drawn, and `CockpitVisibility` takes `Hidden` out of the pilot's own pane. Copies come
-from `Utils.SceneCopy`, unindexed, on `ShaderTwins.Copy` materials. Rules and the per-airframe
-outcome: [../org/cameraViews.md](../org/cameraViews.md), "Remake-only" under mode 7.
+from `Utils.SceneCopy`, unindexed, on `ShaderTwins.Copy` materials. A body cockpit binds none, since
+its outside parts are the ones in view, and neither does the stereo path. Rules and the per-airframe outcome: [../org/cameraViews.md](../org/cameraViews.md), "Remake-only" under mode 7.
 
 ## src/Flight/Hud/FirstPersonDressing.cs
 What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
 `Interior`, `Panel` (`CockpitGauges`), `Pass` (`CockpitOverlay`) and, under the stereo path,
 `Stereo` (`XrCockpit`), all null on a rig built no interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
 held look-behind brings the body back, and takes the screen-space cluster off while the panel is
-on screen; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
+on screen, which a body cockpit's hidden interior never is; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
 after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
 [../org/cameraViews.md](../org/cameraViews.md).
 

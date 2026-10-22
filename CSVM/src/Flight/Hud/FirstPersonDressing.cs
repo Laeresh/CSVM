@@ -59,7 +59,7 @@ public sealed class FirstPersonDressing
     {
         Visibility?.Apply(selected, firstPersonPose);
         // Same rule, so the panel is driven exactly on the frames it is on the screen.
-        bool interior = CockpitVisibility.Rules(selected, firstPersonPose).Interior;
+        bool interior = CockpitVisibility.Rules(selected, firstPersonPose, Visibility?.BodyCockpit ?? false).Interior;
         SetPanel(interior);
         if (interior)
             Reseat?.Sync();

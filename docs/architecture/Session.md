@@ -598,7 +598,7 @@ of a tier's effect. Only the host calls it; a guest reads the roster. Decodes:
 
 ## src/Session/Roster/HumanFlightAdapter.cs
 `FlightRoster`'s private seat path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
-the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. A seat of the bindings' `NetSeats` without a pane
+the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. The cockpit bind hands `PlaneBuilder.Cockpit` to `CockpitVisibility.Bind` and skips `CockpitReseat` for a body cockpit; under the stereo path a body cockpit still draws `cockpit1`. A seat of the bindings' `NetSeats` without a pane
 (flown elsewhere, or a host's bot) takes the aeroplane, paint, loadout, spawn slot and score row, only one flown elsewhere is built with the `RemotePoseBuffer` that IS its ownership, and
 both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. A bot seat is AI-piloted
 (`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, with `IsBotSeat` set so its contacts take a person's rule (it grazes and bounces where world AI dies outright), and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`

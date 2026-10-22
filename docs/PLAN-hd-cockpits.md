@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, body cockpits on the flat screen
 
-11. ☐ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
+11. ☑ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
 12. ☐ [local] Transplanted gauge assemblies and sight glass on the body
 13. ☐ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
 14. ☐ [local] The Corvette's seat and dashboard
@@ -286,7 +286,52 @@ replacement is authored in the export's interior units, never converted from met
 
 # Wave B, body cockpits on the flat screen
 
-## B11 ☐ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
+## B11 ☑ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
+
+**Landed.** The rig's section reaches the flight code by one path, which B12 extends:
+`PlaneBuilder.Cockpit` (`Mech3/PlaneBuilder.cs`) is the `RigCockpit` of the rig `Build` applied, set
+right after `PlaneRigPatch.Apply` returns and null for no rig, no section, or a rig the player's launch
+left out. `HumanFlightAdapter.Assemble` passes it to `CockpitVisibility.Bind(..., cockpit:)`, and the
+bind's `BodyCockpit` is what `FirstPersonDressing.Show` reads.
+
+- **Rules.** `CockpitVisibility.Rules(mode, firstPerson, bodyCockpit)` changes the first-person Cockpit
+  pose alone: body, `markers` and `dontmove` drawn, interior hidden, and the new `Shown.Listed` false.
+  Nose and every external pose answer as without the section. The reseated parts and stores follow
+  `Interior`, so they stay in view.
+- **Hide list.** `Bind` collects every node a `hide` name matches, without case, outside `cockpit*`
+  subtrees (the rig rules' every-node-of-that-name match; `FindGroup` itself is unchanged). `Apply`
+  moves them off `OwnAirframeLayer` onto `FirstPersonLayer` with the same `Move`, after the groups,
+  so a hide node inside a hidden group stays out. Nothing goes through `Visible`.
+- **Panel.** `FirstPersonDressing.Show` asks the same rule with the bind's `BodyCockpit`, so a body
+  cockpit drives no `cockpit1` panel and keeps the screen-space cluster on. B12 turns that when the
+  transplanted dials draw.
+- **Reseat.** The adapter binds no `CockpitReseat` for a body cockpit (decision 12).
+- **Headset.** The adapter hands the bind no section under the stereo path (`xrInterior`, which is
+  `XrCockpit.Live` for a seat with a pane), so a headset seat keeps `cockpit1`. The one-line comment
+  above `bodyCockpit` is where D31 lifts it.
+- **Eye and near plane.** The eye stays at `CockpitCameraOffset`, which the rig's `cockpit_camera`
+  already moves. Every flight camera keeps Godot's default near plane, 0.05 m: neither the Launcher's
+  camera nor a split-screen pane sets one, and only the cockpit pass (0.01) and the spyglass and photo
+  cameras do. The Corvette pack's autogyro built in body mode puts the eye at (0, 0.75, -0.2) with the
+  nearest drawn surface 0.77 m away (no triangle within 0.25 m): rays from the eye hit the car
+  0.77 m below and 1.37 m behind, nothing ahead or to either side, and above only the rotor, at
+  1.29 m. The eye sits above the car's roofline, so the near plane clips nothing there, and the cockpit
+  view shows sky and ground with no car in frame. B14 seats the eye in the cabin. A seated eye clips
+  only a surface within 5 cm of it, closer than a headliner or pillar sits to a driver's head, so
+  the default near plane needs no change for a real-scale cabin.
+- **Tests.** `CockpitVisibilityTests` (`ABodyCockpitKeepsTheBodyAndDropsTheInteriorAndTheHideList`,
+  `ABodyCockpitLeavesNoseAndEveryExternalPoseUnchanged`). Suite `plane-rig-cockpit-body`
+  (`Testing/PlaneRigSuites.cs`): a pack `rig.json` with `"from": "body"` hiding a body leaf reaches
+  `PlaneBuilder.Cockpit` and the bind; in Cockpit the pilot's pane draws the rest of the body and none
+  of the hide node or the interior, a second pane draws the whole body, nothing is hidden through
+  `Visible`, Nose drops the body and an external pose draws all of it.
+- **The look.** `.scratch/b11-shots/corvette-body-cockpit.png` (the Corvette pack with
+  `"cockpit": { "from": "body" }`) and `.scratch/b11-shots/corvette-cockpit1-no-section.png` (the
+  pack as shipped, the stock `cockpit1`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With `from: "body"`, cockpit view draws the replaced body for the pilot, draws no
 `cockpit1` shell, and takes each `hide` node out of the pilot's own pane; every other view, every

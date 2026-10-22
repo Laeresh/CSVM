@@ -195,6 +195,10 @@ public sealed class PlaneBuilder
     /// for one. <c>Flight.Hud.CockpitVisibility</c> is what shows it, per view mode.</summary>
     public Node3D? CockpitInterior { get; private set; }
 
+    /// <summary>The <c>cockpit</c> section of the rig <see cref="Build"/> applied, or null: no rig,
+    /// no section, or a rig that failed its checks and was flown without.</summary>
+    public RigCockpit? Cockpit { get; private set; }
+
     /// <summary>Where the eye sits in <see cref="CockpitInterior"/>'s own units: the
     /// <c>cockpit_camera</c> marker's numbers under the stereo path, the interior's origin on every
     /// other build. The flat view keeps the origin and its tilt (docs/org/cameraViews.md, "Where the
@@ -268,6 +272,7 @@ public sealed class PlaneBuilder
         }
 
         FlareChoice? flares = null;
+        Cockpit = null;
         try
         {
             // ⚠ Patch before anything reads a marker or classifies a part. The camera read, the
@@ -275,6 +280,7 @@ public sealed class PlaneBuilder
             if (PlaneRigPatch.Load(HdModels.Current, rootName) is { } rig)
             {
                 flares = PlaneRigPatch.Apply(rig, built, _gamez, root);
+                Cockpit = rig.Cockpit;
                 CockpitCameraOffset = PlaneRigPatch.MarkerPosition(rig, "cockpit_camera")
                     ?? MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
             }

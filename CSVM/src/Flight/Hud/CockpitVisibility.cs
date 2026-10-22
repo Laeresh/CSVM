@@ -13,7 +13,9 @@ namespace CSVM.Flight.Hud;
 /// <c>cockpit1</c> interior and hides the <c>healthy</c> body. Nose draws no interior and hides
 /// the body, <c>markers</c> and <c>dontmove</c>. Every other view and aircraft is untouched.
 /// The pure decision is <see cref="Rules"/>, and <see cref="Apply"/> writes it onto the four nodes
-/// <see cref="Bind"/> found in one built plane model, for that pilot's own pane alone.
+/// <see cref="Bind"/> found in one built plane model, for that pilot's own pane alone. A model pack's
+/// body cockpit (<see cref="RigCockpit.FromBody"/>) keeps the body in Cockpit and drops the interior
+/// and the rig's hide list instead.
 /// </summary>
 public sealed class CockpitVisibility
 {
@@ -23,15 +25,18 @@ public sealed class CockpitVisibility
     // interior is drawn.
     private readonly List<Node3D> _reseated;
 
+    // Every airframe node a body cockpit's `cockpit.hide` names, outside the interior.
+    private readonly List<Node3D> _listed;
+
     // The pilot's airframe stamp and the layer a hidden group trades it for.
     private readonly uint _own, _out;
 
     // Which airframe groups the last Apply moved out of the pilot's own view, so a frame that
     // changes nothing walks no subtree.
-    private (bool Body, bool Markers, bool Dontmove, bool Reseated) _hidden;
+    private (bool Body, bool Markers, bool Dontmove, bool Reseated, bool Listed) _hidden;
 
     private CockpitVisibility(Node3D? interior, Node3D? body, Node3D? markers, Node3D? dontmove,
-        IReadOnlyList<Node3D> reseated, int pilot)
+        IReadOnlyList<Node3D> reseated, int pilot, bool bodyCockpit, List<Node3D> listed)
     {
         _interior = interior;
         _body = body;
@@ -40,34 +45,47 @@ public sealed class CockpitVisibility
         _reseated = new List<Node3D>(reseated);
         _own = SplitScreen.OwnAirframeLayer(pilot);
         _out = SplitScreen.FirstPersonLayer(pilot);
+        BodyCockpit = bodyCockpit;
+        _listed = listed;
     }
 
-    /// <summary>The decoded rule. <paramref name="firstPerson"/> is whether THIS FRAME's camera
-    /// pose is a first-person one, not merely which view is selected: a held numpad key or the
-    /// look-behind puts the camera outside the aircraft, and the original's gate is the live camera
-    /// mode. So a held key restores the body for as long as it is down, the same way
-    /// <see cref="CameraController.RestoreExternalFov"/> restores the external FOV.</summary>
-    public static Shown Rules(PilotViewMode mode, bool firstPerson) => !firstPerson
-        ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true)
+    /// <summary>Whether the pilot's Cockpit view is a body cockpit, the rig's replaced airframe seen
+    /// from inside, rather than <c>cockpit1</c>.</summary>
+    public bool BodyCockpit { get; }
+
+    /// <summary>The decoded rule. <paramref name="firstPerson"/> is THIS FRAME's camera pose, not the
+    /// selected view. The original gates on the live camera mode, so a held numpad key or look-behind
+    /// restores the body while down, as <see cref="CameraController.RestoreExternalFov"/> does the FOV.
+    /// A body cockpit (<paramref name="bodyCockpit"/>) changes the Cockpit view alone: the body
+    /// stays, the interior and the hide list go.</summary>
+    public static Shown Rules(PilotViewMode mode, bool firstPerson, bool bodyCockpit = false) => !firstPerson
+        ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true, Listed: true)
         : mode == PilotViewMode.Nose
-            ? new Shown(Interior: false, Body: false, Markers: false, Dontmove: false)
-            : new Shown(Interior: true, Body: false, Markers: true, Dontmove: true);
+            ? new Shown(Interior: false, Body: false, Markers: false, Dontmove: false, Listed: true)
+            : bodyCockpit
+                ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true, Listed: false)
+                : new Shown(Interior: true, Body: false, Markers: true, Dontmove: true, Listed: true);
 
     /// <summary>Finds the four groups in one built plane model. Null for a model with no interior,
     /// which is any build that did not ask <see cref="PlaneBuilder"/> for one.
     /// <paramref name="pilot"/> is the seat whose <see cref="SplitScreen.OwnAirframeLayer"/> the
     /// model wears.</summary>
     /// <param name="reseated">The originals <see cref="CockpitReseat.Hidden"/> lists.</param>
+    /// <param name="cockpit">The applied rig's section (<see cref="PlaneBuilder.Cockpit"/>); only a body one counts.</param>
     public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior, int pilot,
-        IReadOnlyList<Node3D>? reseated = null)
+        IReadOnlyList<Node3D>? reseated = null, RigCockpit? cockpit = null)
     {
         if (planeModel == null || interior == null)
         {
             return null;
         }
+        bool body = cockpit is { FromBody: true };
+        var listed = new List<Node3D>();
+        if (body)
+            Collect(planeModel, new HashSet<string>(cockpit!.Hide, StringComparer.OrdinalIgnoreCase), listed);
         return new CockpitVisibility(interior, FindGroup(planeModel, "healthy"),
             FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"),
-            reseated ?? Array.Empty<Node3D>(), pilot);
+            reseated ?? Array.Empty<Node3D>(), pilot, body, listed);
     }
 
     /// <summary>Adds an outside part whose stereo copy the interior carries
@@ -86,10 +104,10 @@ public sealed class CockpitVisibility
     /// hidden node is gone from every pilot's view.</summary>
     public void Apply(PilotViewMode mode, bool firstPerson)
     {
-        var shown = Rules(mode, firstPerson);
+        var shown = Rules(mode, firstPerson, BodyCockpit);
         Set(_interior, shown.Interior);
         var hidden = (Body: !shown.Body, Markers: !shown.Markers, Dontmove: !shown.Dontmove,
-            Reseated: shown.Interior);
+            Reseated: shown.Interior, Listed: !shown.Listed);
         if (hidden == _hidden)
         {
             return;
@@ -103,6 +121,8 @@ public sealed class CockpitVisibility
         Move(_dontmove, _out, _own);
         foreach (var node in _reseated)
             Move(node, _out, _own);
+        foreach (var node in _listed)
+            Move(node, _out, _own);
         if (hidden.Body)
             Move(_body, _own, _out);
         if (hidden.Markers)
@@ -111,6 +131,9 @@ public sealed class CockpitVisibility
             Move(_dontmove, _own, _out);
         if (hidden.Reseated)
             foreach (var node in _reseated)
+                Move(node, _own, _out);
+        if (hidden.Listed)
+            foreach (var node in _listed)
                 Move(node, _own, _out);
     }
 
@@ -163,10 +186,25 @@ public sealed class CockpitVisibility
         return null;
     }
 
+    // Every node a hide name matches, since gamez names repeat, as every rig rule matches them.
+    // Interior-blind like FindGroup: the rig's checks keep hide names off cockpit1.
+    private static void Collect(Node3D node, HashSet<string> names, List<Node3D> hits)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is not Node3D n3d || IsInterior(n3d))
+                continue;
+            if (names.Contains(AnimRuntime.NameOf(n3d)))
+                hits.Add(n3d);
+            Collect(n3d, names, hits);
+        }
+    }
+
     private static bool IsInterior(Node3D node) =>
         AnimRuntime.NameOf(node).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Which of the four groups render this frame. All four true is the built state,
-    /// which is what every external view and every AI plane keeps.</summary>
-    public readonly record struct Shown(bool Interior, bool Body, bool Markers, bool Dontmove);
+    /// <summary>Which of the groups render this frame. All true is the built state, which is what
+    /// every external view and every AI plane keeps. <see cref="Listed"/> is a body cockpit's
+    /// <c>cockpit.hide</c> nodes.</summary>
+    public readonly record struct Shown(bool Interior, bool Body, bool Markers, bool Dontmove, bool Listed);
 }
