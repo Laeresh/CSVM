@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
 12. ☐ Prototype: canopy shells on C1
-13. ☐ Prototype: impostor clumps on C1
+13. ◐ Prototype: impostor clumps on C1
 14. ☐ Pick the mass technique at the controls and productionise it
 15. ☐ C3's canopy volume over its painted jungle, palms on the transitions
 16. ☐ Wave B budget and goldens
@@ -824,20 +824,77 @@ literature (TU Wien 2006 report on forest rendering); Decision 12.
 
 **⚠ Traps.** <TODO>
 
-## B13 ☐ Prototype: impostor clumps on C1
+## B13 ◐ Prototype: impostor clumps on C1
 
 **Goal.** Pre-rendered cards of several trees placed past the card fade on C1, as MSFS does.
 
-**Evidence (confidence: lead-only).** Decision 12.
+**Evidence (confidence: traced-to-code for the fade distances, lead-only for the look).** Decision 12.
+Under Enhanced the card fade does not sit where the original put it. C1's firs author
+`far_fade_range` 500-1000 m near and 1000-2000 m far; Enhanced divides the fade scale by the fog
+push (2) times the View Distance reach (Far, the default and `--det`'s, 2), so the firs fade from
+2-4 km to 4-8 km. C1's zone-1 fog, pushed the same 2, ends at 3.5 km (authored 1000-1750 m). The
+Rich cards therefore never fade inside the visible range at any of the montage poses; at Normal
+View Distance they fade from 1-2 km, still mostly in the fog. A clump that appears only where the
+cards fade out is never seen, so the mass this item can add is density in front of the fog, not
+continuation past the fade.
 
-**Approach.** <TODO: how the clump textures are made (rendered from the original cards, or from
-D31's models).>
+**Approach.** `CSVM/src/Mech3/CanopyClumps.cs`, behind `--canopy-clumps` (off by default, Enhanced
+Rich only); `GameSession.FollowCanopyClumps` builds it at load, drops it on a live move off Rich or
+to Original, and builds it again from the re-baked mask after a lab edit.
 
-**Model recommendation.** <TODO>
+- *Clump art: the chapter's own cards (Decision 6), composed at load.* Every listed card kind's
+  texture (`TextureArchive.FindImage`, so an HD pack's art is used where present), weighted by its
+  stamp count, is resized to its real metres and alpha-blended into one atlas of six 24 m tiles
+  (10 px a metre), four to six trees a tile in even strata across it, back rows raised 8 m and
+  shaded 0.9. Clear texels are bled to the solid colour before the mips, or the clumps darken far
+  off. The cards were chosen over D31's Blender models because they are the exact art the clumps
+  stand beside (same palette, unlit as the cards draw), they exist for every listed species on every
+  chapter today while D31 has one fir, and composing them costs about 100 ms at load with no new
+  asset to ship or check for copyright. The models' gain, true depth from above, is lost at the
+  distances clumps draw.
+- *Placement from `CanopyMask` (B11).* A covered cell holds its density times 1.5 clumps, rounded
+  by a draw, at jittered points in the cell; the base is the ground interpolated between covered
+  cells' `Ground`, sunk 18 % of the clump's height so a cross slope shows no gap. The clump is the
+  tile scaled by the cell's `Top - Ground` over the listed cards' mean height (19.5 m on C1), so its
+  trees stand at the cards' size. Every draw is an integer hash of a fixed seed, the cell and the draw,
+  so the layout is the same on every launch and a brush stroke moves only its own cells' clumps. C1:
+  58,079 clumps in 30 chunks of 2 km (one MultiMesh each, for the frustum).
+- *Fade.* A clump fades in by alpha (not dithered: the dither read as a screen door in the band)
+  from a near distance drawn per clump in 350-900 m over the next 600 m, and collapses inside it, so
+  the near view is the Rich cards alone. Past the card fade it stays, so at a View Distance whose
+  fade falls inside the fog the clumps carry the forest on. The shader is the card's: cylindrical
+  face, fog, sun-side gain, tint line, per-clump brightness and mirror.
+- *Map edge: open.* `MapEdgeExtender` copies card stamps past the edge in its rolling window; it
+  carries no clumps, so the mass stops at the map edge while the cards continue. At the default
+  View Distance the edge is in fog from the montage poses; B14 extends the copies if this technique
+  is picked.
 
-**Verify.** <TODO: the same montage poses as B12.>
+**Model recommendation.** Opus for B14's productionising if clumps win: the look iterates against
+captures, and the map-edge copies touch `MapEdgeExtender`'s rolling window.
 
-**⚠ Traps.** <TODO>
+**Verify.** Units: `CanopyClumpsTests` (placement is a function of the mask and seed; clumps stand
+only in covered cells, about 1.5 a full cell; a clump's size, sink and fade band; clearing one cell
+moves no other cell's clumps; a tile is laid out back first inside its width, the same every call).
+Engine: `canopy-clumps` (about 10 s, windowed through `headless-limits.json`'s shader list): a Rich
+flight without the flag builds none; with it, clumps stand; a live move to original drops them from
+the tree and back builds the same chunks and counts; a live switch to Original drops them and back
+builds them. No golden moves, since the flag is off by default. Montage (yours to judge):
+`.scratch/b13/montage-P1.png` to `montage-P4.png` and `montage-overview.png` in the B13 worktree,
+`--freecam --chapter=C1 --det --mute --graphics=enhanced` at B12's four poses, columns Original,
+Rich, Rich with `--canopy-clumps`. The budget script runs it as `measure.ps1 -Chapters C1 -Modes
+rich,clumps`.
+
+**⚠ Traps.**
+- A fade-in tied to the card fade is invisible under Enhanced (see Evidence); judge the clumps at
+  the default View Distance, not at the authored fade.
+- The clumps add trees: about 1.5 clumps of five trees a full cell against the cards' one fir, so
+  the forest thickens with distance. The thickening starts 350-900 m out and reads as a darker band
+  on the hills from 300 to 600 m up; that is the look being judged, not a defect to tune away
+  unseen.
+- P4 (1200 m up) is inside C1's cloud band (970-1124 m, its fog to 1047 m), so all three columns
+  show cloud; it says nothing about either technique.
+- Never let a clump read a card's Original stamps: the mask is the Rich bake's, and Original builds
+  no clumps.
 
 ## B14 ☐ Pick the mass technique at the controls and productionise it
 

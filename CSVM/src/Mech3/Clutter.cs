@@ -58,7 +58,7 @@ public sealed class ClutterBuilder
         "    ALBEDO *= 1.0 + max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0) * vec3(1.6, 1.5, 1.2);\n";
 
     // The sprite shader's distance-fog block, emitted only into the fogged variant.
-    private const string FogLines =
+    internal const string FogLines =
         "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);\n";

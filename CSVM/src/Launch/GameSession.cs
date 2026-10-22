@@ -309,6 +309,7 @@ public partial class GameSession : Node3D
     private Effects.ScorchField? _scorches;
     private Effects.Ocean? _ocean;
     private bool _oceanEligible;
+    private Node3D? _canopyClumps;
     // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
     // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
     private Effects.SeaState _seaSaved = Effects.SeaState.Default;
@@ -409,6 +410,9 @@ public partial class GameSession : Node3D
 
     /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
     internal ClutterBuilder? Clutter => _clutter;
+
+    /// <summary>The <c>--canopy-clumps</c> prototype's node, null while it draws none. Read by the suites.</summary>
+    internal Node3D? CanopyClumps => _canopyClumps;
 
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
@@ -914,6 +918,7 @@ public partial class GameSession : Node3D
         FollowOcean();
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
+        FollowCanopyClumps();
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
         _sky?.FollowGraphicsMode();
@@ -965,6 +970,7 @@ public partial class GameSession : Node3D
     {
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
+        FollowCanopyClumps();
     }
 
     /// <summary>A live Water Quality change builds or drops the wave ocean
@@ -982,6 +988,7 @@ public partial class GameSession : Node3D
     {
         _clutter?.ApplyVegetation(entry);
         _edgeExtender?.FollowVegetation();
+        FollowCanopyClumps(rebake: true);
     }
 
     /// <summary>Bakes the clutter's Rich variant again under <paramref name="mask"/>, the vegetation lab's
@@ -990,6 +997,7 @@ public partial class GameSession : Node3D
     {
         _clutter?.ApplyVegetationMask(mask);
         _edgeExtender?.FollowVegetation();
+        FollowCanopyClumps(rebake: true);
     }
 
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
@@ -1657,6 +1665,7 @@ public partial class GameSession : Node3D
         state.WorldScene = session.Builder.Scene;
         _worldScene = session.Builder.Scene;
         _clutter = session.Clutter;
+        FollowCanopyClumps();
         state.WorldRuntime = session.Runtime;
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
@@ -2682,6 +2691,24 @@ public partial class GameSession : Node3D
             _ocean.DebugDrive = _spec.DebugWake;
             _plane.AddChild(_ocean);
         }
+    }
+
+    // The --canopy-clumps prototype follows Rich: built while it is on and dropped when it is not.
+    // A lab edit builds it again from the re-baked canopy mask.
+    private void FollowCanopyClumps(bool rebake = false)
+    {
+        bool wanted = _spec.CanopyClumps && VegetationQualitySetting.RichOn;
+        if (!wanted || rebake)
+        {
+            Drop(_canopyClumps);
+            _canopyClumps = null;
+        }
+        if (!wanted || _canopyClumps != null || _plane == null || _sessionTextures == null
+            || _clutter?.ExportedKinds is not { } kinds || _clutter.Canopy() is not { } mask)
+            return;
+        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, _sessionTextures);
+        if (_canopyClumps != null)
+            _plane.AddChild(_canopyClumps);
     }
 
     // The chapter's sea from the shipped file, read once per session that can stand an ocean, under

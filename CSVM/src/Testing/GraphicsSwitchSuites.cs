@@ -484,6 +484,58 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("canopy-clumps",
+        "the --canopy-clumps prototype stands only under Enhanced Rich: a C1 flight at rich without the flag builds no clumps, "
+        + "one with it builds them over the canopy mask; a live move to original drops them from the tree and a move back builds "
+        + "the same chunks and counts again; a live switch to Original drops them and a switch back builds them")]
+    internal static void CanopyClumpsFollowRich(TestContext ctx)
+    {
+        RequireData(ctx);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            var plain = Open(ctx, enhanced: true);
+            try
+            {
+                ctx.Check(plain.Built && plain.Session.CanopyClumps == null, $"a rich flight without the flag builds no clumps");
+            }
+            finally
+            {
+                plain.Close();
+            }
+
+            var live = Open(ctx, true, 1, null, "--canopy-clumps");
+            try
+            {
+                var built = Clumps(live);
+                ctx.Check(live.Built && built.Count > 0 && built.Node != null && built.Node.IsInsideTree(),
+                    $"a rich flight with the flag builds its clumps ({built.Text})");
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(live.Session.CanopyClumps == null && !built.Node!.IsInsideTree(),
+                    $"a live move to original drops them from the tree");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                var again = Clumps(live);
+                ctx.Check(again.Count == built.Count && again.Text == built.Text,
+                    $"a move back to rich builds the same chunks and counts ({again.Text})");
+                Switch(live, enhanced: false);
+                ctx.Check(live.Session.CanopyClumps == null, $"a live switch to Original drops them");
+                Switch(live, enhanced: true);
+                ctx.Check(Clumps(live).Text == built.Text, $"and a switch back to Enhanced builds them again");
+            }
+            finally
+            {
+                live.Close();
+            }
+        }
+        finally
+        {
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
         + "stands one ocean and every sea-level base sheet material carries the hide, which reads "
@@ -1723,6 +1775,14 @@ internal static class GraphicsSwitchSuites
         VegetationQualitySetting.Resolve(word, null, null);
         EnhancedLook.ApplyVegetationQuality(rig.Session);
         Step(rig);
+    }
+
+    // The clump node standing in a session, its total instances, and its chunks with their counts.
+    private static (Node3D? Node, int Count, string Text) Clumps(Rig rig)
+    {
+        var node = rig.Session.CanopyClumps;
+        var chunks = node?.GetChildren().OfType<MultiMeshInstance3D>().Select(m => (m.Name.ToString(), m.Multimesh.InstanceCount)).ToList() ?? new();
+        return (node, chunks.Sum(c => c.InstanceCount), string.Join(" ", chunks.Select(c => $"{c.Item1}={c.InstanceCount}")));
     }
 
     // The ocean nodes standing in the session's tree. Entering and leaving the tree sets the sheet's

@@ -455,6 +455,10 @@ public sealed record SessionSpec
     /// happens to share the word.</summary>
     public bool NoClutter { get; private set; }
 
+    /// <summary><c>--canopy-clumps</c>: the impostor-clump prototype (<see cref="Mech3.CanopyClumps"/>),
+    /// drawn only while <see cref="Utils.VegetationQualitySetting.RichOn"/>. See <c>docs/cli.md</c>.</summary>
+    public bool CanopyClumps { get; private set; }
+
     /// <summary>Resolved. The enhanced passes this run leaves out, one bit per
     /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
     /// See <c>docs/cli.md</c>.</summary>
@@ -1714,6 +1718,7 @@ public sealed record SessionSpec
             else if (arg == "--no-fog") { s.NoFog = true; }
             else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
+            else if (arg == "--canopy-clumps") { s.CanopyClumps = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg == "--screen-flare") { s.ScreenFlare = true; }
