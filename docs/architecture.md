@@ -473,7 +473,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/UI/Screens/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/Screens/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
-- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, with mouse-only icons that open the logs and user folders, over every presentation's main menu and the extraction screen; hidden elsewhere.
+- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, with mouse-only icons that open the logs and user folders and a line naming a newer release, over every presentation's main menu and the extraction screen; hidden elsewhere.
 - `src/UI/Screens/ScreenKeyboardEcho.cs`, the strip across the top repeating the field Steam's on-screen keyboard types into, above everything while it is up.
 - `src/UI/Screens/NoGameDataScreen.cs`, the extraction screen shown instead of the menu when the data root holds no extraction, an unfinished one, one stamped under another schema, or one the menus cannot read: the install folder, Extract, progress, failures.
 - `src/UI/Screens/ExtractionFlow.cs`, the extraction screen's engine-free state: the stale decision, the pre-fill, and a run on a worker marshalled to the main thread by a per-frame tick.
@@ -622,7 +622,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/AudioBuses.cs`, the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
 - `src/Utils/AudioMix.cs`, the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs`, the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
-- `src/Utils/Config.cs`, dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
+- `src/Utils/ReleaseCheck.cs`, an exported build's once-per-launch ask of GitHub for a newer release, which the menu's corner stamp names; off with `updates.checkReleases`.
+- `src/Utils/Config.cs`, dev tuning-override: typed getters over an optional sparse `config.json` (`res://` in the editor, beside the executable in an export), else the caller's in-code `const`.
 - `src/Utils/DisplayModeSetting.cs`, the window's display mode: the saved word against the shipped borderless default, and the one place the window mode is set.
 - `src/Utils/EffectPools.cs`, the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs`, the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.

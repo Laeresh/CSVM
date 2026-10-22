@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.Utils;
@@ -11,9 +12,10 @@ namespace CSVM.UI.Screens;
 /// The build's version as <c>CSVM v&lt;version&gt;</c> in the menu's bottom-right corner. A
 /// screenshot a stranger sends then carries its build, and the number is not taken for the
 /// original game's own. Two mouse-only icons left of it open the logs folder and the user folder,
-/// so a player filing a bug report can find the log. Built once by
+/// so a player filing a bug report can find the log. A line above it names a newer release when
+/// <see cref="ReleaseCheck"/> found one, and opens its page on a click. Built once by
 /// <see cref="CSVM.Launch.Launcher"/>, which shows it over every presentation's main menu and the
-/// extraction screen. It is hidden on every other screen and in flight. The number's home: <see cref="BuildVersion"/>.
+/// extraction screen, and on no other screen or in flight. The number's home: <see cref="BuildVersion"/>.
 /// </summary>
 public sealed partial class BuildStamp : Node
 {
@@ -29,6 +31,9 @@ public sealed partial class BuildStamp : Node
 
     /// <summary>The user folder icon's tooltip.</summary>
     public const string UserTooltip = "Open user folder";
+
+    /// <summary>The release line's tooltip.</summary>
+    public const string ReleaseTooltip = "Open the release page";
 
     // Authored against the menu's 720p chrome metrics, a footer line's size.
     private const float ReferenceFontSize = 15f;
@@ -54,6 +59,8 @@ public sealed partial class BuildStamp : Node
     private Label _label = null!;
     private int _fontSize;
     private bool _holding;
+    private Task<Release?>? _check;
+    private string _releaseUrl = "";
 
     /// <summary>A stamp whose logs icon falls back to <see cref="Log.DirectoryFor"/> over
     /// <paramref name="root"/> and <paramref name="exported"/> while no log file is open.</summary>
@@ -83,6 +90,10 @@ public sealed partial class BuildStamp : Node
     /// <summary>Gets the user folder icon.</summary>
     public Button UserButton { get; private set; } = null!;
 
+    /// <summary>Gets the line above the version naming a newer release, hidden until
+    /// a <see cref="Watch"/>ed check answers one. A click opens the release page.</summary>
+    public Button ReleaseButton { get; private set; } = null!;
+
     /// <summary>Gets the dialog an icon raises when Game Mode refused its folder and the screen has
     /// no messagebox of its own (<see cref="FolderButtonText.DesktopModeOnly"/>).</summary>
     public AcceptDialog DesktopModeNotice { get; private set; } = null!;
@@ -102,6 +113,15 @@ public sealed partial class BuildStamp : Node
     /// the window. Called once a frame by the launcher, which owns both.</summary>
     public void Tick(bool shown)
     {
+        if (_check is { IsCompleted: true } done)
+        {
+            _check = null;
+            if (done.IsCompletedSuccessfully && done.Result is { } release)
+            {
+                ShowRelease(release);
+            }
+        }
+
         _layer.Visible = shown;
         if (!shown)
         {
@@ -116,6 +136,7 @@ public sealed partial class BuildStamp : Node
             _label.AddThemeFontSizeOverride("font_size", size);
             LogsButton.AddThemeFontSizeOverride("font_size", size);
             UserButton.AddThemeFontSizeOverride("font_size", size);
+            ReleaseButton.AddThemeFontSizeOverride("font_size", size);
             _row.AddThemeConstantOverride("separation", Mathf.RoundToInt(ReferenceGapPx * size / ReferenceFontSize));
         }
     }
@@ -124,7 +145,12 @@ public sealed partial class BuildStamp : Node
     /// pointer is over one, or a press began on one. The launcher keeps such a click from a
     /// presentation that polls the mouse rather than taking Godot's GUI events.</summary>
     public bool HoldsPointer(Vector2 at) =>
-        _layer.Visible && (_holding || LogsButton.GetGlobalRect().HasPoint(at) || UserButton.GetGlobalRect().HasPoint(at));
+        _layer.Visible && (_holding || LogsButton.GetGlobalRect().HasPoint(at) || UserButton.GetGlobalRect().HasPoint(at)
+                           || (ReleaseButton.Visible && ReleaseButton.GetGlobalRect().HasPoint(at)));
+
+    /// <summary>Shows <paramref name="check"/>'s answer once it arrives, polled on the frame by
+    /// <see cref="Tick"/> so no node is touched off the main thread.</summary>
+    public void Watch(Task<Release?> check) => _check = check;
 
     public override void _Ready()
     {
@@ -133,19 +159,23 @@ public sealed partial class BuildStamp : Node
         _layer = new CanvasLayer { Layer = HudLayers.BuildStamp, Visible = false };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        // A zero-size box on the bottom-right inset, growing up and to the left by the row's minimum
-        // size. The corner holds however wide the text and the font size make it.
+        // A zero-size box on the bottom-right inset, growing up and to the left by its minimum size.
+        // The corner holds however wide the text and the font size make it. A hidden release line
+        // takes no room, so the row sits where it would alone.
+        var column = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        column.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+        column.GrowHorizontal = Control.GrowDirection.Begin;
+        column.GrowVertical = Control.GrowDirection.Begin;
+        column.OffsetRight = -CornerInsetPx;
+        column.OffsetLeft = column.OffsetRight;
+        column.OffsetBottom = -CornerInsetPx;
+        column.OffsetTop = column.OffsetBottom;
         _row = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        _row.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
-        _row.GrowHorizontal = Control.GrowDirection.Begin;
-        _row.GrowVertical = Control.GrowDirection.Begin;
-        _row.OffsetRight = -CornerInsetPx;
-        _row.OffsetLeft = _row.OffsetRight;
-        _row.OffsetBottom = -CornerInsetPx;
-        _row.OffsetTop = _row.OffsetBottom;
 
         LogsButton = Icon(LogsGlyph, "logs", LogsTooltip, () => Open(LogsFolder, "logs folder"));
         UserButton = Icon(UserGlyph, "user", UserTooltip, () => Open(UserFolder, "user folder"));
+        ReleaseButton = Style(new Button { TooltipText = ReleaseTooltip, Visible = false }, OpenRelease);
+        ReleaseButton.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
 
         // Godot's own dialog, embedded in the game window as the install picker is. Its OK takes the
         // focus, so A, B and Escape reach it through Godot's GUI. ⚠ A menu that polls the pad must
@@ -171,7 +201,9 @@ public sealed partial class BuildStamp : Node
         _row.AddChild(LogsButton);
         _row.AddChild(UserButton);
         _row.AddChild(_label);
-        root.AddChild(_row);
+        column.AddChild(ReleaseButton);
+        column.AddChild(_row);
+        root.AddChild(column);
         _layer.AddChild(root);
         AddChild(_layer);
     }
@@ -187,8 +219,7 @@ public sealed partial class BuildStamp : Node
         }
     }
 
-    // One icon. ⚠ Keep FocusMode None. A focusable icon takes the focus on a click. Enter or A on
-    // the extraction screen would then open the folder again instead of extracting.
+    // One folder icon, a PromptFont glyph where the face loaded.
     private Button Icon(string glyph, string fallback, string tooltip, Action open)
     {
         var face = PromptFontGlyphs.Font;
@@ -198,15 +229,35 @@ public sealed partial class BuildStamp : Node
         {
             Text = face != null ? glyph + "︎" : fallback,
             TooltipText = tooltip,
-            FocusMode = Control.FocusModeEnum.None,
-            Flat = true,
-            MouseFilter = Control.MouseFilterEnum.Stop,
         };
         if (face != null)
         {
             button.AddThemeFontOverride("font", face);
         }
 
+        return Style(button, open);
+    }
+
+    // The line naming a newer release, above the version.
+    private void ShowRelease(Release release)
+    {
+        _releaseUrl = release.Url;
+        ReleaseButton.Text = $"{release.Tag} available";
+        ReleaseButton.Visible = true;
+    }
+
+    // The release line's press. The page went through ReleaseCheck's address check.
+    private void OpenRelease() =>
+        Log.Info("core", $"release page {_releaseUrl}: {FolderOpener.Shell(_releaseUrl)}");
+
+    // A flat, mouse-only button in the stamp's colours. ⚠ Keep FocusMode None. A focusable button
+    // takes the focus on a click. Enter or A on the extraction screen would then press it again
+    // instead of extracting, and a headset's menu would lose its row.
+    private Button Style(Button button, Action open)
+    {
+        button.FocusMode = Control.FocusModeEnum.None;
+        button.Flat = true;
+        button.MouseFilter = Control.MouseFilterEnum.Stop;
         var none = new StyleBoxEmpty();
         foreach (string state in new[] { "normal", "hover", "pressed", "hover_pressed", "focus", "disabled" })
         {

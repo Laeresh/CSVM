@@ -1,8 +1,10 @@
 # Security policy
 
-CSVM is a desktop application that contacts no server: there is no update check, no
-telemetry and no account. It does open a UDP socket, but only where the player asks for
-one. Hosting a multiplayer match from the menu's multiplayer door opens a listen server on
+CSVM is a desktop application with no telemetry and no account. Once per launch, an exported
+build asks GitHub's API for the newest release's version number, and shows a line on the menu
+only when it is newer. A `config.json` beside the executable holding
+`{"updates": {"checkReleases": false}}` turns that off. It does open a UDP socket, but only
+where the player asks for one. Hosting a multiplayer match from the menu's multiplayer door opens a listen server on
 a port the player chooses, and optionally asks the router to forward it. While it hosts, a
 second socket on UDP port 47501 answers LAN game searches with the host's name and session
 details. Joining opens an outbound connection to an address the player typed or picked from

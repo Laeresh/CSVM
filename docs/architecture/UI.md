@@ -761,13 +761,13 @@ view of data collected elsewhere rather than a new sample. What a frame number p
 
 ## src/UI/Screens/BuildStamp.cs
 The build's version as `CSVM v<version>` in the menu's bottom-right corner, so a screenshot a
-stranger sends carries the build it was taken on and the number is not read as the original
-game's own. Two PromptFont icons left of it open the logs folder (the open log file's directory)
-and Godot's user folder through `Utils/FolderOpener.cs`. They are mouse-only, never focusable,
-and `Launcher` keeps their clicks from Original's polled pointer. A Game Mode refusal shows in
-`Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`,
-shown only while `MenuHost.OnMainMenu` holds or `NoGameDataScreen.cs` is up: deeper screens have
-bottom-edge plaques it overlaps at a Steam Deck's aspect. It draws on `HudLayers.PerfReadout`, above the boards. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+stranger sends carries its build and the number is not read as the original game's own. Two
+PromptFont icons left of it open the logs folder (the open log file's directory) and Godot's user
+folder through `Utils/FolderOpener.cs`; a line above it names a newer release (`Utils/ReleaseCheck.cs`)
+and opens its page. All three are mouse-only and never focusable, and `Launcher` keeps their clicks
+from Original's polled pointer. A Game Mode refusal shows in `Messagebox` (Original's box) or
+`DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
+or `NoGameDataScreen.cs`: deeper screens' bottom plaques sit under it at a Steam Deck's aspect. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs
 A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its

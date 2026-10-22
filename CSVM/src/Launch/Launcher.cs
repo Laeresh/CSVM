@@ -747,6 +747,12 @@ public partial class Launcher : Node3D
         AddChild(_buildStamp);
         // A Game Mode refusal stands in the Original menu's own warning box, the stamp's dialog elsewhere.
         _buildStamp.Messagebox = words => _menu.Host?.Active is UI.Menu.Original.OriginalPresentation original && original.RaiseWarning(words);
+        // Exported only, so an editor run, a worktree, the suites and agents never ask GitHub. A
+        // --det capture of an export does not either, or the stamp would depend on the network.
+        if (_exported && !_spec.Det && Config.GetBool(ReleaseCheck.Key, ReleaseCheck.DefaultEnabled))
+        {
+            _buildStamp.Watch(ReleaseCheck.Start(BuildVersion.Current));
+        }
 
         // The strip over Steam's on-screen keyboard, process-wide because the menus, the extraction
         // screen and the flight chat all raise it. It draws nothing on any other machine.

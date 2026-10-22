@@ -79,10 +79,10 @@ public static class Config
             _warnedType.Clear();
         }
 
-        string path = ProjectSettings.GlobalizePath(resPath);
+        string path = OS.HasFeature("editor") ? ProjectSettings.GlobalizePath(resPath) : ExportedPath(resPath, OS.GetExecutablePath());
         if (!File.Exists(path))
         {
-            Log.Info("core", $"config absent file={resPath}, using in-code defaults");
+            Log.Info("core", $"config absent file={path}, using in-code defaults");
             return;
         }
         try
@@ -95,21 +95,29 @@ public static class Config
             var doc = JsonDocument.Parse(File.ReadAllBytes(path), opts);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                Log.Error("core", $"config root is not a JSON object file={resPath}, ignoring the file");
+                Log.Error("core", $"config root is not a JSON object file={path}, ignoring the file");
                 doc.Dispose();
                 return;
             }
             _doc = doc;
             Flatten(doc.RootElement, "", _values);
             _fileLoaded = true;
-            Log.Info("core", $"config loaded overrides={_values.Count} file={resPath}");
+            Log.Info("core", $"config loaded overrides={_values.Count} file={path}");
         }
         catch (JsonException e)
         {
-            Log.Error("core", $"config is not valid JSON file={resPath}, using in-code defaults", e);
+            Log.Error("core", $"config is not valid JSON file={path}, using in-code defaults", e);
             _values.Clear();
         }
     }
+
+    /// <summary>Where an exported build reads <paramref name="resPath"/>: beside the executable. Godot
+    /// documents that GlobalizePath does not resolve res:// in an export and names the executable's
+    /// folder instead. Pure, so a unit pins it without an export.</summary>
+    public static string ExportedPath(string resPath, string executablePath) =>
+        Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(executablePath)) ?? "",
+            resPath.StartsWith("res://", StringComparison.Ordinal) ? resPath["res://".Length..] : resPath);
 
     /// <summary>Override for <paramref name="key"/> if present and a number, else
     /// <paramref name="fallback"/> (returned verbatim, so an absent file is byte-identical).</summary>

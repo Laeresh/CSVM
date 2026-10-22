@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CSVM.Extraction;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
@@ -28,7 +29,9 @@ internal static class BuildStampSuites
         + "a mouse-ignoring parent chain on a layer above the boards, with its PromptFont glyph and tooltip; "
         + "the stamp shows and hides on its tick, and the icons open the log file's directory and the user data folder; "
         + "in Game Mode the real opener refuses without the shell and logs the refusal, which stands in the Original menu's "
-        + "warning box where a messagebox is wired and in the stamp's own pad-focusable dialog where none is")]
+        + "warning box where a messagebox is wired and in the stamp's own pad-focusable dialog where none is; "
+        + "a newer release's line stays hidden until a check answers, then stands above the version, unfocusable, "
+        + "and hands the shell the release page")]
     internal static void BuildStampIcons(TestContext ctx)
     {
         var stamp = new BuildStamp(ctx.RepoRoot, exported: false);
@@ -54,6 +57,7 @@ internal static class BuildStampSuites
             Visibility(ctx, stamp, logs);
             Folders(ctx, stamp, logs, user, opened);
             GameMode(ctx, stamp, user);
+            ReleaseLine(ctx, stamp);
         }
         finally
         {
@@ -278,6 +282,42 @@ internal static class BuildStampSuites
         menu.Step(new MenuCommands { Accept = true });
         ctx.Check(menu.Dialog == null && menu.Screen == screen,
             $"A answers the box and leaves the screen under it where it was ({menu.Screen})");
+    }
+
+    // A finished check is answered on the next tick, and the shell is recorded so no browser opens.
+    private static void ReleaseLine(TestContext ctx, BuildStamp stamp)
+    {
+        const string Page = "https://github.com/Laeresh/CSVM/releases/tag/v9.0.0";
+        var line = stamp.ReleaseButton;
+        stamp.Tick(true);
+        ctx.Check(!line.Visible, $"with no check answered the release line is hidden");
+        stamp.Watch(Task.FromResult<Release?>(new Release("v9.0.0", Page)));
+        stamp.Tick(true);
+        ctx.Check(line.Visible && line.Text == "v9.0.0 available" && line.TooltipText == BuildStamp.ReleaseTooltip,
+            $"a newer release shows as its own line ({line.Visible}, \"{line.Text}\")");
+        var row = stamp.LogsButton.GetParent();
+        ctx.Check(line.GetParent() == row.GetParent() && line.GetIndex() < row.GetIndex(),
+            $"above the row that holds the version ({line.GetIndex()}, {row.GetIndex()})");
+        ctx.Check(line.FocusMode == Control.FocusModeEnum.None && line.MouseFilter == Control.MouseFilterEnum.Stop,
+            $"it never takes focus and takes the mouse ({line.FocusMode}, {line.MouseFilter})");
+
+        var shell = FolderOpener.Shell;
+        var handed = new List<string>();
+        FolderOpener.Shell = path =>
+        {
+            handed.Add(path);
+            return Error.Ok;
+        };
+        try
+        {
+            line.EmitSignal(BaseButton.SignalName.Pressed);
+        }
+        finally
+        {
+            FolderOpener.Shell = shell;
+        }
+
+        ctx.Check(handed.Count == 1 && handed[0] == Page, $"a click hands the shell the release page ({string.Join("; ", handed)})");
     }
 
     // A container sorts its children on a deferred call, which a suite inside one frame never
