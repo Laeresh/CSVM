@@ -324,6 +324,12 @@ public sealed class SceneBuilder
     /// shader.</summary>
     internal bool XrUnderInterior;
 
+    /// <summary>Surfaces that receive no shadow, for a body cockpit's transplanted dials
+    /// (<see cref="CockpitTransplant"/>). cockpit1's own pass holds no airframe to shadow its dials.
+    /// In the main world the airframe's shadow over its dashboard must not dim them either. Set
+    /// before building: it keys the shader.</summary>
+    internal bool NoShadowReceive;
+
     /// <summary>Polygons this builder draws nothing for, by identity (<see cref="CockpitPlate"/>
     /// on the stereo interior's builder). Each one's surface group is still formed, so every later
     /// group keeps the rank, and so the depth bias, it builds with otherwise. Null omits nothing.
@@ -2228,7 +2234,7 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
-    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface.
+    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -2254,13 +2260,16 @@ void fragment() {
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
-            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0);
+            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
+            | (NoShadowReceive ? 16777216 : 0);
+        bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement),
+                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
+                noShadowReceive),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2274,7 +2283,8 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false)
+        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
+        bool noShadowReceive = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2304,6 +2314,8 @@ void fragment() {
             sb.Append(", unshaded");
         if (coverage)
             sb.Append(CoverageMode);
+        if (noShadowReceive)
+            sb.Append(", shadows_disabled");
         // A part under the interior draws in the transparent pass and still sorts its own faces.
         if (underInterior)
             sb.Append(", depth_draw_always");

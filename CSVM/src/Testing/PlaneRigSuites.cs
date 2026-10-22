@@ -268,6 +268,220 @@ internal static class PlaneRigSuites
         }
     }
 
+    // A body cockpit's transplanted panel against the same airframe's stock cockpit1. Able to fail: a
+    // rebuilt dial outside InteriorMaterials binds no belts or zones. A panel left on the airframe's
+    // own layer draws in the second pane.
+    [Suite("plane-rig-cockpit-gauges",
+        "a body cockpit's gauge table moves the named assemblies and the cut-loose sight glass onto the " +
+        "airframe at the rig's poses, the moved speedometer's needle takes GaugeCluster's angle, the bind " +
+        "finds the stock cockpit1's needles, lamps, readouts, belts and zones, the dials keep the interior's " +
+        "own materials and depth bias, the panel draws in the pilot's own Cockpit view alone, and a table " +
+        "naming no gauge binds no panel")]
+    internal static void PlaneRigCockpitGauges(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("speedometer");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+
+        // The stock interior: its bind, and each assembly's plane-frame pose as the flat view shows it.
+        CockpitGauges? stock;
+        var poses = new Dictionary<string, Transform3D>();
+        using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
+        {
+            var bare = Build(ctx, planesGamez, textures, none, plane, out var bareBuilder, cockpitInterior: true);
+            try
+            {
+                stock = CockpitGauges.Bind(bareBuilder);
+                var interior = bareBuilder.CockpitInterior!;
+                var gauges = Named(interior, "gauges").First();
+                foreach (var assembly in gauges.GetChildren().OfType<Node3D>())
+                {
+                    poses[AnimRuntime.NameOf(assembly)] = PlaneRigPatch.PlaneFrame(assembly, bare);
+                }
+
+                var speedo = Named(interior, "speedometer").First();
+                var carried = PlaneBuilder.InteriorToPlane(PlaneRigPatch.PlaneFrame(speedo, interior), bareBuilder.CockpitCameraOffset);
+                ctx.Check(carried.IsEqualApprox(PlaneRigPatch.PlaneFrame(speedo, bare)),
+                    $"InteriorToPlane carries the speedometer to where the built mount puts it {carried.Origin} vs {PlaneRigPatch.PlaneFrame(speedo, bare).Origin}");
+            }
+            finally
+            {
+                bare.Free();
+            }
+        }
+
+        ctx.Check(stock is { NeedleCount: > 0 } && poses.ContainsKey("speedometer"),
+            $"{plane}'s stock cockpit1 binds {stock?.NeedleCount} needles over {poses.Count} assemblies");
+        if (stock == null || !poses.ContainsKey("speedometer"))
+        {
+            return;
+        }
+
+        // Every assembly where the original pilot saw it, but the speedometer moved, turned and scaled,
+        // and the glass. The glass key and the assembly holding the glass are never both named.
+        var speedAt = poses["speedometer"].Origin + new Vector3(0.3f, 0.1f, -0.2f);
+        var speedPose = new RigGaugePose(speedAt, new Vector3(10f, -20f, 0f), 0.06f);
+        var glassAt = new Vector3(0.1f, 0.2f, -0.5f) + poses["speedometer"].Origin;
+        var entries = poses.Keys.Where(n => n is not ("g730" or "g184")).Select(n => n == "speedometer"
+            ? $"\"speedometer\": {{ \"position\": {Json(speedAt)}, \"rotation\": [10, -20, 0], \"scale\": 0.06 }}"
+            : $"\"{n}\": {{ \"position\": {Json(poses[n].Origin)} }}").Append($"\"glass\": {{ \"position\": {Json(glassAt)} }}");
+        using var pack = Pack(ctx, "cockpit-gauges", plane, $$"""{ "cockpit": { "from": "body", "gauges": { {{string.Join(", ", entries)}} } } }""");
+        var model = Build(ctx, planesGamez, textures, pack, plane, out var builder, cockpitInterior: true);
+        var own = new Camera3D { Name = "pilot_pane", CullMask = SplitScreen.PlayerCullMask(0) };
+        var other = new Camera3D { Name = "other_pane", CullMask = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1), 1) };
+        GaugeCluster? cluster = null;
+        try
+        {
+            var panel = builder.CockpitPanel;
+            var speedo = panel == null ? null : Named(panel, "speedometer").FirstOrDefault();
+            ctx.Check(panel is { Visible: false } && panel.GetParent() == model && speedo != null,
+                $"the panel hangs hidden on the airframe and holds the speedometer");
+            if (panel == null || speedo == null)
+            {
+                return;
+            }
+
+            ctx.Check(!Named(builder.CockpitInterior!, "speedometer").Any(), $"…which has left cockpit1");
+            var want = CockpitTransplant.Posed(poses["speedometer"], speedPose);
+            ctx.Check(PlaneRigPatch.PlaneFrame(speedo, model).IsEqualApprox(want),
+                $"the speedometer stands at the rig's pose {PlaneRigPatch.PlaneFrame(speedo, model).Origin} scale={PlaneRigPatch.PlaneFrame(speedo, model).Basis.Scale.X:0.###}");
+            var other1 = poses.Keys.First(n => n is not ("speedometer" or "g730" or "g184"));
+            ctx.Check(Named(panel, other1).Select(n => PlaneRigPatch.PlaneFrame(n, model)).FirstOrDefault().IsEqualApprox(poses[other1]),
+                $"a position-only {other1} keeps the size and facing cockpit1 showed it at");
+
+            var panelBind = CockpitGauges.Bind(builder);
+            ctx.Check(panelBind != null && (panelBind.NeedleCount, panelBind.LampCount, panelBind.ReadoutCount, panelBind.BeltCount, panelBind.DamageZoneCount)
+                    == (stock.NeedleCount, stock.LampCount, stock.ReadoutCount, stock.BeltCount, stock.DamageZoneCount),
+                $"the bind finds what the stock cockpit1's does: needles {panelBind?.NeedleCount}/{stock.NeedleCount} lamps {panelBind?.LampCount}/{stock.LampCount} readouts {panelBind?.ReadoutCount}/{stock.ReadoutCount} belts {panelBind?.BeltCount}/{stock.BeltCount} zones {panelBind?.DamageZoneCount}/{stock.DamageZoneCount}");
+            if (panelBind != null && Named(panel, "speed").FirstOrDefault() is { } needle)
+            {
+                cluster = new GaugeCluster { SpeedMph = 200f };
+                panelBind.Apply(cluster);
+                float wantSpeed = -Mathf.DegToRad(GaugeCluster.SpeedAngleDeg(200f));
+                float gotSpeed = needle.Transform.Basis.GetEuler().Z;
+                ctx.Check(Mathf.Abs(Mathf.AngleDifference(gotSpeed, wantSpeed)) < 0.01f,
+                    $"the moved speed needle takes GaugeCluster's angle got={gotSpeed:0.000} want={wantSpeed:0.000} rad");
+                CheckDialLayers(ctx, builder, speedo, needle);
+            }
+            else
+            {
+                ctx.Check(false, $"the moved speedometer carries its speed needle");
+            }
+
+            CheckGlass(ctx, builder, panel, model, glassAt);
+            CheckPanelPanes(ctx, model, builder, own, other);
+        }
+        finally
+        {
+            cluster?.Free();
+            model.Free();
+            own.Free();
+            other.Free();
+        }
+
+        CheckUnnamed(ctx, planesGamez, textures, plane, poses["speedometer"].Origin);
+    }
+
+    // The dial keeps the interior's own materials and takes no shadow. Its layers keep the order the
+    // bias gives them at any scale, since the bias is a fraction of view distance.
+    private static void CheckDialLayers(TestContext ctx, PlaneBuilder builder, Node3D face, Node3D needle)
+    {
+        var names = builder.InteriorMaterials.ToDictionary(m => m.Material.GetInstanceId(), m => m.TextureName);
+        ShaderMaterial? Wearing(Node3D node, string texture) => node.FindChildren("*", "MeshInstance3D", recursive: true, owned: false)
+            .OfType<MeshInstance3D>().Prepend(node as MeshInstance3D).OfType<MeshInstance3D>()
+            .SelectMany(mi => Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0).Select(mi.GetActiveMaterial))
+            .OfType<ShaderMaterial>()
+            .FirstOrDefault(m => names.TryGetValue(m.GetInstanceId(), out string? t) && t.StartsWith(texture, StringComparison.OrdinalIgnoreCase));
+        var faceMaterial = Wearing(face, "speedometer");
+        var needleMaterial = Wearing(needle, "needle");
+        ctx.Check(faceMaterial != null && needleMaterial != null,
+            $"the moved face and needle wear the interior's own speedometer and needle materials");
+        float faceBias = faceMaterial?.GetShaderParameter("depth_bias").AsSingle() ?? 0f;
+        float needleBias = needleMaterial?.GetShaderParameter("depth_bias").AsSingle() ?? 0f;
+        ctx.Check(faceBias > 0f && needleBias > faceBias,
+            $"the needle's depth bias stands over the face's, a fraction of view distance and so scale-free face={faceBias:0.####} needle={needleBias:0.####}");
+        string code = faceMaterial?.Shader?.Code ?? string.Empty;
+        ctx.Check(code.Contains("shadows_disabled", StringComparison.Ordinal),
+            $"the dial receives no shadow, so the airframe's over its dashboard cannot dim it: {code.Split('\n').FirstOrDefault(l => l.StartsWith("render_mode", StringComparison.Ordinal))}");
+    }
+
+    // The glass is a mesh of its own, wearing the interior's glass material, centred where the rig puts it.
+    private static void CheckGlass(TestContext ctx, PlaneBuilder builder, Node3D panel, Node3D model, Vector3 glassAt)
+    {
+        var glass = panel.GetChildren().OfType<Node3D>().FirstOrDefault(n => n.Name.ToString() == CockpitTransplant.GlassName);
+        var meshes = glass?.GetChildren().OfType<MeshInstance3D>().ToList() ?? new List<MeshInstance3D>();
+        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        ctx.Check(glass != null && PlaneRigPatch.PlaneFrame(glass, model).Origin.DistanceTo(glassAt) < PosTolerance,
+            $"the glass stands at the rig's position {(glass == null ? "none" : PlaneRigPatch.PlaneFrame(glass, model).Origin)} vs {glassAt}");
+        ctx.Check(meshes.Count > 0 && meshes.All(m => m.Mesh.GetSurfaceCount() == 1 && glassIds.Contains(m.Mesh.SurfaceGetMaterial(0).GetInstanceId())),
+            $"…as {meshes.Count} cut-loose mesh(es), each one glass surface wearing the interior's glass material");
+        var box = meshes.Count == 0 ? new Aabb() : PlaneRigPatch.PlaneFrame(meshes[0], model) * meshes[0].GetAabb();
+        ctx.Check(box.Grow(1e-3f).HasPoint(glassAt), $"…with the glass's centre at that position, box {box}");
+    }
+
+    // The panel draws in the pilot's own Cockpit view alone: not in a second pane, a picture, Nose or outside.
+    private static void CheckPanelPanes(TestContext ctx, Node3D model, PlaneBuilder builder, Camera3D own, Camera3D other)
+    {
+        var view = CockpitVisibility.Bind(model, builder.CockpitInterior, 0, cockpit: builder.Cockpit, panel: builder.CockpitPanel);
+        SplitScreen.SeatAirframe(model, own, 0);
+        var panel = builder.CockpitPanel!;
+        if (view == null)
+        {
+            ctx.Check(false, $"the visibility bind takes the body cockpit");
+            return;
+        }
+
+        uint single = SplitScreen.OwnViewCullMask(SplitScreen.PaneCullMask(ZoneGate.OpenCullMask(0xFFFFFu)), 0);
+        uint disc = SpyglassView.DiscMask(own.CullMask, SplitScreen.OwnAirframeLayer(0), enhanced: true);
+        uint photo = Flight.Modes.DangerZonePhotograph.PhotoMask(own.CullMask);
+        view.Apply(PilotViewMode.Cockpit, firstPerson: true);
+        ctx.Check(WorldAndToolSuites.DrawsAll(panel, own.CullMask) && WorldAndToolSuites.DrawsAll(panel, single),
+            $"Cockpit: the pilot's own pane draws the panel, split or alone {WorldAndToolSuites.DrawnBy(panel, own.CullMask)}");
+        ctx.Check(WorldAndToolSuites.DrawsNone(panel, other.CullMask) && WorldAndToolSuites.DrawsNone(panel, disc) && WorldAndToolSuites.DrawsNone(panel, photo),
+            $"…and a second pane, the spyglass disc and the Danger Zone photograph draw none of it");
+        ctx.Check(!builder.CockpitInterior!.Visible, $"…while cockpit1 stays hidden");
+        view.Apply(PilotViewMode.Nose, firstPerson: true);
+        ctx.Check(!panel.Visible, $"Nose hides the panel");
+        view.Apply(PilotViewMode.Cockpit, firstPerson: false);
+        ctx.Check(!panel.Visible, $"an external pose hides the panel");
+    }
+
+    // An assembly the table leaves out stays in the hidden interior; a table naming none binds no panel.
+    private static void CheckUnnamed(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, Vector3 speedAt)
+    {
+        foreach (var (label, gauges) in new[] { ("cockpit-one-gauge", $$"""{ "speedometer": { "position": {{Json(speedAt)}} } }"""), ("cockpit-no-gauge", "{}") })
+        {
+            using var pack = Pack(ctx, label, plane, $$"""{ "cockpit": { "from": "body", "gauges": {{gauges}} } }""");
+            var model = Build(ctx, planesGamez, textures, pack, plane, out var builder, cockpitInterior: true);
+            try
+            {
+                var panel = builder.CockpitPanel;
+                var bind = CockpitGauges.Bind(builder);
+                int moved = panel == null ? -1 : Named(panel, "gauges").Sum(g => g.GetChildCount());
+                bool glass = panel != null && Named(panel, CockpitTransplant.GlassName).Any();
+                if (label == "cockpit-one-gauge")
+                {
+                    ctx.Check(moved == 1 && !glass && Named(builder.CockpitInterior!, "altimeter").Any() && bind is { NeedleCount: 1 },
+                        $"naming only the speedometer moves it alone, no glass, the altimeter left in cockpit1, needles={bind?.NeedleCount}");
+                }
+                else
+                {
+                    ctx.Check(panel != null && panel.GetChildCount() == 0 && bind == null,
+                        $"a body cockpit naming no gauge carries an empty panel and binds none, so the screen-space dials stay");
+                }
+            }
+            finally
+            {
+                model.Free();
+            }
+        }
+    }
+
     // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes
     // dark, and with no rig wing_flare2 itself is.
     private static void CheckLeakFlare(TestContext ctx, GameZ planesGamez, TextureArchive textures)

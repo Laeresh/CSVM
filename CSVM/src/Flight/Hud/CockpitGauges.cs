@@ -77,9 +77,9 @@ public sealed class CockpitGauges
     /// fixed constant; diagnostic and suite use only.</summary>
     public int DamageZoneCount => _zones.Count;
 
-    /// <summary>Finds the panel inside one built interior, or null when there is no interior (an AI
-    /// plane, or any build that did not ask <see cref="PlaneBuilder"/> for one) or no
-    /// <c>gauges</c> subtree in it.</summary>
+    /// <summary>Finds the panel inside one built interior or transplanted panel. Null when there is
+    /// none (an AI plane, or any build that did not ask <see cref="PlaneBuilder"/> for one), or when
+    /// it holds no <c>gauges</c> subtree.</summary>
     public static CockpitGauges? Bind(Node3D? interior,
         IReadOnlyList<(ShaderMaterial Material, string TextureName)>? materials = null)
     {
@@ -98,12 +98,11 @@ public sealed class CockpitGauges
     }
 
     /// <summary>Binds through the one expression every caller must use: this builder's own
-    /// interior paired with its own materials, so a caller cannot supply one without the other.
-    /// The live flight path and the in-engine suite both call this rather than repeating the two
-    /// arguments, so a regression back to the interior alone breaks both instead of only the
-    /// controls.</summary>
+    /// panel paired with its own materials, never one without the other. The
+    /// panel is a body cockpit's transplanted one where it has one, the interior otherwise. The live
+    /// flight path and the in-engine suites both call this rather than repeating the arguments.</summary>
     public static CockpitGauges? Bind(PlaneBuilder builder) =>
-        Bind(builder.CockpitInterior, builder.InteriorMaterials);
+        Bind(builder.CockpitPanel ?? builder.CockpitInterior, builder.InteriorMaterials);
 
     /// <summary>Write this frame's readings onto the panel. Called only while the interior is on
     /// the screen, so an external view costs nothing; the needles hold their last pose behind the

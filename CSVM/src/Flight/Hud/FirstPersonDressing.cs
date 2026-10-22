@@ -29,8 +29,8 @@ public sealed class FirstPersonDressing
     /// drops markers and dontmove).</summary>
     public CockpitVisibility? Visibility { get; set; }
 
-    /// <summary>The authored instrument panel inside the interior: needles and the two warning
-    /// lamps, driven off the same readings the screen-space cluster draws.</summary>
+    /// <summary>The authored instrument panel inside the interior, or a body cockpit's transplanted
+    /// one: needles and lamps, driven off the same readings the screen-space cluster draws.</summary>
     public CockpitGauges? Panel { get; set; }
 
     /// <summary>The <c>cockpit1</c> subtree itself, as the plane builder returned it.</summary>
@@ -58,10 +58,11 @@ public sealed class FirstPersonDressing
         Vector3 shakeRotation, ProjectilePool? pool)
     {
         Visibility?.Apply(selected, firstPersonPose);
-        // Same rule, so the panel is driven exactly on the frames it is on the screen.
-        bool interior = CockpitVisibility.Rules(selected, firstPersonPose, Visibility?.BodyCockpit ?? false).Interior;
-        SetPanel(interior);
-        if (interior)
+        // Same rule, so the panel is driven exactly on the frames it is on the screen. A body
+        // cockpit's transplanted panel counts once it carries a dial; with none the cluster stays.
+        var shown = CockpitVisibility.Rules(selected, firstPersonPose, Visibility?.BodyCockpit ?? false);
+        SetPanel(shown.Interior || (shown.Transplant && Panel != null));
+        if (shown.Interior)
             Reseat?.Sync();
         // After the hide, so the pass shows exactly the frames the interior itself does.
         Pass?.Sync(drawn, camera, shakeRotation, pool?.ActiveMuzzleLights());

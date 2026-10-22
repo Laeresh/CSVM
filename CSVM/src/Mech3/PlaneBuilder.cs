@@ -199,6 +199,11 @@ public sealed class PlaneBuilder
     /// no section, or a rig that failed its checks and was flown without.</summary>
     public RigCockpit? Cockpit { get; private set; }
 
+    /// <summary>A body cockpit's transplanted instruments (<see cref="CockpitTransplant"/>), hidden, on
+    /// the airframe in the plane frame. Null on every build that is not a flat body cockpit; the stereo
+    /// path keeps <c>cockpit1</c>. It holds no <c>gauges</c> node when the rig's table names none.</summary>
+    public Node3D? CockpitPanel { get; private set; }
+
     /// <summary>Where the eye sits in <see cref="CockpitInterior"/>'s own units: the
     /// <c>cockpit_camera</c> marker's numbers under the stereo path, the interior's origin on every
     /// other build. The flat view keeps the origin and its tilt (docs/org/cameraViews.md, "Where the
@@ -252,6 +257,23 @@ public sealed class PlaneBuilder
     /// interior is therefore the marker read in interior units. Engine-free, so it unit-tests.</summary>
     public static Transform3D StereoMount(Vector3 marker, float metresPerUnit) =>
         new(Basis.Identity.Scaled(Vector3.One * metresPerUnit), marker - (marker * metresPerUnit));
+
+    /// <summary>The flat interior's mount: the interior's origin, the flat eye, on the marker, at
+    /// <paramref name="metresPerUnit"/> and the <see cref="HeadPitchOffsetRad"/> tilt. Engine-free, so
+    /// it unit-tests. Decode: docs/org/cameraViews.md, "Where the eye sits in the interior".</summary>
+    public static Transform3D FlatMount(Vector3 marker, float metresPerUnit = InteriorScale) =>
+        new(new Basis(Vector3.Right, HeadPitchOffsetRad).Scaled(Vector3.One * metresPerUnit), marker);
+
+    /// <summary>A transform in <c>cockpit1</c>'s own frame carried through <see cref="FlatMount"/>
+    /// into the plane frame: where the flat view shows that pose. <see cref="InteriorFromPlane"/> is
+    /// its inverse.</summary>
+    public static Transform3D InteriorToPlane(Transform3D interior, Vector3 marker, float metresPerUnit = InteriorScale) =>
+        FlatMount(marker, metresPerUnit) * interior;
+
+    /// <summary>A plane-frame transform read in <c>cockpit1</c>'s own frame through
+    /// <see cref="FlatMount"/>, the inverse of <see cref="InteriorToPlane"/>.</summary>
+    public static Transform3D InteriorFromPlane(Transform3D plane, Vector3 marker, float metresPerUnit = InteriorScale) =>
+        FlatMount(marker, metresPerUnit).AffineInverse() * plane;
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk"), with the model
     /// pack's <c>rig.json</c> for that node applied (<see cref="PlaneRigPatch"/>). Throws
@@ -490,6 +512,9 @@ public sealed class PlaneBuilder
             // The airframe's pack scope, so cockpit1.glb and the airframe's node files reach the
             // interior. Its replacements are this builder's own, which bakes the interior's bias.
             _interiorScene.HdAirframe = _scene.HdAirframe;
+            bool body = Cockpit is { FromBody: true } && !_interiorScene.XrPreciseInterior;
+            // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.
+            _interiorScene.NoShadowReceive = body;
             int replacedBefore = _interiorScene.ReplacedMeshCount;
             // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
             // that the airframe pass never builds the interior, and it is the root here.
@@ -505,10 +530,7 @@ public sealed class PlaneBuilder
             InteriorEye = _interiorScene.XrPreciseInterior ? CockpitCameraOffset : Vector3.Zero;
             n3d.Transform = _interiorScene.XrPreciseInterior
                 ? StereoMount(CockpitCameraOffset, _interiorScale)
-                : new Transform3D(
-                    new Basis(Vector3.Right, HeadPitchOffsetRad)
-                        .Scaled(Vector3.One * _interiorScale),
-                    CockpitCameraOffset);
+                : FlatMount(CockpitCameraOffset, _interiorScale);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
             if (_interiorScene.XrPreciseInterior)
@@ -518,6 +540,13 @@ public sealed class PlaneBuilder
 
             built.AddChild(n3d);
             CockpitInterior = n3d;
+            if (body)
+            {
+                CockpitPanel = CockpitTransplant.Build(n3d, Cockpit!, n3d.Transform,
+                    CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials);
+                built.AddChild(CockpitPanel);
+            }
+
             return;
         }
     }

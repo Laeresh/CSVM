@@ -295,7 +295,7 @@ draws `cockpit1` and hides the `healthy` body, Nose hides the interior, the body
 so a held look-behind brings the body back. The interior takes node visibility. The airframe groups
 move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
 that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them,
-and so do `CockpitReseat.Hidden` and the stores given to `Reseat` on the frames the interior is drawn. A model pack's body cockpit (`Mech3.RigCockpit.FromBody`, `BodyCockpit`) keeps the body in Cockpit, hides the interior, and moves every airframe node its `hide` list names, found outside `cockpit*`, off the same layer; Nose and the external poses are unchanged. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+and so do `CockpitReseat.Hidden` and the stores given to `Reseat` on the frames the interior is drawn. A model pack's body cockpit (`Mech3.RigCockpit.FromBody`, `BodyCockpit`) keeps the body in Cockpit, hides the interior, and moves every airframe node its `hide` list names, found outside `cockpit*`, off the same layer; Nose and the external poses are unchanged. Its transplanted panel (`Mech3/CockpitTransplant.cs`, `Shown.Transplant`) takes `Visible` exactly where the interior would, and on each show is stamped onto `SplitScreen.WorldFlareLayer`, the one layer only that pilot's pane camera draws, since `SeatAirframe` stamps the whole model after the bind. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/CockpitReseat.cs
 The remake-only fix for the Cockpit view's floating wingtip lights and prop discs, in both
@@ -312,7 +312,7 @@ What one pilot's own aircraft wears in a first-person view: `Visibility` (`Cockp
 `Interior`, `Panel` (`CockpitGauges`), `Pass` (`CockpitOverlay`) and, under the stereo path,
 `Stereo` (`XrCockpit`), all null on a rig built no interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
 held look-behind brings the body back, and takes the screen-space cluster off while the panel is
-on screen, which a body cockpit's hidden interior never is; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
+on screen: the interior, or a body cockpit's transplanted panel once it carries a dial (`Panel` bound); `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
 after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
 [../org/cameraViews.md](../org/cameraViews.md).
 
@@ -419,9 +419,9 @@ absolute angle each frame, the artificial-horizon ball and the compass drum take
 basis, and the belts, damage-zone skins, readouts and two warning lamps take the state their
 condition says. All of it reads `GaugeCluster`'s already-computed values rather than re-deriving
 them, so the 3D panel and the screen-space dials cannot disagree. `Bind` finds the nodes in one
-built interior (null on any plane without one) and `Apply` is the per-frame write, the same shape
-`CockpitVisibility` uses, called only while the interior is on the screen. Node names, the
-authored-rotation rule and the per-airframe name variants: [../formats/hud.md](../formats/hud.md).
+built interior or a body cockpit's transplanted panel (`Mech3/CockpitTransplant.cs`, preferred by
+`Bind(PlaneBuilder)`), null without either; `Apply` is the per-frame write, called only while the
+panel is on the screen. Names and rotation rule: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/Weapons/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value: the effect name and which

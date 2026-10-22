@@ -106,7 +106,7 @@ public static class PlaneRigPatch
     /// <summary>Checks the cockpit section's names on the gamez tree, not the built one. A build with no
     /// interior then rejects what a pilot's build rejects. A hide name must be an airframe node outside the
     /// alternate-state subtrees. A gauge must be a child of the interior's <c>gauges</c> node. The glass key
-    /// needs a sight-glass polygon in the interior. It edits nothing.</summary>
+    /// needs a sight-glass polygon in the interior, and no named assembly holding it. It edits nothing.</summary>
     internal static void CheckCockpit(PlaneRig rig, GameZ gamez, GameZNode root, HashSet<string> known)
     {
         if (rig.Cockpit is not { } cockpit)
@@ -125,6 +125,7 @@ public static class PlaneRigPatch
         var interior = Children(gamez, root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
         var gauges = interior == null ? null : FindIn(gamez, interior, n => n.Name.Equals("gauges", StringComparison.OrdinalIgnoreCase));
         var assemblies = gauges == null ? new List<string>() : Children(gamez, gauges).ConvertAll(n => n.Name);
+        bool glass = cockpit.Gauges.ContainsKey(RigCockpit.GlassKey);
         foreach (string name in cockpit.Gauges.Keys)
         {
             if (name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase))
@@ -137,6 +138,11 @@ public static class PlaneRigPatch
             else if (!assemblies.Exists(a => a.Equals(name, StringComparison.OrdinalIgnoreCase)))
             {
                 throw Fail(rig, "cockpit.gauges." + name, $"no assembly '{name}' under the airframe's cockpit1 gauges (it has: {string.Join(", ", assemblies)})");
+            }
+            else if (glass && Children(gamez, gauges!).Find(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } held
+                && FindIn(gamez, held, n => HoldsGlass(gamez, n)) != null)
+            {
+                throw Fail(rig, "cockpit.gauges", $"'{RigCockpit.GlassKey}' and '{name}' both place the sight glass, which '{name}' holds; name one of them");
             }
         }
     }

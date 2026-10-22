@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, body cockpits on the flat screen
 
 11. ☑ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
-12. ☐ [local] Transplanted gauge assemblies and sight glass on the body
+12. ☑ [local] Transplanted gauge assemblies and sight glass on the body
 13. ☐ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
 14. ☐ [local] The Corvette's seat and dashboard
 
@@ -358,7 +358,74 @@ sub-assemblies carry their own `markers` children (`CockpitVisibility.cs:143-167
 the gauges move out of `cockpit1` (B12). <TODO: camera near plane against a real-scale cabin around
 the eye; the session did not measure it.>
 
-## B12 ☐ [local] Transplanted gauge assemblies and sight glass on the body
+## B12 ☑ [local] Transplanted gauge assemblies and sight glass on the body
+
+**Landed.** A flat build with a body cockpit builds `cockpit1` as before, then
+`CockpitTransplant.Build` (`Mech3/CockpitTransplant.cs`, new) moves the rig's named assemblies out of
+it onto the airframe, exposed as `PlaneBuilder.CockpitPanel`: a hidden `cockpit_panel` node under the
+model root holding a `gauges` node (only when an assembly moved) and a `glass` node (only when named).
+The rest of `cockpit1` stays built and hidden, so its torn panels and bullet holes go with it.
+
+- **Re-parented, not rebuilt.** Each named assembly is the built node itself, moved with its meshes,
+  materials and metas, so `CockpitGauges.Bind(PlaneBuilder)`, which now prefers `CockpitPanel` over
+  `CockpitInterior`, binds the same needles, lamps, readouts, belts and zones through the unchanged
+  `InteriorMaterials`. An assembly the table does not name stays in the hidden interior and is not
+  bound. The panel's `cockpit` prefix keeps it out of `FindGroup`, `CockpitReseat` and
+  `ControlSurfaceAnimator`'s interior-blind walks, which the assemblies' own `markers` children need.
+- **Mount arithmetic.** `PlaneBuilder.FlatMount(marker, scale)` is the flat mount the interior already
+  took (marker origin, `HeadPitchOffsetRad` tilt, `InteriorScale`); `InteriorToPlane` carries an
+  interior-frame transform through it and `InteriorFromPlane` back, for B13 and C22.
+  `CockpitTransplant.Posed(original, pose)` sets the pose's position and, where given, its YXZ rotation
+  and uniform scale over the assembly's original plane-frame transform, so a position-only pose keeps
+  the dial's original apparent size (0.04 m per unit) and facing. `CSVM.Tests/CockpitTransplantTests.cs`.
+- **The glass.** `CockpitTransplant.GlassFrame` puts the glass's frame at the centre of its polygon's
+  corners (`GunsightReticle.Find`), unrotated in the interior frame; a rig's glass position is that
+  centre, and B13 writes the template from the same function. Every built surface whose material
+  `InteriorMaterials` names `cockpit6`/`crosshair` is copied into a one-surface `ArrayMesh` on a new
+  `MeshInstance3D` (layers, shadow setting and `node_bias` copied) under `glass`. ⚠ Not
+  `Node.Duplicate()` of the source instance: under the shipped separate render thread that crashes
+  the process (0xC0000005) on the first frames, every run, while `--render-thread safe` and headless
+  survive it. `PlaneRigPatch.CheckCockpit` fails a rig naming `glass` beside an assembly that holds the
+  glass (the Brigand's `g730`, the Firebrand's `g184`), naming the file and both keys.
+- **When it shows.** `CockpitVisibility.Shown` gains `Transplant`, true exactly where the interior
+  would be (`Rules(..., bodyCockpit: false).Interior`); `Bind` takes the panel. `Apply` sets the
+  panel's `Visible` and, on each show, stamps it onto `SplitScreen.WorldFlareLayer(pilot)`, the band
+  only that pilot's pane camera draws (the spyglass disc and the Danger Zone photograph drop it), since
+  `SeatAirframe` stamps the whole model after the bind. `FirstPersonDressing.Show` turns the
+  screen-space cluster off for the transplant only when `Panel` bound, so a table with no assembly
+  (glass alone, or nothing) keeps the 2D dials. The headset path keeps `cockpit1`, as B11 left it.
+- **Lighting.** `SceneBuilder.NoShadowReceive` (new key bit, `shadows_disabled`) is set on the interior
+  builder for a flat body cockpit before it builds, so the airframe's shadow over its dashboard cannot
+  dim the dials under Enhanced (decision 12); shader, gamma blend and no-coverage choices are
+  `cockpit1`'s own. The transplanted glass composites as `cockpit1`'s glass does under
+  `--no-cockpit-pass` (main world), fainter than through the cockpit pass's premultiplied composite;
+  compare `stock-cockpit1-no-pass.png` with `stock-cockpit1.png`.
+- **Depth bias.** No change was needed. The bias is `VERTEX *= 1 - bias` in view space, a fraction of
+  view distance, so a dial's own layers keep their order at any rig scale or distance; the 25x
+  `DepthBiasScale` makes one priority level 0.5 % of the distance (face 0.005, needles 0.04 and 0.045
+  of it), millimetres at a dashboard's 0.5 to 0.8 m, far above reverse-Z float precision there. The
+  suite reads face < needle on the moved dial's own materials; `corvette-scaled-dials.png` shows a
+  dial at 3.75x and one at a quarter scale with needle, lamp window and face in order. The cost is
+  that a priority-9 needle is pulled 4.5 % of its distance toward the eye, so a body surface less than
+  that in front of it (about 3 cm at 0.6 m) loses to it; B14 should keep hoods and wheel rims clear by more.
+- **Tests.** `CockpitTransplantTests` (7), `CockpitVisibilityTests.ATransplantedPanelShowsExactlyWhereCockpit1Would`,
+  `PlaneRigTests.TheGlassKeyAndTheAssemblyHoldingTheGlassMayNotBothBeNamed` and the per-airframe theory
+  (the Brigand and Firebrand reject `glass` with their holder). Suite `plane-rig-cockpit-gauges`
+  (`Testing/PlaneRigSuites.cs`, install only): every assembly at its original place but the
+  speedometer moved, turned and scaled, plus the glass; the speedometer stands at `Posed`'s pose and
+  `InteriorToPlane` matches the built mount; the bind counts equal the stock `cockpit1`'s; the moved
+  `speed` needle reads `GaugeCluster.SpeedAngleDeg`; the glass is one cut-loose glass surface at the
+  rig's centre; the panel draws in the pilot's pane (split and alone) and in no second pane, disc or
+  photograph, and hides in Nose and outside; naming only the speedometer moves it alone, and a body
+  section naming nothing binds no panel.
+- **The look.** `.scratch/b12-shots/corvette-body-cockpit.png` (the Corvette pack, every autogyro
+  assembly and the glass at positions only, about 15 cm further out than `cockpit1` drew them), against
+  `stock-cockpit1.png`. The eye still sits above the car's roof until B14, so the dials float over the
+  ground.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** In a body cockpit, each assembly the `gauges` table names is drawn at its rig pose on the
 airframe, with its needles, lamps, readouts, belts and damage zones driven as in `cockpit1`; an

@@ -109,6 +109,18 @@ public class CockpitVisibilityTests
     }
 
     [Theory]
+    [InlineData(PilotViewMode.Cockpit, true)]
+    [InlineData(PilotViewMode.Nose, true)]
+    [InlineData(PilotViewMode.Cockpit, false)]
+    [InlineData(PilotViewMode.Chase, false)]
+    public void ATransplantedPanelShowsExactlyWhereCockpit1Would(PilotViewMode mode, bool firstPerson)
+    {
+        Assert.Equal(CockpitVisibility.Rules(mode, firstPerson).Interior,
+            CockpitVisibility.Rules(mode, firstPerson, bodyCockpit: true).Transplant);
+        Assert.False(CockpitVisibility.Rules(mode, firstPerson).Transplant);
+    }
+
+    [Theory]
     [InlineData(PilotViewMode.Nose, true)]
     [InlineData(PilotViewMode.Cockpit, false)]
     [InlineData(PilotViewMode.Nose, false)]

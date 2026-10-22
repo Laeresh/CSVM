@@ -13,9 +13,9 @@ namespace CSVM.Flight.Hud;
 /// <c>cockpit1</c> interior and hides the <c>healthy</c> body. Nose draws no interior and hides
 /// the body, <c>markers</c> and <c>dontmove</c>. Every other view and aircraft is untouched.
 /// The pure decision is <see cref="Rules"/>, and <see cref="Apply"/> writes it onto the four nodes
-/// <see cref="Bind"/> found in one built plane model, for that pilot's own pane alone. A model pack's
-/// body cockpit (<see cref="RigCockpit.FromBody"/>) keeps the body in Cockpit and drops the interior
-/// and the rig's hide list instead.
+/// <see cref="Bind"/> found in one built plane model, for that pilot's own pane alone. In Cockpit a
+/// model pack's body cockpit (<see cref="RigCockpit.FromBody"/>) keeps the body, its transplanted
+/// panel shows, and the interior and the rig's hide list go.
 /// </summary>
 public sealed class CockpitVisibility
 {
@@ -28,15 +28,19 @@ public sealed class CockpitVisibility
     // Every airframe node a body cockpit's `cockpit.hide` names, outside the interior.
     private readonly List<Node3D> _listed;
 
-    // The pilot's airframe stamp and the layer a hidden group trades it for.
-    private readonly uint _own, _out;
+    // A body cockpit's transplanted instruments (PlaneBuilder.CockpitPanel).
+    private readonly Node3D? _panel;
+
+    // The pilot's airframe stamp and the layer a hidden group trades it for. The panel takes the
+    // third, which only the pilot's own pane camera draws.
+    private readonly uint _own, _out, _pane;
 
     // Which airframe groups the last Apply moved out of the pilot's own view, so a frame that
     // changes nothing walks no subtree.
     private (bool Body, bool Markers, bool Dontmove, bool Reseated, bool Listed) _hidden;
 
     private CockpitVisibility(Node3D? interior, Node3D? body, Node3D? markers, Node3D? dontmove,
-        IReadOnlyList<Node3D> reseated, int pilot, bool bodyCockpit, List<Node3D> listed)
+        IReadOnlyList<Node3D> reseated, int pilot, bool bodyCockpit, List<Node3D> listed, Node3D? panel)
     {
         _interior = interior;
         _body = body;
@@ -45,8 +49,11 @@ public sealed class CockpitVisibility
         _reseated = new List<Node3D>(reseated);
         _own = SplitScreen.OwnAirframeLayer(pilot);
         _out = SplitScreen.FirstPersonLayer(pilot);
+        // The flare band is the one no camera but this pilot's pane draws, pictures included.
+        _pane = SplitScreen.WorldFlareLayer(pilot);
         BodyCockpit = bodyCockpit;
         _listed = listed;
+        _panel = panel;
     }
 
     /// <summary>Whether the pilot's Cockpit view is a body cockpit, the rig's replaced airframe seen
@@ -57,23 +64,22 @@ public sealed class CockpitVisibility
     /// selected view. The original gates on the live camera mode, so a held numpad key or look-behind
     /// restores the body while down, as <see cref="CameraController.RestoreExternalFov"/> does the FOV.
     /// A body cockpit (<paramref name="bodyCockpit"/>) changes the Cockpit view alone: the body
-    /// stays, the interior and the hide list go.</summary>
+    /// stays, the interior and the hide list go, and the transplanted panel shows.</summary>
     public static Shown Rules(PilotViewMode mode, bool firstPerson, bool bodyCockpit = false) => !firstPerson
-        ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true, Listed: true)
+        ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true, Listed: true, Transplant: false)
         : mode == PilotViewMode.Nose
-            ? new Shown(Interior: false, Body: false, Markers: false, Dontmove: false, Listed: true)
+            ? new Shown(Interior: false, Body: false, Markers: false, Dontmove: false, Listed: true, Transplant: false)
             : bodyCockpit
-                ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true, Listed: false)
-                : new Shown(Interior: true, Body: false, Markers: true, Dontmove: true, Listed: true);
+                ? new Shown(Interior: false, Body: true, Markers: true, Dontmove: true, Listed: false, Transplant: true)
+                : new Shown(Interior: true, Body: false, Markers: true, Dontmove: true, Listed: true, Transplant: false);
 
-    /// <summary>Finds the four groups in one built plane model. Null for a model with no interior,
-    /// which is any build that did not ask <see cref="PlaneBuilder"/> for one.
-    /// <paramref name="pilot"/> is the seat whose <see cref="SplitScreen.OwnAirframeLayer"/> the
-    /// model wears.</summary>
+    /// <summary>Finds the four groups in one built plane model; null for a model built no interior.
+    /// <paramref name="pilot"/> is the seat whose <see cref="SplitScreen.OwnAirframeLayer"/> the model wears.</summary>
     /// <param name="reseated">The originals <see cref="CockpitReseat.Hidden"/> lists.</param>
     /// <param name="cockpit">The applied rig's section (<see cref="PlaneBuilder.Cockpit"/>); only a body one counts.</param>
+    /// <param name="panel">A body cockpit's transplanted instruments (<see cref="PlaneBuilder.CockpitPanel"/>).</param>
     public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior, int pilot,
-        IReadOnlyList<Node3D>? reseated = null, RigCockpit? cockpit = null)
+        IReadOnlyList<Node3D>? reseated = null, RigCockpit? cockpit = null, Node3D? panel = null)
     {
         if (planeModel == null || interior == null)
         {
@@ -85,7 +91,7 @@ public sealed class CockpitVisibility
             Collect(planeModel, new HashSet<string>(cockpit!.Hide, StringComparer.OrdinalIgnoreCase), listed);
         return new CockpitVisibility(interior, FindGroup(planeModel, "healthy"),
             FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"),
-            reseated ?? Array.Empty<Node3D>(), pilot, body, listed);
+            reseated ?? Array.Empty<Node3D>(), pilot, body, listed, body ? panel : null);
     }
 
     /// <summary>Adds an outside part whose stereo copy the interior carries
@@ -106,6 +112,7 @@ public sealed class CockpitVisibility
     {
         var shown = Rules(mode, firstPerson, BodyCockpit);
         Set(_interior, shown.Interior);
+        ShowPanel(shown.Transplant);
         var hidden = (Body: !shown.Body, Markers: !shown.Markers, Dontmove: !shown.Dontmove,
             Reseated: shown.Interior, Listed: !shown.Listed);
         if (hidden == _hidden)
@@ -203,8 +210,24 @@ public sealed class CockpitVisibility
     private static bool IsInterior(Node3D node) =>
         AnimRuntime.NameOf(node).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Which of the groups render this frame. All true is the built state, which is what
-    /// every external view and every AI plane keeps. <see cref="Listed"/> is a body cockpit's
-    /// <c>cockpit.hide</c> nodes.</summary>
-    public readonly record struct Shown(bool Interior, bool Body, bool Markers, bool Dontmove, bool Listed);
+    // Every pane shares the panel's Visible, so the panel also wears the pilot's pane layer alone. It
+    // is stamped on each show: seating the airframe stamps the whole model after the bind.
+    private void ShowPanel(bool shown)
+    {
+        if (_panel == null || !GodotObject.IsInstanceValid(_panel))
+        {
+            return;
+        }
+        if (shown && !_panel.Visible)
+        {
+            SplitScreen.SetVisualLayer(_panel, _pane);
+        }
+        Set(_panel, shown);
+    }
+
+    /// <summary>Which of the groups render this frame. Every external view and every AI plane keeps the
+    /// built state, all true but the transplant. A body cockpit's <c>cockpit.hide</c> nodes are
+    /// <see cref="Listed"/>. Its transplanted panel, <see cref="Transplant"/>, draws exactly where
+    /// <c>cockpit1</c> would.</summary>
+    public readonly record struct Shown(bool Interior, bool Body, bool Markers, bool Dontmove, bool Listed, bool Transplant);
 }

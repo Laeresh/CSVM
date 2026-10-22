@@ -245,7 +245,8 @@ internal sealed class HumanFlightAdapter
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
-                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden, bodyCockpit),
+                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden, bodyCockpit,
+                    planeBuilder.CockpitPanel),
                 Interior = planeBuilder.CockpitInterior,
                 Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
@@ -260,7 +261,7 @@ internal sealed class HumanFlightAdapter
             Racing = _world.Racing,
         };
         if (verbose && controller.Dressing.Visibility is { BodyCockpit: true })
-            Log.Info("flight", $"cockpit: '{planeName}' body cockpit, the model pack's airframe seen from the cockpit_camera marker, {bodyCockpit!.Hide.Count} hide name(s)");
+            Log.Info("flight", $"cockpit: '{planeName}' body cockpit, the model pack's airframe seen from the cockpit_camera marker, {bodyCockpit!.Hide.Count} hide name(s), {bodyCockpit.Gauges.Count} gauge table entr(ies){(controller.Dressing.Panel == null ? ", the screen-space dials kept" : string.Empty)}");
         else if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         if (controller.Dressing.Stereo != null)

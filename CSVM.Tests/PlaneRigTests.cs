@@ -262,9 +262,29 @@ public class PlaneRigTests
     {
         var gamez = Planes.Value;
         var root = gamez.FindByName(plane)!;
-        var entries = string.Join(", ", (assemblies + ",glass").Split(',').Select(a => $"\"{a}\": {{ \"position\": [0, 0, 0] }}"));
-        PlaneRigPatch.CheckCockpit(Cockpit($$"""{ "gauges": { {{entries}} } }"""), gamez, root, new HashSet<string>());
+        static string Entries(IEnumerable<string> names) =>
+            string.Join(", ", names.Select(a => $"\"{a}\": {{ \"position\": [0, 0, 0] }}"));
+        var names = assemblies.Split(',');
+        // The Brigand's and Firebrand's glass is an assembly, which the glass key may not name twice.
+        string? holder = Array.Find(names, n => n is "g730" or "g184");
+        var withGlass = names.Where(n => n != holder).Append("glass");
+        PlaneRigPatch.CheckCockpit(Cockpit($$"""{ "gauges": { {{Entries(names)}} } }"""), gamez, root, new HashSet<string>());
+        PlaneRigPatch.CheckCockpit(Cockpit($$"""{ "gauges": { {{Entries(withGlass)}} } }"""), gamez, root, new HashSet<string>());
+        if (holder != null)
+        {
+            CockpitRejects($$"""{ "gauges": { {{Entries(names.Append("glass"))}} } }""", gamez, root, new HashSet<string>(), "cockpit.gauges", $"'glass' and '{holder}' both place the sight glass");
+        }
+
         CockpitRejects("""{ "gauges": { "compass": { "position": [0, 0, 0] } } }""", gamez, root, new HashSet<string>(), "cockpit.gauges.compass", "no assembly");
+    }
+
+    [Fact]
+    public void TheGlassKeyAndTheAssemblyHoldingTheGlassMayNotBothBeNamed()
+    {
+        var (gamez, root) = Airframe();
+        gamez.Nodes[4].MeshIndex = 0; // the speedometer now holds the glass polygon
+        CockpitRejects("""{ "gauges": { "speedometer": { "position": [0, 0, 0] }, "glass": { "position": [0, 0, 0] } } }""",
+            gamez, root, new HashSet<string>(), "cockpit.gauges", "'glass' and 'speedometer' both place the sight glass");
     }
 
     private static PlaneRig Cockpit(string section) => PlaneRig.Parse($$"""{ "cockpit": {{section}} }""", "probe/rig.json");
