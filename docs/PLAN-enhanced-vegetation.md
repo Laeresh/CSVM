@@ -107,8 +107,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
 2. ☑ The vegetation sidecar: per-chapter kind list and values, read under Rich
-3. ◐ Per-stamp jitter, rotation and tint for listed kinds
-4. ◐ Card shading: wind sway, sun-side shading, contact shadow
+3. ☑ Per-stamp jitter, rotation and tint for listed kinds
+4. ☑ Card shading: wind sway, sun-side shading, contact shadow
 5. ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 6. ☑ The lab's paint tool: texture picks and a brush mask
 7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
@@ -312,7 +312,7 @@ A3's, since nothing reads the file until the wiring lands.
 **⚠ Traps.** Key by model name, not by mesh index: C5 ships one building as several meshes, and a
 substitution target resolves to one model however many templates mention it (`Clutter.cs:1001`).
 
-## A3 ◐ Per-stamp jitter, rotation and tint for listed kinds
+## A3 ☑ Per-stamp jitter, rotation and tint for listed kinds
 
 **Goal.** Under Rich, each listed stamp moves by a small offset, turns and takes a slight tint and
 brightness, so the template's layout no longer repeats visibly from altitude.
@@ -386,7 +386,7 @@ repeat falls to Waves B and C.
 
 **Verified.** <pending orchestrator run>
 
-## A4 ◐ Card shading: wind sway, sun-side shading, contact shadow
+## A4 ☑ Card shading: wind sway, sun-side shading, contact shadow
 
 **Goal.** Under Rich, cards sway in a wind, brighten on their sun side, and sit on a soft contact
 shadow.
