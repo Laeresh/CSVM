@@ -87,7 +87,7 @@ public static class CanopyShells
         var bytes = new byte[mask.Width * mask.Height];
         for (int c = 0; c < bytes.Length; c++)
             bytes[c] = (byte)Mathf.RoundToInt(Math.Clamp(mask.Density[c], 0f, 1f) * 255f);
-        var density = ImageTexture.CreateFromImage(Image.CreateFromData(mask.Width, mask.Height, false, Image.Format.R8, bytes));
+        var density = TextureUpload.Create(mask.Width, mask.Height, Image.Format.R8, bytes);
         var band = FadeBand(kinds.Where(k => k.Rich != null && !k.Solid).SelectMany(k => k.Fades));
         // The card's own lit flag lives only in its shader text; the shells follow it so both take the world light alike.
         bool lit = cardMaterial.Shader?.Code.Contains("csky_world_light_at", StringComparison.Ordinal) ?? false;
