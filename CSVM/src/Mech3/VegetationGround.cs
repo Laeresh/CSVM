@@ -52,6 +52,30 @@ public static class VegetationGround
         return corners.ToArray();
     }
 
+    /// <summary>Every world triangle textured with a ground texture <paramref name="picked"/> accepts, three
+    /// corners each in world space, whatever its <c>no_clutter</c> flag: painted canopy shows on either layer.</summary>
+    public static Vector3[] Painted(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    {
+        var corners = new List<Vector3>();
+        WalkWorld(gamez, worldName, (mesh, xf) =>
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
+                    || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex || !picked(tex))
+                    continue;
+                for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
+                {
+                    var (a, b, c) = Corners(poly, i);
+                    corners.Add(xf * mesh.Vertices[a]);
+                    corners.Add(xf * mesh.Vertices[b]);
+                    corners.Add(xf * mesh.Vertices[c]);
+                }
+            }
+        });
+        return corners.ToArray();
+    }
+
     /// <summary>The nearest point ahead of <paramref name="from"/> along <paramref name="dir"/> on any of
     /// <paramref name="triangles"/> (from <see cref="Triangles"/>), either face; null when the ray meets none.
     /// The lab's ground under the cursor, since a <c>--freecam</c> world builds no colliders to ray.</summary>

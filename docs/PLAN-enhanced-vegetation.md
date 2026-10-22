@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, mass
 
-11. ☐ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
+11. ☑ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
 12. ☐ Prototype: canopy shells on C1
 13. ☐ Prototype: impostor clumps on C1
 14. ☐ Pick the mass technique at the controls and productionise it
@@ -729,22 +729,84 @@ determinism defect to name and track, not one to re-pin.
 
 # Wave B, mass
 
-## B11 ☐ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
+## B11 ☑ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
 
 **Goal.** A per-chapter canopy mask that says where forest mass is drawn: baked from the placed
 stamps' density where the forest is cards (C1), and from the texture picks where it is painted (C3).
 
-**Evidence (confidence: lead-only).** Decisions 11 and 12. `OceanMask` (`CSVM/src/Effects/OceanMask.cs`)
-is the baked-mask precedent, with a cached bake (PLAN-enhanced-ocean Wave B).
+**Evidence (confidence: traced-to-code for the inputs, measured for the coverage, lead-only for the
+density scale).** Decisions 11 and 12. `OceanMask` (`CSVM/src/Effects/OceanMask.cs`) is the
+baked-mask precedent: a pure compute over world triangles and a bake memoised per built world. The
+Rich placements are `KindExport.Rich.Placements`, index-aligned with the Original stamps, jittered
+(A3) and with a zero basis where A6's brush mask dropped the stamp; `ApplyVegetation` and
+`ApplyVegetationMask` replace them through `BakeRich`. C1's `terpat02` stamps its firs (card 10 m
+wide, 17.8 m tall) about one per 32 m cell. C3's picked canopy measures 22.1 km² of the survey's 22.0
+for `forest1`, `forest1-128` and `cliff1`.
 
-**Approach.** <TODO>
+**Approach.** `CSVM/src/Mech3/CanopyMask.cs`, a pure module, with the bake behind
+`ClutterBuilder.Canopy()`.
 
-**Model recommendation.** <TODO>
+- *Shape (what B12, B13 and B15 read):* square cells of `CanopyMask.CellM` = 32 m over `world1`'s
+  `area` (384 × 384 on C1, C1B, C2 and C4, 512 × 512 on C3), row 0 along the lowest Z as in
+  `VegetationMask`. Each cell holds `Density` (0 to 1), `Ground` (the mean ground height under the
+  canopy) and `Top` (the mean tree top); `DensityAt` samples bilinearly and `CellAt` indexes a cell.
+  B12 sets its shells between `Ground` and `Top` and fades them by `Density`; B13 places clumps per
+  cell in proportion to `Density` at `Ground`, sized to `Top - Ground`; B15's volume rises from
+  `Ground` over the painted cells by a thickness of its own, since painted canopy has `Top = Ground`.
+  A consumer that wants a texture uploads `Density` as R8 itself.
+- *Stamps (C1 and every chapter with no canopy pick):* every listed kind's Rich placements; each
+  kept stamp's crown (a disc as wide as its card) splits bilinearly over the four cells around it, so
+  the stamp lattice reads even whatever its phase to the grid. Density is the crown share over
+  `FullCrownShare` (0.075, one fir crown a cell), held at 1; ground and top are crown-weighted, the top
+  the stamp's origin plus its card height (the card shader draws no scale). A zero-basis stamp counts
+  nothing, so the brush clears mass and cards together. On C1: 78,747 cells covered, median 0.46,
+  4,269 full, the full ones a median fir's height over their ground. The density keeps the
+  template's per-repeat pattern, which is what the cards show; a smoother look is B12/B13's filter.
+- *Picks (C3):* the painted canopy is named through A6's pick mechanism: a pick to the reserved,
+  empty set `canopy` (`CanopyMask.CanopySet`) marks a ground texture as painted forest. The set stays
+  empty, so C21 stamps no card there (Decision 11), and the reader and writer need no change. C3 ships
+  `"sets": {"canopy": []}` with `forest1.tif`, `forest1-128.tif` and `cliff1.tif` picked to it (the
+  gamez texture names the lab's pick writes); the transitions (`cliff1_toptrans`, `cliff1_sidetrans`,
+  `cliff1_watertrans2`) stay free for B15's palm picks. The bake takes the world triangles carrying a
+  canopy texture (`VegetationGround.Painted`, flagged or not, since a painted layer shows either way),
+  marks 4 × 4 sample points a cell under the highest such triangle, and gives a cell the covered share
+  times the brush mask's factor held at 1 (the brush thins or clears painted canopy and never
+  thickens it). A chapter with any canopy pick bakes from picks alone, so C3's 707 palms add no mass.
+- *Storage:* baked at need and cached on the builder, never shipped. Both inputs are already in the
+  session (the Rich placements and the sidecar), and a shipped file would drift from the lab's edits.
+- *Live:* `BakeRich` drops the cached mask, so after a lab edit (`ApplyVegetation`,
+  `ApplyVegetationMask`) the next `Canopy()` re-bakes: 8 ms on C1 from stamps, 28 ms on C3 from
+  picks. A consumer re-reads it from `GameSession.ApplyVegetation`/`ApplyVegetationMask`, where it
+  hooks its own rebuild.
+- *Rich only:* `Canopy()` bakes nothing until called, and the consumers call it while
+  `VegetationQualitySetting.RichOn` only, so Original bakes and reads nothing. A chapter with no
+  vegetation entry (C1C, C2B, C5) answers null. The mask covers the map; the edge copies past it are
+  the consumers' to extend.
 
-**Verify.** <TODO>
+**Model recommendation.** Opus: the item is a data contract three later items read, with the Rich
+placements' bit-identity rules beside it; the code itself is small.
+
+**Verify.** Units: `CanopyMaskTests` (the grid from either corner order; a crown's share, held at 1,
+and crown-weighted heights; a dropped or off-area stamp counts nothing; a stamp on a cell line splits
+evenly and a one-fir-a-cell lattice is full whatever its phase; a painted cell's covered share, the
+higher layer's height and top equal to ground; the brush clears and never thickens painted canopy;
+the shipped C3 picks name its painted jungle and not its transitions, with the canopy set empty) and
+the existing `VegetationSidecarTests` (the shipped file reads clean and round-trips byte-identical
+with the canopy set). Engine: `canopy-mask` (headless, about 2.2 s): no entry gives no mask; a
+jittered C1 entry's mask equals one baked from the Rich placements and differs from one baked from
+the Original; C1's full cells stand 10 to 25 m over their ground; a Clear stroke empties the densest
+cell while its Original stamps stay, and a Neutral stroke gives the first mask back; C3's painted
+canopy covers 18 to 25 km² and a re-bake gives it again. The suite writes `canopy-C1.png` and
+`canopy-C3.png` (density in green over the solid ground's heights in grey, two pixels a cell, row 0
+at the top) beside its report. No golden moves: nothing draws from the mask until B12.
 
 **⚠ Traps.** A mask baked from stamps must bake from the Rich placements (after A3 and A6), or the
 mass and the cards disagree.
+- Never give the `canopy` set a member: C21 would stamp it on the painted treetops.
+- The lab's pick tool removes a pick when no kind is checked, so re-picking a canopy texture there
+  deletes its canopy pick; a canopy toggle in the lab belongs to B15 if the look needs it tuned.
+
+**Verified.** <pending orchestrator run>
 
 ## B12 ☐ Prototype: canopy shells on C1
 

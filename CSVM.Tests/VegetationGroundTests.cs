@@ -55,6 +55,17 @@ public sealed class VegetationGroundTests
         Assert.Null(VegetationGround.RayHit(tris, new Vector3(-5f, 0f, 5f), Vector3.Right));
     }
 
+    /// <summary>The painted triangles are those whose texture is accepted, a flagged overlay included.</summary>
+    [Fact]
+    public void PaintedTrianglesFollowTheirTextureWhateverTheFlag()
+    {
+        var tris = VegetationGround.Painted(World(), t => t is "overlay" or "hill");
+        Assert.Equal(2 * 2 * 3, tris.Length);
+        Assert.Contains(tris, v => v.Y == 50f);
+        Assert.Contains(tris, v => v.Y == 0.02f);
+        Assert.Empty(VegetationGround.Painted(World(), _ => false));
+    }
+
     // One world node over one mesh. A flagged overlay lies a few centimetres above its base over x in [0, 10].
     // A lone flagged quad covers x in [20, 30], and a hilltop sits 50 m above the first square.
     private static GameZ World()

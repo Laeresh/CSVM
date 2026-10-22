@@ -1583,6 +1583,121 @@ internal static class WorldAndToolSuites
         ctx.Same(0, unlistedRich, $"no unlisted card's shader sways");
     }
 
+    // The canopy mask bakes from what Rich draws: C1's listed cards after the jitter and the brush, and C3's
+    // ground picked as painted canopy. Each chapter's mask is drawn over its height map into .scratch.
+    [Suite("canopy-mask",
+        "C1's canopy mask bakes from its listed kinds' Rich stamps: jittered, it follows the Rich placements and not the Original ones; "
+        + "a Clear stroke empties the cells it covers while their Original stamps stay, and a Neutral stroke gives the first mask back; "
+        + "its densest cells stand a fir's height over their ground; C3's bakes from the ground its entry picks as canopy, "
+        + "covering about the 22 km2 of painted jungle the survey measured; a build with no entry has none")]
+    internal static void CanopyMaskBake(TestContext ctx)
+    {
+        foreach (var chapter in new[] { "C1", "C3" })
+        {
+            ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+            ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        }
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        // Each build's root and textures live to the end, since a brush re-bake recuts the drawn nodes.
+        var held = new List<TextureArchive>();
+        var roots = new List<Node3D>();
+
+        CanopyMask? Bake(string chapter, VegetationEntry? entry, out ClutterBuilder builder, out GameZ gamez, out GameZNode world)
+        {
+            gamez = GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, chapter));
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+            held.Add(textures);
+            world = gamez.FindByName("world1")!;
+            var mask = VegetationMask.Neutral(world.AreaLeft, world.AreaTop, world.AreaRight, world.AreaBottom);
+            builder = new ClutterBuilder(gamez, textures, null, ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter)),
+                null, entry, entry != null ? mask : null);
+            if (builder.Build(ClutterBuilder.TemplateNames(ctx.InterpPath, chapter)) is { } root)
+                roots.Add(root);
+            return builder.Canopy();
+        }
+
+        static IEnumerable<(Transform3D, float, float)> Stamps(ClutterBuilder b, bool rich) =>
+            b.ExportedKinds!.Where(k => k.Rich != null).SelectMany(k => (rich ? k.Rich!.Placements : k.Placements).Select(p => (p, k.Width, k.Height)));
+
+        // The mask in green over the chapter's solid ground heights in grey, two pixels a cell, row 0 at the lowest Z.
+        void Draw(string name, CanopyMask mask, GameZ gamez, GameZNode world)
+        {
+            var ground = CanopyMask.FromPainted(VegetationGround.Triangles(gamez), world.AreaLeft, world.AreaTop, world.AreaRight, world.AreaBottom);
+            var heights = Enumerable.Range(0, ground.Density.Count).Where(c => ground.Density[c] > 0f).Select(c => ground.Ground[c]).ToList();
+            float lo = heights.Count > 0 ? heights.Min() : 0f, hi = Mathf.Max(lo + 1f, heights.Count > 0 ? heights.Max() : 0f);
+            var image = Image.CreateEmpty(mask.Width * 2, mask.Height * 2, false, Image.Format.Rgb8);
+            for (int c = 0; c < mask.Density.Count; c++)
+            {
+                float g = ground.Density[c] > 0f ? 0.25f + (0.6f * (ground.Ground[c] - lo) / (hi - lo)) : 0.1f;
+                float d = mask.Density[c];
+                image.FillRect(new Rect2I(c % mask.Width * 2, c / mask.Width * 2, 2, 2), new Color(g * (1f - (0.6f * d)), Mathf.Lerp(g, 0.95f, 0.6f * d), g * (1f - (0.6f * d))));
+            }
+            Directory.CreateDirectory(ctx.ScratchDir);
+            string path = Path.Combine(ctx.ScratchDir, name);
+            image.SavePng(path);
+            Log.Info("test", $"artifact file={path}");
+        }
+
+        try
+        {
+            var c1 = VegetationSidecar.Load().For("C1");
+            ctx.Check(Bake("C1", null, out _, out _, out _) == null, $"a C1 build with no vegetation entry has no canopy mask");
+            var jittered = new VegetationEntry { Kinds = c1.Kinds.Select(k => k with { JitterUv = 0.3f }).ToList() };
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var moved = Bake("C1", jittered, out var jb, out _, out _)!;
+            var (lft, top, rgt, bot) = (jb.Mask!.MinX, jb.Mask.MinZ, jb.Mask.MaxX, jb.Mask.MaxZ);
+            ctx.Check(moved.Density.SequenceEqual(CanopyMask.FromStamps(Stamps(jb, true), lft, top, rgt, bot).Density)
+                && !moved.Density.SequenceEqual(CanopyMask.FromStamps(Stamps(jb, false), lft, top, rgt, bot).Density),
+                $"a jittered C1 mask is the Rich placements' and not the Original ones'");
+
+            var first = Bake("C1", c1, out var b1, out var g1, out var w1)!;
+            long c1Ms = watch.ElapsedMilliseconds;
+            int densest = Enumerable.Range(0, first.Density.Count).MaxBy(c => first.Density[c]);
+            var sorted = first.Density.Where(d => d > 0f).OrderBy(d => d).ToList();
+            var rises = Enumerable.Range(0, first.Density.Count).Where(c => first.Density[c] >= 1f)
+                .Select(c => first.Top[c] - first.Ground[c]).OrderBy(r => r).ToList();
+            float rise = rises.Count > 0 ? rises[rises.Count / 2] : 0f;
+            ctx.Note($"C1 covered cells {sorted.Count}, density p10={sorted[sorted.Count / 10]:0.000} p50={sorted[sorted.Count / 2]:0.000} p90={sorted[sorted.Count * 9 / 10]:0.000}, {rises.Count} full");
+            ctx.Check(rises.Count > 0 && rise > 10f && rise < 25f,
+                $"C1's full canopy cells ({rises.Count}) stand a median {rise:0.0} m over their ground, a fir's height");
+
+            float cx = first.MinX + (((densest % first.Width) + 0.5f) * CanopyMask.CellM);
+            float cz = first.MinZ + (((densest / first.Width) + 0.5f) * CanopyMask.CellM);
+            var brush = b1.Mask!.Clone();
+            brush.Stroke(cx, cz, 200f, 1f, VegetationBrush.Clear);
+            b1.ApplyVegetationMask(brush);
+            watch.Restart();
+            var cleared = b1.Canopy()!;
+            long stampMs = watch.ElapsedMilliseconds;
+            int originalsLeft = Stamps(b1, false).Count(s => cleared.CellAt(s.Item1.Origin.X, s.Item1.Origin.Z) == densest);
+            ctx.Check(cleared.Density[densest] == 0f && originalsLeft > 0,
+                $"a Clear stroke empties the densest cell ({cleared.Density[densest]:0.00}) while its {originalsLeft} Original stamps stay");
+            brush.Stroke(cx, cz, 200f, 1f, VegetationBrush.Neutral);
+            b1.ApplyVegetationMask(brush);
+            ctx.Check(b1.Canopy()!.Density.SequenceEqual(first.Density) && b1.Canopy()!.Top.SequenceEqual(first.Top),
+                $"a Neutral stroke gives the first C1 mask back");
+
+            watch.Restart();
+            var painted = Bake("C3", VegetationSidecar.Load().For("C3"), out var b3, out var g3, out var w3)!;
+            long c3Ms = watch.ElapsedMilliseconds;
+            b3.ApplyVegetation(b3.Vegetation!);
+            watch.Restart();
+            ctx.Check(b3.Canopy()!.Density.SequenceEqual(painted.Density), $"a C3 re-bake gives the same painted canopy");
+            long paintMs = watch.ElapsedMilliseconds;
+            float km2 = painted.Density.Sum() * CanopyMask.CellM * CanopyMask.CellM / 1e6f;
+            ctx.Check(km2 > 18f && km2 < 25f, $"C3's painted canopy covers {km2:0.0} km2 of the survey's 22.0 (forest1, forest1-128, cliff1)");
+            ctx.Note($"canopy bake: C1 two builds and the mask {c1Ms} ms, C3 build and mask {c3Ms} ms, C3 canopy {km2:0.00} km2; a re-bake's canopy alone {stampMs} ms on C1, {paintMs} ms on C3; C1 {first.Width}x{first.Height} cells, C3 {painted.Width}x{painted.Height}");
+
+            Draw("canopy-C1.png", first, g1, w1);
+            Draw("canopy-C3.png", painted, g3, w3);
+        }
+        finally
+        {
+            roots.ForEach(r => r.Free());
+            held.ForEach(t => t.Dispose());
+        }
+    }
+
     // A decoration model is a node chain, and the mesh node under its `.flt` top may translate.
     // C5's w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same
     // build with that chain transform cleared. The control both fails able and shows the move is

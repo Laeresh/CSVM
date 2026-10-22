@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using CSVM.Utils;
 using Godot;
@@ -136,6 +137,9 @@ public sealed class ClutterBuilder
 
     // Parallel to ExportedKinds: the kind each export draws, and which of its meshes.
     private List<(Kind Kind, int Part)> _exportedFrom = new();
+
+    // The canopy mask over the last Rich bake, made on first read; every bake drops it.
+    private CanopyMask? _canopy;
 
     /// <param name="scene">The world's SceneBuilder for the 3D decorations; null leaves only sprites.</param>
     /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for
@@ -587,6 +591,32 @@ public sealed class ClutterBuilder
     {
         if (_vegetation != null)
             Rebake(_vegetation, mask);
+    }
+
+    /// <summary>Where forest mass is drawn over the last Rich bake, made on first read and again after a lab
+    /// edit re-bakes. A chapter that picks a texture as canopy bakes from those triangles under the brush mask,
+    /// any other from its listed kinds' Rich stamps. Null with no vegetation entry or no world area.
+    /// ⚠ Read it only while <see cref="VegetationQualitySetting.RichOn"/>, so Original bakes none.</summary>
+    public CanopyMask? Canopy(string worldName = "world1")
+    {
+        if (_canopy != null || _vegetation is not { } entry || _gamez.FindByName(worldName) is not { HasArea: true } w)
+            return _canopy;
+        bool painted = entry.Picks.Any(p => CanopyMask.IsCanopy(entry, p.Texture));
+        if (painted)
+        {
+            var triangles = VegetationGround.Painted(_gamez, t => CanopyMask.IsCanopy(entry, t), worldName);
+            _canopy = CanopyMask.FromPainted(triangles, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom, _mask);
+        }
+        else
+        {
+            // The Rich placements, never the Original: the cards drawn are jittered and thinned by the brush.
+            var stamps = (ExportedKinds ?? new List<KindExport>())
+                .Where(k => k.Rich != null)
+                .SelectMany(k => k.Rich!.Placements.Select(p => (p, k.Width, k.Height)));
+            _canopy = CanopyMask.FromStamps(stamps, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom);
+        }
+        Log.Info("world", $"canopy mask: source={(painted ? "painted" : "stamps")} cells={_canopy.Width}x{_canopy.Height} covered={_canopy.Density.Count(d => d > 0f)}");
+        return _canopy;
     }
 
     /// <summary>Hides each stamp of the last Build while its stamping world node is not visible.
@@ -1117,6 +1147,7 @@ public sealed class ClutterBuilder
     // mask's keep draw. A stamp the mask drops keeps its index with a zero basis, as a cratered one does.
     private void BakeRich()
     {
+        _canopy = null;
         if (_vegetation is not { } entry || _stamps == null)
             return;
         foreach (var kind in _allKinds)
