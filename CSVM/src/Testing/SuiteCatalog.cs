@@ -113,6 +113,7 @@ public static class SuiteCatalog
         "graphics-switch-cover",
         "graze-bounce",
         "ground-contact-core",
+        "hd-model-cockpit1",
         "hd-model-mesh-import",
         "hd-model-swap",
         "heat-shimmer",

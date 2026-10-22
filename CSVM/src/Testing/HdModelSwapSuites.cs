@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
@@ -148,6 +149,144 @@ internal static class HdModelSwapSuites
         CheckPriorityAndEmpty(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, models);
         CheckScope(ctx, textures, root);
     }
+
+    [Suite("hd-model-cockpit1",
+        "the cockpit1 interior takes the airframe's pack scope: planes/<model>/cockpit1.glb, the airframe's root file and a "
+        + "per-node file each replace the one interior node they name, built on the interior's own builder, a texture-named "
+        + "surface wears a material in PlaneBuilder.InteriorMaterials, the gauge bind finds the same needles, lamps, readouts, "
+        + "belts and zones as without the pack, and a pack holding only an exterior node replaces no interior node")]
+    internal static void CockpitInteriorSwap(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+        string root = Path.Combine(ctx.ScratchDir, "hd-model-cockpit1");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        using var none = HdModels.Open(root, "no-such-pack");
+        var (plainBuilder, plainModel) = BuildInterior(planesGamez, textures, plane, none);
+        var plainInterior = plainBuilder.CockpitInterior;
+        ctx.Check(plainInterior != null, $"{plane} builds a cockpit1 interior");
+        if (plainInterior == null)
+        {
+            plainModel.Free();
+            return;
+        }
+
+        // A gauge face where the airframe has one, so the bind is read over a replaced gauge part.
+        // Its driven zones are gamez children the replacement must leave drawn.
+        var target = FindNamedMesh(plainInterior, "damageindicator")
+            ?? Nodes(plainInterior).FirstOrDefault(n => n != plainInterior && n.Visible && DrawnMesh(n) != null);
+        string exterior = PlaneMeshNode(planesGamez, textures, plane);
+        ctx.Check(target != null && exterior.Length > 0, $"{plane} carries an interior and an exterior mesh node");
+        if (target == null || exterior.Length == 0)
+        {
+            plainModel.Free();
+            return;
+        }
+
+        string node = AnimRuntime.NameOf(target);
+        int index = target.GetMeta(AnimRuntime.IndexMeta).AsInt32();
+        string texture = DrawnMesh(target)!.SurfaceGetMaterial(0)?.ResourceName ?? string.Empty;
+        var materials = new[] { (new StandardMaterial3D { ResourceName = texture.Length > 0 ? texture : PackPaint }, 1f) };
+        var plainPanel = CockpitGauges.Bind(plainBuilder);
+        ctx.Check(ctx.SyntheticData || plainPanel is { NeedleCount: > 0, BeltCount: > 0 },
+            $"the pack-free interior binds its gauges needles={plainPanel?.NeedleCount} belts={plainPanel?.BeltCount}");
+        try
+        {
+            foreach (var (pack, file, holder) in new[]
+            {
+                ("Cockpit", "cockpit1", node), ("Root", plane, node), ("NodeFile", node, node), ("Exterior", exterior, exterior),
+            })
+            {
+                ctx.Same((long)Error.Ok, (long)WriteModel(Path.Combine(root, pack, "pack", "planes", plane, file + ".glb"), holder, materials),
+                    $"{pack}: planes/{plane}/{file}.glb write result");
+                using var models = HdModels.Open(root, pack);
+                var (builder, model) = BuildInterior(planesGamez, textures, plane, models);
+                try
+                {
+                    CheckInterior(ctx, pack, builder, model, plainPanel, pack == "Exterior" ? null : (index, texture));
+                }
+                finally
+                {
+                    model.Free();
+                }
+            }
+        }
+        finally
+        {
+            plainModel.Free();
+        }
+    }
+
+    // One packed interior build against the pack-free one. Given a replaced node, the interior draws
+    // exactly that node from the pack; without one it draws none and the exterior node is replaced.
+    private static void CheckInterior(TestContext ctx, string pack, PlaneBuilder builder, Node3D model,
+        CockpitGauges? plainPanel, (int Index, string Texture)? replaced)
+    {
+        var interior = builder.CockpitInterior;
+        ctx.Check(interior != null, $"{pack}: the packed build carries its interior");
+        if (interior == null)
+        {
+            return;
+        }
+
+        static bool Swapped(Node3D n) => MeshChild(n)?.HasMeta(SceneBuilder.GamezMeshMeta) == true;
+        var inside = Nodes(interior).Where(Swapped).ToList();
+        int outside = Nodes(model).Count(Swapped) - inside.Count;
+        if (replaced is not { } swap)
+        {
+            ctx.Check(inside.Count == 0 && outside > 0,
+                $"{pack}: a pack with no interior file replaces no interior node interior={inside.Count} exterior={outside}");
+            return;
+        }
+
+        ctx.Check(inside.Count == 1 && outside == 0
+                && inside[0].GetMeta(AnimRuntime.IndexMeta).AsInt32() == swap.Index,
+            $"{pack}: exactly the named interior node is replaced interior={inside.Count} exterior={outside}");
+        var drawn = DrawnMesh(inside.FirstOrDefault());
+        ctx.Check(drawn != null && drawn.GetAabb().IsEqualApprox(new Aabb(Vector3.Zero, new Vector3(2, 3, 1))),
+            $"{pack}: it draws the pack's mesh in the node's own frame aabb={drawn?.GetAabb()}");
+        var material = drawn is { } d && d.GetSurfaceCount() > 0 ? d.SurfaceGetMaterial(0) as ShaderMaterial : null;
+        if (swap.Texture.Length > 0)
+        {
+            // CockpitGauges reads the belts and damage zones through this list.
+            ctx.Check(material != null && builder.InteriorMaterials.Any(m => m.Material.GetInstanceId() == material.GetInstanceId()),
+                $"{pack}: the texture-named surface ({swap.Texture}) wears a material in InteriorMaterials");
+        }
+
+        var panel = CockpitGauges.Bind(builder);
+        ctx.Check(plainPanel == null
+                ? panel == null
+                : panel != null && panel.NeedleCount == plainPanel.NeedleCount && panel.LampCount == plainPanel.LampCount
+                    && panel.ReadoutCount == plainPanel.ReadoutCount && panel.BeltCount == plainPanel.BeltCount
+                    && panel.DamageZoneCount == plainPanel.DamageZoneCount,
+            $"{pack}: the gauges bind as without the pack needles={panel?.NeedleCount}/{plainPanel?.NeedleCount} lamps={panel?.LampCount}/{plainPanel?.LampCount} readouts={panel?.ReadoutCount}/{plainPanel?.ReadoutCount} belts={panel?.BeltCount}/{plainPanel?.BeltCount} zones={panel?.DamageZoneCount}/{plainPanel?.DamageZoneCount}");
+    }
+
+    private static (PlaneBuilder Builder, Node3D Model) BuildInterior(GameZ gamez, TextureArchive textures, string plane, HdModels pack)
+    {
+        var saved = HdModels.Current;
+        HdModels.Current = pack;
+        try
+        {
+            var builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: true);
+            return (builder, builder.Build(plane));
+        }
+        finally
+        {
+            HdModels.Current = saved;
+        }
+    }
+
+    private static Node3D? FindNamedMesh(Node3D root, string name) =>
+        Nodes(root).FirstOrDefault(n => AnimRuntime.NameOf(n).Equals(name, StringComparison.OrdinalIgnoreCase) && DrawnMesh(n) != null);
 
     // A meshless root's file replaces the generic-named leaves below that root alone. Each leaf matches
     // its own name, and a repeated name the names between. Elsewhere the same name keeps its gamez

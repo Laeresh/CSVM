@@ -38,7 +38,8 @@ edit it from there.
 | Packs | Each subfolder and each `.zip` directly inside the folder is one pack. Loose files at the folder's top are ignored. Packs load in name order, and a later pack wins a key. |
 | Top folder | Each pack's own top folder is dropped: `HDModels/mypack/planes/player_bhawk/body.glb` and a zip entry `mypack/planes/player_bhawk/body.glb` both key `planes/player_bhawk/body`. ⚠ A zip needs one top folder; an entry `planes/player_bhawk/body.glb` keys `player_bhawk/body` and replaces nothing. |
 | File types | `.glb` from zips and subfolders; `.gltf` (with its buffers and images beside it) from subfolders only, since a zip entry has no folder to resolve a relative path against. A `.gltf` in a zip is skipped with a warning. |
-| Airframe key | `planes/<model node>/<node>.glb`, the model node being the airframe's gamez root (`player_bhawk`, `player_kestrel`). Reaches that airframe's nodes only. |
+| Airframe key | `planes/<model node>/<node>.glb`, the model node being the airframe's gamez root (`player_bhawk`, `player_kestrel`). Reaches that airframe's nodes only, its `cockpit1` interior's included. |
+| Cockpit interior | `planes/<model node>/cockpit1.glb` is the root file of the interior the pilot sees in cockpit view, and replaces each `cockpit1` node it holds a glTF node for. Being below the airframe, an interior node is also reached by the airframe's root file, by its own airframe key and by a bare file, after `cockpit1.glb`. No meshed interior node shares a name with a node outside it on any airframe, so an airframe file holding only exterior names reaches none. Its frame is in [what a file must hold](#what-a-file-must-hold). |
 | Chapter key | `<chapter>/<node>.glb`, the chapter spelt as its `extracted/` folder (`C1`, `C1B`, `C3`). Reaches that chapter's world and the weapons built from its gamez. |
 | Bare key | `<node>.glb`. Reaches every builder: every chapter and every airframe. |
 | Precedence | A file named after the node's nearest gamez ancestor that names the node comes first (the root scope below); then the airframe key, the chapter key and the bare key, in that order. |
@@ -46,7 +47,8 @@ edit it from there.
 | Names | A node is its original gamez name, never Godot's node name, matched without case. A trailing `.flt` is dropped from the node and the file alike, so `he_rocket.glb` and `he_rocket.flt.glb` both reach `he_rocket` and `he_rocket.flt`. Any other dot is kept. |
 
 Each build logs how many meshes it drew from the pack (`HD models: N mesh instance(s) of
-player_bhawk drawn from the model pack`, and the same for the wreck pieces), which is the quickest
+player_bhawk drawn from the model pack`, and the same for the wreck pieces and, as `cockpit interior
+mesh instance(s)`, the cockpit interior), which is the quickest
 check that a key reached its node.
 
 ### What a file must hold
@@ -54,6 +56,7 @@ check that a key reached its node.
 | Item | Rule |
 |---|---|
 | Frame | Metres, Y up, nose toward -Z, right +X, as glTF and the exporter write it. Each mesh is in its gamez node's own frame: the matched glTF node's own transform is ignored, because the game already places the node by the original's. Transforms of nodes below the matched node do apply. |
+| Interior frame | A `cockpit1` node's mesh is in the interior's own units, the units its gamez nodes are authored in, about 25 to the metre, never in metres. The game mounts the whole interior at the `cockpit_camera` marker scaled by 0.04 (and tilted by the first-person view's fixed head pitch on the flat screen), so a replacement is scaled with it. The interior's draw-order bias is built for that scale, and a replacement's surfaces take it. |
 | Matching node | The first glTF node named like the gamez node gives the mesh; failing an exact name, one with Blender's repeat suffix (`wing.001`). In a file keyed by the node itself (not a root file) and holding no such name, every mesh in the file merges from its scene roots. |
 | Merge | Every mesh at or below the matched node merges into one, placed by the transforms below it. A subtree named after one of the gamez node's own descendants is left out, since that descendant draws it (the exporter writes `tail`'s moving `lrudder1` under `tail`). A mirroring transform is honoured. |
 | Hiding a node | A matched node with no mesh below it draws nothing. The node, its bindings and its colliders stay. A file that fails to import draws the original and logs one warning. |
@@ -158,7 +161,7 @@ facades (the splash columns, `g1182` on C1's water tower), a node whose original
 weapon root such as `he_rocket` is a meshless group, so its body is a descendant like `g12`), the
 horizon dome, the cloud and sky meshes (the `skywal*` walls excepted), open-sea meshes, and terrain:
 `CAN_MODIFY` nodes, all-water meshes, cell-sized ground tiles and the map's border strips. Also never
-replaced: the cockpit interior, the subtrees a cutscene stages from the aircraft archive
+replaced: the subtrees a cutscene stages from the aircraft archive
 (`piratefighter`, `balmoral`, `chuteman` and the rest) and the `shadow` card, whose key is the shadow mesh above.
 
 ### Gameplay keeps the original
@@ -188,7 +191,9 @@ than the one this machine draws its store on.
   by `CSVM.Tests/HdModelsTests.cs` and `PackIndexTests.cs`; the import, merge and scope rules are
   `Mech3/HdModelMeshes.cs`, and the material, draw-order and never-replaced rules are
   `Mech3/SceneBuilder.cs` and `Mech3/WorldBuilder.cs`, covered by the `hd-model-mesh-import` and
-  `hd-model-swap` suites. The rig rules are `Mech3/PlaneRig.cs` and `Mech3/PlaneRigPatch.cs`, covered
+  `hd-model-swap` suites. The interior's scope is `Mech3/PlaneBuilder.cs`, covered by the
+  `hd-model-cockpit1` suite, which also binds the cockpit gauges over a replaced gauge face on the
+  real install and finds the same needles, lamps, readouts, belts and damage zones as without it. The rig rules are `Mech3/PlaneRig.cs` and `Mech3/PlaneRigPatch.cs`, covered
   by `CSVM.Tests/PlaneRigTests.cs` and the `plane-rig` suite.
 - The UV-compatible livery rule is measured on the Bloodhawk. An unedited export, packed one copy
   per node or as the one root file `planes/player_bhawk/player_bhawk.glb`, wears three patterns with

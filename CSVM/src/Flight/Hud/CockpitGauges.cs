@@ -51,12 +51,23 @@ public sealed class CockpitGauges
         _nitroDial = FindNamed(gauges, "nitrogauge");
         // A bind that locates the panel but finds zero belts or zero damage zones is an anomaly
         // that used to be silent; this line is what makes it visible again.
-        int needles = new[]
+        NeedleCount = new[]
             { _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge, _gunArrow, _missileArrow }
             .Count(n => n.IsBound) + (_horizon.IsBound ? 1 : 0) + (_compass.IsBound ? 1 : 0);
-        int lamps = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
-        Log.Debug("flight", $"cockpit gauges bound needles={needles} lamps={lamps} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
+        LampCount = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
+        Log.Debug("flight", $"cockpit gauges bound needles={NeedleCount} lamps={LampCount} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
     }
+
+    /// <summary>How many needles this bind found, the horizon ball and compass drum included.
+    /// Diagnostic and suite use only.</summary>
+    public int NeedleCount { get; }
+
+    /// <summary>How many of the two warning lamps and the nitro dial this bind found. Diagnostic
+    /// and suite use only.</summary>
+    public int LampCount { get; }
+
+    /// <summary>How many digit readouts this bind found. Diagnostic and suite use only.</summary>
+    public int ReadoutCount => _readouts.Count;
 
     /// <summary>How many belt positions this bind found a matching skin for. Not a fixed
     /// constant across airframes; diagnostic and suite use only.</summary>

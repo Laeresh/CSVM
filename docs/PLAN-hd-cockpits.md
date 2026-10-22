@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, rig section and pack scope (all [cloud])
 
 1. ☑ [cloud] `PlaneRig` `cockpit` section: reader and validation
-2. ☐ [cloud] The interior builder gets the airframe's pack scope
+2. ☑ [cloud] The interior builder gets the airframe's pack scope
 
 ### Wave B, body cockpits on the flat screen
 
@@ -211,7 +211,50 @@ launch fallback still drops the whole rig.>
 `horizn` vs `horiz`); `CockpitGauges` already resolves both (`Flight/Hud/CockpitGauges.cs:41-48`),
 and the table must accept the data's names, not invent a canonical one without saying so.
 
-## A2 ☐ [cloud] The interior builder gets the airframe's pack scope
+## A2 ☑ [cloud] The interior builder gets the airframe's pack scope
+
+**Landed.** `PlaneBuilder.MountCockpitInterior` sets the interior builder's `HdAirframe` to the
+airframe builder's just before it builds `cockpit1`, and logs its own line, `HD models: N cockpit
+interior mesh instance(s) of <model> drawn from the model pack`, beside the airframe's. No change to
+`SceneBuilder`: the replacement path already runs on whichever builder draws the node, so a
+replaced interior surface takes the interior's `DepthBiasScale`, gamma blend, alpha-coverage and
+stereo-interior shader keys.
+
+- **Exclusions checked.** `KeepsOriginalMesh` is set by `WorldBuilder` alone, never on a plane
+  builder. The sprite, glow and facade rules and the meshless-node rule apply to the interior as to
+  the airframe. Gauge parts (needles, lamps, readout cells, belt and zone quads) are ordinary
+  meshes and are replaced like any node; their bindings ride the node.
+- **C22's question.** A texture-named replacement surface does land in the interior's
+  `TexturedMaterials`: `MappedReplacement` resolves it through `OriginalMaterialFor` to a gamez
+  material index and takes `GetMaterial`, whose cache miss runs `BuildMaterial`, which registers
+  every textured material at `SceneBuilder.cs:2151`; a cache hit returns one already registered.
+  The exceptions are the original's own: a billboard texture (no match) and an absent texture (the
+  grey/magenta fallback). A non-texture-named surface wears `PackMaterial` and is never in the list.
+  The suite checks the instance id against `PlaneBuilder.InteriorMaterials`.
+- **The airframe root file.** Yes, it reaches the interior: an interior node's ancestor walk passes
+  `cockpit1` and then the airframe root, so `planes/<model>/<model>.glb` replaces an interior node
+  it holds a glTF node for (suite case `Root`). No meshed interior node on any of the ten airframes
+  shares a name with a node outside `cockpit1` (`extracted/planes/nodes.json`), so the exported
+  round-trip file, which holds only exterior names, reaches none. Names repeat inside one interior
+  (`g784` under both `altimeter` and `speedometer` on the Bloodhawk), which the root file's
+  path match settles, so C21's export must keep the interior's hierarchy.
+- **Suite `hd-model-cockpit1`** (`Testing/HdModelSwapSuites.cs`, ci tier): `cockpit1.glb`, the
+  airframe root file and a per-node file each replace exactly the one named interior node
+  (`damageindicator` on the install, the dash on the synthetic tree) with the pack's mesh in the
+  node's frame; a pack holding only an exterior node replaces no interior node. On the install the
+  gauge bind over the replaced `damageindicator` finds the same needles, lamps, readouts, belts and
+  zones as without the pack (`CockpitGauges.NeedleCount`, `LampCount`, `ReadoutCount` added).
+  Without the `HdAirframe` line the suite fails.
+- **For D32.** The stereo path's head-plate cut omits gamez polygons by identity, so a replaced
+  node carrying the plate draws whatever the file holds. `GunsightReticle.Find` reads the gamez
+  glass polygons and the overlay is added whenever the glass texture was split, which the
+  replaced node's own gamez mesh still does (it is built for `GamezMeshMeta`), so the collimated
+  reticle stays at the original glass's place whatever the replacement draws, and a
+  texture-named `cockpit6`/`crosshair` replacement surface wears the reticle-free glass layer.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `planes/<model>/cockpit1.glb` (a root-scope file) and per-node files under the airframe
 key reach the nodes of `cockpit1`, and the "never replaced: the cockpit interior" rule leaves

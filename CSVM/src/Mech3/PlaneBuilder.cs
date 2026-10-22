@@ -481,12 +481,20 @@ public sealed class PlaneBuilder
             // A tracked head can lean past the plate behind the eye, so the stereo interior drops it.
             // The flat eye never sees its front, and the flat build keeps it untouched.
             _interiorScene.OmittedPolygons = _interiorScene.XrPreciseInterior ? CockpitPlate.Find(_gamez, node) : null;
+            // The airframe's pack scope, so cockpit1.glb and the airframe's node files reach the
+            // interior. Its replacements are this builder's own, which bakes the interior's bias.
+            _interiorScene.HdAirframe = _scene.HdAirframe;
+            int replacedBefore = _interiorScene.ReplacedMeshCount;
             // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
             // that the airframe pass never builds the interior, and it is the root here.
             if (_interiorScene.BuildSubtree(node, n => !ReferenceEquals(n, node) && Skip(n))
                 is not { } n3d)
             {
                 return;
+            }
+            if (_interiorScene.ReplacedMeshCount > replacedBefore)
+            {
+                Log.Info("world", $"HD models: {_interiorScene.ReplacedMeshCount - replacedBefore} cockpit interior mesh instance(s) of {root.Name} drawn from the model pack");
             }
             InteriorEye = _interiorScene.XrPreciseInterior ? CockpitCameraOffset : Vector3.Zero;
             n3d.Transform = _interiorScene.XrPreciseInterior
