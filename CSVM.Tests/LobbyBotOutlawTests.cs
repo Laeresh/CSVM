@@ -10,14 +10,15 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.Roster;
 using CSVM.Spec;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>A lobby host's launch field holds its bots to the outlaw list as it holds its people.
-/// No bot sits on an outlawed airframe or carries an outlawed gun calibre, ammunition or rocket. A
-/// militia whose def the list would strip is not drawn, so a drawn bot keeps every weapon its def
-/// carries.</summary>
+/// No bot sits on an outlawed airframe or carries an outlawed gun calibre, ammunition, rocket or
+/// nitro injector. A militia whose def the list would strip is not drawn, so a drawn bot keeps
+/// every weapon its def carries.</summary>
 [Trait("Tier", "Quick")]
 public sealed class LobbyBotOutlawTests
 {
@@ -150,6 +151,40 @@ public sealed class LobbyBotOutlawTests
         Assert.Equal(12, seated.Count(seat => seat.IsBot && seat.PlaneNode == "player_fury"));
     }
 
+    // A seat's injector comes from its custom build alone (HumanFlightAdapter), and a bot seats none,
+    // so it flies its airframe's stock engine. Were that engine nitrous, the row would refuse every
+    // airframe and seat no bot. A guest's build reaches its seat through a real lobby, as at launch.
+    [Fact]
+    public void TheNitroRowSeatsNoBotAndNoGuestOnAnInjectorEngine()
+    {
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.0, 0.0, 0.0), new Random(2));
+        var wires = new[] { new NetLobby(mesh[0]), new NetLobby(mesh[1]) };
+        var host = new DogfightLobby(wires[0], () => "Host");
+        var guest = new DogfightLobby(wires[1], () => "Lucy", 0);
+        guest.Show();
+        Assert.True(host.SetAllowCustomPlanes(true) && host.SetOutlawComponents(true));
+        Settle(wires, host, guest);
+        Assert.True(guest.PickCustom(new NetPlaneBuild { Name = "Bee", Airframe = 2, Engine = 4 }, default));
+        Settle(wires, host, guest);
+
+        // ABLE-TO-FAIL CONTROL: with the row clear, the guest's injector build comes back on its seat.
+        // It runs through the same field and check the bots meet.
+        var (open, openBuilds) = LobbyField(wires[0], host.Rules, 0);
+        Assert.True(open[1] is { IsBot: false } && CarriesNitro(openBuilds[1]), "the guest's build carries the injector");
+        Assert.DoesNotContain(Enumerable.Range(0, open.Length), seat => open[seat].IsBot && CarriesNitro(openBuilds[seat]));
+
+        Assert.True(host.SetOutlawed(NetPlaneRules.NitroFlag, true));
+        Settle(wires, host, guest);
+        Assert.Equal(PlaneRefusal.Engine, guest.Refusal);
+        for (int seed = 0; seed < 40; seed++)
+        {
+            var (roster, builds) = LobbyField(wires[0], host.Rules, seed);
+            Assert.Equal(12, roster.Count(seat => seat.IsBot));
+            Assert.All(builds, build => Assert.False(CarriesNitro(build), "a seat carries the injector"));
+            Assert.All(roster.Where(seat => seat.IsBot), bot => Assert.True(host.Rules.AdmitsStock(StockAirframes.IdOf(bot.PlaneNode)!.Value)));
+        }
+    }
+
     // An install whose defs cannot be read must not leave the arms unjudged. The draw keeps to
     // Fortune Hunter, which no shipped def is titled for, so its bots fly the legal stock fit.
     [ExtractedDataFact]
@@ -177,18 +212,42 @@ public sealed class LobbyBotOutlawTests
     }
 
     // Three bots are hand-set on the Warhawk so an outlawed pick meets the draw; the rest are Random.
-    private static (NetSeat[] Roster, CoopFit[] Fits) Field(NetPlaneRules? rules, Func<byte, string, bool>? arms, int seed)
+    private static (NetSeat[] Roster, CoopFit[] Fits) Field(NetPlaneRules? rules, Func<byte, string, bool>? arms, int seed,
+        INetTransport? wire = null)
     {
-        var wire = LoopbackTransport.Mesh(1, new LoopbackConditions(0.0, 0.0, 0.0), new Random(1))[0];
+        wire ??= LoopbackTransport.Mesh(1, new LoopbackConditions(0.0, 0.0, 0.0), new Random(1))[0];
         var bots = Enumerable.Range(0, 12).Select(i => new VsBotEntry(i < 3 ? Warhawk : null, NetBotSkill.Veteran, 0, "")).ToArray();
         return SeatFields.VersusLaunchField(wire, new[] { "player_fury" }, new LoadoutChoice?[] { null }, Stock, rules,
             bots: bots, draws: new Random(seed), botArms: arms);
+    }
+
+    // The field a lobby host launches and each seat's custom build, as NetFlight takes them.
+    private static (NetSeat[] Roster, NetPlaneBuild?[] Builds) LobbyField(NetLobby wire, NetPlaneRules rules, int seed)
+    {
+        var (roster, _) = Field(rules, null, seed, wire);
+        return (roster, SeatFields.SeatBuildsFor(roster, Array.Empty<CustomPlaneDef?>(), wire, rules));
+    }
+
+    // Each end steps its socket and then its lobby, four times over.
+    private static void Settle(NetLobby[] wires, DogfightLobby host, DogfightLobby guest)
+    {
+        for (int round = 0; round < 4; round++)
+        {
+            wires[0].Step(0.016);
+            host.Step();
+            wires[1].Step(0.016);
+            guest.Step();
+        }
     }
 
     private static List<string> WeaponsOf(MilitiaFits militias, NetSeat bot) =>
         InstantAction.MilitiaAt(bot.Militia) is { } militia
             ? militias.WeaponsFor(militia.Name, bot.PlaneNode).Select(slot => slot.WeaponId).ToList()
             : new List<string>();
+
+    // Mirrors HumanFlightAdapter.Assemble's reading of a seat's build.
+    private static bool CarriesNitro(NetPlaneBuild? build) =>
+        CustomPlaneWire.Def(build) is { } custom && CustomPlaneBuild.HasNitrous(custom);
 
     private static int Row(string id) => Stock.Options.PylonOrdnance.Select(option => option.Id).ToList().IndexOf(id);
 }
