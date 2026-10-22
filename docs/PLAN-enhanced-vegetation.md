@@ -116,9 +116,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, mass
 
 11. ☑ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
-12. ◐ Prototype: canopy shells on C1
-13. ◐ Prototype: impostor clumps on C1
-14. ☐ Pick the mass technique at the controls and productionise it
+12. ❌ Prototype: canopy shells on C1 (not picked)
+13. ☑ Prototype: impostor clumps on C1 (picked)
+14. ◐ Pick the mass technique at the controls and productionise it
 15. ☐ C3's canopy volume over its painted jungle, palms on the transitions
 16. ☐ Wave B budget and goldens
 
@@ -808,7 +808,7 @@ mass and the cards disagree.
 
 **Verified.** <pending orchestrator run>
 
-## B12 ◐ Prototype: canopy shells on C1
+## B12 ❌ Prototype: canopy shells on C1
 
 **Goal.** Stacked alpha-tested shells over C1's forest that take over as the cards fade, so the
 forest reads as mass from altitude.
@@ -825,65 +825,17 @@ a full canopy cell (one fir per 32 m) reads as scattered dots. The shells are th
 the eye's height as well as the fade. C1's fir card is dark foliage (mean opaque texel about
 sRGB 21, 30, 16).
 
-**Approach (as built).** `CSVM/src/Mech3/CanopyShells.cs`, behind `--canopy-shells` (off by
-default; `SessionSpec.CanopyShells`) and `VegetationQualitySetting.RichOn`, built and dropped by
-`GameSession.FollowCanopyShells` from the build, `FollowClutterFade` (a live Vegetation Quality or
-View Distance change), `ApplyGraphicsMode` and the lab's `ApplyVegetation`/`ApplyVegetationMask`
-(which rebuild it over the re-baked mask). `Clutter.cs` is untouched.
+**Approach (as prototyped).** Eight alpha-tested shells a 2 km chunk over the canopy mask, each
+drawing the most-stamped listed card (C1's `firtree1`) revolved into crowns on a jittered 9 m
+lattice, taking over from the cards by the eye's height and the card fade. The prototype, its suite
+and its flag are in git history (`git log --grep=B12`); the tree no longer carries them.
 
-- *Placement:* `ClutterBuilder.Canopy()` (B11) cut into chunks of 64 × 64 cells (2 km); a cell is
-  drawn when it or a neighbour has density, so crowns thin out over the forest's edge instead of a
-  quad edge cutting them. Each corner sits at the density-weighted `Ground` of the covered cells
-  touching it, with the canopy height `Top - Ground`. A chunk is one ground-level grid mesh drawn as
-  a MultiMesh of 8 identity instances; each instance's custom data lifts it to a share of the
-  canopy height, 0.15 for the lowest (about 2.7 m over a fir's ground, so it never fights the
-  ground's depth) to 1 at the top. On C1: 30 chunks, 95,400 corners, one draw each.
-- *Texture (the chapter's own card, Decision 6):* the fragment stage revolves the most-stamped
-  listed card (C1's `firtree1`, through its own material's `albedo_tex`) about its axis. Crowns sit
-  one per 9 m lattice cell, jittered, sized 0.8 to 1.15 of the canopy height; a fragment shows the
-  nearest crown's card texel at its height (card v) and distance off the axis (card u, over the
-  card's width). The mip comes from the world footprint. A crown is kept when its hash is below the
-  mask's density at its centre (R8 texture) times the takeover below, so a fade thins whole crowns.
-  Each shell marches the view ray through the slab down to the next shell (3 steps), so a crown seen
-  from the side shows no gaps between slices. Unshaded and fogged as the cards are, with the Rich
-  cards' sun-side gain on the crown's sun-facing half and a crown darkening toward its base by up to 20 %.
-- *Fade-in:* `max(1 - card alpha, over)`. The card alpha is the clutter fade over the listed stamps'
-  mean band (`FadeBand`: near 710 m, far 1419 m on C1) under the live `csky_clutter_fade_scale_sq`,
-  so the shells take over exactly where the cards fade at any View Distance. `over` is the eye's
-  height over the crown's ground, 0 at 150 m to full at 300 m, times a distance ramp from 150 m to
-  300 m that keeps slices out of a close view. A view low over the trees (the 80 m pose) is cards
-  only; a view from 300 m up shows one density from its foreground to the fog.
-- *Map edge:* open. The shells end at `world1`'s area, and `MapEdgeExtender`'s copies past it are
-  cards only, so from altitude the forest thins again past the edge.
-- *Measurement:* `analysis/veg-budget/measure.ps1 -Chapters C1 -Modes rich,shells` adds the
-  shells as their own case (`--canopy-shells` on the Rich launch).
+**Outcome: not picked (B14).** GPU per frame on C1 at 5120x1440, `--det`, against Rich alone:
+17.42 ms at `measure.ps1`'s 80 m view against 6.06 (+11.4 ms), and 15.38 / 14.69 / 13.91 ms at the
+300, 600 and 700 m poses against 4.33 / 3.33 / 3.29, fourteen to fifteen times Wave B's 0.75 ms share at each. The
+crowns read near black at every pose, since the fir card is.
 
-**Model recommendation.** Opus for B14's productionising if the shells win: the fade rule, the
-fill cost of eight alpha-tested layers with a 27-lookup march, and the map edge all need
-measurement-led judgement.
-
-**Verify.** Units: `CanopyShellsTests` (the layer shares rise from 0.15 to 1; the fade band is the
-fading stamps' mean and none fading is the never-fades band; one covered cell draws itself and a
-halo at its ground, as tall as its canopy, inside its box; a shared corner is density-weighted;
-forest in two chunks draws two). Engine: `canopy-shells` (C1 Enhanced flight: the flag at rich
-stands one shell set of 8-layer MultiMeshes, a live move to original drops it and a move back
-stands it again, a live switch to Original drops it with the word still rich and back in Enhanced it
-stands again, a lab re-bake stands a new one; at original with the flag, or at rich without it,
-none). Goldens: none move, since no golden passes the flag. The look is the montage at the four
-`measure.ps1`-derived C1 poses (80, 300, 600 and 1200 m up, all looking at `-9275,191,-6280`),
-Original, Rich and Rich with shells, judged by you in B14. The cost is B14's to measure.
-
-**⚠ Traps.**
-- Shell slices show from the side as stacked discs: keep the slab march, and keep the shells out
-  of a low or close view (the height and distance ramps), where the cards already read.
-- Judge the takeover at the crown's ground, not at the shell's height, or the upper slices of one
-  crown fade before the lower ones and a crown is drawn as a stack of rings.
-- Godot's shader built-ins are not visible inside a shader function; pass `CAMERA_POSITION_WORLD`.
-- The fir card is near black, so the crowns are too; the cards read lighter only through the Rich
-  sun-side gain, which the shells copy. A brighter crown is a look decision, not a bug.
-- The 1200 m pose sits inside C1's cloud layer, so it shows cloud in every variant.
-
-## B13 ◐ Prototype: impostor clumps on C1
+## B13 ☑ Prototype: impostor clumps on C1
 
 **Goal.** Pre-rendered cards of several trees placed past the card fade on C1, as MSFS does.
 
@@ -897,7 +849,7 @@ View Distance they fade from 1-2 km, still mostly in the fog. A clump that appea
 cards fade out is never seen, so the mass this item can add is density in front of the fog, not
 continuation past the fade.
 
-**Approach.** `CSVM/src/Mech3/CanopyClumps.cs`, behind `--canopy-clumps` (off by default, Enhanced
+**Approach (as prototyped; B14 is the production form).** `CSVM/src/Mech3/CanopyClumps.cs`, behind `--canopy-clumps` (off by default, Enhanced
 Rich only); `GameSession.FollowCanopyClumps` builds it at load, drops it on a live move off Rich or
 to Original, and builds it again from the re-baked mask after a lab edit.
 
@@ -955,19 +907,89 @@ rich,clumps`.
 - Never let a clump read a card's Original stamps: the mask is the Rich bake's, and Original builds
   no clumps.
 
-## B14 ☐ Pick the mass technique at the controls and productionise it
+## B14 ◐ Pick the mass technique at the controls and productionise it
 
 **Goal.** One technique chosen by you from B12 and B13, made production quality on C1.
 
-**Evidence (confidence: lead-only).** Decision 12.
+**Evidence (confidence: measured cost, judged look).** Decision 12. Your pick is the impostor
+clumps (B13); the shells (B12) are not picked. The prototypes' GPU per frame on C1, 5120x1440,
+`--det`: at `measure.ps1`'s 80 m view Rich 6.06 ms, with shells 17.42 ms, with clumps 6.09 ms; at
+the 300, 600 and 700 m poses (`--pos=-8575,491,-5580`, `-8275,791,-5280`, `-8075,890,-5080`, all
+`--lookat=-9275,191,-6280`) Rich 4.33 / 3.33 / 3.29, shells 15.38 / 14.69 / 13.91, clumps 4.81 /
+3.47 / 3.43, single launches noisier at those views. The prototype clumps' weakness was that they
+added trees (about 1.5 clumps of five a full cell over the cards' one fir), so the forest thickened
+and darkened with distance, a darker band on the hillsides from 300 to 700 m up, and their trees
+read darker than the Rich cards beside them (back rows shaded 0.9, the sun-side gain on half a clump
+rather than half a tree, and front rows sunk 18 % of the clump's height).
 
-**Approach.** Show both side by side (montage, then the controls) and ask with AskUserQuestion.
+**Approach (as built).** `CanopyClumps` draws by default under Enhanced and Rich on C1
+(`CanopyClumps.DefaultOn`); `--canopy-clumps=on|off` forces it either way on any chapter with a
+canopy mask. The switch stays because it is the A/B every check of this item reads: a golden's
+off-state, the budget script's `noclumps` mode and the other-chapter captures. Under Original
+nothing builds.
 
-**Model recommendation.** <TODO>
+- *A handover, not an addition.* Past `HandoverNearM`-`HandoverFarM` (1000 to 1600 m, plain metres,
+  so no View Distance moves it) the listed cards' Rich material fades them out by their own dither
+  and the clumps fade in by alpha; past it the clumps alone draw, to the fog. The card side is a
+  `canopy_handover` uniform in the Rich card text, zero (and skipped) while no clumps stand, so the
+  other chapters' Rich cards draw as before.
+- *Trees per area.* `CanopyClumps.Rate` gives each canopy cell its kept listed stamps over a tile's
+  mean tree count (3.17 on C1), so the clumps carry the cards' trees cell by cell: 37,508 stamps,
+  11,857 clumps. The mask's density is held at one fir a cell, so a rate from it moved trees out of
+  the dense stands. Tiles hold two to four trees, so the clumps spread nearly as evenly as the
+  one-a-cell lattice.
+- *Colour.* No back-row shade; each clump's instance colour takes the Rich cards' brightness and tint
+  spreads (mean 1); a two-channel side map gives each tree in a tile its own sun-side half, so the
+  shared `RichFragmentLines` gain lands as it does on a card. The C1 cards are unlit with white
+  vertex colours, so nothing else enters. A clump stands on the lowest ground under its width, 0.5 m
+  down, at full card height.
+- *Band placement.* A handover at 450 to 1050 m or 600 to 1000 m read sparser than the cards: a tile's
+  trees stand together, and the ground paints a dark blob under every original stamp, which shows bare
+  where a clump stands elsewhere. Past 1000 m both are under a few pixels and in C1's haze.
+- *Map edge.* `MapEdgeExtender.SetClumps` gives each extension cell its source cell's clumps
+  (`CanopyClumps.Field.Copy`), moved as its ground is, so the mass continues past the edge with the
+  card copies, which take the same handover.
+- *View Distance.* At Normal the cards' own fade starts inside 1 km (`firtree2` and `dougfirtree1`
+  from 600 m), and the clumps carry the far hills the cards leave thin; at Far, Very Far and
+  Unlimited the frame matches Rich alone in density and colour.
+- *Other chapters (left off).* `--canopy-clumps=on` against off at `measure.ps1`'s views raised to
+  about 300 m and from 1.5 km: C1B's 339 stamps all stand inside 1 km of its view, so nothing
+  differs; C2's clumps mix palms with brush into one tile (card height 6 m) and stand larger plants
+  across the far desert, palms over a hill's skyline, where the brush cards are specks; C4 (27,677 clumps) matches its cards from 1.5 km, its 300 m view sits in cloud.
+  None clearly reads right, so `DefaultOn` names C1 alone; C3 is B15's.
 
-**Verify.** <TODO>
+**Model recommendation.** Opus: the look iterates against captures and the rate, band and handover
+are judgement calls the measurements settle.
 
-**⚠ Traps.** The look call is yours. A luminance distance never settles it.
+**Verify.** Units: `CanopyClumpsTests` (placement a function of the mask, rate and seed; the rate
+carries the stamps' tree count to 10 %; a clump's size, base and colour spread; a cleared cell
+moves no other cell's clumps; the tile layout; C1 alone by default). Engine: `canopy-clumps` (a C1
+Enhanced flight at rich builds them by default, the cards' Rich material carries the band and the
+map edge copies them; a live move to original drops clumps, copies and band and a move back builds
+the same chunks; a live switch to Original drops them and back builds them; a lab re-bake builds new
+ones; `--canopy-clumps=off` or a session at original builds none). Look: `.scratch/b14/montage-C1.png`
+(80, 300, 600 and 700 m, Rich before against Rich with clumps), `.scratch/b14/motion-strip.png`
+(1800 to 600 m from the target at 300 m up, no band or pop), the other chapters and View Distances
+under `.scratch/b14/other/`. In the 600 m view's forest the mean sRGB moves by under 1.5 levels and
+the share of tree pixels by 10 % less with clumps.
+Budget: owed. `measure.ps1 -Modes rich` over the five chapters and the clumps against `noclumps` at the three high C1 poses wait for an idle machine; read against A7's Rich row and Wave B's 0.75 ms share.
+Goldens: the goldens stage alone moved the five Enhanced C1 shots A7 re-pinned,
+`c1-lake-enhanced`, `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`, `c1-cockpit-enhanced` and
+`c1-cockpit-xr-sim-enhanced`, and no Faithful, Original or other chapter's shot. Each rendered one
+hash four times over two runs at four workers, with other worktrees' probes running beside them;
+each rendered with `--canopy-clumps=off` added to its manifest args lands on its old pin exactly, so
+the clumps are the whole of each move. Four move 1.6 to 2.0 % of their pixels, all on the far hills;
+`c1-cloud-deck-enhanced` moves four pixels by one level on the screen's centre column under the deck.
+The five hashes are re-pinned by hand (never `-RegenGoldens`), `c1-lake-enhanced`'s `exercises`
+names the handover, and a third run passes 38 of 38.
+
+**⚠ Traps.**
+- A handover inside 1 km shows: a tile's trees stand together, and the ground's dark blob under each
+  original stamp shows bare. Keep the band past where both are a few pixels.
+- Never rate clumps from the mask's density: it is held at one fir a cell, so the dense stands lose
+  trees.
+- The cards' handover is a uniform on the shared Rich material; every path that drops the clumps
+  zeroes it (`CanopyClumps.Handover`), or the cards fade with nothing behind them.
 
 ## B15 ☐ C3's canopy volume over its painted jungle, palms on the transitions
 

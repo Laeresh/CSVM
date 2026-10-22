@@ -455,9 +455,10 @@ public sealed record SessionSpec
     /// happens to share the word.</summary>
     public bool NoClutter { get; private set; }
 
-    /// <summary><c>--canopy-clumps</c>: the impostor-clump prototype (<see cref="Mech3.CanopyClumps"/>),
-    /// drawn only while <see cref="Utils.VegetationQualitySetting.RichOn"/>. See <c>docs/cli.md</c>.</summary>
-    public bool CanopyClumps { get; private set; }
+    /// <summary><c>--canopy-clumps=on|off</c>: force the impostor clumps (<see cref="Mech3.CanopyClumps"/>) on or
+    /// off on any chapter with a canopy mask; null keeps <see cref="Mech3.CanopyClumps.DefaultOn"/>. Rich only
+    /// either way. See <c>docs/cli.md</c>.</summary>
+    public bool? CanopyClumps { get; private set; }
 
     /// <summary>Resolved. The enhanced passes this run leaves out, one bit per
     /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
@@ -488,10 +489,6 @@ public sealed record SessionSpec
     /// SET, not the placement rule. Null → the chapter's own list;
     /// <see cref="NoClutter"/> wins if both are given. See <c>docs/cli.md</c>.</summary>
     public IReadOnlyList<string>? ClutterTemplates { get; private set; }
-
-    /// <summary><c>--canopy-shells</c>: draw the canopy shells (<see cref="Mech3.CanopyShells"/>) over the
-    /// forest while Rich vegetation is on. A prototype switch, off by default. See <c>docs/cli.md</c>.</summary>
-    public bool CanopyShells { get; private set; }
 
     /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
     /// (<see cref="Mech3.ZoneGate"/>), every zone draws at every camera state. The one switch that
@@ -1722,8 +1719,7 @@ public sealed record SessionSpec
             else if (arg == "--no-fog") { s.NoFog = true; }
             else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
-            else if (arg == "--canopy-clumps") { s.CanopyClumps = true; }
-            else if (arg == "--canopy-shells") { s.CanopyShells = true; }
+            else if (arg is "--canopy-clumps=on" or "--canopy-clumps=off") { s.CanopyClumps = arg.EndsWith("on", StringComparison.Ordinal); }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg == "--screen-flare") { s.ScreenFlare = true; }

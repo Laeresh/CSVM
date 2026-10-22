@@ -33,9 +33,20 @@ public sealed class ClutterBuilder
     /// reading a single shape.</summary>
     public static readonly StringName CollisionCellMeta = "csvm_clutter_cell";
 
-    // The Rich card's declarations: the sim clock its sway reads and its sun-side varyings.
+    // The Rich card's declarations: the sim clock its sway reads and its sun-side varyings. The handover
+    // band to the canopy clumps (CanopyClumps.Handover) is zero while none stand.
     // The Rich lines are emitted into the Rich variant alone, so the Original card's text never changes.
-    internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_side;\nvarying flat float v_sun;";
+    internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_side;\nvarying flat float v_sun;\n"
+        + "uniform vec2 " + CanopyClumps.HandoverParam + ";";
+
+    // How far into the handover band the planted point is, 0 inside it and 1 past it. It is the clumps'
+    // alpha and the share the card fades by.
+    internal const string HandoverShare = "clamp((distance(origin, CAMERA_POSITION_WORLD) - " + CanopyClumps.HandoverParam
+        + ".x) / max(" + CanopyClumps.HandoverParam + ".y - " + CanopyClumps.HandoverParam + ".x, 1.0), 0.0, 1.0)";
+
+    // How much the card's half facing the sun's bearing gains, before its side; the clumps share it.
+    internal const string SunLine =
+        "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0);\n";
 
     // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
     // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
@@ -43,7 +54,11 @@ public sealed class ClutterBuilder
     // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the planted point.
     internal const string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
         + "    v_side = sign(VERTEX.x);\n"
-        + "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0);\n"
+        + SunLine
+        + "    if (" + CanopyClumps.HandoverParam + ".y > 0.0) {\n"
+        + "        v_alpha *= 1.0 - " + HandoverShare + ";\n"
+        + "        keep *= step(0.004, v_alpha);\n"
+        + "    }\n"
         + "    vec2 breeze = vec2(0.9397, 0.3420);\n"
         + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
         + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
@@ -635,6 +650,21 @@ public sealed class ClutterBuilder
             kind.Instances?.Recut();
     }
 
+    // The basis a card's vertices are turned by, the rendering half of its decoration model's own
+    // FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a different N").
+    // A SphericalY glow takes the world-up facade look-at, which reads the eye's position and
+    // never its basis, so a roll leaves it alone. A CylindricalY card spins about its planted
+    // point's vertical alone, so a tree or a lamp post stays upright.
+    internal static string FaceBasisLines(bool spherical) => spherical
+        ? "    mat3 face = csky_facade_spherical(origin, CAMERA_POSITION_WORLD);"
+        : "    vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;\n"
+            + "    float len = length(to_cam);\n"
+            + "    vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);\n"
+            + "    mat3 face = mat3(\n"
+            + "        vec3(dir.y, 0.0, -dir.x),\n"
+            + "        vec3(0.0, 1.0, 0.0),\n"
+            + "        vec3(dir.x, 0.0, dir.y));";
+
     // A kind's node under the clutter root. The faithful path keeps its one MultiMesh; Enhanced cuts
     // it into map cells (ClutterInstances), so a pane skips the cells out of its reach.
     private static ClutterInstances Drawn(Node3D root, MultiMeshInstance3D whole,
@@ -995,21 +1025,6 @@ public sealed class ClutterBuilder
         {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}
         """;
     }
-
-    // The basis a card's vertices are turned by, the rendering half of its decoration model's own
-    // FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a different N").
-    // A SphericalY glow takes the world-up facade look-at, which reads the eye's position and
-    // never its basis, so a roll leaves it alone. A CylindricalY card spins about its planted
-    // point's vertical alone, so a tree or a lamp post stays upright.
-    private static string FaceBasisLines(bool spherical) => spherical
-        ? "    mat3 face = csky_facade_spherical(origin, CAMERA_POSITION_WORLD);"
-        : "    vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;\n"
-            + "    float len = length(to_cam);\n"
-            + "    vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);\n"
-            + "    mat3 face = mat3(\n"
-            + "        vec3(dir.y, 0.0, -dir.x),\n"
-            + "        vec3(0.0, 1.0, 0.0),\n"
-            + "        vec3(dir.x, 0.0, dir.y));";
 
     // A template subtree: root → ground node (first descendant with a mesh; its texture
     // + quad size define what gets decorated and the tiling period) → decoration nodes

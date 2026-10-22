@@ -484,85 +484,11 @@ internal static class GraphicsSwitchSuites
         }
     }
 
-    [Suite("canopy-shells",
-        "--canopy-shells stands the canopy shells over C1's forest in an Enhanced flight at rich, one MultiMesh of "
-        + "every shell layer per forest chunk; a live move to original drops them and a move back stands them again; "
-        + "a live switch to Original drops them with the word still rich; a lab re-bake stands new ones; a session "
-        + "built at original with the flag, or at rich without it, stands none")]
-    internal static void CanopyShellsFollowRich(TestContext ctx)
-    {
-        RequireData(ctx);
-        bool wasEnhanced = GraphicsMode.Enhanced;
-        string launched = VegetationQualitySetting.Word;
-        try
-        {
-            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
-            var live = Open(ctx, enhanced: true, extra: new[] { "--canopy-shells" });
-            try
-            {
-                var built = live.Session.CanopyShells;
-                var layers = built?.GetChildren().OfType<MultiMeshInstance3D>().ToList() ?? new();
-                ctx.Check(live.Built && ShellsInTree(live) == 1 && layers.Count > 0
-                    && layers.All(m => m.Multimesh.InstanceCount == Mech3.CanopyShells.Layers && m.Multimesh.UseCustomData),
-                    $"a session built at rich with the flag stands one shell set ({ShellsInTree(live)} in tree, {layers.Count} chunk(s))");
-                ApplyVegetation(live, VegetationQualitySetting.Original);
-                ctx.Check(live.Session.CanopyShells == null && ShellsInTree(live) == 0,
-                    $"a live move to original drops them ({ShellsInTree(live)} in tree)");
-                ApplyVegetation(live, VegetationQualitySetting.Rich);
-                var again = live.Session.CanopyShells;
-                ctx.Check(again != null && again != built && ShellsInTree(live) == 1,
-                    $"and a move back to rich stands them again ({ShellsInTree(live)} in tree)");
-                Switch(live, enhanced: false);
-                ctx.Check(live.Session.CanopyShells == null && ShellsInTree(live) == 0
-                    && VegetationQualitySetting.Word == VegetationQualitySetting.Rich,
-                    $"a live switch to Original drops them with the word still {VegetationQualitySetting.Word} ({ShellsInTree(live)} in tree)");
-                Switch(live, enhanced: true);
-                var back = live.Session.CanopyShells;
-                live.Session.ApplyVegetation(Mech3.VegetationSidecar.Load().For("C1"));
-                Step(live);
-                ctx.Check(back != null && live.Session.CanopyShells is { } rebaked && rebaked != back && ShellsInTree(live) == 1,
-                    $"back in Enhanced they stand again, and a lab re-bake stands new ones over the new mask ({ShellsInTree(live)} in tree)");
-            }
-            finally
-            {
-                live.Close();
-            }
-
-            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
-            var original = Open(ctx, enhanced: true, extra: new[] { "--canopy-shells" });
-            try
-            {
-                ctx.Check(original.Built && original.Session.CanopyShells == null && ShellsInTree(original) == 0,
-                    $"a session built at original with the flag stands none ({ShellsInTree(original)} in tree)");
-            }
-            finally
-            {
-                original.Close();
-            }
-
-            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
-            var plain = Open(ctx, enhanced: true);
-            try
-            {
-                ctx.Check(plain.Built && plain.Session.CanopyShells == null && ShellsInTree(plain) == 0,
-                    $"a session built at rich without the flag stands none ({ShellsInTree(plain)} in tree)");
-            }
-            finally
-            {
-                plain.Close();
-            }
-        }
-        finally
-        {
-            VegetationQualitySetting.Resolve(launched, null, null);
-            Restore(wasEnhanced);
-        }
-    }
-
     [Suite("canopy-clumps",
-        "the --canopy-clumps prototype stands only under Enhanced Rich: a C1 flight at rich without the flag builds no clumps, "
-        + "one with it builds them over the canopy mask; a live move to original drops them from the tree and a move back builds "
-        + "the same chunks and counts again; a live switch to Original drops them and a switch back builds them")]
+        "the canopy clumps stand by default in a C1 Enhanced flight at rich: they stand over the canopy mask, the listed "
+        + "cards' Rich material carries the handover band, and the map edge's cells copy them; a live move to original drops "
+        + "the clumps, their edge copies and the band, and a move back builds the same chunks; a live switch to Original drops "
+        + "them and back builds them; a lab re-bake builds new ones; --canopy-clumps=off, or a session at original, builds none")]
     internal static void CanopyClumpsFollowRich(TestContext ctx)
     {
         RequireData(ctx);
@@ -571,37 +497,58 @@ internal static class GraphicsSwitchSuites
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
-            var plain = Open(ctx, enhanced: true);
-            try
-            {
-                ctx.Check(plain.Built && plain.Session.CanopyClumps == null, $"a rich flight without the flag builds no clumps");
-            }
-            finally
-            {
-                plain.Close();
-            }
-
-            var live = Open(ctx, true, 1, null, "--canopy-clumps");
+            var live = Open(ctx, true, 1, "C1");
             try
             {
                 var built = Clumps(live);
                 ctx.Check(live.Built && built.Count > 0 && built.Node != null && built.Node.IsInsideTree(),
-                    $"a rich flight with the flag builds its clumps ({built.Text})");
+                    $"a rich C1 flight builds its clumps by default ({built.Text})");
+                ctx.Check(Handover(live) == "on" && EdgeClumps(live) > 0,
+                    $"the cards hand over ({Handover(live)}) and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
                 ApplyVegetation(live, VegetationQualitySetting.Original);
-                ctx.Check(live.Session.CanopyClumps == null && !built.Node!.IsInsideTree(),
-                    $"a live move to original drops them from the tree");
+                ctx.Check(live.Session.CanopyClumps == null && !built.Node!.IsInsideTree() && EdgeClumps(live) == 0 && Handover(live) == "off",
+                    $"a live move to original drops them, their edge copies and the band ({EdgeClumps(live)} copies, {Handover(live)})");
                 ApplyVegetation(live, VegetationQualitySetting.Rich);
                 var again = Clumps(live);
-                ctx.Check(again.Count == built.Count && again.Text == built.Text,
+                ctx.Check(again.Count == built.Count && again.Text == built.Text && EdgeClumps(live) > 0 && Handover(live) == "on",
                     $"a move back to rich builds the same chunks and counts ({again.Text})");
                 Switch(live, enhanced: false);
                 ctx.Check(live.Session.CanopyClumps == null, $"a live switch to Original drops them");
                 Switch(live, enhanced: true);
-                ctx.Check(Clumps(live).Text == built.Text, $"and a switch back to Enhanced builds them again");
+                var back = Clumps(live);
+                ctx.Check(back.Text == built.Text, $"and a switch back to Enhanced builds them again");
+                live.Session.ApplyVegetation(Mech3.VegetationSidecar.Load().For("C1"));
+                Step(live);
+                var rebaked = Clumps(live);
+                ctx.Check(rebaked.Node != null && rebaked.Node != back.Node && rebaked.Text == built.Text && EdgeClumps(live) > 0 && Handover(live) == "on",
+                    $"a lab re-bake builds new ones over the same mask ({EdgeClumps(live)} edge copies)");
             }
             finally
             {
                 live.Close();
+            }
+
+            var off = Open(ctx, true, 1, "C1", "--canopy-clumps=off");
+            try
+            {
+                ctx.Check(off.Built && off.Session.CanopyClumps == null && EdgeClumps(off) == 0 && Handover(off) == "off",
+                    $"--canopy-clumps=off builds none and leaves the cards whole ({Handover(off)})");
+            }
+            finally
+            {
+                off.Close();
+            }
+
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
+            var original = Open(ctx, true, 1, "C1");
+            try
+            {
+                ctx.Check(original.Built && original.Session.CanopyClumps == null && EdgeClumps(original) == 0,
+                    $"a session built at original builds none");
+            }
+            finally
+            {
+                original.Close();
             }
         }
         finally
@@ -1860,23 +1807,37 @@ internal static class GraphicsSwitchSuites
         return (node, chunks.Sum(c => c.InstanceCount), string.Join(" ", chunks.Select(c => $"{c.Item1}={c.InstanceCount}")));
     }
 
-    // The ocean nodes standing in the session's tree. Entering and leaving the tree sets the sheet's
-    // switch. The server's getter for that errors outside the editor, so the tree is read instead.
-    private static string OceanState(Rig rig) =>
-        string.Create(CultureInfo.InvariantCulture, $"{OceansUnder(rig.Session)} in tree");
-
-    // The canopy shell sets standing in the session's tree, so a dropped set left behind is seen.
-    private static int ShellsInTree(Rig rig)
+    // The map edge's clump copies past the first corner, standing in the tree.
+    private static int EdgeClumps(Rig rig)
     {
+        if (rig.Session.EdgeExtender is not { } edge)
+            return 0;
+        edge.Update(edge.BeyondCorner);
         int count = 0;
-        Walk(rig.Session, node =>
+        Walk(edge, node =>
         {
-            if (node.Name == Mech3.CanopyShells.NodeName && node.IsInsideTree())
+            if (node is MultiMeshInstance3D { Multimesh.InstanceCount: > 0 } && node.Name == Mech3.CanopyClumps.Field.CopyName
+                && node.IsInsideTree() && !node.IsQueuedForDeletion())
                 count++;
         });
         return count;
     }
 
+    // Whether every listed card's Rich material carries the handover band: on, off, or mixed.
+    private static string Handover(Rig rig)
+    {
+        var bands = rig.Session.Clutter?.ExportedKinds?.Where(k => k.Rich?.Material is ShaderMaterial)
+            .Select(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2())
+            .Distinct().ToList() ?? new();
+        return bands.Count != 1 ? $"mixed ({bands.Count})"
+            : bands[0] == new Vector2(Mech3.CanopyClumps.HandoverNearM, Mech3.CanopyClumps.HandoverFarM) ? "on"
+            : bands[0] == Vector2.Zero ? "off" : $"band {bands[0]}";
+    }
+
+    // The ocean nodes standing in the session's tree. Entering and leaving the tree sets the sheet's
+    // switch. The server's getter for that errors outside the editor, so the tree is read instead.
+    private static string OceanState(Rig rig) =>
+        string.Create(CultureInfo.InvariantCulture, $"{OceansUnder(rig.Session)} in tree");
 
     // The ocean nodes standing in the tree under root. Read under the host, it also counts one
     // parented outside the session.

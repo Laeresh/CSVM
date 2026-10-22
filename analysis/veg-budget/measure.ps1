@@ -1,8 +1,8 @@
 <#
 The Enhanced vegetation plan's per-wave budget (PLAN-enhanced-vegetation, Decision 18): the frame
 cost at one fixed worst-case view per chapter with a vegetation entry, under Faithful, Enhanced
-with --vegetation-quality=original and Enhanced with =rich. The clumps mode, asked for by name with
--Modes, is rich plus the --canopy-clumps prototype.
+with --vegetation-quality=original and Enhanced with =rich, which on C1 draws the canopy clumps. The
+noclumps mode, asked for by name with -Modes, is rich with --canopy-clumps=off, the clumps' A/B.
 
 Every launch is --freecam at the chapter's pose below, --det (so no saved option reaches it and the
 sway's clock is the sim clock), --perf --no-vsync --mute, at -Resolution, and quits on a
@@ -50,9 +50,7 @@ $modeArgs = @{
     "faithful" = @("--graphics=original")
     "original" = @("--graphics=enhanced", "--vegetation-quality=original")
     "rich"     = @("--graphics=enhanced", "--vegetation-quality=rich")
-    "clumps"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-clumps")
-    # The canopy-shell prototype, measured on request: -Modes rich,shells.
-    "shells"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-shells")
+    "noclumps" = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-clumps=off")
 }
 
 if (-not $SummaryOnly) {

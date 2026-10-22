@@ -309,7 +309,8 @@ public partial class GameSession : Node3D
     private Effects.ScorchField? _scorches;
     private Effects.Ocean? _ocean;
     private bool _oceanEligible;
-    private Node3D? _canopyClumps;
+    // The canopy clumps over the forest, standing while Rich is on and the chapter or --canopy-clumps draws them.
+    private Mech3.CanopyClumps.Field? _canopyClumps;
     // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
     // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
     private Effects.SeaState _seaSaved = Effects.SeaState.Default;
@@ -317,8 +318,6 @@ public partial class GameSession : Node3D
     // The world runtime whose motions say which hulls the ocean follows; set in every mode it builds in.
     private AnimRuntime? _oceanRuntime;
     private ClutterBuilder? _clutter;
-    // The canopy shells over the clutter's forest, standing while --canopy-shells and Rich are both on.
-    private Node3D? _canopyShells;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
@@ -413,10 +412,8 @@ public partial class GameSession : Node3D
     /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
     internal ClutterBuilder? Clutter => _clutter;
 
-    /// <summary>The <c>--canopy-clumps</c> prototype's node, null while it draws none. Read by the suites.</summary>
-    internal Node3D? CanopyClumps => _canopyClumps;
-    /// <summary>The canopy shells standing now, null while they are off. Read by the suites.</summary>
-    internal Node3D? CanopyShells => _canopyShells;
+    /// <summary>The canopy clumps' node over the map, null while none stand. Read by the suites.</summary>
+    internal Node3D? CanopyClumps => _canopyClumps?.Root;
 
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
@@ -923,7 +920,6 @@ public partial class GameSession : Node3D
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
         FollowCanopyClumps();
-        FollowCanopyShells();
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
         _sky?.FollowGraphicsMode();
@@ -976,7 +972,6 @@ public partial class GameSession : Node3D
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
         FollowCanopyClumps();
-        FollowCanopyShells();
     }
 
     /// <summary>A live Water Quality change builds or drops the wave ocean
@@ -995,7 +990,6 @@ public partial class GameSession : Node3D
         _clutter?.ApplyVegetation(entry);
         _edgeExtender?.FollowVegetation();
         FollowCanopyClumps(rebake: true);
-        FollowCanopyShells(rebuild: true);
     }
 
     /// <summary>Bakes the clutter's Rich variant again under <paramref name="mask"/>, the vegetation lab's
@@ -1005,7 +999,6 @@ public partial class GameSession : Node3D
         _clutter?.ApplyVegetationMask(mask);
         _edgeExtender?.FollowVegetation();
         FollowCanopyClumps(rebake: true);
-        FollowCanopyShells(rebuild: true);
     }
 
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
@@ -1673,7 +1666,6 @@ public partial class GameSession : Node3D
         state.WorldScene = session.Builder.Scene;
         _worldScene = session.Builder.Scene;
         _clutter = session.Clutter;
-        FollowCanopyClumps();
         state.WorldRuntime = session.Runtime;
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
@@ -1771,7 +1763,7 @@ public partial class GameSession : Node3D
             if (_probes!.DumpTileGrid(_edgeExtender))
                 return false;
         }
-        FollowCanopyShells();
+        FollowCanopyClumps();
         // The sky step: the weather rig, its domes and decks' zone, the cloud field and banks, then
         // the lens flare over them (src/Launch/SkyStage.cs).
         _sky!.Build(state, builder);
@@ -2702,22 +2694,26 @@ public partial class GameSession : Node3D
         }
     }
 
-    // The --canopy-clumps prototype follows Rich: built while it is on and dropped when it is not.
-    // A lab edit builds it again from the re-baked canopy mask.
+    // The canopy clumps follow Rich: built while it is on and dropped when it is not. The map edge's copies
+    // and the cards' handover go with them. A lab edit builds them again from the re-baked canopy mask.
     private void FollowCanopyClumps(bool rebake = false)
     {
-        bool wanted = _spec.CanopyClumps && VegetationQualitySetting.RichOn;
-        if (!wanted || rebake)
+        bool wanted = (_spec.CanopyClumps ?? Mech3.CanopyClumps.DefaultOn(_spec.Chapter)) && VegetationQualitySetting.RichOn;
+        if (_canopyClumps != null && (!wanted || rebake))
         {
-            Drop(_canopyClumps);
+            Drop(_canopyClumps.Root);
             _canopyClumps = null;
+            _edgeExtender?.SetClumps(null);
+            Mech3.CanopyClumps.Handover(_clutter?.ExportedKinds, false);
         }
         if (!wanted || _canopyClumps != null || _plane == null || _sessionTextures == null
-            || _clutter?.ExportedKinds is not { } kinds || _clutter.Canopy() is not { } mask)
+            || _clutter?.ExportedKinds is not { } kinds || _clutter.Vegetation is not { } entry || _clutter.Canopy() is not { } mask)
             return;
-        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, _sessionTextures);
-        if (_canopyClumps != null)
-            _plane.AddChild(_canopyClumps);
+        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, entry, _sessionTextures);
+        if (_canopyClumps == null)
+            return;
+        _plane.AddChild(_canopyClumps.Root);
+        _edgeExtender?.SetClumps(_canopyClumps);
     }
 
     // The chapter's sea from the shipped file, read once per session that can stand an ocean, under
@@ -3059,25 +3055,6 @@ public partial class GameSession : Node3D
         var world = new LiveWorld(IsInstanceValid(_sun) ? _sun : null, this);
         foreach (var setting in moved)
             setting.Apply?.Invoke(world);
-    }
-
-    /// <summary>Stands the canopy shells over the clutter's canopy mask while <c>--canopy-shells</c> and
-    /// <see cref="VegetationQualitySetting.RichOn"/> are both on, and drops them otherwise. A lab edit re-bakes
-    /// the mask, so it asks for a <paramref name="rebuild"/>.</summary>
-    private void FollowCanopyShells(bool rebuild = false)
-    {
-        bool want = _spec.CanopyShells && VegetationQualitySetting.RichOn && _plane != null;
-        if (_canopyShells != null && (rebuild || !want))
-        {
-            Drop(_canopyShells);
-            _canopyShells = null;
-        }
-        if (want && _canopyShells == null && _clutter?.Canopy() is { } mask && _clutter.ExportedKinds is { } kinds)
-        {
-            _canopyShells = Mech3.CanopyShells.Build(mask, kinds);
-            if (_canopyShells != null)
-                _plane!.AddChild(_canopyShells);
-        }
     }
 
     // A layer a switch drops leaves the tree now and is freed at the frame's end. ⚠ Do not QueueFree

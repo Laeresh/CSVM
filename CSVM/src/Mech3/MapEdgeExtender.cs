@@ -110,6 +110,9 @@ public sealed partial class MapEdgeExtender : Node3D
     private int _blockCells = 1;
     private bool _repeat = true;
 
+    // The canopy clumps each live cell copies from its source cell, null while none stand.
+    private CanopyClumps.Field? _clumps;
+
     // Whether the live copies draw the Rich variant, so a live Vegetation Quality move rebuilds them.
     private bool _rich = VegetationQualitySetting.RichOn;
     private bool _tinted;
@@ -418,6 +421,22 @@ public sealed partial class MapEdgeExtender : Node3D
     /// so the window's copies are built again from it at the next <see cref="Update"/>.</summary>
     public void FollowVegetation() => DropWindow();
 
+    /// <summary>The canopy clumps the window's cells copy past the edge, null for none. Each live cell takes
+    /// its copies now; the ground and the card copies stand.</summary>
+    public void SetClumps(CanopyClumps.Field? clumps)
+    {
+        _clumps = clumps;
+        foreach (var (at, cell) in _live)
+        {
+            if (cell.GetNodeOrNull(CanopyClumps.Field.CopyName) is { } old)
+            {
+                cell.RemoveChild(old);
+                old.QueueFree();
+            }
+            AddClumps(cell, at.Item1, at.Item2);
+        }
+    }
+
     /// <summary>Builds the extender for a world, or null when it carries no usable area/partition
     /// grid. <paramref name="clutter"/> lets the extension grow the same decorations the map
     /// grows, matching the original's continued-terrain clutter.</summary>
@@ -593,9 +612,20 @@ public sealed partial class MapEdgeExtender : Node3D
             _copies[(ix, iz)] = AddCellClutter(cell, mirror, sprites, draws);
             _draws[(ix, iz)] = draws;
         }
+        AddClumps(cell, ix, iz);
         if (_tinted)
             ApplyTint(cell, ix, iz);
         return cell;
+    }
+
+    // One extension cell's clumps: its source cell's, moved as the cell's ground is.
+    private void AddClumps(Node3D cell, int ix, int iz)
+    {
+        var (sx, fx) = FoldAxis(ix, _cols, _blockCells, _repeat);
+        var (sz, fz) = FoldAxis(iz, _rows, _blockCells, _repeat);
+        var source = new Rect2(_x0 + (sx * _tileX), _z0 + (sz * _tileZ), _tileX, _tileZ);
+        if (_clumps?.Copy(source, MirrorTransform(ix, iz, sx, fx, sz, fz)) is { } copy)
+            cell.AddChild(copy);
     }
 
     // ---------------------------------------------------------------- tile-grid overlay
