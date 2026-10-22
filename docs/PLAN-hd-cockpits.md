@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, cockpit1 replacements
 
 21. ☑ [cloud] code, [local] check: the export writes `cockpit1.glb`; unedited round trip
-22. ☐ [local] Gauge table in interior units, and replaced dials that keep driving
+22. ☑ [local] Gauge table in interior units, and replaced dials that keep driving
 
 ### Wave D, under the headset
 
@@ -608,7 +608,57 @@ without the pack.>
 frame (`docs/formats/model-packs.md:56`); an export that bakes the 0.04 mount into `cockpit1`
 round-trips at the wrong size.
 
-## C22 ☐ [local] Gauge table in interior units, and replaced dials that keep driving
+## C22 ☑ [local] Gauge table in interior units, and replaced dials that keep driving
+
+**Landed.** A build whose rig section has no `"from": "body"` and names gauges places them inside
+`cockpit1`: `PlaneBuilder.MountCockpitInterior` calls `CockpitTransplant.PoseInside` after the body
+branch, on the flat and the stereo path alike, since the pose is in `cockpit1`'s own frame whatever
+the mount. A body section under the stereo path still keeps `cockpit1` untouched (B11).
+
+- **Posing.** Each named assembly stays the built node under `cockpit1`'s `gauges`, so the interior's
+  own `CockpitGauges.Bind`, visibility and reseat are unchanged. `CockpitTransplant.PosedUnder(parent,
+  original, pose)` is `Posed` in interior units, put under the parent's interior-frame transform; an
+  absent `rotation` or `scale` keeps the assembly's own. An unnamed assembly is not touched. `FlatMount`,
+  `InteriorToPlane`, `InteriorFromPlane` and `GlassFrame` keep their signatures.
+- **The glass.** Cut loose with B12's `CutGlass` into a `glass` node of the interior at
+  `Posed(GlassFrame, pose)`, now with `strip`: each source instance holding a glass surface takes a
+  new `ArrayMesh` of its other surfaces, since the builder's cached mesh is shared. Not
+  `SceneBuilder.OmittedPolygons`: that drops gamez polygons by identity at build time, so it would
+  leave nothing to cut and would miss a texture-named `cockpit6`/`crosshair` replacement surface,
+  which the material-id cut reaches. `GunsightReticle.Find` reads the gamez tree and the split glass
+  texture is still built, so the stereo overlay still builds; it stays at the original glass's place.
+  **For D32:** a moved glass under the headset needs its overlay re-hung in the glass's frame.
+- **Replaced dials.** A2's finding holds: a texture-named replacement surface wears a material in
+  `InteriorMaterials`, so belts, zones and readouts bind. The readout rule (one surface per character,
+  left to right by mean x) is in model-packs.md's new "Gauge parts" row.
+- **C21's residual, traced and fixed.** The Bloodhawk's `pf_canopy2` and `g366` wear `sparbead1`
+  (and `g366` `sparbead`) at priorities 0 and 5, and `inside` wears `cockpit10` at 0 and 5
+  (`extracted/planes`, scan in `.scratch/c22-prio/Scan.ps1`). The original builds each as two
+  surfaces and the export writes both, but `MappedReplacement` gave every surface of a texture the
+  highest priority, so the rim's priority-0 half drew at 5 over the padding. Now a file holding
+  exactly as many surfaces of a texture as the original builds (`SceneBuilder.OriginalSurfacesByTexture`,
+  the `BuildMesh` group key) gives each, in file order, the original surface's material and priority;
+  any other count keeps the highest, so the decal rule stands. The unedited round trip's cockpit shot
+  went from 296 differing pixels (275 over 8 levels, bottom rows) to 9, none over 8 levels. The
+  rest is untextured `pfhorizon`, exported under a writer name and drawn at priority 0 against the
+  original's -5, which the format documents.
+- **Tests.** `CockpitTransplantTests.AnInteriorPoseLandsInCockpit1sFrameUnderAMovedParent`. Suite
+  `plane-rig-cockpit-inside` (`Testing/PlaneRigSuites.cs`, install only): the speedometer moved,
+  turned and scaled in interior units stands at `Posed`'s pose under `cockpit1`'s `gauges`, an unnamed
+  assembly stays, the bind equals the stock one, the `speed` needle reads `GaugeCluster.SpeedAngleDeg`,
+  and the moved glass draws once (glass surfaces and total interior surfaces equal the stock count).
+  Its second case exports the stock `gungauge` subtree with `GltfExporter.Export`, packs it as
+  `planes/<model>/gungauge.glb`, moves it with the table, checks every meshed node below it is drawn
+  from the file, its readouts and cell surfaces equal the stock's, and runs `DrivenBelts` (a spent
+  belt light turns red). `hd-model-cockpit1`'s round trip now also compares each textured surface's
+  depth bias, and fails on the three nodes above without the fix.
+- **Shots** (`.scratch/c22-shots/`): `cockpit-original.png`, `cockpit-roundtrip.png` and
+  `cockpit-diff-x8.png` (the fixed round trip), and `cockpit-dials-swapped.png`, a rig-only pack
+  swapping the speedometer and altimeter positions.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A replaced `cockpit1` can move, turn, scale or drop its assemblies through the same
 `gauges` table, in interior units, and a replaced dial face keeps its belts, damage zones and

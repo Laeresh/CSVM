@@ -426,6 +426,115 @@ internal static class PlaneRigSuites
         ctx.Check(withCockpit > 0, $"{withCockpit} of {templates.Count} dumped airframes carry a cockpit1 and its template");
     }
 
+    // A replaced cockpit1's table, read in interior units against the stock interior. Able to fail: a
+    // moved glass left in its parent mesh draws twice. A pose read as metres misplaces the dial.
+    [Suite("plane-rig-cockpit-inside",
+        "without from: body, the gauge table places the named assemblies inside cockpit1 in its own frame and units: the " +
+        "moved speedometer stands at the rig's pose and its needle takes GaugeCluster's angle, an unnamed assembly stays, " +
+        "the bind finds the stock needles, lamps, readouts, belts and zones, and a moved glass is cut loose and draws once. " +
+        "A gungauge replaced by a texture-named copy and moved by the table keeps its belt lights driven and one surface " +
+        "per readout character")]
+    internal static void PlaneRigCockpitInside(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("speedometer", "gungauge");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+        string gungaugeFile = Path.Combine(PackRoot(ctx, "cockpit-inside-export"), "gungauge.glb");
+
+        // The stock interior: its bind, each assembly's interior-frame pose, its glass and surface counts.
+        CockpitGauges? stock;
+        var poses = new Dictionary<string, Transform3D>();
+        int stockGlass, stockSurfaces, stockCells;
+        using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
+        {
+            var bare = Build(ctx, planesGamez, textures, none, plane, out var bareBuilder, cockpitInterior: true);
+            try
+            {
+                stock = CockpitGauges.Bind(bareBuilder);
+                var interior = bareBuilder.CockpitInterior!;
+                foreach (var assembly in Named(interior, "gauges").First().GetChildren().OfType<Node3D>())
+                {
+                    poses[AnimRuntime.NameOf(assembly)] = PlaneRigPatch.PlaneFrame(assembly, interior);
+                }
+
+                (stockGlass, stockSurfaces) = GlassAndSurfaces(bareBuilder, interior);
+                stockCells = Cells(interior);
+                Directory.CreateDirectory(Path.GetDirectoryName(gungaugeFile)!);
+                ctx.Same((long)Error.Ok, (long)Tooling.GltfExporter.Export(Named(interior, "gungauge").First(), gungaugeFile, allStates: true),
+                    $"the stock gungauge's export write result");
+            }
+            finally
+            {
+                bare.Free();
+            }
+        }
+
+        ctx.Check(stock is { NeedleCount: > 0 } && stockGlass > 0 && poses.ContainsKey("speedometer") && poses.ContainsKey("gungauge"),
+            $"{plane}'s stock cockpit1 binds {stock?.NeedleCount} needles over {poses.Count} assemblies with {stockGlass} glass surface(s)");
+        if (stock == null || stockGlass == 0 || !poses.ContainsKey("speedometer") || !poses.ContainsKey("gungauge"))
+        {
+            return;
+        }
+
+        var speedPose = new RigGaugePose(poses["speedometer"].Origin + new Vector3(3f, 2f, -1f), new Vector3(10f, -20f, 0f), 1.5f);
+        var glassAt = poses["speedometer"].Origin + new Vector3(-2f, 6f, 1f);
+        using (var pack = Pack(ctx, "cockpit-inside", plane,
+            $$"""{ "cockpit": { "gauges": { "speedometer": { "position": {{Json(speedPose.Position)}}, "rotation": [10, -20, 0], "scale": 1.5 }, "glass": { "position": {{Json(glassAt)}} } } } }"""))
+        {
+            var model = Build(ctx, planesGamez, textures, pack, plane, out var builder, cockpitInterior: true);
+            GaugeCluster? cluster = null;
+            try
+            {
+                var interior = builder.CockpitInterior!;
+                var speedo = Named(interior, "speedometer").FirstOrDefault();
+                ctx.Check(builder.CockpitPanel == null && speedo != null && Named(interior, "gauges").First().IsAncestorOf(speedo),
+                    $"no panel: the speedometer stays under cockpit1's gauges node");
+                var frame = speedo == null ? Transform3D.Identity : PlaneRigPatch.PlaneFrame(speedo, interior);
+                ctx.Check(frame.IsEqualApprox(CockpitTransplant.Posed(poses["speedometer"], speedPose)),
+                    $"the speedometer stands at the rig's pose in interior units {frame.Origin} scale={frame.Basis.Scale.X:0.###}");
+                var other = poses.Keys.First(n => n is not ("speedometer" or "g730" or "g184"));
+                ctx.Check(Named(interior, other).Select(n => PlaneRigPatch.PlaneFrame(n, interior)).FirstOrDefault().IsEqualApprox(poses[other]),
+                    $"the unnamed {other} stays where the original put it");
+
+                var bind = CockpitGauges.Bind(builder);
+                ctx.Check(SameBind(bind, stock), $"the bind finds what the stock cockpit1's does: {Counts(bind)} vs {Counts(stock)}");
+                if (bind != null && Named(interior, "speed").FirstOrDefault() is { } needle)
+                {
+                    cluster = new GaugeCluster { SpeedMph = 200f };
+                    bind.Apply(cluster);
+                    float want = -Mathf.DegToRad(GaugeCluster.SpeedAngleDeg(200f));
+                    float got = needle.Transform.Basis.GetEuler().Z;
+                    ctx.Check(Mathf.Abs(Mathf.AngleDifference(got, want)) < 0.01f,
+                        $"the moved speed needle takes GaugeCluster's angle got={got:0.000} want={want:0.000} rad");
+                }
+                else
+                {
+                    ctx.Check(false, $"the moved speedometer carries its speed needle");
+                }
+
+                var glass = interior.GetChildren().OfType<Node3D>().FirstOrDefault(n => n.Name.ToString() == CockpitTransplant.GlassName);
+                var (glassSurfaces, surfaces) = GlassAndSurfaces(builder, interior);
+                int cut = glass?.GetChildren().OfType<MeshInstance3D>().Count() ?? 0;
+                ctx.Check(glass != null && PlaneRigPatch.PlaneFrame(glass, interior).Origin.DistanceTo(glassAt) < PosTolerance,
+                    $"the glass stands at the rig's position in interior units {(glass == null ? "none" : PlaneRigPatch.PlaneFrame(glass, interior).Origin)} vs {glassAt}");
+                ctx.Check(cut == stockGlass && glassSurfaces == stockGlass && surfaces == stockSurfaces,
+                    $"the glass draws once: {cut} cut-loose and {glassSurfaces} glass surfaces in all against the stock {stockGlass}, and {surfaces}/{stockSurfaces} surfaces in the interior; glass on {string.Join(" ", GlassHolders(builder, interior))}");
+            }
+            finally
+            {
+                cluster?.Free();
+                model.Free();
+            }
+        }
+
+        CheckReplacedGungauge(ctx, planesGamez, textures, plane, gungaugeFile, poses["gungauge"], stock, stockCells);
+    }
+
     // The dial keeps the interior's own materials and takes no shadow. Its layers keep the order the
     // bias gives them at any scale, since the bias is a fraction of view distance.
     private static void CheckDialLayers(TestContext ctx, PlaneBuilder builder, Node3D face, Node3D needle)
@@ -597,6 +706,37 @@ internal static class PlaneRigSuites
         }
     }
 
+    // The gungauge and every gamez node below it drawn from a texture-named copy, moved by the table.
+    private static void CheckReplacedGungauge(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane,
+        string file, Transform3D original, CockpitGauges stock, int stockCells)
+    {
+        var at = original.Origin + new Vector3(-4f, 1f, 0.5f);
+        using var pack = Pack(ctx, "cockpit-inside-gungauge", plane, $$"""{ "cockpit": { "gauges": { "gungauge": { "position": {{Json(at)}} } } } }""");
+        File.Copy(file, Path.Combine(PackRoot(ctx, "cockpit-inside-gungauge"), "HDModels", "pack", "planes", plane, "gungauge.glb"));
+        using var withFile = HdModels.Open(PackRoot(ctx, "cockpit-inside-gungauge"), "HDModels");
+        var model = Build(ctx, planesGamez, textures, withFile, plane, out var builder, cockpitInterior: true);
+        try
+        {
+            var interior = builder.CockpitInterior!;
+            static bool Replaced(Node3D n) => n.GetChildren().OfType<MeshInstance3D>().Any(m => m.HasMeta(SceneBuilder.GamezMeshMeta));
+            var gauge = Named(interior, "gungauge").FirstOrDefault();
+            var meshed = gauge == null ? new List<Node3D>() : gauge.FindChildren("*", "Node3D", recursive: true, owned: false).OfType<Node3D>().Prepend(gauge)
+                .Where(n => n.HasMeta(AnimRuntime.NameMeta) && n.GetChildren().OfType<MeshInstance3D>().Any()).ToList();
+            ctx.Check(meshed.Count > 0 && meshed.All(Replaced),
+                $"the gungauge's {meshed.Count} meshed nodes are drawn from the pack's copy; not: {string.Join(" ", meshed.Where(n => !Replaced(n)).Select(AnimRuntime.NameOf))}");
+            ctx.Check(gauge != null && PlaneRigPatch.PlaneFrame(gauge, interior).Origin.DistanceTo(at) < PosTolerance,
+                $"…and moved by the table to {at} in interior units");
+            var bind = CockpitGauges.Bind(builder);
+            ctx.Check(bind != null && bind.ReadoutCount == stock.ReadoutCount && Cells(interior) == stockCells,
+                $"its readouts bind as the stock's, one surface per character: readouts {bind?.ReadoutCount}/{stock.ReadoutCount} cells {Cells(interior)}/{stockCells}");
+            WorldAndToolSuites.DrivenBelts(ctx, interior, builder, planesGamez, textures);
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
     // Every glass surface's vertices in the plane frame, in tree and surface order, as CutGlass walks them.
     private static List<Vector3> GlassVertices(Node3D root, Node3D model, PlaneBuilder builder)
     {
@@ -616,6 +756,36 @@ internal static class PlaneRigSuites
 
         return found;
     }
+
+    // Glass-material surfaces and all surfaces drawn under the interior.
+    private static (int Glass, int All) GlassAndSurfaces(PlaneBuilder builder, Node3D interior)
+    {
+        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        var surfaces = interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .SelectMany(mi => Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0).Select(mi.GetActiveMaterial)).ToList();
+        return (surfaces.Count(m => m != null && glassIds.Contains(m.GetInstanceId())), surfaces.Count);
+    }
+
+    private static IEnumerable<string> GlassHolders(PlaneBuilder builder, Node3D interior)
+    {
+        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        return interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Where(mi => Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0).Any(s => mi.GetActiveMaterial(s) is { } m && glassIds.Contains(m.GetInstanceId())))
+            .Select(mi => $"{mi.GetParent()?.Name}/{mi.Name}({mi.Mesh.GetSurfaceCount()})");
+    }
+
+    // The readout character cells: the surfaces of each 4char_ammo and 6char_type mesh.
+    private static int Cells(Node3D interior) =>
+        new[] { "4char_ammo", "6char_type" }.SelectMany(n => Named(interior, n))
+            .SelectMany(n => n.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
+            .Sum(mi => mi.Mesh?.GetSurfaceCount() ?? 0);
+
+    private static bool SameBind(CockpitGauges? a, CockpitGauges b) =>
+        a != null && (a.NeedleCount, a.LampCount, a.ReadoutCount, a.BeltCount, a.DamageZoneCount)
+            == (b.NeedleCount, b.LampCount, b.ReadoutCount, b.BeltCount, b.DamageZoneCount);
+
+    private static string Counts(CockpitGauges? g) =>
+        $"needles {g?.NeedleCount} lamps {g?.LampCount} readouts {g?.ReadoutCount} belts {g?.BeltCount} zones {g?.DamageZoneCount}";
 
     // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes
     // dark, and with no rig wing_flare2 itself is.

@@ -1223,6 +1223,10 @@ void fragment() {
         return name.Length == 0 ? "node" : name;
     }
 
+    // A texture-named material's texture, as OriginalMaterialFor matches it: no extension, no padding.
+    private static string TextureStem(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? string.Empty : System.IO.Path.GetFileNameWithoutExtension(name.Trim());
+
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
         Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit,
         bool zoneGate, bool applyActive)
@@ -1591,6 +1595,10 @@ void fragment() {
         bool fogged = mesh.Fog;
         var scroll = EffectiveScroll(mesh, meshIndex);
         var result = new ArrayMesh();
+        var ownSurfaces = OriginalSurfacesByTexture(mesh, forceDoubleSided);
+        var fileCounts = surfaces.GroupBy(s => TextureStem((s.Material as BaseMaterial3D)?.ResourceName), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        var taken = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int rank = 0; rank < surfaces.Count; rank++)
         {
             var surface = surfaces[rank];
@@ -1609,6 +1617,15 @@ void fragment() {
             UvClampAxes edgeClamp;
             if (OriginalMaterialFor(source?.ResourceName, mesh) is var (original, priority) && original >= 0)
             {
+                // The export writes the original's surfaces of a texture one for one. A file that
+                // still does gives each its own material and priority, in the original's order.
+                string stem = TextureStem(source?.ResourceName);
+                if (ownSurfaces.TryGetValue(stem, out var own) && own.Count == fileCounts[stem])
+                {
+                    int next = taken.GetValueOrDefault(stem);
+                    taken[stem] = next + 1;
+                    (original, priority) = own[next];
+                }
                 if (DrawsNothing(original))
                     continue;
                 (clampUv, edgeClamp) = ClampFor(unitAxes, scroll);
@@ -1671,6 +1688,45 @@ void fragment() {
         }
         return found >= 0 && _billboardTexture != null && _gamez.Materials[found].TextureName is { } tex && _billboardTexture(tex)
             ? (-1, 0) : (found, priority ?? 0);
+    }
+
+    // Each texture's surfaces as BuildMesh groups the model, base groups then overlay passes, in
+    // that order: one (material, priority) per surface. Keep the group key in step with BuildMesh's.
+    private Dictionary<string, List<(int Material, int Priority)>> OriginalSurfacesByTexture(GameZMesh mesh, bool forceDoubleSided)
+    {
+        var groups = new HashSet<(int, int, bool, bool, int)>();
+        var byTexture = new Dictionary<string, List<(int, int)>>(StringComparer.OrdinalIgnoreCase);
+        void Add(int material, GameZPolygon poly, int pass)
+        {
+            bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
+            if (material < 0 || material >= _gamez.Materials.Count
+                || !groups.Add((material, poly.Priority, poly.NoClutter, doubleSided, pass))
+                || _gamez.Materials[material].TextureName is not { } texture)
+                return;
+            string stem = TextureStem(texture);
+            if (!byTexture.TryGetValue(stem, out var list))
+                byTexture[stem] = list = new List<(int, int)>();
+            list.Add((material, poly.Priority));
+        }
+
+        int levels = 0;
+        foreach (var poly in mesh.Polygons)
+        {
+            if (DrawsNothing(poly.MaterialIndex))
+                continue;
+            Add(poly.MaterialIndex, poly, 0);
+            levels = Math.Max(levels, poly.OverlayPasses?.Count ?? 0);
+        }
+        for (int pass = 1; pass <= levels; pass++)
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.OverlayPasses is { } overlays && overlays.Count >= pass
+                    && !DrawsNothing(poly.MaterialIndex) && !DrawsNothing(overlays[pass - 1].MaterialIndex))
+                    Add(overlays[pass - 1].MaterialIndex, poly, pass);
+            }
+        }
+        return byTexture;
     }
 
     // A replacement surface whose glTF material names no original texture. It wears the file's base

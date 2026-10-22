@@ -9,6 +9,7 @@ namespace CSVM.Tests;
 /// The flat interior mount and a body cockpit's pose arithmetic. An interior-frame transform is carried
 /// into the plane frame (<see cref="PlaneBuilder.InteriorToPlane"/>) and back. A rig pose is laid over
 /// it (<see cref="CockpitTransplant.Posed"/>), each absent field keeping the original's apparent value.
+/// Inside <c>cockpit1</c> the same pose is read in interior units (<see cref="CockpitTransplant.PosedUnder"/>).
 /// </summary>
 public class CockpitTransplantTests
 {
@@ -76,6 +77,24 @@ public class CockpitTransplantTests
         var posed = CockpitTransplant.Posed(original, new RigGaugePose(Vector3.Zero, null, 0.1f));
         Assert.True(posed.Basis.Scale.IsEqualApprox(Vector3.One * 0.1f));
         Assert.True(posed.Basis.Orthonormalized().IsEqualApprox(original.Basis.Orthonormalized()));
+    }
+
+    // Inside cockpit1 a pose is in interior units. The assembly lands there under a parent that is
+    // itself moved, turned and scaled, and an absent field keeps the assembly's interior-frame value.
+    [Fact]
+    public void AnInteriorPoseLandsInCockpit1sFrameUnderAMovedParent()
+    {
+        var parent = new Transform3D(Basis.FromEuler(new Vector3(0.2f, -0.4f, 0.1f), EulerOrder.Yxz).Scaled(Vector3.One * 1.5f), new Vector3(2f, -1f, 3f));
+        var original = parent * new Transform3D(Basis.FromEuler(new Vector3(-0.352f, 0f, 0f), EulerOrder.Yxz), new Vector3(1f, 2f, -4f));
+        var at = new Vector3(6f, -3f, -12f);
+
+        var moved = parent * CockpitTransplant.PosedUnder(parent, original, new RigGaugePose(at, null, null));
+        Assert.True(moved.Origin.DistanceTo(at) < 1e-4f, $"{moved.Origin} vs {at}");
+        Assert.True(moved.Basis.IsEqualApprox(original.Basis), "position only keeps the facing and size in cockpit1");
+
+        var turned = parent * CockpitTransplant.PosedUnder(parent, original, new RigGaugePose(at, new Vector3(0f, 90f, 0f), 2f));
+        var want = Basis.FromEuler(new Vector3(0f, Mathf.Pi / 2f, 0f), EulerOrder.Yxz).Scaled(Vector3.One * 2f);
+        Assert.True(turned.Basis.IsEqualApprox(want), $"{turned.Basis} vs {want}");
     }
 
     [Fact]

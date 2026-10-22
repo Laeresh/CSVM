@@ -546,6 +546,11 @@ public sealed class PlaneBuilder
                     CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials);
                 built.AddChild(CockpitPanel);
             }
+            else if (Cockpit is { FromBody: false, Gauges.Count: > 0 })
+            {
+                CockpitTransplant.PoseInside(n3d, Cockpit,
+                    CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials);
+            }
 
             return;
         }

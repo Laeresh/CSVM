@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
@@ -157,7 +158,7 @@ internal static class HdModelSwapSuites
         + "belts and zones as without the pack, and a pack holding only an exterior node replaces no interior node. "
         + "The aircraft export writes cockpit1.glb beside the airframe file, root cockpit1 at identity, and leaves the interior "
         + "out of the airframe file; put unedited into a pack it replaces every meshed interior node with the original's vertex "
-        + "count, bounds in the node's frame, texture names and unlit surfaces")]
+        + "count, bounds in the node's frame, texture names, unlit surfaces and each textured surface's draw priority")]
     internal static void CockpitInteriorSwap(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -267,16 +268,16 @@ internal static class HdModelSwapSuites
 
                 replaced++;
                 if (VertexCount(a) != VertexCount(b) || !a.GetAabb().IsEqualApprox(b.GetAabb())
-                    || !TextureNames(a).SetEquals(TextureNames(b)))
+                    || !TextureNames(a).SetEquals(TextureNames(b)) || Biases(a) != Biases(b))
                 {
-                    wrong.Add($"{AnimRuntime.NameOf(original)}#{index} verts={VertexCount(a)}/{VertexCount(b)} aabb={a.GetAabb()}/{b.GetAabb()} textures={string.Join(",", TextureNames(a))}/{string.Join(",", TextureNames(b))}");
+                    wrong.Add($"{AnimRuntime.NameOf(original)}#{index} verts={VertexCount(a)}/{VertexCount(b)} aabb={a.GetAabb()}/{b.GetAabb()} textures={string.Join(",", TextureNames(a))}/{string.Join(",", TextureNames(b))} bias={Biases(a)}/{Biases(b)}");
                 }
             }
 
             ctx.Check(meshed.Count > 0 && replaced == meshed.Count,
                 $"the round trip replaces every meshed interior node replaced={replaced}/{meshed.Count}");
             ctx.Check(wrong.Count == 0,
-                $"each replaced interior node keeps its vertex count, bounds in its frame, texture names and unlit surfaces; differing:{string.Join("; ", wrong.Take(8))}");
+                $"each replaced interior node keeps its vertex count, bounds in its frame, texture names, unlit surfaces and surface draw priorities; differing:{string.Join("; ", wrong.Take(8))}");
         }
         finally
         {
@@ -289,6 +290,13 @@ internal static class HdModelSwapSuites
         var state = new GltfState();
         return new GltfDocument().AppendFromFile(file, state) == Error.Ok ? state.GetNodes() : new Godot.Collections.Array<GltfNode>();
     }
+
+    // Each textured surface's draw-order bias in surface order. A texture worn at two priorities keeps
+    // both. An untextured one is exported under no texture's name and draws at priority 0.
+    private static string Biases(ArrayMesh mesh) =>
+        string.Join(",", Enumerable.Range(0, mesh.GetSurfaceCount())
+            .Select(mesh.SurfaceGetMaterial).OfType<ShaderMaterial>().Where(m => !string.IsNullOrEmpty(m.ResourceName))
+            .Select(m => m.GetShaderParameter("depth_bias").AsSingle().ToString("0.#####", CultureInfo.InvariantCulture)));
 
     private static int VertexCount(ArrayMesh mesh) =>
         Enumerable.Range(0, mesh.GetSurfaceCount()).Sum(i => mesh.SurfaceGetArrayLen(i));

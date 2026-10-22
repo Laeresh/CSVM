@@ -50,7 +50,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
-- `src/Mech3/CockpitTransplant.cs`, a body cockpit's instruments: the rig-named gauge assemblies and the cut-loose sight glass moved onto the airframe.
+- `src/Mech3/CockpitTransplant.cs`, the rig's gauge table: the named gauge assemblies and the cut-loose sight glass moved onto the airframe in a body cockpit, or inside `cockpit1` otherwise.
 - `src/Mech3/CockpitPlate.cs`, the head-and-shoulders plate behind the cockpit eye, selected by polygon, which the stereo interior leaves out.
 - `src/Mech3/GunsightReticle.cs`, the stereo interior's gunsight reticle lifted off the sight glass and drawn collimated at infinity.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
