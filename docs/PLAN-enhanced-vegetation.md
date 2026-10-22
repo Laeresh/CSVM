@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
 12. ❌ Prototype: canopy shells on C1 (not picked)
 13. ☑ Prototype: impostor clumps on C1 (picked)
-14. ◐ Pick the mass technique at the controls and productionise it
+14. ☑ Pick the mass technique at the controls and productionise it
 15. ☐ C3's canopy volume over its painted jungle, palms on the transitions
 16. ☐ Wave B budget and goldens
 
@@ -907,7 +907,7 @@ rich,clumps`.
 - Never let a clump read a card's Original stamps: the mask is the Rich bake's, and Original builds
   no clumps.
 
-## B14 ◐ Pick the mass technique at the controls and productionise it
+## B14 ☑ Pick the mass technique at the controls and productionise it
 
 **Goal.** One technique chosen by you from B12 and B13, made production quality on C1.
 
@@ -958,6 +958,10 @@ nothing builds.
   across the far desert, palms over a hill's skyline, where the brush cards are specks; C4 (27,677 clumps) matches its cards from 1.5 km, its 300 m view sits in cloud.
   None clearly reads right, so `DefaultOn` names C1 alone; C3 is B15's.
 
+**Ruling (yours, from the montage).** The handover stays: at Far and beyond the clumps keep the
+cards' density and colour rather than adding mass, and their gain is View Distance Normal's far hills
+and the forest past the map edge.
+
 **Model recommendation.** Opus: the look iterates against captures and the rate, band and handover
 are judgement calls the measurements settle.
 
@@ -972,7 +976,11 @@ ones; `--canopy-clumps=off` or a session at original builds none). Look: `.scrat
 (1800 to 600 m from the target at 300 m up, no band or pop), the other chapters and View Distances
 under `.scratch/b14/other/`. In the 600 m view's forest the mean sRGB moves by under 1.5 levels and
 the share of tree pixels by 10 % less with clumps.
-Budget: owed. `measure.ps1 -Modes rich` over the five chapters and the clumps against `noclumps` at the three high C1 poses wait for an idle machine; read against A7's Rich row and Wave B's 0.75 ms share.
+Budget: `measure.ps1 -Modes rich,noclumps -Launches 4` on an idle machine puts the clumps at
++0.04 ms GPU, +0.07 ms `render_cpu_ms` and +0.08 ms `proc_ms` at C1's 80 m view (5.90 against
+5.87 ms, 469 draws against 421), within Wave B's 0.75 ms GPU share and its CPU half; at the 300,
+600 and 700 m poses `rich` against `noclumps` reads 3.80 / 3.78, 2.79 / 2.79 and 2.68 / 2.69 ms over
+four launches each. C1B, C2, C3 and C4 draw no clumps and match A7's Rich row within 0.02 ms.
 Goldens: the goldens stage alone moved the five Enhanced C1 shots A7 re-pinned,
 `c1-lake-enhanced`, `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`, `c1-cockpit-enhanced` and
 `c1-cockpit-xr-sim-enhanced`, and no Faithful, Original or other chapter's shot. Each rendered one
