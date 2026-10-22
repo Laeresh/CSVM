@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
 12. ☑ [local] Transplanted gauge assemblies and sight glass on the body
 13. ☑ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
-14. ☐ [local] The Corvette's seat and dashboard
+14. ◐ [local] The Corvette's seat and dashboard
 
 ### Wave C, cockpit1 replacements
 
@@ -515,7 +515,62 @@ in interior units (`Mech3/PlaneBuilder.cs:198-202`); the template follows the fl
 must not inherit a pose that only lines up on the flat screen. The dumped rig is no longer a no-op:
 copying it unedited switches the cockpit to body mode (decision 10), which the doc must say.
 
-## B14 ☐ [local] The Corvette's seat and dashboard
+## B14 ◐ [local] The Corvette's seat and dashboard
+
+**Landed.** `.scratchKeep\corvette\scripts\build_corvette_pack.py` step 4c measures the cabin by
+rays through the placed car and writes `cockpit_camera` and a `"cockpit": { "from": "body",
+"gauges": {...} }` section into each pack's `planes\player_autogyro\rig.json`; the AI `autogyro`
+rig keeps its markers alone. Nothing is tracked or committed; the pre-B14 rigs and script are in
+`.scratchKeep\corvette\backup-b14\`. The build commands are `-- <car.glb> <pack> 4.57 -0.5` (real)
+and `-- <car.glb> <pack> 6.7 -0.6` (stretched).
+
+- **The driver.** The seat is the port half of the seat material (`Mesh9Mtl`); the cushion is the
+  lowest point downward rays find along its centreline; the eye is 0.70 m above that and 0.20 m
+  ahead of the backrest at eye height. Human sizes scale with the car (`k` = length / 4.57), so the
+  stretched car seats a 1.47x driver and frames the cabin as the real one does (its shots match the
+  real car's).
+
+  | Variant | Seat x | Cushion y (at z) | Backrest z | Eye | Nearest surface | Headliner above |
+  |---|---|---|---|---|---|---|
+  | real (k 1) | -0.381 | -0.551 (1.484) | 1.706 | (-0.381, 0.149, 1.506) | 0.187 m | 0.225 m |
+  | stretched (k 1.466) | -0.559 | -0.431 (1.656) | 1.982 | (-0.559, 0.595, 1.688) | 0.274 m | 0.330 m |
+
+  No surface is within 5 cm of either eye, so the default near plane clips nothing.
+- **The binnacle.** The hood is the dash top walked from the windscreen toward the driver until it
+  drops (real: y 0.076, lip z 0.756); the instrument face is what a forward ray from behind the lip
+  finds. The steering wheel's rim and airbag hub leave the eye a strip of that face (real: y -0.084
+  to 0.011 where both dials stand), and the speedometer (left) and altimeter (right) fill it, 0.15 m
+  apart at a bezel radius of 4.5 cm (6.6 cm stretched). The rim covers the speedometer's left edge
+  (about a quarter of its sample points), as a real wheel covers a gauge.
+- **The centre stack.** Below the flat dash top (real y 0.023): `gungauge`, `damageindicator` and
+  `missilegauge` in a row 7 cm under the top, `horizn` 10 cm below, all at 4 cm radius (`horizn`
+  4.5 cm), and `nitrogauge` (3 cm units) right of `horizn`, as `cockpit1` orders them. The compass
+  drum stands on the dash top at the stack's rear edge, its window tilted 10 degrees back from
+  facing, as `cockpit1` tilts it.
+- **Facing and clearance.** Every assembly faces the eye with its x level (YXZ: pitch
+  `-asin(d.y)`, yaw `atan2(d.x, d.z)`). Each is moved along the sight line off its surface until no
+  sample point (bezel rim, drum window, bar corners) has a car surface nearer the eye by less than
+  4.5 % of its distance (3 cm at least) or less than 1 cm behind it, B12's bias band: 3 to 4 cm on
+  the real car, 4.4 to 5.9 cm stretched. Every assembly passes with no point in that band.
+- **The glass.** The original's sight glass offset from its eye (`--dump-markers`: 0.448 m ahead,
+  1.4 cm low, tilted -4.7 degrees, scale 0.04), scaled by `k`, so the painted crosshair sits on the
+  2D pipper as in `cockpit1`: real (-0.381, 0.134, 1.058), stretched (-0.559, 0.575, 1.032) at
+  scale 0.0586.
+- **Regeneration.** The pylon loop reused `k` as its counter, which moved the wreck's front-bumper
+  cut to 1.65 m behind the nose; the loop now counts with `step`, and the wreck pieces regenerate
+  byte-identically to the shipped packs. Of the 124 pack files only the rigs changed: both
+  `player_autogyro` rigs (the new entries) and the real `autogyro` rig, whose `pylon3`/`pylon4` x
+  the script rounds to 0.261 where the shipped file held 0.26. The source `.glb` is unchanged.
+- **Not seen.** `nitrogauge` draws only with a nitrous injector fitted (`CockpitGauges`), which the
+  CLI cannot fit, so no shot shows it; its placement passed the clearance check. The Deck's copy is
+  not updated.
+- **The look.** `.scratch/b14-shots/corvette-<real|stretched>-level.png`, `-look-left.png` (door,
+  side window and mirror), `-look-right.png` (passenger seat, stack and compass) and `-bank.png`
+  (rolled right, the horizon ball following).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Both Corvette packs (`.scratchKeep\corvette\HDModels-real`, real and stretched, and the
 stretched copy on the Deck's `~/CSVM/HDModels/corvette`) seat the eye in the driver's seat with the
