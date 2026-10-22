@@ -484,10 +484,16 @@ puts the coverage edge on the scissor's own 0.5. Written as 0.5 it moved the edg
 opaque texel then took half coverage wherever its texture magnified (mip 0), which veiled the C3
 dome's cloud puffs and cut them along a triangle's diagonal where one triangle of a quad sat at
 mip 0 and the other did not, and it eroded every cutout's silhouette. The render mode
-alone changes nothing, because Godot's opaque pass writes alpha 1 unless that edge built-in is
-set, and `alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why
-the plain mode ships. The faithful presentation emits none of it, so its shader text and the
-goldens pinned on it are untouched.
+alone changes nothing; the edge built-in is what turns it on. With the built-in set and `ALPHA`
+written, Godot 4.7 counts the shader as alpha (`uses_alpha && (!uses_alpha_clip ||
+uses_alpha_antialiasing)` in its forward clustered `uses_alpha_pass`), so an Enhanced cutout draws
+in the transparent pass, not the opaque one: sorted per instance by render priority and depth with
+the blends, and blended through `BLEND_MODE_ALPHA_TO_COVERAGE`, which mixes `SRC_ALPHA` over the
+target on the covered samples. Two cutout surfaces of one instance therefore overlap their
+partial edge pixels in the sort's tie order (`analysis/goldens/README.md`).
+`alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why the plain
+mode ships. The faithful presentation emits none of it, so its shader text and the goldens pinned
+on it are untouched.
 
 All of that is a different question from `LastAlphaClass`, the extractor's own
 `None`/`Simple`/`Full` field, which is the header bit itself and the only reader that sees the

@@ -205,10 +205,11 @@ covers it.
   flown above that range; move it in a suite and photograph it from street level.** Raising C5's
   lamp glow 4.75 m left all 19 shots hash-identical.
 
-- **GOLD-20**, **Two blended surfaces of one mesh instance at one render priority draw in an order
-  taken from the whole scene's cull output; before blaming a change for a small move, check whether
-  the moved pixels sit on such a pair.** Seven invisible boxes parked 100 km below C1 moved
-  `c1-rocket-hit-enhanced` by 3 pixels at the radio tower's two alpha sheets, as
+- **GOLD-20**, **Two transparent-pass surfaces of one mesh instance at one render priority draw in
+  an order taken from the whole scene's cull output; before blaming a change for a small move,
+  check whether the moved pixels sit on such a pair.** Under Enhanced the pass holds the coverage
+  cutouts as well as the blends. Seven invisible boxes parked 100 km below C1 moved
+  `c1-rocket-hit-enhanced` by 3 pixels at the radio tower's cutouts, as
   `threading/worker_pool/max_threads=2` does (`analysis/goldens/README.md`).
 
 - **GOLD-21**, **A stereo golden that moves a few levels where the new code draws nothing is not yet
