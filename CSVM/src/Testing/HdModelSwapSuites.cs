@@ -154,7 +154,10 @@ internal static class HdModelSwapSuites
         "the cockpit1 interior takes the airframe's pack scope: planes/<model>/cockpit1.glb, the airframe's root file and a "
         + "per-node file each replace the one interior node they name, built on the interior's own builder, a texture-named "
         + "surface wears a material in PlaneBuilder.InteriorMaterials, the gauge bind finds the same needles, lamps, readouts, "
-        + "belts and zones as without the pack, and a pack holding only an exterior node replaces no interior node")]
+        + "belts and zones as without the pack, and a pack holding only an exterior node replaces no interior node. "
+        + "The aircraft export writes cockpit1.glb beside the airframe file, root cockpit1 at identity, and leaves the interior "
+        + "out of the airframe file; put unedited into a pack it replaces every meshed interior node with the original's vertex "
+        + "count, bounds in the node's frame, texture names and unlit surfaces")]
     internal static void CockpitInteriorSwap(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -218,12 +221,86 @@ internal static class HdModelSwapSuites
                     model.Free();
                 }
             }
+
+            CheckInteriorRoundTrip(ctx, planesGamez, textures, plane, plainModel, plainInterior, root);
         }
         finally
         {
             plainModel.Free();
         }
     }
+
+    // The export's cockpit1.glb, put unedited into a pack, redraws every meshed interior node as the
+    // original. The airframe file holds no interior node.
+    private static void CheckInteriorRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, string plane,
+        Node3D plainModel, Node3D plainInterior, string root)
+    {
+        string airframe = Path.Combine(root, "RoundTrip", "pack", "planes", plane, plane + ".glb");
+        string cockpit = GltfExporter.CockpitPathBeside(airframe);
+        Directory.CreateDirectory(Path.GetDirectoryName(airframe)!);
+        ctx.Same((long)Error.Ok, (long)GltfExporter.Export(plainModel, airframe, cockpitPath: cockpit), $"the aircraft export write result");
+        ctx.Check(Path.GetFileName(cockpit) == "cockpit1.glb" && File.Exists(cockpit), $"the export writes {cockpit}");
+        var airframeNodes = GltfNodes(airframe);
+        ctx.Check(airframeNodes.Count > 0 && !airframeNodes.Any(n => n.ResourceName == "cockpit1"),
+            $"the airframe file holds no cockpit1 node nodes={airframeNodes.Count}");
+        var cockpitRoot = GltfNodes(cockpit).FirstOrDefault();
+        ctx.Check(cockpitRoot is { ResourceName: "cockpit1" } && cockpitRoot.Xform.IsEqualApprox(Transform3D.Identity),
+            $"cockpit1.glb's root is cockpit1 at identity root={cockpitRoot?.ResourceName} xform={cockpitRoot?.Xform}");
+
+        using var trip = HdModels.Open(root, "RoundTrip");
+        var (builder, model) = BuildInterior(gamez, textures, plane, trip);
+        try
+        {
+            var meshed = Nodes(plainInterior).Where(n => DrawnMesh(n) != null).ToList();
+            int replaced = 0;
+            var wrong = new List<string>();
+            foreach (var original in meshed)
+            {
+                int index = original.GetMeta(AnimRuntime.IndexMeta).AsInt32();
+                var packed = builder.CockpitInterior is { } interior ? ByIndex(interior, index) : null;
+                var a = DrawnMesh(original)!;
+                var b = DrawnMesh(packed);
+                if (MeshChild(packed)?.HasMeta(SceneBuilder.GamezMeshMeta) != true || b == null)
+                {
+                    continue;
+                }
+
+                replaced++;
+                if (VertexCount(a) != VertexCount(b) || !a.GetAabb().IsEqualApprox(b.GetAabb())
+                    || !TextureNames(a).SetEquals(TextureNames(b)))
+                {
+                    wrong.Add($"{AnimRuntime.NameOf(original)}#{index} verts={VertexCount(a)}/{VertexCount(b)} aabb={a.GetAabb()}/{b.GetAabb()} textures={string.Join(",", TextureNames(a))}/{string.Join(",", TextureNames(b))}");
+                }
+            }
+
+            ctx.Check(meshed.Count > 0 && replaced == meshed.Count,
+                $"the round trip replaces every meshed interior node replaced={replaced}/{meshed.Count}");
+            ctx.Check(wrong.Count == 0,
+                $"each replaced interior node keeps its vertex count, bounds in its frame, texture names and unlit surfaces; differing:{string.Join("; ", wrong.Take(8))}");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
+    private static Godot.Collections.Array<GltfNode> GltfNodes(string file)
+    {
+        var state = new GltfState();
+        return new GltfDocument().AppendFromFile(file, state) == Error.Ok ? state.GetNodes() : new Godot.Collections.Array<GltfNode>();
+    }
+
+    private static int VertexCount(ArrayMesh mesh) =>
+        Enumerable.Range(0, mesh.GetSurfaceCount()).Sum(i => mesh.SurfaceGetArrayLen(i));
+
+    // Each surface's texture, as an export names its material and a pack maps it back, and whether it
+    // draws unlit.
+    private static HashSet<string> TextureNames(ArrayMesh mesh) =>
+        Enumerable.Range(0, mesh.GetSurfaceCount())
+            .Select(i => mesh.SurfaceGetMaterial(i))
+            .Select(m => Path.GetFileNameWithoutExtension(m?.ResourceName ?? string.Empty).ToLowerInvariant()
+                + (m is ShaderMaterial shader && GltfExporter.DrawsUnlit(shader) ? " unlit" : string.Empty))
+            .ToHashSet();
 
     // One packed interior build against the pack-free one. Given a replaced node, the interior draws
     // exactly that node from the pack; without one it draws none and the exterior node is replaced.

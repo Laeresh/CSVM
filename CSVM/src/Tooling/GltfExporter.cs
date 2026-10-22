@@ -36,8 +36,9 @@ public sealed class GltfExporter
     /// <c>.glb</c> binary, <c>.gltf</c> JSON with external buffers, anything else <c>.glb</c>. Reads the live scene through a duplicate, so the
     /// on-screen plane is untouched. With <paramref name="allStates"/> a hidden gamez node is kept
     /// and marked hidden, so a destructible's damage states reach the file, and the top gamez nodes
-    /// are shown. Returns the write <see cref="Error"/>.</summary>
-    public static Error Export(Node3D? plane, string path, bool allStates = false)
+    /// are shown. The mounted <c>cockpit1</c> interior is left out. <paramref name="cockpitPath"/>
+    /// gets it, all states kept, unmounted into its own units. Returns the first failed write.</summary>
+    public static Error Export(Node3D? plane, string path, bool allStates = false, string? cockpitPath = null)
     {
         if (plane == null || string.IsNullOrEmpty(path))
         {
@@ -48,12 +49,34 @@ public sealed class GltfExporter
         // shares the ArrayMesh resources, so the winding fix builds a new mesh rather than editing
         // one, and skins are overridden on the NODE.
         var copy = SceneCopy.Of(plane);
+        // ⚠ Out of the airframe file even when shown: its root file reaches interior nodes too, and
+        // cockpit1.glb is the interior's one source.
+        var interior = MountedInterior(copy);
+        interior?.GetParent().RemoveChild(interior);
         if (allStates)
         {
             ShowSubjects(copy);
         }
-        return Write(copy, path, allStates);
+        var err = Write(copy, path, allStates);
+        if (interior == null)
+        {
+            return err;
+        }
+        if (err != Error.Ok || cockpitPath == null)
+        {
+            interior.Free();
+            return err;
+        }
+        interior.Transform = Transform3D.Identity;
+        interior.Visible = true;
+        return Write(interior, cockpitPath, allStates: true);
     }
+
+    /// <summary>Where <c>--export-gltf=</c> puts the interior: <c>cockpit1</c> beside
+    /// <paramref name="airframePath"/>, in its format, the key a model pack reads it under.</summary>
+    public static string CockpitPathBeside(string airframePath) =>
+        airframePath[..^Path.GetFileName(airframePath).Length] + "cockpit1"
+        + (Path.GetExtension(NormalizeExtension(airframePath)).Equals(".gltf", StringComparison.OrdinalIgnoreCase) ? ".gltf" : ".glb");
 
     /// <summary>Writes several live subtrees into one glTF under a single root, each at its world
     /// transform, so neighbouring terrain tiles line up in the file as they do in the world. A node
@@ -88,14 +111,16 @@ public sealed class GltfExporter
 
     /// <summary>Exports <paramref name="node"/> to a timestamped GLB in the git-ignored
     /// <c>Exports/</c> directory beside the Godot project. <paramref name="nodeName"/> becomes a
-    /// filesystem-safe portion of the filename.</summary>
+    /// filesystem-safe portion of the filename. An aircraft's interior goes beside it with a
+    /// <c>_cockpit1</c> suffix, so a later export keeps it; renamed <c>cockpit1.glb</c> in a pack.</summary>
     public static Error ExportToExports(Node3D? node, string nodeName)
     {
         if (node == null)
         {
             return Export(null, "");
         }
-        return Export(node, ExportsPath(nodeName));
+        string path = ExportsPath(nodeName);
+        return Export(node, path, cockpitPath: Path.ChangeExtension(path, null) + "_cockpit1.glb");
     }
 
     /// <summary>The CLI one-shot, ticked from the tail of <c>_Process</c>: wait for the session to
@@ -109,10 +134,16 @@ public sealed class GltfExporter
         }
         // A --node= subject's own reset state may switch it off (a flyout template waits for its
         // launch). Its damage states wait hidden for their hits.
-        var err = Export(plane, _pendingPath, allStates: spec.NodeName != null);
+        var err = Export(plane, _pendingPath, allStates: spec.NodeName != null, cockpitPath: CockpitPathBeside(_pendingPath));
         _pendingPath = null;
         tree.Quit(err == Error.Ok ? 0 : 1);
     }
+
+    /// <summary>Whether a remake skin draws its colour without light: an unshaded shader that takes
+    /// no light term, as a <c>lighting: false</c> model's surfaces are built.</summary>
+    internal static bool DrawsUnlit(ShaderMaterial skin) =>
+        skin.Shader?.Code is { } code && code.Contains(", unshaded", StringComparison.Ordinal)
+        && !code.Contains("csky_lights.gdshaderinc", StringComparison.Ordinal);
 
     private static string ExportsPath(string name)
     {
@@ -122,6 +153,11 @@ public sealed class GltfExporter
         return Path.Combine(directory,
             $"crimsonskies_{SafeFileName(name)}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
     }
+
+    // The interior PlaneBuilder mounts as a direct child of the model it returns, by gamez name.
+    private static Node3D? MountedInterior(Node root) =>
+        root.GetChildren().OfType<Node3D>().FirstOrDefault(c => c.HasMeta(Mech3.AnimRuntime.NameMeta)
+            && c.GetMeta(Mech3.AnimRuntime.NameMeta).AsString().Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
 
     private static bool HasAncestorIn(Node3D node, IReadOnlyList<Node3D> nodes)
     {
@@ -321,13 +357,19 @@ public sealed class GltfExporter
             // Two-sided source polygons keep their disabled culling; so does a surface whose
             // winding could not be reversed, where two-sided is still the lesser wrong.
             bool twoSided = !reversed[i] || (shader.Shader?.Code ?? string.Empty).Contains("cull_disabled");
+            var albedo = shader.GetShaderParameter("albedo_tex").As<Texture2D>();
             var std = new StandardMaterial3D
             {
                 // The original texture without its extension, the name a model pack maps back by.
                 ResourceName = Path.GetFileNameWithoutExtension(shader.ResourceName),
-                AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
+                AlbedoTexture = albedo,
                 VertexColorUseAsAlbedo = true,
                 CullMode = twoSided ? BaseMaterial3D.CullModeEnum.Disabled : BaseMaterial3D.CullModeEnum.Back,
+                // An untextured surface maps back by no name, so a pack lights it unless the file
+                // says unlit (the horizon ball). A texture-named one takes its model's lighting.
+                ShadingMode = albedo == null && DrawsUnlit(shader)
+                    ? BaseMaterial3D.ShadingModeEnum.Unshaded
+                    : BaseMaterial3D.ShadingModeEnum.PerPixel,
             };
             var tint = shader.GetShaderParameter("albedo_color");
             if (tint.VariantType == Variant.Type.Color)

@@ -104,7 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, cockpit1 replacements
 
-21. ☐ [cloud] code, [local] check: the export writes `cockpit1.glb`; unedited round trip
+21. ☑ [cloud] code, [local] check: the export writes `cockpit1.glb`; unedited round trip
 22. ☐ [local] Gauge table in interior units, and replaced dials that keep driving
 
 ### Wave D, under the headset
@@ -431,7 +431,54 @@ original file untouched.
 
 # Wave C, cockpit1 replacements
 
-## C21 ☐ [cloud] code, [local] check: the export writes `cockpit1.glb`; unedited round trip
+## C21 ☑ [cloud] code, [local] check: the export writes `cockpit1.glb`; unedited round trip
+
+**Landed.** The interior was left out because `PlaneBuilder` builds it hidden and the exporter frees
+every hidden `Node3D`; in cockpit view it would have ridden in the airframe file, mounted.
+`GltfExporter.Export` now takes an optional `cockpitPath`. It finds the mounted interior in its
+copy (the direct child of the plane root whose gamez name is `cockpit1`, where
+`PlaneBuilder.MountCockpitInterior` adds `CockpitInterior`), detaches it before the airframe write,
+and writes it to `cockpitPath` with every state kept (`allStates`), shown, and its root `cockpit1`
+at identity: no 0.04 mount, no tilt, no `cockpit_camera` offset, so each node is in the interior's
+own frame and units with the gamez hierarchy intact.
+
+- **Call sites.** `--export-gltf=<path>` writes `cockpit1.glb` (or `.gltf`, following the path's
+  format) beside the airframe file (`GltfExporter.CockpitPathBeside`), the key a pack reads it
+  under. F10 and NodeLab's single export (`ExportToExports`) write `<file>_cockpit1.glb` beside the
+  timestamped file, so a later export never overwrites an earlier interior; the author renames it
+  `cockpit1.glb` in the pack. `Launch/Launcher.cs` is unchanged: both call sites already go through
+  `Tick` and `ExportToExports`. A subtree with no mounted interior (a world node, an AI build) writes
+  no second file.
+- **The airframe file drops the interior always.** Two copies would not fight on the round trip
+  (`cockpit1.glb` is the nearer root and wins), but an author editing the interior in the airframe
+  file would see no change, and the file would carry a mounted copy at 0.04 and the head tilt. One
+  file per scope keeps one source.
+- **Untextured unlit surfaces.** The first round-trip shot differed at the artificial horizon's ball:
+  `pfhorizon`'s surfaces are untextured on a `lighting: false` model, exported under a writer-given
+  name, and a non-texture-named replacement surface is lit by default (`SceneBuilder.MappedReplacement`).
+  The exporter now writes `KHR_materials_unlit` on an untextured surface whose skin draws unlit
+  (`GltfExporter.DrawsUnlit`: an `unshaded` remake shader without the light include). A texture-named
+  surface is unchanged, since it already takes its model's lighting flag.
+- **Suite `hd-model-cockpit1`, extended** (`CheckInteriorRoundTrip`): exports the built airframe
+  with `CockpitPathBeside`, checks the airframe file holds no `cockpit1` node and `cockpit1.glb`'s
+  root is `cockpit1` at identity, packs it unedited, and compares every meshed interior node:
+  replaced 67 of 67 on the Bloodhawk, each with the original's vertex count, bounds in the node's
+  frame, texture names and unlit surfaces (`g784` under both `altimeter` and `speedometer` resolves
+  by path). Without the unlit fix the suite fails on `pfhorizon` alone.
+- **Shots** (`.scratch\c21-shots\`): a CLI export (`--viewer --plane=player_bhawk --export-gltf=`)
+  packed as `HDModels/roundtrip/planes/player_bhawk/{player_bhawk,cockpit1}.glb` logs `67 cockpit
+  interior mesh instance(s)`, and its `--fly --stage=empty --view=cockpit` shot differs from the
+  pack-free one in 0.03 % of pixels (275 px over 8 levels), all in the frame's bottom ten rows, where
+  a pale rim surface draws over the padding. The likely cause, one draw priority per texture on a
+  replacement surface, is in `SceneBuilder` and untraced.
+- **Not covered.** The aircraft export path is the viewer's parked plane (`--viewer`), which builds
+  the flat interior. A stereo build's interior would carry the head-plate cut and the reticle
+  overlays, and in flight the session's subject is the world root, whose interiors sit too deep to
+  be found, so neither reaches `cockpit1.glb`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `--export-gltf=<path>` and F10 write `cockpit1.glb` beside the airframe file, in interior
 units with gamez node names and texture-named materials; put unedited into

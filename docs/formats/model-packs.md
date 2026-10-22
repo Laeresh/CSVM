@@ -26,7 +26,10 @@ The surest start is an export of the original: **F10** in the game, or `--export
 (`docs/cli.md`), writes an aircraft or, with `--chapter=` and `--node=`, a world subtree, with the
 gamez node names and texture-named materials kept. Put unedited into a pack under its root's key
 (`planes/player_bhawk/player_bhawk.glb` for the Bloodhawk), that file draws as the original does;
-edit it from there.
+edit it from there. An aircraft's cockpit interior is never in that file: the export writes it
+beside it as `cockpit1.glb` (F10: `<file>_cockpit1.glb`, renamed `cockpit1.glb` in the pack), root
+`cockpit1` at the origin, in the interior's own units and hierarchy with every state node kept, so
+`planes/player_bhawk/cockpit1.glb` replaces the interior node by node.
 
 ## Reference
 
@@ -87,7 +90,9 @@ its base colour when it has no texture. A textured surface draws the texture tim
 alpha included, as glTF specifies. It fogs, takes world light and follows a graphics-mode switch
 like any surface, but no livery or texture pack reaches it. Flags come from the standard glTF
 fields: `doubleSided`, `alphaMode` `MASK` (cut at the file's `alphaCutoff`, 0.5 when absent) and
-`BLEND`, and `KHR_materials_unlit`. It draws at priority 0.
+`BLEND`, and `KHR_materials_unlit`. It draws at priority 0. An untextured original surface is
+exported under such a name, with `KHR_materials_unlit` when its model is `lighting: false` (the
+artificial horizon's ball), so it draws as lit or unlit as the original.
 
 Within one mesh, surfaces draw in the file's surface order. A one-sided surface is culled like a
 one-sided original. Replacement surfaces count in the world's surface census as original ones do
@@ -193,7 +198,13 @@ than the one this machine draws its store on.
   `Mech3/SceneBuilder.cs` and `Mech3/WorldBuilder.cs`, covered by the `hd-model-mesh-import` and
   `hd-model-swap` suites. The interior's scope is `Mech3/PlaneBuilder.cs`, covered by the
   `hd-model-cockpit1` suite, which also binds the cockpit gauges over a replaced gauge face on the
-  real install and finds the same needles, lamps, readouts, belts and damage zones as without it. The rig rules are `Mech3/PlaneRig.cs` and `Mech3/PlaneRigPatch.cs`, covered
+  real install and finds the same needles, lamps, readouts, belts and damage zones as without it.
+  The same suite exports the Bloodhawk and packs its `cockpit1.glb` unedited: all 67 meshed interior
+  nodes are replaced, each with the original's vertex count, bounds, texture names and unlit
+  surfaces, and the airframe file holds no interior node. A cockpit-view shot of that pack differs
+  from the original in 0.03 % of pixels, at the frame's bottom rows, where a pale rim surface draws
+  over the padding; the likely cause, one draw priority per texture on a replacement, is untraced.
+  The rig rules are `Mech3/PlaneRig.cs` and `Mech3/PlaneRigPatch.cs`, covered
   by `CSVM.Tests/PlaneRigTests.cs` and the `plane-rig` suite.
 - The UV-compatible livery rule is measured on the Bloodhawk. An unedited export, packed one copy
   per node or as the one root file `planes/player_bhawk/player_bhawk.glb`, wears three patterns with
