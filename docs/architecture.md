@@ -90,7 +90,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
 - `src/Mech3/ArtImage.cs`, the one door menu art is loaded through: a path in, a decoded image or null out, decoder by extension.
 - `src/Mech3/MarkerRig.cs`, a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
-- `src/Mech3/PlaneRig.cs`, one airframe's `rig.json`: moved markers and prop, surface and flare overrides, validated loudly at load.
+- `src/Mech3/PlaneRig.cs`, one airframe's `rig.json`: moved markers, prop, surface and flare overrides and the cockpit section, validated loudly at load.
 - `src/Mech3/PlaneRigPatch.cs`, applies a `PlaneRig` to the built plane before any marker read: moves and adds markers, stamps prop/surface overrides, picks flares.
 - `src/Mech3/CompiledAnim.cs`, reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs`, the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.

@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, rig section and pack scope (all [cloud])
 
-1. ☐ [cloud] `PlaneRig` `cockpit` section: reader and validation
+1. ☑ [cloud] `PlaneRig` `cockpit` section: reader and validation
 2. ☐ [cloud] The interior builder gets the airframe's pack scope
 
 ### Wave B, body cockpits on the flat screen
@@ -128,7 +128,61 @@ D31 and D32 both edit `Flight/Hud/XrCockpit.cs`. Never run those pairs in parall
 
 # Wave A, rig section and pack scope
 
-## A1 ☐ [cloud] `PlaneRig` `cockpit` section: reader and validation
+## A1 ☑ [cloud] `PlaneRig` `cockpit` section: reader and validation
+
+**Landed.** `PlaneRig.Cockpit` (`Mech3/PlaneRig.cs`) is a `RigCockpit`, or null when `rig.json` has
+no `cockpit` key. The reader parses and validates only; nothing it reads is drawn yet. The schema:
+
+```json
+"cockpit": {
+  "from": "body",
+  "hide": ["g12", "roofnode"],
+  "gauges": {
+    "speedometer": { "position": [x, y, z], "rotation": [rx, ry, rz], "scale": s },
+    "glass": { "position": [x, y, z] }
+  }
+}
+```
+
+- `cockpit` is an object with the keys `from`, `hide` and `gauges`, each optional; any other key fails.
+- `from` is the string `"body"` (`RigCockpit.FromBody` true) or absent (false: the airframe keeps
+  `cockpit1`). Any other value, the empty string included, fails.
+- `hide` is an array of non-empty strings (`RigCockpit.Hide`, in file order). It fails without
+  `"from": "body"`, even when empty. A name listed twice, compared without case, fails.
+- `gauges` is an object from assembly name to pose (`RigCockpit.Gauges`, a dictionary whose lookup
+  ignores case). A name defined twice, compared without case, fails.
+- A pose (`RigGaugePose`) is an object with the keys `position`, `rotation` and `scale`; any other key
+  fails. `position` is required: 3 finite numbers, plane-frame metres in body mode, `cockpit1`'s own
+  frame and units otherwise. `rotation` is optional: 3 finite numbers, Euler degrees in Godot's YXZ
+  order (basis `Ry * Rx * Rz`), the convention of `Node3D.RotationDegrees`, so B12, B13 and C22 can
+  assign and read it without a conversion. `scale` is optional: one finite number above zero, a
+  uniform factor. An absent optional field is null and keeps the assembly's own value in that frame.
+- Non-finite numbers fail, including a literal past float range.
+
+The name checks run in `PlaneRigPatch.CheckCockpit`, called at the top of `PlaneRigPatch.Apply` before
+the first edit. They read the GAMEZ tree, never the built one, so an AI or non-interior build rejects
+the same rig. Every failure is an `InvalidDataException` naming the file and the entry, so the menu
+launch fallback (`PlaneRigPatch.PlayerNotice`, flown without the whole rig plus the notice) covers the
+section unchanged.
+- A `hide` name must be an airframe node outside `cockpit1`, `cockpit2`, `destroyed` and
+  `player_damage_off`, matched without case like every other rig name.
+- A `gauges` name must be a direct child of the first `gauges` node inside the root's direct child
+  `cockpit1`, matched without case. The error lists the airframe's own names.
+- The reserved key `glass` (`RigCockpit.GlassKey`) needs a polygon in `cockpit1` whose texture is
+  `cockpit6` or `crosshair` (`GunsightReticle.IsGlass`).
+
+The data's assembly names per player airframe (pinned by
+`PlaneRigTests.EachPlayerAirframeAcceptsItsOwnAssembliesAndGlass`): every airframe has `comp`,
+`altimeter`, `speedometer`, `damageindicator`, `gungauge`, `missilegauge` and `nitrogauge`. The
+horizon assembly is `horizn` (Bloodhawk, Autogyro, Brigand), `horiz` (Devastator, Avenger, Balmoral,
+Kestrel, Peacemaker), `horizm` (Fury) or `hparent` (Warhawk, Firebrand). The Brigand's and Firebrand's
+sight glass is itself a `gauges` child (`g730`, `g184`); on every other airframe it sits elsewhere in
+`cockpit1` (`inside`, `dashboard` or a `g` node under `inside`). B12 has to treat a rig naming both
+`glass` and `g730` on the Brigand as one polygon placed twice.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `rig.json` accepts a `cockpit` section with `from` (`"body"`; absent means the airframe's
 `cockpit1`), `hide` (gamez node names) and `gauges` (assembly name to position, rotation and scale),

@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using Godot;
 using Xunit;
@@ -24,6 +28,26 @@ public class PlaneRigTests
           "flares": { "left": "wing_flare1", "right": "wing_flare2" }
         }
         """;
+
+    private static readonly Lazy<GameZ> Planes = new(() =>
+        GameZ.Load(SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "planes.zip"))));
+
+    /// <summary>Every assembly the data carries per player airframe, so a rig naming them passes. The
+    /// Brigand's and Firebrand's sight glass is itself a child of <c>gauges</c>.</summary>
+    public static TheoryData<string, string> Assemblies => new()
+    {
+        { "player_bhawk", "horizn,comp,altimeter,missilegauge,gungauge,speedometer,nitrogauge,damageindicator" },
+        { "player_pfighter", "horiz,comp,altimeter,speedometer,damageindicator,missilegauge,gungauge,nitrogauge" },
+        { "player_fury", "horizm,comp,speedometer,altimeter,missilegauge,gungauge,damageindicator,nitrogauge" },
+        { "player_warhawk", "missilegauge,hparent,speedometer,altimeter,gungauge,damageindicator,comp,nitrogauge" },
+        { "player_autogyro", "horizn,altimeter,speedometer,comp,gungauge,missilegauge,nitrogauge,damageindicator" },
+        { "player_avenger", "horiz,comp,altimeter,speedometer,missilegauge,gungauge,nitrogauge,damageindicator" },
+        { "player_balmoral", "horiz,comp,altimeter,speedometer,missilegauge,gungauge,nitrogauge,damageindicator" },
+        { "player_brigand", "horizn,comp,g730,speedometer,altimeter,missilegauge,gungauge,damageindicator,nitrogauge" },
+        { "player_fbrand", "hparent,comp,altimeter,speedometer,g184,gungauge,missilegauge,nitrogauge,damageindicator" },
+        { "player_kestrel", "horiz,comp,altimeter,speedometer,damageindicator,missilegauge,gungauge,nitrogauge" },
+        { "player_peacemaker", "horiz,comp,altimeter,speedometer,missilegauge,gungauge,nitrogauge,damageindicator" },
+    };
 
     [Fact]
     public void AFullFileParsesEverySection()
@@ -165,6 +189,114 @@ public class PlaneRigTests
     [Fact]
     public void AnAileronWithoutASideIsRejected() =>
         Rejects("""{ "surfaces": [ { "node": "l_aileron1", "kind": "aileron" } ] }""", "surfaces[0] (l_aileron1)", "needs a side");
+
+    [Fact]
+    public void ABodyCockpitParsesWithAbsentPoseFieldsNull()
+    {
+        var rig = PlaneRig.Parse(
+            """
+            { "cockpit": { "from": "body", "hide": ["g12", "roofnode"],
+                "gauges": { "speedometer": { "position": [0.1, 0.9, -1.2], "rotation": [-20, 0, 5], "scale": 0.05 },
+                            "glass": { "position": [0, 1.1, -1.0] } } } }
+            """,
+            "cockpit.json");
+
+        var cockpit = rig.Cockpit!;
+        Assert.True(cockpit.FromBody);
+        Assert.Equal(new[] { "g12", "roofnode" }, cockpit.Hide);
+        Assert.Equal(new RigGaugePose(new Vector3(0.1f, 0.9f, -1.2f), new Vector3(-20f, 0f, 5f), 0.05f), cockpit.Gauges["SPEEDOMETER"]);
+        Assert.Equal(new RigGaugePose(new Vector3(0f, 1.1f, -1.0f), null, null), cockpit.Gauges[RigCockpit.GlassKey]);
+    }
+
+    [Fact]
+    public void ACockpitWithoutFromKeepsCockpit1AndNoSectionIsNull()
+    {
+        var rig = PlaneRig.Parse("""{ "cockpit": { "gauges": { "comp": { "position": [1, 2, 3] } } } }""", "c1.json");
+
+        Assert.False(rig.Cockpit!.FromBody);
+        Assert.Empty(rig.Cockpit.Hide);
+        Assert.Single(rig.Cockpit.Gauges);
+        Assert.Null(PlaneRig.Parse("{}", "empty.json").Cockpit);
+    }
+
+    [Theory]
+    [InlineData("""{ "cockpit": [] }""", "cockpit", "not a JSON object")]
+    [InlineData("""{ "cockpit": { "seat": [0, 1, 0] } }""", "cockpit", "'seat'")]
+    [InlineData("""{ "cockpit": { "from": "cockpit1" } }""", "cockpit.from", "'cockpit1'")]
+    [InlineData("""{ "cockpit": { "from": "" } }""", "cockpit.from", "non-empty")]
+    [InlineData("""{ "cockpit": { "hide": ["g12"] } }""", "cockpit.hide", "needs \"from\": \"body\"")]
+    [InlineData("""{ "cockpit": { "from": "body", "hide": "g12" } }""", "cockpit.hide", "not a JSON array")]
+    [InlineData("""{ "cockpit": { "from": "body", "hide": ["g12", 4] } }""", "cockpit.hide[1]", "non-empty")]
+    [InlineData("""{ "cockpit": { "from": "body", "hide": ["g12", "G12"] } }""", "cockpit.hide[1] (G12)", "listed twice")]
+    [InlineData("""{ "cockpit": { "gauges": [] } }""", "cockpit.gauges", "not a JSON object")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 0, 0] }, "Comp": { "position": [0, 0, 0] } } } }""", "cockpit.gauges.Comp", "defined twice")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": [0, 0, 0] } } }""", "cockpit.gauges.comp", "not a JSON object")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "rotation": [0, 0, 0] } } } }""", "cockpit.gauges.comp", "missing 'position'")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 0, 0], "tilt": 3 } } } }""", "cockpit.gauges.comp", "'tilt'")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 1e39, 0] } } } }""", "cockpit.gauges.comp.position", "finite")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 0, 0], "rotation": [0, 90] } } } }""", "cockpit.gauges.comp.rotation", "3 numbers")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 0, 0], "scale": 0 } } } }""", "cockpit.gauges.comp.scale", "positive")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 0, 0], "scale": -2 } } } }""", "cockpit.gauges.comp.scale", "positive")]
+    [InlineData("""{ "cockpit": { "gauges": { "comp": { "position": [0, 0, 0], "scale": 1e39 } } } }""", "cockpit.gauges.comp.scale", "finite")]
+    public void AMalformedCockpitIsRejected(string json, string entry, string problem) =>
+        Rejects(json, entry, problem);
+
+    [Fact]
+    public void CockpitNamesAreCheckedOnTheGamezTree()
+    {
+        var (gamez, root) = Airframe();
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "body", "roof" };
+
+        PlaneRigPatch.CheckCockpit(Cockpit("""{ "from": "body", "hide": ["ROOF"], "gauges": { "Speedometer": { "position": [0, 0, 0] }, "glass": { "position": [0, 0, 0] } } }"""), gamez, root, known);
+        CockpitRejects("""{ "from": "body", "hide": ["canopy"] }""", gamez, root, known, "cockpit.hide[0] (canopy)", "no node");
+        CockpitRejects("""{ "from": "body", "hide": ["speedometer"] }""", gamez, root, known, "cockpit.hide[0] (speedometer)", "no node");
+        CockpitRejects("""{ "gauges": { "horizn": { "position": [0, 0, 0] } } }""", gamez, root, known, "cockpit.gauges.horizn", "it has: speedometer");
+
+        gamez.Materials[0].TextureName = "panel.tif";
+        CockpitRejects("""{ "gauges": { "glass": { "position": [0, 0, 0] } } }""", gamez, root, known, "cockpit.gauges.glass", "no sight glass");
+    }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(Assemblies))]
+    public void EachPlayerAirframeAcceptsItsOwnAssembliesAndGlass(string plane, string assemblies)
+    {
+        var gamez = Planes.Value;
+        var root = gamez.FindByName(plane)!;
+        var entries = string.Join(", ", (assemblies + ",glass").Split(',').Select(a => $"\"{a}\": {{ \"position\": [0, 0, 0] }}"));
+        PlaneRigPatch.CheckCockpit(Cockpit($$"""{ "gauges": { {{entries}} } }"""), gamez, root, new HashSet<string>());
+        CockpitRejects("""{ "gauges": { "compass": { "position": [0, 0, 0] } } }""", gamez, root, new HashSet<string>(), "cockpit.gauges.compass", "no assembly");
+    }
+
+    private static PlaneRig Cockpit(string section) => PlaneRig.Parse($$"""{ "cockpit": {{section}} }""", "probe/rig.json");
+
+    private static void CockpitRejects(string section, GameZ gamez, GameZNode root, HashSet<string> known, string entry, string problem)
+    {
+        var e = Assert.Throws<InvalidDataException>(() => PlaneRigPatch.CheckCockpit(Cockpit(section), gamez, root, known));
+        Assert.Contains("'probe/rig.json'", e.Message);
+        Assert.Contains(entry + ":", e.Message);
+        Assert.Contains(problem, e.Message);
+    }
+
+    // plane > body, cockpit1 > gauges > speedometer, cockpit1 > inside (the glass mesh).
+    private static (GameZ Gamez, GameZNode Root) Airframe()
+    {
+        var gamez = new GameZ();
+        string[] names = { "plane", "body", "cockpit1", "gauges", "speedometer", "inside" };
+        foreach (string name in names)
+        {
+            gamez.Nodes.Add(new GameZNode { Name = name });
+        }
+
+        gamez.Nodes[0].Children.AddRange(new[] { 1, 2 });
+        gamez.Nodes[2].Children.AddRange(new[] { 3, 5 });
+        gamez.Nodes[3].Children.Add(4);
+        gamez.Materials.Add(new GameZMaterial { TextureName = "cockpit6.tif" });
+        var mesh = new GameZMesh();
+        mesh.Polygons.Add(new GameZPolygon { MaterialIndex = 0 });
+        gamez.Meshes.Add(mesh);
+        gamez.Nodes[5].MeshIndex = 0;
+        return (gamez, gamez.Nodes[0]);
+    }
 
     private static void Rejects(string json, string entry, string problem)
     {

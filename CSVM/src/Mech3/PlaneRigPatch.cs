@@ -73,6 +73,7 @@ public static class PlaneRigPatch
     public static FlareChoice Apply(PlaneRig rig, Node3D built, GameZ gamez, GameZNode root)
     {
         var known = ModelNames(gamez, root);
+        CheckCockpit(rig, gamez, root, known);
         var byName = new Dictionary<string, List<Node3D>>(StringComparer.OrdinalIgnoreCase);
         Index(built, byName);
         var edits = new List<Action>();
@@ -100,6 +101,44 @@ public static class PlaneRigPatch
         }
 
         return acc;
+    }
+
+    /// <summary>Checks the cockpit section's names on the gamez tree, not the built one. A build with no
+    /// interior then rejects what a pilot's build rejects. A hide name must be an airframe node outside the
+    /// alternate-state subtrees. A gauge must be a child of the interior's <c>gauges</c> node. The glass key
+    /// needs a sight-glass polygon in the interior. It edits nothing.</summary>
+    internal static void CheckCockpit(PlaneRig rig, GameZ gamez, GameZNode root, HashSet<string> known)
+    {
+        if (rig.Cockpit is not { } cockpit)
+        {
+            return;
+        }
+
+        for (int i = 0; i < cockpit.Hide.Count; i++)
+        {
+            if (!known.Contains(cockpit.Hide[i]))
+            {
+                throw Fail(rig, Label("cockpit.hide", i, cockpit.Hide[i]), $"no node '{cockpit.Hide[i]}' on the model");
+            }
+        }
+
+        var interior = Children(gamez, root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        var gauges = interior == null ? null : FindIn(gamez, interior, n => n.Name.Equals("gauges", StringComparison.OrdinalIgnoreCase));
+        var assemblies = gauges == null ? new List<string>() : Children(gamez, gauges).ConvertAll(n => n.Name);
+        foreach (string name in cockpit.Gauges.Keys)
+        {
+            if (name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase))
+            {
+                if (interior == null || FindIn(gamez, interior, n => HoldsGlass(gamez, n)) == null)
+                {
+                    throw Fail(rig, "cockpit.gauges." + name, "the airframe's cockpit1 holds no sight glass (a polygon wearing cockpit6 or crosshair)");
+                }
+            }
+            else if (!assemblies.Exists(a => a.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw Fail(rig, "cockpit.gauges." + name, $"no assembly '{name}' under the airframe's cockpit1 gauges (it has: {string.Join(", ", assemblies)})");
+            }
+        }
     }
 
     // A marker moves to its rig position by rewriting its local origin under the parent's plane frame.
@@ -245,6 +284,32 @@ public static class PlaneRigPatch
         displaced.ExceptWith(chosen);
         return new FlareChoice(chosen, displaced);
     }
+
+    private static List<GameZNode> Children(GameZ gamez, GameZNode node) =>
+        node.Children.FindAll(c => c >= 0 && c < gamez.Nodes.Count).ConvertAll(c => gamez.Nodes[c]);
+
+    private static GameZNode? FindIn(GameZ gamez, GameZNode node, Predicate<GameZNode> match)
+    {
+        if (match(node))
+        {
+            return node;
+        }
+
+        foreach (var child in Children(gamez, node))
+        {
+            if (FindIn(gamez, child, match) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HoldsGlass(GameZ gamez, GameZNode node) =>
+        node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count && gamez.Meshes[node.MeshIndex] is { } mesh
+        && mesh.Polygons.Exists(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
+            && gamez.Materials[p.MaterialIndex].TextureName is { } texture && GunsightReticle.IsGlass(texture));
 
     // ⚠ Never add a firepoint or pylon. Loadout.BindAi arms an AI over every one the tree carries,
     // so each added one is an added gun or store.

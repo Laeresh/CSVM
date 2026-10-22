@@ -509,10 +509,12 @@ whose interior or wreck carries a same-named node resolves to the authored one i
 
 ## src/Mech3/PlaneRig.cs
 The engine-free reader for an airframe's `rig.json`: marker positions in the marker frame, prop
-overrides (axis, rate, blur disc), control-surface overrides (kind, side, hinge) and the two
-wingtip flare nodes. Every section is optional and an absent entry keeps the original's value. It
-owns the load-time checks that need no built plane (keys, finite numbers, axes, pylon number and
-side); node names are checked where the rig is applied, `PlaneRigPatch.cs`. Read `MarkerRig.cs`,
+overrides (axis, rate, blur disc), control-surface overrides (kind, side, hinge), the two wingtip
+flare nodes and the `cockpit` section (`RigCockpit`: body mode, a hide list, and a gauges table of
+`RigGaugePose`, rotation in Godot's YXZ Euler degrees). Every section is optional and an absent
+entry keeps the original's value. It owns the checks that need no airframe tree (keys, finite
+numbers, axes, pylon number and side, positive scale, a name defined twice, a hide list without body
+mode); names are checked where the rig is applied, `PlaneRigPatch.cs`. Read `MarkerRig.cs`,
 `PropParts.cs`, `ControlSurfaces.cs` and `WingLights.cs` next for what each override replaces.
 
 ## src/Mech3/PlaneRigPatch.cs
@@ -521,9 +523,9 @@ read or `Loadout.Bind`. It moves marker nodes, adds a `target` or reference mark
 under `markers` (never a firepoint or pylon, since `Loadout.BindAi` arms an AI over every one the
 tree carries), stamps prop and surface overrides as metas `PropParts` and `ControlSurfaces` read, and
 picks the flare set by each original's plane-frame x, a rig flare stamped with the originals it replaced
-(`WingLights.StandsForMeta`). Rig vectors are plane-frame and become node-local here. A name the model
-lacks outside its alternate-state subtrees throws naming the file and entry, every check before the first
-edit; `PlayerNotice`, set by the launcher's menu entry, makes `Build` report it and build without the rig. Rigs come from `HdModels.RigFor`.
+(`WingLights.StandsForMeta`). Rig vectors are plane-frame and become node-local here. A name the model lacks outside its alternate-state subtrees throws naming the file and entry, every check before the first edit.
+`CheckCockpit` checks cockpit names on the gamez tree, so an interior-less build rejects the same rig: hide names are airframe nodes, gauges are children of `cockpit1`'s `gauges`, and `glass` needs a `cockpit6` or `crosshair` polygon.
+`PlayerNotice`, set by the launcher's menu entry, makes `Build` report it and build without the rig. Rigs come from `HdModels.RigFor`.
 
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,
