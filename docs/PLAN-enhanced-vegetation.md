@@ -11,7 +11,7 @@ gives forests mass past the card fade, dresses ground the original leaves bare, 
 and ground cover up close. Each of those four is one wave, prototyped and judged at the controls
 before it ships. The scope came from a grilling in this session; its calls are the Decisions table,
 which is the authority where the prose disagrees. The plan draws no `backlog` issues. #57 (CM23
-co-op host perf) is a constraint the budget holds, not an item here; #142 and #205 (Enhanced C5
+co-op host perf) is out of reach: CM23 is C5, which has no vegetation entry; #142 and #205 (Enhanced C5
 city look) touch clutter but are city bugs and stay separate.
 
 The plan assumes the decode in [`org/clutter.md`](org/clutter.md) and leaves it untouched: the
@@ -50,7 +50,7 @@ the sidecar under Rich and nothing else; an Original golden that moves is a defe
 | 15 | Collision of 3D trees | **Not solid**, like the cards, so the setting is visual only and co-op peers on different settings play the same game |
 | 16 | 3D trees vs cards | **A Blender look-alike per card species within a near radius, dithering over to the original card beyond it**, on the same stamps |
 | 17 | Who models | **Agents, with scripted Blender run headless**, exporting glTF; you judge renders beside the card |
-| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; CM23's co-op host (#57) must not get slower; the Deck stays Original until a Deck item measures it |
+| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; a wave that gives an entry to a chapter with co-op missions also measures a co-op host there (the method is `analysis/cm23-host-perf/FINDINGS.md`); the Deck stays Original until a Deck item measures it |
 | 19 | Card shader upgrades (sway, sun-side shading, contact shadow) | **Wave A**, beside jitter and tint |
 
 Defaults set without a question, open to change: the variation comes from a fixed seed (identical on
@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ Card shading: wind sway, sun-side shading, contact shadow
 5. ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 6. ☑ The lab's paint tool: texture picks and a brush mask
-7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
+7. ☐ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
 
 ### Wave B, mass
 
@@ -624,13 +624,14 @@ stamp).
 
 **Verified.** <pending orchestrator run>
 
-## A7 ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
+## A7 ☐ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
 
-**Goal.** Wave A's cost measured, a ceiling for the plan set from it, CM23's co-op host no slower,
-and the Enhanced goldens Wave A moved re-pinned.
+**Goal.** Wave A's cost measured, a ceiling for the plan set from it, and the Enhanced goldens Wave
+A moved re-pinned.
 
-**Evidence (confidence: lead-only).** Decision 18. The CM23 measurement method is
-`analysis/cm23-host-perf/FINDINGS.md`.
+**Evidence (confidence: lead-only).** Decision 18. No co-op host measurement: the sidecar lists
+C1, C1B, C2, C3 and C4, and a chapter with no entry builds no Rich variant and compiles no Rich
+shader, so C5's CM23 (#57) draws as before.
 
 **Approach.** <TODO: the fixed worst-case view per chapter (low over C1's forest, C3's jungle).>
 
