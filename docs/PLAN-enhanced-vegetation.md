@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ Card shading: wind sway, sun-side shading, contact shadow
 5. ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 6. ☑ The lab's paint tool: texture picks and a brush mask
-7. ☐ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
+7. ☑ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
 
 ### Wave B, mass
 
@@ -624,7 +624,7 @@ stamp).
 
 **Verified.** <pending orchestrator run>
 
-## A7 ☐ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
+## A7 ☑ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
 
 **Goal.** Wave A's cost measured, a ceiling for the plan set from it, and the Enhanced goldens Wave
 A moved re-pinned.
@@ -633,14 +633,99 @@ A moved re-pinned.
 C1, C1B, C2, C3 and C4, and a chapter with no entry builds no Rich variant and compiles no Rich
 shader, so C5's CM23 (#57) draws as before.
 
-**Approach.** <TODO: the fixed worst-case view per chapter (low over C1's forest, C3's jungle).>
+**Approach.** The instrument is [`analysis/veg-budget/measure.ps1`](../analysis/veg-budget/measure.ps1),
+which every later budget item (B16, C24, D37) reruns unchanged. Each chapter has one `--freecam`
+view, 80 m up and 300 m off on both axes from its densest listed vegetation (the cell with the most
+card stamps), looking at it:
 
-**Model recommendation.** <TODO>
+| Chapter | View | In frame |
+|---|---|---|
+| C1 | `--pos=-8975,271,-5980 --lookat=-9275,191,-6280` | a hill of `terpat02` firs to the skyline |
+| C1B | `--pos=-7288,285,-5486 --lookat=-7588,205,-5786` | the bushes and firs on the rock top, night sea |
+| C2 | `--pos=59,88,-2955 --lookat=-241,8,-3255` | palms and brush over desert scrub between two suburbs |
+| C3 | `--pos=-5439,80,-3077 --lookat=-5739,0,-3377` | the palm transition along a beach under the painted jungle hills |
+| C4 | `--pos=-8957,827,-4918 --lookat=-9257,747,-5218` | firs on both sides of the railway, the snow peak behind |
 
-**Verify.** <TODO>
+C3's cards are only the 707 palms on its transitions; the view keeps the painted jungle in frame for
+Wave B's canopy. Every launch is `--det` (no saved option reaches it, and the sway's clock is the
+sim clock) with `--perf --no-vsync --mute`, 600 sim frames, through `RunProbe.ps1` on the hidden
+desktop at `-Resolution 5120x1440` (the author's display; the client area is 5120x1421), where
+`--det`'s Enhanced profile is TAA, Ultra shadows, far view distance and render scale 100 %. A case
+is Faithful (`--graphics=original`), Enhanced Original or Enhanced Rich, and a repeat runs every
+chapter's three cases back to back, so drift lands on all three (PERF-9, PERF-48). The first two
+windows (the first draw's shader compiles) are dropped; a launch reports the median of its other
+eight windows, a case the median and range of its launches.
+
+The hidden desktop presents at the display's 120 Hz even with `max_fps=0`, so `frame_ms` sits at
+8.33 ms in every case and is a floor, not a cost (PERF-2); the cost is read off `gpu_ms` (the GPU's
+own timing of the root viewport's render, which the present pacing does not enter),
+`render_cpu_ms`, `proc_ms` and the counts. At that pacing the GPU idles for part of each frame and
+may run below its boost clock; both words are measured under the same pacing, so the difference
+between them holds.
+
+**Baseline (Wave A).** Four launches a case on one PC (RTX 5080 on Vulkan, 120 Hz display), idle,
+gaming mode off. Median (range of the launch medians):
+
+| Chapter | Case | `gpu_ms` | `render_cpu_ms` | `proc_ms` | draws | prims |
+|---|---|---:|---:|---:|---:|---:|
+| C1 | Faithful | 0.71 (0.70-0.72) | 0.30 (0.29-0.30) | 1.24 (1.21-1.27) | 240 | 88,596 |
+| C1 | Enhanced Original | 5.87 (5.85-5.87) | 0.45 (0.44-0.45) | 1.23 (1.23-1.25) | 421 | 322,531 |
+| C1 | Enhanced Rich | 5.87 (5.85-5.88) | 0.45 (0.43-0.46) | 1.24 (1.22-1.24) | 421 | 322,531 |
+| C1B | Faithful | 0.65 (0.64-0.66) | 0.34 (0.34-0.35) | 0.19 (0.18-0.19) | 211 | 2,452 |
+| C1B | Enhanced Original | 3.51 (3.50-3.52) | 0.49 (0.49-0.49) | 0.21 (0.20-0.21) | 282 | 272,580 |
+| C1B | Enhanced Rich | 3.50 (3.50-3.51) | 0.49 (0.48-0.51) | 0.21 (0.20-0.21) | 282 | 272,580 |
+| C2 | Faithful | 0.85 (0.85-0.86) | 1.08 (1.08-1.09) | 0.56 (0.54-0.58) | 1,474 | 308,853 |
+| C2 | Enhanced Original | 3.00 (2.99-3.02) | 1.25 (1.24-1.27) | 0.58 (0.58-0.62) | 1,606 | 485,367 |
+| C2 | Enhanced Rich | 2.99 (2.99-2.99) | 1.25 (1.24-1.26) | 0.59 (0.59-0.60) | 1,606 | 485,367 |
+| C3 | Faithful | 1.34 (1.33-1.35) | 0.82 (0.81-0.85) | 0.73 (0.70-0.75) | 1,061 | 19,173 |
+| C3 | Enhanced Original | 4.24 (4.22-4.24) | 1.10 (1.08-1.12) | 0.75 (0.73-0.77) | 1,211 | 287,593 |
+| C3 | Enhanced Rich | 4.25 (4.23-4.25) | 1.11 (1.07-1.14) | 0.75 (0.73-0.77) | 1,211 | 287,593 |
+| C4 | Faithful | 0.74 (0.73-0.75) | 0.38 (0.37-0.39) | 0.47 (0.46-0.48) | 382 | 205,459 |
+| C4 | Enhanced Original | 2.70 (2.69-2.70) | 0.48 (0.47-0.49) | 0.47 (0.46-0.47) | 462 | 59,806 |
+| C4 | Enhanced Rich | 2.71 (2.69-2.72) | 0.48 (0.48-0.49) | 0.47 (0.47-0.47) | 462 | 59,806 |
+
+**Wave A's cost is below this rig's noise.** Rich against Original moves `gpu_ms` by -0.01 to
++0.01 ms and `render_cpu_ms` and `proc_ms` by at most 0.01 ms at every view, inside the 0.01 to
+0.03 ms range of one case's launches, with the same draws and primitives: the Rich layout swaps
+nodes one for one, and the mirror, tint, sway and sun side are a few vertex and fragment
+instructions on cards that cover a small share of the frame. The Enhanced stack itself (TAA, Ultra
+shadows, SSAO, SSR at 5120x1421) is the frame's cost: 2 to 5 ms of GPU over Faithful at every view,
+the most at C1, whose firs fill the frame and every shadow cascade.
+
+**Ceiling.** Waves B to D together may add at most **2.0 ms of `gpu_ms`** and **0.5 ms of CPU
+(`render_cpu_ms` plus `proc_ms`)** over the Rich row at any of the five views, measured with this
+script: Wave B (mass) 0.75 ms GPU, Wave C (density) 0.25 ms, Wave D (near) 1.0 ms, the CPU half
+shared as each wave needs it. The reasoning: C1 is the heaviest view at 5.87 ms, and 5.87 + 2.0 =
+7.87 ms keeps the worst vegetation view inside the 8.33 ms period of the author's 120 Hz display
+with half a millisecond to spare for the plane, the cockpit and the HUD, which a freecam view does
+not draw. 2.0 ms is about a third of what Enhanced already costs at C1, so Rich stays a fraction of
+the mode that carries it. The CPU half is small because the frame's CPU side in flight belongs to
+the simulation and the AI, and a co-op host carries both (Decision 18). A wave whose difference is
+below 0.05 ms (about twice this baseline's launch range) counts as zero; a wave over its share
+either buys it back from a later wave's share or is cut before it ships. The Deck and Linux are
+outside this ceiling and stay Original until D36 measures them.
+
+**Model recommendation.** A mid-tier model suffices: the measurement is a script run and a table,
+and the goldens step follows `docs/verification.md`'s GOLD rules.
+
+**Verify.** The baseline above, from `measure.ps1 -Launches 4`, every launch exit 0 and every
+Rich capture's hash different from its Original twin's (the word reached the draw). Goldens: the
+goldens stage alone (`RunTests.ps1 -SkipUnits -SkipEngine`) moved five Enhanced shots on listed
+chapters, `c1-lake-enhanced`, `c1-rocket-hit-enhanced`, `c1-cockpit-enhanced`,
+`c1-cockpit-xr-sim-enhanced` and `c1b-ocean-enhanced`, and no Faithful, Original or C5 shot. Each
+rendered one hash four times over two runs at four workers (each run's batch and its re-render),
+so none flips under load. Each shot rendered with `--vegetation-quality=original` added to its
+manifest args lands on its old pin exactly, so the Rich word is the whole of each move. The five
+hashes are re-pinned by hand from those renders (never `-RegenGoldens`, so no other shot could be
+re-baselined), `c1-lake-enhanced`'s `exercises` names the Rich conifers (its frame sensitivity reads
+23.70 % under Rich against 23.68 % under Original, so the recorded figure stands), and a third run
+passes 38 of 38. `c1-cloud-deck-enhanced`, which moved once after A3, holds its pin in all three
+runs.
 
 **⚠ Traps.** Read `docs/verification.md` first. A golden that flips under external GPU load is a
 determinism defect to name and track, not one to re-pin.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B, mass
 

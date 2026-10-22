@@ -110,7 +110,9 @@ args, which `--det` honours while it drops the saved mode): the lake's reflectio
 the night city's omni pool, the deck's lit puffs, a rocket burst's lit effects, the cockpit pass,
 and the wave ocean. `c1b-ocean-enhanced` passes `--water-quality=waves` itself, so a change to the
 water-quality ladder cannot turn its subject off; the lake, the night city and the rocket shot also
-draw the ocean, through `--det`'s own `waves` fallback. Every other shot is the faithful path, and `RunTests.ps1 -Graphics` reaches
+draw the ocean, through `--det`'s own `waves` fallback. `--det` resolves Vegetation Quality to `rich`
+as well, so every C1 and C1B Enhanced shot draws the Rich vegetation cards; the C5 night city has no
+vegetation entry and draws none. Every other shot is the faithful path, and `RunTests.ps1 -Graphics` reaches
 none of them. Their frame sensitivity is mostly TAA's jitter: a static freecam pose moves 5.77 % to
 24.69 % from one frame to the next, against 0.01 % (the C5 pose) and 1.04 % (the lake, its falls
 scrolling) with TAA forced off, so the hash pins the jitter phase along with the picture. That phase
