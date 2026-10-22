@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, mass
 
 11. ☑ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
-12. ☐ Prototype: canopy shells on C1
+12. ◐ Prototype: canopy shells on C1
 13. ◐ Prototype: impostor clumps on C1
 14. ☐ Pick the mass technique at the controls and productionise it
 15. ☐ C3's canopy volume over its painted jungle, palms on the transitions
@@ -808,21 +808,80 @@ mass and the cards disagree.
 
 **Verified.** <pending orchestrator run>
 
-## B12 ☐ Prototype: canopy shells on C1
+## B12 ◐ Prototype: canopy shells on C1
 
 **Goal.** Stacked alpha-tested shells over C1's forest that take over as the cards fade, so the
 forest reads as mass from altitude.
 
-**Evidence (confidence: lead-only).** The layered-forest technique for distant views is in the
-literature (TU Wien 2006 report on forest rendering); Decision 12.
+**Evidence (confidence: traced-to-code for the fade and the mask, lead-only for the look).** The
+layered-forest technique for distant views is in the literature (TU Wien 2006 report on forest
+rendering); Decision 12. C1's listed firs fade over `far_fade_range` near 500 to 1000 m and far
+1000 to 2000 m (`firtree1`; `firtree2` and `dougfirtree1` 300 to 600 and 1000 to 2000), and the
+fade's global scale is divided by the Enhanced fog push (2) and the View Distance reach (Far, 2), so
+under `--det` the Enhanced cards stand fully drawn to about 2 to 4 km, behind C1's haze. **From
+altitude the forest does not vanish by the fade at these views: it thins, because every card is an
+upright CylindricalY quad**, so seen from above a fir is a narrow spike over the painted ground and
+a full canopy cell (one fir per 32 m) reads as scattered dots. The shells are therefore driven by
+the eye's height as well as the fade. C1's fir card is dark foliage (mean opaque texel about
+sRGB 21, 30, 16).
 
-**Approach.** <TODO>
+**Approach (as built).** `CSVM/src/Mech3/CanopyShells.cs`, behind `--canopy-shells` (off by
+default; `SessionSpec.CanopyShells`) and `VegetationQualitySetting.RichOn`, built and dropped by
+`GameSession.FollowCanopyShells` from the build, `FollowClutterFade` (a live Vegetation Quality or
+View Distance change), `ApplyGraphicsMode` and the lab's `ApplyVegetation`/`ApplyVegetationMask`
+(which rebuild it over the re-baked mask). `Clutter.cs` is untouched.
 
-**Model recommendation.** <TODO>
+- *Placement:* `ClutterBuilder.Canopy()` (B11) cut into chunks of 64 × 64 cells (2 km); a cell is
+  drawn when it or a neighbour has density, so crowns thin out over the forest's edge instead of a
+  quad edge cutting them. Each corner sits at the density-weighted `Ground` of the covered cells
+  touching it, with the canopy height `Top - Ground`. A chunk is one ground-level grid mesh drawn as
+  a MultiMesh of 8 identity instances; each instance's custom data lifts it to a share of the
+  canopy height, 0.15 for the lowest (about 2.7 m over a fir's ground, so it never fights the
+  ground's depth) to 1 at the top. On C1: 30 chunks, 95,400 corners, one draw each.
+- *Texture (the chapter's own card, Decision 6):* the fragment stage revolves the most-stamped
+  listed card (C1's `firtree1`, through its own material's `albedo_tex`) about its axis. Crowns sit
+  one per 9 m lattice cell, jittered, sized 0.8 to 1.15 of the canopy height; a fragment shows the
+  nearest crown's card texel at its height (card v) and distance off the axis (card u, over the
+  card's width). The mip comes from the world footprint. A crown is kept when its hash is below the
+  mask's density at its centre (R8 texture) times the takeover below, so a fade thins whole crowns.
+  Each shell marches the view ray through the slab down to the next shell (3 steps), so a crown seen
+  from the side shows no gaps between slices. Unshaded and fogged as the cards are, with the Rich
+  cards' sun-side gain on the crown's sun-facing half and a crown darkening toward its base by up to 20 %.
+- *Fade-in:* `max(1 - card alpha, over)`. The card alpha is the clutter fade over the listed stamps'
+  mean band (`FadeBand`: near 710 m, far 1419 m on C1) under the live `csky_clutter_fade_scale_sq`,
+  so the shells take over exactly where the cards fade at any View Distance. `over` is the eye's
+  height over the crown's ground, 0 at 150 m to full at 300 m, times a distance ramp from 150 m to
+  300 m that keeps slices out of a close view. A view low over the trees (the 80 m pose) is cards
+  only; a view from 300 m up shows one density from its foreground to the fog.
+- *Map edge:* open. The shells end at `world1`'s area, and `MapEdgeExtender`'s copies past it are
+  cards only, so from altitude the forest thins again past the edge.
+- *Measurement:* `analysis/veg-budget/measure.ps1 -Chapters C1 -Modes rich,shells` adds the
+  shells as their own case (`--canopy-shells` on the Rich launch).
 
-**Verify.** <TODO: a montage from several altitudes against the Original fade, for B14.>
+**Model recommendation.** Opus for B14's productionising if the shells win: the fade rule, the
+fill cost of eight alpha-tested layers with a 27-lookup march, and the map edge all need
+measurement-led judgement.
 
-**⚠ Traps.** <TODO>
+**Verify.** Units: `CanopyShellsTests` (the layer shares rise from 0.15 to 1; the fade band is the
+fading stamps' mean and none fading is the never-fades band; one covered cell draws itself and a
+halo at its ground, as tall as its canopy, inside its box; a shared corner is density-weighted;
+forest in two chunks draws two). Engine: `canopy-shells` (C1 Enhanced flight: the flag at rich
+stands one shell set of 8-layer MultiMeshes, a live move to original drops it and a move back
+stands it again, a live switch to Original drops it with the word still rich and back in Enhanced it
+stands again, a lab re-bake stands a new one; at original with the flag, or at rich without it,
+none). Goldens: none move, since no golden passes the flag. The look is the montage at the four
+`measure.ps1`-derived C1 poses (80, 300, 600 and 1200 m up, all looking at `-9275,191,-6280`),
+Original, Rich and Rich with shells, judged by you in B14. The cost is B14's to measure.
+
+**⚠ Traps.**
+- Shell slices show from the side as stacked discs: keep the slab march, and keep the shells out
+  of a low or close view (the height and distance ramps), where the cards already read.
+- Judge the takeover at the crown's ground, not at the shell's height, or the upper slices of one
+  crown fade before the lower ones and a crown is drawn as a stack of rings.
+- Godot's shader built-ins are not visible inside a shader function; pass `CAMERA_POSITION_WORLD`.
+- The fir card is near black, so the crowns are too; the cards read lighter only through the Rich
+  sun-side gain, which the shells copy. A brighter crown is a look decision, not a bug.
+- The 1200 m pose sits inside C1's cloud layer, so it shows cloud in every variant.
 
 ## B13 ◐ Prototype: impostor clumps on C1
 

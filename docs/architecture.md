@@ -72,6 +72,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/VegetationGround.cs`, the ground textures under a world point and the coplanar layer among them that takes stamps, what the vegetation lab's texture pick names.
 - `src/Mech3/CanopyMask.cs`, where forest mass is drawn under Rich: a 32 m grid of canopy density, ground and tree-top height, baked from the Rich card stamps or from ground picked as painted canopy.
 - `src/Mech3/CanopyClumps.cs`, the `--canopy-clumps` prototype: cards of several trees composed at load from the listed card textures, placed per canopy-mask cell and fading in past a near band under Rich.
+- `src/Mech3/CanopyShells.cs`, the `--canopy-shells` prototype: stacked alpha-tested shells over the canopy mask that draw the chapter's own card as crowns from altitude and past the card fade.
 - `src/Mech3/VegetationVariation.cs`, one listed stamp's Rich variation: a texture-space jitter clamped into its triangle, a card mirror for the yaw, an instance-colour tint, on its own fixed stream.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs`, zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.

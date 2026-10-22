@@ -51,6 +51,8 @@ $modeArgs = @{
     "original" = @("--graphics=enhanced", "--vegetation-quality=original")
     "rich"     = @("--graphics=enhanced", "--vegetation-quality=rich")
     "clumps"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-clumps")
+    # The canopy-shell prototype, measured on request: -Modes rich,shells.
+    "shells"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-shells")
 }
 
 if (-not $SummaryOnly) {

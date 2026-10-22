@@ -489,6 +489,10 @@ public sealed record SessionSpec
     /// <see cref="NoClutter"/> wins if both are given. See <c>docs/cli.md</c>.</summary>
     public IReadOnlyList<string>? ClutterTemplates { get; private set; }
 
+    /// <summary><c>--canopy-shells</c>: draw the canopy shells (<see cref="Mech3.CanopyShells"/>) over the
+    /// forest while Rich vegetation is on. A prototype switch, off by default. See <c>docs/cli.md</c>.</summary>
+    public bool CanopyShells { get; private set; }
+
     /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
     /// (<see cref="Mech3.ZoneGate"/>), every zone draws at every camera state. The one switch that
     /// isolates a regression anywhere in the world's content at the controls: the gate hides a lot
@@ -1719,6 +1723,7 @@ public sealed record SessionSpec
             else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--canopy-clumps") { s.CanopyClumps = true; }
+            else if (arg == "--canopy-shells") { s.CanopyShells = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg == "--screen-flare") { s.ScreenFlare = true; }
