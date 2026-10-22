@@ -123,6 +123,30 @@ public class OceanMaskRasterTests
         Assert.True(one.Zones.AsSpan().SequenceEqual(OceanMaskRaster.Run(tris.ToArray(), Mean, 7).Zones));
     }
 
+    // A land texel the coverage filter reaches takes the group of the sea beside it, and a seam where
+    // two groups meet. Group 0's grid then draws no shore of another group's sea.
+    [Fact]
+    public void ALandTexelTakesTheGroupOfTheSeaBesideIt()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 1024f, Kind.Base, Colors.White);
+        int east = tris.Count;
+        AddQuad(tris, 0f, -1024f, 1024f, Kind.Base, Colors.White);
+        for (int i = east; i < tris.Count; i++)
+            tris[i] = tris[i] with { Zone = 1 };
+        // A sliver far south stretches the mask over the land south of z = 0.
+        var far = new Vector3(-1024f, 0f, 1024f);
+        tris.Add(new Tri(far, far + new Vector3(1f, 0f, 0f), far + new Vector3(0f, 0f, 1f), Kind.Base, Colors.White, Colors.White, Colors.White));
+        var one = OceanMaskRaster.Run(tris.ToArray(), Mean, 1);
+        int At(float x, float z) => ((int)((z - one.Origin.Y) / Cell) * one.Width) + (int)((x - one.Origin.X) / Cell);
+        Assert.Equal(0, one.Mask[2 * At(500f, 4f)]);
+        Assert.Equal(1, one.Zones[At(500f, 4f)]);
+        Assert.Equal(0, one.Zones[At(-500f, 4f)]);
+        Assert.Equal(OceanMaskRaster.SeamZone, one.Zones[At(-4f, 4f)]);
+        Assert.Equal(OceanMaskRaster.SeamZone, one.Zones[At(4f, -4f)]);
+        Assert.True(one.Zones.AsSpan().SequenceEqual(OceanMaskRaster.Run(tris.ToArray(), Mean, 7).Zones));
+    }
+
     // A ramp's base triangle marks its texels with the ramp byte, which the hide reads, and the rest
     // of the sheet stays 255. Both are sea, and no band count moves either.
     [Fact]

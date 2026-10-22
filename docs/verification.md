@@ -161,6 +161,9 @@ covers it.
   crop between the eyes, never by thresholded centroids.** On one capture the pipper's centroids
   read 0.18 px of disparity and a 0.43 px vertical offset; the shift search read 0.76 px and 0.00,
   matching its 463 m range, and gave the box the aircraft's own 2.5 px.
+- **SHOT-49**, **Before calling a line an Enhanced defect, threshold its pixels and read the same
+  pixels in the Original frame.** Of the 5,093 px a C5 shore band drew darker than its surroundings
+  under Enhanced, 99.6 % were dark in Original too (mean 2.0 against Enhanced's 13.8).
 
 ## GOLD, golden images
 

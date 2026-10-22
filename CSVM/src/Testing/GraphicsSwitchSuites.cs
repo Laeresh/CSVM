@@ -1549,7 +1549,7 @@ internal static class GraphicsSwitchSuites
         ctx.Check(include.Contains($"csky_ocean_sea(world.xz) < {threshold}", StringComparison.Ordinal)
                 && grid.Contains($"m.r < {threshold}", StringComparison.Ordinal),
             $"the sheet's hide steps aside at the coverage the ocean discards below, {threshold} (include {(include.Length > 0 ? "read" : "missing")}, grid shader {(grid.Length > 0 ? "read" : "missing")})");
-        ctx.Check(include.Contains($"abs(zone - {Effects.OceanMask.SeamZone}.0)", StringComparison.Ordinal),
+        ctx.Check(include.Contains($"abs(zone - {Effects.OceanMaskRaster.SeamZone}.0)", StringComparison.Ordinal),
             $"and leaves a zone seam texel, which no grid draws, to the sheet");
         string hide = Effects.OceanMask.HideHeight.ToString("0.0#", CultureInfo.InvariantCulture);
         string top = Effects.OceanMask.RampTop.ToString("0.0#", CultureInfo.InvariantCulture);

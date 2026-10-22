@@ -39,9 +39,6 @@ internal sealed class OceanMask
     /// OceanMask). The include spells it as a literal.</summary>
     public const float RampTop = 4f;
 
-    /// <summary>The zone byte of a texel on a seam between two zone groups, which no grid draws.</summary>
-    public const byte SeamZone = OceanMaskRaster.AnyZone - 1;
-
     // The globals csky_ocean.gdshaderinc declares: the live mask, its zone groups and its world rect.
     private static readonly StringName MaskParam = "csky_ocean_mask";
     private static readonly StringName ZoneParam = "csky_ocean_zone";
@@ -286,7 +283,7 @@ internal sealed class OceanMask
         result.TintTexture = TextureUpload.Create(result.TintImage, callerKeeps: true);
         result.Texture = TextureUpload.Create(result.Image, callerKeeps: true);
         if (result.ZoneLayers.Count > 1)
-            result.ZoneTexture = TextureUpload.Create(raster.Width, raster.Height, Image.Format.R8, Seam(raster));
+            result.ZoneTexture = TextureUpload.Create(raster.Width, raster.Height, Image.Format.R8, raster.Zones);
         result.LiftImage = result.RampTriangles > 0
             ? Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Lift)
             : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
@@ -314,37 +311,6 @@ internal sealed class OceanMask
         (byte)Math.Clamp(c.G * 255f, 0f, 255f) / 255f,
         (byte)Math.Clamp(c.B * 255f, 0f, 255f) / 255f,
         (byte)Math.Clamp(c.A * 255f, 0f, 255f) / 255f);
-
-    // The zone groups with every texel on a seam between two groups taken from both. A seam texel's
-    // centre can fall on either side, so either grid would overhang the other group's culled sea.
-    // C5 lays an opaque fog gradient along each seam, which hides the gap this leaves.
-    private static byte[] Seam(OceanMaskRaster.Result raster)
-    {
-        int w = raster.Width, h = raster.Height;
-        var zones = raster.Zones;
-        var mask = raster.Mask;
-        var seamed = (byte[])zones.Clone();
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int i = (y * w) + x;
-                byte z = zones[i];
-                if (mask[2 * i] == 0 || z >= SeamZone)
-                    continue;
-                for (int d = 0; d < 4; d++)
-                {
-                    int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), ny = y + (d == 2 ? 1 : d == 3 ? -1 : 0);
-                    if (nx < 0 || ny < 0 || nx >= w || ny >= h)
-                        continue;
-                    int n = (ny * w) + nx;
-                    if (mask[2 * n] != 0 && zones[n] < SeamZone && zones[n] != z)
-                        seamed[i] = SeamZone;
-                }
-            }
-        }
-        return seamed;
-    }
 
     // The authored priority a world material was built at. Its depth bias adds under half a level
     // on top (rank, no_clutter), so the floor a quarter level up recovers it.
