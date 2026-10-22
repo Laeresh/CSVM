@@ -10,13 +10,17 @@ namespace CSVM.Extraction;
 /// Higher-resolution replacements for the extracted art, read in place from the HD folder's zips
 /// and files (<c>textures.hd</c>, <c>--hd=</c>, default <c>HD</c>).
 /// Each pack's own top folder is dropped. A path left with a folder replaces that file under
-/// <c>extracted/</c>, matched without case or extension: <c>rimage/c1m1.png</c>,
+/// <c>extracted/</c>, matched without case, its own extension first: <c>rimage/c1m1.png</c>,
 /// <c>C3/rtexture12/cliff01.png</c>. A bare name replaces that world texture in every archive.
 /// Engine-free; the callers decode and size what this returns.
 /// </summary>
 public sealed class HdTextures : IDisposable
 {
     private readonly Dictionary<string, (ZipArchive? Zip, string Path)> _byKey = new(StringComparer.Ordinal);
+
+    // The same files keyed with their extension. The scrapbook draws X.PNG on the page and X.JPG in
+    // the zoom, often different pictures, and a pack may ship both.
+    private readonly Dictionary<string, (ZipArchive? Zip, string Path)> _byExactKey = new(StringComparer.Ordinal);
     private readonly List<ZipArchive> _zips = new();
     private readonly string _extracted;
 
@@ -89,13 +93,16 @@ public sealed class HdTextures : IDisposable
         }
 
         string name = archiveBaseName.ToLowerInvariant();
-        return (Relative(archivePath) is { } archive ? Read(KeyOf(archive) + "/" + name) : null) ?? Read(name);
+        return (Relative(archivePath) is { } archive ? Read(_byKey, KeyOf(archive) + "/" + name) : null) ?? Read(_byKey, name);
     }
 
     /// <summary>The replacement for the file at <paramref name="originalPath"/> under
-    /// <c>extracted/</c>, or null.</summary>
+    /// <c>extracted/</c>, or null. A pack file with the original's own extension beats one
+    /// without.</summary>
     public byte[]? ForExtracted(string originalPath) =>
-        _byKey.Count > 0 && Relative(originalPath) is { } rel ? Read(KeyOf(rel)) : null;
+        _byKey.Count > 0 && Relative(originalPath) is { } rel
+            ? Read(_byExactKey, ExactKeyOf(rel)) ?? Read(_byKey, KeyOf(rel))
+            : null;
 
     public void Dispose()
     {
@@ -106,6 +113,7 @@ public sealed class HdTextures : IDisposable
 
         _zips.Clear();
         _byKey.Clear();
+        _byExactKey.Clear();
     }
 
     // "rimage\C1M1.PNG" -> "rimage/c1m1": case and extension never decide a match, since the
@@ -116,6 +124,8 @@ public sealed class HdTextures : IDisposable
         int dot = unix.LastIndexOf('.');
         return (dot > unix.LastIndexOf('/') ? unix[..dot] : unix).ToLowerInvariant();
     }
+
+    private static string ExactKeyOf(string relativePath) => relativePath.Replace('\\', '/').ToLowerInvariant();
 
     private static string DropTop(string entryPath)
     {
@@ -138,13 +148,14 @@ public sealed class HdTextures : IDisposable
         }
 
         _byKey[KeyOf(relativePath)] = (zip, path);
+        _byExactKey[ExactKeyOf(relativePath)] = (zip, path);
     }
 
     // ⚠ Locked: a ZipArchive is not safe to read from two threads, and the world archive and the
     // menus may both reach here.
-    private byte[]? Read(string key)
+    private byte[]? Read(Dictionary<string, (ZipArchive? Zip, string Path)> map, string key)
     {
-        if (!_byKey.TryGetValue(key, out var source))
+        if (!map.TryGetValue(key, out var source))
         {
             return null;
         }
