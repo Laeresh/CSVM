@@ -375,7 +375,8 @@ internal static class SeatFields
             oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin);
     }
 
-    /// <summary>The militia/airframe pairs whose def's weapons <paramref name="rules"/> allow whole
+    /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
+    /// The militia/airframe pairs whose def's weapons <paramref name="rules"/> allow whole
     /// (<see cref="Session.Roster.BotSeats.ArmsAdmitted"/>), read once from the install. Null while
     /// the outlaw list is not in force, which leaves the draw's candidates the whole table.</summary>
     internal static System.Func<byte, string, bool>? BotArmsUnder(Net.NetPlaneRules? rules, string zrdrPath,

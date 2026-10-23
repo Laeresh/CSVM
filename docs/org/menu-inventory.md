@@ -88,9 +88,10 @@ convention".
 | `join-board[:pads[:bots\|bot]]` | the join board, drawing `pads` entries posed as signed on; `bots` stands five bot rows of the player setup under the articles, named from the pilot names, the second a Fury at ace and the third a novice, and `bot` opens the Edit Bot panel on that second row |
 | `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog |
 | `loadboard-campaign[:CM]` | the load screen's chart sheet for that campaign mission, `CM01` by default, over the menu; it reads the memento off a `--campaign=` profile the same way |
+| `loadboard-mp[:chapter[:mode]]` | the Dogfight load screen's blackboard for that chapter's lobby environment and mode letter, as `pauseboard-mp` names them, standing rather than torn down by a build |
 | `pauseboard[:CM[:done]]` | the Original presentation's pause sheet for that campaign mission, `CM01` by default, with that many of its objectives marked. A `--campaign=<profile>:<seq>` beside it hangs that profile's own memento, the way a real pause does; without one the sheet hangs the seeded pin-up |
 | `pauseboard-ia[:chapter[:mission_type]]` | the Original presentation's Instant Action pause blackboard for that chapter's environment and mission type, `C1` and `stunt_flying` by default |
-| `pauseboard-mp[:chapter]` | the Original presentation's Dogfight pause blackboard for that chapter's lobby environment, a Deathmatch with nobody on a team, `C1` by default |
+| `pauseboard-mp[:chapter[:mode]]` | the Original presentation's Dogfight pause blackboard for that chapter's lobby environment and mode letter (`d` Deathmatch, `t` team Deathmatch, `c` Capture the Flag, `z` Zeppelin vs Zeppelin), `C1` and `d` by default |
 
 ## Part 2: the original as the data ships it
 

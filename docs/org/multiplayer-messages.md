@@ -1316,7 +1316,9 @@ flies every airframe on no def, so an admitted airframe always has a pair. Rules
 eleven stock airframes, which a host on an admitted custom plane can launch under, leave the bots
 out of the field, as a full field leaves them out. A bot on its airframe's
 stock arms flies the stock fit with each outlawed ammunition or rocket replaced by the first one the
-list allows, where the original's reset to none would leave it no gun.
+list allows, where the original's reset to none would leave it no gun. The nitro row needs no bot
+rule: a bot is seated no custom build, so it flies its airframe's stock engine
+(`NetPlaneBuild.StockEngine`), never an injector, which `LobbyBotOutlawTests` pins over a real lobby.
 
 **Compatibility of the seat bytes.** The previous layout knew only `0xFF`, a guest's one pick, and
 read every other byte as a launch seat. A host of that layout files `0xFE` to `0xFC` as launch-seat

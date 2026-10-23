@@ -339,8 +339,9 @@ bar at `564,546`, the propeller at `506,549` and the wing ornament along the fra
 `LoadScreens.OnBoard` keeps the row at its authored point and boxes it to the 21 pixels above the
 bar's top; the renderer's fit (`ComposedBoardView.Fitted`) steps its face down a point at a time
 until its wrapped block fits. It fits on one line at 8 points (10.7 pixels against the body's 13),
-the fit's floor, and its point value stays at 13. The pause sheet uses the same rule above its
-strips, where the row's authored point is under them ([`pause-screen.md`](pause-screen.md)).
+the fit's floor, and its point value stays at 13. The pause sheet cannot fit the row in its band,
+whose authored point is under the strips, so it stacks the row under the one above at full size
+([`pause-screen.md`](pause-screen.md)).
 
 **Free flight is ours rather than the original's**, and no shipped dialog describes it. It takes
 the mode's own name at `HEAD1`'s authored place and writes nothing else, since the nearest

@@ -219,14 +219,15 @@ public static class BotSeats
         return candidates.Count == 0 ? null : candidates[rng.Next(candidates.Count)];
     }
 
-    /// <summary>Whether <paramref name="rules"/> admit a bot on stock node <paramref name="plane"/>.
-    /// They are asked as for a person's stock pick (<see cref="NetPlaneRules.Refuses"/>): the
-    /// airframe, the stock engine and the stock guns' calibres. A node outside the eleven passes.
-    /// </summary>
+    /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
+    /// Whether <paramref name="rules"/> admit a bot on stock node <paramref name="plane"/>. They are
+    /// asked as for a person's stock pick (<see cref="NetPlaneRules.Refuses"/>): the airframe, the
+    /// stock engine and the stock guns' calibres. A node outside the eleven passes.</summary>
     public static bool AirframeAdmitted(NetPlaneRules rules, string plane) =>
         StockAirframes.IdOf(plane) is not { } airframe || rules.AdmitsStock(airframe);
 
-    /// <summary>The fit a bot on its airframe's stock arms flies under <paramref name="rules"/>. It is
+    /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
+    /// The fit a bot on its airframe's stock arms flies under <paramref name="rules"/>. It is
     /// the stock fit where they allow it. Otherwise every gun takes the first ammunition they allow
     /// and every pylon the first rocket, none only where they allow none. Enforce clears to none,
     /// and a bot has no second Ready to pick again.</summary>
@@ -241,7 +242,8 @@ public static class BotSeats
         return CoopFit.Of(ammoPicks, cells);
     }
 
-    /// <summary>Whether <paramref name="rules"/> allow every weapon a militia def's block carries. An
+    /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
+    /// Whether <paramref name="rules"/> allow every weapon a militia def's block carries. An
     /// AI gun fires slug, so it is asked as its calibre's slug. An ordnance id is asked as its row of
     /// <paramref name="rocketTable"/>; one off the table answers to Outlaw All Rockets alone.</summary>
     public static bool ArmsAdmitted(NetPlaneRules rules, IEnumerable<AiWeaponSlot> weapons, WeaponDefs defs,
