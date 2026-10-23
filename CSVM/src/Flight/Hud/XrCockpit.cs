@@ -35,7 +35,7 @@ public sealed class XrCockpit : IXrInterior
     // Each hung part with its true pose on the airframe, which a placement change re-places it from.
     private readonly List<(Node3D Part, Transform3D OnAirframe)> _hung = new();
     // Each airframe mesh with the twin under the interior that takes its pose and visibility.
-    private readonly List<(Node3D Original, Node3D Twin)> _mirrored = new();
+    private readonly List<BodyTwin> _mirrored = new();
     // The authored eye in the interior's own units (PlaneBuilder.InteriorEye).
     private readonly Vector3 _eye;
     // A body cockpit, one metre per metre, which neither the tuning lab's scale nor store fields move.
@@ -177,23 +177,16 @@ public sealed class XrCockpit : IXrInterior
 
         Lift();
         _interior.Transform = new Transform3D(origin.Basis, Vector3.Zero) * InOrigin(held, EyeInAircraft);
-        foreach (var (original, twin) in _mirrored)
+        if (_mirrored.Count > 0 && _interior.GetParent() is Node3D airframe)
         {
-            if (GodotObject.IsInstanceValid(original) && GodotObject.IsInstanceValid(twin))
-            {
-                twin.Visible = original.IsVisibleInTree();
-                if (twin.Visible && OnAirframe(original) is { } onAirframe)
-                {
-                    twin.Transform = InInterior(_mount, onAirframe);
-                }
-            }
+            BodyTwins.Mirror(_mirrored, airframe, _mount);
         }
     }
 
-    /// <summary>Has <paramref name="twin"/>, a stereo-built copy of <paramref name="original"/> that is a
-    /// direct child of the interior, take the original's airframe pose and visibility on each
-    /// <see cref="Follow"/>. A moving surface, a spinning prop or a torn panel then shows in it.</summary>
-    public void Mirror(Node3D original, Node3D twin) => _mirrored.Add((original, twin));
+    /// <summary>Has the pair's twin take its original's airframe pose and visibility on each
+    /// <see cref="Follow"/>. The twin is a stereo-built copy and a direct child of the interior. A moving
+    /// surface, a spinning prop or a torn panel then shows in it.</summary>
+    public void Mirror(BodyTwin pair) => _mirrored.Add(pair);
 
     /// <summary>Rescales the mount about the authored eye to <paramref name="metresPerUnit"/>: the
     /// tuning lab's live scale. The next <see cref="Follow"/> places it. ⚠ The depth bias stays the
@@ -290,23 +283,11 @@ public sealed class XrCockpit : IXrInterior
         }
     }
 
-    // A node's pose on the node the interior is mounted on, from local transforms alone. Null when
-    // the walk never meets it.
-    private Transform3D? OnAirframe(Node3D node)
-    {
-        var onAirframe = Transform3D.Identity;
-        for (Node? step = node; step != _interior.GetParent(); step = step.GetParent())
-        {
-            if (step is not Node3D at)
-            {
-                return null;
-            }
-
-            onAirframe = at.Transform * onAirframe;
-        }
-
-        return onAirframe;
-    }
+    // A node's pose on the node the interior is mounted on. Null when the node is not under it.
+    private Transform3D? OnAirframe(Node3D node) =>
+        _interior.GetParent() is Node3D airframe && (node == airframe || airframe.IsAncestorOf(node))
+            ? NodeFrame.Under(node, airframe)
+            : null;
 
     // The interior's mount composed up to the aircraft from local transforms alone: the wobble
     // pivot and the model root. Null when the walk never meets the aircraft.

@@ -542,6 +542,8 @@ void fragment() {
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
     private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
+    // The instance ids of the bias materials built under XrPreciseInterior, which carry its placement.
+    private readonly HashSet<ulong> _interiorPlaced = new();
     // A fullbright builder's committed surface arrays, per built mesh in surface order. Reading a
     // surface back from Godot copies it off the GPU and waits for the render thread.
     private readonly Dictionary<ArrayMesh, List<Godot.Collections.Array>> _builtArrays = new();
@@ -799,6 +801,12 @@ void fragment() {
     public TransparencyClass AlphaOf(Material? material) =>
         material != null && _materialAlpha.TryGetValue(material, out var known)
             ? known : TransparencyClass.None;
+
+    /// <summary>Whether this builder made <paramref name="material"/> in the stereo interior's placement
+    /// (<see cref="XrPreciseInterior"/>), as every bias material it builds there is. A camera-facing card
+    /// is not, nor a material another builder made.</summary>
+    public bool PlacesInInterior(Material? material) =>
+        material != null && _interiorPlaced.Contains(material.GetInstanceId());
 
     /// <summary>The one biased albedo fetch every mip-mapped arm emits, defined in
     /// <c>csky_mip_bias.gdshaderinc</c> beside the global it reads.
@@ -2267,6 +2275,8 @@ void fragment() {
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
             replacement));
         NoteAlpha(mat, blend, scissor);
+        if (XrPreciseInterior)
+            _interiorPlaced.Add(mat.GetInstanceId());
         if (XrPreciseInterior && (blend || XrUnderInterior))
             mat.RenderPriority = XrInteriorBlendPriority;
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;

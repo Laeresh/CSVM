@@ -498,7 +498,7 @@ internal static class HdModelSwapSuites
         PlaneBuilder stock, GunsightReticle.Look? look, Vector3 centre)
     {
         var interior = stock.CockpitInterior!;
-        var names = stock.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).ToDictionary(m => m.Material.GetInstanceId(), m => m.TextureName);
+        var names = GunsightReticle.GlassMaterials(stock.InteriorMaterials);
         var holder = interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
             .Select(mi => (Instance: mi, Surface: Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0)
                 .FirstOrDefault(s => mi.GetActiveMaterial(s) is { } m && names.ContainsKey(m.GetInstanceId()), -1)))
@@ -512,7 +512,7 @@ internal static class HdModelSwapSuites
         string node = AnimRuntime.NameOf(holder.Instance.GetParent<Node3D>());
         string texture = names[holder.Instance.GetActiveMaterial(holder.Surface).GetInstanceId()];
         var moved = new Vector3(-1f, 0.5f, -0.25f);
-        var local = PlaneRigPatch.PlaneFrame(holder.Instance, interior).Basis.Inverse() * moved;
+        var local = NodeFrame.Under(holder.Instance, interior).Basis.Inverse() * moved;
         var arrays = ((ArrayMesh)holder.Instance.Mesh).SurfaceGetArrays(holder.Surface);
         var glass = new Godot.Collections.Array();
         glass.Resize((int)Mesh.ArrayType.Max);

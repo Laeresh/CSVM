@@ -91,17 +91,6 @@ public static class PlaneRigPatch
     internal static Vector3 ToNodeAxis(Transform3D frame, Vector3 planeAxis) =>
         (frame.Basis.Inverse() * planeAxis).Normalized();
 
-    /// <summary>The node's transform in the plane frame: every local below the built root, its own included.</summary>
-    internal static Transform3D PlaneFrame(Node3D node, Node3D built)
-    {
-        var acc = Transform3D.Identity;
-        for (Node3D? n = node; n != null && n != built; n = n.GetParent() as Node3D)
-        {
-            acc = n.Transform * acc;
-        }
-
-        return acc;
-    }
 
     /// <summary>Checks the cockpit section's names on the gamez tree, not the built one. A build with no
     /// interior then rejects what a pilot's build rejects. A hide name must be an airframe node outside the
@@ -122,15 +111,15 @@ public static class PlaneRigPatch
             }
         }
 
-        var interior = Children(gamez, root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        var interior = gamez.ChildrenOf(root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
         var gauges = interior == null ? null : FindIn(gamez, interior, n => n.Name.Equals("gauges", StringComparison.OrdinalIgnoreCase));
-        var assemblies = gauges == null ? new List<string>() : Children(gamez, gauges).ConvertAll(n => n.Name);
+        var assemblies = gauges == null ? new List<string>() : gamez.ChildrenOf(gauges).ConvertAll(n => n.Name);
         bool glass = cockpit.Gauges.ContainsKey(RigCockpit.GlassKey);
         foreach (string name in cockpit.Gauges.Keys)
         {
             if (name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase))
             {
-                if (interior == null || FindIn(gamez, interior, n => HoldsGlass(gamez, n)) == null)
+                if (interior == null || !GunsightReticle.HoldsGlass(gamez, interior))
                 {
                     throw Fail(rig, "cockpit.gauges." + name, "the airframe's cockpit1 holds no sight glass (a polygon wearing cockpit6 or crosshair)");
                 }
@@ -139,19 +128,13 @@ public static class PlaneRigPatch
             {
                 throw Fail(rig, "cockpit.gauges." + name, $"no assembly '{name}' under the airframe's cockpit1 gauges (it has: {string.Join(", ", assemblies)})");
             }
-            else if (glass && Children(gamez, gauges!).Find(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } held
-                && FindIn(gamez, held, n => HoldsGlass(gamez, n)) != null)
+            else if (glass && gamez.ChildrenOf(gauges!).Find(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } held
+                && GunsightReticle.HoldsGlass(gamez, held))
             {
                 throw Fail(rig, "cockpit.gauges", $"'{RigCockpit.GlassKey}' and '{name}' both place the sight glass, which '{name}' holds; name one of them");
             }
         }
     }
-
-    /// <summary>Whether the node's own mesh has a sight-glass polygon (<see cref="GunsightReticle.IsGlass"/>).</summary>
-    internal static bool HoldsGlass(GameZ gamez, GameZNode node) =>
-        node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count && gamez.Meshes[node.MeshIndex] is { } mesh
-        && mesh.Polygons.Exists(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
-            && gamez.Materials[p.MaterialIndex].TextureName is { } texture && GunsightReticle.IsGlass(texture));
 
     // A marker moves to its rig position by rewriting its local origin under the parent's plane frame.
     // A missing one is added under the markers group, so Loadout's cs_name walk finds it like any other.
@@ -164,7 +147,7 @@ public static class PlaneRigPatch
             {
                 var node = nodes[0];
                 var parent = node.GetParent() as Node3D ?? built;
-                edits.Add(() => node.Position = PlaneFrame(parent, built).AffineInverse() * pos);
+                edits.Add(() => node.Position = NodeFrame.Under(parent, built).AffineInverse() * pos);
             }
             else if (MayAdd(name))
             {
@@ -174,7 +157,7 @@ public static class PlaneRigPatch
                     var marker = new Node3D { Name = name };
                     marker.SetMeta(AnimRuntime.NameMeta, name);
                     parent.AddChild(marker);
-                    marker.Position = PlaneFrame(parent, built).AffineInverse() * pos;
+                    marker.Position = NodeFrame.Under(parent, built).AffineInverse() * pos;
                 });
                 added++;
             }
@@ -216,7 +199,7 @@ public static class PlaneRigPatch
             {
                 edits.Add(() =>
                 {
-                    node.SetMeta(PropParts.SpinAxisMeta, prop.Axis is { } a ? ToNodeAxis(PlaneFrame(node, built), a) : axis);
+                    node.SetMeta(PropParts.SpinAxisMeta, prop.Axis is { } a ? ToNodeAxis(NodeFrame.Under(node, built), a) : axis);
                     node.SetMeta(PropParts.SpinRateMeta, prop.DegPerSec ?? rate);
                 });
             }
@@ -234,7 +217,7 @@ public static class PlaneRigPatch
             {
                 edits.Add(() =>
                 {
-                    var frame = PlaneFrame(node, built);
+                    var frame = NodeFrame.Under(node, built);
                     node.SetMeta(ControlSurfaces.KindMeta, (int)surface.ClassifierKind);
                     if (surface.HingeAxis is { } axis)
                     {
@@ -269,7 +252,7 @@ public static class PlaneRigPatch
             {
                 if (WingLights.IsFlare(node.Name))
                 {
-                    bool port = PlaneFrame(node, built).Origin.X < 0f;
+                    bool port = NodeFrame.Under(node, built).Origin.X < 0f;
                     if ((port ? rig.LeftFlare : rig.RightFlare) == null)
                     {
                         chosen.Add(node);
@@ -297,9 +280,6 @@ public static class PlaneRigPatch
         return new FlareChoice(chosen, displaced);
     }
 
-    private static List<GameZNode> Children(GameZ gamez, GameZNode node) =>
-        node.Children.FindAll(c => c >= 0 && c < gamez.Nodes.Count).ConvertAll(c => gamez.Nodes[c]);
-
     private static GameZNode? FindIn(GameZ gamez, GameZNode node, Predicate<GameZNode> match)
     {
         if (match(node))
@@ -307,7 +287,7 @@ public static class PlaneRigPatch
             return node;
         }
 
-        foreach (var child in Children(gamez, node))
+        foreach (var child in gamez.ChildrenOf(node))
         {
             if (FindIn(gamez, child, match) is { } found)
             {

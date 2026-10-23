@@ -231,9 +231,9 @@ internal sealed class HumanFlightAdapter
         MeshInstances += planeBuilder.MeshInstanceCount;
         // A flat body cockpit's pass draws twins of the body. Made after the ghost stamp and before the
         // stores hang, so neither reaches them; they stay hidden unless a pass mirrors them.
-        (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? flatBody = null;
+        FlatBodyTwins? flatBody = null;
         if (!xrInterior && !paneless && planeBuilder.CockpitPanel is { } flatPanel)
-            flatBody = (planeBuilder.CockpitCameraOffset, planeBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
+            flatBody = new(planeBuilder.CockpitCameraOffset, planeBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
 
         var controller = new FlightController
         {
@@ -276,10 +276,10 @@ internal sealed class HumanFlightAdapter
         // A twinned body mesh leaves the pilot's pane while its stereo twin draws in its place.
         if (controller.Dressing is { Stereo: { } stereoBody, Visibility: { } seen } && planeBuilder.StereoBody.Count > 0)
         {
-            foreach (var (original, twin) in planeBuilder.StereoBody)
+            foreach (var pair in planeBuilder.StereoBody)
             {
-                stereoBody.Mirror(original, twin);
-                seen.Reseat(original);
+                stereoBody.Mirror(pair);
+                seen.Reseat(pair.Original);
             }
 
             Log.Info("flight", $"cockpit: '{planeName}' stereo body cockpit at real scale, {planeBuilder.StereoBody.Count} airframe mesh(es) drawn from the XR origin's frame, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, gunsight reticle collimated ({planeBuilder.GunsightReticles})");

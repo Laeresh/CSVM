@@ -23,8 +23,9 @@ public static class CockpitTransplant
     /// <summary>The panel's child holding the cut-loose sight glass, beside the <c>gauges</c> node.</summary>
     public const string GlassName = "glass";
 
-    // The cross-node draw-order tie-break every built instance carries (SceneBuilder.NodeBiasOf).
-    private const string NodeBias = "node_bias";
+    /// <summary>The instance uniform holding the cross-node draw-order tie-break every built instance
+    /// carries (<c>SceneBuilder.NodeBiasOf</c>), which a copy of a built instance takes from it.</summary>
+    internal const string NodeBias = "node_bias";
 
     /// <summary>An assembly's plane-frame transform under a rig pose: the pose's position, and its
     /// rotation (YXZ Euler degrees) and uniform scale where given. An absent field keeps
@@ -73,7 +74,7 @@ public static class CockpitTransplant
         IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials, out Transform3D? glassCarried)
     {
         var panel = new Node3D { Name = PanelName, Visible = false };
-        var glassIds = GlassMaterials(materials);
+        var glassIds = GunsightReticle.GlassMaterials(materials);
         int glassSurfaces = 0;
         glassCarried = null;
         if (cockpit.Gauges.TryGetValue(RigCockpit.GlassKey, out var glassPose) && glassFrame is { } frame)
@@ -84,18 +85,11 @@ public static class CockpitTransplant
             panel.AddChild(glass);
         }
 
-        var gauges = FindNamed(interior, "gauges");
         Node3D? group = null;
         int moved = 0;
-        foreach (var (name, pose) in cockpit.Gauges)
+        foreach (var (gauges, assembly, pose) in NamedAssemblies(interior, cockpit))
         {
-            if (name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase)
-                || gauges == null || Child(gauges, name) is not { } assembly)
-            {
-                continue;
-            }
-
-            var original = PlaneRigPatch.PlaneFrame(assembly, interior);
+            var original = NodeFrame.Under(assembly, interior);
             var at = Posed(mount * original, pose);
             // The Brigand's and Firebrand's glass rides its assembly, which the rig names instead.
             if (HoldsGlass(assembly, glassIds))
@@ -138,47 +132,56 @@ public static class CockpitTransplant
         if (cockpit.Gauges.TryGetValue(RigCockpit.GlassKey, out var glassPose) && glassFrame is { } frame)
         {
             var glass = new Node3D { Name = GlassName, Transform = Posed(frame, glassPose) };
-            glassSurfaces = CutGlass(interior, interior, frame, GlassMaterials(materials), glass, strip: true);
+            glassSurfaces = CutGlass(interior, interior, frame, GunsightReticle.GlassMaterials(materials), glass, strip: true);
             interior.AddChild(glass);
         }
 
-        var gauges = FindNamed(interior, "gauges");
         int moved = 0;
-        foreach (var (name, pose) in cockpit.Gauges)
+        foreach (var (gauges, assembly, pose) in NamedAssemblies(interior, cockpit))
         {
-            if (name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase)
-                || gauges == null || Child(gauges, name) is not { } assembly)
-            {
-                continue;
-            }
-
-            assembly.Transform = PosedUnder(PlaneRigPatch.PlaneFrame(gauges, interior),
-                PlaneRigPatch.PlaneFrame(assembly, interior), pose);
+            assembly.Transform = PosedUnder(NodeFrame.Under(gauges, interior),
+                NodeFrame.Under(assembly, interior), pose);
             moved++;
         }
 
         Log.Info("world", $"cockpit: {moved} gauge assembly(ies) and {glassSurfaces} sight glass surface(s) placed inside cockpit1");
     }
 
-    private static HashSet<ulong> GlassMaterials(IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials)
+    /// <summary>Adds surface <paramref name="surface"/> of <paramref name="mesh"/> to <paramref name="into"/>,
+    /// name and material kept, with <paramref name="arrays"/> in place of its own where given.</summary>
+    internal static void CopySurface(ArrayMesh mesh, int surface, ArrayMesh into, Godot.Collections.Array? arrays = null)
     {
-        var ids = new HashSet<ulong>();
-        foreach (var (material, texture) in materials)
+        into.AddSurfaceFromArrays(mesh.SurfaceGetPrimitiveType(surface), arrays ?? mesh.SurfaceGetArrays(surface));
+        into.SurfaceSetName(into.GetSurfaceCount() - 1, mesh.SurfaceGetName(surface));
+        into.SurfaceSetMaterial(into.GetSurfaceCount() - 1, mesh.SurfaceGetMaterial(surface));
+    }
+
+    // The assemblies the table names under the interior's gauges node, with their poses. The glass key
+    // names no assembly. Listed first, since Build moves each one out of that node.
+    private static List<(Node3D Gauges, Node3D Assembly, RigGaugePose Pose)> NamedAssemblies(Node3D interior, RigCockpit cockpit)
+    {
+        var named = new List<(Node3D, Node3D, RigGaugePose)>();
+        if (FindNamed(interior, "gauges") is not { } gauges)
         {
-            if (GunsightReticle.IsGlass(texture))
+            return named;
+        }
+
+        foreach (var (name, pose) in cockpit.Gauges)
+        {
+            if (!name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase) && Child(gauges, name) is { } assembly)
             {
-                ids.Add(material.GetInstanceId());
+                named.Add((gauges, assembly, pose));
             }
         }
 
-        return ids;
+        return named;
     }
 
     // Each surface wearing a glass material becomes a mesh of its own, placed in the glass's frame.
     // Its new instance carries the source's layers, shadow setting and node_bias. With strip, the
     // source instance takes a mesh of its own without those surfaces; the cached mesh is shared.
     // ⚠ Never Duplicate() the source instance: under the separate render thread the process crashes.
-    private static int CutGlass(Node node, Node3D interior, Transform3D frame, HashSet<ulong> glassIds, Node3D into,
+    private static int CutGlass(Node node, Node3D interior, Transform3D frame, IReadOnlyDictionary<ulong, string> glassIds, Node3D into,
         bool strip = false)
     {
         int cut = 0;
@@ -187,13 +190,11 @@ public static class CockpitTransplant
             var kept = strip && IsGlass(instance, mesh, glassIds) ? new ArrayMesh() : null;
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
-                if (instance.GetActiveMaterial(s) is not { } material || !glassIds.Contains(material.GetInstanceId()))
+                if (instance.GetActiveMaterial(s) is not { } material || !glassIds.ContainsKey(material.GetInstanceId()))
                 {
                     if (kept != null)
                     {
-                        kept.AddSurfaceFromArrays(mesh.SurfaceGetPrimitiveType(s), mesh.SurfaceGetArrays(s));
-                        kept.SurfaceSetName(kept.GetSurfaceCount() - 1, mesh.SurfaceGetName(s));
-                        kept.SurfaceSetMaterial(kept.GetSurfaceCount() - 1, mesh.SurfaceGetMaterial(s));
+                        CopySurface(mesh, s, kept);
                     }
 
                     continue;
@@ -208,7 +209,7 @@ public static class CockpitTransplant
                     Mesh = own,
                     Layers = instance.Layers,
                     CastShadow = instance.CastShadow,
-                    Transform = frame.AffineInverse() * PlaneRigPatch.PlaneFrame(instance, interior),
+                    Transform = frame.AffineInverse() * NodeFrame.Under(instance, interior),
                 };
                 copy.SetInstanceShaderParameter(NodeBias, instance.GetInstanceShaderParameter(NodeBias));
                 into.AddChild(copy);
@@ -229,7 +230,7 @@ public static class CockpitTransplant
         return cut;
     }
 
-    private static bool HoldsGlass(Node node, HashSet<ulong> glassIds)
+    private static bool HoldsGlass(Node node, IReadOnlyDictionary<ulong, string> glassIds)
     {
         if (node is MeshInstance3D { Mesh: ArrayMesh mesh } instance && IsGlass(instance, mesh, glassIds))
         {
@@ -247,11 +248,11 @@ public static class CockpitTransplant
         return false;
     }
 
-    private static bool IsGlass(MeshInstance3D instance, ArrayMesh mesh, HashSet<ulong> glassIds)
+    private static bool IsGlass(MeshInstance3D instance, ArrayMesh mesh, IReadOnlyDictionary<ulong, string> glassIds)
     {
         for (int s = 0; s < mesh.GetSurfaceCount(); s++)
         {
-            if (instance.GetActiveMaterial(s) is { } material && glassIds.Contains(material.GetInstanceId()))
+            if (instance.GetActiveMaterial(s) is { } material && glassIds.ContainsKey(material.GetInstanceId()))
             {
                 return true;
             }

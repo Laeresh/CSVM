@@ -92,7 +92,7 @@ public sealed class PlaneBuilder
     // The stereo interior's sight glass textures split into their glass and reticle layers, by name.
     private readonly Dictionary<string, GunsightReticle.Layers?> _gunsight = new();
     // A stereo body cockpit's airframe twins, and the builder that drew them through the stereo shader.
-    private readonly List<(MeshInstance3D Original, MeshInstance3D Twin)> _stereoBody = new();
+    private readonly List<BodyTwin> _stereoBody = new();
     // A flat body cockpit's twin material copies, by the airframe material each copies.
     private readonly Dictionary<ShaderMaterial, ShaderMaterial> _flatCopies = new();
     private SceneBuilder? _stereoBodyScene;
@@ -211,7 +211,7 @@ public sealed class PlaneBuilder
     /// <summary>A stereo body cockpit's airframe: each drawn body mesh paired with a twin built through
     /// the stereo interior's shader, under <see cref="CockpitPanel"/>. The hide
     /// list's nodes, and meshes whose shader cannot be lifted (a flare), have none. Empty elsewhere.</summary>
-    public IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> StereoBody => _stereoBody;
+    public IReadOnlyList<BodyTwin> StereoBody => _stereoBody;
 
     /// <summary>Where the eye sits in <see cref="CockpitInterior"/>'s own units: the
     /// <c>cockpit_camera</c> marker's numbers under the stereo path, the interior's origin on every
@@ -284,17 +284,11 @@ public sealed class PlaneBuilder
     public static Transform3D InteriorFromPlane(Transform3D plane, Vector3 marker, float metresPerUnit = InteriorScale) =>
         FlatMount(marker, metresPerUnit).AffineInverse() * plane;
 
-    /// <summary>A flat body cockpit's airframe twins for the cockpit pass, each hidden under <paramref name="panel"/>. Every
-    /// drawn body mesh of <paramref name="built"/> has one, but those under an override material (a flare), <c>cockpit*</c>
-    /// and the <paramref name="hide"/> subtrees. A twin shares its original's mesh and <c>node_bias</c> and wears copies of
-    /// its materials, since the pass writes <c>light_origin</c> on them; <see cref="Repaint"/> reaches the copies.
-    /// Call it before stores hang, which then get none.</summary>
-    public List<(MeshInstance3D Original, MeshInstance3D Twin)> FlatBody(Node3D built, Node3D panel, IEnumerable<string> hide)
-    {
-        var twins = new List<(MeshInstance3D, MeshInstance3D)>();
-        PairFlatTwins(built, new HashSet<string>(hide, StringComparer.OrdinalIgnoreCase), panel, _flatCopies, twins);
-        return twins;
-    }
+    /// <summary>A flat body cockpit's airframe twins for the cockpit pass, each hidden under <paramref name="panel"/>
+    /// (<see cref="BodyTwins.Flat"/>), outside the <paramref name="hide"/> subtrees. <see cref="Repaint"/> reaches
+    /// their material copies. Call it before stores hang, which then get none.</summary>
+    public List<BodyTwin> FlatBody(Node3D built, Node3D panel, IEnumerable<string> hide) =>
+        BodyTwins.Flat(built, panel, hide, _flatCopies);
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk"), with the model
     /// pack's <c>rig.json</c> for that node applied (<see cref="PlaneRigPatch"/>). Throws
@@ -451,79 +445,6 @@ public sealed class PlaneBuilder
         name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
         && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
 
-    // Each gamez node's drawn meshes, in child order, keyed by the node's index.
-    private static void TwinMeshes(Node node, Dictionary<int, List<Mesh>> into)
-    {
-        if (node.HasMeta(AnimRuntime.IndexMeta))
-        {
-            var list = new List<Mesh>();
-            foreach (var child in node.GetChildren())
-            {
-                if (child is MeshInstance3D { Mesh: { } mesh } mi && mi.Name.ToString() == "mesh")
-                {
-                    list.Add(mesh);
-                }
-            }
-
-            into[(int)node.GetMeta(AnimRuntime.IndexMeta)] = list;
-        }
-
-        foreach (var child in node.GetChildren())
-        {
-            TwinMeshes(child, into);
-        }
-    }
-
-    // Whether every surface of a twin mesh wears the stereo interior's placement.
-    private static bool Lifts(Mesh mesh)
-    {
-        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-        {
-            if (mesh.SurfaceGetMaterial(s) is not ShaderMaterial { Shader: { } shader }
-                || !shader.Code.Contains(SceneBuilder.XrEyeLeftGlobal, StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    // FlatBody's walk: PairTwins' choice of meshes, each twin sharing its original's mesh. One copy per
-    // source material, so the pass's per-frame light_origin write stays short.
-    private static void PairFlatTwins(Node node, HashSet<string> hide, Node3D panel,
-        Dictionary<ShaderMaterial, ShaderMaterial> copies, List<(MeshInstance3D, MeshInstance3D)> into)
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is MeshInstance3D { Mesh: { } mesh } mi && mi.Name.ToString() == "mesh")
-            {
-                if (!node.HasMeta(AnimRuntime.IndexMeta) || mi.MaterialOverride != null)
-                {
-                    continue;
-                }
-
-                var twin = new MeshInstance3D { Name = $"twin{into.Count}", Mesh = mesh, CastShadow = mi.CastShadow, Visible = false };
-                for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-                {
-                    if (mi.GetActiveMaterial(s) is ShaderMaterial m)
-                    {
-                        twin.SetSurfaceOverrideMaterial(s, copies.TryGetValue(m, out var copy) ? copy : copies[m] = ShaderTwins.Copy(m));
-                    }
-                }
-
-                twin.SetInstanceShaderParameter("node_bias", mi.GetInstanceShaderParameter("node_bias"));
-                panel.AddChild(twin);
-                into.Add((mi, twin));
-            }
-            else if (child is Node3D n3d && !hide.Contains(AnimRuntime.NameOf(n3d))
-                && !AnimRuntime.NameOf(n3d).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase))
-            {
-                PairFlatTwins(n3d, hide, panel, copies, into);
-            }
-        }
-    }
-
     // The painter can only be built once the aircraft's root is known, its skin prefix is
     // read off the model's own material names. Built on the first Build/BuildDestroyed call
     // and reused, so both share one painted-texture cache.
@@ -653,7 +574,8 @@ public sealed class PlaneBuilder
             ParkInteriorStates(n3d);
             if (xr && !body)
             {
-                CutReplacedPlate(n3d);
+                // A pack's mesh holds no gamez polygons for OmittedPolygons to drop, so it is cut by shape.
+                ReplacedPlateTriangles += CockpitPlate.CutReplaced(n3d, InteriorMaterials);
             }
 
             built.AddChild(n3d);
@@ -719,65 +641,6 @@ public sealed class PlaneBuilder
         }
     }
 
-    // A pack's mesh holds no gamez polygons for OmittedPolygons to drop, so under the headset its
-    // untextured triangles shaped as the head plate leave (CockpitPlate.Kept). A texture-named surface
-    // never does: three interiors carry textured triangles of that shape.
-    private void CutReplacedPlate(Node3D interior)
-    {
-        var textured = InteriorMaterials.Select(m => m.Material.GetInstanceId()).ToHashSet();
-        foreach (var instance in interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
-        {
-            if (!instance.HasMeta(SceneBuilder.GamezMeshMeta) || instance.Mesh is not ArrayMesh mesh)
-            {
-                continue;
-            }
-
-            var frame = PlaneRigPatch.PlaneFrame(instance, interior);
-            var surfaces = new List<(Godot.Collections.Array Arrays, Mesh.PrimitiveType Primitive, string Name, Material? Material)>();
-            int cutHere = 0;
-            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-            {
-                var arrays = mesh.SurfaceGetArrays(s);
-                var material = mesh.SurfaceGetMaterial(s);
-                if (mesh.SurfaceGetPrimitiveType(s) == Mesh.PrimitiveType.Triangles && material != null
-                    && !textured.Contains(material.GetInstanceId()))
-                {
-                    var index = arrays[(int)Mesh.ArrayType.Index];
-                    var indices = index.VariantType == Variant.Type.PackedInt32Array ? index.AsInt32Array() : null;
-                    var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-                    var kept = CockpitPlate.Kept(vertices, indices, frame);
-                    int before = (indices?.Length ?? vertices.Length) / 3;
-                    cutHere += before - (kept.Length / 3);
-                    if (kept.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    arrays[(int)Mesh.ArrayType.Index] = kept;
-                }
-
-                surfaces.Add((arrays, mesh.SurfaceGetPrimitiveType(s), mesh.SurfaceGetName(s), material));
-            }
-
-            if (cutHere == 0)
-            {
-                continue;
-            }
-
-            // The cached replacement is shared, so the instance takes a mesh of its own.
-            var own = new ArrayMesh();
-            foreach (var (arrays, primitive, name, material) in surfaces)
-            {
-                own.AddSurfaceFromArrays(primitive, arrays);
-                own.SurfaceSetName(own.GetSurfaceCount() - 1, name);
-                own.SurfaceSetMaterial(own.GetSurfaceCount() - 1, material);
-            }
-
-            instance.Mesh = own;
-            ReplacedPlateTriangles += cutHere;
-        }
-    }
-
     // Under the stereo path a body cockpit's panel is what the stereo interior lifts. It takes a twin of
     // every drawn body mesh, built through the stereo shader and placed each frame by Flight.Hud.XrCockpit.
     // The moved glass takes its reticle, collimated for the cockpit_camera eye in the plane frame.
@@ -796,47 +659,9 @@ public sealed class PlaneBuilder
             return;
         }
 
-        var meshes = new Dictionary<int, List<Mesh>>();
-        TwinMeshes(copy, meshes);
+        _stereoBody.AddRange(BodyTwins.Stereo(built, copy, _stereoBodyScene, Cockpit!.Hide, CockpitPanel!));
         copy.Free();
-        PairTwins(built, built, new HashSet<string>(Cockpit!.Hide, StringComparer.OrdinalIgnoreCase), meshes, CockpitPanel!);
         Log.Info("world", $"cockpit: {_stereoBody.Count} airframe mesh(es) twinned for the stereo interior");
-    }
-
-    // Pairs every drawn body mesh outside cockpit* and the hide list with the twin of its gamez node. A
-    // mesh worn under an override material, a flare, or a twin whose shader is not the stereo one, stays
-    // drawn in the world only.
-    private void PairTwins(Node node, Node3D built, HashSet<string> hide, Dictionary<int, List<Mesh>> twins, Node3D holder)
-    {
-        int ordinal = 0;
-        foreach (var child in node.GetChildren())
-        {
-            if (child is MeshInstance3D mi && mi.Name.ToString() == "mesh")
-            {
-                if (node.HasMeta(AnimRuntime.IndexMeta) && mi.MaterialOverride == null
-                    && twins.GetValueOrDefault((int)node.GetMeta(AnimRuntime.IndexMeta)) is { } list
-                    && ordinal < list.Count && Lifts(list[ordinal]))
-                {
-                    var twin = new MeshInstance3D
-                    {
-                        Name = $"twin{_stereoBody.Count}",
-                        Mesh = list[ordinal],
-                        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                        Transform = PlaneRigPatch.PlaneFrame(mi, built),
-                    };
-                    twin.SetInstanceShaderParameter("node_bias", mi.GetInstanceShaderParameter("node_bias"));
-                    holder.AddChild(twin);
-                    _stereoBody.Add((mi, twin));
-                }
-
-                ordinal++;
-            }
-            else if (child is Node3D n3d && !hide.Contains(AnimRuntime.NameOf(n3d))
-                && !AnimRuntime.NameOf(n3d).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase))
-            {
-                PairTwins(n3d, built, hide, twins, holder);
-            }
-        }
     }
 
     // ⚠ The interior's off-states ship ACTIVE. A node the build script left NodeSetActive(false)

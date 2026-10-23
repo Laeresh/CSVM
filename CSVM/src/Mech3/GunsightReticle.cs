@@ -58,6 +58,31 @@ public static class GunsightReticle
         return Array.Exists(GlassTextures, g => g.Equals(stem, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Whether <paramref name="node"/>'s gamez subtree, every LOD level included, has a polygon
+    /// wearing the sight glass's texture (<see cref="IsGlass"/>).</summary>
+    public static bool HoldsGlass(GameZ gamez, GameZNode node) =>
+        (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count && gamez.Meshes[node.MeshIndex] is { } mesh
+            && mesh.Polygons.Exists(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
+                && gamez.Materials[p.MaterialIndex].TextureName is { } texture && IsGlass(texture)))
+        || gamez.ChildrenOf(node).Exists(c => HoldsGlass(gamez, c));
+
+    /// <summary>The sight glass's materials among a builder's textured <paramref name="materials"/>, each
+    /// instance id with the texture it resolved from. Keyed by id: Godot can hand back a fresh wrapper
+    /// for the same material.</summary>
+    public static Dictionary<ulong, string> GlassMaterials(IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials)
+    {
+        var glass = new Dictionary<ulong, string>();
+        foreach (var (material, texture) in materials)
+        {
+            if (IsGlass(texture))
+            {
+                glass[material.GetInstanceId()] = texture;
+            }
+        }
+
+        return glass;
+    }
+
     /// <summary>Splits an RGBA8 glass texture into its two layers. Returns the reticle's texel count,
     /// zero (and both layers null) when the texture holds none. The glass layer has each reticle
     /// texel repainted with the nearest tint's colour at the tint's alpha. The reticle layer keeps
@@ -275,15 +300,7 @@ public static class GunsightReticle
     public static List<Glass> Drawn(Node3D interior, IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials,
         IReadOnlyList<Glass> original)
     {
-        var names = new Dictionary<ulong, string>();
-        foreach (var (material, texture) in materials)
-        {
-            if (IsGlass(texture))
-            {
-                names[material.GetInstanceId()] = texture;
-            }
-        }
-
+        var names = GlassMaterials(materials);
         var found = new List<Glass>();
         foreach (var instance in interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
         {
@@ -292,7 +309,7 @@ public static class GunsightReticle
                 continue;
             }
 
-            var frame = PlaneRigPatch.PlaneFrame(instance, interior);
+            var frame = NodeFrame.Under(instance, interior);
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
                 if (instance.GetActiveMaterial(s) is not { } material || !names.TryGetValue(material.GetInstanceId(), out var name))
