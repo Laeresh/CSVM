@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ❌ Prototype: canopy shells on C1 (not picked)
 13. ☑ Prototype: impostor clumps on C1 (picked)
 14. ☑ Pick the mass technique at the controls and productionise it
-15. ☐ C3's canopy volume over its painted jungle, palms on the transitions
+15. ☐ C3's canopy volume over its painted jungle
 16. ☐ Wave B budget and goldens
 
 ### Wave C, density
@@ -999,16 +999,15 @@ names the handover, and a third run passes 38 of 38.
 - The cards' handover is a uniform on the shared Rich material; every path that drops the clumps
   zeroes it (`CanopyClumps.Handover`), or the cards fade with nothing behind them.
 
-## B15 ☐ C3's canopy volume over its painted jungle, palms on the transitions
+## B15 ☐ C3's canopy volume over its painted jungle
 
-**Goal.** C3's `forest1`/`cliff1` canopy gains a volume with depth, and its transition textures
-(`cliff1_toptrans`, `cliff1_sidetrans`, `cliff1_watertrans2`) carry palm1, palm2 and palm3.
+**Goal.** C3's `forest1`/`cliff1` canopy gains a volume with depth. The palms on its transition
+textures are C21's: a pick to a set places no stamp until C21 builds the added stamps.
 
-**Evidence (confidence: measured areas, lead-only look).** The survey table above; palmtree2/palmtree3
-draw today as palmtree1's substitution targets. Decision 11.
+**Evidence (confidence: measured areas, lead-only look).** The survey table above; Decision 11.
+Picks are read today only for the canopy test (`CanopyMask.IsCanopy` in `ClutterBuilder`).
 
-**Approach.** The B14 technique fed by the C3 mask from texture picks; palms through A6's texture
-picks. <TODO>
+**Approach.** The B14 technique fed by the C3 mask from texture picks. <TODO>
 
 **Model recommendation.** <TODO>
 
@@ -1035,7 +1034,9 @@ picks. <TODO>
 ## C21 ☐ Remake-added stamps on picked textures, in texture space, under the mask
 
 **Goal.** Under Rich, a picked texture gets stamps from its vegetation set, once per texture repeat
-like the original's, and the mask thins or thickens them.
+like the original's, and the mask thins or thickens them. C3's transition textures
+(`cliff1_toptrans`, `cliff1_sidetrans`, `cliff1_watertrans2`) are picked to palm1, palm2 and palm3;
+palmtree2/palmtree3 draw today as palmtree1's substitution targets.
 
 **Evidence (confidence: traced for the lattice, lead-only for the rest).** The lattice and its rules
 are `PlaceOnTriangle` (`Clutter.cs:556`) and [`org/clutter.md`](org/clutter.md), "The lattice rule".
