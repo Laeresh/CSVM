@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ Prototype: impostor clumps on C1 (picked)
 14. ☑ Pick the mass technique at the controls and productionise it
 15. ☑ C3's canopy volume over its painted jungle
-16. ☐ Clump tiles beside the vegetation models, replaceable by a model pack
+16. ☑ Clump tiles beside the vegetation models, replaceable by a model pack
 17. ☐ Wave B budget and goldens
 
 ### Wave C, density
@@ -1069,7 +1069,7 @@ Budget: `measure.ps1 -Chapters C3,C1 -Modes rich,noclumps -Launches 4` on an idl
 - Keep the band's near edge past where the crown tips read as spots on the near slopes (about
   700 m). Inside it the painted texture carries the canopy until D32's models fill it.
 
-## B16 ☐ Clump tiles beside the vegetation models, replaceable by a model pack
+## B16 ☑ Clump tiles beside the vegetation models, replaceable by a model pack
 
 **Goal.** A species' clump tile sits beside its 3D model in `CSVM/data/vegetation_models/<chapter>/`,
 rendered from that model, so the far clumps match the near models. A model pack (`HDModels`) replaces
@@ -1142,8 +1142,11 @@ stamps' trees to 10 %). Engine: `canopy-clumps` adds that a C1 flight takes the 
 tile, that a build with no tile composes another atlas, and that a model pack's tile under the same
 key replaces it, its counts raising the trees a clump. Look: `.scratch/b16/` (the composed tiles
 against the `firtree1` tile at 300 and 600 m up, View Distance Far and Normal, with 3x crops of the
-far hills, and the tile beside its model and the card). Goldens: not run; the five Enhanced C1 shots
-B14 re-pinned draw clumps on their far hills and are expected to move, which B17 re-pins.
+far hills, and the tile beside its model and the card). Goldens: exactly the five Enhanced C1 shots
+B14 re-pinned move (`c1-lake-enhanced`, `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`,
+`c1-cockpit-enhanced`, `c1-cockpit-xr-sim-enhanced`), each re-rendering to its new hash, and no
+other of the 38; B17 re-pins them. Budget: the atlas keeps its size and the clump count stands at
+11,857, so B17's measurement is its check.
 
 **⚠ Traps.**
 - Never ship a tile composed from the original's card or canopy textures. A shipped tile is rendered
