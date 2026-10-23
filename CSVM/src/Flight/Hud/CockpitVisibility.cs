@@ -21,8 +21,8 @@ public sealed class CockpitVisibility
 {
     private readonly Node3D? _interior, _body, _markers, _dontmove;
 
-    // CockpitReseat's originals and the pylon stores, which leave the pilot's pane exactly while the
-    // interior is drawn.
+    // CockpitReseat's originals, the pylon stores and a stereo body cockpit's twinned meshes. They
+    // leave the pilot's pane exactly while the interior or the transplanted panel is drawn.
     private readonly List<Node3D> _reseated;
 
     // Every airframe node a body cockpit's `cockpit.hide` names, outside the interior.
@@ -94,8 +94,8 @@ public sealed class CockpitVisibility
             reseated ?? Array.Empty<Node3D>(), pilot, body, listed, body ? panel : null);
     }
 
-    /// <summary>Adds an outside part whose stereo copy the interior carries
-    /// (<see cref="XrCockpit.Hang"/>), so it leaves the pilot's pane with the reseated originals.</summary>
+    /// <summary>Adds an outside part whose stereo copy the interior carries (<see cref="XrCockpit.Hang"/>,
+    /// <see cref="XrCockpit.Mirror"/>), so it leaves the pilot's pane with the reseated originals.</summary>
     public void Reseat(Node3D node)
     {
         _reseated.Add(node);
@@ -114,7 +114,7 @@ public sealed class CockpitVisibility
         Set(_interior, shown.Interior);
         ShowPanel(shown.Transplant);
         var hidden = (Body: !shown.Body, Markers: !shown.Markers, Dontmove: !shown.Dontmove,
-            Reseated: shown.Interior, Listed: !shown.Listed);
+            Reseated: shown.Interior || shown.Transplant, Listed: !shown.Listed);
         if (hidden == _hidden)
         {
             return;

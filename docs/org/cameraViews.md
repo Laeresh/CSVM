@@ -799,6 +799,13 @@ The radii are from the stereo eye, the origin's measurement scaled by the eye-to
 head-movement row was measured with the eye at the interior's origin and has not been re-measured
 from the marker.
 
+A model pack's body cockpit places the glass by its rig pose in plane-frame metres, and its overlay is
+built from the glass's corners carried to that pose (`CockpitTransplant.Carried`) and read from the
+`cockpit_camera` marker, the flat body cockpit's eye. Where the rig leaves the glass where `cockpit1`
+drew it, the reticle points where the flat body cockpit's does. A moved or turned glass moves the aim
+it shows with it, which is the pack author's to set. A body cockpit whose rig names no glass draws
+neither glass nor reticle.
+
 Measured on the stand-in with the reticle at its authored size, C1 empty stage, Bloodhawk, pose
 `--direction=0,0.34,-0.94 --hold=0,0,0,0.6`, frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
 x 640.192 / 640.191 and y 321.24 in both eyes, the authored eye's projection of the centre cross being

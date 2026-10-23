@@ -280,7 +280,7 @@ rows).
 - `src/Flight/Hud/CockpitReseat.cs`, the Cockpit view's copies of the wingtip lights and prop discs, seated on the interior's own fins and nacelles, and the open-air lights it hides (remake-only).
 - `src/Flight/Hud/FirstPersonDressing.cs`, what a pilot's own aircraft wears in first person, frame by frame: the body hide, the interior pass and the panel needles.
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out and a stereo session builds none.
-- `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
+- `src/Flight/Hud/XrCockpit.cs`, the cockpit interior, or a body cockpit's panel and airframe twins, under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
 - `src/Flight/Hud/XrCockpitTuner.cs`, the `--xr-tune` lab: live nudges of the flown plane's VR interior scale and eye offset, a readout on the HUD panel, a save into `vr_cockpits.json`.
 - `src/Flight/Hud/VrCockpitTuning.cs`, the tuning lab's engine-free step arithmetic, readout text and `vr_cockpits.json` writer.

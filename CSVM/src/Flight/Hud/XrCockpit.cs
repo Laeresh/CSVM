@@ -26,13 +26,20 @@ public sealed class XrCockpit : IXrInterior
     // unscaled box reaches 1.6 km. An eye past that, facing away from the origin, culls the interior.
     private const float EverywhereM = 40000f;
 
+    // The eye feed's globals are declared, which Godot refuses twice. Asking it outside the editor errors.
+    private static bool _eyeGlobals;
+
     private readonly Node3D _interior;
     // Each geometry with the sorting offset it was built with, which lifting adds to.
     private readonly List<(GeometryInstance3D Geometry, float Own)> _geometry = new();
     // Each hung part with its true pose on the airframe, which a placement change re-places it from.
     private readonly List<(Node3D Part, Transform3D OnAirframe)> _hung = new();
+    // Each airframe mesh with the twin under the interior that takes its pose and visibility.
+    private readonly List<(Node3D Original, Node3D Twin)> _mirrored = new();
     // The authored eye in the interior's own units (PlaneBuilder.InteriorEye).
     private readonly Vector3 _eye;
+    // A body cockpit, one metre per metre, which neither the tuning lab's scale nor store fields move.
+    private readonly bool _realScale;
     // The airframe's mount, rescaled only by the tuning lab (SetMountScale).
     private Transform3D _mount;
     private Vector3 _storeOffset;
@@ -47,6 +54,12 @@ public sealed class XrCockpit : IXrInterior
     /// <paramref name="storeOffset"/> and <paramref name="storeSpread"/> (<see cref="Placed"/>).</summary>
     public XrCockpit(Node3D interior, Vector3 eyeOffset = default, Vector3 eyeInInterior = default,
         Vector3 storeOffset = default, float storeSpread = 1f)
+        : this(interior, eyeOffset, eyeInInterior, storeOffset, storeSpread, realScale: false)
+    {
+    }
+
+    private XrCockpit(Node3D interior, Vector3 eyeOffset, Vector3 eyeInInterior, Vector3 storeOffset, float storeSpread,
+        bool realScale)
     {
         _interior = interior;
         _mount = interior.Transform;
@@ -54,6 +67,7 @@ public sealed class XrCockpit : IXrInterior
         EyeOffset = eyeOffset;
         _storeOffset = storeOffset;
         _storeSpread = storeSpread;
+        _realScale = realScale;
         Collect(interior, _geometry);
     }
 
@@ -80,13 +94,32 @@ public sealed class XrCockpit : IXrInterior
     /// before any plane is built, only when the stereo path is live.</summary>
     public static void DeclareEyeFeed()
     {
+        DeclareEyeGlobals();
+        Live = true;
+    }
+
+    /// <summary>Declares the stereo shader's global uniforms, each once, without making the process
+    /// stereo (<see cref="Live"/>): what a suite building a stereo interior needs.</summary>
+    public static void DeclareEyeGlobals()
+    {
+        if (_eyeGlobals)
+        {
+            return;
+        }
+
+        _eyeGlobals = true;
         foreach (var name in new[] { SceneBuilder.XrEyeLeftGlobal, SceneBuilder.XrEyeRightGlobal, SceneBuilder.XrOriginGlobal })
         {
             RenderingServer.GlobalShaderParameterAdd(name, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         }
-
-        Live = true;
     }
+
+    /// <summary>A body cockpit's stereo interior: <paramref name="panel"/>
+    /// (<see cref="PlaneBuilder.CockpitPanel"/>), in the plane frame at real scale, with the eye on
+    /// <paramref name="eyeOnPlane"/>, the <c>cockpit_camera</c> marker, plus <paramref name="eyeOffset"/>.
+    /// Stores hang at their true pylon poses; <see cref="Mirror"/> takes the airframe's twins.</summary>
+    public static XrCockpit Body(Node3D panel, Vector3 eyeOffset, Vector3 eyeOnPlane) =>
+        new(panel, eyeOffset, eyeOnPlane, Vector3.Zero, 1f, realScale: true);
 
     /// <summary>The interior's pose relative to the XR origin, in the origin's axes. The origin
     /// stands at <paramref name="eyeInAircraft"/> with the aircraft's attitude, and the interior at
@@ -144,15 +177,31 @@ public sealed class XrCockpit : IXrInterior
 
         Lift();
         _interior.Transform = new Transform3D(origin.Basis, Vector3.Zero) * InOrigin(held, EyeInAircraft);
+        foreach (var (original, twin) in _mirrored)
+        {
+            if (GodotObject.IsInstanceValid(original) && GodotObject.IsInstanceValid(twin))
+            {
+                twin.Visible = original.IsVisibleInTree();
+                if (twin.Visible && OnAirframe(original) is { } onAirframe)
+                {
+                    twin.Transform = InInterior(_mount, onAirframe);
+                }
+            }
+        }
     }
+
+    /// <summary>Has <paramref name="twin"/>, a stereo-built copy of <paramref name="original"/> that is a
+    /// direct child of the interior, take the original's airframe pose and visibility on each
+    /// <see cref="Follow"/>. A moving surface, a spinning prop or a torn panel then shows in it.</summary>
+    public void Mirror(Node3D original, Node3D twin) => _mirrored.Add((original, twin));
 
     /// <summary>Rescales the mount about the authored eye to <paramref name="metresPerUnit"/>: the
     /// tuning lab's live scale. The next <see cref="Follow"/> places it. ⚠ The depth bias stays the
     /// one the build baked (SceneBuilder's <c>DepthBiasScale</c>); only a rebuild at the new scale is
-    /// exact.</summary>
+    /// exact. A body cockpit is real scale and keeps its mount.</summary>
     public void SetMountScale(float metresPerUnit)
     {
-        if (!(metresPerUnit > 0f) || Mathf.IsEqualApprox(metresPerUnit, MountScale))
+        if (_realScale || !(metresPerUnit > 0f) || Mathf.IsEqualApprox(metresPerUnit, MountScale))
         {
             return;
         }
@@ -187,6 +236,12 @@ public sealed class XrCockpit : IXrInterior
     /// (<see cref="Placed"/>): the tuning lab's live store placement.</summary>
     public void PlaceStores(Vector3 offset, float spread)
     {
+        // A body cockpit's stores are the real ones' copies, at their true pylon poses.
+        if (_realScale)
+        {
+            return;
+        }
+
         _storeOffset = offset;
         _storeSpread = spread;
         PlaceHung();
@@ -199,15 +254,9 @@ public sealed class XrCockpit : IXrInterior
     /// under the node the interior is mounted on.</summary>
     public bool Hang(Node3D part, Node3D anchor)
     {
-        var onAirframe = Transform3D.Identity;
-        for (Node? node = anchor; node != _interior.GetParent(); node = node.GetParent())
+        if (OnAirframe(anchor) is not { } onAirframe)
         {
-            if (node is not Node3D step)
-            {
-                return false;
-            }
-
-            onAirframe = step.Transform * onAirframe;
+            return false;
         }
 
         part.Transform = InInterior(_mount, Placed(onAirframe, _storeOffset, _storeSpread));
@@ -239,6 +288,24 @@ public sealed class XrCockpit : IXrInterior
         {
             Collect(child, into);
         }
+    }
+
+    // A node's pose on the node the interior is mounted on, from local transforms alone. Null when
+    // the walk never meets it.
+    private Transform3D? OnAirframe(Node3D node)
+    {
+        var onAirframe = Transform3D.Identity;
+        for (Node? step = node; step != _interior.GetParent(); step = step.GetParent())
+        {
+            if (step is not Node3D at)
+            {
+                return null;
+            }
+
+            onAirframe = at.Transform * onAirframe;
+        }
+
+        return onAirframe;
     }
 
     // The interior's mount composed up to the aircraft from local transforms alone: the wobble

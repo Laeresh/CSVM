@@ -108,4 +108,29 @@ public class CockpitTransplantTests
         Assert.Equal(Basis.Identity, frame.Value.Basis);
         Assert.Null(CockpitTransplant.GlassFrame(new List<GunsightReticle.Glass>()));
     }
+
+    // A glass moved by the rig: its corners go where the moved glass draws them. The stereo reticle
+    // built from them then lies in that glass's plane, on the rig's position, at the pose's scale.
+    [Fact]
+    public void AGlassCornerIsCarriedToWhereTheMovedGlassDrawsIt()
+    {
+        var frame = new Transform3D(Basis.Identity, new Vector3(0f, 2f, -10f));
+        var corner = new Vector3(1f, 3f, -10f);
+        var at = new Vector3(-0.381f, 0.134f, 1.058f);
+        var pose = new RigGaugePose(at, new Vector3(-4.7f, 0f, 0f), 0.04f);
+        var glass = CockpitTransplant.Posed(PlaneBuilder.InteriorToPlane(frame, Marker), pose);
+        var carried = CockpitTransplant.Carried(frame, glass);
+
+        Assert.True((carried * frame.Origin).DistanceTo(at) < Tolerance, $"centre lands at {carried * frame.Origin}");
+        var want = at + (Basis.FromEuler(new Vector3(Mathf.DegToRad(-4.7f), 0f, 0f), EulerOrder.Yxz) * (new Vector3(1f, 1f, 0f) * 0.04f));
+        Assert.True((carried * corner).DistanceTo(want) < Tolerance, $"corner lands at {carried * corner} vs {want}");
+
+        // An assembly holding the glass carries it by the assembly's own move.
+        var holder = PlaneBuilder.InteriorToPlane(Speedometer, Marker);
+        var moved = CockpitTransplant.Posed(holder, new RigGaugePose(at, null, null));
+        var byHolder = CockpitTransplant.Carried(Speedometer, moved);
+        Assert.True((byHolder * Speedometer.Origin).DistanceTo(at) < Tolerance);
+        Assert.True(byHolder.Basis.IsEqualApprox(PlaneBuilder.FlatMount(Marker).Basis),
+            "a position-only move keeps the flat mount's size and facing");
+    }
 }

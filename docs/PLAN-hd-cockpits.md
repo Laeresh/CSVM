@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, under the headset
 
-31. ☐ [local] Body cockpit under the headset
+31. ◐ [local] Body cockpit under the headset
 32. ☐ [local] Replaced `cockpit1` under the headset
 
 ## Dependency and parallelism notes
@@ -738,7 +738,95 @@ a rig `markers` entry must not reach into `cockpit1`.
 
 # Wave D, under the headset
 
-## D31 ☐ [local] Body cockpit under the headset
+## D31 ◐ [local] Body cockpit under the headset
+
+**Landed.** Under the stereo path a rig with `"from": "body"` draws the body cockpit, its hide list,
+its transplanted dials and a named glass with the collimated reticle, all from the XR origin's frame.
+`HumanFlightAdapter` no longer gates the section on `xrInterior`. The user's look in the headset is
+owed, batched with B14.
+
+- **What is lifted.** The stereo build's `CockpitPanel` is what the stereo interior follows:
+  `XrCockpit.Body(panel, eyeOffset, cockpit_camera)` lifts it top level into the XR origin's frame the
+  way the stock interior is lifted, with the panel's mount at identity, one metre per metre. It holds
+  the transplanted `gauges` and `glass` (built through the stereo interior shader on the interior
+  builder), the glass's reticle overlay, and a twin of every drawn body mesh. The twins come from a
+  second airframe `SceneBuilder` keyed `XrPreciseInterior` (`PlaneBuilder.StereoBody`): the airframe
+  subtree is built again, each `mesh` instance of a gamez node is paired by node index and child order
+  with its original, and the copy's tree is freed. Each twin shares the copy's `Mesh`, takes the
+  original's `node_bias`, casts no shadow (the original casts the real one) and is a direct child of
+  the panel. `XrCockpit.Mirror` sets each twin's pose (the original's local transforms up to the
+  model root, `InInterior` through the identity mount) and its visibility from `IsVisibleInTree` on
+  every `Follow`, so control surfaces, props, torn panels and the hook move in the twins. A mesh
+  under an override material (the wingtip flares, whose facade shader cannot be lifted), the
+  point-sprite `lights`, a twin whose shader is not the stereo variant, the hide list's subtrees and
+  every `cockpit*` subtree get no twin. Pylon stores hang through the existing `Hang` at their true
+  pylon poses (the body's `XrCockpit` has zero store offset and spread 1).
+- **Doubles.** Each twinned original goes to `CockpitVisibility.Reseat`, whose list now leaves the
+  pilot's pane while the interior *or* the transplanted panel is drawn (`Reseated: Interior ||
+  Transplant`). The pilot's pane draws the twins (the panel's `WorldFlareLayer` stamp) and none of
+  their originals; a second pane, the spyglass disc, the photograph and every outside view draw the
+  originals as before. An external pose lowers the panel back onto the airframe at identity and gives
+  the originals back. The flat body cockpit binds no reseated parts, so its rules are unchanged.
+- **Scale and eye.** The panel's dials use the flat mount (`FlatMount(cockpit_camera, InteriorScale)`)
+  on both paths, so one rig puts each dial at one plane-frame pose and size flat and in the headset.
+  The interior builder's depth bias is set to `1 / InteriorScale` for a body cockpit, so the
+  per-plane `interiorScaleFactor` reaches neither the dials nor their bias; it scales only the hidden
+  `cockpit1` rest. `SetMountScale` and `PlaceStores` do nothing on a body `XrCockpit`; the tuning
+  lab's eye offset still applies. `EyeInAircraft` is `cockpit_camera` plus the seated-eye offset.
+- **The tilt.** The view under the headset takes the aircraft's attitude untilted, as the stock stereo
+  interior does: the tracked head supplies the pitch, and the 4.7° head-pitch tilt exists to put the
+  flat camera's authored sight near the guns. The flat mount's tilt reaches a body cockpit only as the
+  default facing of a dial whose pose gives no `rotation` (B13's template always gives one), so it
+  never enters the view.
+- **Head plate.** Not cut for a body cockpit (`OmittedPolygons` null); `cockpit1`'s shell never draws.
+- **Glass and reticle.** `CockpitTransplant.Build` now returns `glassCarried`, how the glass moved
+  from `cockpit1`'s frame into the plane frame (`Carried`): from the `glass` key's pose, or from the
+  move of the assembly that holds the glass (the Brigand's `g730`, the Firebrand's `g184`). The
+  overlays are built from the glass corners carried through it, in the panel's plane frame, read from
+  `cockpit_camera` (`authored_eye`) with a margin of `EyeReachM` metres, and take the glass's own
+  depth bias. They hang on the panel, never on `cockpit1`.
+- **Limits.** The twins' opaque surfaces write the interior's stencil mark, so the whiteout quad leaves
+  the body clear as it leaves the stock interior clear, and a store's stereo copy (drawn under the
+  interior) hides where it overlaps the body even when it is in front. The wingtip flares and point
+  sprites stay at world coordinates in the pilot's pane, as they do in the stock stereo cockpit. A
+  material-level animation on an original (none of the airframe animators makes one) would not reach
+  its twin. `XrCockpit.DeclareEyeGlobals` declares the eye feed's three globals once without making
+  the process stereo; `DeclareEyeFeed` calls it.
+- **Tests.** `CockpitTransplantTests.AGlassCornerIsCarriedToWhereTheMovedGlassDrawsIt`,
+  `XrCockpitTests.ARealScaleTwinLiftsToItsOwnOffsetFromTheEye`. Suite `plane-rig-cockpit-stereo`
+  (`Testing/PlaneRigSuites.cs`, install only, windowed through `analysis/headless-limits.json`
+  `headlessDiffers`, since the reticle needs the glass texture's pixels): on the Bloodhawk with a body
+  section hiding a body leaf and naming a moved, turned, scaled speedometer and the glass, the panel
+  carries a stereo-shaded twin of each of the 32 drawn body meshes and none for the hide node, no head
+  plate is cut, one reticle overlay hangs on the panel reading `cockpit_camera`; lifted at a rotated
+  pose 20 km from the origin each twin stands at its original's offset from the eye within 0.48 µm,
+  none past 6.1 m, the speedometer and glass at the rig's plane-frame poses; a turned original turns
+  its twin and a hidden one hides it on the next `Follow`; the pilot's pane draws the twins and none of
+  their originals or the hide node, a second pane draws all the originals; the scale and store fields
+  leave the mount alone; an external pose lowers the panel.
+- **Registration and jitter** (SHOT-45 and SHOT-48; least-squares sub-pixel shift with gain and
+  offset fitted, over seven cockpit regions clear of the pipper, `.scratch/d31-reg/reg.py`). The
+  Corvette pack (`.scratch/d31-pack`, the real pack with its body section) on `--stage=empty`,
+  `--view=cockpit --no-cockpit-pass`, heading `-0.743,0,-0.669`, the left eye on the flat camera with
+  `--xr-sim=eye=1280x720,fov=96.4268,ipd=20,head=0.01/0/0,shot=left,pitch=-4.70001`. At the origin
+  the stereo left eye registers within 0.078 px of the flat frame in every region. Between the stereo
+  frames at 0 and 20 km the wheel, mirror, glovebox, door and pillar regions agree within 0.09 px (the
+  dial regions differ by their needles' readings). Over 24 consecutive frames at 20 km the stereo
+  cockpit's worst frame-to-frame step is 0.006 px (0.032 px at the origin, the moving needles); the
+  flat body cockpit, drawn at world coordinates, steps up to 2.43 px there (mean 0.26 to 0.88 px per
+  region) against 0.064 px at the origin. So the flat 20 km frame is no registration reference.
+- **For B14.** The flat body cockpit jitters by up to 2.4 px at 20 km from the origin, since its body
+  and dials are drawn at world coordinates; this item does not change the flat path.
+- **For D32.** `AddGunsightReticles(parent, root, toParent, eye, metresPerUnit)` now builds overlays in
+  any frame, so a moved glass inside a replaced `cockpit1` can take its overlay through `Carried`
+  under the interior (`toParent` the glass's move in interior units, `eye` `InteriorEye`). The stereo
+  `cockpit1` path is otherwise unchanged; the body branch skips it whole.
+- **Shots** (`.scratch/d31-shots/`): `flat-0km.png` against `xr-left-0km.png` (flat and stereo left
+  eye from one eye point), `flat-20km.png`, `xr-left-20km.png`. Jitter series in `.scratch/d31-jitter/`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A body cockpit, its transplanted gauges and its glass draw steadily under the headset,
 with the eye at `cockpit_camera` and the collimated reticle on a named glass.

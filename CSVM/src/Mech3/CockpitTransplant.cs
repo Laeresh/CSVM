@@ -63,21 +63,24 @@ public static class CockpitTransplant
         return corners == 0 ? null : new Transform3D(Basis.Identity, sum / corners);
     }
 
-    /// <summary>Moves the assemblies <paramref name="cockpit"/> names out of the built
-    /// <paramref name="interior"/> into a new hidden panel, and copies the glass out when named. Each
-    /// takes its rig pose in the frame <paramref name="mount"/> puts the interior in. The panel holds
-    /// a <c>gauges</c> node only when an assembly moved.</summary>
+    /// <summary>Moves the assemblies <paramref name="cockpit"/> names out of the built <paramref name="interior"/>
+    /// into a new hidden panel, and copies the glass out when named. Each takes its rig pose in
+    /// <paramref name="mount"/>'s frame. The panel holds a <c>gauges</c> node only when an assembly moved.</summary>
     /// <param name="glassFrame"><see cref="GlassFrame"/> of the same interior.</param>
     /// <param name="materials">The interior's textured materials, which name the glass's surfaces.</param>
+    /// <param name="glassCarried">How the sight glass moved, <see cref="Carried"/>; null when no glass moved.</param>
     public static Node3D Build(Node3D interior, RigCockpit cockpit, Transform3D mount, Transform3D? glassFrame,
-        IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials)
+        IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials, out Transform3D? glassCarried)
     {
         var panel = new Node3D { Name = PanelName, Visible = false };
+        var glassIds = GlassMaterials(materials);
         int glassSurfaces = 0;
+        glassCarried = null;
         if (cockpit.Gauges.TryGetValue(RigCockpit.GlassKey, out var glassPose) && glassFrame is { } frame)
         {
             var glass = new Node3D { Name = GlassName, Transform = Posed(mount * frame, glassPose) };
-            glassSurfaces = CutGlass(interior, interior, frame, GlassMaterials(materials), glass);
+            glassSurfaces = CutGlass(interior, interior, frame, glassIds, glass);
+            glassCarried = Carried(frame, glass.Transform);
             panel.AddChild(glass);
         }
 
@@ -92,7 +95,14 @@ public static class CockpitTransplant
                 continue;
             }
 
-            var at = Posed(mount * PlaneRigPatch.PlaneFrame(assembly, interior), pose);
+            var original = PlaneRigPatch.PlaneFrame(assembly, interior);
+            var at = Posed(mount * original, pose);
+            // The Brigand's and Firebrand's glass rides its assembly, which the rig names instead.
+            if (HoldsGlass(assembly, glassIds))
+            {
+                glassCarried = Carried(original, at);
+            }
+
             if (group == null)
             {
                 group = new Node3D { Name = "gauges" };
@@ -108,6 +118,12 @@ public static class CockpitTransplant
         Log.Info("world", $"cockpit: {moved} gauge assembly(ies) and {glassSurfaces} sight glass surface(s) moved onto the airframe");
         return panel;
     }
+
+    /// <summary>The transform a transplant carried a part by, from <c>cockpit1</c>'s frame into the
+    /// plane frame: from <paramref name="inInterior"/>, its pose in the interior, to <paramref name="onPlane"/>.
+    /// A sight glass polygon's corners go through it to where the moved glass draws them.</summary>
+    public static Transform3D Carried(Transform3D inInterior, Transform3D onPlane) =>
+        onPlane * inInterior.AffineInverse();
 
     /// <summary>Places the assemblies <paramref name="cockpit"/> names where they stand inside the
     /// drawn <paramref name="interior"/>, each pose in <c>cockpit1</c>'s own frame and units. An assembly
@@ -211,6 +227,24 @@ public static class CockpitTransplant
         }
 
         return cut;
+    }
+
+    private static bool HoldsGlass(Node node, HashSet<ulong> glassIds)
+    {
+        if (node is MeshInstance3D { Mesh: ArrayMesh mesh } instance && IsGlass(instance, mesh, glassIds))
+        {
+            return true;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (HoldsGlass(child, glassIds))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsGlass(MeshInstance3D instance, ArrayMesh mesh, HashSet<ulong> glassIds)

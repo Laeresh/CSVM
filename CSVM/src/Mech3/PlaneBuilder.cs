@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
@@ -90,6 +91,9 @@ public sealed class PlaneBuilder
     private readonly List<Node3D> _cockpitDamagePanels = new();
     // The stereo interior's sight glass textures split into their glass and reticle layers, by name.
     private readonly Dictionary<string, GunsightReticle.Layers?> _gunsight = new();
+    // A stereo body cockpit's airframe twins, and the builder that drew them through the stereo shader.
+    private readonly List<(MeshInstance3D Original, MeshInstance3D Twin)> _stereoBody = new();
+    private SceneBuilder? _stereoBodyScene;
     private PaintScheme? _scheme;
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
@@ -113,14 +117,7 @@ public sealed class PlaneBuilder
         _scheme = scheme;
         _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
-        _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
-            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
-        {
-            // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
-            ShadowLookupOffset = AirframeShadowLookupOffset,
-            // The race ghost keys the airframe alone; the interior is the owner's view and never fades.
-            RaceGhostShader = raceGhost,
-        };
+        _scene = AirframeScene(raceGhost, stereo: false);
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a
         // later caller a mesh biased for the wrong scale.
@@ -200,9 +197,15 @@ public sealed class PlaneBuilder
     public RigCockpit? Cockpit { get; private set; }
 
     /// <summary>A body cockpit's transplanted instruments (<see cref="CockpitTransplant"/>), hidden, on
-    /// the airframe in the plane frame. Null on every build that is not a flat body cockpit; the stereo
-    /// path keeps <c>cockpit1</c>. It holds no <c>gauges</c> node when the rig's table names none.</summary>
+    /// the airframe in the plane frame; null on every other build. It holds no <c>gauges</c> node when the
+    /// rig's table names none. Under the stereo path it also holds <see cref="StereoBody"/>'s twins and the
+    /// glass's collimated reticle, and is what the stereo interior lifts.</summary>
     public Node3D? CockpitPanel { get; private set; }
+
+    /// <summary>A stereo body cockpit's airframe: each drawn body mesh paired with a twin built through
+    /// the stereo interior's shader, under <see cref="CockpitPanel"/>. The hide
+    /// list's nodes, and meshes whose shader cannot be lifted (a flare), have none. Empty elsewhere.</summary>
+    public IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> StereoBody => _stereoBody;
 
     /// <summary>Where the eye sits in <see cref="CockpitInterior"/>'s own units: the
     /// <c>cockpit_camera</c> marker's numbers under the stereo path, the interior's origin on every
@@ -389,6 +392,7 @@ public sealed class PlaneBuilder
             : null;
         _scene.Repaint();
         _interiorScene?.Repaint();
+        _stereoBodyScene?.Repaint();
     }
 
     // ⚠ Blur disc textures must alpha-blend, never scissor: their alpha peaks around 26%,
@@ -425,6 +429,44 @@ public sealed class PlaneBuilder
         name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
         && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
 
+    // Each gamez node's drawn meshes, in child order, keyed by the node's index.
+    private static void TwinMeshes(Node node, Dictionary<int, List<Mesh>> into)
+    {
+        if (node.HasMeta(AnimRuntime.IndexMeta))
+        {
+            var list = new List<Mesh>();
+            foreach (var child in node.GetChildren())
+            {
+                if (child is MeshInstance3D { Mesh: { } mesh } mi && mi.Name.ToString() == "mesh")
+                {
+                    list.Add(mesh);
+                }
+            }
+
+            into[(int)node.GetMeta(AnimRuntime.IndexMeta)] = list;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            TwinMeshes(child, into);
+        }
+    }
+
+    // Whether every surface of a twin mesh wears the stereo interior's placement.
+    private static bool Lifts(Mesh mesh)
+    {
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            if (mesh.SurfaceGetMaterial(s) is not ShaderMaterial { Shader: { } shader }
+                || !shader.Code.Contains(SceneBuilder.XrEyeLeftGlobal, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // The painter can only be built once the aircraft's root is known, its skin prefix is
     // read off the model's own material names. Built on the first Build/BuildDestroyed call
     // and reused, so both share one painted-texture cache.
@@ -441,6 +483,18 @@ public sealed class PlaneBuilder
         _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix);
         Log.Info("world", $"[paint] {root.Name} ({_skinPrefix}): {_scheme}{(_painter.PatternMissesAircraft ? $", pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only" : "")}");
     }
+
+    // The airframe's builder, and a stereo body cockpit's second one, whose twins the stereo interior lifts.
+    private SceneBuilder AirframeScene(bool raceGhost, bool stereo) =>
+        new(_gamez, _textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
+        {
+            // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
+            ShadowLookupOffset = AirframeShadowLookupOffset,
+            // The race ghost keys the airframe alone; the interior is the owner's view and never fades.
+            RaceGhostShader = raceGhost,
+            XrPreciseInterior = stereo,
+        };
 
     // Hides and re-skins the wingtip flares (WingLights.cs), and in the same walk collects
     // the flight build's damage panels: torn pdpN hidden, healthy pdpN_h as built. A rig's
@@ -506,15 +560,21 @@ public sealed class PlaneBuilder
             {
                 continue;
             }
+            bool xr = _interiorScene.XrPreciseInterior;
+            bool body = Cockpit is { FromBody: true };
             // A tracked head can lean past the plate behind the eye, so the stereo interior drops it.
-            // The flat eye never sees its front, and the flat build keeps it untouched.
-            _interiorScene.OmittedPolygons = _interiorScene.XrPreciseInterior ? CockpitPlate.Find(_gamez, node) : null;
+            // The flat eye never sees its front, and a body cockpit never draws cockpit1's shell.
+            _interiorScene.OmittedPolygons = xr && !body ? CockpitPlate.Find(_gamez, node) : null;
             // The airframe's pack scope, so cockpit1.glb and the airframe's node files reach the
             // interior. Its replacements are this builder's own, which bakes the interior's bias.
             _interiorScene.HdAirframe = _scene.HdAirframe;
-            bool body = Cockpit is { FromBody: true } && !_interiorScene.XrPreciseInterior;
             // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.
             _interiorScene.NoShadowReceive = body;
+            if (body)
+            {
+                // A body cockpit is real scale: its dials take the flat mount's bias, never the VR factor's.
+                _interiorScene.DepthBiasScale = 1f / InteriorScale;
+            }
             int replacedBefore = _interiorScene.ReplacedMeshCount;
             // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
             // that the airframe pass never builds the interior, and it is the root here.
@@ -527,24 +587,29 @@ public sealed class PlaneBuilder
             {
                 Log.Info("world", $"HD models: {_interiorScene.ReplacedMeshCount - replacedBefore} cockpit interior mesh instance(s) of {root.Name} drawn from the model pack");
             }
-            InteriorEye = _interiorScene.XrPreciseInterior ? CockpitCameraOffset : Vector3.Zero;
-            n3d.Transform = _interiorScene.XrPreciseInterior
+            InteriorEye = xr ? CockpitCameraOffset : Vector3.Zero;
+            n3d.Transform = xr
                 ? StereoMount(CockpitCameraOffset, _interiorScale)
                 : FlatMount(CockpitCameraOffset, _interiorScale);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
-            if (_interiorScene.XrPreciseInterior)
+            if (xr && !body)
             {
-                AddGunsightReticles(n3d, node);
+                AddGunsightReticles(n3d, node, Transform3D.Identity, InteriorEye, _interiorScale);
             }
 
             built.AddChild(n3d);
             CockpitInterior = n3d;
             if (body)
             {
-                CockpitPanel = CockpitTransplant.Build(n3d, Cockpit!, n3d.Transform,
-                    CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials);
+                // The flat mount on both paths, so one rig puts each dial at one place on the body.
+                CockpitPanel = CockpitTransplant.Build(n3d, Cockpit!, FlatMount(CockpitCameraOffset),
+                    CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials, out var glassCarried);
                 built.AddChild(CockpitPanel);
+                if (xr)
+                {
+                    LiftBody(built, root, node, glassCarried);
+                }
             }
             else if (Cockpit is { FromBody: false, Gauges.Count: > 0 })
             {
@@ -573,17 +638,79 @@ public sealed class PlaneBuilder
         return layers?.Glass ?? tex;
     }
 
-    // One collimated reticle overlay per sight glass the build split a texture for.
+    // One collimated reticle overlay per sight glass the build split a texture for, under parent.
+    // The glass goes into parent's frame by toParent, and eye reads it there at metresPerUnit.
     // It takes the glass's own depth bias, so it hides behind whatever hides the glass.
-    private void AddGunsightReticles(Node3D interior, GameZNode root)
+    private void AddGunsightReticles(Node3D parent, GameZNode root, Transform3D toParent, Vector3 eye, float metresPerUnit)
     {
         foreach (var glass in GunsightReticle.Find(_gamez, root))
         {
+            var placed = glass with { Corners = glass.Corners.Select(c => toParent * c).ToList() };
             if (_gunsight.GetValueOrDefault(glass.TextureName) is { } layers
-                && GunsightReticle.Overlay(glass, layers, GunsightReticle.EyeReachM / _interiorScale, _interiorScene!.PriorityBias(glass.Priority), InteriorEye) is { } overlay)
+                && GunsightReticle.Overlay(placed, layers, GunsightReticle.EyeReachM / metresPerUnit, _interiorScene!.PriorityBias(glass.Priority), eye) is { } overlay)
             {
-                interior.AddChild(overlay);
+                parent.AddChild(overlay);
                 GunsightReticles++;
+            }
+        }
+    }
+
+    // Under the stereo path a body cockpit's panel is what the stereo interior lifts. It takes a twin of
+    // every drawn body mesh, built through the stereo shader and placed each frame by Flight.Hud.XrCockpit.
+    // The moved glass takes its reticle, collimated for the cockpit_camera eye in the plane frame.
+    private void LiftBody(Node3D built, GameZNode root, GameZNode interior, Transform3D? glassCarried)
+    {
+        if (glassCarried is { } carried)
+        {
+            AddGunsightReticles(CockpitPanel!, interior, carried, CockpitCameraOffset, 1f);
+        }
+
+        _stereoBodyScene = AirframeScene(raceGhost: false, stereo: true);
+        _stereoBodyScene.HdAirframe = _scene.HdAirframe;
+        if (_stereoBodyScene.BuildSubtree(root, Skip) is not { } copy)
+        {
+            return;
+        }
+
+        var meshes = new Dictionary<int, List<Mesh>>();
+        TwinMeshes(copy, meshes);
+        copy.Free();
+        PairTwins(built, built, new HashSet<string>(Cockpit!.Hide, StringComparer.OrdinalIgnoreCase), meshes, CockpitPanel!);
+        Log.Info("world", $"cockpit: {_stereoBody.Count} airframe mesh(es) twinned for the stereo interior");
+    }
+
+    // Pairs every drawn body mesh outside cockpit* and the hide list with the twin of its gamez node. A
+    // mesh worn under an override material, a flare, or a twin whose shader is not the stereo one, stays
+    // drawn in the world only.
+    private void PairTwins(Node node, Node3D built, HashSet<string> hide, Dictionary<int, List<Mesh>> twins, Node3D holder)
+    {
+        int ordinal = 0;
+        foreach (var child in node.GetChildren())
+        {
+            if (child is MeshInstance3D mi && mi.Name.ToString() == "mesh")
+            {
+                if (node.HasMeta(AnimRuntime.IndexMeta) && mi.MaterialOverride == null
+                    && twins.GetValueOrDefault((int)node.GetMeta(AnimRuntime.IndexMeta)) is { } list
+                    && ordinal < list.Count && Lifts(list[ordinal]))
+                {
+                    var twin = new MeshInstance3D
+                    {
+                        Name = $"twin{_stereoBody.Count}",
+                        Mesh = list[ordinal],
+                        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                        Transform = PlaneRigPatch.PlaneFrame(mi, built),
+                    };
+                    twin.SetInstanceShaderParameter("node_bias", mi.GetInstanceShaderParameter("node_bias"));
+                    holder.AddChild(twin);
+                    _stereoBody.Add((mi, twin));
+                }
+
+                ordinal++;
+            }
+            else if (child is Node3D n3d && !hide.Contains(AnimRuntime.NameOf(n3d))
+                && !AnimRuntime.NameOf(n3d).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase))
+            {
+                PairTwins(n3d, built, hide, twins, holder);
             }
         }
     }
