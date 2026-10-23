@@ -310,7 +310,7 @@ its outside parts are the ones in view, and neither does the stereo path. Rules 
 ## src/Flight/Hud/FirstPersonDressing.cs
 What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
 `Interior`, `Panel` (`CockpitGauges`), `Pass` (`CockpitOverlay`) and, under the stereo path,
-`Stereo` (`XrCockpit`), all null on a rig built no interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
+`Stereo` (`XrCockpit`), all null on a rig built no interior; a flat body cockpit's `Interior` is its transplanted panel and `Body` its eye and twins, and `BuildPass` builds `Pass` over either. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
 held look-behind brings the body back, and takes the screen-space cluster off while the panel is
 on screen: the interior, or a body cockpit's transplanted panel once it carries a dial (`Panel` bound); `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
 after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
@@ -323,8 +323,8 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 `CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
-lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does; `Sync` follows
-the interior `Visible` and sets each material's `light_origin` to the eye for the point lights.
+lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does, through `FirstPersonDressing.BuildPass`; `Sync` follows
+the interior `Visible` and sets each material's `light_origin` to the eye for the point lights. `BuildBody` takes a flat body cockpit's panel instead, placed from its model root's pose less the `cockpit_camera` eye and turned about the shake pivot, and each `Mech3/PlaneBuilder.cs` `FlatBody` twin takes its original's plane-frame pose and visibility per `Sync`, the original joining `CockpitVisibility.Reseat`.
 
 ## src/Flight/Hud/XrCockpit.cs
 The cockpit interior under the stereo path, drawn in the main world the cockpit pass's way: while it

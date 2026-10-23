@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ [local] Transplanted gauge assemblies and sight glass on the body
 13. ☑ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
 14. ◐ [local] The Corvette's seat and dashboard
-15. ☐ [local] Flat body cockpits drawn steadily, through the cockpit pass
+15. ☑ [local] Flat body cockpits drawn steadily, through the cockpit pass
 
 ### Wave C, cockpit1 replacements
 
@@ -591,7 +591,78 @@ The pack is built by `.scratchKeep\corvette\scripts\build_corvette_pack.py`.
 **⚠ Traps.** Third-party asset: never commit the pack or put it in a tracked path, and leave the
 original file untouched.
 
-## B15 ☐ [local] Flat body cockpits drawn steadily, through the cockpit pass
+## B15 ☑ [local] Flat body cockpits drawn steadily, through the cockpit pass
+
+**Landed.** On the flat screen, with the cockpit pass on, a body cockpit's pass holds the
+transplanted panel and a twin of each drawn body mesh, all at small numbers around the pass's
+origin. `--no-cockpit-pass` keeps the main-world body cockpit, and a rig without `"from": "body"`
+takes the stock path unchanged.
+
+- **Twins.** `PlaneBuilder.FlatBody(built, panel, hide)` (`Mech3/PlaneBuilder.cs`) hangs a hidden
+  twin under the panel for each `mesh` instance of a gamez node, choosing the meshes as D31's
+  `PairTwins` does. A twin shares its original's `Mesh`, `node_bias` and shadow setting, and wears
+  `ShaderTwins.Copy` copies of its materials, one per source material, because the pass writes
+  `light_origin` on every material it holds. No second airframe build is needed. `HumanFlightAdapter`
+  makes them for a flat seat with a pane, after the race-ghost stamp and before the stores hang. The
+  dressing's `Interior` is then the panel and its new `Body` holds the eye (`cockpit_camera`) and the
+  twins.
+- **The pass.** `GameSession.BuildCockpitPasses` builds through the new
+  `FirstPersonDressing.BuildPass`. It calls `CockpitOverlay.BuildBody` for a body cockpit and
+  `Build` otherwise. The body's mount is the model root's local transform times the panel's, with the
+  eye subtracted. `Sync` places it as `attitude × (wobble × mount.Origin − eye)`, so the body turns
+  about the shake pivot as its originals do. The stock interior's mount origin and eye are both zero,
+  so its transform is the one it had. Each `Sync` gives every twin its original's plane-frame pose
+  (`PlaneRigPatch.PlaneFrame` to the model root, through `XrCockpit.InInterior`) and
+  `IsVisibleInTree`, the minimal copy of `XrCockpit.Mirror`'s loop. Each original joins
+  `CockpitVisibility.Reseat`, so it leaves the pilot's pane while the panel is drawn. A second pane
+  and every outside view keep drawing the originals. `CockpitVisibility` is unchanged.
+- **Pass camera.** It now culls nothing (`CullMask = uint.MaxValue`). The panel wears
+  `SplitScreen.WorldFlareLayer` (bit 20 and up), past Godot's default 20-bit mask, so the pass
+  first drew an empty frame. The stock interior's layers all sit under bit 20.
+- **What the pass does not take.** The hide list, `cockpit*` subtrees and meshes under an override
+  material (the flares) get no twin, as in D31. Point-sprite `lights` are not `mesh` instances.
+  Pylon stores and anything else hung after the twins are made also get none. They stay in the
+  main world under the pass, which matches decision 12 (stores in view, not hidden). The pass draws
+  over the world, so a store, smoke or a world object nearer than a body surface hides behind it, as
+  it does behind the stock interior (the trap below). No other class of body part is held back:
+  windows and canopies have to be in the pass, because the body seen through them is.
+- **Look.** The dials keep `cockpit1`'s shader and no shadow (decision 12). The twins cast and
+  receive the pass sun's shadow among themselves, but a world object's shadow no longer reaches the
+  body, as with the stock interior. The sight glass now composites as stock `cockpit1` does through
+  the pass (`origin-pass.png` against `origin-no-pass.png`, glass region mean 71 against 81). The
+  car's translucent windows darken in the same way: sky seen through the windscreen reads 69 against
+  97 under `--no-cockpit-pass`, and through the side window 66 against 100. Opaque surfaces match
+  exactly. This is the pass's after-tonemap composite of a translucent surface (SHOT-46), the same
+  composite that makes the stock glass read stronger. Whether the window tint is acceptable is the
+  user's look, owed with B14.
+- **Tests.** Suite `plane-rig-cockpit-pass` (`Testing/PlaneRigSuites.cs`, install only, headless)
+  runs on the Bloodhawk with a body section that hides a body leaf and names a moved, turned and
+  scaled speedometer and the glass. It checks that 32 of 32 drawn body meshes are twinned and the
+  hide node is not, with mesh, shader and bias shared and the materials copied, and that every twin
+  starts hidden. The pass must take the panel into its own viewport, and its camera must draw the
+  panel. On a rotated pose 20 km out with a wobbled pivot, each shown twin stands at its original's
+  offset from the eye within 0.98 µm, and within 1 cm of the world's float32 globals. The speedometer
+  must stand at the rig's pose, `light_origin` must reach the twins and none of the originals, and
+  the pilot's pane must drop every twinned original and the hide node while a second pane draws
+  them. A turned original turns its twin and a hidden one hides it. An external pose takes the pass
+  off and gives the originals back.
+- **Jitter and registration** (SHOT-45, SHOT-48, INSTR-30; least-squares sub-pixel shift with gain
+  and offset fitted, `.scratch/b15-jitter/reg.py`, ten regions clear of the pipper, four of them
+  dials). The run used the Corvette real pack (`.scratch/b15-pack`) on `--stage=empty
+  --plane=player_autogyro --view=cockpit --direction=-0.743,0,-0.669 --frames=60 --shots=24`. At
+  `--pos=14142,400,14142` (20 km) the pass's worst frame-to-frame step is 0.006 px, a speedometer
+  needle, and 0.002 px over the body regions. Under `--no-cockpit-pass` at the same pose it is
+  3.76 px (mean 0.36 to 1.15 px per region; D31 measured 2.43 px over its regions). At the origin the
+  figures are 0.006 px with the pass and 0.063 px without. The pass at the origin registers with the
+  `--no-cockpit-pass` frame within 0.07 px in nine regions. The tenth, the A-pillar, reads 0.20 px
+  because it takes in the darker side window. The pass at the origin and at 20 km agree within
+  0.07 px.
+- **Shots** (`.scratch/b15-shots/`): `origin-pass.png` against `origin-no-pass.png`, and
+  `far-20km-pass.png` against `far-20km-no-pass.png`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** On the flat screen a body cockpit (the body seen from inside, its transplanted dials and
 its glass) draws as steadily far from the chapter origin as the stock interior does.

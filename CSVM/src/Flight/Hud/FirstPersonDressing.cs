@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
 using Godot;
@@ -33,8 +34,13 @@ public sealed class FirstPersonDressing
     /// one: needles and lamps, driven off the same readings the screen-space cluster draws.</summary>
     public CockpitGauges? Panel { get; set; }
 
-    /// <summary>The <c>cockpit1</c> subtree itself, as the plane builder returned it.</summary>
+    /// <summary>What the pass takes out of the plane model. That is the <c>cockpit1</c> subtree as the plane builder
+    /// returned it, or a flat body cockpit's transplanted panel (<see cref="Body"/>).</summary>
     public Node3D? Interior { get; set; }
+
+    /// <summary>A flat body cockpit as the pass draws it: the eye (the <c>cockpit_camera</c> marker) and the body's
+    /// twins under the panel (<see cref="Mech3.PlaneBuilder.FlatBody"/>). Null for every other cockpit.</summary>
+    public (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? Body { get; set; }
 
     /// <summary>The interior's own render pass, which takes <see cref="Interior"/> out of the plane
     /// model and draws it at the origin. Null under <c>--no-cockpit-pass</c>, when the interior
@@ -49,6 +55,14 @@ public sealed class FirstPersonDressing
     /// <summary>The lights and propeller discs copied onto the interior, kept on their originals'
     /// visibility and spin while the interior is drawn.</summary>
     public CockpitReseat? Reseat { get; set; }
+
+    /// <summary>Builds <see cref="Pass"/> on <paramref name="parent"/> over <see cref="Interior"/>, with
+    /// <see cref="Body"/>'s twins when it is set, from the session's <paramref name="sun"/> and
+    /// <paramref name="env"/>. Null for a rig built no interior.</summary>
+    public CockpitOverlay? BuildPass(Node parent, DirectionalLight3D? sun, Godot.Environment? env) =>
+        Pass = Interior is not { } interior ? null
+            : Body is { } body ? CockpitOverlay.BuildBody(parent, interior, body.Eye, body.Twins, Visibility, sun, env)
+            : CockpitOverlay.Build(parent, interior, sun, env);
 
     /// <summary>One frame's dressing for <paramref name="selected"/> under the pose the frame took.
     /// <paramref name="firstPersonPose"/> is that pose, not the selection, so a held look-behind

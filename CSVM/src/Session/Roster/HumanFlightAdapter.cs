@@ -229,6 +229,11 @@ internal sealed class HumanFlightAdapter
             RaceGhost.Stamp(planeModel, paneless ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
+        // A flat body cockpit's pass draws twins of the body. Made after the ghost stamp and before the
+        // stores hang, so neither reaches them; they stay hidden unless a pass mirrors them.
+        (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? flatBody = null;
+        if (!xrInterior && !paneless && planeBuilder.CockpitPanel is { } flatPanel)
+            flatBody = (planeBuilder.CockpitCameraOffset, PlaneBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
 
         var controller = new FlightController
         {
@@ -246,7 +251,8 @@ internal sealed class HumanFlightAdapter
             {
                 Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden, bodyCockpit,
                     planeBuilder.CockpitPanel),
-                Interior = planeBuilder.CockpitInterior,
+                Interior = flatBody != null ? planeBuilder.CockpitPanel : planeBuilder.CockpitInterior,
+                Body = flatBody,
                 Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
                 // A body cockpit lifts its panel, at real scale; the per-plane eye offset still seats the eye.
@@ -264,7 +270,7 @@ internal sealed class HumanFlightAdapter
             Racing = _world.Racing,
         };
         if (verbose && controller.Dressing.Visibility is { BodyCockpit: true })
-            Log.Info("flight", $"cockpit: '{planeName}' body cockpit, the model pack's airframe seen from the cockpit_camera marker, {bodyCockpit!.Hide.Count} hide name(s), {bodyCockpit.Gauges.Count} gauge table entr(ies){(controller.Dressing.Panel == null ? ", the screen-space dials kept" : string.Empty)}");
+            Log.Info("flight", $"cockpit: '{planeName}' body cockpit, the model pack's airframe seen from the cockpit_camera marker, {bodyCockpit!.Hide.Count} hide name(s), {bodyCockpit.Gauges.Count} gauge table entr(ies), {flatBody?.Twins.Count ?? 0} airframe mesh(es) twinned for the cockpit pass{(controller.Dressing.Panel == null ? ", the screen-space dials kept" : string.Empty)}");
         else if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // A twinned body mesh leaves the pilot's pane while its stereo twin draws in its place.

@@ -3062,10 +3062,9 @@ public partial class GameSession : Node3D
         }
         foreach (var rig in _rigs)
         {
-            if (rig.Controller is not { Dressing.Interior: { } interior } controller)
+            if (rig.Controller is not { } controller)
                 continue;
-            var overlay = Flight.Hud.CockpitOverlay.Build(rig.HudParent, interior, _sun, _env);
-            controller.Dressing.Pass = overlay;
+            var overlay = controller.Dressing.BuildPass(rig.HudParent, _sun, _env);
             // The overlay's cloned sun/env carry the zone live at its build; registering them
             // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
             // since the faithful path's aircraft light moves per zone as well.

@@ -539,6 +539,75 @@ internal static class PlaneRigSuites
         CheckReplacedGungauge(ctx, planesGamez, textures, plane, gungaugeFile, poses["gungauge"], stock, stockCells);
     }
 
+    // A flat body cockpit through the cockpit pass, on a rotated, wobbled pose 20 km out. Able to fail: a twin placed
+    // through the world's composition or turned about the eye, or a material shared with its original. An original left
+    // on the pilot's layer fails too, as does a twin that misses its original's turn or hide.
+    [Suite("plane-rig-cockpit-pass",
+        "a flat body cockpit's pass holds the transplanted panel and a hidden twin of every drawn body mesh outside the hide "
+        + "list and cockpit1, sharing its mesh on copies of its materials; at a rotated, wobbled pose 20 km from the origin "
+        + "each twin and the moved speedometer stand at their originals' offsets from the eye, from small numbers; the "
+        + "pilot's pane drops the twinned originals and the hide node while a second pane draws them; a turned or hidden "
+        + "original moves its twin on the next sync; the eye's light origin reaches the twins alone; an external pose "
+        + "takes the pass off and gives the originals back")]
+    internal static void PlaneRigCockpitPass(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("speedometer");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+        string? hide;
+        Vector3 camera;
+        using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
+        {
+            var bare = Build(ctx, planesGamez, textures, none, plane, out var bareBuilder, cockpitInterior: true);
+            hide = Named(bare, "healthy").Select(b => PlainMeshNodes(b).FirstOrDefault()).FirstOrDefault() is { } leaf
+                ? AnimRuntime.NameOf(leaf)
+                : null;
+            camera = bareBuilder.CockpitCameraOffset;
+            bare.Free();
+        }
+
+        ctx.Check(hide != null, $"{plane}'s healthy body carries a plain mesh leaf to hide");
+        if (hide == null)
+        {
+            return;
+        }
+
+        var speedPose = new RigGaugePose(camera + new Vector3(-0.2f, -0.15f, -0.5f), new Vector3(-15f, 10f, 0f), 0.05f);
+        using var pack = Pack(ctx, "cockpit-pass", plane, $$"""
+            { "cockpit": { "from": "body", "hide": ["{{hide}}"], "gauges": {
+              "speedometer": { "position": {{Json(speedPose.Position)}}, "rotation": [-15, 10, 0], "scale": 0.05 },
+              "glass": { "position": {{Json(camera + new Vector3(0f, -0.02f, -0.45f))}} } } } }
+            """);
+        var model = Build(ctx, planesGamez, textures, pack, plane, out var builder, cockpitInterior: true);
+        var aircraft = new Node3D { Name = "pass-body-aircraft" };
+        var pivot = new Node3D { Name = "ShakePivot" };
+        aircraft.AddChild(pivot);
+        pivot.AddChild(model);
+        ctx.Host.AddChild(aircraft);
+        var own = new Camera3D { Name = "pilot_pane", CullMask = SplitScreen.PlayerCullMask(0) };
+        var other = new Camera3D { Name = "other_pane", CullMask = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1), 1) };
+        var eyeCamera = new Camera3D { Name = "pass-body-eye" };
+        ctx.Host.AddChild(eyeCamera);
+        CockpitOverlay? pass = null;
+        try
+        {
+            pass = CheckPassBody(ctx, builder, model, aircraft, pivot, hide, speedPose, own, other, eyeCamera);
+        }
+        finally
+        {
+            pass?.Free();
+            aircraft.Free();
+            own.Free();
+            other.Free();
+            eyeCamera.Free();
+        }
+    }
+
     // A body cockpit under the stereo build, lifted as XrRig lifts it, on a rotated pose 20 km out.
     // Able to fail: a twin placed through the world's composition, or an original left on the pilot's
     // layer. A dial posed through the stereo mount instead of the rig's plane frame fails too.
@@ -713,6 +782,110 @@ internal static class PlaneRigSuites
         ctx.Check(!panel.TopLevel && panel.Transform.IsEqualApprox(Transform3D.Identity)
                 && twins.All(t => WorldAndToolSuites.DrawsAll(t.Original, own.CullMask)),
             $"an external pose lowers the panel onto the airframe and gives the originals back to the pilot's pane");
+    }
+
+    // The flat body's twins, then its pass at a far pose: placement, layers, mirroring and the external pose.
+    private static CockpitOverlay? CheckPassBody(TestContext ctx, PlaneBuilder builder, Node3D model, Node3D aircraft, Node3D pivot,
+        string hide, RigGaugePose speedPose, Camera3D own, Camera3D other, Camera3D eyeCamera)
+    {
+        if (builder.CockpitPanel is not { } panel || builder.CockpitInterior is not { } interior)
+        {
+            ctx.Check(false, $"the body build carries a transplanted panel and cockpit1");
+            return null;
+        }
+
+        var twins = PlaneBuilder.FlatBody(model, panel, builder.Cockpit!.Hide);
+        var drawn = BodyMeshes(model, hide);
+        ctx.Check(twins.Count > 0 && twins.Select(t => t.Original).ToHashSet().SetEquals(drawn) && twins.All(t => t.Twin.GetParent() == panel),
+            $"the panel holds a twin of every drawn body mesh outside cockpit1 and the hide list: {twins.Count} of {drawn.Count}");
+        var hidden = Named(model, hide).Where(n => !panel.IsAncestorOf(n) && !interior.IsAncestorOf(n)).ToList();
+        ctx.Check(hidden.Count > 0 && !twins.Any(t => hidden.Any(h => h.IsAncestorOf(t.Original))), $"the hide node '{hide}' has none");
+        var origMaterials = twins.SelectMany(t => Enumerable.Range(0, t.Original.Mesh.GetSurfaceCount()).Select(t.Original.GetActiveMaterial)).ToHashSet();
+        ctx.Check(twins.All(t => ReferenceEquals(t.Twin.Mesh, t.Original.Mesh)
+                && Enumerable.Range(0, t.Twin.Mesh.GetSurfaceCount()).All(s => t.Twin.GetActiveMaterial(s) is ShaderMaterial m
+                    && !origMaterials.Contains(m) && t.Original.GetActiveMaterial(s) is ShaderMaterial o && m.Shader == o.Shader)
+                && t.Twin.GetInstanceShaderParameter("node_bias").Equals(t.Original.GetInstanceShaderParameter("node_bias"))),
+            $"each twin shares its original's mesh, shader and node bias, on copies of its materials");
+        ctx.Check(twins.All(t => !t.Twin.Visible), $"every twin starts hidden, so a session without the pass draws no double");
+
+        var view = CockpitVisibility.Bind(model, interior, 0, cockpit: builder.Cockpit, panel: panel)!;
+        SplitScreen.SeatAirframe(model, own, 0);
+        var eye = builder.CockpitCameraOffset;
+        var host = new Node { Name = "pass-body-hud" };
+        ctx.Host.AddChild(host);
+        var pass = CockpitOverlay.BuildBody(host, panel, eye, twins, view, null, null);
+        ctx.Check(pass != null && pass.Interior == panel && panel.GetParent() is SubViewport,
+            $"the pass takes the panel out of the plane model into its own viewport");
+        if (pass == null)
+        {
+            host.Free();
+            return null;
+        }
+
+        host.RemoveChild(pass);
+        host.Free();
+        ctx.Host.AddChild(pass);
+        var shake = new Vector3(0.02f, -0.015f, 0.03f);
+        pivot.Rotation = shake;
+        aircraft.GlobalTransform = new Transform3D(FarAttitude, FarAt);
+        eyeCamera.GlobalPosition = aircraft.GlobalTransform * eye;
+        var cam = new CameraController(eyeCamera, new CamParams(), _ => false, -1, PilotViewMode.Cockpit);
+        view.Apply(PilotViewMode.Cockpit, firstPerson: true);
+        pass.Sync(FarAttitude, cam, shake);
+        ctx.Check(pass.Visible && panel.Visible && WorldAndToolSuites.DrawsAll(panel, pass.Camera.CullMask),
+            $"Cockpit shows the pass and its panel, which the pass camera draws on the pilot's flare band {WorldAndToolSuites.DrawnBy(panel, pass.Camera.CullMask)}");
+
+        // Each relative to the eye, from small numbers: the pivot's wobble over the model root, less the eye.
+        Vector3 FromEye(Node3D node) => FarAttitude * ((pivot.Transform * model.Transform * PlaneRigPatch.PlaneFrame(node, model)).Origin - eye);
+        float worst = 0f, reach = 0f, world = 0f;
+        foreach (var (original, twin) in twins.Where(t => t.Twin.Visible))
+        {
+            var at = (panel.Transform * twin.Transform).Origin;
+            worst = Mathf.Max(worst, at.DistanceTo(FromEye(original)));
+            reach = Mathf.Max(reach, at.Length());
+            world = Mathf.Max(world, at.DistanceTo(original.GlobalPosition - eyeCamera.GlobalPosition));
+        }
+
+        ctx.Check(worst < 1e-5f && reach < 50f && world < 0.01f,
+            $"every twin stands at its original's offset from the eye, worst {worst * 1e6f:0.##} um ({world * 1000f:0.##} mm against the world's float32 globals), none past {reach:0.##} m");
+        ctx.Note($"{twins.Count} twins of {drawn.Count} body meshes, worst offset error {worst * 1e6f:0.##} um, farthest {reach:0.##} m from the eye");
+        var speedo = Named(panel, "speedometer").FirstOrDefault();
+        ctx.Check(speedo != null && (panel.Transform * PlaneRigPatch.PlaneFrame(speedo, panel)).Origin.DistanceTo(
+                FarAttitude * ((pivot.Transform * model.Transform * CockpitTransplant.Posed(Transform3D.Identity, speedPose)).Origin - eye)) < 1e-5f,
+            $"the speedometer stands at the rig's plane-frame pose, relative to the eye");
+        var twinMaterial = twins[0].Twin.GetActiveMaterial(0) as ShaderMaterial;
+        var origMaterial = twins[0].Original.GetActiveMaterial(0) as ShaderMaterial;
+        ctx.Check(twinMaterial != null && origMaterial != null
+                && twinMaterial.GetShaderParameter(CockpitOverlay.LightOriginParam).AsVector3().IsEqualApprox(eyeCamera.GlobalPosition)
+                && origMaterial.GetShaderParameter(CockpitOverlay.LightOriginParam).AsVector3() == Vector3.Zero,
+            $"the eye's light origin reaches the twins' materials and none of the originals'");
+
+        ctx.Check(twins.All(t => WorldAndToolSuites.DrawsNone(t.Original, own.CullMask) && WorldAndToolSuites.DrawsAll(t.Original, other.CullMask)),
+            $"the pilot's pane drops every twinned original, a second pane still draws them");
+        ctx.Check(hidden.All(h => WorldAndToolSuites.DrawsNone(h, own.CullMask) && WorldAndToolSuites.DrawsAll(h, other.CullMask)),
+            $"the hide node leaves the pilot's pane alone");
+        var shown = twins.Where(t => t.Twin.Visible).ToList();
+        ctx.Check(shown.Count > 0 && twins.All(t => t.Twin.Visible == t.Original.IsVisibleInTree()), $"each of the {shown.Count} shown twins shows exactly where its original does");
+        if (shown.Count > 0)
+        {
+            var (moved, movedTwin) = shown[^1];
+            var part = moved.GetParent<Node3D>();
+            part.RotateObjectLocal(Vector3.Right, 0.3f);
+            pass.Sync(FarAttitude, cam, shake);
+            ctx.Check((panel.Transform * movedTwin.Transform).Origin.DistanceTo(FromEye(moved)) < 1e-5f
+                    && (panel.Transform * movedTwin.Transform).Basis.IsEqualApprox(FarAttitude * (pivot.Transform * model.Transform * PlaneRigPatch.PlaneFrame(moved, model)).Basis),
+                $"a turned original turns its twin on the next sync");
+            part.Visible = false;
+            pass.Sync(FarAttitude, cam, shake);
+            ctx.Check(!movedTwin.Visible, $"a hidden original hides its twin");
+            part.Visible = true;
+        }
+
+        view.Apply(PilotViewMode.Cockpit, firstPerson: false);
+        pass.Sync(FarAttitude, cam, shake);
+        ctx.Check(!pass.Visible && twins.All(t => WorldAndToolSuites.DrawsAll(t.Original, own.CullMask)),
+            $"an external pose takes the pass off and gives the originals back to the pilot's pane");
+        return pass;
     }
 
     // Every drawn mesh of the body a stereo body cockpit lifts: outside cockpit*, the hide list and flares.

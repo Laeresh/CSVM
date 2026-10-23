@@ -11,6 +11,7 @@ namespace CSVM.Flight.Hud;
 /// <see cref="CameraController.FirstPersonPose"/> survives, since the plane position and the
 /// <c>cockpit_camera</c> offset cancel between eye and panel. What is left is small, so float32
 /// rounds it far below a pixel, which the interior's chapter-scale world transform does not.
+/// A flat body cockpit's pass takes its transplanted panel and twins of the body instead (<see cref="BuildBody"/>).
 /// The flat game's path; <c>--no-cockpit-pass</c> leaves the interior in the main world instead,
 /// as the stereo path always does (<see cref="InteriorInPass"/>).
 /// One per player, built on that player's own HUD parent (<see cref="PlayerRig.HudParent"/>).
@@ -25,8 +26,19 @@ public sealed partial class CockpitOverlay : CanvasLayer
     private readonly Node3D _interior;
     private readonly DirectionalLight3D? _light;
     private readonly DirectionalLight3D? _sun;
-    private readonly Basis _mount;
     private readonly List<OmniLight3D> _flashes = new();
+
+    // The moved node's pose under the shake pivot, in the aircraft's frame, and the eye there, which
+    // the pass's origin stands on. The stock interior's mount keeps only its basis: its origin is the eye.
+    private readonly Transform3D _mount;
+    private readonly Vector3 _eye;
+
+    // A body cockpit's model root, which its twins' originals hang under, and the panel's own pose on it.
+    private readonly Node3D? _owner;
+    private readonly Transform3D _panelLocal;
+
+    // Each body mesh with its twin under the panel, which takes its pose and visibility in Sync.
+    private readonly List<(Node3D Original, Node3D Twin)> _mirrored = new();
 
     // The panel's own shader materials, whose point-light term needs the world position of this
     // pass's origin (SceneBuilder's `light_origin`).
@@ -36,14 +48,19 @@ public sealed partial class CockpitOverlay : CanvasLayer
     private int _shadowRevision = Utils.ShadowQualitySetting.Revision;
 
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
-        DirectionalLight3D? light, DirectionalLight3D? sun)
+        DirectionalLight3D? light, DirectionalLight3D? sun, Node3D? owner, Vector3 eye)
     {
         _view = view;
         _camera = camera;
         _interior = interior;
         _light = light;
         _sun = sun;
-        _mount = interior.Transform.Basis;
+        _owner = owner;
+        _panelLocal = interior.Transform;
+        _mount = owner == null
+            ? new Transform3D(interior.Transform.Basis, Vector3.Zero)
+            : owner.Transform * interior.Transform;
+        _eye = owner == null ? Vector3.Zero : eye;
         CollectMaterials(interior, _materials);
     }
 
@@ -52,7 +69,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     public Camera3D Camera => _camera;
 
     /// <summary>The interior as this pass holds it: re-parented out of the plane model, into the
-    /// overlay world, at zero translation.</summary>
+    /// overlay world, at its offset from the eye. That is zero for <c>cockpit1</c> and small for a body cockpit's panel.</summary>
     public Node3D Interior => _interior;
 
     /// <summary>This pass's own cloned sun, so <c>WeatherRig.RegisterExtraLighting</c>
@@ -77,16 +94,28 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// world's, copied so the panel is lit as it was; the pass keeps the sun to re-aim its copy
     /// per frame, since the interior's world frame turns with the aircraft.</summary>
     public static CockpitOverlay? Build(Node parent, Node3D interior, DirectionalLight3D? sun,
-        Godot.Environment? env)
+        Godot.Environment? env) => Build(parent, interior, sun, env, body: false, Vector3.Zero);
+
+    /// <summary>A flat body cockpit's pass: <paramref name="panel"/> (<see cref="Mech3.PlaneBuilder.CockpitPanel"/>)
+    /// moved into the private world, with the eye at <paramref name="eye"/> on its model root. Each of
+    /// <paramref name="twins"/> (<see cref="Mech3.PlaneBuilder.FlatBody"/>) takes its original's pose and visibility on
+    /// every <see cref="Sync"/>. Its original joins <paramref name="visibility"/>'s reseated list, so it leaves the
+    /// pilot's pane while the panel draws.</summary>
+    public static CockpitOverlay? BuildBody(Node parent, Node3D panel, Vector3 eye,
+        IEnumerable<(MeshInstance3D Original, MeshInstance3D Twin)> twins, CockpitVisibility? visibility,
+        DirectionalLight3D? sun, Godot.Environment? env)
     {
-        if (interior.GetParent() is not { } owner)
+        if (Build(parent, panel, sun, env, body: true, eye) is not { } overlay)
         {
             return null;
         }
-        var overlay = NewOverlay(interior, sun, env);
-        owner.RemoveChild(interior);
-        overlay.AddViewportChildren(interior);
-        parent.AddChild(overlay);
+
+        foreach (var (original, twin) in twins)
+        {
+            overlay._mirrored.Add((original, twin));
+            visibility?.Reseat(original);
+        }
+
         return overlay;
     }
 
@@ -112,7 +141,8 @@ public sealed partial class CockpitOverlay : CanvasLayer
         IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes = null)
     {
         MirrorFlashes(flashes, camera.EyePosition);
-        if (!Shown(GodotObject.IsInstanceValid(_interior) && _interior.Visible))
+        if (!Shown(GodotObject.IsInstanceValid(_interior) && _interior.Visible
+            && (_owner == null || GodotObject.IsInstanceValid(_owner))))
         {
             return;
         }
@@ -120,7 +150,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
         // below a pixel, and keeping it means the sun, the sky radiance and the flashes all sit
         // where the main world has them, with nothing re-aimed.
         var attitudeOnly = attitude.Orthonormalized();
-        _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount, shakeRotation), Vector3.Zero);
+        // A body turns about the shake pivot, as its originals do. The stock interior's zero origin turns about the eye.
+        _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount.Basis, shakeRotation),
+            attitudeOnly * ((Basis.FromEuler(shakeRotation) * _mount.Origin) - _eye));
+        MirrorBody();
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
@@ -169,11 +202,26 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// halted, so nothing would reach <see cref="Sync"/> to notice the interior went away.</summary>
     public void Deactivate() => Shown(false);
 
+    // A body cockpit keeps its model root, which its twins' poses are read under.
+    private static CockpitOverlay? Build(Node parent, Node3D interior, DirectionalLight3D? sun,
+        Godot.Environment? env, bool body, Vector3 eye)
+    {
+        if (interior.GetParent() is not { } owner || (body && owner is not Node3D))
+        {
+            return null;
+        }
+        var overlay = NewOverlay(interior, sun, env, body ? (Node3D)owner : null, eye);
+        owner.RemoveChild(interior);
+        overlay.AddViewportChildren(interior);
+        parent.AddChild(overlay);
+        return overlay;
+    }
+
     // The whole node graph, assembled before anything is added to a tree so a failed build frees
     // cleanly. The viewport owns its World3D outright: sharing the main one would put the interior
     // back at chapter-scale coordinates, which is the defect this pass exists to avoid.
     private static CockpitOverlay NewOverlay(Node3D interior, DirectionalLight3D? sun,
-        Godot.Environment? env)
+        Godot.Environment? env, Node3D? owner, Vector3 eye)
     {
         var view = new SubViewport
         {
@@ -196,7 +244,8 @@ public sealed partial class CockpitOverlay : CanvasLayer
             // its copy, whose ambient RegisterExtraLighting then keeps on the flown zone's value.
             view.World3D.Environment = (Godot.Environment)env.Duplicate();
         }
-        var camera = new Camera3D { Name = "interior_camera", Near = 0.01f, Far = 100f, Current = true };
+        // Every layer, since a body cockpit's panel wears the pilot's flare band, past Godot's default 20.
+        var camera = new Camera3D { Name = "interior_camera", Near = 0.01f, Far = 100f, Current = true, CullMask = uint.MaxValue };
         DirectionalLight3D? light = null;
         if (sun != null)
         {
@@ -214,7 +263,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
             // pass's far plane, since a zone's fog far would push every split past the pass.
             SunShadow.Copy(sun, light, camera.Far);
         }
-        return new CockpitOverlay(view, camera, interior, light, sun)
+        return new CockpitOverlay(view, camera, interior, light, sun, owner, eye)
         {
             Name = "cockpit_pass",
             Layer = UI.Boards.HudLayers.CockpitPass,
@@ -273,8 +322,27 @@ public sealed partial class CockpitOverlay : CanvasLayer
         }
         // Everything but the translation is kept: the head-pitch tilt and the interior scale are
         // the mount PlaneBuilder built, and the pass changes only where the frame's origin is.
-        interior.Transform = new Transform3D(interior.Transform.Basis, Vector3.Zero);
+        interior.Transform = new Transform3D(_mount.Basis, _mount.Origin - _eye);
         _view.AddChild(interior);
+    }
+
+    // Each twin takes its original's pose on the model root and its visibility. A twin whose original
+    // went, or left the model, hides.
+    private void MirrorBody()
+    {
+        foreach (var (original, twin) in _mirrored)
+        {
+            if (!GodotObject.IsInstanceValid(twin))
+            {
+                continue;
+            }
+
+            twin.Visible = GodotObject.IsInstanceValid(original) && original.IsVisibleInTree() && _owner!.IsAncestorOf(original);
+            if (twin.Visible)
+            {
+                twin.Transform = XrCockpit.InInterior(_panelLocal, Mech3.PlaneRigPatch.PlaneFrame(original, _owner!));
+            }
+        }
     }
 
     // The omni muzzle flashes live in the main world, which this world cannot see, so each lit one

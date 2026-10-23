@@ -282,6 +282,18 @@ public sealed class PlaneBuilder
     public static Transform3D InteriorFromPlane(Transform3D plane, Vector3 marker, float metresPerUnit = InteriorScale) =>
         FlatMount(marker, metresPerUnit).AffineInverse() * plane;
 
+    /// <summary>A flat body cockpit's airframe twins for the cockpit pass, each hidden under <paramref name="panel"/>. Every
+    /// drawn body mesh of <paramref name="built"/> has one, but those under an override material (a flare), <c>cockpit*</c>
+    /// and the <paramref name="hide"/> subtrees. A twin shares its original's mesh and <c>node_bias</c> and wears copies of
+    /// its materials, since the pass writes <c>light_origin</c> on them. Call it before stores hang, which then get none.</summary>
+    public static List<(MeshInstance3D Original, MeshInstance3D Twin)> FlatBody(Node3D built, Node3D panel, IEnumerable<string> hide)
+    {
+        var twins = new List<(MeshInstance3D, MeshInstance3D)>();
+        PairFlatTwins(built, new HashSet<string>(hide, StringComparer.OrdinalIgnoreCase), panel,
+            new Dictionary<ShaderMaterial, ShaderMaterial>(), twins);
+        return twins;
+    }
+
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk"), with the model
     /// pack's <c>rig.json</c> for that node applied (<see cref="PlaneRigPatch"/>). Throws
     /// <see cref="System.IO.InvalidDataException"/> for a rig that fails its checks, unless
@@ -469,6 +481,41 @@ public sealed class PlaneBuilder
         }
 
         return true;
+    }
+
+    // FlatBody's walk: PairTwins' choice of meshes, each twin sharing its original's mesh. One copy per
+    // source material, so the pass's per-frame light_origin write stays short.
+    private static void PairFlatTwins(Node node, HashSet<string> hide, Node3D panel,
+        Dictionary<ShaderMaterial, ShaderMaterial> copies, List<(MeshInstance3D, MeshInstance3D)> into)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is MeshInstance3D { Mesh: { } mesh } mi && mi.Name.ToString() == "mesh")
+            {
+                if (!node.HasMeta(AnimRuntime.IndexMeta) || mi.MaterialOverride != null)
+                {
+                    continue;
+                }
+
+                var twin = new MeshInstance3D { Name = $"twin{into.Count}", Mesh = mesh, CastShadow = mi.CastShadow, Visible = false };
+                for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                {
+                    if (mi.GetActiveMaterial(s) is ShaderMaterial m)
+                    {
+                        twin.SetSurfaceOverrideMaterial(s, copies.TryGetValue(m, out var copy) ? copy : copies[m] = ShaderTwins.Copy(m));
+                    }
+                }
+
+                twin.SetInstanceShaderParameter("node_bias", mi.GetInstanceShaderParameter("node_bias"));
+                panel.AddChild(twin);
+                into.Add((mi, twin));
+            }
+            else if (child is Node3D n3d && !hide.Contains(AnimRuntime.NameOf(n3d))
+                && !AnimRuntime.NameOf(n3d).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase))
+            {
+                PairFlatTwins(n3d, hide, panel, copies, into);
+            }
+        }
     }
 
     // The painter can only be built once the aircraft's root is known, its skin prefix is
