@@ -544,7 +544,7 @@ internal static class PlaneRigSuites
     // on the pilot's layer fails too, as does a twin that misses its original's turn or hide.
     [Suite("plane-rig-cockpit-pass",
         "a flat body cockpit's pass holds the transplanted panel and a hidden twin of every drawn body mesh outside the hide "
-        + "list and cockpit1, sharing its mesh on copies of its materials; at a rotated, wobbled pose 20 km from the origin "
+        + "list and cockpit1, sharing its mesh on copies of its materials, which a later repaint reaches; at a rotated, wobbled pose 20 km from the origin "
         + "each twin and the moved speedometer stand at their originals' offsets from the eye, from small numbers; the "
         + "pilot's pane drops the twinned originals and the hide node while a second pane draws them; a turned or hidden "
         + "original moves its twin on the next sync; the eye's light origin reaches the twins alone; an external pose "
@@ -794,7 +794,7 @@ internal static class PlaneRigSuites
             return null;
         }
 
-        var twins = PlaneBuilder.FlatBody(model, panel, builder.Cockpit!.Hide);
+        var twins = builder.FlatBody(model, panel, builder.Cockpit!.Hide);
         var drawn = BodyMeshes(model, hide);
         ctx.Check(twins.Count > 0 && twins.Select(t => t.Original).ToHashSet().SetEquals(drawn) && twins.All(t => t.Twin.GetParent() == panel),
             $"the panel holds a twin of every drawn body mesh outside cockpit1 and the hide list: {twins.Count} of {drawn.Count}");
@@ -807,6 +807,7 @@ internal static class PlaneRigSuites
                 && t.Twin.GetInstanceShaderParameter("node_bias").Equals(t.Original.GetInstanceShaderParameter("node_bias"))),
             $"each twin shares its original's mesh, shader and node bias, on copies of its materials");
         ctx.Check(twins.All(t => !t.Twin.Visible), $"every twin starts hidden, so a session without the pass draws no double");
+        CheckTwinRepaint(ctx, builder, twins);
 
         var view = CockpitVisibility.Bind(model, interior, 0, cockpit: builder.Cockpit, panel: panel)!;
         SplitScreen.SeatAirframe(model, own, 0);
@@ -886,6 +887,29 @@ internal static class PlaneRigSuites
         ctx.Check(!pass.Visible && twins.All(t => WorldAndToolSuites.DrawsAll(t.Original, own.CullMask)),
             $"an external pose takes the pass off and gives the originals back to the pilot's pane");
         return pass;
+    }
+
+    // A repaint after the twins are made reaches their material copies. Each copy first wears a stale stand-in,
+    // so a repaint that left the copies alone fails whatever the livery changes.
+    private static void CheckTwinRepaint(TestContext ctx, PlaneBuilder builder, List<(MeshInstance3D Original, MeshInstance3D Twin)> twins)
+    {
+        var pairs = twins.SelectMany(t => Enumerable.Range(0, t.Twin.Mesh.GetSurfaceCount())
+                .Select(s => (Original: t.Original.GetActiveMaterial(s) as ShaderMaterial, Copy: t.Twin.GetActiveMaterial(s) as ShaderMaterial)))
+            .Where(p => p.Original != null && p.Copy != null && p.Original.GetShaderParameter("albedo_tex").VariantType == Variant.Type.Object)
+            .Distinct().ToList();
+        var shipped = pairs.ToDictionary(p => p.Original!, p => p.Original!.GetShaderParameter("albedo_tex").AsGodotObject());
+        var stale = CSVM.Utils.TextureUpload.Create(Image.CreateEmpty(4, 4, false, Image.Format.Rgba8));
+        foreach (var (_, copy) in pairs)
+        {
+            copy!.SetShaderParameter("albedo_tex", stale);
+        }
+
+        builder.Repaint(new PaintScheme { Pattern = "cccp", Color1 = PaintScheme.FromBytes(200, 10, 10) });
+        int changed = shipped.Count(s => !ReferenceEquals(s.Key.GetShaderParameter("albedo_tex").AsGodotObject(), s.Value));
+        ctx.Check(pairs.Count > 0 && pairs.All(p => ReferenceEquals(p.Copy!.GetShaderParameter("albedo_tex").AsGodotObject(),
+                p.Original!.GetShaderParameter("albedo_tex").AsGodotObject())),
+            $"a repaint after the twins are made gives each of {pairs.Count} twin material copies its original's albedo ({changed} originals repainted)");
+        builder.Repaint(null);
     }
 
     // Every drawn mesh of the body a stereo body cockpit lifts: outside cockpit*, the hide list and flares.

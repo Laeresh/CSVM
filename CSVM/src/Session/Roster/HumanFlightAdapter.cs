@@ -233,7 +233,7 @@ internal sealed class HumanFlightAdapter
         // stores hang, so neither reaches them; they stay hidden unless a pass mirrors them.
         (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? flatBody = null;
         if (!xrInterior && !paneless && planeBuilder.CockpitPanel is { } flatPanel)
-            flatBody = (planeBuilder.CockpitCameraOffset, PlaneBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
+            flatBody = (planeBuilder.CockpitCameraOffset, planeBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
 
         var controller = new FlightController
         {

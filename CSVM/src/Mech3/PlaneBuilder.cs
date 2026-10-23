@@ -93,6 +93,8 @@ public sealed class PlaneBuilder
     private readonly Dictionary<string, GunsightReticle.Layers?> _gunsight = new();
     // A stereo body cockpit's airframe twins, and the builder that drew them through the stereo shader.
     private readonly List<(MeshInstance3D Original, MeshInstance3D Twin)> _stereoBody = new();
+    // A flat body cockpit's twin material copies, by the airframe material each copies.
+    private readonly Dictionary<ShaderMaterial, ShaderMaterial> _flatCopies = new();
     private SceneBuilder? _stereoBodyScene;
     private PaintScheme? _scheme;
     private PatternLibrary _patterns;
@@ -285,12 +287,12 @@ public sealed class PlaneBuilder
     /// <summary>A flat body cockpit's airframe twins for the cockpit pass, each hidden under <paramref name="panel"/>. Every
     /// drawn body mesh of <paramref name="built"/> has one, but those under an override material (a flare), <c>cockpit*</c>
     /// and the <paramref name="hide"/> subtrees. A twin shares its original's mesh and <c>node_bias</c> and wears copies of
-    /// its materials, since the pass writes <c>light_origin</c> on them. Call it before stores hang, which then get none.</summary>
-    public static List<(MeshInstance3D Original, MeshInstance3D Twin)> FlatBody(Node3D built, Node3D panel, IEnumerable<string> hide)
+    /// its materials, since the pass writes <c>light_origin</c> on them; <see cref="Repaint"/> reaches the copies.
+    /// Call it before stores hang, which then get none.</summary>
+    public List<(MeshInstance3D Original, MeshInstance3D Twin)> FlatBody(Node3D built, Node3D panel, IEnumerable<string> hide)
     {
         var twins = new List<(MeshInstance3D, MeshInstance3D)>();
-        PairFlatTwins(built, new HashSet<string>(hide, StringComparer.OrdinalIgnoreCase), panel,
-            new Dictionary<ShaderMaterial, ShaderMaterial>(), twins);
+        PairFlatTwins(built, new HashSet<string>(hide, StringComparer.OrdinalIgnoreCase), panel, _flatCopies, twins);
         return twins;
     }
 
@@ -409,6 +411,10 @@ public sealed class PlaneBuilder
         _scene.Repaint();
         _interiorScene?.Repaint();
         _stereoBodyScene?.Repaint();
+        foreach (var (original, copy) in _flatCopies)
+        {
+            copy.SetShaderParameter("albedo_tex", original.GetShaderParameter("albedo_tex"));
+        }
     }
 
     // ⚠ Blur disc textures must alpha-blend, never scissor: their alpha peaks around 26%,
@@ -616,9 +622,10 @@ public sealed class PlaneBuilder
             // A tracked head can lean past the plate behind the eye, so the stereo interior drops it.
             // The flat eye never sees its front, and a body cockpit never draws cockpit1's shell.
             _interiorScene.OmittedPolygons = xr && !body ? CockpitPlate.Find(_gamez, node) : null;
-            // The airframe's pack scope, so cockpit1.glb and the airframe's node files reach the
-            // interior. Its replacements are this builder's own, which bakes the interior's bias.
+            // The airframe's own keys alone, so cockpit1.glb and the airframe's node files reach the
+            // interior and a bare file does not. Its replacements are this builder's own, which bakes the interior's bias.
             _interiorScene.HdAirframe = _scene.HdAirframe;
+            _interiorScene.HdAirframeKeysOnly = true;
             // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.
             _interiorScene.NoShadowReceive = body;
             if (body)

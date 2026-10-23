@@ -156,6 +156,7 @@ internal static class HdModelSwapSuites
         + "per-node file each replace the one interior node they name, built on the interior's own builder, a texture-named "
         + "surface wears a material in PlaneBuilder.InteriorMaterials, the gauge bind finds the same needles, lamps, readouts, "
         + "belts and zones as without the pack, and a pack holding only an exterior node replaces no interior node. "
+        + "A bare file named like the interior node replaces nothing in the interior while a bare exterior file still reaches the airframe. "
         + "The aircraft export writes cockpit1.glb beside the airframe file, root cockpit1 at identity, and leaves the interior "
         + "out of the airframe file; put unedited into a pack it replaces every meshed interior node with the original's vertex "
         + "count, bounds in the node's frame, texture names, unlit surfaces and each textured surface's draw priority")]
@@ -223,6 +224,20 @@ internal static class HdModelSwapSuites
                 }
             }
 
+            // Bare files named like the interior node and an exterior node: the airframe takes its own, the interior none.
+            foreach (string file in new[] { node, exterior })
+            {
+                ctx.Same((long)Error.Ok, (long)WriteModel(Path.Combine(root, "Bare", "pack", file + ".glb"), file, materials),
+                    $"Bare: {file}.glb write result");
+            }
+
+            using (var bare = HdModels.Open(root, "Bare"))
+            {
+                var (builder, model) = BuildInterior(planesGamez, textures, plane, bare);
+                CheckInterior(ctx, "Bare", builder, model, plainPanel, null);
+                model.Free();
+            }
+
             CheckInteriorRoundTrip(ctx, planesGamez, textures, plane, plainModel, plainInterior, root);
         }
         finally
@@ -238,7 +253,8 @@ internal static class HdModelSwapSuites
         + "plate is cut by shape, leaving as many triangles as stock, and its one collimated reticle reads the glass as stock's "
         + "does; a rig table moving the glass, and a pack's texture-named glass surface at a new place, each put the reticle in "
         + "the moved glass's plane with the same texel at its centre; a per-plane interior scale sets the mount, leaves the "
-        + "interior-unit poses and the reticle as they are, and the seated eye offset adds as on stock")]
+        + "interior-unit poses and the reticle as they are, and the seated eye offset adds as on stock. On every player airframe "
+        + "the stock reticles read from the drawn glass equal one overlay per gamez glass polygon in count, plane, pane and bias")]
     internal static void CockpitInteriorStereo(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -292,6 +308,7 @@ internal static class HdModelSwapSuites
                 return;
             }
 
+            CheckStockReticles(ctx, gamez, textures, none);
             var centre = CockpitTransplant.GlassFrame(glasses)!.Value.Origin;
             CheckStereoRoundTrip(ctx, gamez, textures, plane, root, stock, look, plate.Sum(p => p.VertexIndices.Count - 2));
             var moved = new Vector3(1.5f, -0.75f, 0.5f);
@@ -397,6 +414,84 @@ internal static class HdModelSwapSuites
             model.Free();
         }
     }
+
+    // Every player airframe's stock stereo reticles, read from the drawn glass, against one overlay per gamez
+    // glass polygon (GunsightReticle.Find). Count, plane, UVs, pane and depth bias must agree.
+    private static void CheckStockReticles(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels none)
+    {
+        if (DisplayServer.GetName() == SuiteRender.Headless)
+        {
+            ctx.Note($"headless: no reticle overlay is built, so the per-airframe stock reticle check drops out");
+            return;
+        }
+
+        var bias = new SceneBuilder(gamez, textures) { DepthBiasScale = 1f / PlaneBuilder.InteriorScale };
+        var stand = new GunsightReticle.Layers(new ImageTexture(), new ImageTexture(), new ImageTexture(), 0.15f, default);
+        var differ = new List<string>();
+        int airframes = 0;
+        foreach (var (model, _) in MarkerRig.PlayerAirframes)
+        {
+            var cockpit1 = gamez.FindByName(model)?.Children.Select(c => gamez.Nodes[c])
+                .FirstOrDefault(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+            if (cockpit1 == null)
+            {
+                differ.Add($"{model}: no cockpit1");
+                continue;
+            }
+
+            var (built, root) = BuildInterior(gamez, textures, model, none, xr: true);
+            try
+            {
+                airframes++;
+                var overlays = built.CockpitInterior!.FindChildren("gunsight_reticle", "MeshInstance3D", recursive: true, owned: false)
+                    .OfType<MeshInstance3D>().ToList();
+                var want = GunsightReticle.Find(gamez, cockpit1);
+                int matched = 0;
+                foreach (var glass in want)
+                {
+                    if (GunsightReticle.Overlay(glass, stand, GunsightReticle.EyeReachM / PlaneBuilder.InteriorScale,
+                        bias.PriorityBias(glass.Priority)) is not { } expected)
+                    {
+                        continue;
+                    }
+
+                    var look = GunsightReticle.Look.For(glass.Corners, glass.Uvs)!.Value;
+                    var pane = expected.Mesh.GetAabb();
+                    float depth = ((ShaderMaterial)expected.MaterialOverride).GetShaderParameter("depth_bias").AsSingle();
+                    expected.Free();
+                    var hit = overlays.FirstOrDefault(o => o.MaterialOverride is ShaderMaterial m
+                        && SameLook(LookOf(m), look) && o.Mesh.GetAabb().Position.DistanceTo(pane.Position) < 1e-3f
+                        && o.Mesh.GetAabb().Size.DistanceTo(pane.Size) < 1e-3f
+                        && Mathf.Abs(m.GetShaderParameter("depth_bias").AsSingle() - depth) < 1e-7f);
+                    if (hit != null)
+                    {
+                        overlays.Remove(hit);
+                        matched++;
+                    }
+                    else
+                    {
+                        differ.Add($"{model}: no overlay matches the {glass.TextureName} polygon at priority {glass.Priority}, pane {pane}");
+                    }
+                }
+
+                if (matched == 0 || overlays.Count > 0)
+                {
+                    differ.Add($"{model}: {matched} overlays match {want.Count} glass polygons, {overlays.Count} left over");
+                }
+            }
+            finally
+            {
+                root.Free();
+            }
+        }
+
+        ctx.Check(airframes == MarkerRig.PlayerAirframes.Count && differ.Count == 0,
+            $"stock: each of the {airframes} player airframes' stereo reticles equals one overlay per gamez glass polygon; differing: {string.Join("; ", differ)}");
+    }
+
+    private static GunsightReticle.Look LookOf(ShaderMaterial m) =>
+        new(m.GetShaderParameter("grad_u").AsVector3(), m.GetShaderParameter("grad_v").AsVector3(),
+            m.GetShaderParameter("uv_origin").AsVector2(), m.GetShaderParameter("plane_n").AsVector3(), m.GetShaderParameter("plane_h").AsSingle());
 
     // A pack's texture-named glass surface, the stock glass moved, replacing the node that holds it.
     private static void CheckPackGlass(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, string root,

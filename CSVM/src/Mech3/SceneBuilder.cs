@@ -362,6 +362,10 @@ public sealed class SceneBuilder
     /// the next build looks up its replacement. <see cref="PlaneBuilder"/> sets it per build.</summary>
     internal string? HdAirframe;
 
+    /// <summary>Only <see cref="HdAirframe"/>'s own keys reach this builder's nodes, never a bare or chapter
+    /// key. The cockpit interior sets it, so a world pack's generic <c>g366.glb</c> leaves every cockpit alone.</summary>
+    internal bool HdAirframeKeysOnly;
+
     /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
     /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
     /// for. Null keeps none.</summary>
@@ -1560,15 +1564,21 @@ void fragment() {
         int steps = 0;
         for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
         {
-            if (HdModels.Current.KeyFor(scope.Name, HdChapter, HdAirframe) != null
+            if (PackKey(scope.Name) != null
                 && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
                 return scoped;
             path.Insert(0, scope.Name);
         }
-        return HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) != null
+        return PackKey(node.Name) != null
             ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
             : null;
     }
+
+    // The key HdModelMeshes resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
+    private string? PackKey(string name) =>
+        HdModels.Current.KeyFor(name, HdChapter, HdAirframe) is { } key
+        && (!HdAirframeKeysOnly || key.StartsWith($"planes/{HdAirframe?.ToLowerInvariant()}/", StringComparison.Ordinal))
+            ? key : null;
 
     // The names of the gamez nodes below `node`. A glTF subtree named after one is that node's to draw.
     private IEnumerable<string> DescendantNames(GameZNode node)
