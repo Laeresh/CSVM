@@ -111,3 +111,6 @@ analysis/capture-rigs/*-log.txt
 
 # Per-app Caddy site blocks of other services on the VPS (see server/Caddyfile)
 /server/sites/
+
+# The user's loose working files (reference images and the like), never committed
+/tmp/
