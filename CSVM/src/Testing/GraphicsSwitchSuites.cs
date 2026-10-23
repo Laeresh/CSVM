@@ -488,7 +488,8 @@ internal static class GraphicsSwitchSuites
         "the canopy clumps stand by default in a C1 Enhanced flight at rich: they stand over the canopy mask, the listed "
         + "cards' Rich material carries the handover band, and the map edge's cells copy them; a live move to original drops "
         + "the clumps, their edge copies and the band, and a move back builds the same chunks; a live switch to Original drops "
-        + "them and back builds them; a lab re-bake builds new ones; --canopy-clumps=off, or a session at original, builds none")]
+        + "them and back builds them; a lab re-bake builds new ones; a rich C3 flight builds them over its painted canopy alone, "
+        + "fading in over their own band while the beach palms keep every distance; --canopy-clumps=off, or a session at original, builds none")]
     internal static void CanopyClumpsFollowRich(TestContext ctx)
     {
         RequireData(ctx);
@@ -526,6 +527,25 @@ internal static class GraphicsSwitchSuites
             finally
             {
                 live.Close();
+            }
+
+            var c3 = Open(ctx, true, 1, "C3");
+            try
+            {
+                var painted = Clumps(c3);
+                var mask = c3.Session.Clutter?.Canopy();
+                var band = (painted.Node?.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial)
+                    ?.GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2();
+                ctx.Check(c3.Built && painted.Count > 0 && mask != null, $"a rich C3 flight builds clumps over its painted canopy ({painted.Count})");
+                ctx.Check(band == new Vector2(Mech3.CanopyClumps.PaintedNearM, Mech3.CanopyClumps.PaintedFarM) && Handover(c3) == "off",
+                    $"they fade in over the painted band ({band}) and the beach palms keep every distance ({Handover(c3)})");
+                int stray = painted.Node!.GetChildren().OfType<MultiMeshInstance3D>().Sum(m => Enumerable.Range(0, m.Multimesh.InstanceCount)
+                    .Count(i => m.Multimesh.GetInstanceTransform(i).Origin is var o && mask!.CellAt(o.X, o.Z) is var c && (c < 0 || mask.Density[c] <= 0f)));
+                ctx.Check(stray == 0, $"every clump stands in a painted cell ({stray} outside)");
+            }
+            finally
+            {
+                c3.Close();
             }
 
             var off = Open(ctx, true, 1, "C1", "--canopy-clumps=off");

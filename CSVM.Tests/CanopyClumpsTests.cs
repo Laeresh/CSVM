@@ -123,13 +123,74 @@ public sealed class CanopyClumpsTests
         Assert.Equal(tiles.Count, tiles.Select(t => string.Join(";", t)).Distinct().Count());
     }
 
-    /// <summary>C1 draws clumps by default; the other chapters do so only when asked.</summary>
+    /// <summary>C1 and C3 draw clumps by default; the other chapters do so only when asked.</summary>
     [Fact]
-    public void OnlyC1DrawsClumpsByDefault()
+    public void OnlyC1AndC3DrawClumpsByDefault()
     {
         Assert.True(CanopyClumps.DefaultOn("C1"));
         Assert.True(CanopyClumps.DefaultOn("c1"));
-        Assert.All(new[] { "C1B", "C2", "C3", "C4", "C5", null }, ch => Assert.False(CanopyClumps.DefaultOn(ch)));
+        Assert.True(CanopyClumps.DefaultOn("C3"));
+        Assert.All(new[] { "C1B", "C2", "C4", "C5", null }, ch => Assert.False(CanopyClumps.DefaultOn(ch)));
+    }
+
+    /// <summary>Over painted canopy the rate is the covered share times the crowns a full cell carries. The
+    /// clumps then carry that many trees per covered area, and none stands outside the painted cells.</summary>
+    [Fact]
+    public void PaintedCanopyIsRatedFromItsCoveredShare()
+    {
+        var mask = Painted();
+        const float trees = 3f;
+        var rate = CanopyClumps.Rate(mask, CanopyClumps.PaintedTreesPerCell, trees);
+        Assert.All(Enumerable.Range(0, rate.Length), c => Assert.Equal(mask.Density[c] * CanopyClumps.PaintedTreesPerCell / trees, rate[c], 5));
+        var clumps = CanopyClumps.Place(mask, rate, CanopyClumps.PaintedRiseM, TileHeight, rise: CanopyClumps.PaintedRiseM);
+        float expected = mask.Density.Sum() * CanopyClumps.PaintedTreesPerCell;
+        Assert.InRange(clumps.Count * trees, expected * 0.9f, expected * 1.1f);
+        Assert.All(clumps, c => Assert.True(mask.Density[mask.CellAt(c.Base.X, c.Base.Z)] > 0f, $"a clump at x {c.Base.X} stands off the painted canopy"));
+        Assert.Contains(clumps, c => mask.Density[mask.CellAt(c.Base.X, c.Base.Z)] < 1f);
+    }
+
+    /// <summary>Painted canopy's top is its ground, so without a rise it stands no clump. With one, every clump
+    /// takes that rise over the card height, at its cell's painted height, the same on every call.</summary>
+    [Fact]
+    public void PaintedClumpsTakeTheGivenRise()
+    {
+        var mask = Painted();
+        var rate = CanopyClumps.Rate(mask, CanopyClumps.PaintedTreesPerCell, 3f);
+        Assert.Empty(CanopyClumps.Place(mask, rate, CardHeight, TileHeight));
+        var clumps = CanopyClumps.Place(mask, rate, CardHeight, TileHeight, rise: CanopyClumps.PaintedRiseM);
+        Assert.NotEmpty(clumps);
+        Assert.Equal(clumps, CanopyClumps.Place(mask, rate, CardHeight, TileHeight, rise: CanopyClumps.PaintedRiseM));
+        Assert.All(clumps, c =>
+        {
+            Assert.Equal(TileHeight * CanopyClumps.PaintedRiseM / CardHeight, c.Height, 4);
+            Assert.InRange(c.Base.Y, 7f - 1f, 7f);
+        });
+    }
+
+    /// <summary>Over painted canopy no card hands over. The clumps take a band of their own that starts past
+    /// the near view, so none stands up close.</summary>
+    [Fact]
+    public void PaintedClumpsFadeInPastTheNearView()
+    {
+        var band = CanopyClumps.Band(painted: true);
+        Assert.Equal(new Vector2(CanopyClumps.PaintedNearM, CanopyClumps.PaintedFarM), band);
+        Assert.InRange(band.X, 500f, band.Y - 1f);
+        Assert.Equal(new Vector2(CanopyClumps.HandoverNearM, CanopyClumps.HandoverFarM), CanopyClumps.Band(painted: false));
+    }
+
+    // A 10 x 10 cell area at 7 m. Its left four columns are painted canopy, the fifth half covered, the rest bare.
+    private static CanopyMask Painted()
+    {
+        var tris = new List<Vector3>();
+        foreach (var (x0, x1) in new[] { (0f, 4 * C), (4 * C, 4.5f * C) })
+        {
+            tris.AddRange(new[]
+            {
+                new Vector3(x0, 7f, 0f), new Vector3(x1, 7f, 0f), new Vector3(x1, 7f, 10 * C),
+                new Vector3(x0, 7f, 0f), new Vector3(x1, 7f, 10 * C), new Vector3(x0, 7f, 10 * C),
+            });
+        }
+        return CanopyMask.FromPainted(tris, 0f, 0f, 10 * C, 10 * C);
     }
 
     // PerDensity clumps a cell for every unit of the mask's density.

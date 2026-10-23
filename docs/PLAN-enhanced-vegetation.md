@@ -1007,13 +1007,59 @@ textures are C21's: a pick to a set places no stamp until C21 builds the added s
 **Evidence (confidence: measured areas, lead-only look).** The survey table above; Decision 11.
 Picks are read today only for the canopy test (`CanopyMask.IsCanopy` in `ClutterBuilder`).
 
-**Approach.** The B14 technique fed by the C3 mask from texture picks. <TODO>
+**Approach (as built).** B14's `CanopyClumps` fed by B11's pick-baked mask. `Build` takes a painted
+path when the chapter has a `canopy` pick; C3 draws it by default (`DefaultOn` names C1 and C3).
 
-**Model recommendation.** <TODO>
+- *Rate.* Painted cells hold no stamps, so `CanopyClumps.Rate(mask, PaintedTreesPerCell, meanTrees)`
+  gives each cell its covered share times 6 crowns (about 13 m crowns edge to edge in a 32 m cell)
+  over a tile's mean tree count (3.17). B14's trap does not apply here: a pick-baked cell's density
+  is the share of it the canopy texture covers, never held at a cap. C3: 40,947 clumps in 19 chunks.
+- *Height.* Painted canopy's top is its ground, so `Place` takes `PaintedRiseM` (16 m) as every
+  clump's rise; a crown tile stands 25.6 m with its back row. A clump stands on the painted
+  surface, which is the treetops, so the volume adds crowns above the canopy the texture shows.
+- *Art.* Crowns cut from the picked canopy textures themselves (`forest1`, `forest1-128`,
+  `cliff1`): three dome silhouettes a texture, each of overlapping discs darkened to their rims and
+  the card darkened toward its base, the texture tiled 12.8 m a repeat. The crowns keep the painted
+  colour and grain: on hill regions the mean colour sits within 1 to 5 sRGB levels of the frame
+  without them.
+- *Near bound.* No card stands on the painted canopy, so nothing hands over and the beach palms
+  keep every distance (`Handover` is not called). The clumps take their own band,
+  `PaintedNearM`-`PaintedFarM` (700 to 1300 m): inside it nothing stands, so the near view is the
+  painted canopy alone. Over the band a clump rises out of the canopy: the shader's `grow` sinks it
+  below the painted surface by its unfaded share of its height, so it stays opaque.
 
-**Verify.** <TODO>
+Rejected in the montage, one line each:
+- C3's palm cards as the clump art: too much colour variation, a grey-brown palm plantation over the
+  broadleaf jungle.
+- An alpha fade over the band: half-clear ghost crowns on the skyline.
+- Squashing the clump's height over the band: flat, light pancakes on the near slopes.
+- A 400-1000 m band: crown tips poke through the near slopes as light spots.
+- A 1000-1600 m band: the hills at about 1 km stay flat.
+
+**Ruling (yours, from the montage).** Crowns cut from the canopy texture, rising out over 700 to
+1300 m, on by default on C3. Once Wave D's look-alike models exist, they fill the 0 to 700 m band
+over C3's painted canopy (D32).
+
+**Model recommendation.** Opus: the art, rate and band are look calls iterated against captures.
+
+**Verify.** Units: `CanopyClumpsTests` (a painted cell's rate is its share times the crowns a full
+cell carries, and the clumps carry that many trees per covered area to 10 %; none stands off the
+painted cells; without a rise painted canopy stands none, with one every clump takes it and the
+layout repeats; the painted band starts past 500 m and differs from the cards' band; C1 and C3 on
+by default). Engine: `canopy-clumps` adds a rich C3 flight: clumps stand, their material carries
+the painted band, the palms' Rich material carries no handover, and every clump stands in a painted
+cell. Look: `.scratch/b15/` in the B15 worktree (the five poses with clumps off, crowns and palm
+cards; the band and fade variants; a 3000 to 600 m approach to a ridge with no pop). Goldens: C3's
+two shots (`c3-island`, `c3-flare-xr-sim`) pass no `--graphics=enhanced`, so neither should move;
+the C1 shots see the clump shader's `grow` lines at zero, which leave their output unchanged.
 
 **⚠ Traps.** No cards on the painted treetops: the texture already shows them from above.
+- Never call `Handover` for painted canopy: the listed cards there are the beach palms, and they
+  would fade out past 1 km with nothing behind them.
+- Never fade painted-canopy clumps by alpha: a part-clear clump shows as a ghost against the sky.
+  Keep `grow` on for them, so they sink into the canopy instead.
+- Keep the band's near edge past where the crown tips read as spots on the near slopes (about
+  700 m). Inside it the painted texture carries the canopy until D32's models fill it.
 
 ## B16 ☐ Wave B budget and goldens
 
@@ -1169,7 +1215,8 @@ handover, judged again in game.
 ## D32 ☐ Near-radius 3D draw with a dither handover to the card
 
 **Goal.** Within a near radius a listed stamp draws its 3D model, dithering over to the original card
-beyond it; from altitude nothing changes.
+beyond it; from altitude nothing changes. Over C3's painted canopy, where no card stands, the near
+models fill the 0 to 700 m band inside B15's crown clumps (B15's ruling).
 
 **Evidence (confidence: lead-only).** Decision 16; X-Plane 12 draws trees the same way (developer
 docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_dither_keep`,

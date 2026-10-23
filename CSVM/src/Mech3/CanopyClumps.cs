@@ -27,6 +27,16 @@ public static class CanopyClumps
     /// past <see cref="HandoverFarM"/> the clumps alone. Plain metres, so no View Distance moves it.</summary>
     public const float HandoverNearM = 1000f, HandoverFarM = 1600f;
 
+    /// <summary>TUNE. The fade-in band over painted canopy, where no card stands to hand over from. Inside it
+    /// the painted texture alone draws; over it the clumps rise out of the canopy to their full height.</summary>
+    public const float PaintedNearM = 700f, PaintedFarM = 1300f;
+
+    /// <summary>TUNE. How far the clumps over painted canopy rise above the painted treetops, in metres.</summary>
+    public const float PaintedRiseM = 16f;
+
+    /// <summary>TUNE. The crowns a fully painted cell carries: about 14 m crowns packed edge to edge.</summary>
+    public const float PaintedTreesPerCell = 6f;
+
     /// <summary>The fixed seed of the placement and layout hash, so every launch draws the same clumps.</summary>
     public const int Seed = 0x5EED_C1;
 
@@ -46,14 +56,20 @@ public static class CanopyClumps
     // that low so a cross slope shows no gap beneath its front row; a share of its height cut its trees short.
     private const float SinkM = 0.5f;
 
+    // A crown card over painted canopy: its width in metres and the silhouettes cut per canopy texture. One
+    // repeat of the canopy texture spans CrownTilePx on it, 12.8 m.
+    private const float CrownWidthM = 14f;
+    private const int CrownShapes = 3, CrownTilePx = 128;
+
     // The clump instances are split into square chunks of this edge, so the frustum culls them.
     private const float ChunkM = 2048f;
 
     private static Shader? _shader;
 
-    /// <summary>Whether a chapter draws clumps when <c>--canopy-clumps</c> does not say. C1 only: the other
-    /// stamp-mask chapters were checked and left off, and C3's painted canopy is its own volume.</summary>
-    public static bool DefaultOn(string? chapter) => string.Equals(chapter, "C1", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether a chapter draws clumps when <c>--canopy-clumps</c> does not say: C1 over its cards and
+    /// C3 over its painted canopy. The other stamp-mask chapters were checked and left off.</summary>
+    public static bool DefaultOn(string? chapter) =>
+        string.Equals(chapter, "C1", StringComparison.OrdinalIgnoreCase) || string.Equals(chapter, "C3", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The clumps each cell of <paramref name="mask"/> holds on average: the kept card stamps planted in
     /// it over <paramref name="meanTrees"/>. The clumps then carry the cards' trees per area cell by cell. The
@@ -70,22 +86,29 @@ public static class CanopyClumps
         return rate;
     }
 
+    /// <summary>The clumps each cell of a painted <paramref name="mask"/> holds: its covered share times
+    /// <paramref name="treesPerCell"/> over <paramref name="meanTrees"/>. A painted cell's density is the share
+    /// of it the canopy texture covers, never held at a cap, so the stamp trap does not apply.</summary>
+    public static float[] Rate(CanopyMask mask, float treesPerCell, float meanTrees) =>
+        mask.Density.Select(d => d * treesPerCell / meanTrees).ToArray();
+
     /// <summary>The clumps over <paramref name="mask"/>. A covered cell holds its <paramref name="rate"/>
     /// rounded by a draw. Each sits at a jittered point in the cell, on the lowest ground under its width
     /// interpolated between covered cells. A clump's size is its tile scaled by the cell's top less its ground
-    /// over <paramref name="cardHeight"/>. Its colour spreads as the Rich cards' does, by
+    /// over <paramref name="cardHeight"/>. Painted canopy's top is its ground, so it passes a <paramref name="rise"/>.
+    /// Its colour spreads as the Rich cards' does, by
     /// <paramref name="brightness"/> overall and <paramref name="tint"/> per channel.</summary>
     public static List<Clump> Place(CanopyMask mask, IReadOnlyList<float> rate, float cardHeight, float tileHeight,
-        float brightness = 0f, float tint = 0f, int seed = Seed)
+        float brightness = 0f, float tint = 0f, int seed = Seed, float rise = 0f)
     {
         var clumps = new List<Clump>();
         for (int c = 0; c < mask.Density.Count; c++)
         {
-            float rise = mask.Top[c] - mask.Ground[c];
-            if (mask.Density[c] <= 0f || rate[c] <= 0f || rise <= 0f || cardHeight <= 0f)
+            float cellRise = rise > 0f ? rise : mask.Top[c] - mask.Ground[c];
+            if (mask.Density[c] <= 0f || rate[c] <= 0f || cellRise <= 0f || cardHeight <= 0f)
                 continue;
             int n = (int)MathF.Floor(rate[c] + U(seed, c, 0));
-            float s = rise / cardHeight;
+            float s = cellRise / cardHeight;
             for (int k = 0; k < n; k++)
             {
                 int draw = 1 + (k * 8);
@@ -175,7 +198,8 @@ public static class CanopyClumps
         TextureArchive textures)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var cards = kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
+        bool painted = entry.Picks.Any(p => CanopyMask.IsCanopy(entry, p.Texture));
+        var cards = painted ? Crowns(entry, textures) : kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
             .Select(k => (Kind: k, Kept: k.Rich!.Placements.Count(p => p.Basis.Y.LengthSquared() > 0f)))
             .Where(k => k.Kept > 0)
             .GroupBy(k => k.Kind.Texture, StringComparer.OrdinalIgnoreCase)
@@ -191,26 +215,105 @@ public static class CanopyClumps
         float tileHeight = TileHeight(sizes);
         float cardHeight = cards.Sum(c => c.Weight * c.Size.Y) / stamps;
         float meanTrees = MeanTrees(weights, sizes);
-        var rate = Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
+        var rate = painted ? Rate(mask, PaintedTreesPerCell, meanTrees) : Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
             .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Y.LengthSquared() > 0f).Select(p => p.Origin)), meanTrees);
         float brightness = cards.Sum(c => c.Weight * (c.Look?.Brightness ?? 0f)) / stamps;
         float tint = cards.Sum(c => c.Weight * (c.Look?.Tint ?? 0f)) / stamps;
         var (atlas, side) = Compose(cards.Select(c => c.Image!).ToList(), sizes, weights, tileHeight);
-        var clumps = Place(mask, rate, cardHeight, tileHeight, brightness, tint);
+        var clumps = Place(mask, rate, cardHeight, tileHeight, brightness, tint, rise: painted ? PaintedRiseM : 0f);
+        var band = Band(painted);
 
         var material = new ShaderMaterial { Shader = _shader ??= new Shader { Code = ShaderCode() } };
         material.SetShaderParameter("albedo_tex", TextureUpload.Create(atlas));
         material.SetShaderParameter("side_tex", TextureUpload.Create(side));
         material.SetShaderParameter("variants", (float)Variants);
-        material.SetShaderParameter(HandoverParam, new Vector2(HandoverNearM, HandoverFarM));
+        material.SetShaderParameter(HandoverParam, band);
+        material.SetShaderParameter("grow", painted ? 1f : 0f);
         var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f);
         foreach (var chunk in clumps.GroupBy(c => (MathF.Floor(c.Base.X / ChunkM), MathF.Floor(c.Base.Z / ChunkM))))
             field.Root.AddChild(field.Draw(chunk.ToList(), Transform3D.Identity, string.Create(CultureInfo.InvariantCulture, $"chunk_{chunk.Key.Item1}_{chunk.Key.Item2}")));
-        Handover(kinds, true);
+
+        // Painted canopy takes over from no card, so the listed cards (C3's beach palms) keep every distance.
+        if (!painted)
+            Handover(kinds, true);
 
         Log.Info("world",
-            $"canopy clumps: {clumps.Count} over {field.Root.GetChildCount()} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture))}), {stamps:0} card stamps at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, handover {HandoverNearM:0}-{HandoverFarM:0} m, {watch.ElapsedMilliseconds} ms");
+            $"canopy clumps: {clumps.Count} over {field.Root.GetChildCount()} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, {watch.ElapsedMilliseconds} ms");
         return field;
+    }
+
+    /// <summary>The clumps' fade-in band: the cards' handover band, or over painted canopy its own.</summary>
+    public static Vector2 Band(bool painted) =>
+        painted ? new Vector2(PaintedNearM, PaintedFarM) : new Vector2(HandoverNearM, HandoverFarM);
+
+    // Crown cards cut from the painted canopy's own textures, CrownShapes silhouettes each. The volume then
+    // wears the colour and grain the ground shows from above. Equal weights; the spread is the listed kinds' mean.
+    private static List<(string Texture, Vector2 Size, float Weight, VegetationKind? Look, Image? Image)> Crowns(VegetationEntry entry,
+        TextureArchive textures)
+    {
+        var look = entry.Kinds.Count == 0 ? null
+            : new VegetationKind("", Tint: entry.Kinds.Average(k => k.Tint), Brightness: entry.Kinds.Average(k => k.Brightness));
+        var size = new Vector2(CrownWidthM, PaintedRiseM);
+        var cards = new List<(string, Vector2, float, VegetationKind?, Image?)>();
+        foreach (var pick in entry.Picks.Where(p => CanopyMask.IsCanopy(entry, p.Texture)))
+        {
+            if (textures.FindImage(pick.Texture) is not { } image)
+                continue;
+            image.Decompress();
+            image.Convert(Image.Format.Rgba8);
+            for (int k = 0; k < CrownShapes; k++)
+                cards.Add((pick.Texture, size, 1f, look, Crown(image, k)));
+            image.Dispose();
+        }
+
+        return cards;
+    }
+
+    // One crown card: a dome of overlapping discs over a body to the base, textured with the canopy image
+    // tiled CrownTilePx to a repeat. Each disc darkens to its rim and the card darkens toward its base, so the
+    // bumps read as relief rather than a flat cut-out.
+    private static Image Crown(Image canopy, int shape)
+    {
+        int w = (int)(CrownWidthM * PixelsPerM), h = (int)(PaintedRiseM * PixelsPerM);
+        int cell = -100 - shape;
+        var discs = new List<(float X, float Y, float R)> { (w / 2f, (w * 0.5f) + 8f, w * 0.36f) };
+        for (int d = 0; d < 7; d++)
+        {
+            float r = w * (0.11f + (0.11f * U(Seed, cell, (d * 4) + 1)));
+            float x = r + ((w - (2f * r)) * U(Seed, cell, (d * 4) + 2));
+            discs.Add((x, r + (w * 0.35f * U(Seed, cell, (d * 4) + 3)), r));
+        }
+        const int tile = CrownTilePx;
+        var src = (Image)canopy.Duplicate();
+        src.Resize(tile, tile, Image.Interpolation.Bilinear);
+        byte[] tex = src.GetData();
+        src.Dispose();
+        int ox = (int)(U(Seed, cell, 20) * tile), oy = (int)(U(Seed, cell, 21) * tile);
+        var px = new byte[w * h * 4];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float rim = -1f;
+                foreach (var (dx, dy, r) in discs)
+                {
+                    float q = (((x - dx) * (x - dx)) + ((y - dy) * (y - dy))) / (r * r);
+                    if (q < 1f)
+                        rim = Math.Max(rim, MathF.Sqrt(1f - q));
+                }
+                bool body = y >= discs[0].Y && MathF.Abs(x - (w / 2f)) < w * 0.45f;
+                if (rim < 0f && !body)
+                    continue;
+                float shade = (0.8f + (0.2f * Math.Max(rim, 0.3f))) * (0.82f - (0.3f * y / h));
+                int t = (((((y + oy) % tile) * tile) + ((x + ox) % tile)) * 4);
+                int o = ((y * w) + x) * 4;
+                for (int ch = 0; ch < 3; ch++)
+                    px[o + ch] = (byte)(tex[t + ch] * shade);
+                px[o + 3] = 255;
+            }
+        }
+
+        return Image.CreateFromData(w, h, false, Image.Format.Rgba8, px);
     }
 
     // The atlas, one tile per variant side by side, and its side map. Each tree is its card resized to the
@@ -315,8 +418,9 @@ public static class CanopyClumps
     private static float S(int seed, int cell, int draw) => (2f * U(seed, cell, draw)) - 1f;
 
     // The Rich card's look on a clump: the same face, sun side, fog and tint lines. The fade is the card's
-    // handover turned round, in past the band. The tile comes off the custom data's first channel, and each
-    // tree's sun side off the side map, swapped for a mirrored clump.
+    // handover turned round, in past the band. Over painted canopy (grow) a clump sinks below the canopy by its
+    // unfaded share instead: a part-clear clump shows as a ghost on the skyline. The tile comes off the custom
+    // data's first channel, and each tree's sun side off the side map, swapped for a mirrored clump.
     private static string ShaderCode() => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled, blend_mix, depth_prepass_alpha;
@@ -324,6 +428,7 @@ public static class CanopyClumps
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
         uniform sampler2D side_tex : filter_linear_mipmap, repeat_disable;
         uniform float variants = 1.0;
+        uniform float grow = 0.0;
         uniform vec2 {{HandoverParam}};
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
@@ -340,6 +445,8 @@ public static class CanopyClumps
             vec3 origin = MODEL_MATRIX[3].xyz;
             v_alpha = {{ClutterBuilder.HandoverShare}};
             float keep = step(0.004, v_alpha);
+            origin.y -= MODEL_MATRIX[1].y * (1.0 - v_alpha) * grow;
+            v_alpha = mix(v_alpha, 1.0, grow);
         {{ClutterBuilder.FaceBasisLines(false)}}
             v_mirror = MODEL_MATRIX[0].x;
             vec3 local = vec3(VERTEX.x * MODEL_MATRIX[0].x, VERTEX.y * MODEL_MATRIX[1].y, 0.0);
