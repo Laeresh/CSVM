@@ -68,13 +68,13 @@ export's executable) on the worker it lands on. F11 reads each pane's own camera
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.
-`Export(node, path)` works on a throwaway `node.Duplicate()`, frees hidden `Node3D`s (the panel/flare `Visible` toggles
-are how damage is baked) and the point-sprite `"lights"` instances, and converts every shader skin to a
-`StandardMaterial3D` over geometry with its winding reversed (`docs/formats/gotchas.md`: unreversed,
-this data exports inside out). Format is extension-driven (`.glb` default). `ExportSet` writes several
-subtrees under one root at their world transforms, dropping any an ancestor in the list carries.
-`ExportToExports`/`ExportSetToExports` name a timestamped `Exports/` GLB. The viewer's `--export-gltf=`
-one-shot and F10, and NodeLab's selection and export set actions, share that writer.
+`Export(node, path)` works on a throwaway `Utils/SceneCopy`, frees hidden `Node3D`s (damage is baked by
+`Visible`) and the point-sprite `"lights"`, and converts every shader skin to a `StandardMaterial3D` over
+reversed winding (`docs/formats/gotchas.md`: unreversed, this data exports inside out). File nodes and
+materials take their gamez and texture names past the writer's renaming, so a model pack matches back.
+`allStates` (the `--node=` one-shot) keeps hidden gamez nodes, written hidden, and shows the subject, so a
+destructible's states reach the file. `.glb` by default. `ExportSet` writes several subtrees under one root at world transforms; `Export*ToExports` names a timestamped `Exports/` GLB, the writer `--export-gltf=`, F10 and NodeLab's export actions share.
+A plane's mounted `cockpit1` (`PlaneBuilder`'s direct child) never rides in its file; given `cockpitPath`, it is written there all states, root at identity, in interior units (`CockpitPathBeside`; F10 suffixes `_cockpit1`). An untextured `lighting: false` skin (`DrawsUnlit`) is written `KHR_materials_unlit`.
 
 ## src/Tooling/SyntheticData.cs
 `--synthetic-data`'s tree: an `extracted/` of invented records and code-generated files written into

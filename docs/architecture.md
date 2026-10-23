@@ -38,6 +38,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/GameZ.cs`, GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
 - `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
+- `src/Mech3/HdModelMeshes.cs`, a model pack's replacement mesh for a gamez node, imported once per pack key with its winding reversed back.
 - `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
 - `src/Mech3/StereoFacing.cs`, the stereo path's sprite basis: every camera-facing sprite faces the eye with world up, never the head's view plane.
 - `src/Mech3/ZoneGate.cs`, the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
@@ -49,6 +50,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
+- `src/Mech3/CockpitTransplant.cs`, the rig's gauge table: the named gauge assemblies and the cut-loose sight glass moved onto the airframe in a body cockpit, or inside `cockpit1` otherwise.
 - `src/Mech3/CockpitPlate.cs`, the head-and-shoulders plate behind the cockpit eye, selected by polygon, which the stereo interior leaves out.
 - `src/Mech3/GunsightReticle.cs`, the stereo interior's gunsight reticle lifted off the sight glass and drawn collimated at infinity.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
@@ -94,7 +96,9 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TgaImage.cs`, the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
 - `src/Mech3/ArtImage.cs`, the one door menu art is loaded through: a path in, a decoded image or null out, decoder by extension.
-- `src/Mech3/MarkerRig.cs`, a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
+- `src/Mech3/MarkerRig.cs`, a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers` and its `rig.json` template, body cockpit included.
+- `src/Mech3/PlaneRig.cs`, one airframe's `rig.json`: moved markers, prop, surface and flare overrides and the cockpit section, validated loudly at load.
+- `src/Mech3/PlaneRigPatch.cs`, applies a `PlaneRig` to the built plane before any marker read: moves and adds markers, stamps prop/surface overrides, picks flares.
 - `src/Mech3/CompiledAnim.cs`, reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs`, the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs`, merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
@@ -282,7 +286,7 @@ rows).
 - `src/Flight/Hud/CockpitReseat.cs`, the Cockpit view's copies of the wingtip lights and prop discs, seated on the interior's own fins and nacelles, and the open-air lights it hides (remake-only).
 - `src/Flight/Hud/FirstPersonDressing.cs`, what a pilot's own aircraft wears in first person, frame by frame: the body hide, the interior pass and the panel needles.
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out and a stereo session builds none.
-- `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
+- `src/Flight/Hud/XrCockpit.cs`, the cockpit interior, or a body cockpit's panel and airframe twins, under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
 - `src/Flight/Hud/XrCockpitTuner.cs`, the `--xr-tune` lab: live nudges of the flown plane's VR interior scale and eye offset, a readout on the HUD panel, a save into `vr_cockpits.json`.
 - `src/Flight/Hud/VrCockpitTuning.cs`, the tuning lab's engine-free step arithmetic, readout text and `vr_cockpits.json` writer.
@@ -535,7 +539,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/MenuHost.cs`, the process-lifetime host: it selects, shows and ticks the presentation and owns everything a switch outlives.
 - `src/UI/Menu/IMenuFeature.cs`, the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs`, the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
-- `src/UI/Menu/MenuNoticeFeature.cs`, one launcher notice the active presentation shows once at its next show: VR mode's fall back to flat.
+- `src/UI/Menu/MenuNoticeFeature.cs`, one launcher notice the active presentation shows once at its next show: VR mode's fall back to flat, an aircraft flown without its bad rig.
 - `src/UI/Menu/MenuCommands.cs`, one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
 - `src/UI/Menu/IMenuAudio.cs`, the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs`, the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
@@ -719,7 +723,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
-- `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
+- `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
 - `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
 - `src/Tooling/SyntheticTextures.cs`, the synthetic tree's C1 texture archive: the fixture manifest plus one generated PNG per entry.
 - `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket, shakes and messages.
@@ -970,6 +974,9 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, `.rof` half, stamps) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
 - `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
 - `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
+- `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
+- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: `extracted/` paths and world texture names, a chapter's own entry beating the bare name.
+- `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
 - `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
 ### `src/Net/`, the network seam

@@ -192,6 +192,7 @@ public sealed class ProbeRunner
 
     /// <summary>--dump-markers[=plane] (docs/cli.md): the airframe marker-rig report, stdout and
     /// <c>./.scratch/markers_dump.txt</c>, that <c>docs/formats/markers.md</c> regenerates from.
+    /// Each airframe also gets a starting <c>rig.json</c> under <c>./.scratch/rigs/</c>.
     /// See <see cref="Mech3.MarkerRig"/>.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpMarkers(SessionSpec spec)
@@ -207,7 +208,12 @@ public sealed class ProbeRunner
         Log.Raw(r.Text);
         // ./.scratch/ inside the workspace, per PROJECT_CONTEXT.md, never the OS temp dir.
         WriteScratch("markers_dump.txt", r.Text);
-        Log.Info("core", $"{r.Summary} → ./.scratch/markers_dump.txt");
+        foreach (var (model, json) in r.RigTemplates)
+        {
+            Directory.CreateDirectory(Path.Combine(_paths.RepoRoot, ".scratch", "rigs", model));
+            WriteScratch(Path.Combine("rigs", model, "rig.json"), json);
+        }
+        Log.Info("core", $"{r.Summary} → ./.scratch/markers_dump.txt, rig templates in ./.scratch/rigs/<model>/rig.json");
         return true;
     }
 

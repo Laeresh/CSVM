@@ -1224,18 +1224,20 @@ public sealed partial class ProjectilePool : Node3D
             {
                 XrPreciseInterior = true,
                 XrUnderInterior = true,
+                HdChapter = _flyoutScene.HdChapter,
             };
 
         // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not
         // obstruct another round or the world hit-test; mounted ordnance must not be shootable either),
         // and the world builder would otherwise attach one.
+        int replacedBefore = scene.ReplacedMeshCount;
         var inst = scene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
         if (inst != null)
             PoseAtResetState(inst, weapon);
         // Verification breadcrumb (once per model name): confirms the named prototype resolved and
         // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
         if (inst != null && _flyoutLogged.Add(modelName))
-            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
+            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es), {scene.ReplacedMeshCount - replacedBefore} from the model pack");
         return inst;
     }
 
@@ -2007,26 +2009,29 @@ public sealed partial class ProjectilePool : Node3D
     /// splash <c>splash1.flt</c>/<c>bsplsh.flt</c>), collision-exempt, tracked for a short life and
     /// freed. Returns false, leaving the stand-in spark to show, when there is no world scene, the
     /// name resolves to nothing, or the node built no mesh.</summary>
-    // Installs this instance's own translucent twin as a surface override. Its own per-instance
-    // uniform then drives the fade without editing the shared cached material every other splash's
-    // mesh also points at. Cached per source material (ShaderTwins.FadeCopy).
+    // Installs this instance's own translucent twin as each surface's override, so a model pack's
+    // multi-surface splash fades whole. Its own per-instance uniform then drives the fade without editing
+    // the shared cached material. Cached per source material (ShaderTwins.FadeCopy).
     // A source with no alpha path is counted, not swallowed: the splash plays its scale curves
     // without a fade rather than throwing.
     private void EnsureSplashFade(MeshInstance3D mi)
     {
-        if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
+        if (mi.Mesh is not { } mesh)
             return;
-        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial { Shader: not null } sm)
-            return;
-        if (!_splashFadeTwins.TryGetValue(sm, out var twin))
+        for (int surface = 0; surface < mesh.GetSurfaceCount(); surface++)
         {
-            twin = ShaderTwins.FadeCopy(sm);
-            _splashFadeTwins[sm] = twin;
-            if (twin == null)
-                Log.Info("weapons", $"splash fade: source shader has no alpha path, fade skipped, curves unaffected");
+            if (mesh.SurfaceGetMaterial(surface) is not ShaderMaterial { Shader: not null } sm)
+                continue;
+            if (!_splashFadeTwins.TryGetValue(sm, out var twin))
+            {
+                twin = ShaderTwins.FadeCopy(sm);
+                _splashFadeTwins[sm] = twin;
+                if (twin == null)
+                    Log.Info("weapons", $"splash fade: source shader has no alpha path, fade skipped, curves unaffected");
+            }
+            if (twin != null)
+                mi.SetSurfaceOverrideMaterial(surface, twin);
         }
-        if (twin != null)
-            mi.SetSurfaceOverrideMaterial(0, twin);
     }
 
     // Registers the column's built material with the shared TextureCycler the first time it is
@@ -2063,10 +2068,12 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (node == null)
             return false;
+        int replacedBefore = _flyoutScene.ReplacedMeshCount;
         var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
         if (inst == null)
             return false;
         int meshes = CountMeshes(inst);
+        int replaced = _flyoutScene.ReplacedMeshCount - replacedBefore;
         if (meshes == 0)
         {
             // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render, drop it
@@ -2114,7 +2121,7 @@ public sealed partial class ProjectilePool : Node3D
             AdvanceSplash(fx); // pose t=0 (the column at full authored scale) before the first tick
         _impactFx.Add(fx);
         if (_impactFxLogged.Add(animName))
-            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es){(animated ? $", splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
+            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es), {replaced} from the model pack{(animated ? $", splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
         return true;
     }
 
@@ -2321,9 +2328,9 @@ public sealed partial class ProjectilePool : Node3D
         {
             if (node is Node3D n3d && node != model)
                 xf *= n3d.Transform;
-            if (node is MeshInstance3D { Mesh: not null } mi)
+            if (node is MeshInstance3D mi && SceneBuilder.GameplayMesh(mi) is { } mesh)
             {
-                var local = xf * mi.Mesh.GetAabb();
+                var local = xf * mesh.GetAabb();
                 box = any ? box.Merge(local) : local;
                 any = true;
             }
@@ -3091,7 +3098,8 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (_casingProto == null)
             return null;
-        var inst = _flyoutScene!.BuildSubtree(_casingProto, skip: null, collisionSkip: _ => true);
+        int replacedBefore = _flyoutScene!.ReplacedMeshCount;
+        var inst = _flyoutScene.BuildSubtree(_casingProto, skip: null, collisionSkip: _ => true);
         if (inst == null)
             return null;
         _casingModels.AddChild(inst);
@@ -3101,7 +3109,7 @@ public sealed partial class ProjectilePool : Node3D
         if (!_casingLogged)
         {
             _casingLogged = true;
-            Log.Info("weapons", $"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es)");
+            Log.Info("weapons", $"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es), {_flyoutScene.ReplacedMeshCount - replacedBefore} from the model pack");
         }
         var slot = new CasingSlot { Node = inst };
         _casings.Add(slot);

@@ -97,6 +97,61 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // A subtree built in code the way SceneBuilder names it: two siblings sharing one gamez name and
+    // names Godot sanitises. The re-read file must name every node as the data does. Able to fail:
+    // without the exporter's rename the file holds "gear_flt" and an "@"-mangled second "wing".
+    // Each mesh wears a skin named for its texture as SceneBuilder names one; without the material
+    // rewrite the file holds "wing2", "wing3" and "cowl_".
+    [Suite("gltf-export-names",
+        "a glTF export names each node with its original gamez name, so two same-named siblings and "
+        + "a name holding '.', ':' or '@' read back from the file as the data spells them, and the "
+        + "live subtree keeps its Godot names; each material is named after its skin's texture "
+        + "without the extension, repeated, shared with a node or holding a '.'; an all-states "
+        + "export keeps a hidden subject shown and its hidden damage state written hidden")]
+    internal static void GltfExportNames(TestContext ctx)
+    {
+        GltfExportAllStates(ctx);
+        string[] originals = { "probe_plane", "wing", "wing", "gear.flt", "hinge:l@1" };
+        string[] skins = { "", "wing.tif", "wing.tif", "cowl..tif", "probe_skin.tif" };
+        var root = NamedProbeNode(originals[0], null);
+        for (int i = 1; i < originals.Length; i++)
+        {
+            var skin = new ShaderMaterial { ResourceName = skins[i], Shader = new Shader { Code = "shader_type spatial;" } };
+            root.AddChild(NamedProbeNode(originals[i], new BoxMesh { Material = skin }));
+        }
+        ctx.Host.AddChild(root);
+        var liveBefore = LiveNames(root);
+        string path = Path.Combine(ctx.ScratchDir, "gltf-export-names.glb");
+        try
+        {
+            Directory.CreateDirectory(ctx.ScratchDir);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(root, path), $"export write result");
+            ctx.Check(LiveNames(root) == liveBefore, $"live subtree names unchanged before=[{liveBefore}] after=[{LiveNames(root)}]");
+
+            var doc = new GltfDocument();
+            var state = new GltfState();
+            ctx.Same((long)Error.Ok, (long)doc.AppendFromFile(path, state), $"re-import read result");
+            var fileNames = new List<string>();
+            foreach (var node in state.GetNodes())
+            {
+                fileNames.Add(node.OriginalName);
+            }
+            foreach (string name in originals.Distinct())
+            {
+                int want = originals.Count(n => n == name);
+                int got = fileNames.Count(n => n == name);
+                ctx.Same(want, got, $"file nodes named '{name}' (file=[{string.Join(", ", fileNames)}])");
+            }
+            var materialNames = state.GetMaterials().Select(m => m.ResourceName).OrderBy(n => n, System.StringComparer.Ordinal);
+            string wantMaterials = string.Join(", ", skins.Skip(1).Select(Path.GetFileNameWithoutExtension).OrderBy(n => n, System.StringComparer.Ordinal));
+            ctx.Check(string.Join(", ", materialNames) == wantMaterials, $"file materials [{string.Join(", ", materialNames)}] are the skins' textures [{wantMaterials}]");
+        }
+        finally
+        {
+            root.Free();
+        }
+    }
+
     // The reader behind the texture's own alpha class, which is a reader question and not a render
     // one: the class comes off the extraction manifest's `alpha` field, and a pixel test cannot
     // stand in for it. Able to fail: with the manifest read removed, every chapter falls back
@@ -4164,4 +4219,53 @@ internal static class WorldAndToolSuites
         }
         return changed;
     }
+
+    // One Node3D holding its gamez name in NameMeta under the sanitised Godot name SceneBuilder
+    // gives it, plus a mesh child.
+    // A --node= stage's tree: a subject its reset state switched off, under a bare root, holding a
+    // shown healthy part and a hidden damaged one. Able to fail: pruning every hidden node writes
+    // a file with neither part, and leaving the subject hidden writes it hidden.
+    private static void GltfExportAllStates(TestContext ctx)
+    {
+        var root = new Node3D { Name = "world1" };
+        var subject = NamedProbeNode("probe_tower", null);
+        subject.Visible = false;
+        var damaged = NamedProbeNode("probe_damaged", new BoxMesh());
+        damaged.Visible = false;
+        subject.AddChild(NamedProbeNode("probe_healthy", new BoxMesh()));
+        subject.AddChild(damaged);
+        root.AddChild(subject);
+        ctx.Host.AddChild(root);
+        string path = Path.Combine(ctx.ScratchDir, "gltf-export-states.glb");
+        try
+        {
+            Directory.CreateDirectory(ctx.ScratchDir);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(root, path, allStates: true), $"all-states export write result");
+            ctx.Check(!subject.Visible && !damaged.Visible, $"the live subject and damaged part stay hidden");
+            var state = new GltfState();
+            ctx.Same((long)Error.Ok, (long)new GltfDocument().AppendFromFile(path, state), $"all-states re-import read result");
+            var visible = state.GetNodes().ToDictionary(n => n.OriginalName, n => n.Visible);
+            string seen = string.Join(", ", visible.Select(p => $"{p.Key}={p.Value}"));
+            ctx.Check(visible.GetValueOrDefault("probe_tower") && visible.GetValueOrDefault("probe_healthy"), $"subject and healthy part written shown [{seen}]");
+            ctx.Check(visible.TryGetValue("probe_damaged", out bool shown) && !shown, $"damaged part written hidden [{seen}]");
+        }
+        finally
+        {
+            root.Free();
+        }
+    }
+
+    private static Node3D NamedProbeNode(string original, Mesh? mesh)
+    {
+        var node = new Node3D { Name = original.Replace('.', '_').Replace(':', '_').Replace('@', '_') };
+        node.SetMeta(AnimRuntime.NameMeta, original);
+        if (mesh != null)
+        {
+            node.AddChild(new MeshInstance3D { Name = "mesh", Mesh = mesh });
+        }
+        return node;
+    }
+
+    private static string LiveNames(Node root) =>
+        string.Join(", ", root.FindChildren("*", "", true, false).Select(n => n.Name.ToString()).Prepend(root.Name.ToString()));
 }

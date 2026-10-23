@@ -295,7 +295,7 @@ draws `cockpit1` and hides the `healthy` body, Nose hides the interior, the body
 so a held look-behind brings the body back. The interior takes node visibility. The airframe groups
 move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
 that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them,
-and so do `CockpitReseat.Hidden` and the stores given to `Reseat` on the frames the interior is drawn. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+and so do `CockpitReseat.Hidden` and the parts given to `Reseat` (stores, a stereo body's twinned meshes) on the frames the interior or the transplanted panel is drawn. A model pack's body cockpit (`Mech3.RigCockpit.FromBody`, `BodyCockpit`) keeps the body in Cockpit, hides the interior, and moves every airframe node its `hide` list names, found outside `cockpit*`, off the same layer; Nose and the external poses are unchanged. Its transplanted panel (`Mech3/CockpitTransplant.cs`, `Shown.Transplant`) takes `Visible` exactly where the interior would, and on each show is stamped onto `SplitScreen.WorldFlareLayer`, the one layer only that pilot's pane camera draws, since `SeatAirframe` stamps the whole model after the bind. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/CockpitReseat.cs
 The remake-only fix for the Cockpit view's floating wingtip lights and prop discs, in both
@@ -304,15 +304,15 @@ stations (`PropSeats`) onto the interior while it is still a child of the plane 
 copies follow it into the cockpit pass, and lists open-air lights (`OpenAirFlares`) to hide. `Sync`
 mirrors each original's visibility and spin onto its copy; `FirstPersonDressing` calls it while the
 interior is drawn, and `CockpitVisibility` takes `Hidden` out of the pilot's own pane. Copies come
-from `Utils.SceneCopy`, unindexed, on `ShaderTwins.Copy` materials. Rules and the per-airframe
-outcome: [../org/cameraViews.md](../org/cameraViews.md), "Remake-only" under mode 7.
+from `Utils.SceneCopy`, unindexed, on `ShaderTwins.Copy` materials. A body cockpit binds none, since
+its outside parts are the ones in view, and neither does the stereo path. Rules and the per-airframe outcome: [../org/cameraViews.md](../org/cameraViews.md), "Remake-only" under mode 7.
 
 ## src/Flight/Hud/FirstPersonDressing.cs
 What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
 `Interior`, `Panel` (`CockpitGauges`), `Pass` (`CockpitOverlay`) and, under the stereo path,
-`Stereo` (`XrCockpit`), all null on a rig built no interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
+`Stereo` (`XrCockpit`), all null on a rig built no interior; a flat body cockpit's `Interior` is its transplanted panel and `Body` its eye and twins, and `BuildPass` builds `Pass` over either. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
 held look-behind brings the body back, and takes the screen-space cluster off while the panel is
-on screen; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
+on screen: the interior, or a body cockpit's transplanted panel once it carries a dial (`Panel` bound); `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
 after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
 [../org/cameraViews.md](../org/cameraViews.md).
 
@@ -323,8 +323,8 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 `CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
-lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does; `Sync` follows
-the interior `Visible` and sets each material's `light_origin` to the eye for the point lights.
+lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does, through `FirstPersonDressing.BuildPass`; `Sync` follows
+the interior `Visible` and sets each material's `light_origin` to the eye for the point lights. `BuildBody` takes a flat body cockpit's panel instead, placed from its model root's pose less the `cockpit_camera` eye and turned about the shake pivot, and each `Mech3/PlaneBuilder.cs` `FlatBody` twin takes its original's plane-frame pose and visibility per `Sync`, the original joining `CockpitVisibility.Reseat`.
 
 ## src/Flight/Hud/XrCockpit.cs
 The cockpit interior under the stereo path, drawn in the main world the cockpit pass's way: while it
@@ -333,7 +333,7 @@ origin as the airframe holds it (`InOrigin`, engine-free), so every transform Go
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
 its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it, and a sorting offset that puts it after the world's transparents on top of the one it was built with (the reticle overlay's). Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
 plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
-seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset`, `SetMountScale` and `PlaceStores` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose placed by the plane's store fields (`Placed`: the lateral distance times the spread, then the offset, in the aircraft's frame; `InInterior`; both engine-free). It keeps each part's airframe pose, so a store change or a rescale re-places them where a rebuild would.
+seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset`, `SetMountScale` and `PlaceStores` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose placed by the plane's store fields (`Placed`: the lateral distance times the spread, then the offset, in the aircraft's frame; `InInterior`; both engine-free). It keeps each part's airframe pose, so a store change or a rescale re-places them where a rebuild would. It reads only the mount and the eye, so a pack's replaced `cockpit1` and a rig's interior-unit gauge poses take the plane's scale and eye offset as the stock interior does. `Body` follows a body cockpit's panel instead (`Mech3/PlaneBuilder.cs` `CockpitPanel`), at real scale with the eye on `cockpit_camera`, where scale and store fields do nothing; `Mirror` gives each airframe twin its original's pose and visibility on every `Follow`.
 
 ## src/Flight/Hud/VrCockpits.cs
 The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
@@ -419,9 +419,9 @@ absolute angle each frame, the artificial-horizon ball and the compass drum take
 basis, and the belts, damage-zone skins, readouts and two warning lamps take the state their
 condition says. All of it reads `GaugeCluster`'s already-computed values rather than re-deriving
 them, so the 3D panel and the screen-space dials cannot disagree. `Bind` finds the nodes in one
-built interior (null on any plane without one) and `Apply` is the per-frame write, the same shape
-`CockpitVisibility` uses, called only while the interior is on the screen. Node names, the
-authored-rotation rule and the per-airframe name variants: [../formats/hud.md](../formats/hud.md).
+built interior or a body cockpit's transplanted panel (`Mech3/CockpitTransplant.cs`, preferred by
+`Bind(PlaneBuilder)`), null without either; `Apply` is the per-frame write, called only while the
+panel is on the screen. Names and rotation rule: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/Weapons/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value: the effect name and which
@@ -1258,7 +1258,8 @@ Spins the flying aircraft's prop and rotor blur discs. `Build` collects every no
 classifies (rest pose plus rate, radians per second about local axes) and `Advance` recomputes each
 disc's absolute pose from its stored rest pose through `SpinMotion.ComposeSpin`, the same
 accumulate-from-rest decode `AnimRuntime` plays the ambient world's `XYZ_ROTATION` spins through, so
-a long flight session cannot drift. `FlightController` drives it throttle-scaled with a
+a long flight session cannot drift. A plane rig's axis off every local axis turns about its own line
+instead (`Mech3/PlaneRigPatch.cs`). `FlightController` drives it throttle-scaled with a
 `PropIdleSpin` floor and zero while crashed. `--fly` only; the static viewer keeps the still disc.
 
 ## src/Flight/Airframe/PropellerSlot.cs
@@ -1312,7 +1313,7 @@ node takes which slot: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Airframe/ControlSurfaceAnimator.cs
 The node side of `ControlSurfaceMix`: collects every classified surface the original's numbered
-lists reach (`ControlSurfaces.InNumbering`) and poses it absolutely
+lists reach (`ControlSurfaces.InNumbering`), plus every surface a plane rig names, turning about the rig's hinge (`Mech3/PlaneRigPatch.cs`), and poses it absolutely
 (`Basis = base · Rot(hingeAxis, slotAngle · scale)`) from its build-time local basis rather than
 accumulating, owning the two frame flips the original has no need of, a mount rotated by yaw π and a
 nose-mounted canard that raises the nose the other way. A surface inside the cockpit interior turns
@@ -1325,10 +1326,10 @@ Flashes the wingtip flares for `FlashDuration` (about one frame of the original'
 `WingLights.BlinkPeriod`, and toggles a matching `OmniLight3D` per flare, its range and colour from
 `WingLights`, on the same window. Gated on the session's ANIMATION_LOD quality flag: below HIGH the
 flares and lights stay off for the instance's life, which is the def's own low-detail branch.
-`Reset` restarts the cycle with everything off and hands every suspended lamp back.
-`Suspend(flareName)` hands one named lamp to whatever just deactivated it, which is how the fuel
-leak's one-way `OBJECT_ACTIVE_STATE` deactivation survives the blink cycle; a suspended lamp is
-skipped in `Advance`. Advanced each `_Process`, frozen while paused or crashed; `--fly` only.
+`Reset` restarts the cycle with everything off and hands every suspended lamp back. `Suspend(flareName)`
+hands one named lamp, or a plane rig's flare that replaced it (`WingLights.AnswersTo`), to whatever
+just deactivated it, which is how the fuel leak's one-way `OBJECT_ACTIVE_STATE` deactivation survives
+the blink cycle; `Advance` skips it. Advanced each `_Process`, frozen while paused or crashed; `--fly` only.
 
 ## src/Flight/Weapons/PylonOrdnance.cs
 The rockets mounted under a plane's wings. `Build` instances ONE flyout model body per loaded pylon
@@ -1340,13 +1341,13 @@ body from its pylon immediately rather than queueing it, so the weapon lab's reb
 leave the old ordnance hanging beside the new. `--fly` only. In a stereo seat each body also gets a copy built through the stereo interior's shader and hung on `XrCockpit.Hang`, steady and stencilled beside the interior's wing, at the place the plane's `vr_cockpits.json` store fields give it; the body leaves the pilot's pane through `CockpitVisibility.Reseat`, and the pylon, the launch point, stays put.
 
 ## src/Flight/Airframe/PlaneCollider.cs
-Derives up to sixteen plane-frame convex hulls from the built model's mesh triangles alone, with no
-per-plane data: region clipping partitioning the airframe on x and z (fuselage out to the wing band,
-tail inside that band and aft, wing outboard), greedy volume-guided refinement cutting one or two
-parallel planes per axis (the double cut separates bilateral pairs such as twin fins), then one
-`ConvexHull` per refined piece, judged on the pieces' boxes so a hull never moves a cut or a name.
-Single-sourced: the terrain sweep casts these hulls and `AircraftBody` mounts the same
-`ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
+Derives up to sixteen plane-frame convex hulls from the built model's gamez mesh triangles alone
+(`SceneBuilder.GameplayMesh`, never a pack's replacement), with no per-plane data: region clipping
+partitioning the airframe on x and z (fuselage out to the wing band, tail inside that band and aft,
+wing outboard), greedy volume-guided refinement cutting one or two parallel planes per axis (the
+double cut separates twin fins), then one `ConvexHull` per refined piece, judged on the pieces'
+boxes so a hull never moves a cut or a name. Single-sourced: the terrain sweep casts these hulls
+and `AircraftBody` mounts the same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
 `airframe-hull-coverage` suite measures; `docs/org/weaponRay.md` holds what they present over the mesh.
 
 ## src/Flight/Airframe/ConvexHull.cs
@@ -1453,8 +1454,8 @@ authored anim through `DamageEffectSink`, the player rig's own runtime. Staging 
 ladder entry and cleared on the upward crossing, so a repair un-stages and the entry can fire
 again. `RigAnimFor` is a curated membership test over the effect catalogue, which is what keeps a
 cockpit gauge def from ever playing on an airframe, and the panel-pairing traps sit on
-`PairHealthySkins`. The cockpit-interior twins ride the same panel table as their exterior
-partners, so no separate cockpit rule exists. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+`PairHealthySkins`, which pairs by the gamez model even under a model pack replacement. The
+cockpit twins ride their exterior partners' panel table. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/Airframe/EffectCatalogue.cs
 The record of which authored anims are playable effects and what their defs need staged: the name
@@ -1697,14 +1698,14 @@ overload writes into a caller's buffer, for the per-frame raster.
 `CSVM.Tests/GroundShadowLawTests` pins the numbers. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/Airframe/GroundShadowSilhouette.cs
-One caster's shape: the triangles of the node the original rasterises, taken once, and the 64x64
-coverage texture rebuilt from them each frame. The airframe's triangles are held still in the
-aircraft's frame; each propeller or rotor blur disc is its own group, re-posed from its live node so
-it turns in the shadow without re-reading the model. Pose, flattening and the footprint collapse
-into one affine map per group, so a vertex costs two dot products, and the fill is an incremental
-edge walk with its bounds hand-inlined, which holds a debug-build raster near a third of a
-millisecond per aircraft at that size. The mask is readable as data (`CoveredAt`), which is how the
-suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
+One caster's shape: the triangles of the node the original rasterises, read off the gamez model
+under a model pack replacement (`SceneBuilder.GameplayMesh`), or a pack's own
+`planes/<airframe>/shadow` mesh in place of the still airframe, taken once, and the 64x64 coverage
+texture rebuilt from them each frame. Each propeller or rotor blur disc is its own group, re-posed
+from its live node so it turns in the shadow without re-reading the model. Pose, flattening and the
+footprint collapse into one affine map per group, and the fill is an incremental edge walk with its
+bounds hand-inlined. The mask is readable as data (`CoveredAt`), which is how the suites pin a
+shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/Airframe/GroundShadowPass.cs
 The drawing half: one modulating quad per live aircraft, rebuilt from the rule each rendered frame,

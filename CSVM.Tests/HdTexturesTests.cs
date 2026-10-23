@@ -60,6 +60,27 @@ public class HdTexturesTests
     }
 
     [Fact]
+    public void APackShippingBothFormatsOfOneNameAnswersEachOriginalWithItsOwn()
+    {
+        // The scrapbook draws SB_03_01_BASE.PNG on the page and SB_03_01_BASE.JPG in the zoom (#255).
+        var root = TestData.TempDir();
+        var hdDir = Path.Combine(root, "HD");
+        Directory.CreateDirectory(hdDir);
+        Zip(Path.Combine(hdDir, "pack.zip"),
+            ("pack/rof/ASSETS/GRAPHICS/SCRAPBOOK/SB_03_01_BASE.jpg", "zoom"),
+            ("pack/rof/ASSETS/GRAPHICS/SCRAPBOOK/SB_03_01_BASE.png", "thumb"));
+
+        using var hd = HdTextures.Open(root, "HD");
+
+        var scrapbook = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
+        Assert.Equal("thumb", Text(hd.ForExtracted(Path.Combine(scrapbook, "SB_03_01_BASE.PNG"))));
+        Assert.Equal("zoom", Text(hd.ForExtracted(Path.Combine(scrapbook, "SB_03_01_BASE.JPG"))));
+        // An original whose format the pack does not ship takes the name's last entry.
+        Assert.Equal("thumb", Text(hd.ForExtracted(Path.Combine(scrapbook, "SB_03_01_BASE.TIF"))));
+        Assert.Equal(1, hd.Count);
+    }
+
+    [Fact]
     public void NoFolderOrAnEmptyNameReadsNoPack()
     {
         var root = TestData.TempDir();

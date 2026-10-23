@@ -242,6 +242,7 @@
     "generator-sub-kill-disables-bay": 0.761,
     "generator-takeoff-run": 1.628,
     "gltf-export": 0.55,
+    "gltf-export-names": 0.05,
     "graphics-flare-switch": 5.85,
     "graphics-live-switch": 8.347,
     "graphics-ocean-switch": 11.4,
@@ -258,6 +259,8 @@
     "ground-contact-core": 0.022,
     "gun-voice-reach": 1.83,
     "hangar-door-wake": 2.993,
+    "hd-model-mesh-import": 0.15,
+    "hd-model-swap": 0.3,
     "heat-shimmer": 0.044,
     "hostile-marker-hud": 0.453,
     "hud-auto-dock-line": 0.008,
@@ -444,6 +447,7 @@
     "pause-world-icons": 0.913,
     "perf-hud-layout": 0.023,
     "persist-chain-kill": 1.516,
+    "plane-rig": 0.379,
     "plane-shader-reuse": 0.287,
     "plane-wobble-walk": 0.438,
     "player-destroy-choreography": 1.848,
@@ -618,6 +622,14 @@
     "xr-view-cutscene": 1.43,
     "xr-view-first-person": 0.84,
     "xr-view-head-look": 1.16,
-    "xr-view-static": 0.45
+    "xr-view-static": 0.45,
+    "hd-model-cockpit1": 0.216,
+    "hd-model-cockpit1-stereo": 3.861,
+    "plane-rig-cockpit-body": 0.348,
+    "plane-rig-cockpit-gauges": 0.355,
+    "plane-rig-cockpit-inside": 0.481,
+    "plane-rig-cockpit-pass": 0.348,
+    "plane-rig-cockpit-stereo": 0.587,
+    "plane-rig-cockpit-template": 1.309
   }
 }

@@ -31,7 +31,9 @@
   "headlessDiffers": {
     "build-stamp-icons": "lays the logs icon out against the window, which headless sizes at 64 px, so it asserts a layout no player sees",
     "load-progress": "reads each milestone's lamp strip back off the window, which headless never draws, so those checks drop out and the rest pass",
-    "perf-hud-layout": "lays the readout out against the window, which headless sizes at 64 px, so it asserts a layout no player sees"
+    "hd-model-cockpit1-stereo": "reads the stereo interior's collimated reticle, which needs the glass texture's pixels that headless keeps none of, so its reticle checks fail there",
+    "perf-hud-layout":"lays the readout out against the window, which headless sizes at 64 px, so it asserts a layout no player sees",
+    "plane-rig-cockpit-stereo": "reads the glass's collimated reticle, which needs the glass texture's pixels that headless keeps none of, so its reticle checks drop out; it also makes the stereo airframe shader texts no other windowed suite makes"
   },
   "headlessShaders": {
     "alpha-coverage-text": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
@@ -70,6 +72,8 @@
     "ocean-harbour-ramp": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "ocean-lab": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "ocean-wake": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
+    "plane-rig-cockpit-body": "makes shader texts no other windowed suite makes",
+    "plane-rig-cockpit-template": "makes shader texts no other windowed suite makes",
     "player-destroy-choreography": "makes shader texts no other windowed suite makes",
     "race-presence": "makes shader texts no other windowed suite makes",
     "scorch-decals": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",

@@ -26,10 +26,29 @@ public static class WingLights
     public const float FlareRangeMin = 0.5f;
     public const float FlareRangeMax = 1.25f;
 
+    /// <summary>On a plane rig's flare node: the names of the original flares it replaced. A def
+    /// darkening one of those by name darkens this node instead (<see cref="PlaneRigPatch"/>).</summary>
+    public const string StandsForMeta = "csvm_flare_stands_for";
+
     /// <summary>Warm amber the original flashes the lights, wing_light.json's LIGHT_STATE COLOR.</summary>
     public static readonly Color FlareColor = new(0.88f, 0.78f, 0.36f);
 
-    /// <summary>The wingtip flare sprite nodes toggled by the blink anim (wing_flare1/2).</summary>
+    /// <summary>The wingtip flare sprite nodes toggled by the blink anim (wing_flare1/2).
+    /// ⚠ Never read the side off the digit: <c>wing_flare1</c> is port on every airframe but the
+    /// Warhawk, where it is starboard (docs/formats/model-packs.md, <c>rig.json</c>).</summary>
     public static bool IsFlare(string name) =>
         name.StartsWith("wing_flare", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether <paramref name="flare"/> answers to <paramref name="name"/>: its own node
+    /// name, or an original flare a plane rig put it in place of.</summary>
+    public static bool AnswersTo(Node3D flare, string name)
+    {
+        if (flare.Name.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return flare.HasMeta(StandsForMeta)
+            && Array.Exists(flare.GetMeta(StandsForMeta).AsStringArray(), n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
 }

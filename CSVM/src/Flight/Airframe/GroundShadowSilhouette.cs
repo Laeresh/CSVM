@@ -21,6 +21,12 @@ public sealed class GroundShadowSilhouette
     /// without one falls back to the model root, as the original does.</summary>
     public const string PlayerNode = "geometry";
 
+    /// <summary>The name a model pack's own shadow mesh takes, read only as
+    /// <c>planes/&lt;airframe&gt;/shadow</c>, in the airframe's frame. It stands in for the still
+    /// airframe's triangles and box; the blur discs stay the built model's. The gamez node of that name
+    /// is the software path's card, never built, so no drawn replacement shares the key.</summary>
+    public const string PackShadowNode = "shadow";
+
     // Where the footprint's own extremes land in the texture, in texels of the original's own 32
     // from either edge. It keeps the silhouette off the border band, which the spread writes into
     // but never scans, and it is scaled with the step so the margin is the same ground either way.
@@ -133,7 +139,15 @@ public sealed class GroundShadowSilhouette
         var groups = new List<Group> { still };
         Aabb box = default;
         bool any = false;
-        Collect(node, at, at, true, still, groups, ref box, ref any);
+        var packed = PackShadow(model);
+        if (packed != null)
+        {
+            Surfaces(packed, Transform3D.Identity, still);
+            box = packed.GetAabb();
+            any = packed.GetSurfaceCount() > 0;
+        }
+
+        Collect(node, at, at, true, packed == null, still, groups, ref box, ref any);
         var parts = new List<Part>();
         foreach (var group in groups)
         {
@@ -207,13 +221,22 @@ public sealed class GroundShadowSilhouette
         return null;
     }
 
-    // The subtree's own bounding box, and the triangles of the part of it that draws, split into
-    // the still airframe and one group per propeller or rotor blur disc.
-    // ⚠ The box and the triangles differ, and deliberately: the box is the node's, which the
-    // original reads off the model whatever is shown and whatever angle a disc is turned to, while
-    // a hidden node rasterises nothing, so a torn damage panel widens no footprint and casts no
-    // silhouette until it is shown.
-    private static void Collect(Node node, Transform3D at, Transform3D within, bool drawn,
+    // The pack's own shadow mesh for this airframe, or null. ⚠ Only the airframe key counts: a bare
+    // or chapter shadow file is a world prop's, and a bare one would otherwise shadow every aircraft.
+    private static Mesh? PackShadow(Node3D model)
+    {
+        string airframe = Mech3.AnimRuntime.NameOf(model);
+        return Extraction.HdModels.Current.KeyFor(PackShadowNode, null, airframe)
+            == $"planes/{airframe.ToLowerInvariant()}/{PackShadowNode}"
+            ? Mech3.HdModelMeshes.Current.For(PackShadowNode, airframe: airframe)
+            : null;
+    }
+
+    // The subtree's box and drawn triangles: the still airframe (left out under a pack shadow mesh,
+    // stillToo false) and one group per blur disc. ⚠ Keep box and triangles apart. The box
+    // is read whatever is shown, as the original reads it. A hidden node rasterises nothing, so a
+    // torn panel casts no silhouette until it is shown.
+    private static void Collect(Node node, Transform3D at, Transform3D within, bool drawn, bool stillToo,
         Group group, List<Group> groups, ref Aabb box, ref bool any)
     {
         drawn = drawn && node is not Node3D { Visible: false };
@@ -225,9 +248,12 @@ public sealed class GroundShadowSilhouette
             within = Transform3D.Identity;
         }
 
-        if (node is MeshInstance3D instance && instance.Mesh is { } mesh)
+        // The gamez model under a model pack replacement, so the outline and its cost stay the
+        // original's. This raster runs on the CPU every frame, and a pack mesh can carry 40 times more.
+        if (node is MeshInstance3D instance && (stillToo || group.Pivot != null)
+            && Mech3.SceneBuilder.GameplayMesh(instance) is { } mesh)
         {
-            var local = instance.GetAabb();
+            var local = mesh.GetAabb();
             var here = new Aabb(at * local.GetEndpoint(0), Vector3.Zero);
             for (int i = 1; i < 8; i++)
                 here = here.Expand(at * local.GetEndpoint(i));
@@ -241,7 +267,7 @@ public sealed class GroundShadowSilhouette
         {
             var child = node.GetChild(i);
             var step = child is Node3D spatial ? spatial.Transform : Transform3D.Identity;
-            Collect(child, at * step, within * step, drawn, group, groups, ref box, ref any);
+            Collect(child, at * step, within * step, drawn, stillToo, group, groups, ref box, ref any);
         }
     }
 

@@ -81,6 +81,9 @@ public sealed class WorldBuilder
     // What HideUnplacedEntities switched off, still awaiting the verdict below.
     private readonly List<(GameZNode Node, Node3D Built)> _hiddenUnplaced = new();
     private GameZNode? _builtWorld; // the World node of the last Build (for CreateEdgeExtender)
+    // The partition cell's x and z size, the ground-tile scale IsTerrainMesh measures against;
+    // null for a world with no grid.
+    private (float X, float Z)? _cell;
     private int _deckAltitude;
     private float _deckCoverage;
     // The horizon's zone children in flat-list order, falling an absent request back to the
@@ -114,6 +117,17 @@ public sealed class WorldBuilder
         // colour so the quad shows. The faithful path draws it opaque, as the original does (no
         // colour key, docs/org/textures.md). Named in both modes so a live switch can swap it.
         _scene.KeyedBackdropTexture = IsSkySpriteTexture;
+        _scene.KeepsOriginalMesh = KeepsOriginalMesh;
+    }
+
+    /// <summary>The chapter folder as <c>extracted/</c> spells it (<c>C3</c>), forwarded to the
+    /// scene builder for the model pack's keys (<see cref="SceneBuilder.HdChapter"/>). The weapon
+    /// flyouts, casings and impact models built on <see cref="Scene"/> resolve under it too. Set
+    /// before building.</summary>
+    public string? HdChapter
+    {
+        get => _scene.HdChapter;
+        set => _scene.HdChapter = value;
     }
 
     /// <summary>Which mission of the chapter this world is being built for, 1-based, forwarded to
@@ -426,9 +440,15 @@ public sealed class WorldBuilder
         FindCloudDeck(world, roots);
         _deckUndimmedMeshes.Clear();
         _scene.CastsNoShadow = GroundSheetTest(world);
+        _cell = CellOf(world);
         RankConflicts(roots);
+        int replacedBefore = _scene.ReplacedMeshCount;
         foreach (var idx in roots)
             Add(root, deck, idx);
+        if (_scene.ReplacedMeshCount > replacedBefore)
+        {
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {worldName} drawn from the model pack");
+        }
 
         // Said out loud per build because "0 / 0 / 0" from a gate that stopped stamping is
         // otherwise indistinguishable from a chapter that authors no zoned content.
@@ -479,11 +499,22 @@ public sealed class WorldBuilder
     public Node3D BuildNode(GameZ gamez, GameZNode node)
     {
         var root = new Node3D { Name = "world1" };
+        foreach (var n in gamez.Nodes)
+            if (n.Kind == "World")
+            {
+                _cell = CellOf(n);
+                break;
+            }
+        int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(node, skip: null, collisionSkip: n => NoCollisionNode(_gamez, n));
         if (built != null)
         {
             built.Transform = gamez.WorldTransformOf(node);
             root.AddChild(built);
+        }
+        if (_scene.ReplacedMeshCount > replacedBefore)
+        {
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {node.Name} drawn from the model pack");
         }
         return root;
     }
@@ -568,10 +599,21 @@ public sealed class WorldBuilder
         bool SkipOtherZones(GameZNode n) =>
             n.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
             && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
-        // ⚠ Do not force-fog the dome. Every horizon model is authored `fog: false` and the
-        // FOG_ALTITUDE fade never reaches the dome's own authored size, so force-fogging paints
-        // nothing but flat fog colour. Decode: docs/formats/weather.md.
-        var built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
+        // The dome builds with no model pack context, so no sky node is ever replaced.
+        string? chapter = _scene.HdChapter;
+        _scene.HdChapter = null;
+        Node3D? built;
+        try
+        {
+            // ⚠ Do not force-fog the dome. Every horizon model is authored `fog: false`, and the
+            // FOG_ALTITUDE fade never reaches the dome's own authored size. Force-fogging paints
+            // nothing but flat fog colour. Decode: docs/formats/weather.md.
+            built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
+        }
+        finally
+        {
+            _scene.HdChapter = chapter;
+        }
         if (built == null)
             return null;
         DisableShadows(built);
@@ -625,6 +667,23 @@ public sealed class WorldBuilder
             return true;
         return !wall && MapEdgeExtender.ClassifyGroundMesh(vertices, textures, tileX, tileZ, out _, out _)
             == MapEdgeExtender.TileVerdict.Accepted;
+    }
+
+    /// <summary>Whether one world mesh is terrain, which a model pack never replaces. Terrain is a
+    /// sheet of nothing but water, a ground tile <see cref="MapEdgeExtender.ClassifyGroundMesh"/>
+    /// accepts, or a strip completing one (<see cref="MapEdgeExtender.IsCompletionStrip"/>). That is the ground
+    /// the map-edge continuation copies, and the ground clutter stands on and craters cut.</summary>
+    internal static bool IsTerrainMesh(IReadOnlyList<Vector3> vertices,
+        IReadOnlyList<string?> textures, float tileX, float tileZ)
+    {
+        bool allWater = textures.Count > 0;
+        foreach (var t in textures)
+            allWater &= SceneBuilder.ClassifySurface(t) == "water";
+        if (allWater)
+            return true;
+        var verdict = MapEdgeExtender.ClassifyGroundMesh(vertices, textures, tileX, tileZ, out _, out var span);
+        return verdict == MapEdgeExtender.TileVerdict.Accepted
+            || (verdict == MapEdgeExtender.TileVerdict.TooSmall && MapEdgeExtender.IsCompletionStrip(span, tileX, tileZ));
     }
 
     // The deck-tile test: one flat, untilted 4-vertex quad, so a wall or a ramp fails it. Static
@@ -752,7 +811,7 @@ public sealed class WorldBuilder
         Aabb? total = null;
         if (node is MeshInstance3D { Mesh: not null } mi)
         {
-            total = xf * mi.GetAabb();
+            total = xf * SceneBuilder.GameplayAabb(mi);
         }
         foreach (var child in node.GetChildren())
         {
@@ -860,6 +919,12 @@ public sealed class WorldBuilder
         Walk(root, Transform3D.Identity);
         return merged;
     }
+
+    // The world's partition cell size, as GroundSheetTest divides it, or null without a grid.
+    private static (float X, float Z)? CellOf(GameZNode world) =>
+        world.HasArea && world.PartitionCols > 0 && world.PartitionRows > 0
+            ? ((world.AreaRight - world.AreaLeft) / world.PartitionCols, (world.AreaBottom - world.AreaTop) / world.PartitionRows)
+            : null;
 
     // IsShadowlessGround per mesh index, for this world's cell size, decided once per mesh.
     private Func<int, bool> GroundSheetTest(GameZNode world)
@@ -1028,6 +1093,25 @@ public sealed class WorldBuilder
         var result = new ArrayMesh();
         surface.Commit(result);
         return result;
+    }
+
+    // The world nodes a model pack never replaces: the deck, sky and cloud surfaces, the open sea
+    // the Enhanced ocean draws over, and terrain. Terrain is a node authoring CAN_MODIFY or a mesh
+    // IsTerrainMesh calls ground, so TerrainCarve and clutter stamping keep the original geometry.
+    private bool KeepsOriginalMesh(GameZNode n)
+    {
+        if (_deckNodes.Contains(n.Index) || n.CanModify || MeshUsesTexture(_gamez, n, IsNonSolidSkyTexture)
+            || MeshUsesTexture(_gamez, n, SceneBuilder.IsOceanBaseTexture))
+            return true;
+        if (_cell is not { } cell || n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
+            return false;
+        var mesh = _gamez.Meshes[n.MeshIndex];
+        var textures = new List<string?>(mesh.Polygons.Count);
+        foreach (var poly in mesh.Polygons)
+            textures.Add(poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
+                ? _gamez.Materials[poly.MaterialIndex].TextureName
+                : null);
+        return IsTerrainMesh(mesh.Vertices, textures, cell.X, cell.Z);
     }
 
     // True when the node's model is one flat horizontal quad, reporting its altitude and its

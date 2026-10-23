@@ -51,12 +51,23 @@ public sealed class CockpitGauges
         _nitroDial = FindNamed(gauges, "nitrogauge");
         // A bind that locates the panel but finds zero belts or zero damage zones is an anomaly
         // that used to be silent; this line is what makes it visible again.
-        int needles = new[]
+        NeedleCount = new[]
             { _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge, _gunArrow, _missileArrow }
             .Count(n => n.IsBound) + (_horizon.IsBound ? 1 : 0) + (_compass.IsBound ? 1 : 0);
-        int lamps = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
-        Log.Debug("flight", $"cockpit gauges bound needles={needles} lamps={lamps} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
+        LampCount = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
+        Log.Debug("flight", $"cockpit gauges bound needles={NeedleCount} lamps={LampCount} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
     }
+
+    /// <summary>How many needles this bind found, the horizon ball and compass drum included.
+    /// Diagnostic and suite use only.</summary>
+    public int NeedleCount { get; }
+
+    /// <summary>How many of the two warning lamps and the nitro dial this bind found. Diagnostic
+    /// and suite use only.</summary>
+    public int LampCount { get; }
+
+    /// <summary>How many digit readouts this bind found. Diagnostic and suite use only.</summary>
+    public int ReadoutCount => _readouts.Count;
 
     /// <summary>How many belt positions this bind found a matching skin for. Not a fixed
     /// constant across airframes; diagnostic and suite use only.</summary>
@@ -66,9 +77,9 @@ public sealed class CockpitGauges
     /// fixed constant; diagnostic and suite use only.</summary>
     public int DamageZoneCount => _zones.Count;
 
-    /// <summary>Finds the panel inside one built interior, or null when there is no interior (an AI
-    /// plane, or any build that did not ask <see cref="PlaneBuilder"/> for one) or no
-    /// <c>gauges</c> subtree in it.</summary>
+    /// <summary>Finds the panel inside one built interior or transplanted panel. Null when there is
+    /// none (an AI plane, or any build that did not ask <see cref="PlaneBuilder"/> for one), or when
+    /// it holds no <c>gauges</c> subtree.</summary>
     public static CockpitGauges? Bind(Node3D? interior,
         IReadOnlyList<(ShaderMaterial Material, string TextureName)>? materials = null)
     {
@@ -87,12 +98,11 @@ public sealed class CockpitGauges
     }
 
     /// <summary>Binds through the one expression every caller must use: this builder's own
-    /// interior paired with its own materials, so a caller cannot supply one without the other.
-    /// The live flight path and the in-engine suite both call this rather than repeating the two
-    /// arguments, so a regression back to the interior alone breaks both instead of only the
-    /// controls.</summary>
+    /// panel paired with its own materials, never one without the other. The
+    /// panel is a body cockpit's transplanted one where it has one, the interior otherwise. The live
+    /// flight path and the in-engine suites both call this rather than repeating the arguments.</summary>
     public static CockpitGauges? Bind(PlaneBuilder builder) =>
-        Bind(builder.CockpitInterior, builder.InteriorMaterials);
+        Bind(builder.CockpitPanel ?? builder.CockpitInterior, builder.InteriorMaterials);
 
     /// <summary>Write this frame's readings onto the panel. Called only while the interior is on
     /// the screen, so an external view costs nothing; the needles hold their last pose behind the

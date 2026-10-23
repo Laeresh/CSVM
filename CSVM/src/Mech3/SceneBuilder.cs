@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
 
@@ -78,6 +79,10 @@ public sealed class SceneBuilder
     /// <summary>Meta key a collider carries when its surface class is water or buildings.
     /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
     public static readonly StringName SurfaceMeta = "csky_surface";
+
+    /// <summary>Meta key a replaced mesh instance holds its gamez model under, read through
+    /// <see cref="GameplayMesh"/>.</summary>
+    public static readonly StringName GamezMeshMeta = "csvm_gamez_mesh";
 
     /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
     /// type id (<see cref="GameZMaterial.SoilId"/>). Every polygon in the body shares it, since
@@ -319,6 +324,12 @@ public sealed class SceneBuilder
     /// shader.</summary>
     internal bool XrUnderInterior;
 
+    /// <summary>Surfaces that receive no shadow, for a body cockpit's transplanted dials
+    /// (<see cref="CockpitTransplant"/>). cockpit1's own pass holds no airframe to shadow its dials.
+    /// In the main world the airframe's shadow over its dashboard must not dim them either. Set
+    /// before building: it keys the shader.</summary>
+    internal bool NoShadowReceive;
+
     /// <summary>Polygons this builder draws nothing for, by identity (<see cref="CockpitPlate"/>
     /// on the stereo interior's builder). Each one's surface group is still formed, so every later
     /// group keeps the rank, and so the depth bias, it builds with otherwise. Null omits nothing.
@@ -341,6 +352,20 @@ public sealed class SceneBuilder
     /// <summary>Called with each node a build makes, before its contents. A suite's only view of a
     /// build that throws before it returns its root. Null outside that suite.</summary>
     internal Action<Node3D>? NodeMade;
+
+    /// <summary>The chapter folder as <c>extracted/</c> spells it (<c>C3</c>), under which this
+    /// builder's nodes look up model pack replacements (<see cref="HdModels.For"/>). Set before
+    /// building. ⚠ A builder with neither this nor <see cref="HdAirframe"/> set draws no replacement.</summary>
+    internal string? HdChapter;
+
+    /// <summary>The airframe, as its model node (<c>player_bhawk</c>), under which every node of
+    /// the next build looks up its replacement. <see cref="PlaneBuilder"/> sets it per build.</summary>
+    internal string? HdAirframe;
+
+    /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
+    /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
+    /// for. Null keeps none.</summary>
+    internal Predicate<GameZNode>? KeepsOriginalMesh;
 
     private const string LightShaderCode = @"
 shader_type spatial;
@@ -475,6 +500,12 @@ void fragment() {
     // tiles have exclusive model indices), so this is defence. `ForceLit` is the deck-underside
     // exception (`WorldBuilder.Add`); `ClutterFade` is ClutterBuilder's 3D-decoration build.
     private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
+    // A model pack replacement as this builder draws it: the shared import's surfaces under this
+    // builder's materials. The model index is in the key because its render flags reach the materials.
+    private readonly Dictionary<(ArrayMesh Import, int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh> _replacementCache = new();
+    // A replacement surface's material when its glTF material names no original texture, keyed by
+    // the imported material itself. Every other component picks a shader variant or a bias.
+    private readonly Dictionary<(Material? Source, int Rank, bool DoubleSided, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, bool ClutterFade), Material> _packMaterialCache = new();
     // The ground-layer twin of a blended _materialCache entry, under the same key. It is a twin, not
     // a key component, so no opaque or scissored material is ever split in two.
     private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade), Material> _groundLayerCache = new();
@@ -510,6 +541,9 @@ void fragment() {
     // A fullbright builder's committed surface arrays, per built mesh in surface order. Reading a
     // surface back from Godot copies it off the GPU and waits for the render thread.
     private readonly Dictionary<ArrayMesh, List<Godot.Collections.Array>> _builtArrays = new();
+    // The first gamez material skinned with each texture, by name without extension or case. Built
+    // on the first replacement surface that asks.
+    private Dictionary<string, int>? _materialByTexture;
 
     /// <param name="fullbright">Render unshaded, like the original's world pass: texture × baked
     /// vertex colour, ignoring scene lights.</param>
@@ -563,6 +597,10 @@ void fragment() {
     private enum CylAxis { None, Y, X }
 
     public int MeshInstanceCount { get; private set; }
+
+    /// <summary>Meshes this builder drew from the model pack instead of the gamez model: mesh
+    /// instances, plus each <see cref="SharedMesh"/> request a replacement answered.</summary>
+    public int ReplacedMeshCount { get; private set; }
 
     /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>.</summary>
     public int ShadowlessMeshCount { get; private set; }
@@ -655,6 +693,17 @@ void fragment() {
     /// <c>CAN_MODIFY</c> gate read off <see cref="CanModifyMeta"/>.</summary>
     public static bool CanModify(Node? collider) => collider != null && collider.HasMeta(CanModifyMeta);
 
+    /// <summary>The mesh a plane's hulls and a shootable round's box read from <paramref name="instance"/>.
+    /// It is the gamez model a replacement draws over, else the drawn mesh. ⚠ Never read a hull or hit box off <c>Mesh</c>; a pack would reshape it.</summary>
+    public static Mesh? GameplayMesh(MeshInstance3D instance) =>
+        instance.HasMeta(GamezMeshMeta) ? instance.GetMeta(GamezMeshMeta).As<Mesh>() : instance.Mesh;
+
+    /// <summary>The local box a site, a zone, a range gate or an effect measures
+    /// <paramref name="instance"/> by: its gamez model's under a replacement, else its own.</summary>
+    public static Aabb GameplayAabb(VisualInstance3D instance) =>
+        instance.HasMeta(GamezMeshMeta) && instance.GetMeta(GamezMeshMeta).As<Mesh>() is { } gamez
+            ? gamez.GetAabb() : instance.GetAabb();
+
     /// <summary>The one billboard rule, read straight from the gamez model: is this a flat card the
     /// engine turns toward the camera? Every caller goes through this. Null when the extraction
     /// carries no <c>ModelType</c> (a legacy tree) and means "apply your own fallback", which the
@@ -692,17 +741,29 @@ void fragment() {
             foreach (var uv in uvs)
             {
                 any = true;
-                if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon)
-                    uFits = false;
-                if (uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
-                    vFits = false;
-                if (!uFits && !vFits)
+                if (!NarrowUnitAxes(uv, ref uFits, ref vFits))
                     return UvClampAxes.None;
             }
         }
         // No UVs at all ⇒ nothing to clamp; keep the surface on the repeating path.
         return !any ? UvClampAxes.None
             : (uFits ? UvClampAxes.U : UvClampAxes.None) | (vFits ? UvClampAxes.V : UvClampAxes.None);
+    }
+
+    /// <summary>The same rule over one surface's own UV array, a model pack replacement's. Null or
+    /// empty reads as no UVs. ⚠ Never decide a replacement surface from its node's gamez polygons;
+    /// the two UV layouts share nothing.</summary>
+    public static UvClampAxes UvAxesWithinUnitSquare(IReadOnlyList<Vector2>? uvs)
+    {
+        if (uvs == null || uvs.Count == 0)
+            return UvClampAxes.None;
+        bool uFits = true, vFits = true;
+        foreach (var uv in uvs)
+        {
+            if (!NarrowUnitAxes(uv, ref uFits, ref vFits))
+                return UvClampAxes.None;
+        }
+        return (uFits ? UvClampAxes.U : UvClampAxes.None) | (vFits ? UvClampAxes.V : UvClampAxes.None);
     }
 
     /// <summary>Builds the subtree rooted at <paramref name="node"/>; null if skipped entirely.
@@ -744,6 +805,33 @@ void fragment() {
 
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
         UvAxesWithinUnitSquare(polys, pass) == UvClampAxes.Both;
+
+    // Drops each axis `uv` leaves the unit square on; false once neither fits.
+    internal static bool NarrowUnitAxes(Vector2 uv, ref bool uFits, ref bool vFits)
+    {
+        if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon)
+            uFits = false;
+        if (uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
+            vFits = false;
+        return uFits || vFits;
+    }
+
+    /// <summary>The sampler clamp and the shader edge clamp one surface takes from its unit axes. A
+    /// surface inside the unit square never needs the sampler to wrap, which is what draws the
+    /// hairline seams. Where only one axis fits, the sampler keeps repeating for the other and the
+    /// fitting axis is clamped in the shader. A scrolling axis keeps repeating, since its UVs run
+    /// past 1 and wrap back round.</summary>
+    internal static (bool ClampUv, UvClampAxes EdgeClamp) ClampFor(UvClampAxes unitAxes, Vector2 scroll)
+    {
+        if (scroll == Vector2.Zero && unitAxes == UvClampAxes.Both)
+            return (true, UvClampAxes.None);
+        var edgeClamp = UvClampAxes.None;
+        if (unitAxes.HasFlag(UvClampAxes.U) && scroll.X == 0)
+            edgeClamp |= UvClampAxes.U;
+        if (unitAxes.HasFlag(UvClampAxes.V) && scroll.Y == 0)
+            edgeClamp |= UvClampAxes.V;
+        return (false, edgeClamp);
+    }
 
     /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
     /// null for the untagged default. The collision buckets are built from this
@@ -808,16 +896,23 @@ void fragment() {
     }
 
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's
-    /// shared cache and carrying this builder's materials. Exists for
-    /// <see cref="ClutterBuilder"/>'s 3D-decoration path, which draws one MultiMesh over this single
-    /// mesh; the transform, the <c>node_bias</c> instance uniform and the collider are the caller's.
+    /// cache with its materials, for <see cref="ClutterBuilder"/>'s 3D-decoration MultiMesh. The
+    /// transform, <c>node_bias</c> and collider are the caller's.
     /// The override flags share <see cref="BuildSubtree"/>'s cache; <paramref name="clutterFade"/>
-    /// selects the bias shader's per-instance fade variant over the MultiMesh custom data.</summary>
+    /// selects the bias shader's per-instance fade variant over the MultiMesh custom data. Given the
+    /// <paramref name="node"/> carrying the model, a model pack replacement answers instead.</summary>
     internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
-        bool clutterFade = false) =>
-        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count
-            ? GetMesh(meshIndex, forceDoubleSided, forceLit, clutterFade)
-            : null;
+        bool clutterFade = false, GameZNode? node = null)
+    {
+        if (meshIndex < 0 || meshIndex >= _gamez.Meshes.Count)
+            return null;
+        if (node != null && Replacement(node, meshIndex, forceDoubleSided, forceLit, clutterFade) is { } replacement)
+        {
+            ReplacedMeshCount++;
+            return replacement;
+        }
+        return GetMesh(meshIndex, forceDoubleSided, forceLit, clutterFade);
+    }
 
     /// <summary>An untextured quad-frame mesh carrying the SAME fog-pipelined material a
     /// <c>Colored</c> polygon with no material entry gets, for <see cref="WorldBuilder"/>'s
@@ -1128,6 +1223,10 @@ void fragment() {
         return name.Length == 0 ? "node" : name;
     }
 
+    // A texture-named material's texture, as OriginalMaterialFor matches it: no extension, no padding.
+    private static string TextureStem(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? string.Empty : System.IO.Path.GetFileNameWithoutExtension(name.Trim());
+
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
         Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit,
         bool zoneGate, bool applyActive)
@@ -1201,7 +1300,10 @@ void fragment() {
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
             && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
-            var mesh = GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
+            // Only the drawn mesh changes. The node, its metas, bias, layer, shadow and colliders
+            // stay the original's, and the colliders keep reading the gamez model.
+            var replacement = Replacement(node, node.MeshIndex, forceDoubleSided, forceLit);
+            var mesh = replacement ?? GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
@@ -1221,10 +1323,17 @@ void fragment() {
                 }
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
-                if (_meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
+                // ⚠ Never move a replacement by it; that pivot belongs to the original's quad.
+                if (replacement == null && _meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
                     mi.Position = pivot;
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
+                if (replacement != null)
+                {
+                    ReplacedMeshCount++;
+                    if (GetMesh(node.MeshIndex, forceDoubleSided, forceLit) is { } gamezMesh)
+                        mi.SetMeta(GamezMeshMeta, gamezMesh);
+                }
                 if (collidable)
                     AttachCollision(n3d, node.MeshIndex, node.CanModify);
             }
@@ -1417,6 +1526,230 @@ void fragment() {
         return mesh;
     }
 
+    // The model pack's mesh for a node in place of its gamez model, as this builder draws it, or null.
+    // ⚠ Keep the pack's count first: with no pack a build pays that one check per meshed node.
+    // ⚠ Never replace a sprite or facade; its shader turns the original quad about its own pivot.
+    // A node the original draws nothing for keeps drawing nothing, so its colliders stay as built.
+    private ArrayMesh? Replacement(GameZNode node, int meshIndex, bool forceDoubleSided, bool forceLit,
+        bool clutterFade = false)
+    {
+        if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null))
+            return null;
+        var shared = HdModelMeshes.Current;
+        // A failed import is null and draws the gamez model; an empty one draws nothing.
+        if (Imported(node, shared) is not { } imported || shared.SurfacesOf(imported) is not { } surfaces)
+            return null;
+        var mesh = _gamez.Meshes[meshIndex];
+        if (GetCylindricalAxis(mesh) != CylAxis.None || IsGlowSpriteMesh(mesh) || UsesBillboardTexture(mesh)
+            || !mesh.Polygons.Exists(p => !DrawsNothing(p.MaterialIndex))
+            || KeepsOriginalMesh?.Invoke(node) == true)
+            return null;
+        var key = (imported, meshIndex, forceDoubleSided, forceLit, clutterFade);
+        if (!_replacementCache.TryGetValue(key, out var built))
+            _replacementCache[key] = built = MappedReplacement(surfaces, shared, mesh, meshIndex, forceDoubleSided, forceLit, clutterFade);
+        return built;
+    }
+
+    // The pack's import for a node: from the file of the nearest ancestor whose file names it, else
+    // from the node's own key. A generic name (`g12`, `part1`) then reaches only its own root's nodes.
+    // ⚠ Keep the ancestors first; a bare file of a generic name would otherwise win over the root's.
+    private ArrayMesh? Imported(GameZNode node, HdModelMeshes shared)
+    {
+        List<string>? owned = null;
+        var path = new List<string>();
+        int steps = 0;
+        for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
+        {
+            if (HdModels.Current.KeyFor(scope.Name, HdChapter, HdAirframe) != null
+                && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
+                return scoped;
+            path.Insert(0, scope.Name);
+        }
+        return HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) != null
+            ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
+            : null;
+    }
+
+    // The names of the gamez nodes below `node`. A glTF subtree named after one is that node's to draw.
+    private IEnumerable<string> DescendantNames(GameZNode node)
+    {
+        foreach (int child in node.Children)
+        {
+            if (child < 0 || child >= _gamez.Nodes.Count)
+                continue;
+            yield return _gamez.Nodes[child].Name;
+            foreach (string name in DescendantNames(_gamez.Nodes[child]))
+                yield return name;
+        }
+    }
+
+    // The shared import's surfaces under this builder's materials, in a mesh of this builder's own.
+    // ⚠ Never set a material on the shared mesh; every builder replacing from that key reads it.
+    // Draw order: an original texture's priority on this model (else 0), no no_clutter layer, pass
+    // 0, and the file's surface order as the rank. The node's bias applies as built.
+    private ArrayMesh MappedReplacement(IReadOnlyList<HdSurface> surfaces, HdModelMeshes shared, GameZMesh mesh,
+        int meshIndex, bool forceDoubleSided, bool forceLit, bool clutterFade)
+    {
+        // The model's own render flags, as its original surfaces take them.
+        bool lit = mesh.Lighting || forceLit;
+        bool fogged = mesh.Fog;
+        var scroll = EffectiveScroll(mesh, meshIndex);
+        var result = new ArrayMesh();
+        var ownSurfaces = OriginalSurfacesByTexture(mesh, forceDoubleSided);
+        var fileCounts = surfaces.GroupBy(s => TextureStem((s.Material as BaseMaterial3D)?.ResourceName), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        var taken = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int rank = 0; rank < surfaces.Count; rank++)
+        {
+            var surface = surfaces[rank];
+            var source = surface.Material as BaseMaterial3D;
+            // glTF doubleSided is the importer's disabled culling. The import's reversal puts the
+            // visible side where the data's is, so a one-sided surface takes an original's cull_front.
+            bool doubleSided = forceDoubleSided || !_cullBackfaces
+                || source?.CullMode == BaseMaterial3D.CullModeEnum.Disabled;
+            var uvs = surface.Arrays[(int)Mesh.ArrayType.TexUV];
+            var unitAxes = UvAxesWithinUnitSquare(uvs.VariantType == Variant.Type.PackedVector2Array ? uvs.AsVector2Array() : null);
+            // KHR_materials_unlit arrives as the unshaded mode. An export never writes it, so it is the
+            // author's word for this surface; without it the model's lighting holds. forceLit wins.
+            bool fileUnlit = source?.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded;
+            Material material;
+            bool clampUv;
+            UvClampAxes edgeClamp;
+            if (OriginalMaterialFor(source?.ResourceName, mesh) is var (original, priority) && original >= 0)
+            {
+                // The export writes the original's surfaces of a texture one for one. A file that
+                // still does gives each its own material and priority, in the original's order.
+                string stem = TextureStem(source?.ResourceName);
+                if (ownSurfaces.TryGetValue(stem, out var own) && own.Count == fileCounts[stem])
+                {
+                    int next = taken.GetValueOrDefault(stem);
+                    taken[stem] = next + 1;
+                    (original, priority) = own[next];
+                }
+                if (DrawsNothing(original))
+                    continue;
+                (clampUv, edgeClamp) = ClampFor(unitAxes, scroll);
+                material = GetMaterial(original, priority, rank, noClutter: false, doubleSided, scroll, clampUv,
+                    lit && (forceLit || !fileUnlit), fogged, pass: 0, edgeClamp, clutterFade);
+            }
+            else
+            {
+                var tex = shared.AlbedoOf(source);
+                (clampUv, edgeClamp) = tex != null ? ClampFor(unitAxes, Vector2.Zero) : (false, UvClampAxes.None);
+                // A non-original surface is lit by default, whatever the model's flag.
+                material = PackMaterial(source, tex, rank, doubleSided, clampUv, edgeClamp, forceLit || !fileUnlit, fogged, clutterFade);
+            }
+            if (!CountSurface(material, clampUv, edgeClamp))
+                continue;
+            result.AddSurfaceFromArrays(surface.Primitive, surface.Arrays);
+            int added = result.GetSurfaceCount() - 1;
+            result.SurfaceSetName(added, surface.Name);
+            result.SurfaceSetMaterial(added, material);
+        }
+        // ⚠ Never fall back to the gamez model here: no surface left means the pack draws nothing.
+        return result;
+    }
+
+    // The gamez material an original surface skinned with the texture `name` takes, or -1: the node's
+    // own model first, then the whole table. Matched as the archive matches, without case or extension.
+    // A sprite texture is no match, since its material is a camera-facing billboard. The priority is
+    // the highest of this model's polygons wearing it, base or overlay, else 0.
+    private (int Material, int Priority) OriginalMaterialFor(string? name, GameZMesh mesh)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return (-1, 0);
+        string stem = System.IO.Path.GetFileNameWithoutExtension(name.Trim());
+        bool Wears(int material) => material >= 0 && material < _gamez.Materials.Count
+            && _gamez.Materials[material].TextureName is { } texName
+            && string.Equals(System.IO.Path.GetFileNameWithoutExtension(texName.Trim()), stem, StringComparison.OrdinalIgnoreCase);
+        int found = -1;
+        int? priority = null;
+        foreach (var poly in mesh.Polygons)
+        {
+            int worn = Wears(poly.MaterialIndex) ? poly.MaterialIndex
+                : poly.OverlayPasses?.Find(p => Wears(p.MaterialIndex))?.MaterialIndex ?? -1;
+            if (worn < 0)
+                continue;
+            found = found < 0 ? worn : found;
+            priority = Math.Max(priority ?? int.MinValue, poly.Priority);
+        }
+        if (found < 0)
+        {
+            if (_materialByTexture == null)
+            {
+                _materialByTexture = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < _gamez.Materials.Count; i++)
+                {
+                    if (_gamez.Materials[i].TextureName is { } texName)
+                        _materialByTexture.TryAdd(System.IO.Path.GetFileNameWithoutExtension(texName.Trim()), i);
+                }
+            }
+            found = _materialByTexture.TryGetValue(stem, out int index) ? index : -1;
+        }
+        return found >= 0 && _billboardTexture != null && _gamez.Materials[found].TextureName is { } tex && _billboardTexture(tex)
+            ? (-1, 0) : (found, priority ?? 0);
+    }
+
+    // Each texture's surfaces as BuildMesh groups the model, base groups then overlay passes, in
+    // that order: one (material, priority) per surface. Keep the group key in step with BuildMesh's.
+    private Dictionary<string, List<(int Material, int Priority)>> OriginalSurfacesByTexture(GameZMesh mesh, bool forceDoubleSided)
+    {
+        var groups = new HashSet<(int, int, bool, bool, int)>();
+        var byTexture = new Dictionary<string, List<(int, int)>>(StringComparer.OrdinalIgnoreCase);
+        void Add(int material, GameZPolygon poly, int pass)
+        {
+            bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
+            if (material < 0 || material >= _gamez.Materials.Count
+                || !groups.Add((material, poly.Priority, poly.NoClutter, doubleSided, pass))
+                || _gamez.Materials[material].TextureName is not { } texture)
+                return;
+            string stem = TextureStem(texture);
+            if (!byTexture.TryGetValue(stem, out var list))
+                byTexture[stem] = list = new List<(int, int)>();
+            list.Add((material, poly.Priority));
+        }
+
+        int levels = 0;
+        foreach (var poly in mesh.Polygons)
+        {
+            if (DrawsNothing(poly.MaterialIndex))
+                continue;
+            Add(poly.MaterialIndex, poly, 0);
+            levels = Math.Max(levels, poly.OverlayPasses?.Count ?? 0);
+        }
+        for (int pass = 1; pass <= levels; pass++)
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.OverlayPasses is { } overlays && overlays.Count >= pass
+                    && !DrawsNothing(poly.MaterialIndex) && !DrawsNothing(overlays[pass - 1].MaterialIndex))
+                    Add(overlays[pass - 1].MaterialIndex, poly, pass);
+            }
+        }
+        return byTexture;
+    }
+
+    // A replacement surface whose glTF material names no original texture. It wears the file's base
+    // colour, times its texture if any, in the bias shader's replacement variant. BLEND arrives as
+    // alpha or depth-prepass transparency; MASK is the scissor, cut at the file's alphaCutoff.
+    private Material PackMaterial(BaseMaterial3D? source, ImageTexture? tex, int rank, bool doubleSided,
+        bool clampUv, UvClampAxes edgeClamp, bool lit, bool fogged, bool clutterFade)
+    {
+        rank = Math.Min(rank, SurfaceRankCap);
+        var key = ((Material?)source, rank, doubleSided, clampUv, edgeClamp, lit, fogged, clutterFade);
+        if (_packMaterialCache.TryGetValue(key, out var cached))
+            return cached;
+        var transparency = source?.Transparency ?? BaseMaterial3D.TransparencyEnum.Disabled;
+        bool blend = transparency is BaseMaterial3D.TransparencyEnum.Alpha or BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
+        bool scissor = transparency is BaseMaterial3D.TransparencyEnum.AlphaScissor or BaseMaterial3D.TransparencyEnum.AlphaHash;
+        var material = BiasMaterial(priority: 0, rank, noClutter: false, doubleSided, tex, source?.AlbedoColor ?? Colors.White,
+            blend, scissor, Vector2.Zero, clampUv, lit, fogged, pass: 0, edgeClamp, clutterFade, replacement: true);
+        if (scissor)
+            material.SetShaderParameter("alpha_cutoff", source?.AlphaScissorThreshold ?? 0.5f);
+        _packMaterialCache[key] = material;
+        return material;
+    }
+
     private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
         bool clutterFade = false)
     {
@@ -1560,27 +1893,9 @@ void fragment() {
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
                     _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag);
-            // A surface whose UVs never leave the unit square never needs the sampler to wrap, and
-            // wrapping is what produces the hairline seams (see UvsWithinUnitSquare). A scrolling
-            // surface is excluded: its UVs run past 1 and rely on repeat to come back round.
-            var unitAxes = UvAxesWithinUnitSquare(polys, pass);
-            bool clampUv = scroll == Vector2.Zero && unitAxes == UvClampAxes.Both;
-            // The partial case: one axis fits the unit square while the other tiles or scrolls. The
-            // sampler must keep repeating for that other axis, so the fitting, non-scrolling axis is
-            // clamped in the shader instead (see UvAxesWithinUnitSquare).
-            var edgeClamp = UvClampAxes.None;
-            if (!clampUv)
-            {
-                if (unitAxes.HasFlag(UvClampAxes.U) && scroll.X == 0)
-                    edgeClamp |= UvClampAxes.U;
-                if (unitAxes.HasFlag(UvClampAxes.V) && scroll.Y == 0)
-                    edgeClamp |= UvClampAxes.V;
-            }
+            // Wrapping is what produces the hairline seams on a surface mapped once (see ClampFor).
+            var (clampUv, edgeClamp) = ClampFor(UvAxesWithinUnitSquare(polys, pass), scroll);
 
-            if (clampUv)
-                ClampedSurfaceTotal++;
-            else if (edgeClamp != UvClampAxes.None)
-                EdgeClampedSurfaceTotal++;
             // The glow/cylindrical paths take only the full clamp: their quads' UVs are
             // authored inside the unit square, so the partial case cannot arise there. They also
             // carry no clutter fade: no 3D decoration in the install is a glow or a facade.
@@ -1588,16 +1903,7 @@ void fragment() {
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
                 : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade,
                     groundLayer: _fullbright && !clutterFade && !forceLit && !doubleSided && !billboardMesh && LiesFlat(mesh, polys));
-            var alpha = _materialAlpha.TryGetValue(surfaceMaterial, out var known) ? known : TransparencyClass.None;
-            if (alpha == TransparencyClass.BlendSurface)
-                BlendSurfaceCount++;
-            if (alpha == TransparencyClass.BlendSurface && surfaceMaterial.RenderPriority == GroundLayerRenderPriority)
-                GroundLayerSurfaceCount++;
-            else if (alpha == TransparencyClass.ScissorSurface)
-                ScissorSurfaceCount++;
-            // ⚠ Drop the surface, never hide the instance. The group is one of several on a shared
-            // mesh, and the classes are isolated from each other, not from the world.
-            if (alpha != TransparencyClass.None && HiddenAlpha.HasFlag(alpha))
+            if (!CountSurface(surfaceMaterial, clampUv, edgeClamp))
                 continue;
             // What SurfaceTool.Commit does, with the arrays kept for the world's merge. Commit adds
             // no surface for a group that emitted no triangle, so neither does this.
@@ -1614,6 +1920,25 @@ void fragment() {
             }
         }
         return arrayMesh;
+    }
+
+    // Counts one surface into the clamp and transparency census, and says whether it is built: false
+    // for a class HiddenAlpha leaves out. Original and replacement surfaces both pass through here.
+    // ⚠ Drop the surface, never hide the instance; the classes isolate from each other, not the world.
+    private bool CountSurface(Material material, bool clampUv, UvClampAxes edgeClamp)
+    {
+        if (clampUv)
+            ClampedSurfaceTotal++;
+        else if (edgeClamp != UvClampAxes.None)
+            EdgeClampedSurfaceTotal++;
+        var alpha = _materialAlpha.TryGetValue(material, out var known) ? known : TransparencyClass.None;
+        if (alpha == TransparencyClass.BlendSurface)
+            BlendSurfaceCount++;
+        if (alpha == TransparencyClass.BlendSurface && material.RenderPriority == GroundLayerRenderPriority)
+            GroundLayerSurfaceCount++;
+        else if (alpha == TransparencyClass.ScissorSurface)
+            ScissorSurfaceCount++;
+        return alpha == TransparencyClass.None || !HiddenAlpha.HasFlag(alpha);
     }
 
     // The UV scroll rate for one model: the caller's per-model override if it has one, else the
@@ -1874,6 +2199,8 @@ void fragment() {
             bool water = ClassifySurface(texName) == "water";
             bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
             var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase);
+            // The glTF export names its material from this, so a pack built from it maps back here.
+            textured.ResourceName = texName;
             if (keyed != null)
             {
                 bool scrolls = scroll != Vector2.Zero;
@@ -1919,14 +2246,16 @@ void fragment() {
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false,
+        bool replacement = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
         if (tex == null)
             edgeClamp = UvClampAxes.None;
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
-            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase));
+            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
+            replacement));
         NoteAlpha(mat, blend, scissor);
         if (XrPreciseInterior && (blend || XrUnderInterior))
             mat.RenderPriority = XrInteriorBlendPriority;
@@ -1961,11 +2290,11 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
-    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior.
+    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false, bool water = false, bool oceanBase = false)
+        bool clutterFade = false, bool water = false, bool oceanBase = false, bool replacement = false)
     {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
@@ -1987,13 +2316,17 @@ void fragment() {
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
-            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0);
+            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
+            | (NoShadowReceive ? 16777216 : 0);
+        bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
+                noShadowReceive),
+                "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -2006,7 +2339,8 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false)
+        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
+        bool noShadowReceive = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2036,6 +2370,8 @@ void fragment() {
             sb.Append(", unshaded");
         if (coverage)
             sb.Append(CoverageMode);
+        if (noShadowReceive)
+            sb.Append(", shadows_disabled");
         // A part under the interior draws in the transparent pass and still sorts its own faces.
         if (underInterior)
             sb.Append(", depth_draw_always");
@@ -2109,8 +2445,11 @@ void fragment() {
         // inset by half a texel so no bilinear tap can cross the edge and wrap.
         if (textured && edgeClamp != UvClampAxes.None)
             sb.AppendLine("uniform vec2 uv_edge_inset = vec2(0.0);");
-        if (!textured)
+        // A replacement's textured surface also takes its glTF baseColorFactor here, the texture's multiplier.
+        if (!textured || replacement)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
+        if (scissor && replacement)
+            sb.AppendLine("uniform float alpha_cutoff = 0.5;");
         // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
@@ -2221,6 +2560,8 @@ void fragment() {{");
                 : scroll ? $"    vec4 base_col = {SampleAlbedo("UV + scroll_rate * csky_time")};"
                 : $"    vec4 base_col = {SampleAlbedo("UV")};");
         }
+        if (textured && replacement)
+            sb.AppendLine("    base_col *= albedo_color;");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         // Per-mission SUNLIGHT dimming (world/deck/clutter), skipped for a model authored
@@ -2284,7 +2625,7 @@ void fragment() {{");
         else if (underInterior)
             sb.AppendLine("    ALPHA = 1.0;");
         if (scissor)
-            sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+            sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)
             sb.AppendLine(CoverageLines);
         sb.AppendLine("}");

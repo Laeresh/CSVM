@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
+using System.Text.Json;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -49,11 +51,12 @@ public sealed class MarkerRig
         "cockpit1", "cockpit2", "destroyed", "player_damage_off",
     };
 
-    private MarkerRig(string planeRoot, List<Marker> markers, List<IReadOnlyList<int>> coLocated)
+    private MarkerRig(string planeRoot, List<Marker> markers, List<IReadOnlyList<int>> coLocated, List<GaugePose>? cockpit)
     {
         PlaneRoot = planeRoot;
         Markers = markers;
         CoLocated = coLocated;
+        Cockpit = cockpit;
     }
 
     public enum MarkerKind { Firepoint, Pylon, Target }
@@ -66,6 +69,10 @@ public sealed class MarkerRig
     /// <summary>Groups of ≥2 indices into <see cref="Markers"/> that share a position, two gun
     /// groups on one mount. Empty for the airframes whose every firepoint is distinct.</summary>
     public IReadOnlyList<IReadOnlyList<int>> CoLocated { get; }
+
+    /// <summary>The body cockpit template's poses (<see cref="CockpitPoses"/>); null when the airframe
+    /// has no <c>cockpit1</c>.</summary>
+    public IReadOnlyList<GaugePose>? Cockpit { get; }
 
     /// <summary>Classifies a node name as a weapon marker. Returns false for everything else in
     /// the markers group (cockpit_camera, exhaust*, ground_level, …) and for the bare, unnumbered
@@ -132,7 +139,42 @@ public sealed class MarkerRig
             ? a.Kind.CompareTo(b.Kind)
             : a.Ordinal.CompareTo(b.Ordinal));
         var coLocated = GroupCoLocated(markers.ConvertAll(m => m.Local), CoLocateTolerance);
-        return new MarkerRig(planeRoot, markers, coLocated);
+        return new MarkerRig(planeRoot, markers, coLocated, CockpitPoses(gamez, root));
+    }
+
+    /// <summary>Where the flat view shows each of <c>cockpit1</c>'s instruments, in the plane frame.
+    /// Every child of its <c>gauges</c> node comes in file order, then the sight glass under
+    /// <see cref="RigCockpit.GlassKey"/> at <see cref="CockpitTransplant.GlassFrame"/>. Each is carried
+    /// through <see cref="PlaneBuilder.InteriorToPlane"/> on the gamez <c>cockpit_camera</c>. An assembly
+    /// holding the glass stands in for the key, which a rig may not name beside it. Null without
+    /// <c>cockpit1</c>.</summary>
+    public static List<GaugePose>? CockpitPoses(GameZ gamez, GameZNode root)
+    {
+        var interior = Children(gamez, root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        if (interior == null)
+        {
+            return null;
+        }
+
+        var marker = FindNamedMarker(gamez, root.Name, "cockpit_camera");
+        var poses = new List<GaugePose>();
+        bool held = false;
+        // Below cockpit1, whose own local the built mount replaces; depth-first, as the transplant searches.
+        if (FindGauges(gamez, interior, Transform3D.Identity) is var (gauges, at))
+        {
+            foreach (var assembly in Children(gamez, gauges))
+            {
+                held |= HoldsGlass(gamez, assembly);
+                poses.Add(new GaugePose(assembly.Name, PlaneBuilder.InteriorToPlane(at * (assembly.Local ?? Transform3D.Identity), marker)));
+            }
+        }
+
+        if (!held && CockpitTransplant.GlassFrame(GunsightReticle.Find(gamez, interior)) is { } glass)
+        {
+            poses.Add(new GaugePose(RigCockpit.GlassKey, PlaneBuilder.InteriorToPlane(glass, marker)));
+        }
+
+        return poses;
     }
 
     /// <summary>Reads one non-weapon marker node's plane-frame position by name, e.g.
@@ -292,6 +334,77 @@ public sealed class MarkerRig
         return sb.ToString();
     }
 
+    /// <summary>A starting <c>rig.json</c> for this plane, in the schema <see cref="PlaneRig.Parse"/> reads.
+    /// Its <c>markers</c> section holds every marker's plane-frame position. With a <c>cockpit1</c>, a body
+    /// <c>cockpit</c> section poses every instrument where <c>cockpit1</c> drew it. Props,
+    /// surfaces and flares are left out, since an absent section keeps the original's values.</summary>
+    public string FormatRigTemplate() => RigTemplate(Markers, Cockpit);
+
+    // A repeated name keeps its first position, since a rig names each marker once. Values print as
+    // the shortest text that reads back to the same float, so an unedited template moves nothing.
+    internal static string RigTemplate(IEnumerable<Marker> markers, IReadOnlyList<GaugePose>? cockpit = null)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var lines = new List<string>();
+        foreach (var m in markers)
+        {
+            if (seen.Add(m.Name))
+            {
+                lines.Add($"    {JsonSerializer.Serialize(m.Name)}: {Vec3(m.Local)}");
+            }
+        }
+        var sb = new StringBuilder();
+        sb.Append("{\n  \"markers\": {");
+        sb.Append(lines.Count == 0 ? "" : "\n" + string.Join(",\n", lines) + "\n  ");
+        sb.Append('}');
+        if (cockpit != null)
+        {
+            // Rounded to a micrometre and a ten-thousandth of a degree, below anything a pilot sees.
+            // Float noise such as 2E-14 then never reaches the author.
+            var gauges = cockpit.Select(g => $"      {JsonSerializer.Serialize(g.Name)}: {{ \"position\": {Vec3(g.Pose.Origin, 6)}, "
+                + $"\"rotation\": {Vec3(g.RotationDeg, 4)}, \"scale\": {Num(Round(g.Scale, 7))} }}").ToList();
+            sb.Append(",\n  \"cockpit\": {\n    \"from\": \"body\",\n    \"gauges\": {");
+            sb.Append(gauges.Count == 0 ? "" : "\n" + string.Join(",\n", gauges) + "\n    ");
+            sb.Append("}\n  }");
+        }
+        sb.Append("\n}\n");
+        return sb.ToString();
+    }
+
+    private static (GameZNode Node, Transform3D At)? FindGauges(GameZ gamez, GameZNode node, Transform3D at)
+    {
+        foreach (var child in Children(gamez, node))
+        {
+            var childAt = at * (child.Local ?? Transform3D.Identity);
+            if (child.Name.Equals("gauges", StringComparison.OrdinalIgnoreCase))
+            {
+                return (child, childAt);
+            }
+
+            if (FindGauges(gamez, child, childAt) is { } hit)
+            {
+                return hit;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HoldsGlass(GameZ gamez, GameZNode node) =>
+        PlaneRigPatch.HoldsGlass(gamez, node) || Children(gamez, node).Exists(c => HoldsGlass(gamez, c));
+
+    private static List<GameZNode> Children(GameZ gamez, GameZNode node) =>
+        node.Children.FindAll(c => c >= 0 && c < gamez.Nodes.Count).ConvertAll(c => gamez.Nodes[c]);
+
+    private static string Vec3(Vector3 v) => $"[{Num(v.X)}, {Num(v.Y)}, {Num(v.Z)}]";
+
+    private static string Vec3(Vector3 v, int digits) => Vec3(new Vector3(Round(v.X, digits), Round(v.Y, digits), Round(v.Z, digits)));
+
+    // Adding zero turns a rounded -0 into 0.
+    private static float Round(float v, int digits) => (float)Math.Round(v, digits) + 0f;
+
+    private static string Num(float v) => v.ToString("R", CultureInfo.InvariantCulture);
+
     private static bool TrySuffix(string name, string prefix, out int ordinal)
     {
         ordinal = 0;
@@ -314,4 +427,15 @@ public sealed class MarkerRig
     /// <param name="Ordinal">The trailing number (<c>firepoint7</c> → 7); 0 for <c>target</c>.</param>
     /// <param name="Local">Plane-frame position (metres), relative to the airframe origin.</param>
     public readonly record struct Marker(string Name, MarkerKind Kind, int Ordinal, Vector3 Local);
+
+    /// <param name="Name">A <c>gauges</c> assembly, or <see cref="RigCockpit.GlassKey"/>.</param>
+    /// <param name="Pose">Plane-frame transform where the flat view shows it.</param>
+    public readonly record struct GaugePose(string Name, Transform3D Pose)
+    {
+        /// <summary>The rotation as a rig writes it, Euler degrees in YXZ order (<see cref="RigGaugePose"/>).</summary>
+        public Vector3 RotationDeg => Pose.Basis.Orthonormalized().GetEuler(EulerOrder.Yxz) * (180f / Mathf.Pi);
+
+        /// <summary>The uniform scale as a rig writes it, the mean of the basis's three axis lengths.</summary>
+        public float Scale => (Pose.Basis.Scale.X + Pose.Basis.Scale.Y + Pose.Basis.Scale.Z) / 3f;
+    }
 }

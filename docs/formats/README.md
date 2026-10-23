@@ -89,6 +89,12 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
   intro, flight check, and ammo selection.
 - [cinemas.md](cinemas.md), the shipped `.mpg` cinemas, their container and codecs, and how CSVM
   would play them.
+
+### CSVM replacement packs
+
+- [model-packs.md](model-packs.md), the glTF model pack and per-airframe `rig.json` a pack author
+  writes: folder and keys, materials, the UV-compatible livery rule, and what is never replaced.
+
 ## Shared conventions (zrdr readers)
 
 The zrdr "reader" files are the engine's config/script lists; mech3ax extracts each to a

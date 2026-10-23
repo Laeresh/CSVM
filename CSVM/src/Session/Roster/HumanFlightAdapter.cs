@@ -213,10 +213,12 @@ internal sealed class HumanFlightAdapter
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
             raceGhost: _world.Racing || ghostSelf, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
         var planeModel = planeBuilder.Build(planeName);
-        // Before the ghost stamp, so the copies wear their originals' stamp. ponytail: none under the
-        // stereo path. Its lift draws the copies' flat shaders at the world origin. A stereo seat
-        // needs copies built through the interior's stereo variant.
-        var reseat = xrInterior ? null : CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
+        var bodyCockpit = planeBuilder.Cockpit;
+        // ponytail: none under the stereo path, whose lift draws the copies' flat shaders at the world
+        // origin. None in a body cockpit, whose outside parts are the real ones in view. Bound before
+        // the ghost stamp, so the copies wear their originals' stamp.
+        var reseat = xrInterior || bodyCockpit is { FromBody: true } ? null
+            : CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
 
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
@@ -227,6 +229,11 @@ internal sealed class HumanFlightAdapter
             RaceGhost.Stamp(planeModel, paneless ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
+        // A flat body cockpit's pass draws twins of the body. Made after the ghost stamp and before the
+        // stores hang, so neither reaches them; they stay hidden unless a pass mirrors them.
+        (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? flatBody = null;
+        if (!xrInterior && !paneless && planeBuilder.CockpitPanel is { } flatPanel)
+            flatBody = (planeBuilder.CockpitCameraOffset, PlaneBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
 
         var controller = new FlightController
         {
@@ -242,11 +249,17 @@ internal sealed class HumanFlightAdapter
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
-                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden),
-                Interior = planeBuilder.CockpitInterior,
+                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden, bodyCockpit,
+                    planeBuilder.CockpitPanel),
+                Interior = flatBody != null ? planeBuilder.CockpitPanel : planeBuilder.CockpitInterior,
+                Body = flatBody,
                 Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
-                Stereo = xrInterior && planeBuilder.CockpitInterior is { } interior
+                // A body cockpit lifts its panel, at real scale; the per-plane eye offset still seats the eye.
+                Stereo = !xrInterior ? null
+                    : planeBuilder.CockpitPanel is { } panel
+                    ? XrCockpit.Body(panel, vrCockpit.EyeOffsetInAircraft, planeBuilder.CockpitCameraOffset)
+                    : planeBuilder.CockpitInterior is { } interior
                     ? new XrCockpit(interior, vrCockpit.EyeOffsetInAircraft, planeBuilder.InteriorEye,
                         vrCockpit.StoreOffsetInAircraft, vrCockpit.StoreSpread)
                     : null,
@@ -256,9 +269,22 @@ internal sealed class HumanFlightAdapter
             ShippedSkins = swap is { ShippedSkins: true },
             Racing = _world.Racing,
         };
-        if (verbose && controller.Dressing.Visibility != null)
+        if (verbose && controller.Dressing.Visibility is { BodyCockpit: true })
+            Log.Info("flight", $"cockpit: '{planeName}' body cockpit, the model pack's airframe seen from the cockpit_camera marker, {bodyCockpit!.Hide.Count} hide name(s), {bodyCockpit.Gauges.Count} gauge table entr(ies), {flatBody?.Twins.Count ?? 0} airframe mesh(es) twinned for the cockpit pass{(controller.Dressing.Panel == null ? ", the screen-space dials kept" : string.Empty)}");
+        else if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
-        if (controller.Dressing.Stereo != null)
+        // A twinned body mesh leaves the pilot's pane while its stereo twin draws in its place.
+        if (controller.Dressing is { Stereo: { } stereoBody, Visibility: { } seen } && planeBuilder.StereoBody.Count > 0)
+        {
+            foreach (var (original, twin) in planeBuilder.StereoBody)
+            {
+                stereoBody.Mirror(original, twin);
+                seen.Reseat(original);
+            }
+
+            Log.Info("flight", $"cockpit: '{planeName}' stereo body cockpit at real scale, {planeBuilder.StereoBody.Count} airframe mesh(es) drawn from the XR origin's frame, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, gunsight reticle collimated ({planeBuilder.GunsightReticles})");
+        }
+        else if (controller.Dressing.Stereo != null)
             Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");
         // The recenter action, for the seat the headset flies.
         controller.RecenterHeadset = paneless ? null : _human.RecenterHeadset;

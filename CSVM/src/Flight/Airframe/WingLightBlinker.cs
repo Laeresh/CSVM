@@ -98,14 +98,14 @@ public sealed class WingLightBlinker
 
     /// <summary>Hands the named flare (its Godot node name, e.g. <c>wing_flare2</c>) to whatever
     /// just deactivated it, so the next <see cref="Advance"/> stops re-asserting the blink over
-    /// it. Sets the flare and its lamp hidden immediately. A no-op if no managed lamp carries
-    /// that name.</summary>
+    /// it. Sets the flare and its lamp hidden immediately. A plane rig's flare that replaced the
+    /// named one answers for it (<see cref="WingLights.AnswersTo"/>). A no-op if no lamp answers.</summary>
     public void Suspend(string flareName)
     {
         for (int i = 0; i < _lamps.Count; i++)
         {
             var (flare, light) = _lamps[i];
-            if (!flare.Name.ToString().Equals(flareName, StringComparison.OrdinalIgnoreCase))
+            if (!WingLights.AnswersTo(flare, flareName))
                 continue;
             _suspended[i] = true;
             flare.Visible = false;

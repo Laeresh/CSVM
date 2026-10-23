@@ -31,15 +31,20 @@ public sealed class ControlSurfaceAnimator
     public int Count => _surfaces.Count;
 
     /// <summary>Walks the built plane tree and collects every control-surface node the original's
-    /// numbered lists reach (<see cref="ControlSurfaces.InNumbering"/>). Null if the model has none
-    /// (the autogyro has only its two ailerons, absence of any kind is normal and per-surface).</summary>
+    /// numbered lists reach (<see cref="ControlSurfaces.InNumbering"/>), plus every surface a plane
+    /// rig names. Null if the model has none (the autogyro has only its two ailerons, absence of
+    /// any kind is normal and per-surface).</summary>
     public static ControlSurfaceAnimator? Build(Node3D planeRoot)
     {
         var surfaces = new List<Surface>();
         foreach (var child in planeRoot.GetChildren())
             Collect(child, Transform3D.Identity, surfaces, interior: false);
-        var names = surfaces.Select(s => s.Node.Name.ToString()).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
-        surfaces.RemoveAll(s => !ControlSurfaces.InNumbering(s.Node.Name, names));
+        // ⚠ Never apply the numbering's stop to a rig entry, which the rig names outright. The name
+        // set stays the names' own, so a rig kind never fills a gap in the original's lists.
+        var names = surfaces.Select(s => s.Node.Name.ToString())
+            .Where(n => ControlSurfaces.Classify(n) != ControlSurfaces.Kind.None)
+            .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        surfaces.RemoveAll(s => !s.Node.HasMeta(ControlSurfaces.KindMeta) && !ControlSurfaces.InNumbering(s.Node.Name, names));
         return surfaces.Count > 0 ? new ControlSurfaceAnimator(surfaces) : null;
     }
 
@@ -92,15 +97,18 @@ public sealed class ControlSurfaceAnimator
         {
             acc = parentAcc * n3d.Transform; // pose in the plane model's frame
             interior |= AnimRuntime.NameOf(n3d).StartsWith("cockpit", System.StringComparison.OrdinalIgnoreCase);
-            var kind = ControlSurfaces.Classify(n3d.Name);
+            var kind = ControlSurfaces.Classify(n3d);
             if (kind != ControlSurfaces.Kind.None)
             {
-                var axis = ControlSurfaces.HingeAxis(kind);
-                // The slot angle already carries the original's sign. Two frame flips remain: a
-                // rotated mount (canard groups carry yaw π), and a nose-mounted elevator, which
-                // raises the nose the other way. Account for both before touching any sign.
-                float d = (acc.Basis * axis).Dot(axis);
+                var axis = ControlSurfaces.HingeAxis(n3d, kind);
+                Vector3? rigPivot = n3d.HasMeta(ControlSurfaces.HingePivotMeta)
+                    ? n3d.GetMeta(ControlSurfaces.HingePivotMeta).AsVector3() : null;
+                // The slot angle already carries the original's sign. Two frame flips remain: a rotated
+                // mount (canard groups carry yaw π) and a nose-mounted elevator, raising the nose the
+                // other way. A rig axis is a hinge line, so its written direction flips nothing.
+                float d = (acc.Basis * axis).Dot(ControlSurfaces.HingeAxis(kind));
                 float scale = d < 0f ? -1f : 1f;
+                float hingeZ = rigPivot is { } p ? (acc * p).Z : acc.Origin.Z;
                 SurfaceSlot slot;
                 switch (kind)
                 {
@@ -114,7 +122,7 @@ public sealed class ControlSurfaceAnimator
                     case ControlSurfaces.Kind.ElevatorRight:
                         slot = kind == ControlSurfaces.Kind.ElevatorLeft
                             ? SurfaceSlot.ElevatorLeft : SurfaceSlot.ElevatorRight;
-                        if (acc.Origin.Z < CanardMaxZ)
+                        if (hingeZ < CanardMaxZ)
                             scale = -scale;
                         break;
                     default:
@@ -122,8 +130,10 @@ public sealed class ControlSurfaceAnimator
                         break;
                 }
 
-                // ⚠ The outside surfaces turn about their origin, as the original turns them.
-                surfaces.Add(new Surface(n3d, axis, slot, scale, interior ? LeadingEdge(n3d) : Vector3.Zero));
+                // ⚠ The outside surfaces turn about their origin, as the original turns them,
+                // unless a plane rig places their hinge.
+                surfaces.Add(new Surface(n3d, axis, slot, scale,
+                    rigPivot ?? (interior ? LeadingEdge(n3d) : Vector3.Zero)));
             }
         }
 

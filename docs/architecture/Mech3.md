@@ -38,7 +38,17 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples, and a fogged clutter instance darkens toward a night zone's fog over twice its fade band, the band at least C5's tower band, so no block darkens before the towers do (`csky_clutter_dark_lit`, [../org/weather.md](../org/weather.md)). The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves; a stereo process (`StereoFacing.Live`) keys the ghost's stereo text under another. `XrPreciseInterior` keys the stereo cockpit interior's variant the same way (`Flight/Hud/XrCockpit.cs`): each eye places a vertex from its offset to that eye, read off the `Xr*Global` uniforms, and the depth bias pulls toward the drawing eye; its opaque and cutout surfaces write `XrInteriorStencil`, which the stereo whiteout and flare rings skip, and its blended ones draw at `XrInteriorBlendPriority`, between the whiteout and the flash. `OmittedPolygons` leaves polygons out by identity (`CockpitPlate.cs`) while each surface group keeps its rank. `NodeMade` hands a suite each node a build makes, so a build that throws can be checked for what it left alive. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples, and a fogged clutter instance darkens toward a night zone's fog over twice its fade band, the band at least C5's tower band, so no block darkens before the towers do (`csky_clutter_dark_lit`, [../org/weather.md](../org/weather.md)). The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves; a stereo process (`StereoFacing.Live`) keys the ghost's stereo text under another. `XrPreciseInterior` keys the stereo cockpit interior's variant the same way (`Flight/Hud/XrCockpit.cs`): each eye places a vertex from its offset to that eye, read off the `Xr*Global` uniforms, and the depth bias pulls toward the drawing eye; its opaque and cutout surfaces write `XrInteriorStencil`, which the stereo whiteout and flare rings skip, and its blended ones draw at `XrInteriorBlendPriority`, between the whiteout and the flash. `OmittedPolygons` leaves polygons out by identity (`CockpitPlate.cs`) while each surface group keeps its rank. `NodeMade` hands a suite each node a build makes, so a build that throws can be checked for what it left alive. A builder given a model pack context (`HdChapter` from the world, `HdAirframe` per plane build) draws a node's replacement from `HdModelMeshes.cs` in place of its gamez model, here and in `SharedMesh`, as a copy of its own whose surfaces wear this builder's materials: a glTF material named after an original texture takes that texture's material from the same cache (unlit there when the file carries `KHR_materials_unlit`), and any other takes the file's base colour in the bias shader, two-sided, blended, cutout or unlit from glTF's `doubleSided`, `alphaMode` and `KHR_materials_unlit`. Only such a non-original surface sets the bias shader's `replacement` key bit, whose variant multiplies a texture by `albedo_color` (`baseColorFactor`) and cuts a scissor at `alpha_cutoff` (`alphaCutoff`), so no original variant's key or text moves. Each surface clamps by its own UVs, ranks by its order in the file, counts in the clamp and transparency census and drops under `HiddenAlpha` as an original surface does (`CountSurface`). A surface named after an original texture draws at the highest priority of the model's polygons wearing it (base or overlay pass), so a decal stays over its skin, unless the file holds exactly as many surfaces of that texture as the original builds (`OriginalSurfacesByTexture`, keyed as `BuildMesh` groups): then each takes, in order, the material and priority of the original's surface in its place, as an unedited export needs; any other draws at priority 0, and every replacement surface at pass 0 off the no_clutter layer. The node's gamez descendants' names go to the import, which leaves their glTF subtrees to them. A node first looks in the file of its nearest gamez ancestor whose file names it, then under its own key, so a root's file (`he_rocket.glb`, a destructible's root) reaches its generic-named parts (`g12`, `part1`) and no other node of that name; a meshless root draws nothing either way. A failed import draws the gamez model; an empty one (a matched glTF node with no mesh below it) keeps the instance with a surface-less mesh, so the node draws nothing and keeps every binding. The node, its metas, bias, layer, shadow setting and gamez colliders stay as built, sprites, glows, facades and whatever `KeepsOriginalMesh` names keep the gamez model, and `ReplacedMeshCount` counts the swaps. A replaced instance keeps its gamez mesh under `GamezMeshMeta`, which `GameplayMesh` hands a plane's hulls and a shootable round's hit box, so a pack reshapes neither. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+
+## src/Mech3/HdModelMeshes.cs
+Imports a model pack replacement for a gamez node (`Extraction/HdModels.cs` finds the file), cached per pack key and the node's
+descendant names (a failure as null) and shared, read off the parsed `GltfState` with no scene. The first glTF node named like
+the gamez node (else minus Blender's `.001`) gives every mesh at or below it, placed by the transforms below it but never its own,
+which is the exported gamez transform the game applies already; a subtree named after a gamez descendant is that node's to draw.
+A matched node with no mesh below it is an empty mesh (draw nothing); with no match the whole file merges from its roots. Surfaces
+stay separate with the file's materials, from the importer's uncompressed arrays, each triangle surface reversed back
+([../formats/gotchas.md](../formats/gotchas.md)) except under a mirroring transform. `SurfacesOf` and `AlbedoOf` (a mip-mapped
+base-colour copy) feed `SceneBuilder.cs`, which draws its own copy; `Current` follows `HdModels.Current`. `Scoped` reads a node out of an ancestor's file: the glTF node of its name whose ancestors follow most of the gamez names between, with no whole-file fallback.
 
 ## src/Mech3/ShaderTwins.cs
 The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites, `EmitterRenderer`'s
@@ -137,8 +147,18 @@ re-liveries the built plane in place, `BuildDestroyed` builds the wreck subtree 
 plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanels` and
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
-(`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt, or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`) and draws the sight's reticle collimated (`GunsightReticle.cs`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+(`PropParts.cs`); `Build` and `BuildDestroyed` resolve model pack replacements under the airframe's model node (each logs how many drew), `Build` applies the model pack's `rig.json` to the built tree (`PlaneRigPatch.cs`; a bad rig throws, or with `PlaneRigPatch.PlayerNotice` set is logged, reported there and left out), exposes an applied rig's `cockpit` section as `Cockpit` (null for no rig or a rig left out), then reads `CockpitCameraOffset` off the `cockpit_camera` marker or the rig's position for it, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
+mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt (`FlatMount`; `InteriorToPlane` and `InteriorFromPlane` carry a pose through it, engine-free), or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), on a builder of its own that takes the airframe's model pack scope, so `planes/<model>/cockpit1.glb` and the airframe's files replace interior nodes with surfaces carrying the interior's depth bias (logged as a count of their own), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. A body cockpit (`Cockpit.FromBody`) then moves the rig's named assemblies and glass out of it onto the airframe through the flat mount on either path (`CockpitTransplant.cs`, exposed as `CockpitPanel`), on an interior builder keyed to receive no shadow at the unfactored `InteriorScale` bias; under the stereo path the panel also takes a twin of each drawn body mesh from a second, stereo-keyed airframe builder (`StereoBody`) and the moved glass's reticle, while for the flat cockpit pass `FlatBody` hangs a hidden twin of each on it, sharing the original's mesh on copies of its materials; any other build with a section naming gauges places them inside `cockpit1` in its own units (`CockpitTransplant.PoseInside`), on either path. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate outside a body cockpit (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`, and cut by shape from pack replacements, counted in `ReplacedPlateTriangles`) and draws the sight's reticle collimated on the glass where the build drew it, after any posing (`GunsightReticle.cs` `Drawn`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Mech3/CockpitTransplant.cs
+The rig's `cockpit.gauges` table on the built `cockpit1`. A body cockpit's `Build` re-parents the named
+assemblies, as built, into a `gauges` node under a hidden `cockpit_panel` on the airframe (shown by
+`Flight/Hud/CockpitVisibility.cs`), so `Flight/Hud/CockpitGauges.cs` binds the same parts and
+`InteriorMaterials`; `Posed` lays the pose over the plane-frame one (`PlaneBuilder.InteriorToPlane`).
+Otherwise `PoseInside` poses each where it stands, in `cockpit1`'s units (`PosedUnder`). The sight
+glass, one polygon of a larger mesh, is copied out per surface into a `glass` node (`GlassFrame`);
+inside `cockpit1` its source instances also take a mesh without it, as the cached mesh is shared.
+`Carried` is how the glass moved, for the stereo reticle. The `cockpit` prefix keeps the panel out of interior-blind walks. Format: [../formats/model-packs.md](../formats/model-packs.md).
 
 ## src/Mech3/CockpitPlate.cs
 The flat head-and-shoulders plate every `cockpit1` carries behind the eye, as the polygons that draw
@@ -146,16 +166,16 @@ it: one z plane 0 to 8 units aft (0.16-1.80 on ten interiors, 6.80 on the Warhaw
 a colour material, priority 5. It faces aft, so the flat eye never sees its front, and a tracked head
 leaning past it does, which is why the stereo interior builder omits it. It shares its node with
 canopy structure, so the selection is by polygon; `Find` walks the interior in its own frame, and
-`CSVM.Tests/CockpitPlateTests.cs` pins the count per airframe (7 each, the Balmoral's 5). Engine-free.
-Read `PlaneBuilder.cs` next.
+`CSVM.Tests/CockpitPlateTests.cs` pins the count per airframe (7 each, the Balmoral's 5). A model pack's replacement of that node has no gamez polygons, so `Kept` cuts its triangles by the rule's
+geometry alone (`IsPlateShape`) on its untextured surfaces: over the eleven interiors that takes exactly the plate's triangles, while textured ones of that shape stand on three. Engine-free. Read `PlaneBuilder.cs` next.
 
 ## src/Mech3/GunsightReticle.cs
 The stereo interior's gunsight reticle, drawn collimated: each eye sees each line in the direction the
 authored eye sees it, so it reads at infinity. Every interior's sight glass is one polygon wearing one
 texture (`cockpit6`, the Warhawk's `crosshair`); `Split` lifts the reticle out of it, leaving the tint,
 the frame line and the sight body on the glass at its depth. `Overlay` builds the quad in the glass's
-plane that draws the reticle through `Look`, the authored eye's view of the glass, and `Find` walks the
-interior for the glass. The overlay carries `SortAfterGlassM` as its sorting offset, so it draws after
+plane that draws the reticle through `Look`, the authored eye's view of the glass. `Find` walks the gamez interior for the glass; `Drawn` reads it off the built meshes, one per surface wearing a glass
+material, so the overlay follows a glass a rig's table moved or a pack replaced. The overlay carries `SortAfterGlassM` as its sorting offset, so it draws after
 the glass it shares a priority with. `CSVM.Tests/GunsightReticleTests.cs` pins the eleven glasses and the split.
 Measurements: [../org/cameraViews.md](../org/cameraViews.md). Read `PlaneBuilder.cs` next.
 
@@ -212,7 +232,8 @@ Classifies a plane's propeller and rotor subnodes by name (`staticpropN`/`static
 `nitropropN`, `propN`/`propNb`, `rotorN`/`rotorNb`) and supplies each spinning kind's local axis
 and rate: the `XYZ_ROTATION` values from `plane_props.json` (`spinprops`) and `autogyro.json`
 (`agyro_rotors`), props spinning about local Z and rotors about local Y. Units and keys:
-[../formats/anim-definitions.md](../formats/anim-definitions.md). `PlaneBuilder.cs` is the one caller.
+[../formats/anim-definitions.md](../formats/anim-definitions.md). `Spin(Node3D)` reads a plane rig's
+stamped axis and rate first (`PlaneRigPatch.cs`). Read `PlaneBuilder.cs` and `Flight/Airframe/PropAnimator.cs` next.
 
 ## src/Mech3/ControlSurfaces.cs
 Classifies a plane's control-surface mesh nodes and their hinge axes: the deflecting node
@@ -221,7 +242,7 @@ hinge parent group whose transform places and orients the hinge line, ailerons a
 hinging about local X and rudders about local Y. The name patterns are the original's own six
 `sprintf` node lists, which is why the elevators classify per side: they carry a differential roll
 term. `InNumbering` keeps the lists' stop at the first missing index over the whole plane,
-`cockpit1` included; the `_rotate` and digitless names are remake-only widenings outside it. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
+`cockpit1` included; the `_rotate` and digitless names are remake-only widenings outside it. A plane rig's stamped kind, hinge axis and hinge point (`PlaneRigPatch.cs`) win over the name, outside the numbering. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
 
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
@@ -229,7 +250,9 @@ texture (oil_liteflare), the warm-amber flash colour (0.88, 0.78, 0.36 = wing_li
 LIGHT_STATE COLOR), the blink period (1.5 s = its LOOP SEQUENCE_OFFSET) and the point-light range
 (0.5-1.25 m, also LIGHT_STATE). PlaneBuilder hides and re-skins the flares (additive tint, posed
 through `csky_facade_spherical` as the SphericalY facade model 1261 is, never Godot's billboard
-mode); WingLightBlinker flashes them and emits a matching OmniLight3D per side.
+mode); WingLightBlinker flashes them and emits a matching OmniLight3D per side. `AnswersTo` is
+how a def's flare name finds its lamp: the node's own name, or an original a plane rig's flare
+replaced. The digit is not the side (`wing_flare1` is starboard on the Warhawk).
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): the World node's children plus every partition-referenced
@@ -243,7 +266,7 @@ taking the zone rule through `Session/WeatherRig.Tick` instead.
 parks at the world origin awaiting mission placement; `NoCollisionNode` exempts sky, cloud and
 billboard geometry and anything authoring `intersect_surface: false` from colliders. The static
 helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
-`FogVolumeZoneIdOf`, `MatchNodes`) are pure and test off engine. Deck and dome: [../formats/weather.md](../formats/weather.md), [../org/weather.md](../org/weather.md).
+`FogVolumeZoneIdOf`, `MatchNodes`) are pure and test off engine. `HdChapter` is the model pack's chapter key for this world's scene builder, which the weapon flyouts share; the dome builds without it, and the deck, sky, open sea and terrain (`IsTerrainMesh`, or a CAN_MODIFY node) are never replaced. Deck and dome: [../formats/weather.md](../formats/weather.md), [../org/weather.md](../org/weather.md).
 
 ## src/Mech3/WorldMerge.cs
 Under Enhanced Graphics in flight, the placed world's static opaque surfaces that share an exact
@@ -515,12 +538,32 @@ in `UI/Boards/ComposedBoardView.cs`, which is why no JPEG decoder belongs here.
 ## src/Mech3/MarkerRig.cs
 A player airframe's weapon marker rig read from the planes.zbd GameZ: `Extract` walks a `player_*`
 root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and reports plane-frame
-positions plus co-located groups (two gun groups on one mount). `Format` prints one dump block per
-plane and `PlayerAirframes` is the model to display list; together they are the instrument
-[../formats/markers.md](../formats/markers.md) regenerates from and the source `--dump-markers` and
-`UI/Overlays/MarkerOverlay.cs` share. `FindNamedMarker` is the sibling read for one non-weapon node by name,
-skipping the alternate-state subtrees so a plane whose interior or wreck carries a same-named node
-still resolves to the authored one in the top-level `markers` group.
+positions plus co-located groups. `Format` prints one dump block per plane, and `PlayerAirframes` is
+the model to display list: the source [../formats/markers.md](../formats/markers.md), `--dump-markers`
+and `UI/Overlays/MarkerOverlay.cs` share. `FormatRigTemplate` writes the starting `rig.json`: every marker,
+and a body `cockpit` section from `CockpitPoses`, each `cockpit1` gauge assembly and the glass carried
+through `PlaneBuilder.InteriorToPlane` (the flat mount, never the stereo one) to where cockpit view drew it.
+`FindNamedMarker` reads one non-weapon node by name, skipping the alternate-state subtrees.
+
+## src/Mech3/PlaneRig.cs
+The engine-free reader for an airframe's `rig.json`: marker positions in the marker frame, prop
+overrides (axis, rate, blur disc), control-surface overrides (kind, side, hinge), the two wingtip
+flare nodes and the `cockpit` section (`RigCockpit`: body mode, a hide list, and a gauges table of
+`RigGaugePose`, rotation in Godot's YXZ Euler degrees). Every section is optional and an absent
+entry keeps the original's value. It owns the checks that need no airframe tree (keys, finite
+numbers, axes, pylon number and side, positive scale, a name defined twice, a hide list without body
+mode); names are checked where the rig is applied, `PlaneRigPatch.cs`. Read `MarkerRig.cs`,
+`PropParts.cs`, `ControlSurfaces.cs` and `WingLights.cs` next for what each override replaces.
+
+## src/Mech3/PlaneRigPatch.cs
+Applies a `PlaneRig` to a freshly built plane, inside `PlaneBuilder.Build` and so before any marker
+read or `Loadout.Bind`. It moves marker nodes, adds a `target` or reference marker the model lacks
+under `markers` (never a firepoint or pylon, since `Loadout.BindAi` arms an AI over every one the
+tree carries), stamps prop and surface overrides as metas `PropParts` and `ControlSurfaces` read, and
+picks the flare set by each original's plane-frame x, a rig flare stamped with the originals it replaced
+(`WingLights.StandsForMeta`). Rig vectors are plane-frame and become node-local here. A name the model lacks outside its alternate-state subtrees throws naming the file and entry, every check before the first edit.
+`CheckCockpit` checks cockpit names on the gamez tree, so an interior-less build rejects the same rig: hide names are airframe nodes, gauges are children of `cockpit1`'s `gauges`, and `glass` needs a `cockpit6` or `crosshair` polygon and fails beside a named assembly that holds it (the Brigand's `g730`, the Firebrand's `g184`).
+`PlayerNotice`, set by the launcher's menu entry, makes `Build` report it and build without the rig. Rigs come from `HdModels.RigFor`.
 
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,
@@ -756,7 +799,7 @@ anchor)` pair seeded from the authored `HEALTH`, plus a coarse healthy/damaged/d
 `DamageStage`. Built in `AnimRuntime`'s bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`,
 damaged via `DamageAt`. `Resolve(struck)` climbs to the nearest claiming pool, which answers for its damage node and
 everything under it (what the original stamps its handler over) and, through its anchor alone, for nothing. `Instance`
-carries its `Centre` (the damage node's box centre, the one position every reader takes) and that centre's
+carries its `Centre` (the damage node's gamez box centre, a replacement's ignored, the one position every reader takes) and that centre's
 `Velocity` (stepped by `ZeppelinRuntime` for a zeppelin's zones, else zero), a mission record's fields (`Team`,
 `Owner`, `Gasbag`, `Dormant`, `Reseed`), and the anchor's name and gamez ancestors for `TargetPool`, cached under the parent's id. Schema: docs/formats/destructibles.md; teams, position and velocity docs/org/targeting.md.
 
@@ -861,8 +904,9 @@ seam without naming the renderer; `Effects/Puffer.cs` integrates it. Keys: [../f
 
 ## src/Mech3/SubtreeBounds.cs
 A built subtree's world-space extent, the union of its own mesh boxes (`WorldAabb`), skipping any
-node marked `OverlayMeta` so a tool's drawing parked on an object never grows its box. Shared by
-`AnimRuntime`'s effect siting and the inspect tools behind `UI/Screens/SelectionService.cs`.
+node marked `OverlayMeta` so a tool's drawing parked on an object never grows its box. A model pack
+replacement is measured by its gamez model (`SceneBuilder.GameplayAabb`). Shared by `AnimRuntime`'s
+range gates, `NODE_UNDERCOVER` origin and effect siting, and the inspect tools behind `UI/Screens/SelectionService.cs`.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop, or a wing-walk

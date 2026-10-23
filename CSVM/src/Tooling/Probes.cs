@@ -135,6 +135,7 @@ public static class Probes
                 continue;
             }
             sb.Append(rig.Format(display)).AppendLine();
+            r.RigTemplates.Add((model, rig.FormatRigTemplate()));
             r.Done++;
         }
         r.Text = sb.ToString();
@@ -2496,6 +2497,10 @@ public static class Probes
     public sealed class MarkersResult
     {
         public readonly List<string> Missing = new();
+
+        /// <summary>Each found airframe's model node and its starting <c>rig.json</c>
+        /// (<see cref="MarkerRig.FormatRigTemplate"/>), in report order.</summary>
+        public readonly List<(string Model, string Json)> RigTemplates = new();
         public string Text = "";
         public string Summary = "";
         public string? Error;

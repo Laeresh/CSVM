@@ -293,6 +293,30 @@ public sealed class DamageVisuals
         _panelTrails.Clear();
     }
 
+    /// <summary>Merged mesh-AABB center of the panel's subtree, in the plane root's frame. The pdpN
+    /// nodes carry transforms but the _h twins sit at the origin with their placement baked into the
+    /// mesh, so mesh AABBs locate both. It reads the gamez model under a model pack replacement, so the
+    /// pairing stays the original's whatever is drawn.</summary>
+    internal static bool TryMeshCenter(Node3D panel, Node3D root, out Vector3 center)
+    {
+        var merged = default(Aabb);
+        bool any = false;
+        void Walk(Node node)
+        {
+            if (node is MeshInstance3D mi && Mech3.SceneBuilder.GameplayMesh(mi) is { } mesh)
+            {
+                var box = RelativeTo(mi, root) * mesh.GetAabb();
+                merged = any ? merged.Merge(box) : box;
+                any = true;
+            }
+            foreach (var child in node.GetChildren())
+                Walk(child);
+        }
+        Walk(panel);
+        center = merged.GetCenter();
+        return any;
+    }
+
     private static bool Same(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPanelStage(string anim) =>
@@ -311,29 +335,6 @@ public sealed class DamageVisuals
                 if (IsPanelStage(anim))
                     return true;
         return false;
-    }
-
-    // Merged mesh-AABB center of the panel's subtree, in the plane root's
-    // frame. The pdpN nodes carry transforms but the _h twins sit at the origin with
-    // their placement baked into the mesh, mesh AABBs locate both.
-    private static bool TryMeshCenter(Node3D panel, Node3D root, out Vector3 center)
-    {
-        var merged = default(Aabb);
-        bool any = false;
-        void Walk(Node node)
-        {
-            if (node is MeshInstance3D mi && mi.Mesh != null)
-            {
-                var box = RelativeTo(mi, root) * mi.GetAabb();
-                merged = any ? merged.Merge(box) : box;
-                any = true;
-            }
-            foreach (var child in node.GetChildren())
-                Walk(child);
-        }
-        Walk(panel);
-        center = merged.GetCenter();
-        return any;
     }
 
     // Transform of `node` relative to `root`

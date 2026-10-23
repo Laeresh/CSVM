@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Utils;
 using Godot;
 
@@ -266,6 +267,55 @@ public static class GunsightReticle
         return found;
     }
 
+    /// <summary>The sight glass as the build drew it under <paramref name="interior"/>, in its own frame.
+    /// Each surface wearing a glass texture's material from <paramref name="materials"/> is one glass,
+    /// its vertices the corners. So the glass is found where a rig's table moved it, riding a moved
+    /// assembly, or as a model pack's texture-named surface. The priority is the gamez glass's of the same
+    /// texture in <paramref name="original"/>, else 0. Only a flat surface with affine UVs reads right.</summary>
+    public static List<Glass> Drawn(Node3D interior, IReadOnlyList<(ShaderMaterial Material, string TextureName)> materials,
+        IReadOnlyList<Glass> original)
+    {
+        var names = new Dictionary<ulong, string>();
+        foreach (var (material, texture) in materials)
+        {
+            if (IsGlass(texture))
+            {
+                names[material.GetInstanceId()] = texture;
+            }
+        }
+
+        var found = new List<Glass>();
+        foreach (var instance in interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
+        {
+            if (instance.Mesh is not ArrayMesh mesh)
+            {
+                continue;
+            }
+
+            var frame = PlaneRigPatch.PlaneFrame(instance, interior);
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if (instance.GetActiveMaterial(s) is not { } material || !names.TryGetValue(material.GetInstanceId(), out var name))
+                {
+                    continue;
+                }
+
+                var arrays = mesh.SurfaceGetArrays(s);
+                var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+                if (uvs.Length == vertices.Length)
+                {
+                    string stem = System.IO.Path.GetFileNameWithoutExtension(name);
+                    int priority = original.FirstOrDefault(g => System.IO.Path.GetFileNameWithoutExtension(g.TextureName)
+                        .Equals(stem, StringComparison.OrdinalIgnoreCase))?.Priority ?? 0;
+                    found.Add(new Glass(vertices.Select(v => frame * v).ToList(), uvs, priority, name));
+                }
+            }
+        }
+
+        return found;
+    }
+
     /// <summary>Godot's straight-alpha <see cref="Image"/> of <paramref name="source"/> split into its
     /// glass and reticle layers, each with a box-filtered mip chain. Null when it holds no reticle,
     /// or no pixels.</summary>
@@ -350,10 +400,11 @@ public static class GunsightReticle
         + "}\n";
 
     // The glass polygon's rectangle in its own plane, along its first edge and across it, grown by
-    // margin each way, as four corners in order.
+    // margin each way, as four corners in order. A drawn surface's corners can repeat, so the edge
+    // runs to the first corner off the first.
     private static Vector3[] Pane(IReadOnlyList<Vector3> corners, Vector3 normal, float margin)
     {
-        var a = (corners[1] - corners[0]).Normalized();
+        var a = (corners.First(c => !c.IsEqualApprox(corners[0])) - corners[0]).Normalized();
         var b = normal.Normalized().Cross(a);
         float aMin = float.MaxValue, aMax = float.MinValue, bMin = float.MaxValue, bMax = float.MinValue;
         foreach (var corner in corners)
