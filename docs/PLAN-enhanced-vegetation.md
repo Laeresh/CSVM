@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ❌ Prototype: canopy shells on C1 (not picked)
 13. ☑ Prototype: impostor clumps on C1 (picked)
 14. ☑ Pick the mass technique at the controls and productionise it
-15. ☐ C3's canopy volume over its painted jungle
+15. ☑ C3's canopy volume over its painted jungle
 16. ☐ Clump tiles beside the vegetation models, replaceable by a model pack
 17. ☐ Wave B budget and goldens
 
@@ -1001,7 +1001,7 @@ names the handover, and a third run passes 38 of 38.
 - The cards' handover is a uniform on the shared Rich material; every path that drops the clumps
   zeroes it (`CanopyClumps.Handover`), or the cards fade with nothing behind them.
 
-## B15 ☐ C3's canopy volume over its painted jungle
+## B15 ☑ C3's canopy volume over its painted jungle
 
 **Goal.** C3's `forest1`/`cliff1` canopy gains a volume with depth. The palms on its transition
 textures are C21's: a pick to a set places no stamp until C21 builds the added stamps.
@@ -1050,10 +1050,16 @@ painted cells; without a rise painted canopy stands none, with one every clump t
 layout repeats; the painted band starts past 500 m and differs from the cards' band; C1 and C3 on
 by default). Engine: `canopy-clumps` adds a rich C3 flight: clumps stand, their material carries
 the painted band, the palms' Rich material carries no handover, and every clump stands in a painted
-cell. Look: `.scratch/b15/` in the B15 worktree (the five poses with clumps off, crowns and palm
+cell. Look: `.scratch/b15/` in the plan worktree (the five poses with clumps off, crowns and palm
 cards; the band and fade variants; a 3000 to 600 m approach to a ridge with no pop). Goldens: C3's
-two shots (`c3-island`, `c3-flare-xr-sim`) pass no `--graphics=enhanced`, so neither should move;
-the C1 shots see the clump shader's `grow` lines at zero, which leave their output unchanged.
+two shots (`c3-island`, `c3-flare-xr-sim`) pass no `--graphics=enhanced`, and the C1 shots see the
+clump shader's `grow` lines at zero; all 38 pass unchanged.
+Budget: `measure.ps1 -Chapters C3,C1 -Modes rich,noclumps -Launches 4` on an idle machine puts C3's
+80 m view at 4.33 against 4.27 ms GPU (+0.06; 1,242 draws against 1,211, 361k primitives against
+288k) with `render_cpu_ms` and `proc_ms` within 0.01 ms; C1's view is unchanged within 0.05 ms. At
+300 m up, 4 km east of the southeast island's hills (`--pos=-2400,300,-4600
+--lookat=-6400,100,-4600`), 3.72 against 3.65 ms GPU over four launches each. Within Wave B's
+0.75 ms GPU share.
 
 **⚠ Traps.** No cards on the painted treetops: the texture already shows them from above.
 - Never call `Handover` for painted canopy: the listed cards there are the beach palms, and they
