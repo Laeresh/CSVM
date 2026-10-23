@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ [local] Body-mode visibility: the body stays, `cockpit1` goes, the hide list applies
 12. ☑ [local] Transplanted gauge assemblies and sight glass on the body
 13. ☑ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
-14. ◐ [local] The Corvette's seat and dashboard
+14. ☑ [local] The Corvette's seat and dashboard
 15. ☑ [local] Flat body cockpits drawn steadily, through the cockpit pass
 
 ### Wave C, cockpit1 replacements
@@ -516,7 +516,7 @@ in interior units (`Mech3/PlaneBuilder.cs:198-202`); the template follows the fl
 must not inherit a pose that only lines up on the flat screen. The dumped rig is no longer a no-op:
 copying it unedited switches the cockpit to body mode (decision 10), which the doc must say.
 
-## B14 ◐ [local] The Corvette's seat and dashboard
+## B14 ☑ [local] The Corvette's seat and dashboard
 
 **Landed.** `.scratchKeep\corvette\scripts\build_corvette_pack.py` step 4c measures the cabin by
 rays through the placed car and writes `cockpit_camera` and a `"cockpit": { "from": "body",
@@ -544,8 +544,9 @@ and `-- <car.glb> <pack> 6.7 -0.6` (stretched).
   apart at a bezel radius of 4.5 cm (6.6 cm stretched). The rim covers the speedometer's left edge
   (about a quarter of its sample points), as a real wheel covers a gauge.
 - **The centre stack.** Below the flat dash top (real y 0.023): `gungauge`, `damageindicator` and
-  `missilegauge` in a row 7 cm under the top, `horizn` 10 cm below, all at 4 cm radius (`horizn`
-  4.5 cm), and `nitrogauge` (3 cm units) right of `horizn`, as `cockpit1` orders them. The compass
+  `missilegauge` in a row 7 cm under the top, all at 4 cm radius, and `nitrogauge` (3 cm units)
+  below the row's right end. `horizn` is left out: on the stack it stood half hidden in the centre
+  console, and the user had it removed rather than moved. The compass
   drum stands on the dash top at the stack's rear edge, its window tilted 10 degrees back from
   facing, as `cockpit1` tilts it.
 - **Facing and clearance.** Every assembly faces the eye with its x level (YXZ: pitch
@@ -567,9 +568,9 @@ and `-- <car.glb> <pack> 6.7 -0.6` (stretched).
   not updated.
 - **The look.** `.scratch/b14-shots/corvette-<real|stretched>-level.png`, `-look-left.png` (door,
   side window and mirror), `-look-right.png` (passenger seat, stack and compass) and `-bank.png`
-  (rolled right, the horizon ball following).
+  (rolled right).
 
-**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id). The user's look at the controls is owed, so the item stays open.
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id). At the controls the user keeps the stretched pack and judged its seat and dials good, the dials standing partly on the stack's vents, which the gag does not need perfected; the horizon was dropped on that verdict.
 
 **Original approach (kept for reference).**
 
