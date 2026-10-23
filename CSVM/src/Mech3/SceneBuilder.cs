@@ -325,6 +325,12 @@ public sealed class SceneBuilder
     /// shader.</summary>
     internal bool XrUnderInterior;
 
+    /// <summary>Surfaces that receive no shadow, for a body cockpit's transplanted dials
+    /// (<see cref="CockpitTransplant"/>). cockpit1's own pass holds no airframe to shadow its dials.
+    /// In the main world the airframe's shadow over its dashboard must not dim them either. Set
+    /// before building: it keys the shader.</summary>
+    internal bool NoShadowReceive;
+
     /// <summary>Polygons this builder draws nothing for, by identity (<see cref="CockpitPlate"/>
     /// on the stereo interior's builder). Each one's surface group is still formed, so every later
     /// group keeps the rank, and so the depth bias, it builds with otherwise. Null omits nothing.
@@ -356,6 +362,10 @@ public sealed class SceneBuilder
     /// <summary>The airframe, as its model node (<c>player_bhawk</c>), under which every node of
     /// the next build looks up its replacement. <see cref="PlaneBuilder"/> sets it per build.</summary>
     internal string? HdAirframe;
+
+    /// <summary>Only <see cref="HdAirframe"/>'s own keys reach this builder's nodes, never a bare or chapter
+    /// key. The cockpit interior sets it, so a world pack's generic <c>g366.glb</c> leaves every cockpit alone.</summary>
+    internal bool HdAirframeKeysOnly;
 
     /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
     /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
@@ -533,6 +543,8 @@ void fragment() {
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
     private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
+    // The instance ids of the bias materials built under XrPreciseInterior, which carry its placement.
+    private readonly HashSet<ulong> _interiorPlaced = new();
     // A fullbright builder's committed surface arrays, per built mesh in surface order. Reading a
     // surface back from Godot copies it off the GPU and waits for the render thread.
     private readonly Dictionary<ArrayMesh, List<Godot.Collections.Array>> _builtArrays = new();
@@ -790,6 +802,12 @@ void fragment() {
     public TransparencyClass AlphaOf(Material? material) =>
         material != null && _materialAlpha.TryGetValue(material, out var known)
             ? known : TransparencyClass.None;
+
+    /// <summary>Whether this builder made <paramref name="material"/> in the stereo interior's placement
+    /// (<see cref="XrPreciseInterior"/>), as every bias material it builds there is. A camera-facing card
+    /// is not, nor a material another builder made.</summary>
+    public bool PlacesInInterior(Material? material) =>
+        material != null && _interiorPlaced.Contains(material.GetInstanceId());
 
     /// <summary>The one biased albedo fetch every mip-mapped arm emits, defined in
     /// <c>csky_mip_bias.gdshaderinc</c> beside the global it reads.
@@ -1218,6 +1236,10 @@ void fragment() {
         return name.Length == 0 ? "node" : name;
     }
 
+    // A texture-named material's texture, as OriginalMaterialFor matches it: no extension, no padding.
+    private static string TextureStem(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? string.Empty : System.IO.Path.GetFileNameWithoutExtension(name.Trim());
+
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
         Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit,
         bool zoneGate, bool applyActive)
@@ -1551,15 +1573,21 @@ void fragment() {
         int steps = 0;
         for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
         {
-            if (HdModels.Current.KeyFor(scope.Name, HdChapter, HdAirframe) != null
+            if (PackKey(scope.Name) != null
                 && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
                 return scoped;
             path.Insert(0, scope.Name);
         }
-        return HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) != null
+        return PackKey(node.Name) != null
             ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
             : null;
     }
+
+    // The key HdModelMeshes resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
+    private string? PackKey(string name) =>
+        HdModels.Current.KeyFor(name, HdChapter, HdAirframe) is { } key
+        && (!HdAirframeKeysOnly || key.StartsWith($"planes/{HdAirframe?.ToLowerInvariant()}/", StringComparison.Ordinal))
+            ? key : null;
 
     // The names of the gamez nodes below `node`. A glTF subtree named after one is that node's to draw.
     private IEnumerable<string> DescendantNames(GameZNode node)
@@ -1586,6 +1614,10 @@ void fragment() {
         bool fogged = mesh.Fog;
         var scroll = EffectiveScroll(mesh, meshIndex);
         var result = new ArrayMesh();
+        var ownSurfaces = OriginalSurfacesByTexture(mesh, forceDoubleSided);
+        var fileCounts = surfaces.GroupBy(s => TextureStem((s.Material as BaseMaterial3D)?.ResourceName), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        var taken = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int rank = 0; rank < surfaces.Count; rank++)
         {
             var surface = surfaces[rank];
@@ -1604,6 +1636,15 @@ void fragment() {
             UvClampAxes edgeClamp;
             if (OriginalMaterialFor(source?.ResourceName, mesh) is var (original, priority) && original >= 0)
             {
+                // The export writes the original's surfaces of a texture one for one. A file that
+                // still does gives each its own material and priority, in the original's order.
+                string stem = TextureStem(source?.ResourceName);
+                if (ownSurfaces.TryGetValue(stem, out var own) && own.Count == fileCounts[stem])
+                {
+                    int next = taken.GetValueOrDefault(stem);
+                    taken[stem] = next + 1;
+                    (original, priority) = own[next];
+                }
                 if (DrawsNothing(original))
                     continue;
                 (clampUv, edgeClamp) = ClampFor(unitAxes, scroll);
@@ -1666,6 +1707,45 @@ void fragment() {
         }
         return found >= 0 && _billboardTexture != null && _gamez.Materials[found].TextureName is { } tex && _billboardTexture(tex)
             ? (-1, 0) : (found, priority ?? 0);
+    }
+
+    // Each texture's surfaces as BuildMesh groups the model, base groups then overlay passes, in
+    // that order: one (material, priority) per surface. Keep the group key in step with BuildMesh's.
+    private Dictionary<string, List<(int Material, int Priority)>> OriginalSurfacesByTexture(GameZMesh mesh, bool forceDoubleSided)
+    {
+        var groups = new HashSet<(int, int, bool, bool, int)>();
+        var byTexture = new Dictionary<string, List<(int, int)>>(StringComparer.OrdinalIgnoreCase);
+        void Add(int material, GameZPolygon poly, int pass)
+        {
+            bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
+            if (material < 0 || material >= _gamez.Materials.Count
+                || !groups.Add((material, poly.Priority, poly.NoClutter, doubleSided, pass))
+                || _gamez.Materials[material].TextureName is not { } texture)
+                return;
+            string stem = TextureStem(texture);
+            if (!byTexture.TryGetValue(stem, out var list))
+                byTexture[stem] = list = new List<(int, int)>();
+            list.Add((material, poly.Priority));
+        }
+
+        int levels = 0;
+        foreach (var poly in mesh.Polygons)
+        {
+            if (DrawsNothing(poly.MaterialIndex))
+                continue;
+            Add(poly.MaterialIndex, poly, 0);
+            levels = Math.Max(levels, poly.OverlayPasses?.Count ?? 0);
+        }
+        for (int pass = 1; pass <= levels; pass++)
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.OverlayPasses is { } overlays && overlays.Count >= pass
+                    && !DrawsNothing(poly.MaterialIndex) && !DrawsNothing(overlays[pass - 1].MaterialIndex))
+                    Add(overlays[pass - 1].MaterialIndex, poly, pass);
+            }
+        }
+        return byTexture;
     }
 
     // A replacement surface whose glTF material names no original texture. It wears the file's base
@@ -2196,6 +2276,8 @@ void fragment() {
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
             replacement));
         NoteAlpha(mat, blend, scissor);
+        if (XrPreciseInterior)
+            _interiorPlaced.Add(mat.GetInstanceId());
         if (XrPreciseInterior && (blend || XrUnderInterior))
             mat.RenderPriority = XrInteriorBlendPriority;
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
@@ -2229,7 +2311,7 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
-    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface.
+    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -2255,13 +2337,16 @@ void fragment() {
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
-            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0);
+            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
+            | (NoShadowReceive ? 16777216 : 0);
+        bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement),
+                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
+                noShadowReceive),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2275,7 +2360,8 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false)
+        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
+        bool noShadowReceive = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2305,6 +2391,8 @@ void fragment() {
             sb.Append(", unshaded");
         if (coverage)
             sb.Append(CoverageMode);
+        if (noShadowReceive)
+            sb.Append(", shadows_disabled");
         // A part under the interior draws in the transparent pass and still sorts its own faces.
         if (underInterior)
             sb.Append(", depth_draw_always");

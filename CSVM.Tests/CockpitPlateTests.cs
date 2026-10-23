@@ -56,6 +56,73 @@ public class CockpitPlateTests
         Assert.Equal(expected, CockpitPlate.Find(gamez, interior!).Count);
     }
 
+    /// <summary>A replacement surface has no priority, so <see cref="CockpitPlate.Kept"/> judges its
+    /// untextured triangles by shape alone. Over each interior's untextured polygons, triangulated as the
+    /// build draws them, that drops exactly the plate's triangles. No other untextured one has its shape.</summary>
+    [ExtractedDataTheory]
+    [MemberData(nameof(PlatePolygons))]
+    public void TheShapeCutDropsExactlyThePlatesUntexturedTriangles(string plane, int expected)
+    {
+        var gamez = Planes.Value;
+        var root = gamez.FindByName(plane) ?? throw new InvalidOperationException($"{plane} not in planes.zbd");
+        var interior = gamez.Nodes[root.Children.Find(c => gamez.Nodes[c].Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase))];
+        var plate = CockpitPlate.Find(gamez, interior);
+        int platePolygons = 0, wrong = 0;
+        void Walk(int index, Transform3D parent)
+        {
+            var node = gamez.Nodes[index];
+            if (node.Kind == "Lod" && node.LodRangeMin != 0f)
+            {
+                return;
+            }
+
+            var at = parent * (node.Local ?? Transform3D.Identity);
+            if (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count)
+            {
+                var mesh = gamez.Meshes[node.MeshIndex];
+                foreach (var polygon in mesh.Polygons)
+                {
+                    if (polygon.MaterialIndex < 0 || polygon.MaterialIndex >= gamez.Materials.Count
+                        || gamez.Materials[polygon.MaterialIndex].TextureName != null)
+                    {
+                        continue;
+                    }
+
+                    var vertices = Triangles(mesh, polygon);
+                    int kept = CockpitPlate.Kept(vertices, null, at).Length;
+                    bool isPlate = plate.Contains(polygon);
+                    platePolygons += isPlate ? 1 : 0;
+                    wrong += kept == (isPlate ? 0 : vertices.Count) ? 0 : 1;
+                }
+            }
+
+            foreach (int child in node.Children)
+            {
+                Walk(child, at);
+            }
+        }
+
+        foreach (int child in interior.Children)
+        {
+            Walk(child, Transform3D.Identity);
+        }
+
+        Assert.Equal(expected, platePolygons);
+        Assert.Equal(0, wrong);
+    }
+
+    [Fact]
+    public void TheShapeCutKeepsEveryTriangleButTheAftFacingOnes()
+    {
+        var quad = Quad(0.8f);
+        // Two triangles of the plate quad, in its winding, then one of them reversed, facing the eye.
+        var vertices = new List<Vector3> { quad[0], quad[1], quad[2], quad[0], quad[2], quad[3], quad[0], quad[2], quad[1] };
+        Assert.Equal(new[] { 6, 7, 8 }, CockpitPlate.Kept(vertices, null, Transform3D.Identity));
+        Assert.Equal(new[] { 0, 2, 1 }, CockpitPlate.Kept(quad, new[] { 0, 1, 2, 0, 2, 1 }, Transform3D.Identity));
+        // Carried 10 units forward, the plate stands ahead of the eye and stays.
+        Assert.Equal(6, CockpitPlate.Kept(quad, new[] { 0, 1, 2, 0, 2, 3 }, new Transform3D(Basis.Identity, new Vector3(0f, 0f, -10f))).Length);
+    }
+
     [Fact]
     public void AnAftFacingColourQuadBehindTheEyeIsPlate()
     {
@@ -92,6 +159,22 @@ public class CockpitPlateTests
     {
         new Vector3(0f, 0f, z), new Vector3(1f, 0f, z), new Vector3(1f, 1f, z), new Vector3(0f, 1f, z),
     };
+
+    // A polygon's triangles as SceneBuilder.EmitPolygon draws them: a fan, or a strip of alternating winding.
+    private static List<Vector3> Triangles(GameZMesh mesh, GameZPolygon polygon)
+    {
+        var v = polygon.VertexIndices;
+        var corners = new List<Vector3>();
+        for (int i = 0; i + 2 < v.Count; i++)
+        {
+            var (a, b, c) = !polygon.TriangleStrip ? (0, i + 1, i + 2) : (i & 1) == 0 ? (i, i + 1, i + 2) : (i, i + 2, i + 1);
+            corners.Add(mesh.Vertices[v[a]]);
+            corners.Add(mesh.Vertices[v[b]]);
+            corners.Add(mesh.Vertices[v[c]]);
+        }
+
+        return corners;
+    }
 
     private static List<Vector3> Reversed(List<Vector3> corners)
     {

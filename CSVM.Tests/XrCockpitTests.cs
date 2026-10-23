@@ -62,6 +62,22 @@ public class XrCockpitTests
             "the copy keeps its offset from the interior's wing above it");
     }
 
+    // A body cockpit's panel is mounted at identity in the plane frame, one metre per metre. A twin of
+    // an airframe mesh then lifts to exactly its offset from the seated eye, in the aircraft's axes.
+    [Fact]
+    public void ARealScaleTwinLiftsToItsOwnOffsetFromTheEye()
+    {
+        var eye = new Vector3(-0.381f, 0.149f, 1.506f) + new Vector3(0f, 0.02f, 0.06f);
+        var wheel = new Transform3D(new Basis(Vector3.Right, -0.3f), new Vector3(-0.38f, -0.05f, 0.95f));
+        var twin = XrCockpit.InInterior(Transform3D.Identity, wheel);
+        Assert.Equal(wheel, twin);
+
+        var attitude = Basis.FromEuler(new Vector3(0.2f, -1.1f, 0.05f));
+        var lifted = new Transform3D(attitude, Vector3.Zero) * XrCockpit.InOrigin(Transform3D.Identity, eye) * twin;
+        Assert.True(lifted.Origin.IsEqualApprox(attitude * (wheel.Origin - eye)), $"lifted to {lifted.Origin}");
+        Assert.True(lifted.Basis.IsEqualApprox(attitude * wheel.Basis));
+    }
+
     // The per-plane store placement. At the defaults it is the true pylon pose, bit for bit. Else
     // the lateral distance is spread, then offset, and the store's own attitude is kept.
     [Fact]

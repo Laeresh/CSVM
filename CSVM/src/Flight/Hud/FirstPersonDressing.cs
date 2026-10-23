@@ -29,12 +29,17 @@ public sealed class FirstPersonDressing
     /// drops markers and dontmove).</summary>
     public CockpitVisibility? Visibility { get; set; }
 
-    /// <summary>The authored instrument panel inside the interior: needles and the two warning
-    /// lamps, driven off the same readings the screen-space cluster draws.</summary>
+    /// <summary>The authored instrument panel inside the interior, or a body cockpit's transplanted
+    /// one: needles and lamps, driven off the same readings the screen-space cluster draws.</summary>
     public CockpitGauges? Panel { get; set; }
 
-    /// <summary>The <c>cockpit1</c> subtree itself, as the plane builder returned it.</summary>
+    /// <summary>What the pass takes out of the plane model. That is the <c>cockpit1</c> subtree as the plane builder
+    /// returned it, or a flat body cockpit's transplanted panel (<see cref="Body"/>).</summary>
     public Node3D? Interior { get; set; }
+
+    /// <summary>A flat body cockpit as the pass draws it, its twins under the panel
+    /// (<see cref="Mech3.PlaneBuilder.FlatBody"/>). Null for every other cockpit.</summary>
+    public Mech3.FlatBodyTwins? Body { get; set; }
 
     /// <summary>The interior's own render pass, which takes <see cref="Interior"/> out of the plane
     /// model and draws it at the origin. Null under <c>--no-cockpit-pass</c>, when the interior
@@ -50,6 +55,14 @@ public sealed class FirstPersonDressing
     /// visibility and spin while the interior is drawn.</summary>
     public CockpitReseat? Reseat { get; set; }
 
+    /// <summary>Builds <see cref="Pass"/> on <paramref name="parent"/> over <see cref="Interior"/>, with
+    /// <see cref="Body"/>'s twins when it is set, from the session's <paramref name="sun"/> and
+    /// <paramref name="env"/>. Null for a rig built no interior.</summary>
+    public CockpitOverlay? BuildPass(Node parent, DirectionalLight3D? sun, Godot.Environment? env) =>
+        Pass = Interior is not { } interior ? null
+            : Body is { } body ? CockpitOverlay.BuildBody(parent, interior, body.Eye, body.Twins, Visibility, sun, env)
+            : CockpitOverlay.Build(parent, interior, sun, env);
+
     /// <summary>One frame's dressing for <paramref name="selected"/> under the pose the frame took.
     /// <paramref name="firstPersonPose"/> is that pose, not the selection, so a held look-behind
     /// brings the body back. The pass follows the drawn attitude and the airframe's wobble, and
@@ -58,10 +71,11 @@ public sealed class FirstPersonDressing
         Vector3 shakeRotation, ProjectilePool? pool)
     {
         Visibility?.Apply(selected, firstPersonPose);
-        // Same rule, so the panel is driven exactly on the frames it is on the screen.
-        bool interior = CockpitVisibility.Rules(selected, firstPersonPose).Interior;
-        SetPanel(interior);
-        if (interior)
+        // Same rule, so the panel is driven exactly on the frames it is on the screen. A body
+        // cockpit's transplanted panel counts once it carries a dial; with none the cluster stays.
+        var shown = CockpitVisibility.Rules(selected, firstPersonPose, Visibility?.BodyCockpit ?? false);
+        SetPanel(shown.Interior || (shown.Transplant && Panel != null));
+        if (shown.Interior)
             Reseat?.Sync();
         // After the hide, so the pass shows exactly the frames the interior itself does.
         Pass?.Sync(drawn, camera, shakeRotation, pool?.ActiveMuzzleLights());

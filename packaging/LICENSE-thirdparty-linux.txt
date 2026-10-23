@@ -14,7 +14,7 @@ Assembled from these exact payload versions, which ExportRelease.ps1 re-checks
 against what it packages before it will build a tarball:
 
   Godot Engine build: 4.7.stable.mono.official.5b4e0cb0f
-  .NET runtime version: 8.0.31
+  .NET runtime version: 8.0.32
   .NET runtime pack: Microsoft.NETCore.App.Runtime.linux-x64
   unzbd crate target: x86_64-unknown-linux-musl
   mech3ax cs-anim commit: d0f6199c1c53062dafcb87404140b2685ee9ddd6

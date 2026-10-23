@@ -13,13 +13,14 @@ public enum RigSurfaceKind { Aileron, Elevator, Rudder }
 public enum RigSide { Left, Right }
 
 /// <summary>
-/// One airframe's parsed <c>rig.json</c>: marker positions, prop, surface and flare overrides.
+/// One airframe's parsed <c>rig.json</c>: marker positions, prop, surface and flare overrides, and
+/// the cockpit section.
 /// Any section or optional field may be absent, and absent means the original's value. Absence
 /// therefore reads as null or an empty collection, never as a default. Vectors are metres in the
 /// marker frame, nose -Z, right +X (docs/formats/markers.md).
 /// ⚠ Do not add a gun, caliber, ammo or pylon-count field: the rig says where, never what, and
 /// those stay in <c>stock_loadouts.json</c> and the save. Node names are not checked here, since
-/// that needs the built plane.
+/// that needs the airframe's tree (<see cref="PlaneRigPatch"/>).
 /// </summary>
 public sealed class PlaneRig
 {
@@ -31,8 +32,12 @@ public sealed class PlaneRig
 
     private static readonly HashSet<string> SectionKeys = new(StringComparer.Ordinal)
     {
-        "markers", "props", "surfaces", "flares",
+        "markers", "props", "surfaces", "flares", "cockpit",
     };
+
+    private static readonly HashSet<string> CockpitKeys = new(StringComparer.Ordinal) { "from", "hide", "gauges" };
+
+    private static readonly HashSet<string> PoseKeys = new(StringComparer.Ordinal) { "position", "rotation", "scale" };
 
     private static readonly HashSet<string> PropKeys = new(StringComparer.Ordinal)
     {
@@ -54,7 +59,8 @@ public sealed class PlaneRig
         List<RigProp> props,
         List<RigSurface> surfaces,
         string? leftFlare,
-        string? rightFlare)
+        string? rightFlare,
+        RigCockpit? cockpit)
     {
         SourceName = sourceName;
         Markers = markers;
@@ -62,6 +68,7 @@ public sealed class PlaneRig
         Surfaces = surfaces;
         LeftFlare = leftFlare;
         RightFlare = rightFlare;
+        Cockpit = cockpit;
     }
 
     /// <summary>The file or label every validation message names.</summary>
@@ -79,6 +86,9 @@ public sealed class PlaneRig
 
     /// <summary>The node to treat as the starboard wingtip flare, or null for the original's.</summary>
     public string? RightFlare { get; }
+
+    /// <summary>The <c>cockpit</c> section, or null where the airframe keeps <c>cockpit1</c> as built.</summary>
+    public RigCockpit? Cockpit { get; }
 
     /// <summary>Reads and validates <paramref name="path"/>; the path names every error.</summary>
     public static PlaneRig Load(string path) => Parse(File.ReadAllText(path), path);
@@ -148,8 +158,101 @@ public sealed class PlaneRig
                 right = OptionalString(f, "right", sourceName, "flares");
             }
 
-            return new PlaneRig(sourceName, markers, props, surfaces, left, right);
+            RigCockpit? cockpit = root.TryGetProperty("cockpit", out var c) ? ReadCockpit(c, sourceName) : null;
+            return new PlaneRig(sourceName, markers, props, surfaces, left, right, cockpit);
         }
+    }
+
+    // A hide list needs body mode: without it the pilot sits in cockpit1, which draws none of the
+    // airframe's nodes. Names repeat without case, as PlaneRigPatch matches them.
+    private static RigCockpit ReadCockpit(JsonElement section, string source)
+    {
+        if (section.ValueKind != JsonValueKind.Object)
+        {
+            throw Fail(source, "cockpit", "not a JSON object");
+        }
+
+        CheckKeys(section, CockpitKeys, source, "cockpit");
+        bool fromBody = OptionalString(section, "from", source, "cockpit") switch
+        {
+            null => false,
+            "body" => true,
+            var other => throw Fail(source, "cockpit.from", $"unknown source '{other}' (body, or no 'from' to keep cockpit1)"),
+        };
+        var hide = new List<string>();
+        if (section.TryGetProperty("hide", out var h))
+        {
+            if (!fromBody)
+            {
+                throw Fail(source, "cockpit.hide", "needs \"from\": \"body\", since cockpit1 draws no airframe node");
+            }
+
+            if (h.ValueKind != JsonValueKind.Array)
+            {
+                throw Fail(source, "cockpit.hide", "not a JSON array");
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in h.EnumerateArray())
+            {
+                string label = $"cockpit.hide[{hide.Count.ToString(CultureInfo.InvariantCulture)}]";
+                if (entry.ValueKind != JsonValueKind.String || entry.GetString() is not { Length: > 0 } node)
+                {
+                    throw Fail(source, label, "not a non-empty string");
+                }
+
+                if (!seen.Add(node))
+                {
+                    throw Fail(source, $"{label} ({node})", "node listed twice");
+                }
+
+                hide.Add(node);
+            }
+        }
+
+        var gauges = new Dictionary<string, RigGaugePose>(StringComparer.OrdinalIgnoreCase);
+        if (section.TryGetProperty("gauges", out var g))
+        {
+            if (g.ValueKind != JsonValueKind.Object)
+            {
+                throw Fail(source, "cockpit.gauges", "not a JSON object");
+            }
+
+            foreach (var assembly in g.EnumerateObject())
+            {
+                string label = "cockpit.gauges." + assembly.Name;
+                if (gauges.ContainsKey(assembly.Name))
+                {
+                    throw Fail(source, label, "defined twice");
+                }
+
+                gauges[assembly.Name] = ReadPose(assembly.Value, source, label);
+            }
+        }
+
+        return new RigCockpit(fromBody, hide, gauges);
+    }
+
+    private static RigGaugePose ReadPose(JsonElement e, string source, string label)
+    {
+        if (e.ValueKind != JsonValueKind.Object)
+        {
+            throw Fail(source, label, "not a JSON object");
+        }
+
+        CheckKeys(e, PoseKeys, source, label);
+        var position = e.TryGetProperty("position", out var p)
+            ? Vec3(p, source, label + ".position")
+            : throw Fail(source, label, "missing 'position'");
+        Vector3? rotation = e.TryGetProperty("rotation", out var r) ? Vec3(r, source, label + ".rotation") : null;
+        float? scale = null;
+        if (e.TryGetProperty("scale", out var s))
+        {
+            float value = Number(s, source, label + ".scale");
+            scale = value > 0f ? value : throw Fail(source, label + ".scale", "not a positive number");
+        }
+
+        return new RigGaugePose(position, rotation, scale);
     }
 
     // A pylon keeps its side: odd numbers are port (x < 0), even are starboard (x > 0), and the
@@ -366,6 +469,23 @@ public sealed class PlaneRig
 /// axis and rate of <see cref="PropParts.Spin"/>, or the blur disc of a <c>propNb</c>/<c>rotorNb</c>
 /// name (<see cref="PropParts.Kind.PropGhost"/>).</summary>
 public sealed record RigProp(string Node, Vector3? Axis, float? DegPerSec, bool? Blur);
+
+/// <summary>The <c>cockpit</c> section. In body mode the pilot sits in the replaced airframe, otherwise
+/// in the original interior. The hide list names airframe nodes the pilot's pane drops, body mode only.
+/// The gauges table maps an assembly to its pose, keys matched without case. An assembly is a child of
+/// the interior's <c>gauges</c> node, or the glass key. The names are checked in <see cref="PlaneRigPatch"/>.</summary>
+public sealed record RigCockpit(bool FromBody, IReadOnlyList<string> Hide, IReadOnlyDictionary<string, RigGaugePose> Gauges)
+{
+    /// <summary>The sight glass's key: a polygon wearing <c>cockpit6</c> or <c>crosshair</c>
+    /// (<see cref="GunsightReticle.IsGlass"/>), not a node, so it has no name of its own.</summary>
+    public const string GlassKey = "glass";
+}
+
+/// <summary>One assembly's pose: plane-frame metres in body mode, the interior's own frame and units
+/// otherwise. The rotation is Euler degrees in Godot's YXZ order, basis Ry * Rx * Rz.
+/// That is how <c>Node3D.RotationDegrees</c> reads them. A null field keeps the assembly's own value in
+/// that frame.</summary>
+public sealed record RigGaugePose(Vector3 Position, Vector3? RotationDeg, float? Scale);
 
 /// <summary>One control-surface override. <see cref="Side"/> is null only on a rudder; the hinge
 /// fields are null where the original's hinge parent group and node-local axis stand.</summary>

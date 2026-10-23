@@ -250,6 +250,11 @@ public sealed class GameZ
         return p >= 0 ? Nodes[p] : null;
     }
 
+    /// <summary>The nodes <paramref name="node"/>'s children list names, in file order, skipping an index
+    /// past the node table.</summary>
+    public List<GameZNode> ChildrenOf(GameZNode node) =>
+        node.Children.FindAll(c => c >= 0 && c < Nodes.Count).ConvertAll(c => Nodes[c]);
+
     /// <summary>The world-space transform of a node, accumulated up its parent chain (the
     /// nodes.json children lists, parent is a flat list position, so we invert those).
     /// Nodes without a transformation contribute identity. Robust to nesting, though most

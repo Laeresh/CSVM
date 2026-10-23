@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
@@ -148,6 +150,559 @@ internal static class HdModelSwapSuites
         CheckPriorityAndEmpty(ctx, WorldGamez(weapon.Flyout!.Model!), textures, none, models);
         CheckScope(ctx, textures, root);
     }
+
+    [Suite("hd-model-cockpit1",
+        "the cockpit1 interior takes the airframe's pack scope: planes/<model>/cockpit1.glb, the airframe's root file and a "
+        + "per-node file each replace the one interior node they name, built on the interior's own builder, a texture-named "
+        + "surface wears a material in PlaneBuilder.InteriorMaterials, the gauge bind finds the same needles, lamps, readouts, "
+        + "belts and zones as without the pack, and a pack holding only an exterior node replaces no interior node. "
+        + "A bare file named like the interior node replaces nothing in the interior while a bare exterior file still reaches the airframe. "
+        + "The aircraft export writes cockpit1.glb beside the airframe file, root cockpit1 at identity, and leaves the interior "
+        + "out of the airframe file; put unedited into a pack it replaces every meshed interior node with the original's vertex "
+        + "count, bounds in the node's frame, texture names, unlit surfaces and each textured surface's draw priority")]
+    internal static void CockpitInteriorSwap(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+        string root = Path.Combine(ctx.ScratchDir, "hd-model-cockpit1");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        using var none = HdModels.Open(root, "no-such-pack");
+        var (plainBuilder, plainModel) = BuildInterior(planesGamez, textures, plane, none);
+        var plainInterior = plainBuilder.CockpitInterior;
+        ctx.Check(plainInterior != null, $"{plane} builds a cockpit1 interior");
+        if (plainInterior == null)
+        {
+            plainModel.Free();
+            return;
+        }
+
+        // A gauge face where the airframe has one, so the bind is read over a replaced gauge part.
+        // Its driven zones are gamez children the replacement must leave drawn.
+        var target = FindNamedMesh(plainInterior, "damageindicator")
+            ?? Nodes(plainInterior).FirstOrDefault(n => n != plainInterior && n.Visible && DrawnMesh(n) != null);
+        string exterior = PlaneMeshNode(planesGamez, textures, plane);
+        ctx.Check(target != null && exterior.Length > 0, $"{plane} carries an interior and an exterior mesh node");
+        if (target == null || exterior.Length == 0)
+        {
+            plainModel.Free();
+            return;
+        }
+
+        string node = AnimRuntime.NameOf(target);
+        int index = target.GetMeta(AnimRuntime.IndexMeta).AsInt32();
+        string texture = DrawnMesh(target)!.SurfaceGetMaterial(0)?.ResourceName ?? string.Empty;
+        var materials = new[] { (new StandardMaterial3D { ResourceName = texture.Length > 0 ? texture : PackPaint }, 1f) };
+        var plainPanel = CockpitGauges.Bind(plainBuilder);
+        ctx.Check(ctx.SyntheticData || plainPanel is { NeedleCount: > 0, BeltCount: > 0 },
+            $"the pack-free interior binds its gauges needles={plainPanel?.NeedleCount} belts={plainPanel?.BeltCount}");
+        try
+        {
+            foreach (var (pack, file, holder) in new[]
+            {
+                ("Cockpit", "cockpit1", node), ("Root", plane, node), ("NodeFile", node, node), ("Exterior", exterior, exterior),
+            })
+            {
+                ctx.Same((long)Error.Ok, (long)WriteModel(Path.Combine(root, pack, "pack", "planes", plane, file + ".glb"), holder, materials),
+                    $"{pack}: planes/{plane}/{file}.glb write result");
+                using var models = HdModels.Open(root, pack);
+                var (builder, model) = BuildInterior(planesGamez, textures, plane, models);
+                try
+                {
+                    CheckInterior(ctx, pack, builder, model, plainPanel, pack == "Exterior" ? null : (index, texture));
+                }
+                finally
+                {
+                    model.Free();
+                }
+            }
+
+            // Bare files named like the interior node and an exterior node: the airframe takes its own, the interior none.
+            foreach (string file in new[] { node, exterior })
+            {
+                ctx.Same((long)Error.Ok, (long)WriteModel(Path.Combine(root, "Bare", "pack", file + ".glb"), file, materials),
+                    $"Bare: {file}.glb write result");
+            }
+
+            using (var bare = HdModels.Open(root, "Bare"))
+            {
+                var (builder, model) = BuildInterior(planesGamez, textures, plane, bare);
+                CheckInterior(ctx, "Bare", builder, model, plainPanel, null);
+                model.Free();
+            }
+
+            CheckInteriorRoundTrip(ctx, planesGamez, textures, plane, plainModel, plainInterior, root);
+        }
+        finally
+        {
+            plainModel.Free();
+        }
+    }
+
+    // A replaced or rig-arranged cockpit1 under the stereo build draws as the stock one. Able to fail: a
+    // round trip keeping its head plate, or a reticle left at the original glass's place.
+    [Suite("hd-model-cockpit1-stereo",
+        "under the stereo build the unedited cockpit1.glb round trip draws as the stock interior: the replaced node's head "
+        + "plate is cut by shape, leaving as many triangles as stock, and its one collimated reticle reads the glass as stock's "
+        + "does; a rig table moving the glass, and a pack's texture-named glass surface at a new place, each put the reticle in "
+        + "the moved glass's plane with the same texel at its centre; a per-plane interior scale sets the mount, leaves the "
+        + "interior-unit poses and the reticle as they are, and the seated eye offset adds as on stock. On every player airframe "
+        + "the stock reticles read from the drawn glass equal one overlay per gamez glass polygon in count, plane, pane and bias")]
+    internal static void CockpitInteriorStereo(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+        // The stereo shader reads the eye feed's globals; declared without making the run stereo.
+        XrCockpit.DeclareEyeGlobals();
+        var cockpit1 = gamez.FindByName(plane)?.Children.Select(c => gamez.Nodes[c])
+            .FirstOrDefault(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        var plate = cockpit1 == null ? new HashSet<GameZPolygon>() : CockpitPlate.Find(gamez, cockpit1);
+        var glasses = cockpit1 == null ? new List<GunsightReticle.Glass>() : GunsightReticle.Find(gamez, cockpit1);
+        ctx.Check(plate.Count > 0 && glasses.Count == 1, $"{plane}'s cockpit1 carries a head plate of {plate.Count} polygons and {glasses.Count} sight glass");
+        if (plate.Count == 0 || glasses.Count != 1)
+        {
+            return;
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, "hd-model-cockpit1-stereo");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        // The export an author's F10 makes, from the flat build.
+        using var none = HdModels.Open(root, "no-such-pack");
+        var (_, flatModel) = BuildInterior(gamez, textures, plane, none);
+        string tripFolder = Path.Combine(root, "RoundTrip", "pack", "planes", plane);
+        string airframe = Path.Combine(tripFolder, plane + ".glb");
+        Directory.CreateDirectory(tripFolder);
+        ctx.Same((long)Error.Ok, (long)GltfExporter.Export(flatModel, airframe, cockpitPath: GltfExporter.CockpitPathBeside(airframe)),
+            $"the aircraft export write result");
+        flatModel.Free();
+
+        var (stock, stockModel) = BuildInterior(gamez, textures, plane, none, xr: true);
+        try
+        {
+            ctx.Check(stock.InteriorOmittedPolygons == plate.Count && stock.ReplacedPlateTriangles == 0,
+                $"stock: the head plate's {stock.InteriorOmittedPolygons} polygons are omitted, no triangle cut");
+            // A headless renderer keeps no glass pixels to split, so no reticle is built and its checks drop out.
+            bool headless = stock.GunsightReticles == 0 && DisplayServer.GetName() == SuiteRender.Headless;
+            var look = headless ? null : Reticle(ctx, "stock", stock);
+            if (headless)
+            {
+                ctx.Note($"headless: no reticle overlay is built, so the reticle checks drop out");
+            }
+            else if (look == null)
+            {
+                return;
+            }
+
+            CheckStockReticles(ctx, gamez, textures, none);
+            var centre = CockpitTransplant.GlassFrame(glasses)!.Value.Origin;
+            CheckStereoRoundTrip(ctx, gamez, textures, plane, root, stock, look, plate.Sum(p => p.VertexIndices.Count - 2));
+            var moved = new Vector3(1.5f, -0.75f, 0.5f);
+            string rig = $$"""{ "cockpit": { "gauges": { "glass": { "position": [{{Num(centre.X + moved.X)}}, {{Num(centre.Y + moved.Y)}}, {{Num(centre.Z + moved.Z)}}] } } } }""";
+            Directory.CreateDirectory(Path.Combine(root, "Moved", "pack", "planes", plane));
+            File.WriteAllText(Path.Combine(root, "Moved", "pack", "planes", plane, "rig.json"), rig);
+            using (var pack = HdModels.Open(root, "Moved"))
+            {
+                var (built, model) = BuildInterior(gamez, textures, plane, pack, xr: true);
+                CheckMovedReticle(ctx, "table", built, look, centre, moved);
+                model.Free();
+            }
+
+            CheckPackGlass(ctx, gamez, textures, plane, root, stock, look, centre);
+            // The round trip and the table together, at a per-plane scale.
+            File.WriteAllText(Path.Combine(tripFolder, "rig.json"), rig);
+            using (var both = HdModels.Open(root, "RoundTrip"))
+            {
+                CheckScaledMount(ctx, gamez, textures, plane, both, stock, look, centre, moved);
+            }
+        }
+        finally
+        {
+            stockModel.Free();
+        }
+    }
+
+    // The export's cockpit1.glb, put unedited into a pack, redraws every meshed interior node as the
+    // original. The airframe file holds no interior node.
+    private static void CheckInteriorRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, string plane,
+        Node3D plainModel, Node3D plainInterior, string root)
+    {
+        string airframe = Path.Combine(root, "RoundTrip", "pack", "planes", plane, plane + ".glb");
+        string cockpit = GltfExporter.CockpitPathBeside(airframe);
+        Directory.CreateDirectory(Path.GetDirectoryName(airframe)!);
+        ctx.Same((long)Error.Ok, (long)GltfExporter.Export(plainModel, airframe, cockpitPath: cockpit), $"the aircraft export write result");
+        ctx.Check(Path.GetFileName(cockpit) == "cockpit1.glb" && File.Exists(cockpit), $"the export writes {cockpit}");
+        var airframeNodes = GltfNodes(airframe);
+        ctx.Check(airframeNodes.Count > 0 && !airframeNodes.Any(n => n.ResourceName == "cockpit1"),
+            $"the airframe file holds no cockpit1 node nodes={airframeNodes.Count}");
+        var cockpitRoot = GltfNodes(cockpit).FirstOrDefault();
+        ctx.Check(cockpitRoot is { ResourceName: "cockpit1" } && cockpitRoot.Xform.IsEqualApprox(Transform3D.Identity),
+            $"cockpit1.glb's root is cockpit1 at identity root={cockpitRoot?.ResourceName} xform={cockpitRoot?.Xform}");
+
+        using var trip = HdModels.Open(root, "RoundTrip");
+        var (builder, model) = BuildInterior(gamez, textures, plane, trip);
+        try
+        {
+            var meshed = Nodes(plainInterior).Where(n => DrawnMesh(n) != null).ToList();
+            int replaced = 0;
+            var wrong = new List<string>();
+            foreach (var original in meshed)
+            {
+                int index = original.GetMeta(AnimRuntime.IndexMeta).AsInt32();
+                var packed = builder.CockpitInterior is { } interior ? ByIndex(interior, index) : null;
+                var a = DrawnMesh(original)!;
+                var b = DrawnMesh(packed);
+                if (MeshChild(packed)?.HasMeta(SceneBuilder.GamezMeshMeta) != true || b == null)
+                {
+                    continue;
+                }
+
+                replaced++;
+                if (VertexCount(a) != VertexCount(b) || !a.GetAabb().IsEqualApprox(b.GetAabb())
+                    || !TextureNames(a).SetEquals(TextureNames(b)) || Biases(a) != Biases(b))
+                {
+                    wrong.Add($"{AnimRuntime.NameOf(original)}#{index} verts={VertexCount(a)}/{VertexCount(b)} aabb={a.GetAabb()}/{b.GetAabb()} textures={string.Join(",", TextureNames(a))}/{string.Join(",", TextureNames(b))} bias={Biases(a)}/{Biases(b)}");
+                }
+            }
+
+            ctx.Check(meshed.Count > 0 && replaced == meshed.Count,
+                $"the round trip replaces every meshed interior node replaced={replaced}/{meshed.Count}");
+            ctx.Check(wrong.Count == 0,
+                $"each replaced interior node keeps its vertex count, bounds in its frame, texture names, unlit surfaces and surface draw priorities; differing:{string.Join("; ", wrong.Take(8))}");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
+    private static void CheckStereoRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, string root,
+        PlaneBuilder stock, GunsightReticle.Look? look, int plateTriangles)
+    {
+        using var trip = HdModels.Open(root, "RoundTrip");
+        var (built, model) = BuildInterior(gamez, textures, plane, trip, xr: true);
+        try
+        {
+            ctx.Check(built.ReplacedPlateTriangles == plateTriangles,
+                $"round trip: the replaced node's head plate is cut by shape, {built.ReplacedPlateTriangles} of its {plateTriangles} triangles");
+            int want = Triangles(stock.CockpitInterior!), got = Triangles(built.CockpitInterior!);
+            ctx.Check(want == got, $"round trip: the stereo interior draws as many triangles as stock {got}/{want}");
+            ctx.Note($"round trip: {built.ReplacedPlateTriangles} head plate triangles cut, {got} interior triangles drawn against stock's {want}");
+            if (look is { } reference && Reticle(ctx, "round trip", built) is { } seen)
+            {
+                ctx.Check(SameLook(seen, reference) && ReticleParam(built, "depth_bias").IsEqualApprox(ReticleParam(stock, "depth_bias"))
+                        && ReticleParam(built, "authored_eye").IsEqualApprox(ReticleParam(stock, "authored_eye")),
+                    $"round trip: the reticle reads the glass as stock's does, plane {seen.N} at {seen.H:0.####} against {reference.N} at {reference.H:0.####}");
+            }
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
+    // Every player airframe's stock stereo reticles, read from the drawn glass, against one overlay per gamez
+    // glass polygon (GunsightReticle.Find). Count, plane, UVs, pane and depth bias must agree.
+    private static void CheckStockReticles(TestContext ctx, GameZ gamez, TextureArchive textures, HdModels none)
+    {
+        if (DisplayServer.GetName() == SuiteRender.Headless)
+        {
+            ctx.Note($"headless: no reticle overlay is built, so the per-airframe stock reticle check drops out");
+            return;
+        }
+
+        var bias = new SceneBuilder(gamez, textures) { DepthBiasScale = 1f / PlaneBuilder.InteriorScale };
+        var stand = new GunsightReticle.Layers(new ImageTexture(), new ImageTexture(), new ImageTexture(), 0.15f, default);
+        var differ = new List<string>();
+        int airframes = 0;
+        foreach (var (model, _) in MarkerRig.PlayerAirframes)
+        {
+            var cockpit1 = gamez.FindByName(model)?.Children.Select(c => gamez.Nodes[c])
+                .FirstOrDefault(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+            if (cockpit1 == null)
+            {
+                differ.Add($"{model}: no cockpit1");
+                continue;
+            }
+
+            var (built, root) = BuildInterior(gamez, textures, model, none, xr: true);
+            try
+            {
+                airframes++;
+                var overlays = built.CockpitInterior!.FindChildren("gunsight_reticle", "MeshInstance3D", recursive: true, owned: false)
+                    .OfType<MeshInstance3D>().ToList();
+                var want = GunsightReticle.Find(gamez, cockpit1);
+                int matched = 0;
+                foreach (var glass in want)
+                {
+                    if (GunsightReticle.Overlay(glass, stand, GunsightReticle.EyeReachM / PlaneBuilder.InteriorScale,
+                        bias.PriorityBias(glass.Priority)) is not { } expected)
+                    {
+                        continue;
+                    }
+
+                    var look = GunsightReticle.Look.For(glass.Corners, glass.Uvs)!.Value;
+                    var pane = expected.Mesh.GetAabb();
+                    float depth = ((ShaderMaterial)expected.MaterialOverride).GetShaderParameter("depth_bias").AsSingle();
+                    expected.Free();
+                    var hit = overlays.FirstOrDefault(o => o.MaterialOverride is ShaderMaterial m
+                        && SameLook(LookOf(m), look) && o.Mesh.GetAabb().Position.DistanceTo(pane.Position) < 1e-3f
+                        && o.Mesh.GetAabb().Size.DistanceTo(pane.Size) < 1e-3f
+                        && Mathf.Abs(m.GetShaderParameter("depth_bias").AsSingle() - depth) < 1e-7f);
+                    if (hit != null)
+                    {
+                        overlays.Remove(hit);
+                        matched++;
+                    }
+                    else
+                    {
+                        differ.Add($"{model}: no overlay matches the {glass.TextureName} polygon at priority {glass.Priority}, pane {pane}");
+                    }
+                }
+
+                if (matched == 0 || overlays.Count > 0)
+                {
+                    differ.Add($"{model}: {matched} overlays match {want.Count} glass polygons, {overlays.Count} left over");
+                }
+            }
+            finally
+            {
+                root.Free();
+            }
+        }
+
+        ctx.Check(airframes == MarkerRig.PlayerAirframes.Count && differ.Count == 0,
+            $"stock: each of the {airframes} player airframes' stereo reticles equals one overlay per gamez glass polygon; differing: {string.Join("; ", differ)}");
+    }
+
+    private static GunsightReticle.Look LookOf(ShaderMaterial m) =>
+        new(m.GetShaderParameter("grad_u").AsVector3(), m.GetShaderParameter("grad_v").AsVector3(),
+            m.GetShaderParameter("uv_origin").AsVector2(), m.GetShaderParameter("plane_n").AsVector3(), m.GetShaderParameter("plane_h").AsSingle());
+
+    // A pack's texture-named glass surface, the stock glass moved, replacing the node that holds it.
+    private static void CheckPackGlass(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, string root,
+        PlaneBuilder stock, GunsightReticle.Look? look, Vector3 centre)
+    {
+        var interior = stock.CockpitInterior!;
+        var names = GunsightReticle.GlassMaterials(stock.InteriorMaterials);
+        var holder = interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Select(mi => (Instance: mi, Surface: Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0)
+                .FirstOrDefault(s => mi.GetActiveMaterial(s) is { } m && names.ContainsKey(m.GetInstanceId()), -1)))
+            .FirstOrDefault(h => h.Surface >= 0);
+        ctx.Check(holder.Instance != null, $"the stock interior draws its glass");
+        if (holder.Instance == null)
+        {
+            return;
+        }
+
+        string node = AnimRuntime.NameOf(holder.Instance.GetParent<Node3D>());
+        string texture = names[holder.Instance.GetActiveMaterial(holder.Surface).GetInstanceId()];
+        var moved = new Vector3(-1f, 0.5f, -0.25f);
+        var local = NodeFrame.Under(holder.Instance, interior).Basis.Inverse() * moved;
+        var arrays = ((ArrayMesh)holder.Instance.Mesh).SurfaceGetArrays(holder.Surface);
+        var glass = new Godot.Collections.Array();
+        glass.Resize((int)Mesh.ArrayType.Max);
+        glass[(int)Mesh.ArrayType.Vertex] = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Select(v => v + local).ToArray();
+        glass[(int)Mesh.ArrayType.TexUV] = arrays[(int)Mesh.ArrayType.TexUV];
+        glass[(int)Mesh.ArrayType.Normal] = arrays[(int)Mesh.ArrayType.Normal];
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, glass);
+        mesh.SurfaceSetMaterial(0, new StandardMaterial3D { ResourceName = texture });
+        var scene = new Node3D { Name = "pack_scene" };
+        var file = new Node3D { Name = node };
+        file.SetMeta(AnimRuntime.NameMeta, node);
+        file.AddChild(new MeshInstance3D { Name = "mesh", Mesh = mesh });
+        scene.AddChild(file);
+        string path = Path.Combine(root, "PackGlass", "pack", "planes", plane, node + ".glb");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, path), $"planes/{plane}/{node}.glb write result");
+        scene.Free();
+        using var pack = HdModels.Open(root, "PackGlass");
+        var (built, model) = BuildInterior(gamez, textures, plane, pack, xr: true);
+        CheckMovedReticle(ctx, $"pack {node}.glb", built, look, centre, moved);
+        model.Free();
+    }
+
+    private static void CheckScaledMount(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, HdModels pack,
+        PlaneBuilder stock, GunsightReticle.Look? look, Vector3 centre, Vector3 moved)
+    {
+        const float factor = 1.25f;
+        var (plain, plainModel) = BuildInterior(gamez, textures, plane, pack, xr: true);
+        var (scaled, scaledModel) = BuildInterior(gamez, textures, plane, pack, xr: true, factor: factor);
+        try
+        {
+            var a = plain.CockpitInterior!;
+            var b = scaled.CockpitInterior!;
+            ctx.Check(b.Transform.IsEqualApprox(PlaneBuilder.StereoMount(scaled.CockpitCameraOffset, PlaneBuilder.InteriorScale * factor))
+                    && scaled.ReplacedPlateTriangles == plain.ReplacedPlateTriangles && plain.ReplacedPlateTriangles > 0,
+                $"scaled: the round trip with the table mounts at {factor} times InteriorScale and cuts its plate the same");
+            var glassA = a.GetNodeOrNull<Node3D>(CockpitTransplant.GlassName);
+            var glassB = b.GetNodeOrNull<Node3D>(CockpitTransplant.GlassName);
+            ctx.Check(glassA != null && glassB != null && glassA.Transform.IsEqualApprox(glassB.Transform),
+                $"scaled: the moved glass keeps its interior-unit pose");
+            CheckMovedReticle(ctx, "scaled", scaled, look, centre, moved);
+            var seat = new Vector3(0f, 0.02f, 0.06f);
+            var stockEye = new XrCockpit(stock.CockpitInterior!, seat, stock.InteriorEye).EyeInAircraft;
+            var tripEye = new XrCockpit(a, seat, plain.InteriorEye).EyeInAircraft;
+            ctx.Check(tripEye.IsEqualApprox(stockEye), $"the seated eye offset adds to the replaced interior's eye as to stock's {tripEye}/{stockEye}");
+        }
+        finally
+        {
+            plainModel.Free();
+            scaledModel.Free();
+        }
+    }
+
+    // The reticle of a moved glass: in the glass's plane carried by the move, the same texel at its centre.
+    private static void CheckMovedReticle(TestContext ctx, string label, PlaneBuilder built, GunsightReticle.Look? stock, Vector3 centre, Vector3 moved)
+    {
+        if (stock is not { } look || Reticle(ctx, label, built) is not { } seen)
+        {
+            return;
+        }
+
+        float off = seen.N.Dot(centre + moved) - seen.H;
+        var uv = seen.At(centre + moved);
+        ctx.Check(seen.N.IsEqualApprox(look.N) && Mathf.Abs(off) < 1e-3f && uv.DistanceTo(look.At(centre)) < 1e-4f
+                && Mathf.Abs(look.N.Dot(centre) - look.H) < 1e-3f,
+            $"{label}: the reticle lies in the moved glass's plane, {off:0.#####} units off, centre texel {uv} against stock {look.At(centre)}");
+    }
+
+    // The one collimated reticle a stereo interior carries, as the overlay's shader reads the glass.
+    private static GunsightReticle.Look? Reticle(TestContext ctx, string label, PlaneBuilder built)
+    {
+        var overlays = built.CockpitInterior!.FindChildren("gunsight_reticle", "MeshInstance3D", recursive: true, owned: false)
+            .OfType<MeshInstance3D>().ToList();
+        ctx.Check(overlays.Count == 1 && built.GunsightReticles == 1, $"{label}: one reticle overlay ({overlays.Count}, {built.GunsightReticles} built)");
+        if (overlays.Count != 1 || overlays[0].MaterialOverride is not ShaderMaterial m)
+        {
+            return null;
+        }
+
+        return new GunsightReticle.Look(m.GetShaderParameter("grad_u").AsVector3(), m.GetShaderParameter("grad_v").AsVector3(),
+            m.GetShaderParameter("uv_origin").AsVector2(), m.GetShaderParameter("plane_n").AsVector3(), m.GetShaderParameter("plane_h").AsSingle());
+    }
+
+    private static Vector3 ReticleParam(PlaneBuilder built, string name) =>
+        built.CockpitInterior!.FindChildren("gunsight_reticle", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Select(mi => ((ShaderMaterial)mi.MaterialOverride).GetShaderParameter(name))
+            .Select(v => v.VariantType == Variant.Type.Float ? new Vector3(v.AsSingle(), 0f, 0f) : v.AsVector3()).First();
+
+    private static bool SameLook(GunsightReticle.Look a, GunsightReticle.Look b) =>
+        a.N.IsEqualApprox(b.N) && Mathf.Abs(a.H - b.H) < 1e-3f && a.GradU.DistanceTo(b.GradU) < 1e-4f
+        && a.GradV.DistanceTo(b.GradV) < 1e-4f && a.Origin.DistanceTo(b.Origin) < 1e-3f;
+
+    // Every triangle the interior's meshes draw, the reticle overlay's left out.
+    private static int Triangles(Node3D interior) =>
+        interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Where(mi => mi.Name.ToString() != "gunsight_reticle").Select(mi => mi.Mesh).OfType<ArrayMesh>()
+            .Sum(mesh => Enumerable.Range(0, mesh.GetSurfaceCount()).Sum(s =>
+                (mesh.SurfaceGetArrayIndexLen(s) is > 0 and var index ? index : mesh.SurfaceGetArrayLen(s)) / 3));
+
+    private static string Num(float f) => f.ToString("R", CultureInfo.InvariantCulture);
+
+    private static Godot.Collections.Array<GltfNode> GltfNodes(string file)
+    {
+        var state = new GltfState();
+        return new GltfDocument().AppendFromFile(file, state) == Error.Ok ? state.GetNodes() : new Godot.Collections.Array<GltfNode>();
+    }
+
+    // Each textured surface's draw-order bias in surface order. A texture worn at two priorities keeps
+    // both. An untextured one is exported under no texture's name and draws at priority 0.
+    private static string Biases(ArrayMesh mesh) =>
+        string.Join(",", Enumerable.Range(0, mesh.GetSurfaceCount())
+            .Select(mesh.SurfaceGetMaterial).OfType<ShaderMaterial>().Where(m => !string.IsNullOrEmpty(m.ResourceName))
+            .Select(m => m.GetShaderParameter("depth_bias").AsSingle().ToString("0.#####", CultureInfo.InvariantCulture)));
+
+    private static int VertexCount(ArrayMesh mesh) =>
+        Enumerable.Range(0, mesh.GetSurfaceCount()).Sum(i => mesh.SurfaceGetArrayLen(i));
+
+    // Each surface's texture, as an export names its material and a pack maps it back, and whether it
+    // draws unlit.
+    private static HashSet<string> TextureNames(ArrayMesh mesh) =>
+        Enumerable.Range(0, mesh.GetSurfaceCount())
+            .Select(i => mesh.SurfaceGetMaterial(i))
+            .Select(m => Path.GetFileNameWithoutExtension(m?.ResourceName ?? string.Empty).ToLowerInvariant()
+                + (m is ShaderMaterial shader && GltfExporter.DrawsUnlit(shader) ? " unlit" : string.Empty))
+            .ToHashSet();
+
+    // One packed interior build against the pack-free one. Given a replaced node, the interior draws
+    // exactly that node from the pack; without one it draws none and the exterior node is replaced.
+    private static void CheckInterior(TestContext ctx, string pack, PlaneBuilder builder, Node3D model,
+        CockpitGauges? plainPanel, (int Index, string Texture)? replaced)
+    {
+        var interior = builder.CockpitInterior;
+        ctx.Check(interior != null, $"{pack}: the packed build carries its interior");
+        if (interior == null)
+        {
+            return;
+        }
+
+        static bool Swapped(Node3D n) => MeshChild(n)?.HasMeta(SceneBuilder.GamezMeshMeta) == true;
+        var inside = Nodes(interior).Where(Swapped).ToList();
+        int outside = Nodes(model).Count(Swapped) - inside.Count;
+        if (replaced is not { } swap)
+        {
+            ctx.Check(inside.Count == 0 && outside > 0,
+                $"{pack}: a pack with no interior file replaces no interior node interior={inside.Count} exterior={outside}");
+            return;
+        }
+
+        ctx.Check(inside.Count == 1 && outside == 0
+                && inside[0].GetMeta(AnimRuntime.IndexMeta).AsInt32() == swap.Index,
+            $"{pack}: exactly the named interior node is replaced interior={inside.Count} exterior={outside}");
+        var drawn = DrawnMesh(inside.FirstOrDefault());
+        ctx.Check(drawn != null && drawn.GetAabb().IsEqualApprox(new Aabb(Vector3.Zero, new Vector3(2, 3, 1))),
+            $"{pack}: it draws the pack's mesh in the node's own frame aabb={drawn?.GetAabb()}");
+        var material = drawn is { } d && d.GetSurfaceCount() > 0 ? d.SurfaceGetMaterial(0) as ShaderMaterial : null;
+        if (swap.Texture.Length > 0)
+        {
+            // CockpitGauges reads the belts and damage zones through this list.
+            ctx.Check(material != null && builder.InteriorMaterials.Any(m => m.Material.GetInstanceId() == material.GetInstanceId()),
+                $"{pack}: the texture-named surface ({swap.Texture}) wears a material in InteriorMaterials");
+        }
+
+        var panel = CockpitGauges.Bind(builder);
+        ctx.Check(plainPanel == null
+                ? panel == null
+                : panel != null && panel.NeedleCount == plainPanel.NeedleCount && panel.LampCount == plainPanel.LampCount
+                    && panel.ReadoutCount == plainPanel.ReadoutCount && panel.BeltCount == plainPanel.BeltCount
+                    && panel.DamageZoneCount == plainPanel.DamageZoneCount,
+            $"{pack}: the gauges bind as without the pack needles={panel?.NeedleCount}/{plainPanel?.NeedleCount} lamps={panel?.LampCount}/{plainPanel?.LampCount} readouts={panel?.ReadoutCount}/{plainPanel?.ReadoutCount} belts={panel?.BeltCount}/{plainPanel?.BeltCount} zones={panel?.DamageZoneCount}/{plainPanel?.DamageZoneCount}");
+    }
+
+    private static (PlaneBuilder Builder, Node3D Model) BuildInterior(GameZ gamez, TextureArchive textures, string plane, HdModels pack,
+        bool xr = false, float factor = 1f)
+    {
+        var saved = HdModels.Current;
+        HdModels.Current = pack;
+        try
+        {
+            var builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: true, xrInterior: xr, interiorScaleFactor: factor);
+            return (builder, builder.Build(plane));
+        }
+        finally
+        {
+            HdModels.Current = saved;
+        }
+    }
+
+    private static Node3D? FindNamedMesh(Node3D root, string name) =>
+        Nodes(root).FirstOrDefault(n => AnimRuntime.NameOf(n).Equals(name, StringComparison.OrdinalIgnoreCase) && DrawnMesh(n) != null);
 
     // A meshless root's file replaces the generic-named leaves below that root alone. Each leaf matches
     // its own name, and a repeated name the names between. Elsewhere the same name keeps its gamez

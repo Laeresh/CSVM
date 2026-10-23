@@ -96,6 +96,42 @@ public class CockpitVisibilityTests
     }
 
     [Fact]
+    public void ABodyCockpitKeepsTheBodyAndDropsTheInteriorAndTheHideList()
+    {
+        var shown = CockpitVisibility.Rules(PilotViewMode.Cockpit, firstPerson: true, bodyCockpit: true);
+        Assert.False(shown.Interior);
+        Assert.True(shown.Body);
+        Assert.True(shown.Markers);
+        Assert.True(shown.Dontmove);
+        Assert.False(shown.Listed);
+        // Without the section the hide list is never applied.
+        Assert.True(CockpitVisibility.Rules(PilotViewMode.Cockpit, firstPerson: true).Listed);
+    }
+
+    [Theory]
+    [InlineData(PilotViewMode.Cockpit, true)]
+    [InlineData(PilotViewMode.Nose, true)]
+    [InlineData(PilotViewMode.Cockpit, false)]
+    [InlineData(PilotViewMode.Chase, false)]
+    public void ATransplantedPanelShowsExactlyWhereCockpit1Would(PilotViewMode mode, bool firstPerson)
+    {
+        Assert.Equal(CockpitVisibility.Rules(mode, firstPerson).Interior,
+            CockpitVisibility.Rules(mode, firstPerson, bodyCockpit: true).Transplant);
+        Assert.False(CockpitVisibility.Rules(mode, firstPerson).Transplant);
+    }
+
+    [Theory]
+    [InlineData(PilotViewMode.Nose, true)]
+    [InlineData(PilotViewMode.Cockpit, false)]
+    [InlineData(PilotViewMode.Nose, false)]
+    [InlineData(PilotViewMode.Chase, false)]
+    public void ABodyCockpitLeavesNoseAndEveryExternalPoseUnchanged(PilotViewMode mode, bool firstPerson)
+    {
+        Assert.Equal(CockpitVisibility.Rules(mode, firstPerson),
+            CockpitVisibility.Rules(mode, firstPerson, bodyCockpit: true));
+    }
+
+    [Fact]
     public void TheTwoFirstPersonViewsDifferOnlyInWhatTheyHide()
     {
         var cockpit = CockpitVisibility.Rules(PilotViewMode.Cockpit, firstPerson: true);

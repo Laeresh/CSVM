@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
@@ -90,6 +91,11 @@ public sealed class PlaneBuilder
     private readonly List<Node3D> _cockpitDamagePanels = new();
     // The stereo interior's sight glass textures split into their glass and reticle layers, by name.
     private readonly Dictionary<string, GunsightReticle.Layers?> _gunsight = new();
+    // A stereo body cockpit's airframe twins, and the builder that drew them through the stereo shader.
+    private readonly List<BodyTwin> _stereoBody = new();
+    // A flat body cockpit's twin material copies, by the airframe material each copies.
+    private readonly Dictionary<ShaderMaterial, ShaderMaterial> _flatCopies = new();
+    private SceneBuilder? _stereoBodyScene;
     private PaintScheme? _scheme;
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
@@ -113,14 +119,7 @@ public sealed class PlaneBuilder
         _scheme = scheme;
         _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
-        _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
-            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
-        {
-            // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
-            ShadowLookupOffset = AirframeShadowLookupOffset,
-            // The race ghost keys the airframe alone; the interior is the owner's view and never fades.
-            RaceGhostShader = raceGhost,
-        };
+        _scene = AirframeScene(raceGhost, stereo: false);
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a
         // later caller a mesh biased for the wrong scale.
@@ -155,6 +154,10 @@ public sealed class PlaneBuilder
     /// <summary>The interior's polygons the build left out: the head plate's under the stereo path
     /// (<see cref="CockpitPlate"/>), none on every other build.</summary>
     public int InteriorOmittedPolygons => _interiorScene?.OmittedPolygonCount ?? 0;
+
+    /// <summary>The head plate's triangles the stereo interior cut from model pack replacements
+    /// (<see cref="CockpitPlate.Kept"/>), which carry no polygons to omit; none on every other build.</summary>
+    public int ReplacedPlateTriangles { get; private set; }
 
     /// <summary>The collimated reticle overlays the stereo interior carries (<see cref="GunsightReticle"/>),
     /// one per sight glass; none on every other build.</summary>
@@ -194,6 +197,21 @@ public sealed class PlaneBuilder
     /// hidden and mounted at <see cref="CockpitCameraOffset"/>; null unless the builder was asked
     /// for one. <c>Flight.Hud.CockpitVisibility</c> is what shows it, per view mode.</summary>
     public Node3D? CockpitInterior { get; private set; }
+
+    /// <summary>The <c>cockpit</c> section of the rig <see cref="Build"/> applied, or null: no rig,
+    /// no section, or a rig that failed its checks and was flown without.</summary>
+    public RigCockpit? Cockpit { get; private set; }
+
+    /// <summary>A body cockpit's transplanted instruments (<see cref="CockpitTransplant"/>), hidden, on
+    /// the airframe in the plane frame; null on every other build. It holds no <c>gauges</c> node when the
+    /// rig's table names none. Under the stereo path it also holds <see cref="StereoBody"/>'s twins and the
+    /// glass's collimated reticle, and is what the stereo interior lifts.</summary>
+    public Node3D? CockpitPanel { get; private set; }
+
+    /// <summary>A stereo body cockpit's airframe: each drawn body mesh paired with a twin built through
+    /// the stereo interior's shader, under <see cref="CockpitPanel"/>. The hide
+    /// list's nodes, and meshes whose shader cannot be lifted (a flare), have none. Empty elsewhere.</summary>
+    public IReadOnlyList<BodyTwin> StereoBody => _stereoBody;
 
     /// <summary>Where the eye sits in <see cref="CockpitInterior"/>'s own units: the
     /// <c>cockpit_camera</c> marker's numbers under the stereo path, the interior's origin on every
@@ -249,6 +267,29 @@ public sealed class PlaneBuilder
     public static Transform3D StereoMount(Vector3 marker, float metresPerUnit) =>
         new(Basis.Identity.Scaled(Vector3.One * metresPerUnit), marker - (marker * metresPerUnit));
 
+    /// <summary>The flat interior's mount: the interior's origin, the flat eye, on the marker, at
+    /// <paramref name="metresPerUnit"/> and the <see cref="HeadPitchOffsetRad"/> tilt. Engine-free, so
+    /// it unit-tests. Decode: docs/org/cameraViews.md, "Where the eye sits in the interior".</summary>
+    public static Transform3D FlatMount(Vector3 marker, float metresPerUnit = InteriorScale) =>
+        new(new Basis(Vector3.Right, HeadPitchOffsetRad).Scaled(Vector3.One * metresPerUnit), marker);
+
+    /// <summary>A transform in <c>cockpit1</c>'s own frame carried through <see cref="FlatMount"/>
+    /// into the plane frame: where the flat view shows that pose. <see cref="InteriorFromPlane"/> is
+    /// its inverse.</summary>
+    public static Transform3D InteriorToPlane(Transform3D interior, Vector3 marker, float metresPerUnit = InteriorScale) =>
+        FlatMount(marker, metresPerUnit) * interior;
+
+    /// <summary>A plane-frame transform read in <c>cockpit1</c>'s own frame through
+    /// <see cref="FlatMount"/>, the inverse of <see cref="InteriorToPlane"/>.</summary>
+    public static Transform3D InteriorFromPlane(Transform3D plane, Vector3 marker, float metresPerUnit = InteriorScale) =>
+        FlatMount(marker, metresPerUnit).AffineInverse() * plane;
+
+    /// <summary>A flat body cockpit's airframe twins for the cockpit pass, each hidden under <paramref name="panel"/>
+    /// (<see cref="BodyTwins.Flat"/>), outside the <paramref name="hide"/> subtrees. <see cref="Repaint"/> reaches
+    /// their material copies. Call it before stores hang, which then get none.</summary>
+    public List<BodyTwin> FlatBody(Node3D built, Node3D panel, IEnumerable<string> hide) =>
+        BodyTwins.Flat(built, panel, hide, _flatCopies);
+
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk"), with the model
     /// pack's <c>rig.json</c> for that node applied (<see cref="PlaneRigPatch"/>). Throws
     /// <see cref="System.IO.InvalidDataException"/> for a rig that fails its checks, unless
@@ -268,6 +309,7 @@ public sealed class PlaneBuilder
         }
 
         FlareChoice? flares = null;
+        Cockpit = null;
         try
         {
             // ⚠ Patch before anything reads a marker or classifies a part. The camera read, the
@@ -275,6 +317,7 @@ public sealed class PlaneBuilder
             if (PlaneRigPatch.Load(HdModels.Current, rootName) is { } rig)
             {
                 flares = PlaneRigPatch.Apply(rig, built, _gamez, root);
+                Cockpit = rig.Cockpit;
                 CockpitCameraOffset = PlaneRigPatch.MarkerPosition(rig, "cockpit_camera")
                     ?? MarkerRig.FindNamedMarker(_gamez, rootName, "cockpit_camera");
             }
@@ -361,6 +404,11 @@ public sealed class PlaneBuilder
             : null;
         _scene.Repaint();
         _interiorScene?.Repaint();
+        _stereoBodyScene?.Repaint();
+        foreach (var (original, copy) in _flatCopies)
+        {
+            copy.SetShaderParameter("albedo_tex", original.GetShaderParameter("albedo_tex"));
+        }
     }
 
     // ⚠ Blur disc textures must alpha-blend, never scissor: their alpha peaks around 26%,
@@ -413,6 +461,18 @@ public sealed class PlaneBuilder
         _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix);
         Log.Info("world", $"[paint] {root.Name} ({_skinPrefix}): {_scheme}{(_painter.PatternMissesAircraft ? $", pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only" : "")}");
     }
+
+    // The airframe's builder, and a stereo body cockpit's second one, whose twins the stereo interior lifts.
+    private SceneBuilder AirframeScene(bool raceGhost, bool stereo) =>
+        new(_gamez, _textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
+        {
+            // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
+            ShadowLookupOffset = AirframeShadowLookupOffset,
+            // The race ghost keys the airframe alone; the interior is the owner's view and never fades.
+            RaceGhostShader = raceGhost,
+            XrPreciseInterior = stereo,
+        };
 
     // Hides and re-skins the wingtip flares (WingLights.cs), and in the same walk collects
     // the flight build's damage panels: torn pdpN hidden, healthy pdpN_h as built. A rig's
@@ -478,9 +538,23 @@ public sealed class PlaneBuilder
             {
                 continue;
             }
+            bool xr = _interiorScene.XrPreciseInterior;
+            bool body = Cockpit is { FromBody: true };
             // A tracked head can lean past the plate behind the eye, so the stereo interior drops it.
-            // The flat eye never sees its front, and the flat build keeps it untouched.
-            _interiorScene.OmittedPolygons = _interiorScene.XrPreciseInterior ? CockpitPlate.Find(_gamez, node) : null;
+            // The flat eye never sees its front, and a body cockpit never draws cockpit1's shell.
+            _interiorScene.OmittedPolygons = xr && !body ? CockpitPlate.Find(_gamez, node) : null;
+            // The airframe's own keys alone, so cockpit1.glb and the airframe's node files reach the
+            // interior and a bare file does not. Its replacements are this builder's own, which bakes the interior's bias.
+            _interiorScene.HdAirframe = _scene.HdAirframe;
+            _interiorScene.HdAirframeKeysOnly = true;
+            // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.
+            _interiorScene.NoShadowReceive = body;
+            if (body)
+            {
+                // A body cockpit is real scale: its dials take the flat mount's bias, never the VR factor's.
+                _interiorScene.DepthBiasScale = 1f / InteriorScale;
+            }
+            int replacedBefore = _interiorScene.ReplacedMeshCount;
             // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
             // that the airframe pass never builds the interior, and it is the root here.
             if (_interiorScene.BuildSubtree(node, n => !ReferenceEquals(n, node) && Skip(n))
@@ -488,22 +562,48 @@ public sealed class PlaneBuilder
             {
                 return;
             }
-            InteriorEye = _interiorScene.XrPreciseInterior ? CockpitCameraOffset : Vector3.Zero;
-            n3d.Transform = _interiorScene.XrPreciseInterior
+            if (_interiorScene.ReplacedMeshCount > replacedBefore)
+            {
+                Log.Info("world", $"HD models: {_interiorScene.ReplacedMeshCount - replacedBefore} cockpit interior mesh instance(s) of {root.Name} drawn from the model pack");
+            }
+            InteriorEye = xr ? CockpitCameraOffset : Vector3.Zero;
+            n3d.Transform = xr
                 ? StereoMount(CockpitCameraOffset, _interiorScale)
-                : new Transform3D(
-                    new Basis(Vector3.Right, HeadPitchOffsetRad)
-                        .Scaled(Vector3.One * _interiorScale),
-                    CockpitCameraOffset);
+                : FlatMount(CockpitCameraOffset, _interiorScale);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
-            if (_interiorScene.XrPreciseInterior)
+            if (xr && !body)
             {
-                AddGunsightReticles(n3d, node);
+                // A pack's mesh holds no gamez polygons for OmittedPolygons to drop, so it is cut by shape.
+                ReplacedPlateTriangles += CockpitPlate.CutReplaced(n3d, InteriorMaterials);
             }
 
             built.AddChild(n3d);
             CockpitInterior = n3d;
+            if (body)
+            {
+                // The flat mount on both paths, so one rig puts each dial at one place on the body.
+                CockpitPanel = CockpitTransplant.Build(n3d, Cockpit!, FlatMount(CockpitCameraOffset),
+                    CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials, out var glassCarried);
+                built.AddChild(CockpitPanel);
+                if (xr)
+                {
+                    LiftBody(built, root, node, glassCarried);
+                }
+            }
+            else if (Cockpit is { FromBody: false, Gauges.Count: > 0 })
+            {
+                CockpitTransplant.PoseInside(n3d, Cockpit,
+                    CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials);
+            }
+
+            if (xr && !body)
+            {
+                // Read where the build left the glass: moved by the table, on a moved assembly, or a pack's own.
+                AddGunsightReticles(n3d, GunsightReticle.Drawn(n3d, InteriorMaterials, GunsightReticle.Find(_gamez, node)),
+                    InteriorEye, _interiorScale);
+            }
+
             return;
         }
     }
@@ -525,19 +625,43 @@ public sealed class PlaneBuilder
         return layers?.Glass ?? tex;
     }
 
-    // One collimated reticle overlay per sight glass the build split a texture for.
+    // One collimated reticle overlay per sight glass the build split a texture for, under parent.
+    // Each glass is in parent's frame, and eye reads it there at metresPerUnit.
     // It takes the glass's own depth bias, so it hides behind whatever hides the glass.
-    private void AddGunsightReticles(Node3D interior, GameZNode root)
+    private void AddGunsightReticles(Node3D parent, IEnumerable<GunsightReticle.Glass> glasses, Vector3 eye, float metresPerUnit)
     {
-        foreach (var glass in GunsightReticle.Find(_gamez, root))
+        foreach (var glass in glasses)
         {
             if (_gunsight.GetValueOrDefault(glass.TextureName) is { } layers
-                && GunsightReticle.Overlay(glass, layers, GunsightReticle.EyeReachM / _interiorScale, _interiorScene!.PriorityBias(glass.Priority), InteriorEye) is { } overlay)
+                && GunsightReticle.Overlay(glass, layers, GunsightReticle.EyeReachM / metresPerUnit, _interiorScene!.PriorityBias(glass.Priority), eye) is { } overlay)
             {
-                interior.AddChild(overlay);
+                parent.AddChild(overlay);
                 GunsightReticles++;
             }
         }
+    }
+
+    // Under the stereo path a body cockpit's panel is what the stereo interior lifts. It takes a twin of
+    // every drawn body mesh, built through the stereo shader and placed each frame by Flight.Hud.XrCockpit.
+    // The moved glass takes its reticle, collimated for the cockpit_camera eye in the plane frame.
+    private void LiftBody(Node3D built, GameZNode root, GameZNode interior, Transform3D? glassCarried)
+    {
+        if (glassCarried is { } carried)
+        {
+            AddGunsightReticles(CockpitPanel!, GunsightReticle.Find(_gamez, interior)
+                .Select(g => g with { Corners = g.Corners.Select(c => carried * c).ToList() }), CockpitCameraOffset, 1f);
+        }
+
+        _stereoBodyScene = AirframeScene(raceGhost: false, stereo: true);
+        _stereoBodyScene.HdAirframe = _scene.HdAirframe;
+        if (_stereoBodyScene.BuildSubtree(root, Skip) is not { } copy)
+        {
+            return;
+        }
+
+        _stereoBody.AddRange(BodyTwins.Stereo(built, copy, _stereoBodyScene, Cockpit!.Hide, CockpitPanel!));
+        copy.Free();
+        Log.Info("world", $"cockpit: {_stereoBody.Count} airframe mesh(es) twinned for the stereo interior");
     }
 
     // ⚠ The interior's off-states ship ACTIVE. A node the build script left NodeSetActive(false)
