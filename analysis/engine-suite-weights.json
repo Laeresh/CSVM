@@ -617,6 +617,14 @@
     "xr-view-cutscene": 1.43,
     "xr-view-first-person": 0.84,
     "xr-view-head-look": 1.16,
-    "xr-view-static": 0.45
+    "xr-view-static": 0.45,
+    "hd-model-cockpit1": 0.216,
+    "hd-model-cockpit1-stereo": 3.861,
+    "plane-rig-cockpit-body": 0.348,
+    "plane-rig-cockpit-gauges": 0.355,
+    "plane-rig-cockpit-inside": 0.481,
+    "plane-rig-cockpit-pass": 0.348,
+    "plane-rig-cockpit-stereo": 0.587,
+    "plane-rig-cockpit-template": 1.309
   }
 }
