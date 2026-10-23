@@ -181,7 +181,7 @@ sight glass is itself a `gauges` child (`g730`, `g184`); on every other airframe
 `cockpit1` (`inside`, `dashboard` or a `g` node under `inside`). B12 has to treat a rig naming both
 `glass` and `g730` on the Brigand as one polygon placed twice.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -253,7 +253,7 @@ stereo-interior shader keys.
   reticle stays at the original glass's place whatever the replacement draws, and a
   texture-named `cockpit6`/`crosshair` replacement surface wears the reticle-free glass layer.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -330,7 +330,7 @@ bind's `BodyCockpit` is what `FirstPersonDressing.Show` reads.
   `"cockpit": { "from": "body" }`) and `.scratch/b11-shots/corvette-cockpit1-no-section.png` (the
   pack as shipped, the stock `cockpit1`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -424,7 +424,7 @@ The rest of `cockpit1` stays built and hidden, so its torn panels and bullet hol
   `stock-cockpit1.png`. The eye still sits above the car's roof until B14, so the dials float over the
   ground.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -491,7 +491,7 @@ them in that list or the belts and damage zones go silent (the bind's debug line
   with the marker's distance from the airframe origin (0.04 × marker), so D31 cannot take the
   template's poses as they stand on the airframes whose marker sits far from the origin.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -569,7 +569,7 @@ and `-- <car.glb> <pack> 6.7 -0.6` (stretched).
   side window and mirror), `-look-right.png` (passenger seat, stack and compass) and `-bank.png`
   (rolled right, the horizon ball following).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id). The user's look at the controls is owed, so the item stays open.
 
 **Original approach (kept for reference).**
 
@@ -660,7 +660,7 @@ takes the stock path unchanged.
 - **Shots** (`.scratch/b15-shots/`): `origin-pass.png` against `origin-no-pass.png`, and
   `far-20km-pass.png` against `far-20km-no-pass.png`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -735,7 +735,7 @@ own frame and units with the gamez hierarchy intact.
   overlays, and in flight the session's subject is the world root, whose interiors sit too deep to
   be found, so neither reaches `cockpit1.glb`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -809,7 +809,7 @@ the mount. A body section under the stereo path still keeps `cockpit1` untouched
   `cockpit-diff-x8.png` (the fixed round trip), and `cockpit-dials-swapped.png`, a rig-only pack
   swapping the speedometer and altimeter positions.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id).
 
 **Original approach (kept for reference).**
 
@@ -922,7 +922,7 @@ owed, batched with B14.
 - **Shots** (`.scratch/d31-shots/`): `flat-0km.png` against `xr-left-0km.png` (flat and stereo left
   eye from one eye point), `flat-20km.png`, `xr-left-20km.png`. Jitter series in `.scratch/d31-jitter/`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id). The user's look at the controls is owed, so the item stays open.
 
 **Original approach (kept for reference).**
 
@@ -1006,7 +1006,7 @@ build drew it. The user's look in the headset is owed, batched with B14 and D31.
   `ReplacedPlateTriangles`. A pack glass that is not flat, or whose UVs are not affine over it, draws a
   wrong reticle.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passed on the merged plan tree carrying every item: 6981 units, 614 engine suites with engine errors clean, and 38 goldens hash-identical. The item's own suites and units are named in its landing commit (`git log --grep=` the item id). The user's look at the controls is owed, so the item stays open.
 
 **Original approach (kept for reference).**
 
