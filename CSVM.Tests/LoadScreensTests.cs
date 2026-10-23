@@ -357,13 +357,14 @@ public class LoadScreensTests
     }
 
     /// <summary>A lowest row whose first line is under the furniture stacks a pitch under the next
-    /// row up in its own column. A title at the same height stays where it is.</summary>
+    /// row up in its own column. That row rises half a pitch to leave a gap. A title at the same
+    /// height stays where it is.</summary>
     [Fact]
     public void ARowUnderTheFurnitureStacksUnderTheRowAboveInItsColumn()
     {
         var set = LoadScreens.OnBoard(Rows(), 510f);
 
-        Assert.Equal(new[] { 35f, 525f, 445f, 445f, 458f, 458f }, set.Select(l => l.Y));
+        Assert.Equal(new[] { 35f, 525f, 438f, 438f, 458f, 458f }, set.Select(l => l.Y));
         Assert.Equal(52f, set[4].Height);
     }
 

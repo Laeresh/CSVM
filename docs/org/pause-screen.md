@@ -418,7 +418,8 @@ write their sixth instruction row and its point value at y 525. The load screen 
 its own band by shrinking it ([`loading-screen.md`](loading-screen.md)), but here the authored
 point itself is under the strips, so no face size fits it there. `LoadScreens.OnBoard` moves a
 column's lowest row whose first line reaches the strips to one 13-pixel pitch under the next row
-up in its column: y 458, under the one-line "Shoot down enemy planes" row at 445, at full size.
+up in its column: y 458, at full size, under the one-line "Shoot down enemy planes" row, which
+rises half a pitch from 445 to 438 so the two read as two rows.
 The other placement, the row's own band above the strips at a shrunk face, would stand it on the
 chalk rule at about y 493; the stack moves the row and keeps its size. `escape.zrd`'s copies of
 these dialogs author no `wrap` on `OBJ3` and `OBJ4` either, so they take the 400 their dialog's

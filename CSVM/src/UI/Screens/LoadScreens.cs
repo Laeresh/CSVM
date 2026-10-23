@@ -354,7 +354,7 @@ public static class LoadScreens
             }
 
             var row = line.Width > 0f ? line : line with { Width = measure };
-            set.Add(Lowest(texts, line) ? Settled(texts, row, clear) : row);
+            set.Add(Lowest(texts, line) ? Settled(texts, row, clear) : Lifted(texts, row, clear));
         }
 
         return set;
@@ -555,13 +555,7 @@ public static class LoadScreens
         if (y + row.Leading > clear)
         {
             // The pitch under that row assumes it takes one line; multiplayer-board measures it.
-            float above = float.NegativeInfinity;
-            foreach (var other in texts)
-            {
-                bool clears = other.Leading > 0f && other.X == row.X && other.Y + other.Leading <= clear;
-                above = clears ? Math.Max(above, other.Y) : above;
-            }
-
+            float above = Above(texts, row, clear);
             if (float.IsNegativeInfinity(above))
             {
                 return row;
@@ -571,6 +565,35 @@ public static class LoadScreens
         }
 
         return row with { Y = y, Height = clear - y };
+    }
+
+    // The row a buried lowest row stacks under rises half a pitch, so the two read as two rows.
+    private static BoardLine Lifted(IReadOnlyList<BoardLine> texts, BoardLine row, float clear)
+    {
+        foreach (var other in texts)
+        {
+            bool buried = other.Leading > 0f && other.X == row.X && other.Y + other.Leading > clear
+                && Lowest(texts, other);
+            if (buried && Above(texts, other, clear) == row.Y)
+            {
+                return row with { Y = row.Y - MathF.Ceiling(row.Leading / 2f) };
+            }
+        }
+
+        return row;
+    }
+
+    // The lowest row in the row's column whose first line clears the furniture.
+    private static float Above(IReadOnlyList<BoardLine> texts, BoardLine row, float clear)
+    {
+        float above = float.NegativeInfinity;
+        foreach (var other in texts)
+        {
+            bool clears = other.Leading > 0f && other.X == row.X && other.Y + other.Leading <= clear;
+            above = clears ? Math.Max(above, other.Y) : above;
+        }
+
+        return above;
     }
 
     // Every Text the named dialog's script places, in script order, as its own property dict. An
