@@ -101,6 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ [local] Transplanted gauge assemblies and sight glass on the body
 13. ☑ [cloud] code, [local] check: `--dump-markers` writes the `cockpit` template
 14. ◐ [local] The Corvette's seat and dashboard
+15. ☐ [local] Flat body cockpits drawn steadily, through the cockpit pass
 
 ### Wave C, cockpit1 replacements
 
@@ -589,6 +590,32 @@ The pack is built by `.scratchKeep\corvette\scripts\build_corvette_pack.py`.
 
 **⚠ Traps.** Third-party asset: never commit the pack or put it in a tracked path, and leave the
 original file untouched.
+
+## B15 ☐ [local] Flat body cockpits drawn steadily, through the cockpit pass
+
+**Goal.** On the flat screen a body cockpit (the body seen from inside, its transplanted dials and
+its glass) draws as steadily far from the chapter origin as the stock interior does.
+
+**Evidence (confidence: direction-sound).** D31 measured the flat body cockpit's worst frame-to-frame
+step over 24 frames 20 km out at 2.43 px, against 0.006 px for its stereo twin (D31's commit
+message). The flat stock interior does not jitter because `Flight/Hud/CockpitOverlay.cs` draws it
+in a world of its own, camera and interior both at the origin, so float32 rounds the remaining
+camera-relative pose far below a pixel; B11 and B12 left the body and the transplanted panel in the
+main world at chapter-scale coordinates. B12 also saw its transplanted glass read fainter than
+through the cockpit pass, the same as stock `cockpit1` under `--no-cockpit-pass`.
+
+**Approach.** Draw a flat body cockpit through the cockpit pass: the transplanted panel, and twins of
+the drawn body meshes kept in step with their originals as D31's `XrCockpit.Mirror` does, with the
+originals leaving the pilot's pane while the pass draws them. <TODO: what of the body the pass must
+not take, e.g. parts whose depth against the world matters.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** The same jitter series as D31 on the flat path (24 frames, 20 km, a rotated pose), and a
+flat registration against the current main-world body cockpit at the origin.
+
+**⚠ Traps.** The pass composites over the main view, so a world object nearer than a twinned body
+surface hides behind it, as it does behind the stock interior.
 
 # Wave C, cockpit1 replacements
 
