@@ -123,6 +123,51 @@ public sealed class CanopyClumpsTests
         Assert.Equal(tiles.Count, tiles.Select(t => string.Join(";", t)).Distinct().Count());
     }
 
+    /// <summary>With no tile every slot composes, as before tiles existed. A tiled species takes its stamp share of
+    /// the slots after the composed ones, and one too rare for a slot stays composed.</summary>
+    [Fact]
+    public void ATiledSpeciesTakesItsShareOfTheSlots()
+    {
+        var weights = new[] { 6f, 3f, 2f, 1f };
+        Assert.Equal(Enumerable.Repeat(-1, CanopyClumps.Variants), CanopyClumps.Slots(weights, new[] { false, false, false, false }));
+        Assert.Equal(new[] { -1, -1, -1, 0, 0, 0 }, CanopyClumps.Slots(weights, new[] { true, false, false, false }));
+        Assert.Equal(new[] { -1, -1, 0, 0, 0, 1 }, CanopyClumps.Slots(weights, new[] { true, true, false, false }));
+        Assert.Equal(new[] { 0, 0, 0, 1, 1, 2 }, CanopyClumps.Slots(weights, new[] { true, true, true, true }));
+        Assert.Equal(new[] { 0, 0, 0, 0, 0, 0 }, CanopyClumps.Slots(new[] { 1f }, new[] { true }));
+        Assert.DoesNotContain(1, CanopyClumps.Slots(new[] { 20f, 1f }, new[] { false, true }));
+    }
+
+    /// <summary>A tiled slot carries its own tile's tree count, cycling through the species' tiles. A tile of
+    /// other counts then moves the rate and not the trees per area.</summary>
+    [Fact]
+    public void ARateTakesATilesOwnTreeCount()
+    {
+        var weights = new[] { 1f };
+        var sizes = new[] { new Vector2(10f, 18f) };
+        var all = new[] { 0, 0, 0, 0, 0, 0 };
+        Assert.Equal(4f, CanopyClumps.MeanTrees(all, new IReadOnlyList<int>?[] { new[] { 4 } }, weights, sizes));
+        Assert.Equal(3f, CanopyClumps.MeanTrees(all, new IReadOnlyList<int>?[] { new[] { 2, 4 } }, weights, sizes));
+        Assert.Equal(CanopyClumps.MeanTrees(weights, sizes),
+            CanopyClumps.MeanTrees(Enumerable.Repeat(-1, 6).ToArray(), new IReadOnlyList<int>?[] { null }, weights, sizes));
+        var half = new[] { -1, -1, -1, 0, 0, 0 };
+        float mixed = CanopyClumps.MeanTrees(half, new IReadOnlyList<int>?[] { new[] { 2 } }, weights, sizes);
+        Assert.Equal((Enumerable.Range(0, 3).Sum(v => CanopyClumps.Layout(v, weights, sizes).Count) + 6f) / 6f, mixed, 5);
+
+        var stamps = new List<(Transform3D, float, float)>();
+        for (int j = 0; j < 40; j++)
+        {
+            for (int i = 0; i < 40; i++)
+                stamps.Add((new Transform3D(Basis.Identity, new Vector3((i + 0.5f) * C, 5f, (j + 0.5f) * C)), 10f, 18f));
+        }
+        var mask = CanopyMask.FromStamps(stamps, 0f, 0f, 40 * C, 40 * C);
+        foreach (int count in new[] { 2, 4 })
+        {
+            float trees = CanopyClumps.MeanTrees(all, new IReadOnlyList<int>?[] { new[] { count } }, weights, sizes);
+            var clumps = CanopyClumps.Place(mask, CanopyClumps.Rate(mask, stamps.Select(s => s.Item1.Origin), trees), CardHeight, TileHeight);
+            Assert.InRange(clumps.Count * count, stamps.Count * 0.9f, stamps.Count * 1.1f);
+        }
+    }
+
     /// <summary>C1 and C3 draw clumps by default; the other chapters do so only when asked.</summary>
     [Fact]
     public void OnlyC1AndC3DrawClumpsByDefault()

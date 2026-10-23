@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
 
@@ -12,8 +13,9 @@ namespace CSVM.Mech3;
 /// <see cref="CanopyMask"/> cell at the card forest's own trees per area. Past a handover band the
 /// clumps carry the forest and the listed cards fade out. The far forest keeps the near one's density
 /// and colour, and continues past the card fade and the map edge (<see cref="Field.Copy"/>).
-/// The clump art is composed at load from the chapter's listed card textures into one atlas of
-/// <see cref="Variants"/> tiles. <see cref="Place"/> and <see cref="Layout"/> are pure. Mech3.md has the rules.
+/// The clump art is one atlas of <see cref="Variants"/> tiles. Each is composed at load from the listed card
+/// textures or is a species' own <see cref="ClumpTile"/> (<see cref="Slots"/>).
+/// <see cref="Place"/> and <see cref="Layout"/> are pure. Mech3.md has the rules.
 /// </summary>
 public static class CanopyClumps
 {
@@ -42,6 +44,9 @@ public static class CanopyClumps
 
     /// <summary>The shader parameter both the clumps and the listed cards' Rich material read the band from.</summary>
     public const string HandoverParam = "canopy_handover";
+
+    /// <summary>Where the shipped clump tiles sit, beside the vegetation models: <c>&lt;chapter&gt;/&lt;card&gt;.clump.*</c>.</summary>
+    public const string ShippedRoot = "res://data/vegetation_models";
 
     // How far a tree at the back of a tile stands above the front row, in metres. That is a row 16 m
     // deeper, seen from about 30 degrees above. The back rows are drawn first.
@@ -160,6 +165,30 @@ public static class CanopyClumps
     public static float MeanTrees(IReadOnlyList<float> weights, IReadOnlyList<Vector2> sizes) =>
         (float)Enumerable.Range(0, Variants).Average(v => Layout(v, weights, sizes).Count);
 
+    /// <summary>The mean tree count over the atlas <paramref name="slots"/> (<see cref="Slots"/>): a composed
+    /// slot's <see cref="Layout"/> of <paramref name="weights"/>, a tiled one its own tile's count in
+    /// <paramref name="tileTrees"/>. A replacement tile then moves no forest's density.</summary>
+    public static float MeanTrees(IReadOnlyList<int> slots, IReadOnlyList<IReadOnlyList<int>?> tileTrees, IReadOnlyList<float> weights,
+        IReadOnlyList<Vector2> sizes) =>
+        (float)Enumerable.Range(0, Variants).Average(v => slots[v] < 0 ? Layout(v, weights, sizes).Count
+            : tileTrees[slots[v]]![Rank(slots, v) % tileTrees[slots[v]]!.Count]);
+
+    /// <summary>What each atlas slot shows: -1 for a tile composed from the cards, else the index of a species in
+    /// <paramref name="weights"/> whose own tile fills it. Each <paramref name="tiled"/> species takes its stamp
+    /// share of the slots, and the untiled ones together the rest, by largest remainder. Composed slots come
+    /// first, so with no tile every slot composes as before. A tiled species too rare for a slot is composed.</summary>
+    public static int[] Slots(IReadOnlyList<float> weights, IReadOnlyList<bool> tiled)
+    {
+        float total = weights.Sum();
+        var groups = new List<(int Id, float Quota)> { (-1, Enumerable.Range(0, weights.Count).Where(i => !tiled[i]).Sum(i => weights[i])) };
+        groups.AddRange(Enumerable.Range(0, weights.Count).Where(i => tiled[i]).Select(i => (i, weights[i])));
+        groups = groups.Select(g => (g.Id, g.Quota * Variants / total)).ToList();
+        var count = groups.Select(g => (int)MathF.Floor(g.Quota)).ToArray();
+        foreach (int g in Enumerable.Range(0, groups.Count).OrderByDescending(g => groups[g].Quota - count[g]).Take(Variants - count.Sum()))
+            count[g]++;
+        return Enumerable.Range(0, groups.Count).SelectMany(g => Enumerable.Repeat(groups[g].Id, count[g])).ToArray();
+    }
+
     /// <summary>A tile's height in metres: the back row's rise plus the tallest card at the largest scale.</summary>
     public static float TileHeight(IReadOnlyList<Vector2> sizes) => DepthRiseM + (sizes.Max(s => s.Y) * 1.1f);
 
@@ -191,11 +220,15 @@ public static class CanopyClumps
             (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, on ? new Vector2(HandoverNearM, HandoverFarM) : Vector2.Zero);
     }
 
+    /// <summary>The tile a species' clumps take on <paramref name="chapter"/>: the model pack's, else the one
+    /// shipped beside its model under <see cref="ShippedRoot"/>. Null composes them from the cards.</summary>
+    public static ClumpTile? TileFor(string chapter, string card) => ClumpTile.Resolve(chapter, card, HdModels.Current.Clump, Shipped);
+
     /// <summary>Draws the clumps over <paramref name="mask"/>, their atlas composed from the listed card kinds in
-    /// <paramref name="kinds"/>, their colour spread from <paramref name="entry"/>. Hands the cards over to them.
-    /// Null when no listed card resolves.</summary>
+    /// <paramref name="kinds"/> where <paramref name="tileFor"/> gives a species no tile, their colour spread
+    /// from <paramref name="entry"/>. Hands the cards over to them. Null when no listed card resolves.</summary>
     public static Field? Build(CanopyMask mask, IReadOnlyList<ClutterBuilder.KindExport> kinds, VegetationEntry entry,
-        TextureArchive textures)
+        TextureArchive textures, Func<string, ClumpTile?> tileFor)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         bool painted = entry.Picks.Any(p => CanopyMask.IsCanopy(entry, p.Texture));
@@ -204,22 +237,27 @@ public static class CanopyClumps
             .Where(k => k.Kept > 0)
             .GroupBy(k => k.Kind.Texture, StringComparer.OrdinalIgnoreCase)
             .Select(g => (Texture: g.Key, Size: new Vector2(g.First().Kind.Width, g.First().Kind.Height), Weight: (float)g.Sum(k => k.Kept),
-                Look: entry.Find(g.First().Kind.Model), Image: textures.FindImage(g.Key)))
+                Look: entry.Find(g.First().Kind.Model), Image: textures.FindImage(g.Key), Species: HdModels.NodeKey(g.First().Kind.Model)))
             .Where(c => c.Image != null)
             .ToList();
         if (cards.Count == 0)
             return null;
         var sizes = cards.Select(c => c.Size).ToList();
-        var weights = cards.Select(c => c.Weight).ToList();
-        float stamps = weights.Sum();
-        float tileHeight = TileHeight(sizes);
+        float stamps = cards.Sum(c => c.Weight);
+        var species = cards.Select(c => c.Species).Distinct().ToList();
+        var strips = species.Select(s => Decode(tileFor(s), s)).ToList();
+        var slots = Slots(species.Select(s => cards.Where(c => c.Species == s).Sum(c => c.Weight)).ToList(), strips.Select(t => t != null).ToList());
+        var weights = cards.Select(c => slots.Contains(species.IndexOf(c.Species)) ? 0f : c.Weight).ToList();
+        var used = slots.Where(s => s >= 0).Distinct().Select(s => strips[s]!).ToList();
+        float tileHeight = used.Select(t => t.HeightM).Append(TileHeight(sizes)).Max();
         float cardHeight = cards.Sum(c => c.Weight * c.Size.Y) / stamps;
-        float meanTrees = MeanTrees(weights, sizes);
+        float meanTrees = MeanTrees(slots, strips.Select(t => t?.Tile.Trees).ToList(), weights, sizes);
         var rate = painted ? Rate(mask, PaintedTreesPerCell, meanTrees) : Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
             .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Y.LengthSquared() > 0f).Select(p => p.Origin)), meanTrees);
         float brightness = cards.Sum(c => c.Weight * (c.Look?.Brightness ?? 0f)) / stamps;
         float tint = cards.Sum(c => c.Weight * (c.Look?.Tint ?? 0f)) / stamps;
-        var (atlas, side) = Compose(cards.Select(c => c.Image!).ToList(), sizes, weights, tileHeight);
+        var (atlas, side) = Compose(cards.Select(c => c.Image!).ToList(), sizes, weights, tileHeight, slots, strips);
+        var tiles = used.Select(t => $"{species[strips.IndexOf(t)]} in {slots.Count(s => s >= 0 && strips[s] == t)} slots from {t.Tile.Source}").ToList();
         var clumps = Place(mask, rate, cardHeight, tileHeight, brightness, tint, rise: painted ? PaintedRiseM : 0f);
         var band = Band(painted);
 
@@ -229,7 +267,7 @@ public static class CanopyClumps
         material.SetShaderParameter("variants", (float)Variants);
         material.SetShaderParameter(HandoverParam, band);
         material.SetShaderParameter("grow", painted ? 1f : 0f);
-        var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f);
+        var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f) { Tiles = tiles, TreesPerClump = meanTrees };
         foreach (var chunk in clumps.GroupBy(c => (MathF.Floor(c.Base.X / ChunkM), MathF.Floor(c.Base.Z / ChunkM))))
             field.Root.AddChild(field.Draw(chunk.ToList(), Transform3D.Identity, string.Create(CultureInfo.InvariantCulture, $"chunk_{chunk.Key.Item1}_{chunk.Key.Item2}")));
 
@@ -238,7 +276,7 @@ public static class CanopyClumps
             Handover(kinds, true);
 
         Log.Info("world",
-            $"canopy clumps: {clumps.Count} over {field.Root.GetChildCount()} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, {watch.ElapsedMilliseconds} ms");
+            $"canopy clumps: {clumps.Count} over {field.Root.GetChildCount()} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, tiles: {(tiles.Count == 0 ? "all composed" : string.Join("; ", tiles))}, {watch.ElapsedMilliseconds} ms");
         return field;
     }
 
@@ -248,13 +286,14 @@ public static class CanopyClumps
 
     // Crown cards cut from the painted canopy's own textures, CrownShapes silhouettes each. The volume then
     // wears the colour and grain the ground shows from above. Equal weights; the spread is the listed kinds' mean.
-    private static List<(string Texture, Vector2 Size, float Weight, VegetationKind? Look, Image? Image)> Crowns(VegetationEntry entry,
-        TextureArchive textures)
+    // A tile replaces a texture's crowns under its name (C3/forest1).
+    private static List<(string Texture, Vector2 Size, float Weight, VegetationKind? Look, Image? Image, string Species)> Crowns(
+        VegetationEntry entry, TextureArchive textures)
     {
         var look = entry.Kinds.Count == 0 ? null
             : new VegetationKind("", Tint: entry.Kinds.Average(k => k.Tint), Brightness: entry.Kinds.Average(k => k.Brightness));
         var size = new Vector2(CrownWidthM, PaintedRiseM);
-        var cards = new List<(string, Vector2, float, VegetationKind?, Image?)>();
+        var cards = new List<(string, Vector2, float, VegetationKind?, Image?, string)>();
         foreach (var pick in entry.Picks.Where(p => CanopyMask.IsCanopy(entry, p.Texture)))
         {
             if (textures.FindImage(pick.Texture) is not { } image)
@@ -262,7 +301,7 @@ public static class CanopyClumps
             image.Decompress();
             image.Convert(Image.Format.Rgba8);
             for (int k = 0; k < CrownShapes; k++)
-                cards.Add((pick.Texture, size, 1f, look, Crown(image, k)));
+                cards.Add((pick.Texture, size, 1f, look, Crown(image, k), System.IO.Path.GetFileNameWithoutExtension(pick.Texture).ToLowerInvariant()));
             image.Dispose();
         }
 
@@ -317,8 +356,10 @@ public static class CanopyClumps
     }
 
     // The atlas, one tile per variant side by side, and its side map. Each tree is its card resized to the
-    // tile's metres, mirrored, and blended back row first. Mipmapped, since clumps are seen far off.
-    private static (Image Atlas, Image Side) Compose(List<Image> images, List<Vector2> sizes, List<float> weights, float tileHeight)
+    // tile's metres, mirrored, and blended back row first. A tiled slot takes its species' tile instead, at its
+    // metres, centred on the slot's floor. Mipmapped, since clumps are seen far off.
+    private static (Image Atlas, Image Side) Compose(List<Image> images, List<Vector2> sizes, List<float> weights, float tileHeight,
+        int[] slots, List<Strip?> strips)
     {
         int tw = (int)(TileWidthM * PixelsPerM), th = (int)MathF.Ceiling(tileHeight * PixelsPerM);
         var atlas = Image.CreateEmpty(tw * Variants, th, false, Image.Format.Rgba8);
@@ -331,6 +372,22 @@ public static class CanopyClumps
         }
         for (int v = 0; v < Variants; v++)
         {
+            if (slots[v] >= 0)
+            {
+                var strip = strips[slots[v]]!;
+                var column = new Rect2I(Rank(slots, v) % strip.Tile.Trees.Count * strip.ColumnPx, 0, strip.ColumnPx, strip.Image.GetHeight());
+                int pw = Math.Min(tw, (int)(strip.Tile.WidthM * PixelsPerM)), ph = Math.Min(th, (int)(strip.HeightM * PixelsPerM));
+                var src = strip.Image.GetRegion(column);
+                src.Resize(pw, ph, Image.Interpolation.Lanczos);
+                var map = strip.Side?.GetRegion(column);
+                map?.Resize(pw, ph, Image.Interpolation.Bilinear);
+                int x = (v * tw) + ((tw - pw) / 2);
+                atlas.BlendRect(src, new Rect2I(0, 0, pw, ph), new Vector2I(x, th - ph));
+                Side(side, tw * Variants, th, src.GetData(), pw, ph, x, th - ph, map?.GetData());
+                src.Dispose();
+                map?.Dispose();
+                continue;
+            }
             foreach (var tree in Layout(v, weights, sizes))
             {
                 int pw = Math.Max(1, (int)(sizes[tree.Card].X * tree.Scale * PixelsPerM));
@@ -356,7 +413,8 @@ public static class CanopyClumps
     // Writes one tree's sun side into the side map over its solid texels, front rows over back ones. Red is
     // the card shader's sun-side share on the tree's right half, green on its left. Each is full a sixth of
     // the tree's width off its axis. Two channels, so a mip level averages each half's share, not their sum.
-    private static void Side(byte[] side, int width, int height, byte[] px, int pw, int ph, int x0, int y0)
+    // A tile's own side map (RGBA, the size of px) gives its texels' shares instead; without one, it is one tree.
+    private static void Side(byte[] side, int width, int height, byte[] px, int pw, int ph, int x0, int y0, byte[]? map = null)
     {
         for (int j = 0; j < ph; j++)
         {
@@ -366,12 +424,45 @@ public static class CanopyClumps
                 if (x < 0 || y < 0 || x >= width || y >= height || px[(((j * pw) + i) * 4) + 3] < 128)
                     continue;
                 float s = Math.Clamp((((i + 0.5f) / pw) - 0.5f) * 6f, -1f, 1f);
-                int o = ((y * width) + x) * 2;
-                side[o] = (byte)(255f * Math.Max(s, 0f));
-                side[o + 1] = (byte)(255f * Math.Max(-s, 0f));
+                int o = ((y * width) + x) * 2, t = ((j * pw) + i) * 4;
+                side[o] = map != null ? map[t] : (byte)(255f * Math.Max(s, 0f));
+                side[o + 1] = map != null ? map[t + 1] : (byte)(255f * Math.Max(-s, 0f));
             }
         }
     }
+
+    // A species' tile decoded for the atlas, or null with a warning, so that species composes from its cards.
+    private static Strip? Decode(ClumpTile? tile, string species)
+    {
+        if (tile == null)
+            return null;
+        var image = new Image();
+        var side = tile.Side != null ? new Image() : null;
+        string? fault = image.LoadPngFromBuffer(tile.Image) != Error.Ok ? "the image is not a readable PNG"
+            : image.GetWidth() % tile.Trees.Count != 0 ? $"its {image.GetWidth()} px are no {tile.Trees.Count} equal tiles"
+            : side != null && side.LoadPngFromBuffer(tile.Side) != Error.Ok ? "the side map is not a readable PNG"
+            : side != null && side.GetSize() != image.GetSize() ? "the side map's size differs from the image's"
+            : null;
+        if (fault != null)
+        {
+            Log.Warn("world", $"canopy clumps: the {species} tile from {tile.Source} composes from the cards, {fault}");
+            return null;
+        }
+        image.Convert(Image.Format.Rgba8);
+        Bleed(image);
+        side?.Convert(Image.Format.Rgba8);
+        return new Strip(tile, image, side, image.GetWidth() / tile.Trees.Count);
+    }
+
+    // The shipped tile files: an image as <name>.png.bin, which Godot does not import, as the cloud puffs ship.
+    private static (byte[] Bytes, string Source)? Shipped(string relative)
+    {
+        string path = $"{ShippedRoot}/{relative}{(relative.EndsWith(".png", StringComparison.Ordinal) ? ".bin" : "")}";
+        return FileAccess.FileExists(path) ? (FileAccess.GetFileAsBytes(path), path) : null;
+    }
+
+    // Which of its species' tiles a slot shows: the slots of that species before it.
+    private static int Rank(IReadOnlyList<int> slots, int slot) => slots.Take(slot).Count(s => s == slots[slot]);
 
     // Gives every clear texel the mean colour of the solid ones. A filter, a resize or a mip level then
     // blends tree colour into an edge. The clear texels' black would darken the clumps far off.
@@ -501,6 +592,12 @@ public static class CanopyClumps
         /// <summary>Every clump over the map.</summary>
         public IReadOnlyList<Clump> Clumps => _clumps;
 
+        /// <summary>Each species tile in the atlas: its species, its slots and where it was read from.</summary>
+        public IReadOnlyList<string> Tiles { get; init; } = Array.Empty<string>();
+
+        /// <summary>The trees a clump carries on average, the rate's divisor.</summary>
+        public float TreesPerClump { get; init; }
+
         /// <summary>The clumps standing in <paramref name="source"/>, drawn moved by <paramref name="mirror"/>;
         /// null where none stands.</summary>
         public MultiMeshInstance3D? Copy(Rect2 source, Transform3D mirror)
@@ -539,5 +636,11 @@ public static class CanopyClumps
                 Name = name,
             };
         }
+    }
+
+    // A decoded tile strip: its tiles side by side, ColumnPx wide each.
+    private sealed record Strip(ClumpTile Tile, Image Image, Image? Side, int ColumnPx)
+    {
+        public float HeightM => Image.GetHeight() * Tile.WidthM / ColumnPx;
     }
 }

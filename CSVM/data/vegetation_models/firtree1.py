@@ -50,6 +50,12 @@ HIGH = np.array((0.46, 0.53, 0.20), np.float32)
 
 CLUMPS = 165
 
+# The clump tiles: trees per tile (CanopyClumps composes two to four), and the linear factor per channel
+# that puts the tiles' mean colour on the C1 card's (sRGB 21.8, 30.1, 16.3 over its solid texels). The
+# cards draw to 1 km and hand over to the clumps past it, so a lighter tile would show as a band.
+CLUMP_TREES = (3, 2, 4)
+CLUMP_GRADE = (0.24, 0.265, 0.19)
+
 
 def radius(f, w):
     fs, rs = zip(*PROFILE)
@@ -258,13 +264,14 @@ def main():
     mat = vb.atlas_material("firtree1", atlas)
     obj = build(w, h, mat, rng)
     glb = vb.export_glb(obj, args.out, args.chapter, os.path.splitext(MODEL)[0])
+    tiles = vb.clump_render(obj, w, h, args.out, args.chapter, os.path.splitext(MODEL)[0], CLUMP_TREES, 2, CLUMP_GRADE, args.render)
     renders = []
     if args.render:
         card = vb.read_card(args.data_root, args.chapter, MODEL)
         if abs(card[0] - w) > 0.01 or abs(card[1] - h) > 0.01:
             raise SystemExit("card is %.3f x %.3f m, CARDS says %.3f x %.3f" % (card[0], card[1], w, h))
         renders = vb.compare_render(obj, card, args.render, "%s_%s" % (args.chapter, "firtree1"), atlas)
-    vb.report(obj, glb, renders)
+    vb.report(obj, glb, tiles + renders)
 
 
 main()

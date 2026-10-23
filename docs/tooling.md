@@ -809,20 +809,37 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   generator: GLB bytes under the `.bin` extension, so Godot imports nothing, no `.import` file
   exists, and the export's `data/*.bin` filter packs it. Nothing in the game reads one yet; the
   near draw is to load it at run time with `GltfDocument.AppendFromBuffer`. A rerun writes it byte
-  for byte the same.
+  for byte the same under the same Blender build; the exporter writes its own version into the
+  file (`Khronos glTF Blender I/O v5.2.41`), so a Blender update changes those bytes alone. Keep
+  the committed file when nothing else moved.
 - Conventions: metres, the pivot at the trunk base on the ground, Y up in the GLB (Blender's Z up,
   converted by the exporter), the height of the card it replaces, one mesh with one alpha-masked,
   double-sided material on one texture atlas, and normals bent out from the trunk axis so the
   crown shades as a volume. The chapter folder exists because one model name carries different
   cards per chapter (`firtree1` is 10 x 18 m on C1 and 10 x 13 m on C4).
+- **The clump tiles** (`veg_blender.clump_render`) sit beside the model: `<species>.clump.png.bin`,
+  `<species>.clump.side.png.bin` and `<species>.clump.json`, the far forest's tiles for that card
+  ([formats/model-packs.md](formats/model-packs.md), "Clump tiles"). Each tile is a group of the
+  generator's `CLUMP_TREES` count of the model's trees (2 to 4), laid out as `CanopyClumps` composes
+  a tile: 24 m wide at 10 px a metre, as tall as the card's tile, strata across the width, each tree
+  at 0.85 to 1.1 of its size, turned at random, and up to 16 m deeper and 8 m higher toward the back.
+  It is rendered orthographic from the side in EEVEE at four times that size and averaged down, the
+  alpha cut at 0.5, under the sky and a sun from above the camera, so neither side is lit (the game
+  adds the sun side). A second render emits each tree's offset from its own trunk for the side map.
+  The generator's `CLUMP_GRADE` scales the colour per channel so the tiles' mean sits on the card's,
+  which draws unlit to 1 km before the clumps take over. The PNGs are written by the script's own
+  encoder with no time chunk, and a rerun writes all three files byte for byte the same.
 - **Nothing traced from the original's textures goes into a model.** The original card appears
   only in the comparison render: its texture on a quad at its real size beside the model, unlit
   as the game draws it, under the same orthographic camera and sun, from eye level (`_side`) and
-  from 35 degrees above (`_above`), plus the model's atlas on its own (`_atlas`). These go to
-  `.scratch/vegetation/` and are never committed.
+  from 35 degrees above (`_above`), plus the model's atlas on its own (`_atlas`), and the clump
+  strip on grey (`_clump`) with its side map (`_clump_side`). These go to `.scratch/vegetation/`
+  and are never committed. The card's pixels never reach a clump tile; `CLUMP_GRADE` is a number
+  chosen against the card's mean colour.
 
-`.\MakeVegetationModel.ps1 -Species firtree1 [-Chapter C1] [-NoRender]` regenerates one species,
-prints its triangle count, size and output paths, and leaves Blender's log in
+`.\MakeVegetationModel.ps1 -Species firtree1 [-Chapter C1] [-NoRender]` regenerates one species
+and its clump tiles, prints its triangle count, size, output paths and, with the renders, the
+tiles' mean colour, and leaves Blender's log in
 `.scratch/vegetation/<species>.log`. The card is read from `extracted/` under `CSVM_DATA_ROOT`,
 else the tree, else the main checkout, and the generator stops if the card's size differs from
 the one it was built for. The script launches no Godot.

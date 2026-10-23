@@ -488,13 +488,16 @@ internal static class GraphicsSwitchSuites
         "the canopy clumps stand by default in a C1 Enhanced flight at rich: they stand over the canopy mask, the listed "
         + "cards' Rich material carries the handover band, and the map edge's cells copy them; a live move to original drops "
         + "the clumps, their edge copies and the band, and a move back builds the same chunks; a live switch to Original drops "
-        + "them and back builds them; a lab re-bake builds new ones; a rich C3 flight builds them over its painted canopy alone, "
+        + "them and back builds them; a lab re-bake builds new ones; the C1 clumps take the firtree1 tile shipped beside its model, "
+        + "compose from the cards without it, and take a model pack's tile under the same key with its own tree count; "
+        + "a rich C3 flight builds them over its painted canopy alone, "
         + "fading in over their own band while the beach palms keep every distance; --canopy-clumps=off, or a session at original, builds none")]
     internal static void CanopyClumpsFollowRich(TestContext ctx)
     {
         RequireData(ctx);
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word;
+        float shippedTrees = 0f;
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
@@ -506,6 +509,18 @@ internal static class GraphicsSwitchSuites
                     $"a rich C1 flight builds its clumps by default ({built.Text})");
                 ctx.Check(Handover(live) == "on" && EdgeClumps(live) > 0,
                     $"the cards hand over ({Handover(live)}) and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
+                var shipped = live.Session.CanopyClumpField!;
+                shippedTrees = shipped.TreesPerClump;
+                ctx.Check(shipped.Tiles is [var tile] && tile.StartsWith("firtree1 ", StringComparison.Ordinal)
+                    && tile.EndsWith($"{Mech3.CanopyClumps.ShippedRoot}/C1/firtree1.clump.png.bin", StringComparison.Ordinal),
+                    $"the clumps take the firtree1 tile shipped beside its model ({string.Join("; ", shipped.Tiles)})");
+                var clutter = live.Session.Clutter!;
+                var composed = Mech3.CanopyClumps.Build(clutter.Canopy()!, clutter.ExportedKinds!, clutter.Vegetation!, live.Session.SessionTextures!, _ => null)!;
+                static byte[] Atlas(Node3D root) => ((ShaderMaterial)((MultiMeshInstance3D)root.GetChild(0)).MaterialOverride)
+                    .GetShaderParameter("albedo_tex").As<Texture2D>().GetImage().GetData();
+                ctx.Check(composed.Tiles.Count == 0 && !Atlas(composed.Root).AsSpan().SequenceEqual(Atlas(shipped.Root)),
+                    $"without a tile they compose from the cards, another atlas ({composed.Clumps.Count} clumps at {composed.TreesPerClump:0.##} trees, against {built.Count} at {shipped.TreesPerClump:0.##})");
+                composed.Root.Free();
                 ApplyVegetation(live, VegetationQualitySetting.Original);
                 ctx.Check(live.Session.CanopyClumps == null && !built.Node!.IsInsideTree() && EdgeClumps(live) == 0 && Handover(live) == "off",
                     $"a live move to original drops them, their edge copies and the band ({EdgeClumps(live)} copies, {Handover(live)})");
@@ -529,6 +544,31 @@ internal static class GraphicsSwitchSuites
                 live.Close();
             }
 
+            // A model pack's tile under the same key: the shipped image with other counts, so the rate moves with it.
+            string pack = System.IO.Path.Combine(ctx.ScratchDir, "clump-pack");
+            string packed = System.IO.Path.Combine(pack, "HDModels", "test", "C1", "firtree1.clump.png");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(packed)!);
+            System.IO.File.WriteAllBytes(packed, Godot.FileAccess.GetFileAsBytes($"{Mech3.CanopyClumps.ShippedRoot}/C1/firtree1.clump.png.bin"));
+            System.IO.File.WriteAllText(System.IO.Path.ChangeExtension(packed, ".json"), "{\"width_m\": 24, \"trees\": [4, 4, 4]}");
+            var savedModels = HdModels.Current;
+            using (var models = HdModels.Open(pack, "HDModels"))
+            {
+                HdModels.Current = models;
+                var withPack = Open(ctx, true, 1, "C1");
+                try
+                {
+                    var field = withPack.Session.CanopyClumpField;
+                    string seen = field == null ? "no clumps" : $"{string.Join("; ", field.Tiles)} at {field.TreesPerClump:0.##} trees against {shippedTrees:0.##}";
+                    ctx.Check(field is { Tiles: [var tile] } && tile.EndsWith(packed, StringComparison.Ordinal) && field.TreesPerClump > shippedTrees,
+                        $"a model pack's tile under the same key replaces the shipped one and its tree count sets the rate ({seen})");
+                }
+                finally
+                {
+                    withPack.Close();
+                    HdModels.Current = savedModels;
+                }
+            }
+
             var c3 = Open(ctx, true, 1, "C3");
             try
             {
@@ -536,7 +576,8 @@ internal static class GraphicsSwitchSuites
                 var mask = c3.Session.Clutter?.Canopy();
                 var band = (painted.Node?.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial)
                     ?.GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2();
-                ctx.Check(c3.Built && painted.Count > 0 && mask != null, $"a rich C3 flight builds clumps over its painted canopy ({painted.Count})");
+                ctx.Check(c3.Built && painted.Count > 0 && mask != null && c3.Session.CanopyClumpField!.Tiles.Count == 0,
+                    $"a rich C3 flight builds clumps over its painted canopy, all composed with no tile shipped ({painted.Count})");
                 ctx.Check(band == new Vector2(Mech3.CanopyClumps.PaintedNearM, Mech3.CanopyClumps.PaintedFarM) && Handover(c3) == "off",
                     $"they fade in over the painted band ({band}) and the beach palms keep every distance ({Handover(c3)})");
                 int stray = painted.Node!.GetChildren().OfType<MultiMeshInstance3D>().Sum(m => Enumerable.Range(0, m.Multimesh.InstanceCount)

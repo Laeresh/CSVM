@@ -186,8 +186,8 @@ gamez node name to a `.glb` from a zip or subfolder, or a loose `.gltf` with its
 (`planes/<airframe>/<node>`), chapter (`C3/<node>`) or bare name, the more specific winning; a gamez ancestor's file comes first (`Mech3/SceneBuilder.cs`). Names
 match without case or a trailing `.flt`. `KeyFor` names the pack key a node resolves to without
 reading it, which `Mech3/HdModelMeshes.cs` caches on. An airframe is its model node
-(`player_bhawk`), and `RigFor` returns `planes/<airframe>/rig.json`, the one `.json` read, for
-`Mech3/PlaneRigPatch.cs`. Engine-free, apart from the texture folder. Coverage: `CSVM.Tests/HdModelsTests.cs`.
+(`player_bhawk`), and `RigFor` returns `planes/<airframe>/rig.json` for `Mech3/PlaneRigPatch.cs`. `Clump` returns a clump tile's
+files (`<chapter>/<card>.clump.png`, `.clump.json`, `.clump.side.png`) for `Mech3/ClumpTile.cs`, keyed with their extension, so `KeyFor` never reaches one. Engine-free, apart from the texture folder. Coverage: `CSVM.Tests/HdModelsTests.cs`.
 
 ## src/Extraction/ExtractionStamp.cs
 Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version

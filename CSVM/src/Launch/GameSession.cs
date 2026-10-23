@@ -415,6 +415,9 @@ public partial class GameSession : Node3D
     /// <summary>The canopy clumps' node over the map, null while none stand. Read by the suites.</summary>
     internal Node3D? CanopyClumps => _canopyClumps?.Root;
 
+    /// <summary>The canopy clumps standing, with their tiles and rate, null while none stand. Read by the suites.</summary>
+    internal Mech3.CanopyClumps.Field? CanopyClumpField => _canopyClumps;
+
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
     internal SessionSpec Spec => _spec;
@@ -2709,7 +2712,8 @@ public partial class GameSession : Node3D
         if (!wanted || _canopyClumps != null || _plane == null || _sessionTextures == null
             || _clutter?.ExportedKinds is not { } kinds || _clutter.Vegetation is not { } entry || _clutter.Canopy() is not { } mask)
             return;
-        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, entry, _sessionTextures);
+        string chapter = _spec.Chapter?.ToUpperInvariant() ?? "";
+        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, entry, _sessionTextures, card => Mech3.CanopyClumps.TileFor(chapter, card));
         if (_canopyClumps == null)
             return;
         _plane.AddChild(_canopyClumps.Root);

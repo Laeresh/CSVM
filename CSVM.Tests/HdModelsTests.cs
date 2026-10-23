@@ -46,6 +46,38 @@ public class HdModelsTests
         Assert.Null(model.GltfPath);
     }
 
+    /// <summary>A clump tile's files are read under their whole path and count as no replacement. No node
+    /// resolves to one, not even a node named like the file, and any other <c>.png</c> is ignored.</summary>
+    [Fact]
+    public void AClumpTileKeyReachesNoNode()
+    {
+        var root = TestData.TempDir();
+        Zip(Path.Combine(root, "HDModels", "pack.zip"),
+            ("pack/C1/firtree1.clump.png", "png"),
+            ("pack/C1/firtree1.clump.json", "json"),
+            ("pack/C1/firtree1.clump.side.png", "side"),
+            ("pack/C1/firtree1.png", "loose png"),
+            ("pack/C1/tower.glb", "tower"));
+
+        using var hd = HdModels.Open(root, "HDModels");
+
+        Assert.Equal(1, hd.Count);
+        Assert.Equal(3, hd.ClumpCount);
+        Assert.Equal("png", Text(hd.Clump("C1/FirTree1.clump.png")!.Value.Bytes));
+        Assert.Equal("json", Text(hd.Clump("c1/firtree1.clump.json")!.Value.Bytes));
+        Assert.Equal("side", Text(hd.Clump("C1/firtree1.clump.side.png")!.Value.Bytes));
+        Assert.EndsWith("pack/C1/firtree1.clump.png", hd.Clump("C1/firtree1.clump.png")!.Value.Source);
+        Assert.Null(hd.Clump("C1/firtree1.png"));
+        Assert.Null(hd.Clump("C1/tower.glb"));
+        Assert.Null(hd.Clump("C4/firtree1.clump.png"));
+        foreach (string node in new[] { "firtree1", "firtree1.clump", "firtree1.clump.png", "FIRTREE1.CLUMP.JSON", "firtree1.clump.side.png" })
+        {
+            Assert.Null(hd.KeyFor(node, chapter: "C1"));
+            Assert.Null(hd.KeyFor(node));
+        }
+        Assert.Equal("c1/tower", hd.KeyFor("tower", chapter: "C1"));
+    }
+
     [Fact]
     public void ATrailingFltIsDroppedFromTheNodeAndTheFileName()
     {

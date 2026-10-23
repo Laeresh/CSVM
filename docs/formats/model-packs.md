@@ -10,7 +10,8 @@ hit box and gameplay measurement keeps reading the original's geometry.
 
 - [Conceptual model](#conceptual-model)
 - [Reference](#reference): [folder and keys](#folder-and-keys), [what a file must hold](#what-a-file-must-hold),
-  [materials](#materials), [liveries](#liveries), [`shadow.glb`](#shadowglb), [`rig.json`](#rigjson)
+  [materials](#materials), [liveries](#liveries), [`shadow.glb`](#shadowglb), [`rig.json`](#rigjson),
+  [clump tiles](#clump-tiles)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [never replaced](#never-replaced),
   [gameplay keeps the original](#gameplay-keeps-the-original), [network play](#network-play)
 - [Evidence & limits](#evidence--limits)
@@ -172,11 +173,36 @@ the aircraft's build with a message naming the file and the entry. A flight laun
 is the exception: it logs that error, tells the player at the menu's next show, and flies the
 aircraft without its rig, none of the rig's entries applied.
 
+### Clump tiles
+
+Under Enhanced and Rich the far forest draws as impostor clumps, cards of a few trees each
+(`Mech3/CanopyClumps.cs`). Their atlas holds six tiles. A species with a clump tile fills its share
+of them with its own tiles; the other species' tiles are composed at load from their cards. The
+remake ships a species' tile beside its 3D model in `CSVM/data/vegetation_models/<chapter>/`,
+rendered from that model (`MakeVegetationModel.ps1`, [tooling.md](../tooling.md)), and a pack
+replaces it under the same key.
+
+| Item | Rule |
+|---|---|
+| Key | `<chapter>/<card>.clump.png`, the chapter spelt as its `extracted/` folder. `<card>` is the listed card's model without `.flt` (`C1/firtree1.clump.png`); over painted canopy (C3) it is the canopy texture without its extension (`C3/forest1.clump.png`, the crowns cut from `forest1.tif`). A chapter key only: one card name is a different size per chapter. |
+| Files | The image `<card>.clump.png`, its sidecar `<card>.clump.json`, and an optional side map `<card>.clump.side.png`, all in one pack. Shipped, the images are `.png.bin` so Godot imports nothing. |
+| Precedence | A pack's tile, then the shipped one, then the tiles composed from the cards. All the files come from the one source that holds the image and its sidecar: a pack holding only one of the two, or a bad sidecar, logs a warning and keeps the shipped tile. |
+| Image | A PNG strip of equal tiles side by side, RGBA, cut to clear and solid at alpha 0.5. A tile is `width_m` wide and as tall as its pixels make it at that width, with the trees standing on its bottom row. The game draws it at 10 px a metre, so a larger image is scaled down. The atlas slot is 24 m wide and as tall as the tallest of the listed cards' composed tiles and the tiles in it, a tile centred on its floor. |
+| Sidecar | `{"width_m": 24, "trees": [3, 2, 4]}`. `width_m`: a tile's width in metres, above 0 and at most 24. `trees`: one whole count of at least 1 per tile, which also sets how many tiles the strip holds. Keys starting `_` are prose; any other key fails. |
+| Side map | The image's size; red is each solid texel's sun-side share on its tree's right half, green on its left, full a sixth of the tree's width off its trunk. The game's sun-side gain then lands per tree as on a card. Without it each tile is shaded as one tree. |
+| Slots | A tiled species takes its share of the card stamps in slots, by largest remainder; the untiled species together take the rest, composed. A species under about a twelfth of the stamps gets no slot and stays composed. Its slots cycle through its tiles. |
+| Density | The clumps carry the cards' trees per area: each cell's clumps are its kept stamps over the mean tree count of the six slots, which reads a tile's count from its sidecar. A tile with other counts changes how many clumps stand, not how many trees. |
+| Separate from models | A clump file keeps its whole name as its key, so no gamez node resolves to it, and it counts in the load line's `clump tile files`, not in its replacements. Any other `.png` in a pack is ignored. |
+
+Each build logs `canopy clumps: ... tiles: <card> in <n> slots from <file>` (or `all composed`),
+the quickest check that a key was read.
+
 ## Reader rules and edge cases
 
 ### Never replaced
 
-Whatever the pack holds, these keep the original's mesh: billboards and glow sprites, single-axis
+Whatever the pack holds, these keep the original's mesh: billboards and glow sprites (a vegetation
+card's far clumps take a [clump tile](#clump-tiles) instead), single-axis
 facades (the splash columns, `g1182` on C1's water tower), a node whose original draws nothing (every
 weapon root such as `he_rocket` is a meshless group, so its body is a descendant like `g12`), the
 horizon dome, the cloud and sky meshes (the `skywal*` walls excepted), open-sea meshes, and terrain:
@@ -241,6 +267,11 @@ than the one this machine draws its store on.
   livery lab; from below, the same 16 silhouette pixels differ painted as unpainted. A copy edited in
   Blender with its UVs and material names kept takes each livery on the changed shape, and the same
   copy with its wing materials renamed keeps on its wings the painted skin the export embedded.
+- The clump tile rules are `Mech3/ClumpTile.cs` (the sources and the sidecar), `Extraction/HdModels.cs`
+  (the keys) and `Mech3/CanopyClumps.cs` (`Slots`, `MeanTrees`, the decode), covered by
+  `CSVM.Tests/ClumpTileTests.cs`, `HdModelsTests.cs` and `CanopyClumpsTests.cs` and by the
+  `canopy-clumps` suite, which reads the shipped `firtree1` tile on C1, composes without it, and
+  takes a pack's tile with other counts at a higher tree count a clump.
 - The `rig.json` schema and its checks are CSVM's own; the marker frame and pylon sides are the
   original's ([markers.md](markers.md)).
 - What Godot's importer gives the builder: `alphaCutoff` as the alpha scissor threshold,
