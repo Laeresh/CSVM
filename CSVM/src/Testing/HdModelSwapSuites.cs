@@ -231,6 +231,94 @@ internal static class HdModelSwapSuites
         }
     }
 
+    // A replaced or rig-arranged cockpit1 under the stereo build draws as the stock one. Able to fail: a
+    // round trip keeping its head plate, or a reticle left at the original glass's place.
+    [Suite("hd-model-cockpit1-stereo",
+        "under the stereo build the unedited cockpit1.glb round trip draws as the stock interior: the replaced node's head "
+        + "plate is cut by shape, leaving as many triangles as stock, and its one collimated reticle reads the glass as stock's "
+        + "does; a rig table moving the glass, and a pack's texture-named glass surface at a new place, each put the reticle in "
+        + "the moved glass's plane with the same texel at its centre; a per-plane interior scale sets the mount, leaves the "
+        + "interior-unit poses and the reticle as they are, and the seated eye offset adds as on stock")]
+    internal static void CockpitInteriorStereo(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        string plane = ctx.PlaneName;
+        // The stereo shader reads the eye feed's globals; declared without making the run stereo.
+        XrCockpit.DeclareEyeGlobals();
+        var cockpit1 = gamez.FindByName(plane)?.Children.Select(c => gamez.Nodes[c])
+            .FirstOrDefault(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        var plate = cockpit1 == null ? new HashSet<GameZPolygon>() : CockpitPlate.Find(gamez, cockpit1);
+        var glasses = cockpit1 == null ? new List<GunsightReticle.Glass>() : GunsightReticle.Find(gamez, cockpit1);
+        ctx.Check(plate.Count > 0 && glasses.Count == 1, $"{plane}'s cockpit1 carries a head plate of {plate.Count} polygons and {glasses.Count} sight glass");
+        if (plate.Count == 0 || glasses.Count != 1)
+        {
+            return;
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, "hd-model-cockpit1-stereo");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        // The export an author's F10 makes, from the flat build.
+        using var none = HdModels.Open(root, "no-such-pack");
+        var (_, flatModel) = BuildInterior(gamez, textures, plane, none);
+        string tripFolder = Path.Combine(root, "RoundTrip", "pack", "planes", plane);
+        string airframe = Path.Combine(tripFolder, plane + ".glb");
+        Directory.CreateDirectory(tripFolder);
+        ctx.Same((long)Error.Ok, (long)GltfExporter.Export(flatModel, airframe, cockpitPath: GltfExporter.CockpitPathBeside(airframe)),
+            $"the aircraft export write result");
+        flatModel.Free();
+
+        var (stock, stockModel) = BuildInterior(gamez, textures, plane, none, xr: true);
+        try
+        {
+            ctx.Check(stock.InteriorOmittedPolygons == plate.Count && stock.ReplacedPlateTriangles == 0,
+                $"stock: the head plate's {stock.InteriorOmittedPolygons} polygons are omitted, no triangle cut");
+            // A headless renderer keeps no glass pixels to split, so no reticle is built and its checks drop out.
+            bool headless = stock.GunsightReticles == 0 && DisplayServer.GetName() == SuiteRender.Headless;
+            var look = headless ? null : Reticle(ctx, "stock", stock);
+            if (headless)
+            {
+                ctx.Note($"headless: no reticle overlay is built, so the reticle checks drop out");
+            }
+            else if (look == null)
+            {
+                return;
+            }
+
+            var centre = CockpitTransplant.GlassFrame(glasses)!.Value.Origin;
+            CheckStereoRoundTrip(ctx, gamez, textures, plane, root, stock, look, plate.Sum(p => p.VertexIndices.Count - 2));
+            var moved = new Vector3(1.5f, -0.75f, 0.5f);
+            string rig = $$"""{ "cockpit": { "gauges": { "glass": { "position": [{{Num(centre.X + moved.X)}}, {{Num(centre.Y + moved.Y)}}, {{Num(centre.Z + moved.Z)}}] } } } }""";
+            Directory.CreateDirectory(Path.Combine(root, "Moved", "pack", "planes", plane));
+            File.WriteAllText(Path.Combine(root, "Moved", "pack", "planes", plane, "rig.json"), rig);
+            using (var pack = HdModels.Open(root, "Moved"))
+            {
+                var (built, model) = BuildInterior(gamez, textures, plane, pack, xr: true);
+                CheckMovedReticle(ctx, "table", built, look, centre, moved);
+                model.Free();
+            }
+
+            CheckPackGlass(ctx, gamez, textures, plane, root, stock, look, centre);
+            // The round trip and the table together, at a per-plane scale.
+            File.WriteAllText(Path.Combine(tripFolder, "rig.json"), rig);
+            using (var both = HdModels.Open(root, "RoundTrip"))
+            {
+                CheckScaledMount(ctx, gamez, textures, plane, both, stock, look, centre, moved);
+            }
+        }
+        finally
+        {
+            stockModel.Free();
+        }
+    }
+
     // The export's cockpit1.glb, put unedited into a pack, redraws every meshed interior node as the
     // original. The airframe file holds no interior node.
     private static void CheckInteriorRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, string plane,
@@ -284,6 +372,153 @@ internal static class HdModelSwapSuites
             model.Free();
         }
     }
+
+    private static void CheckStereoRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, string root,
+        PlaneBuilder stock, GunsightReticle.Look? look, int plateTriangles)
+    {
+        using var trip = HdModels.Open(root, "RoundTrip");
+        var (built, model) = BuildInterior(gamez, textures, plane, trip, xr: true);
+        try
+        {
+            ctx.Check(built.ReplacedPlateTriangles == plateTriangles,
+                $"round trip: the replaced node's head plate is cut by shape, {built.ReplacedPlateTriangles} of its {plateTriangles} triangles");
+            int want = Triangles(stock.CockpitInterior!), got = Triangles(built.CockpitInterior!);
+            ctx.Check(want == got, $"round trip: the stereo interior draws as many triangles as stock {got}/{want}");
+            ctx.Note($"round trip: {built.ReplacedPlateTriangles} head plate triangles cut, {got} interior triangles drawn against stock's {want}");
+            if (look is { } reference && Reticle(ctx, "round trip", built) is { } seen)
+            {
+                ctx.Check(SameLook(seen, reference) && ReticleParam(built, "depth_bias").IsEqualApprox(ReticleParam(stock, "depth_bias"))
+                        && ReticleParam(built, "authored_eye").IsEqualApprox(ReticleParam(stock, "authored_eye")),
+                    $"round trip: the reticle reads the glass as stock's does, plane {seen.N} at {seen.H:0.####} against {reference.N} at {reference.H:0.####}");
+            }
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
+
+    // A pack's texture-named glass surface, the stock glass moved, replacing the node that holds it.
+    private static void CheckPackGlass(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, string root,
+        PlaneBuilder stock, GunsightReticle.Look? look, Vector3 centre)
+    {
+        var interior = stock.CockpitInterior!;
+        var names = stock.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).ToDictionary(m => m.Material.GetInstanceId(), m => m.TextureName);
+        var holder = interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Select(mi => (Instance: mi, Surface: Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0)
+                .FirstOrDefault(s => mi.GetActiveMaterial(s) is { } m && names.ContainsKey(m.GetInstanceId()), -1)))
+            .FirstOrDefault(h => h.Surface >= 0);
+        ctx.Check(holder.Instance != null, $"the stock interior draws its glass");
+        if (holder.Instance == null)
+        {
+            return;
+        }
+
+        string node = AnimRuntime.NameOf(holder.Instance.GetParent<Node3D>());
+        string texture = names[holder.Instance.GetActiveMaterial(holder.Surface).GetInstanceId()];
+        var moved = new Vector3(-1f, 0.5f, -0.25f);
+        var local = PlaneRigPatch.PlaneFrame(holder.Instance, interior).Basis.Inverse() * moved;
+        var arrays = ((ArrayMesh)holder.Instance.Mesh).SurfaceGetArrays(holder.Surface);
+        var glass = new Godot.Collections.Array();
+        glass.Resize((int)Mesh.ArrayType.Max);
+        glass[(int)Mesh.ArrayType.Vertex] = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Select(v => v + local).ToArray();
+        glass[(int)Mesh.ArrayType.TexUV] = arrays[(int)Mesh.ArrayType.TexUV];
+        glass[(int)Mesh.ArrayType.Normal] = arrays[(int)Mesh.ArrayType.Normal];
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, glass);
+        mesh.SurfaceSetMaterial(0, new StandardMaterial3D { ResourceName = texture });
+        var scene = new Node3D { Name = "pack_scene" };
+        var file = new Node3D { Name = node };
+        file.SetMeta(AnimRuntime.NameMeta, node);
+        file.AddChild(new MeshInstance3D { Name = "mesh", Mesh = mesh });
+        scene.AddChild(file);
+        string path = Path.Combine(root, "PackGlass", "pack", "planes", plane, node + ".glb");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, path), $"planes/{plane}/{node}.glb write result");
+        scene.Free();
+        using var pack = HdModels.Open(root, "PackGlass");
+        var (built, model) = BuildInterior(gamez, textures, plane, pack, xr: true);
+        CheckMovedReticle(ctx, $"pack {node}.glb", built, look, centre, moved);
+        model.Free();
+    }
+
+    private static void CheckScaledMount(TestContext ctx, GameZ gamez, TextureArchive textures, string plane, HdModels pack,
+        PlaneBuilder stock, GunsightReticle.Look? look, Vector3 centre, Vector3 moved)
+    {
+        const float factor = 1.25f;
+        var (plain, plainModel) = BuildInterior(gamez, textures, plane, pack, xr: true);
+        var (scaled, scaledModel) = BuildInterior(gamez, textures, plane, pack, xr: true, factor: factor);
+        try
+        {
+            var a = plain.CockpitInterior!;
+            var b = scaled.CockpitInterior!;
+            ctx.Check(b.Transform.IsEqualApprox(PlaneBuilder.StereoMount(scaled.CockpitCameraOffset, PlaneBuilder.InteriorScale * factor))
+                    && scaled.ReplacedPlateTriangles == plain.ReplacedPlateTriangles && plain.ReplacedPlateTriangles > 0,
+                $"scaled: the round trip with the table mounts at {factor} times InteriorScale and cuts its plate the same");
+            var glassA = a.GetNodeOrNull<Node3D>(CockpitTransplant.GlassName);
+            var glassB = b.GetNodeOrNull<Node3D>(CockpitTransplant.GlassName);
+            ctx.Check(glassA != null && glassB != null && glassA.Transform.IsEqualApprox(glassB.Transform),
+                $"scaled: the moved glass keeps its interior-unit pose");
+            CheckMovedReticle(ctx, "scaled", scaled, look, centre, moved);
+            var seat = new Vector3(0f, 0.02f, 0.06f);
+            var stockEye = new XrCockpit(stock.CockpitInterior!, seat, stock.InteriorEye).EyeInAircraft;
+            var tripEye = new XrCockpit(a, seat, plain.InteriorEye).EyeInAircraft;
+            ctx.Check(tripEye.IsEqualApprox(stockEye), $"the seated eye offset adds to the replaced interior's eye as to stock's {tripEye}/{stockEye}");
+        }
+        finally
+        {
+            plainModel.Free();
+            scaledModel.Free();
+        }
+    }
+
+    // The reticle of a moved glass: in the glass's plane carried by the move, the same texel at its centre.
+    private static void CheckMovedReticle(TestContext ctx, string label, PlaneBuilder built, GunsightReticle.Look? stock, Vector3 centre, Vector3 moved)
+    {
+        if (stock is not { } look || Reticle(ctx, label, built) is not { } seen)
+        {
+            return;
+        }
+
+        float off = seen.N.Dot(centre + moved) - seen.H;
+        var uv = seen.At(centre + moved);
+        ctx.Check(seen.N.IsEqualApprox(look.N) && Mathf.Abs(off) < 1e-3f && uv.DistanceTo(look.At(centre)) < 1e-4f
+                && Mathf.Abs(look.N.Dot(centre) - look.H) < 1e-3f,
+            $"{label}: the reticle lies in the moved glass's plane, {off:0.#####} units off, centre texel {uv} against stock {look.At(centre)}");
+    }
+
+    // The one collimated reticle a stereo interior carries, as the overlay's shader reads the glass.
+    private static GunsightReticle.Look? Reticle(TestContext ctx, string label, PlaneBuilder built)
+    {
+        var overlays = built.CockpitInterior!.FindChildren("gunsight_reticle", "MeshInstance3D", recursive: true, owned: false)
+            .OfType<MeshInstance3D>().ToList();
+        ctx.Check(overlays.Count == 1 && built.GunsightReticles == 1, $"{label}: one reticle overlay ({overlays.Count}, {built.GunsightReticles} built)");
+        if (overlays.Count != 1 || overlays[0].MaterialOverride is not ShaderMaterial m)
+        {
+            return null;
+        }
+
+        return new GunsightReticle.Look(m.GetShaderParameter("grad_u").AsVector3(), m.GetShaderParameter("grad_v").AsVector3(),
+            m.GetShaderParameter("uv_origin").AsVector2(), m.GetShaderParameter("plane_n").AsVector3(), m.GetShaderParameter("plane_h").AsSingle());
+    }
+
+    private static Vector3 ReticleParam(PlaneBuilder built, string name) =>
+        built.CockpitInterior!.FindChildren("gunsight_reticle", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Select(mi => ((ShaderMaterial)mi.MaterialOverride).GetShaderParameter(name))
+            .Select(v => v.VariantType == Variant.Type.Float ? new Vector3(v.AsSingle(), 0f, 0f) : v.AsVector3()).First();
+
+    private static bool SameLook(GunsightReticle.Look a, GunsightReticle.Look b) =>
+        a.N.IsEqualApprox(b.N) && Mathf.Abs(a.H - b.H) < 1e-3f && a.GradU.DistanceTo(b.GradU) < 1e-4f
+        && a.GradV.DistanceTo(b.GradV) < 1e-4f && a.Origin.DistanceTo(b.Origin) < 1e-3f;
+
+    // Every triangle the interior's meshes draw, the reticle overlay's left out.
+    private static int Triangles(Node3D interior) =>
+        interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
+            .Where(mi => mi.Name.ToString() != "gunsight_reticle").Select(mi => mi.Mesh).OfType<ArrayMesh>()
+            .Sum(mesh => Enumerable.Range(0, mesh.GetSurfaceCount()).Sum(s =>
+                (mesh.SurfaceGetArrayIndexLen(s) is > 0 and var index ? index : mesh.SurfaceGetArrayLen(s)) / 3));
+
+    private static string Num(float f) => f.ToString("R", CultureInfo.InvariantCulture);
 
     private static Godot.Collections.Array<GltfNode> GltfNodes(string file)
     {
@@ -355,13 +590,14 @@ internal static class HdModelSwapSuites
             $"{pack}: the gauges bind as without the pack needles={panel?.NeedleCount}/{plainPanel?.NeedleCount} lamps={panel?.LampCount}/{plainPanel?.LampCount} readouts={panel?.ReadoutCount}/{plainPanel?.ReadoutCount} belts={panel?.BeltCount}/{plainPanel?.BeltCount} zones={panel?.DamageZoneCount}/{plainPanel?.DamageZoneCount}");
     }
 
-    private static (PlaneBuilder Builder, Node3D Model) BuildInterior(GameZ gamez, TextureArchive textures, string plane, HdModels pack)
+    private static (PlaneBuilder Builder, Node3D Model) BuildInterior(GameZ gamez, TextureArchive textures, string plane, HdModels pack,
+        bool xr = false, float factor = 1f)
     {
         var saved = HdModels.Current;
         HdModels.Current = pack;
         try
         {
-            var builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: true);
+            var builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: true, xrInterior: xr, interiorScaleFactor: factor);
             return (builder, builder.Build(plane));
         }
         finally

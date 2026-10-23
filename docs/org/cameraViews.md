@@ -806,6 +806,13 @@ drew it, the reticle points where the flat body cockpit's does. A moved or turne
 it shows with it, which is the pack author's to set. A body cockpit whose rig names no glass draws
 neither glass nor reticle.
 
+Inside `cockpit1` the overlay is built from the glass as the build drew it (`GunsightReticle.Drawn`),
+read from the stereo eye in interior units: a glass the rig's `gauges` table moved, one riding a moved
+assembly, and a pack's surface named after the glass texture each carry it, and a moved glass moves
+the aim it shows with it in the same way. The Bloodhawk's unedited `cockpit1.glb` round trip builds the
+same overlay as stock, and its left eye under SHOT-45's `--xr-sim` differs from stock's in 3 pixels by
+1 level.
+
 Measured on the stand-in with the reticle at its authored size, C1 empty stage, Bloodhawk, pose
 `--direction=0,0.34,-0.94 --hold=0,0,0,0.6`, frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
 x 640.192 / 640.191 and y 321.24 in both eyes, the authored eye's projection of the centre cross being

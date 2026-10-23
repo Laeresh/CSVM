@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, under the headset
 
 31. ◐ [local] Body cockpit under the headset
-32. ☐ [local] Replaced `cockpit1` under the headset
+32. ◐ [local] Replaced `cockpit1` under the headset
 
 ## Dependency and parallelism notes
 
@@ -875,7 +875,69 @@ the axis-aligned-pin warning in `docs/verification.md`.>
 
 **⚠ Traps.** <TODO>
 
-## D32 ☐ [local] Replaced `cockpit1` under the headset
+## D32 ◐ [local] Replaced `cockpit1` under the headset
+
+**Landed.** A replaced or rig-arranged `cockpit1` under the stereo build draws as the stock one: the
+head plate is left out of a replacement, and the collimated reticle sits on the glass wherever the
+build drew it. The user's look in the headset is owed, batched with B14 and D31.
+
+- **Where the plate is.** On every player airframe the plate's 5 or 7 polygons share one node with
+  canopy structure: `structure` itself (Autogyro, Avenger) or a node under it (`g366` on the
+  Bloodhawk, `g715` Pfighter, `canopy2` Fury, Balmoral and Kestrel, `g150` Warhawk, `g803` Brigand and
+  Peacemaker, `g347` Firebrand). The C21 export writes it into that node's mesh.
+- **The rule: cut by shape.** `CockpitPlate.IsPlateShape` is `IsPlate` without the priority and gamez
+  material checks: every corner on one z plane 0 to 8 interior units aft of the `cockpit1` origin, face
+  normal aft by the corners' order. `CockpitPlate.Kept` drops the triangles of one surface that meet it.
+  `PlaneBuilder.CutReplacedPlate` runs it, under the stereo path outside a body cockpit, on every
+  instance drawn from the pack (`GamezMeshMeta`) and only on surfaces whose material is not texture-named
+  (not in `InteriorMaterials`); the instance takes a mesh of its own, since the cached replacement is
+  shared. Counted in `ReplacedPlateTriangles`. Chosen over the alternatives because it needs nothing
+  of the export or the author: a pack convention (a glTF node or material name) would need the export
+  to split the plate out of a node whose surfaces it shares by material, and "keep the plate on its own
+  node" cannot hold, since the plate's node is canopy structure an author replaces. The untextured
+  condition is needed: over the eleven interiors, triangulated as the build draws them, the shape alone
+  takes exactly the plate's untextured triangles, but textured triangles of that shape stand on the
+  Autogyro (2), Brigand (3) and Kestrel (7). An authored plate is cut when it stays flat, aft-facing and
+  untextured; the rule is in model-packs.md's "Under a headset" row.
+- **The reticle follows the glass.** `GunsightReticle.Drawn(interior, materials, gamez glasses)` reads the
+  glass off the built meshes: each surface whose active material is a glass texture's (from
+  `InteriorMaterials`) is one glass, its vertices carried into the interior's frame
+  (`PlaneRigPatch.PlaneFrame`), its UVs from the surface, its priority the gamez glass's of that
+  texture. `MountCockpitInterior` now adds the overlays after `CockpitTransplant.PoseInside`, from
+  `Drawn`, so a glass the C22 table moved, one riding a moved assembly (the Brigand's `g730`), and a
+  pack's texture-named `cockpit6`/`crosshair` surface at a new place each carry it. A glass under any
+  other name has no reticle. `Overlay`'s pane takes its first edge to the first corner off the first,
+  since a drawn surface repeats corners. The body cockpit keeps D31's `Carried` path;
+  `AddGunsightReticles` now takes the glasses in the parent's frame.
+- **Tuning.** `XrCockpit` reads only the mount and the eye, so the per-plane `interiorScaleFactor` and
+  seated-eye offset reach a replaced `cockpit1` unchanged, and the C22 interior-unit poses and the
+  overlay (in interior units, its margin `EyeReachM / _interiorScale`) scale with the mount.
+- **Tests.** `CockpitPlateTests.TheShapeCutDropsExactlyThePlatesUntexturedTriangles` (all eleven
+  airframes) and `TheShapeCutKeepsEveryTriangleButTheAftFacingOnes`. Suite `hd-model-cockpit1-stereo`
+  (`Testing/HdModelSwapSuites.cs`, install only, windowed through `headless-limits.json`
+  `headlessDiffers`): stock omits the 7 plate polygons; the unedited round trip cuts the plate's 25
+  triangles, draws stock's 1151, and its one overlay equals stock's (plane, UV gradients, depth bias,
+  eye); a rig moving `glass` by (1.5, -0.75, 0.5) units and a `dashboard.glb` holding the glass surface
+  moved by (-1, 0.5, -0.25) each put the overlay in the moved glass's plane with stock's centre texel;
+  the round trip plus the table at a 1.25 scale factor mounts at `StereoMount(marker, 0.05)`, cuts the
+  same plate, keeps the glass's interior-unit pose and the overlay, and a seated-eye offset gives the
+  stock `EyeInAircraft`. With the cut and `Drawn` switched off, the suite fails on six checks.
+- **Shots** (`.scratch/d32-shots/`, SHOT-45's `--xr-sim=eye=1280x720,fov=96.4268,ipd=20,head=0.01/0/0,
+  shot=left,pitch=-4.70001`, `--fly --stage=empty --plane=player_bhawk --view=cockpit --no-cockpit-pass`):
+  `xr-left-stock.png` and `xr-left-roundtrip.png` differ in 3 pixels by 1 level, and register at 0.000 px
+  in seven regions (struts, compass, three dials, the reticle; `.scratch/d32-reg/reg.py`).
+  `xr-left-roundtrip-glass-moved.png` has the table move the glass 3 units right and 1.5 down, with the
+  reticle on it. `flat-stock.png` is the flat frame: it sits 6 to 11 px off both stereo frames in the
+  dial and strut regions, the same for stock and the round trip, since the stereo eye is the
+  `cockpit_camera` marker in interior units and the flat eye the interior's origin.
+- **Not covered.** The flight log line `head plate left out (N polygons)` counts the gamez polygons
+  only (it is written by `HumanFlightAdapter`, outside this item); the cut triangles are in
+  `ReplacedPlateTriangles`. A pack glass that is not flat, or whose UVs are not affine over it, draws a
+  wrong reticle.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A replaced `cockpit1` draws under the headset as the original does: no head plate behind
 the eye, a collimated reticle on its glass, the per-plane tuning applied.

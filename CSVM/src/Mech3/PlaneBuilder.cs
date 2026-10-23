@@ -153,6 +153,10 @@ public sealed class PlaneBuilder
     /// (<see cref="CockpitPlate"/>), none on every other build.</summary>
     public int InteriorOmittedPolygons => _interiorScene?.OmittedPolygonCount ?? 0;
 
+    /// <summary>The head plate's triangles the stereo interior cut from model pack replacements
+    /// (<see cref="CockpitPlate.Kept"/>), which carry no polygons to omit; none on every other build.</summary>
+    public int ReplacedPlateTriangles { get; private set; }
+
     /// <summary>The collimated reticle overlays the stereo interior carries (<see cref="GunsightReticle"/>),
     /// one per sight glass; none on every other build.</summary>
     public int GunsightReticles { get; private set; }
@@ -595,7 +599,7 @@ public sealed class PlaneBuilder
             ParkInteriorStates(n3d);
             if (xr && !body)
             {
-                AddGunsightReticles(n3d, node, Transform3D.Identity, InteriorEye, _interiorScale);
+                CutReplacedPlate(n3d);
             }
 
             built.AddChild(n3d);
@@ -615,6 +619,13 @@ public sealed class PlaneBuilder
             {
                 CockpitTransplant.PoseInside(n3d, Cockpit,
                     CockpitTransplant.GlassFrame(GunsightReticle.Find(_gamez, node)), InteriorMaterials);
+            }
+
+            if (xr && !body)
+            {
+                // Read where the build left the glass: moved by the table, on a moved assembly, or a pack's own.
+                AddGunsightReticles(n3d, GunsightReticle.Drawn(n3d, InteriorMaterials, GunsightReticle.Find(_gamez, node)),
+                    InteriorEye, _interiorScale);
             }
 
             return;
@@ -639,19 +650,77 @@ public sealed class PlaneBuilder
     }
 
     // One collimated reticle overlay per sight glass the build split a texture for, under parent.
-    // The glass goes into parent's frame by toParent, and eye reads it there at metresPerUnit.
+    // Each glass is in parent's frame, and eye reads it there at metresPerUnit.
     // It takes the glass's own depth bias, so it hides behind whatever hides the glass.
-    private void AddGunsightReticles(Node3D parent, GameZNode root, Transform3D toParent, Vector3 eye, float metresPerUnit)
+    private void AddGunsightReticles(Node3D parent, IEnumerable<GunsightReticle.Glass> glasses, Vector3 eye, float metresPerUnit)
     {
-        foreach (var glass in GunsightReticle.Find(_gamez, root))
+        foreach (var glass in glasses)
         {
-            var placed = glass with { Corners = glass.Corners.Select(c => toParent * c).ToList() };
             if (_gunsight.GetValueOrDefault(glass.TextureName) is { } layers
-                && GunsightReticle.Overlay(placed, layers, GunsightReticle.EyeReachM / metresPerUnit, _interiorScene!.PriorityBias(glass.Priority), eye) is { } overlay)
+                && GunsightReticle.Overlay(glass, layers, GunsightReticle.EyeReachM / metresPerUnit, _interiorScene!.PriorityBias(glass.Priority), eye) is { } overlay)
             {
                 parent.AddChild(overlay);
                 GunsightReticles++;
             }
+        }
+    }
+
+    // A pack's mesh holds no gamez polygons for OmittedPolygons to drop, so under the headset its
+    // untextured triangles shaped as the head plate leave (CockpitPlate.Kept). A texture-named surface
+    // never does: three interiors carry textured triangles of that shape.
+    private void CutReplacedPlate(Node3D interior)
+    {
+        var textured = InteriorMaterials.Select(m => m.Material.GetInstanceId()).ToHashSet();
+        foreach (var instance in interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
+        {
+            if (!instance.HasMeta(SceneBuilder.GamezMeshMeta) || instance.Mesh is not ArrayMesh mesh)
+            {
+                continue;
+            }
+
+            var frame = PlaneRigPatch.PlaneFrame(instance, interior);
+            var surfaces = new List<(Godot.Collections.Array Arrays, Mesh.PrimitiveType Primitive, string Name, Material? Material)>();
+            int cutHere = 0;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                var arrays = mesh.SurfaceGetArrays(s);
+                var material = mesh.SurfaceGetMaterial(s);
+                if (mesh.SurfaceGetPrimitiveType(s) == Mesh.PrimitiveType.Triangles && material != null
+                    && !textured.Contains(material.GetInstanceId()))
+                {
+                    var index = arrays[(int)Mesh.ArrayType.Index];
+                    var indices = index.VariantType == Variant.Type.PackedInt32Array ? index.AsInt32Array() : null;
+                    var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                    var kept = CockpitPlate.Kept(vertices, indices, frame);
+                    int before = (indices?.Length ?? vertices.Length) / 3;
+                    cutHere += before - (kept.Length / 3);
+                    if (kept.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    arrays[(int)Mesh.ArrayType.Index] = kept;
+                }
+
+                surfaces.Add((arrays, mesh.SurfaceGetPrimitiveType(s), mesh.SurfaceGetName(s), material));
+            }
+
+            if (cutHere == 0)
+            {
+                continue;
+            }
+
+            // The cached replacement is shared, so the instance takes a mesh of its own.
+            var own = new ArrayMesh();
+            foreach (var (arrays, primitive, name, material) in surfaces)
+            {
+                own.AddSurfaceFromArrays(primitive, arrays);
+                own.SurfaceSetName(own.GetSurfaceCount() - 1, name);
+                own.SurfaceSetMaterial(own.GetSurfaceCount() - 1, material);
+            }
+
+            instance.Mesh = own;
+            ReplacedPlateTriangles += cutHere;
         }
     }
 
@@ -662,7 +731,8 @@ public sealed class PlaneBuilder
     {
         if (glassCarried is { } carried)
         {
-            AddGunsightReticles(CockpitPanel!, interior, carried, CockpitCameraOffset, 1f);
+            AddGunsightReticles(CockpitPanel!, GunsightReticle.Find(_gamez, interior)
+                .Select(g => g with { Corners = g.Corners.Select(c => carried * c).ToList() }), CockpitCameraOffset, 1f);
         }
 
         _stereoBodyScene = AirframeScene(raceGhost: false, stereo: true);
