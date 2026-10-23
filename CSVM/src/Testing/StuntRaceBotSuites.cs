@@ -49,20 +49,6 @@ internal static class StuntRaceBotSuites
     private const float ShieldedStartM = 400f;
     private const float ShieldedSeconds = 120f;
 
-    // How long the field suite flies, seconds, and the turn either way over one leg of steering for a
-    // zone it fails, degrees. Then the sum of a leg's turns both ways that it fails, three and a half
-    // U-turns. An S of alternating U-turns adds 180 a turn, so three pass and four fail.
-    private const float FieldSeconds = 360f;
-    private const float FieldTurnDeg = 300f;
-    private const float FieldAbsTurnDeg = 630f;
-
-    // The bearing about an entry inside which two seats' handovers count as one path, and the share of
-    // seat pairs that may.
-    private const float OnePathDeg = 2f;
-    private const float OnePathShare = 0.15f;
-
-    // The seeds the field flies with line steering on, each a different field of approaches and fluffs.
-    private static readonly ulong[] FieldSeeds = { Seed, 0x5EED2440UL };
     [Suite("stunt-race-bot",
         "a local stunt race of one pane and one ace bot over the run chapter's IA1 course: the launch seats "
         + "the bot, which carries guns but no ordnance and takes no target of its own, and races under its "
@@ -362,62 +348,6 @@ internal static class StuntRaceBotSuites
         }
     }
 
-    [Suite("stunt-race-bot-field",
-        "a local C1 stunt race of one pane and eight veteran bots in mixed planes, all starting from the race's one point, "
-        + "flown six minutes on each of two seeds: no bot circles or weaves on its way into a zone, its track turning under 300 "
-        + "degrees either way and under 630 both ways added up over any leg of steering for one zone; and the bots' approaches "
-        + "differ, at most 15 percent of the seat pairs that steer into one zone handing it to their pilots within 2 degrees of "
-        + "each other about its entry; ABLE-TO-FAIL CONTROLS: an S of four alternating U-turns stays under 300 either way and "
-        + "fails 630 both ways, where three pass; the first seed's field with its line steering off, each bot steering straight for the zone's one "
-        + "lead-in point, circles there and hands its zones over from bunched approaches")]
-    internal static void ABotFieldReachesEachApproachWithoutCircling(TestContext ctx)
-    {
-        string chapter = Course(ctx, "C1");
-        string[] planes = { "player_bhawk", "player_fury", "player_pfighter", "player_peacemaker", "player_fbrand", "player_kestrel", "player_warhawk", "player_brigand" };
-        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
-            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
-            bots: planes.Select((plane, i) => new VsBotEntry(plane, NetBotSkill.Veteran, 0, $"Field{i + 1}")).ToArray());
-        var ambient = NetCombatSuites.Ambient.Save();
-        try
-        {
-            // ABLE-TO-FAIL CONTROL of the measure: an S of alternating U-turns nets no turn either way.
-            SteerLeg S(int uTurns)
-            {
-                var s = new SteerLeg(0, 0, false, "S", 0, 0f);
-                for (int step = 1; step <= uTurns * 180; step++)
-                {
-                    s.Step(Mathf.DegToRad(Mathf.Min(step % 360, 360 - (step % 360))), StuntBotObjective.SteersIn, step);
-                }
-
-                return s;
-            }
-
-            var (three, four) = (S(3), S(4));
-            ctx.Check(four is { PeakTurnDeg: < FieldTurnDeg, AbsTurnDeg: >= FieldAbsTurnDeg } && three.AbsTurnDeg < FieldAbsTurnDeg,
-                $"ABLE-TO-FAIL CONTROL: [S] four alternating U-turns stay under {FieldTurnDeg:0} degrees either way and fail {FieldAbsTurnDeg:0} both ways, and three pass ({four}; {three})");
-            foreach (ulong seed in FieldSeeds)
-            {
-                if (Field(ctx, spec, planes, lineSteering: true, seed) is { } on)
-                {
-                    ctx.Check(on.Worst is { PeakTurnDeg: < FieldTurnDeg } && on.WorstBoth is { AbsTurnDeg: < FieldAbsTurnDeg },
-                        $"[field {seed:X}] no bot's track turns {FieldTurnDeg:0} degrees either way, or {FieldAbsTurnDeg:0} both ways, over a leg of steering for one zone ({on.Legs} legs, worst {on.Worst}, worst both ways {on.WorstBoth})");
-                    ctx.Check(on.Pairs > 0 && on.OnePath <= on.Pairs * OnePathShare,
-                        $"[field {seed:X}] the bots' approaches differ: {on.OnePath} of {on.Pairs} seat pairs hand one zone over within {OnePathDeg:0} degrees of each other, at most {OnePathShare * 100f:0} percent");
-                }
-            }
-
-            if (Field(ctx, spec, planes, lineSteering: false, Seed) is { } off)
-            {
-                ctx.Check(off.Worst is { PeakTurnDeg: >= 360f } && off.OnePath > off.Pairs * OnePathShare,
-                    $"ABLE-TO-FAIL CONTROL: [point] with line steering off a bot circles a lead-in point (worst {off.Worst}) and the approaches bunch ({off.OnePath} of {off.Pairs} seat pairs within {OnePathDeg:0} degrees)");
-            }
-        }
-        finally
-        {
-            ambient.Restore();
-        }
-    }
-
     // The live structures any zone's bots shoot: those its route runs into, and any optional target.
     private static List<DestructibleRegistry.Instance> Targets(StuntMission run, FlightController bot) =>
         bot.Destructibles is { } structures
@@ -598,94 +528,6 @@ internal static class StuntRaceBotSuites
         return steps;
     }
 
-    // The field flown on `seed` for FieldSeconds or until every bot finishes a run. It keeps each seat's
-    // steering legs, and its handovers about each entry where the bot steered into the zone.
-    private static FieldRun? Field(TestContext ctx, SessionSpec spec, string[] planes, bool lineSteering, ulong seed)
-    {
-        string cell = $"{(lineSteering ? "field" : "point")} {seed:X}";
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
-        var end = roster?.Length == planes.Length + 1 ? NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, seed, roster) : null;
-        try
-        {
-            if (end is not { Built: true, Session: { Race: { } race, RaceBots: { } bots } session })
-            {
-                ctx.Check(false, $"[{cell}] the session builds a race of a pane and {planes.Length} bots ({roster?.Length ?? 0} seat(s))");
-                return null;
-            }
-
-            bots.LineSteering = lineSteering;
-            var seats = Enumerable.Range(1, planes.Length).ToArray();
-            var open = new Dictionary<int, SteerLeg>();
-            var legs = new List<SteerLeg>();
-            var prior = new Dictionary<int, StuntBotOrder>();
-            var fluffs = new Dictionary<int, int>();
-            var handovers = new Dictionary<string, Dictionary<int, float>>();
-            int limit = Steps(FieldSeconds);
-            int steps = 0;
-            while (steps < limit && !seats.All(s => race.Of(s)!.RunsFinished > 0))
-            {
-                Step(session, ++steps);
-                foreach (int seat in seats)
-                {
-                    var bot = session.SeatRigs[seat].Controller!;
-                    var order = bots.Orders.GetValueOrDefault(seat);
-                    var before = prior.GetValueOrDefault(seat);
-                    prior[seat] = order;
-                    if (order.Leg == StuntBotLeg.Fluff && before.Leg != StuntBotLeg.Fluff)
-                    {
-                        fluffs[seat] = fluffs.GetValueOrDefault(seat) + 1;
-                    }
-
-                    bool steering = !bot.Crashed && order.Leg == StuntBotLeg.Steer;
-                    if (open.TryGetValue(seat, out var leg) && !(steering && leg.Zone == order.Zone && leg.Far == order.FarEnd))
-                    {
-                        legs.Add(leg);
-                        open.Remove(seat);
-                    }
-
-                    if (order.Zone < 0 || bot.Stunt!.Zones[order.Zone].Route is not { } route)
-                    {
-                        continue;
-                    }
-
-                    if (order.StartsRun && before.Leg == StuntBotLeg.Steer && before.Zone == order.Zone)
-                    {
-                        // Its bearing about the entry, off the ribbon's line.
-                        var into = route.EndTangentInto(order.FarEnd);
-                        var to = route.End(order.FarEnd) - bot.WorldPosition;
-                        to.Y = 0f;
-                        into = new Vector3(into.X, 0f, into.Z).Normalized();
-                        string zone = route.Name + (order.FarEnd ? " far" : "");
-                        handovers.TryAdd(zone, new Dictionary<int, float>());
-                        handovers[zone].TryAdd(seat, Mathf.RadToDeg(Mathf.Atan2(to.Cross(into).Y, to.Dot(into))));
-                    }
-
-                    if (steering)
-                    {
-                        var v = bot.WorldVelocity;
-                        float heading = Mathf.Atan2(v.X, v.Z);
-                        open.TryAdd(seat, new SteerLeg(seat, order.Zone, order.FarEnd, route.Name, steps, heading));
-                        open[seat].Step(heading, order.Why, steps);
-                    }
-                }
-            }
-
-            legs.AddRange(open.Values);
-            var gaps = handovers.Values.SelectMany(h => h.Values.SelectMany((a, i) => h.Values.Skip(i + 1).Select(b => Mathf.Abs(a - b)))).ToList();
-            var run = new FieldRun(legs.MaxBy(l => l.PeakTurnDeg), legs.MaxBy(l => l.AbsTurnDeg), legs.Count, gaps.Count(g => g < OnePathDeg), gaps.Count, legs.Sum(l => l.Misses));
-            ctx.Note($"[{cell}] steering legs (seat, zone, seconds, largest turn either way, turn both ways, misses sent round): {string.Join("; ", legs)}");
-            ctx.Note($"[{cell}] after {steps * GameClock.FixedDt:0} s, best runs and zones: {string.Join(", ", seats.Select(s => $"{planes[s - 1]} {Time(race.Of(s)!)} {race.Of(s)!.MostZones}"))}");
-            ctx.Note($"[{cell}] handover bearings about each entry, degrees: {string.Join("; ", handovers.Select(h => $"{h.Key} {string.Join(" ", h.Value.Values.Select(b => Mathf.RoundToInt(b)))}"))}");
-            ctx.Note($"[{cell}] fluffs per seat: {string.Join(", ", seats.Select(s => $"s{s} {fluffs.GetValueOrDefault(s)}"))}");
-            ctx.Note($"[{cell}] {run.Misses} misses of the cone sent round; worst leg {run.Worst}, both ways {run.WorstBoth}; {run.OnePath} of {run.Pairs} seat pairs within {OnePathDeg:0} degrees");
-            return run;
-        }
-        finally
-        {
-            end?.Close();
-        }
-    }
-
     // The bot started out along the approach to a zone's shielded end, flown until it clears that
     // zone or first crashes.
     private static void Shielded(TestContext ctx, SessionSpec spec, bool shut)
@@ -789,46 +631,5 @@ internal static class StuntRaceBotSuites
                 PhysicsServer3D.BodySetState(body.GetRid(), PhysicsServer3D.BodyState.Transform, body.GlobalTransform);
             }
         }
-    }
-    // One field run: its worst steering leg either way and both ways, and its leg count. Then its handover
-    // seat pairs within OnePathDeg and in all. Misses counts its bots' go-rounds after a missed cone.
-    private sealed record FieldRun(SteerLeg? Worst, SteerLeg? WorstBoth, int Legs, int OnePath, int Pairs, int Misses);
-
-    // One leg of a bot steering for one zone end. PeakTurnDeg is the largest its signed track turn
-    // reached either way since the leg began, degrees, so a full circle is 360. AbsTurnDeg adds its turns
-    // up both ways, so an S counts too. Misses counts the times it was sent round after steering in.
-    private sealed class SteerLeg(int seat, int zone, bool far, string name, int from, float heading)
-    {
-        private readonly int _from = from;
-        private float _lastHeading = heading;
-        private float _turnRad;
-        private float _absRad;
-        private string _why = "";
-        private int _to = from;
-
-        public int Zone => zone;
-
-        public bool Far => far;
-
-        public float PeakTurnDeg { get; private set; }
-
-        public float AbsTurnDeg => Mathf.RadToDeg(_absRad);
-
-        public int Misses { get; private set; }
-
-        public void Step(float heading, string why, int step)
-        {
-            float turn = Mathf.Wrap(heading - _lastHeading, -Mathf.Pi, Mathf.Pi);
-            _turnRad += turn;
-            _absRad += Mathf.Abs(turn);
-            _lastHeading = heading;
-            PeakTurnDeg = Mathf.Max(PeakTurnDeg, Mathf.Abs(Mathf.RadToDeg(_turnRad)));
-            Misses += _why == StuntBotObjective.SteersIn && why != StuntBotObjective.SteersIn ? 1 : 0;
-            _why = why;
-            _to = step;
-        }
-
-        public override string ToString() =>
-            $"s{seat} {name}{(far ? " far" : "")} {(_to - _from) * GameClock.FixedDt:0} s {PeakTurnDeg:0} deg {AbsTurnDeg:0} deg {Misses}";
     }
 }

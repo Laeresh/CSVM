@@ -40,7 +40,6 @@ internal sealed class StuntRaceBots
     private readonly List<(int Seat, StuntBotObjective Objective)> _bots;
     private readonly BotOrderLog _log = new();
     private readonly Dictionary<int, int> _respawns = new();
-    private readonly Dictionary<int, StuntBotOrder> _orders = new();
 
     // Each zone's targets, found when a bot first takes it. The blocking structure each route end
     // cannot see, found when a pick first reads that end.
@@ -67,14 +66,6 @@ internal sealed class StuntRaceBots
     /// a suite's control turns it off.</summary>
     public bool BotObjective { get; set; } = true;
 
-    /// <summary>Whether the bots steer onto their own approach lines. Off, each steers straight for a zone's
-    /// lead-in point; a suite's control turns it off.</summary>
-    public bool LineSteering
-    {
-        get => _bots.TrueForAll(b => b.Objective.OnLine);
-        set => _bots.ForEach(b => b.Objective.OnLine = value);
-    }
-
     /// <summary>Whether an end no round reaches a standing structure from is shut to the bots. Off,
     /// they take either end; a suite's control turns it off.</summary>
     public bool EndsShut { get; set; } = true;
@@ -82,9 +73,6 @@ internal sealed class StuntRaceBots
     /// <summary>Whether the world ray the run table was decided with struck the built world below the
     /// first zone's entry when the table was filled. A ray that strikes nothing refuses no end.</summary>
     public bool RunsSawWorld { get; }
-
-    /// <summary>Each bot seat's order on its last step, which a suite reads to follow its legs.</summary>
-    internal IReadOnlyDictionary<int, StuntBotOrder> Orders => _orders;
 
     /// <summary>One objective per bot seat flown here with a run of the course and its tier read off
     /// <paramref name="roster"/>. Every fluff is drawn on one seeded stream, and each bot's own approach
@@ -155,7 +143,6 @@ internal sealed class StuntRaceBots
 
             var order = BotObjective ? objective.Decide(run.Zones, at, bot.WorldVelocity, pilot.ZoneRun != null)
                 : new StuntBotOrder(StuntBotLeg.None, -1, at, false, BotOrderLog.ObjectiveOff);
-            _orders[seat] = order;
             if (order.StartsRun)
             {
                 pilot.FlyDangerZone(order.Ribbon!, order.FarEnd, at, "race bot");

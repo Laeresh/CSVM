@@ -148,10 +148,6 @@ public sealed class StuntBotObjective
     /// one path. The default is the ribbon's own line and <see cref="LeadInM"/>.</summary>
     public (float BearingDeg, float LeadInM) Approach { get; init; } = (0f, LeadInM);
 
-    /// <summary>Whether the bot steers onto its own approach line. Off, it steers straight for the ribbon's
-    /// lead-in point and ignores <see cref="Approach"/>, which a suite's control flies to show it circles.</summary>
-    public bool OnLine { get; set; } = true;
-
     /// <summary>The U-turn width a bot going round allows for, metres: <see cref="UTurnWidthM"/>. At 0 it
     /// turns in at its own lead-in, which a test's control flies to show it goes round again.</summary>
     public float UTurnWidth { get; init; } = UTurnWidthM;
@@ -334,14 +330,8 @@ public sealed class StuntBotObjective
             return new StuntBotOrder(StuntBotLeg.Run, next, entry, _farEnd, "flies the zone") { StartsRun = true, Ribbon = _route };
         }
 
-        float lead = OnLine ? Approach.LeadInM : LeadInM;
         var leadIn = LeadInPoint(entry, into);
-        float above = CruiseAboveM * Mathf.Clamp(Flat(leadIn - at).Length() / lead, 0f, 1f);
-        if (!OnLine)
-        {
-            return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, SteersIn);
-        }
-
+        float above = CruiseAboveM * Mathf.Clamp(Flat(leadIn - at).Length() / Approach.LeadInM, 0f, 1f);
         var aim = AimOnLine(entry, Line(into), at);
         var heading = Heading(aim - at, velocity, entry - at);
         return new StuntBotOrder(StuntBotLeg.Steer, next, at + (heading * LookAheadM) + (Vector3.Up * (entry.Y + above - at.Y)), _farEnd,
@@ -447,9 +437,8 @@ public sealed class StuntBotObjective
     // This bot's own approach line into an entry whose ribbon runs along `into`.
     private Vector3 Line(Vector3 into) => new Basis(Vector3.Up, Mathf.DegToRad(Approach.BearingDeg)) * into;
 
-    // The lead-in point the bot measures from: its own on its line, or the ribbon's with OnLine off.
-    private Vector3 LeadInPoint(Vector3 entry, Vector3 into) =>
-        OnLine ? entry - (Line(into) * Approach.LeadInM) : entry - (into * LeadInM);
+    // The lead-in point the bot measures from, on its own line.
+    private Vector3 LeadInPoint(Vector3 entry, Vector3 into) => entry - (Line(into) * Approach.LeadInM);
     // The open zone whose lead-in point is nearest, on the end and run a pick of it would take.
     private int Nearest(IReadOnlyList<StuntZone> zones, Vector3 at)
     {

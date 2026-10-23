@@ -250,7 +250,6 @@ It decides every zone end's run once at build, against the built world, for ever
 It steers each bot for its next zone, starts the ribbon run, and starts a completed run again while
 the window is open. The run's own gate test counts every zone, so the race and a network host hear a
 bot as any seat. Each bot's approach is drawn on its seat's own seeded stream, apart from the fluffs.
-`Orders` keeps each seat's last order for a suite, and `LineSteering` off is a suite's control.
 `BotObjective` turns the objective off. Rule: [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots".
 
 ## src/Session/World/BotOrderLog.cs

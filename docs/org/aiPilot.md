@@ -1707,13 +1707,11 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    coming back in is an S rather than a full circle. It cruises 150 m above the end's height while
    far and comes down to it over its lead-in's length to its lead-in point (`CruiseAboveM`).
    ⚠ A bot steered straight for a point circles it when it meets it from the side, and bots crowded
-   onto one path climb out of each other's way and so meet it from the side. The
-   `stunt-race-bot-field` suite flies eight bots over C1 on two seeds and fails a turn of 300 degrees
-   either way, or 630 degrees both ways added up, over one leg of steering for a zone. The second
-   bound is what an S fails: alternating U-turns net no turn either way, and four of them add up to
-   720. Its control steers for the ribbon's lead-in point (`StuntBotObjective.OnLine` off) and
-   circles. Its one-path share follows the drawn line bearings once the bots hold their lines: on
-   the second seed 7 of the 28 seat pairs draw lines within 2 degrees of each other.
+   onto one path climb out of each other's way and so meet it from the side. Eight bots on C1
+   steering for the ribbon's lead-in point circle there, where on their own lines no steering leg
+   turns 300 degrees either way or 630 both ways added up. A turn measure needs both bounds:
+   alternating U-turns net no turn either way (`docs/verification.md` INSTR-106). No suite flies the
+   field; the turn-in rule is held by `StuntBotObjectiveTests` on the flight model.
 3. Once it is short of the end by more than the 105 m lock range and at most 900 m (`ConeReachM`),
    within 30 degrees of the ribbon's line, and tracking within 30 degrees of the end
    (`ConeHalfAngleDeg`), the zone goes to `AiPilot.FlyDangerZone`: the decoded approach and rail

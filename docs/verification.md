@@ -771,8 +771,8 @@ covers it.
   ancestor before calling it a collision defect: a mission's boot script switches whole areas
   off.** C3/M01's `m01.gw` hides C3's guard towers with `WorldPartitionSetActive`.
 - **INSTR-106**, **Bound a track's turn added up both ways as well as its signed net turn: alternating
-  U-turns net to nothing either way.** In `stunt-race-bot-field` a C1 steering leg turns 231 degrees
-  signed and 505 both ways, while the control's circling leg reads 1095 on both.
+  U-turns net to nothing either way.** On a C1 field of eight Stunt Race bots a steering leg turns
+  231 degrees signed and 505 both ways, while a bot circling a lead-in point reads 1095 on both.
 
 ## SRC, sources and documents
 
