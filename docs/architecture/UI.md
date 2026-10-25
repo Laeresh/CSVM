@@ -765,8 +765,8 @@ stranger sends carries its build and the number is not read as the original game
 PromptFont icons left of it open the logs folder (the open log file's directory) and Godot's user
 folder through `Utils/FolderOpener.cs`; a line above it names a newer release (`Utils/ReleaseCheck.cs`)
 and opens its page. All three are mouse-only and never focusable, and `Launcher` keeps their clicks
-from Original's polled pointer. A Game Mode refusal shows in `Messagebox` (Original's box) or
-`DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
+from Original's polled pointer. In Game Mode all three refuse, since the shell there answers Ok and
+shows no window, and the refusal shows in `Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
 or `NoGameDataScreen.cs`: deeper screens' bottom plaques sit under it at a Steam Deck's aspect. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs

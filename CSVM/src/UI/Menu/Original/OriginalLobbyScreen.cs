@@ -2058,8 +2058,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                         items[i] = PlaneWord(i - 1);
                     }
 
-                    return new DropdownList(items, bot.RandomPlane ? 0 : bot.Airframe + 1, _ => true,
-                        i => lobby.SetBotAirframe(bot.Id, i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1));
+                    int Airframe(int i) => i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1;
+                    return new DropdownList(items, bot.RandomPlane ? 0 : bot.Airframe + 1, i => lobby.AdmitsBotAirframe(Airframe(i)),
+                        i => lobby.SetBotAirframe(bot.Id, Airframe(i)));
                 }
 
             case BotSkillKey:

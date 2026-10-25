@@ -107,6 +107,23 @@ public sealed class LobbyBotOutlawTests
             zrdr, messages, Stock)!(blackHat, Warhawk));
     }
 
+    // Only the Black Hat Warhawk carries torpedoes, under the one-per-team cap. A list that allows
+    // the torpedo row alone leaves a stock-armed bot's pylons empty.
+    [Fact]
+    public void TheLegalFitNeverFillsThePylonsWithTorpedoes()
+    {
+        var onlyTorpedo = Enumerable.Range(0, 10).Aggregate(new NetPlaneRules(false, true, 0), (rules, row) => rules.With(NetPlaneRules.RocketFlag + row, true));
+
+        var fit = BotSeats.LegalFit(onlyTorpedo);
+
+        Assert.All(Enumerable.Range(0, CoopFit.Cells), cell => Assert.Equal(NetPlaneRules.NoRocket + 1, fit.OrdnanceAt(cell)));
+        Assert.Equal(fit, onlyTorpedo.Enforce(fit));
+
+        // ABLE-TO-FAIL CONTROL: one other row let back in fills every pylon with it.
+        var nine = BotSeats.LegalFit(onlyTorpedo.With(NetPlaneRules.RocketFlag + 9, false));
+        Assert.All(Enumerable.Range(0, CoopFit.Cells), cell => Assert.Equal(10, nine.OrdnanceAt(cell)));
+    }
+
     // Every militia def's AI gun is wep_130 (.30) or wep_140 (.40). Outlawing .40 leaves out the
     // defs carrying wep_140 even on airframes the list admits, which pins the calibre-to-row mapping.
     [ExtractedDataFact]

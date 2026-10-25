@@ -35,6 +35,9 @@ public sealed partial class BuildStamp : Node
     /// <summary>The release line's tooltip.</summary>
     public const string ReleaseTooltip = "Open the release page";
 
+    /// <summary>What the release line's press says in Steam's Game Mode, which shows no browser.</summary>
+    public const string ReleaseDesktopModeOnly = "The release page only opens in Desktop Mode.";
+
     // Authored against the menu's 720p chrome metrics, a footer line's size.
     private const float ReferenceFontSize = 15f;
     private const float ReferenceHeight = 720f;
@@ -94,8 +97,8 @@ public sealed partial class BuildStamp : Node
     /// a <see cref="Watch"/>ed check answers one. A click opens the release page.</summary>
     public Button ReleaseButton { get; private set; } = null!;
 
-    /// <summary>Gets the dialog an icon raises when Game Mode refused its folder and the screen has
-    /// no messagebox of its own (<see cref="FolderButtonText.DesktopModeOnly"/>).</summary>
+    /// <summary>Gets the dialog an icon or the release line raises on Game Mode's refusal where the
+    /// screen has no messagebox (<see cref="FolderButtonText.DesktopModeOnly"/>).</summary>
     public AcceptDialog DesktopModeNotice { get; private set; } = null!;
 
     /// <summary>Gets a value indicating whether the stamp is on screen.</summary>
@@ -212,9 +215,18 @@ public sealed partial class BuildStamp : Node
     // it has one; a failed open is the log's.
     private void Open(string folder, string what)
     {
-        if (Opener(folder, what).Outcome == FolderOpenOutcome.Refused
-            && Messagebox?.Invoke(FolderButtonText.DesktopModeOnly) != true)
+        if (Opener(folder, what).Outcome == FolderOpenOutcome.Refused)
         {
+            RaiseDesktopModeOnly(FolderButtonText.DesktopModeOnly);
+        }
+    }
+
+    // Game Mode's refusal, in the screen's messagebox where it has one, else the stamp's dialog.
+    private void RaiseDesktopModeOnly(string words)
+    {
+        if (Messagebox?.Invoke(words) != true)
+        {
+            DesktopModeNotice.DialogText = words;
             DesktopModeNotice.PopupCentered();
         }
     }
@@ -246,9 +258,19 @@ public sealed partial class BuildStamp : Node
         ReleaseButton.Visible = true;
     }
 
-    // The release line's press. The page went through ReleaseCheck's address check.
-    private void OpenRelease() =>
+    // The release line's press. The page went through ReleaseCheck's address check. ⚠ Ask Game
+    // Mode first: its shell answers Ok and no browser appears (FolderOpener).
+    private void OpenRelease()
+    {
+        if (SteamOs.InGameMode)
+        {
+            Log.Info("core", $"release page {_releaseUrl} not opened: refused in Game Mode, which shows no browser");
+            RaiseDesktopModeOnly(ReleaseDesktopModeOnly);
+            return;
+        }
+
         Log.Info("core", $"release page {_releaseUrl}: {FolderOpener.Shell(_releaseUrl)}");
+    }
 
     // A flat, mouse-only button in the stamp's colours. ⚠ Keep FocusMode None. A focusable button
     // takes the focus on a click. Enter or A on the extraction screen would then press it again
