@@ -121,7 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ Pick the mass technique at the controls and productionise it
 15. ☑ C3's canopy volume over its painted jungle
 16. ☑ Clump tiles beside the vegetation models, replaceable by a model pack
-17. ☐ Wave B budget and goldens
+17. ☑ Wave B budget and goldens
 
 ### Wave C, density
 
@@ -1155,17 +1155,51 @@ other of the 38; B17 re-pins them. Budget: the atlas keeps its size and the clum
   forest's density moves.
 - The pack index is shared with the HD models: a clump key must never reach a world node.
 
-## B17 ☐ Wave B budget and goldens
+## B17 ☑ Wave B budget and goldens
 
 **Goal.** As A7, for Wave B.
 
-**Evidence (confidence: lead-only).** Decision 18.
+**Evidence (confidence: measured).** Decision 18. A7's instrument, views and ceiling.
 
-**Approach.** <TODO>
+**Approach.** `measure.ps1 -Launches 4`, unchanged, on an idle machine with gaming mode off, and the
+goldens stage re-pinned by hand for the shots Wave B moved.
 
-**Model recommendation.** <TODO>
+**Result (Wave B).** Median (range of the launch medians), four launches a case:
 
-**Verify.** <TODO>
+| Chapter | Case | `gpu_ms` | `render_cpu_ms` | `proc_ms` | draws | prims |
+|---|---|---:|---:|---:|---:|---:|
+| C1 | Faithful | 0.71 (0.50-0.71) | 0.30 (0.29-0.31) | 1.32 (1.20-1.35) | 240 | 88,596 |
+| C1 | Enhanced Original | 5.88 (5.87-6.25) | 0.48 (0.45-0.51) | 1.31 (1.25-1.37) | 421 | 322,531 |
+| C1 | Enhanced Rich | 5.88 (5.88-5.93) | 0.50 (0.47-0.53) | 1.29 (1.24-1.33) | 469 | 335,491 |
+| C1B | Faithful | 0.65 (0.64-0.65) | 0.36 (0.34-0.36) | 0.20 (0.18-0.20) | 211 | 2,452 |
+| C1B | Enhanced Original | 3.54 (3.52-3.55) | 0.52 (0.48-0.54) | 0.21 (0.20-0.22) | 282 | 272,580 |
+| C1B | Enhanced Rich | 3.53 (3.50-3.53) | 0.53 (0.50-0.56) | 0.21 (0.21-0.22) | 282 | 272,580 |
+| C2 | Faithful | 0.85 (0.85-0.86) | 1.12 (1.11-1.13) | 0.59 (0.56-0.62) | 1,474 | 308,853 |
+| C2 | Enhanced Original | 3.00 (3.00-3.00) | 1.29 (1.23-1.32) | 0.62 (0.60-0.63) | 1,606 | 485,367 |
+| C2 | Enhanced Rich | 3.00 (2.99-3.01) | 1.27 (1.24-1.30) | 0.63 (0.61-0.64) | 1,606 | 485,367 |
+| C3 | Faithful | 1.34 (1.34-1.37) | 0.89 (0.81-0.90) | 0.77 (0.71-0.81) | 1,061 | 19,173 |
+| C3 | Enhanced Original | 4.27 (4.27-4.28) | 1.15 (1.12-1.15) | 0.78 (0.74-0.79) | 1,211 | 287,593 |
+| C3 | Enhanced Rich | 4.32 (4.31-4.34) | 1.15 (1.11-1.17) | 0.76 (0.72-0.79) | 1,242 | 360,817 |
+| C4 | Faithful | 0.74 (0.73-0.76) | 0.40 (0.38-0.41) | 0.51 (0.49-0.52) | 382 | 205,459 |
+| C4 | Enhanced Original | 2.69 (2.69-2.70) | 0.51 (0.49-0.54) | 0.51 (0.48-0.52) | 462 | 59,806 |
+| C4 | Enhanced Rich | 2.69 (2.69-2.70) | 0.52 (0.47-0.54) | 0.51 (0.47-0.51) | 462 | 59,806 |
+
+**Wave B costs at most 0.05 ms of GPU at the five views, inside its 0.75 ms share.** The rows are
+read against this run's own Enhanced Original, since Wave A's cost is below the noise and the
+Faithful rows drifted by up to 0.08 ms of CPU from A7's: C3's crown clumps add 0.05 ms of `gpu_ms`
+(1,242 draws against 1,211), C1's clumps none (469 draws against 421), and C1B, C2 and C4 draw no
+clumps and move by at most 0.01 ms. CPU moves by -0.02 to +0.02 ms everywhere. Away from these
+views the clumps cost at most 0.07 ms of GPU: C1's 300, 600 and 700 m poses (B14) and C3's 300 m view
+across the southeast island (B15). Waves C and D keep the remaining 1.95 ms of the 2.0 ms ceiling.
+
+**Model recommendation.** A mid-tier model suffices, as A7.
+
+**Verify.** Every launch exit 0. Goldens: Wave B moved exactly five Enhanced C1 shots, each at
+B14 (the clumps) and again at B16 (the `firtree1` tile): `c1-lake-enhanced`,
+`c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`, `c1-cockpit-enhanced` and
+`c1-cockpit-xr-sim-enhanced`. B16's battery rendered each to one new hash in its batch and its
+re-render; no other shot moved. The five hashes are re-pinned by hand from those renders (never
+`-RegenGoldens`), and two further goldens runs pass 38 of 38.
 
 **⚠ Traps.** As A7.
 
