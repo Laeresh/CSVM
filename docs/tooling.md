@@ -376,7 +376,10 @@ data was not there" never reads as "the check held". `-RegenGoldens` reports `RE
 `$env:CSVM_DATA_ROOT = 'Z:\CSVM'; .\RunTests.ps1` from a worktree behaves identically to the
 primary tree; without it the engine stage reports `SKIP` with the path it looked at. The unit tests
 fall back to their own checkout, so a root holding no extraction skips the engine suites but *not*
-the data-dependent units. The other variable a scripted run may want is
+the data-dependent units. The original's own files are found the same way, as
+`<data root>/CrimsonSkiesGame`, unless **`CSVM_INSTALL_ROOT`** names an install folder, which beats
+every other place for the engine and the tests alike (`Extraction/GameFileSource.cs`). The other
+variable a scripted run may want is
 `CSVM_TRACE_SISCRIPT=<node name>`, which makes `ScriptPlayback` log a `sitrace` line in the `anim`
 category with that node's per-step pose, `dt` and step distance every tick.
 

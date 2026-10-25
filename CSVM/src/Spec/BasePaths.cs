@@ -19,11 +19,16 @@ public sealed record BasePaths(
     string MessagesPath,
     string RofPath)
 {
-    /// <summary>The paths under <paramref name="dataRoot"/>. A spec override is used verbatim, and
+    /// <summary>Where the original's own files are read from, or null when no install was found.
+    /// Readers that build a model from the game bytes take it in place of an extracted path.</summary>
+    public IGameFileSource? Game { get; init; }
+
+    /// <summary>The paths under <paramref name="dataRoot"/>, and the game-file source by
+    /// <see cref="GameFileSource.Locate"/>'s order. A spec override is used verbatim, and
     /// an archive the spec does not name prefers its unpacked sibling folder.
     /// ⚠ Do not call it before <see cref="SessionPaths.ForceZipped"/> is settled; that preference
     /// reads it.</summary>
-    public static BasePaths Resolve(string repoRoot, string dataRoot, SessionSpec spec) => new(
+    public static BasePaths Resolve(string repoRoot, string dataRoot, SessionSpec spec) => new BasePaths(
         repoRoot,
         dataRoot,
         SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "planes.zip")),
@@ -31,5 +36,13 @@ public sealed record BasePaths(
         spec.Sounds ?? SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "soundsh.zip")),
         spec.Interp ?? Path.Combine(dataRoot, "extracted", "interp.json"),
         spec.Messages ?? Path.Combine(dataRoot, "extracted", "messages.json"),
-        spec.Rof ?? Path.Combine(dataRoot, "extracted", "rof"));
+        spec.Rof ?? Path.Combine(dataRoot, "extracted", "rof"))
+    {
+        // A deterministic run ignores saved options, the remembered install among them.
+        Game = GameFileSource.Locate(
+            System.Environment.GetEnvironmentVariable(GameFileSource.InstallVariable),
+            dataRoot,
+            spec.Det ? null : RememberedInstall.Get(),
+            InstallSearchRoots.ForThisMachine()),
+    };
 }
