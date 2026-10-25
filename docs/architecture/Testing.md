@@ -12,7 +12,8 @@ engine-free reader units (`Zrdr`, `WavFile`, `SoundDefs`, `WeaponDefs`, `Message
 `SessionPaths`, `GameZ` transform arithmetic, `MarkerRig`, `AnimDefs` and the rest) plus the
 golden invariants over a player's own `extracted/`. `TestData.cs` owns both input sources, the
 hand-authored `fixtures/` tree and the `CSVM_DATA_ROOT` lookup behind `[ExtractedDataFact]`, and
-states the rule binding each. A check that needs a live Godot belongs in `CSVM/src/Testing`
+states the rule binding each. `GameFilesData.cs` finds the install through `GameFileSource.Locate`, behind
+`[GameFilesFact]`/`[GameFilesTheory]`. A check that needs a live Godot belongs in `CSVM/src/Testing`
 instead; read `TestHarness.cs` for that half.
 
 ## src/Testing/TestHarness.cs

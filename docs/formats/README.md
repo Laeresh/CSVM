@@ -51,6 +51,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 - [extraction.md](extraction.md), extraction modes, output, and round-trip support.
 - [gotchas.md](gotchas.md), cross-cutting reader and renderer rules.
 - [zrdr.md](zrdr.md), reader archives and their family index.
+- [zbd-archive.md](zbd-archive.md), the named-entry container `zrdr.zbd` and the sound archives
+  share.
 
 ### World and scene
 

@@ -28,6 +28,23 @@ The install folder the last extraction read, stored as `OptionsDef.InstallPath` 
 `OptionsStore.UserOptions()`, which needs the engine. A save loads first and changes only this
 field; the value is fully qualified, and the store drops one that is not.
 
+## src/Extraction/GameFileSource.cs
+`IGameFileSource` is how a loader reads the original's files: `Exists` and `Open` (a seekable
+stream, or null) take a game-relative path such as `ZBD/C1/zrdr.zbd`, matched without regard to
+case, and `ReadAllBytes` throws naming `Location`. `InstallFolderSource` reads an install folder or
+mounted drive through `InstallLocator.ResolveFile`. `GameFileSource.Open` alone turns a path into a
+source, so the `.iso` and cabinet kinds land there. `Locate` takes the `CSVM_INSTALL_ROOT` override,
+then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then `InstallLocator.Candidates`.
+Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install with it.
+
+## src/Extraction/ZbdArchive.cs
+`Open(source, path)` or `Read(stream, name)` reads the table at the end of a `zrdr.zbd`,
+`soundsh.zbd` or `soundsl.zbd` ([../formats/zbd-archive.md](../formats/zbd-archive.md)) into
+`Entries`, in table order under their stored names, repeats kept. The format has no checksum, so a
+wrong version or a table whose payloads do not tile from 0 throws `InvalidDataException`.
+`ReadEntry` reads one payload under a lock, so a 128 MB sound archive is never held whole. The
+archive owns its stream. Coverage: `CSVM.Tests/ZbdArchiveTests.cs`.
+
 ## src/Extraction/RofExtraction.cs
 `Run` takes a `RofExtractionRequest` of already-resolved absolute paths (both `.rof` archives, the
 install's `MPG` folder, `langui.dll`, `language.dll`, the output root, a force flag) and a log

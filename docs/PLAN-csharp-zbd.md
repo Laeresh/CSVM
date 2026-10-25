@@ -120,8 +120,9 @@ part 5,127, mostly the pointer tables), `nodes` 7,626, `anim` 8,369 (CS part 2,1
 11,598, `anim-names` 3,897; shared `api-types` 5,178, `common` 1,644, `types` 2,983. The fork's diff
 against upstream is 125 files, +10,842 / -150.
 
-**Codecs.** The outer `.zbd` archive is uncompressed, entries CRC32-checked
-(`archive/src/read.rs`). Textures use per-texture and global palettes, RGB565 to 888 and a simple
+**Codecs.** The named-entry `.zbd` archive is uncompressed and carries no checksum in the shipped
+version 1, and only `zrdr.zbd`, `soundsh.zbd` and `soundsl.zbd` (64 files) use it; every other
+`.zbd` is a format of its own (A1, `docs/formats/zbd-archive.md`). Textures use per-texture and global palettes, RGB565 to 888 and a simple
 alpha; no RLE or LZ. Only the disc CABs are compressed (LZX), with no native .NET decoder. `reader`
 floats are `f32` widened to `f64` for JSON (`reader/src/read.rs`); `Zrdr.cs` reads them back as
 single precision. Six NaN anim deltas are carried raw (`delta_raw`). Texture name collisions are
@@ -162,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, foundation
 
-1. ☐ Game-file source and the ZBD archive reader
+1. ☑ Game-file source and the ZBD archive reader
 2. ☑ Model-diff oracle harness
 
 ### Wave B, small formats
@@ -207,7 +208,37 @@ item; E41 and E42 can run in parallel; E43 after E41 and E42; E44 after E43; E45
 
 # Wave A, foundation
 
-## A1 ☐ Game-file source and the ZBD archive reader
+## A1 ☑ Game-file source and the ZBD archive reader
+
+**Landed.** `CSVM/src/Extraction/GameFileSource.cs` holds `IGameFileSource` (`Location`,
+`Exists(path)`, `Open(path)` returning a seekable stream or null), the `ReadAllBytes` extension,
+`InstallFolderSource` over `InstallLocator.ResolveFile`, and `GameFileSource.Open(root)` /
+`Locate(installOverride, dataRoot, remembered, roots)`. Paths are game-relative
+(`ZBD/C1/zrdr.zbd`, `GOSDATA/ASSETS/crimson.rof`), split on either slash and matched without
+regard to case, so readers need no `ZbdTree` case mapping. `Locate` tries `CSVM_INSTALL_ROOT`, then
+`<dataRoot>/CrimsonSkiesGame`, then the remembered install, then `InstallLocator.Candidates`.
+`GameFileSource.Open` is the one factory, which D32 and D33 extend for an `.iso` and a cabinet
+disc. `CSVM/src/Extraction/ZbdArchive.cs` reads the named-entry container
+([formats/zbd-archive.md](formats/zbd-archive.md)): the table only on open, each payload on demand
+under a lock, repeats kept in table order. The namespace is `Extraction`, beside `InstallLocator`,
+because after the cutover that namespace is exactly the layer reading the original's files.
+`CSVM.Tests/GameFilesData.cs` gives `[GameFilesFact]`/`[GameFilesTheory]` (with `AlsoExtracted`
+for a comparison against `extracted/`), located through `Locate` with no remembered install.
+`SessionPaths` keeps its role only for the `extracted/` paths each Wave B item still reads; a
+switched loader takes the source and a game-relative path instead, and E43 deletes the rest.
+
+**Two premise corrections.** The Crimson Skies archive (version 1) has **no CRC**; the checksum
+lives only in a version-2 header no shipped file uses, so the reader checks that payloads tile
+from offset 0 to the table instead. And only **64 of the 184** `ZbdManifest` files are this
+container (every `zrdr.zbd`, `soundsh.zbd`, `soundsl.zbd`); `interp`, `gamez`, `planes`, the
+textures and the anim archives are formats of their own, so B11, B15, C21 and C22 get no help from
+`ZbdArchive`. **Names repeat**: 44 repeats in each sound archive plus one pair differing only by
+case, and `player.zrd` twice in the root `zrdr.zbd`; today's zips hold a repeat as `stem-N.ext`, a
+rule B13 and B14 must reproduce wherever a loader keys by name.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** One interface hands any loader a readable stream for a game path (case-insensitive),
 whether the game lives in an install folder, on a mounted drive or (after D32) in an ISO; the outer
@@ -219,14 +250,14 @@ Consumers). The outer archive is uncompressed with CRC32-checked entries
 
 **Approach.** A game-file source abstraction beside `InstallLocator`, fed by the located install;
 an archive reader returning named entries as spans/streams. Reuse `RofArchive.cs`'s shape for
-naming and error handling. <TODO: the interface's exact members, and whether `SessionPaths` keeps
-a role.>
+naming and error handling. The interface's members and `SessionPaths`' role are in **Landed**.
 
 **Model recommendation.** high, the seam every later item builds on.
 
 **Verify.** Unit tests on a hand-made archive fixture (CI-safe); every archive in `ZbdManifest.cs`
-opens and lists entries on a real install with CRCs checked. <TODO: a test attribute that skips
-without an install, the counterpart of `ExtractedDataFact`.>
+opens on a real install, and every archive of the named-entry layout lists entries whose names and
+sound payload CRC32s match today's zips. The attribute that skips without an install is
+`[GameFilesFact]`/`[GameFilesTheory]`.
 
 **⚠ Traps.** Install folders are matched case-insensitively and output paths take case from
 `ZbdTree`; Linux installs under Wine/Proton are case-sensitive file systems.
@@ -370,7 +401,9 @@ the zip path.
 
 **Verify.** A2 diff clean; complete battery.
 
-**⚠ Traps.** <TODO: none known.>
+**⚠ Traps.** Each sound archive repeats 44 entry names, one pair differing only by case
+(`VO_c4-RM-m3_Blacke_9.wav`). Today's zips store a repeat as `stem-N.ext`, counting from 1;
+reproduce that wherever a loader looks a sound up by name (A1's finding).
 
 ## B14 ☐ Reader archives (`zrdr.zbd`)
 
@@ -387,6 +420,8 @@ floats are `f32` (`reader/src/read.rs`) and `Zrdr.cs` reads single precision.
 
 **⚠ Traps.** The JSON detour widened floats to `f64`; the direct path must keep the `f32` bits, and
 the diff compares bitwise. Entry names are `.zrd`, renamed `.json`/`.zrd.json` in today's zip.
+The root `zrdr.zbd` holds `player.zrd` twice; today's zip keeps the repeat as `stem-N.ext` (A1's
+finding).
 
 ## B15 ☐ Texture archives
 
@@ -425,7 +460,10 @@ the implementer after reading `anim-definitions.md`.>
 
 **Verify.** A2 diff clean over all 61 archives; complete battery; 8-chapter regression.
 
-**⚠ Traps.** NaN deltas compare by bits, not by value. Stderr notes such as "anim def duplicate
+**⚠ Traps.** NaN deltas compare by bits, not by value. The six NaN deltas of C5/M02
+`carneypkup_cam.zan;camera1` reach today's model as `+0.0`, because `SiVectorChannel.Parse` reads
+`delta` and never `delta_raw`; under Decision 1 the reader reproduces `+0.0` there (A2's finding).
+Stderr notes such as "anim def duplicate
 anim ref" (`ZbdPlan.Classify`) mark data quirks the reader must tolerate the same way.
 
 ## C22 ☐ GameZ and `planes.zbd`
@@ -513,7 +551,9 @@ data root, which the locator then finds.
 **Evidence (confidence: lead-only).** Decisions 2 and 9.
 
 **Approach.** Walk the file list the engine reads (the A1 source plus `ZbdManifest.cs` and the ROF
-list) and write it out. <TODO: the target folder name; the UI entry point (from E41's picker).>
+list) and write it out to `<data root>/CrimsonSkiesGame` (`GameFileSource.DataRootFolder`), which
+`GameFileSource.Locate` ranks above the remembered install. <TODO: the UI entry point (from E41's
+picker).>
 
 **Model recommendation.** medium.
 
