@@ -187,7 +187,7 @@ public sealed class HdModelMeshes
         // moving every vertex by up to 1/65536 of the mesh's extent.
         for (int i = 0; i < source.GetSurfaceCount(); i++)
         {
-            // ⚠ A copy: the importer hands back its own array, and every node of the file reads it.
+            // ⚠ Keep the Duplicate(): the importer hands back its own array, and every node of the file reads it.
             var arrays = source.GetSurfaceArrays(i).Duplicate();
             var primitive = source.GetSurfacePrimitiveType(i);
             if (at != Transform3D.Identity)
