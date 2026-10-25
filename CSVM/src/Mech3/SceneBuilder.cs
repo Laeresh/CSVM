@@ -1664,6 +1664,13 @@ void fragment() {
             int added = result.GetSurfaceCount() - 1;
             result.SurfaceSetName(added, surface.Name);
             result.SurfaceSetMaterial(added, material);
+            // Kept for the world's merge, as BuildMesh keeps its own.
+            if (_fullbright)
+            {
+                if (!_builtArrays.TryGetValue(result, out var kept))
+                    _builtArrays[result] = kept = new List<Godot.Collections.Array>();
+                kept.Add(surface.Arrays);
+            }
         }
         // ⚠ Never fall back to the gamez model here: no surface left means the pack draws nothing.
         return result;

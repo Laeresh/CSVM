@@ -82,7 +82,8 @@ internal static class HdModelSwapSuites
         + "texture takes the very material an original surface of it takes, clamped by its own UVs, "
         + "and repaints with it, unlit where the file says so; any other takes the file's base colour times its texture, "
         + "two-sided, cut at its alphaCutoff, blended or unlit as glTF says, follows a graphics-mode switch, and the "
-        + "shared import keeps its own materials. Replacement surfaces count in the surface census and drop under --hide-alpha. "
+        + "shared import keeps its own materials. Replacement surfaces count in the surface census and drop under --hide-alpha, "
+        + "and a fullbright builder keeps their arrays for the world's merge. "
         + "A glTF export of an original node, put unedited into the pack, wears that node's original material. "
         + "A decal surface draws at the highest priority its original polygons have, a matched node holding no "
         + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model. "
@@ -858,6 +859,8 @@ internal static class HdModelSwapSuites
                     && Bias(0) < packedBuilder.PriorityBias(1)
                     && Bias(1) >= packedBuilder.PriorityBias(2) && Bias(1) < packedBuilder.PriorityBias(3),
                 $"the skin surface draws at its polygons' priority 0 and the decal at the higher of its 1 and 2");
+            ctx.Check(sign != null && ReferenceEquals(packedBuilder.SurfaceArrays(sign, 0), packedBuilder.SurfaceArrays(sign, 0)),
+                $"a fullbright builder keeps a replacement's arrays for the world's merge, so it reads none back off the GPU");
 
             var plain = Build(plainBuilder, none, Hidden);
             var hidden = Build(packedBuilder, models, Hidden);

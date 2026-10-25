@@ -42,13 +42,13 @@ LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparen
 
 ## src/Mech3/HdModelMeshes.cs
 Imports a model pack replacement for a gamez node (`Extraction/HdModels.cs` finds the file), cached per pack key and the node's
-descendant names (a failure as null) and shared, read off the parsed `GltfState` with no scene. The first glTF node named like
+descendant names (a failure as null) and shared, read off the file's `GltfState` with no scene. Each file is parsed once, so the nodes it replaces share its materials and textures. The first glTF node named like
 the gamez node (else minus Blender's `.001`) gives every mesh at or below it, placed by the transforms below it but never its own,
 which is the exported gamez transform the game applies already; a subtree named after a gamez descendant is that node's to draw.
 A matched node with no mesh below it is an empty mesh (draw nothing); with no match the whole file merges from its roots. Surfaces
 stay separate with the file's materials, from the importer's uncompressed arrays, each triangle surface reversed back
 ([../formats/gotchas.md](../formats/gotchas.md)) except under a mirroring transform. `SurfacesOf` and `AlbedoOf` (a mip-mapped
-base-colour copy) feed `SceneBuilder.cs`, which draws its own copy; `Current` follows `HdModels.Current`. `Scoped` reads a node out of an ancestor's file: the glTF node of its name whose ancestors follow most of the gamez names between, with no whole-file fallback.
+base-colour copy) feed `SceneBuilder.cs`, which draws its own copy; `Current` follows `HdModels.Current`. `Scoped` reads a node out of an ancestor's file: the glTF node of its name whose ancestors follow most of the gamez names between, with no whole-file fallback. `KeepChapter`, called as a world session builds, drops other chapters' files and imports, keeping the airframe and bare keys.
 
 ## src/Mech3/ShaderTwins.cs
 The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites, `EmitterRenderer`'s

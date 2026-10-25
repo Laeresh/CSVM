@@ -132,10 +132,12 @@ internal sealed class PackIndex : IDisposable
 
     private static string PathKeyOf(string relativePath) => relativePath.Replace('\\', '/').ToLowerInvariant();
 
+    // A zip written on Windows may name its entries with backslashes.
     private static string DropTop(string entryPath)
     {
-        int slash = entryPath.IndexOf('/');
-        return slash < 0 ? entryPath : entryPath[(slash + 1)..];
+        string unix = entryPath.Replace('\\', '/');
+        int slash = unix.IndexOf('/');
+        return slash < 0 ? unix : unix[(slash + 1)..];
     }
 
     private byte[]? Read(Dictionary<string, (ZipArchive? Zip, string Path, string Extension, string Pack)> map, string key)
@@ -149,15 +151,25 @@ internal sealed class PackIndex : IDisposable
         // and the menus may both reach here.
         lock (_byKey)
         {
-            if (source.Zip == null)
+            // A damaged entry or a locked file costs its own replacement, never the build reading it.
+            try
             {
-                return File.Exists(source.Path) ? File.ReadAllBytes(source.Path) : null;
-            }
+                if (source.Zip == null)
+                {
+                    return File.Exists(source.Path) ? File.ReadAllBytes(source.Path) : null;
+                }
 
-            using var stream = source.Zip.GetEntry(source.Path)!.Open();
-            using var bytes = new MemoryStream();
-            stream.CopyTo(bytes);
-            return bytes.ToArray();
+                using var stream = source.Zip.GetEntry(source.Path)!.Open();
+                using var bytes = new MemoryStream();
+                stream.CopyTo(bytes);
+                return bytes.ToArray();
+            }
+            catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                string origin = source.Zip == null ? source.Path : $"{source.Pack}:{source.Path}";
+                Log.Warn("world", $"HD pack file unreadable, skipped: {origin} ({e.Message})");
+                return null;
+            }
         }
     }
 
