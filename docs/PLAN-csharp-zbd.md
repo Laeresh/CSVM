@@ -1,0 +1,537 @@
+# C# game-file readers, replacing unzbd
+
+**ACTIVE PLAN** (written 2026-10-25). It sits in `docs/`, which by this repo's convention makes it
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. When every item lands, the closing
+commit deletes this file, records the completion in its message, and clears the "Current status"
+pointer; any live prose linking this file by path is unlinked in the same commit.
+
+The engine reads the original game's files itself, in C#, from an install folder, a mounted drive
+or an `.iso`, with no extraction step and no `unzbd` child process. The mech3ax fork that `unzbd`
+is built from has been made private at its original developer's request, and upstream mech3ax now
+holds only a README, so a CSVM release can no longer ship a binary whose source is available. This
+plan replaces every `unzbd` mode and the C# ROF half with readers that build the loaders' existing
+models straight from the game bytes, then deletes the extraction pipeline, the `extracted/` folder
+and the Rust toolchain. An optional copy writes the needed game files (CABs unpacked) into the data
+folder as an install tree, so a disc or ISO need not stay mounted.
+
+Out of scope: byte-identical reproduction of `unzbd`'s JSON/zip output, repacking (`rezbd`), and
+any change to what the engine does with the data. The plan draws no `backlog` issues. No release
+ships until this plan closes; v0.4.0 stays published with its bundled `unzbd.exe`, which the
+original developer accepted.
+
+## Milestone goal
+
+- The game runs from an install folder, a mounted drive or an `.iso` file, read in place.
+- An optional copy lays out the files the engine reads as an install tree under the data root,
+  found afterwards by the same locator.
+- Every loader builds its model from the game bytes behind one game-file source; the JSON/zip
+  loaders, the v0.6.1 shape support and `extracted/` are gone.
+- A dev-only headless `--dump` writes CSVM-shaped JSON/PNG/WAV into `.scratch` for analysis
+  scripts and agents.
+- An upgrading player is sent to a source picker when no source is found, and is offered once to
+  delete the old `extracted/`.
+- Releases bundle no `unzbd`, no `LICENSE-unzbd`, and no Rust build; mech3ax is credited by one
+  linked line.
+- The complete `RunTests.ps1` passes with every golden unchanged, finally from the ISO alone.
+
+**Same game, not the same files.** Equivalence is judged on the loader models and the goldens,
+never on the bytes `unzbd` wrote. Reproducing serde's JSON text, zip layout or the repack pointer
+tables is work this plan does not do.
+
+## Decisions (2026-10-25)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | What "functionally identical" means | **Same in-memory data, same goldens.** Extraction output may differ from `unzbd`'s bytes; today's output is an oracle compared by parsed value. |
+| 2 | What the optional extract produces | **A raw copy of game files**, not decoded files. One load path, wherever the files live. |
+| 3 | Provenance of the C# code | **Mixed.** Written from `docs/formats/` and the existing C# loaders, checked against today's output; agents may read the local Rust (`tools/mech3ax`) to settle edge cases. No line-by-line translation. |
+| 4 | An ISO source | **Read in place.** Own ISO9660 reader and LZX CAB decoder; the copy is a convenience. |
+| 5 | Where the readers hand off | **Straight into the loader models**, behind one game-file source. Each format's JSON/zip path is deleted once its model diff passes. |
+| 6 | The ROF half | **Read directly too.** `extracted/rof/` goes, `extracted/` disappears entirely. |
+| 7 | Data for analysis scripts and agents | **A dev-only headless `--dump`** into `.scratch`, CSVM's own shape, never read by the engine. Old scripts move to it as they are next touched; no sweep. |
+| 8 | First launch of an upgraded install | **Find the source, offer cleanup.** Remembered install or locator scan, else a source picker replacing the Extract screen; once a source works, offer once to delete `extracted/`. The old folder is never read. |
+| 9 | Copy scope | **The files the engine reads**, CABs unpacked, as an install tree under the data root. |
+| 10 | Proof a format is done | **Model-vs-model diff over all real archives** (floats bitwise), then the complete battery with goldens unchanged; the final run from the ISO alone. |
+| 11 | Releases until the port lands | **None.** v0.4.0 stays up; the port release bundles no `unzbd`. |
+| 12 | Credit | **One line naming TerranMechworks/mech3ax, with the upstream link**, in README and the third-party notices. Every link to the fork goes. Upstream holds only a README, so `docs/formats/` citations into mech3ax code are rewritten to cite the C# readers. |
+| 13 | Order | Small formats first (interp, messages, sounds, reader, textures), then anim, then gamez/planes, then ROF and ISO/CAB, then the cutover. |
+| 14 | Per-chapter image-pointer tables (~4,000 lines in `gamez/src/gamez/cs/data`) | **Not ported**, on the reading that they serve only the byte-identical repack. The gamez model diff tests that reading. |
+| 15 | CAB decompression from an ISO | **In memory, per session.** A disk cache only if a measured launch cost is too high. |
+| 16 | The local `tools/mech3ax` checkout | **Stays local and git-ignored** as the read-only reference for decision 3. Nothing from it is pushed or mirrored. |
+
+## ⚠ Read this before implementing anything
+
+| Confidence | Items | What that means for you |
+|---|---|---|
+| **Traced to an exact mechanism in code, with the data that proves it** | none yet | The pipeline facts in the data survey are traced; no port approach is. |
+| **Direction sound, magnitude a judgement call** | A1, A2 | The seam and oracle shape follow from the decisions; the interface details are yours. |
+| **Leads only, no mechanism yet** | every B, C, D, E item | Each rests on discussion and a code survey. Budget for the format's surprises; the model diff is the instrument that settles them. |
+
+**⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
+worktree session here; use a local commit or a file copy.
+
+**⚠ The local `tools/mech3ax` checkout is the only remaining copy of the Rust.** Never delete,
+clean or re-clone it while this plan is live, and never push it anywhere.
+
+## What the data actually ships
+
+The current pipeline, from a code survey in the writing session. File references are
+`CSVM/src/Extraction/` unless stated.
+
+**Sources.** `InstallLocator.Check` (`InstallLocator.cs:185`) treats a `.iso`, or a folder whose
+`ZBD` or `GAME/ZBD` holds `.CAB` files, as a disc; an install is a folder holding `ZBD` plus
+`GOSDATA/ASSETS`, case-insensitive. `Candidates` scans the remembered path
+(`RememberedInstall.cs`), Program Files and fixed drives on Windows, and Wine/Proton prefixes on
+Linux. A disc goes through `unzbd cs disc` (`ExtractionRun.LayOutDisc`), which walks ISO9660 8.3
+names (`tools/mech3ax/crates/unzbd/src/disc.rs:87-155`), unpacks the LZX chapter CABs through the
+`cab` crate, and restores the long `rtextureN` names from a per-chapter table (`disc.rs:177-203`).
+
+**`unzbd` modes** (`ZbdPlan.cs:30-45`, archive list in `ZbdManifest.cs`, 184 archives):
+
+| Mode | Inputs | Output | Count |
+|---|---|---|---|
+| `interp` | `interp.zbd` | `.json` | 1 |
+| `gamez` | `gamez.zbd` per chapter, root `planes.zbd` | `.zip` | 8 + 1 |
+| `sounds` | `soundsh.zbd`, `soundsl.zbd` | `.zip` | 2 |
+| `reader` | `zrdr.zbd`: root, chapter, mission | `.zip` | about 54 |
+| `textures` | `texture.zbd`, `rtexture{2,4,6,8,top}.zbd` per chapter, root `rimage.zbd` | `.zip` of PNGs + `manifest.json` | 8 + 40 + 1 |
+| `anim` | `cam_anim.zbd` per chapter, `mis_anim.zbd` per mission | `.zip` | 61 |
+| `messages` | `strings.dll` | `messages.json` | 1 |
+
+**C# ROF half** (into `extracted/rof/`): `RofArchive.cs`, `RofExtraction.cs` (`crimson.rof`,
+`crimptch.rof`), `BmTexture.cs` + `PngWriter.cs` (.BM to PNG and `_MASK.PNG`), `PeStringTable.cs` +
+`UiStringTable.cs` (`langui.dll`, `language.dll`), `MenuLayoutDecoder.cs`, `MovieCopy.cs` (10
+`.mpg`). Cinemas play through CSVM's own decoder (`CSVM/src/Video/MpegMovie.cs`,
+`MpegSystemStream.cs`).
+
+**Consumers** (`CSVM/src/Mech3/`): no single seam. `GameZ.cs:108-123`, `CompiledAnim.cs:81,120,147-151`,
+`TextureArchive.cs:759-766` and `:904-910` (interp), `SoundArchive.cs:39,126`, `Zrdr.cs:20-179`,
+`Messages.cs:27` and `UiStrings.cs:49` each open their own zip or folder and parse with
+`JsonDocument` into their own models (`GameZNode`, `AnimDefinition`, `ZrdrDict`).
+`SessionArchives.OpenFor` opens a chapter's gamez, textures, sounds and zrdr together.
+`SessionPaths.PreferUnzipped` picks a sibling folder over a zip. `GameZ`, `TextureArchive` and
+`Zrdr` accept both the v0.6.1 and the fork's unified shape (`docs/formats/extraction.md`).
+Textures are PNG-decoded at load (`PngImage.cs`); the zip's `manifest.json` carries each texture's
+alpha class (`TextureArchive.cs:1306-1315`).
+
+**Rust sizes** (`tools/mech3ax/crates`, `.rs` lines including inline tests): `interp` 221,
+`messages` 1,244, `reader` 176, `archive` 458, `image` 776 + `pixel-ops` 524, `gamez` 20,228 (CS
+part 5,127, mostly the pointer tables), `nodes` 7,626, `anim` 8,369 (CS part 2,111), `anim-events`
+11,598, `anim-names` 3,897; shared `api-types` 5,178, `common` 1,644, `types` 2,983. The fork's diff
+against upstream is 125 files, +10,842 / -150.
+
+**Codecs.** The outer `.zbd` archive is uncompressed, entries CRC32-checked
+(`archive/src/read.rs`). Textures use per-texture and global palettes, RGB565 to 888 and a simple
+alpha; no RLE or LZ. Only the disc CABs are compressed (LZX), with no native .NET decoder. `reader`
+floats are `f32` widened to `f64` for JSON (`reader/src/read.rs`); `Zrdr.cs` reads them back as
+single precision. Six NaN anim deltas are carried raw (`delta_raw`). Texture name collisions are
+resolved by a `Rename` rule, recorded as `rename` in the manifest.
+
+**Today's oracles.** `ExtractedGoldenTests.cs` pins counts and structure over a real `extracted/`
+(skips when absent). The CI engine job runs headless with no extraction and no fork access
+(`.github/workflows/checks.yml:2-4`). Freshness is timestamp-only (`ZbdPlan.UpToDate`), with a
+hand-bumped schema in `extracted/VERSION.json` (`ExtractionStamp.Schema = 3`).
+
+**Local scale.** `extracted/` is 1,640 MB in 61,021 files (183 zips, 459 MB, plus unzipped
+folders and `rof/`). A full extraction takes about half a minute
+(`docs/release-notes-v0.1.0.md:28`).
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
+  never guess a value. Inventing content is the mistake this project makes most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data/code before building on it; **a correct disproof that lands no code is a success here**, not a
+  failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
+  TUNE / lead-only).
+- **`PROJECT_CONTEXT.md` + the module's entry in `docs/architecture/<Namespace>.md` (plus its index
+  bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
+  item; a landed item gets its record in the landing commit's message and its issue is **closed**. New decodes land with their `docs/formats/` page.
+- **Read `docs/verification.md` before measuring anything**, the instruments here mislead; cite the
+  rule that bites per item.
+- **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
+  mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
+  location the report came from.
+- **Read the module's entry in `docs/architecture/<Namespace>.md` (found through the index in
+  `docs/architecture.md`) before modifying it,** then the comments on the members you touch; dead
+  ends are in the landing commits (`git log --grep=<ID>`), so search those before re-chasing one.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+
+### Wave A, foundation
+
+1. ☐ Game-file source and the ZBD archive reader
+2. ☐ Model-diff oracle harness
+
+### Wave B, small formats
+
+11. ☐ `interp.zbd`
+12. ☐ `strings.dll` messages
+13. ☐ Sound archives
+14. ☐ Reader archives (`zrdr.zbd`)
+15. ☐ Texture archives
+
+### Wave C, large formats
+
+21. ☐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+22. ☐ GameZ and `planes.zbd`
+
+### Wave D, ROF and disc sources
+
+31. ☐ ROF half read in place
+32. ☐ ISO9660 reader
+33. ☐ LZX CAB decoder and the `rtextureN` long names
+34. ☐ Optional copy into the data root
+
+### Wave E, cutover
+
+41. ☐ Source picker and upgrade cleanup
+42. ☐ Dev-only `--dump`
+43. ☐ Delete the extraction pipeline
+44. ☐ Packaging, licences, credit and docs
+45. ☐ Final ISO-only run
+
+## Dependency and parallelism notes
+
+A1 and A2 block everything. The Wave B items are independent of each other once A lands, but each
+edits `SessionArchives.cs`/`SessionPaths.cs` when it switches its loader, so run at most two in
+parallel and give each its own loader file plus a serialized merge of the shared two. B15 before C22
+(gamez references textures by name). C21 and C22 are independent but both large; run them in
+parallel only with separate file ownership (`CompiledAnim.cs` + anim readers vs `GameZ.cs` + node
+readers). D31 needs only A1. D32 → D33 is a chain; D34 needs D33. Wave E needs every B, C and D
+item; E41 and E42 can run in parallel; E43 after E41 and E42; E44 after E43; E45 last.
+
+---
+
+# Wave A, foundation
+
+## A1 ☐ Game-file source and the ZBD archive reader
+
+**Goal.** One interface hands any loader a readable stream for a game path (case-insensitive),
+whether the game lives in an install folder, on a mounted drive or (after D32) in an ISO; the outer
+`.zbd` archive format is readable through it.
+
+**Evidence (confidence: direction-sound).** Loaders open paths themselves today (data survey,
+Consumers). The outer archive is uncompressed with CRC32-checked entries
+(`tools/mech3ax/crates/archive/src/read.rs`). `InstallLocator` already finds installs and discs.
+
+**Approach.** A game-file source abstraction beside `InstallLocator`, fed by the located install;
+an archive reader returning named entries as spans/streams. Reuse `RofArchive.cs`'s shape for
+naming and error handling. <TODO: the interface's exact members, and whether `SessionPaths` keeps
+a role.>
+
+**Model recommendation.** high, the seam every later item builds on.
+
+**Verify.** Unit tests on a hand-made archive fixture (CI-safe); every archive in `ZbdManifest.cs`
+opens and lists entries on a real install with CRCs checked. <TODO: a test attribute that skips
+without an install, the counterpart of `ExtractedDataFact`.>
+
+**⚠ Traps.** Install folders are matched case-insensitively and output paths take case from
+`ZbdTree`; Linux installs under Wine/Proton are case-sensitive file systems.
+
+## A2 ☐ Model-diff oracle harness
+
+**Goal.** For any format, a test builds the loader model from today's `extracted/` and from the
+game bytes and reports the first differing field, floats compared bitwise.
+
+**Evidence (confidence: direction-sound).** Decision 10. `ExtractedGoldenTests.cs` already skips
+cleanly without data.
+
+**Approach.** A reflective or hand-written deep comparer over the loader models, run as a theory
+over every archive of a mode. <TODO: reflective vs per-model comparers; how NaN and `delta_raw`
+compare.>
+
+**Model recommendation.** high, every format's proof depends on its strictness.
+
+**Verify.** Seed a deliberate one-field difference and see the harness report it with its path.
+
+**⚠ Traps.** An unchanged result is not evidence until the harness has been seen to fail.
+
+# Wave B, small formats
+
+## B11 ☐ `interp.zbd`
+
+**Goal.** `TextureArchive`'s interp read comes from `interp.zbd` directly.
+
+**Evidence (confidence: lead-only).** One input; consumed at `TextureArchive.cs:904-910`; Rust
+`interp` crate 221 lines.
+
+**Approach.** Reader into the model `TextureArchive` builds today; model diff; delete the JSON path.
+
+**Model recommendation.** medium.
+
+**Verify.** A2 diff clean; complete `RunTests.ps1` with goldens unchanged.
+
+**⚠ Traps.** <TODO: none known.>
+
+## B12 ☐ `strings.dll` messages
+
+**Goal.** `Messages` reads `strings.dll` directly.
+
+**Evidence (confidence: lead-only).** `Messages.cs:27`; Rust `messages` crate 1,244 lines. CSVM
+already reads PE string tables (`PeStringTable.cs`).
+
+**Approach.** Reuse `PeStringTable.cs`; model diff; delete the `messages.json` path.
+
+**Model recommendation.** medium.
+
+**Verify.** A2 diff clean; complete battery.
+
+**⚠ Traps.** <TODO: text encoding of the string resources; check against `docs/formats/`.>
+
+## B13 ☐ Sound archives
+
+**Goal.** `SoundArchive` reads `soundsh.zbd`/`soundsl.zbd` directly.
+
+**Evidence (confidence: lead-only).** `SoundArchive.cs:39,126`; entries are stored raw in the
+archive (`archive` crate).
+
+**Approach.** Entries through the A1 archive reader into `SoundArchive`'s model; model diff; delete
+the zip path.
+
+**Model recommendation.** medium.
+
+**Verify.** A2 diff clean; complete battery.
+
+**⚠ Traps.** <TODO: none known.>
+
+## B14 ☐ Reader archives (`zrdr.zbd`)
+
+**Goal.** `Zrdr` builds its dictionaries from `zrdr.zbd` directly, for root, chapter and mission.
+
+**Evidence (confidence: lead-only).** `Zrdr.cs:20-179`; about 54 archives; Rust `reader` 176 lines;
+floats are `f32` (`reader/src/read.rs`) and `Zrdr.cs` reads single precision.
+
+**Approach.** Reader into `ZrdrDict`; model diff; delete the JSON and v0.6.1 shape paths.
+
+**Model recommendation.** medium.
+
+**Verify.** A2 diff clean over every reader archive; complete battery; 8-chapter regression.
+
+**⚠ Traps.** The JSON detour widened floats to `f64`; the direct path must keep the `f32` bits, and
+the diff compares bitwise. Entry names are `.zrd`, renamed `.json`/`.zrd.json` in today's zip.
+
+## B15 ☐ Texture archives
+
+**Goal.** `TextureArchive` decodes `texture.zbd`, `rtextureN.zbd` and `rimage.zbd` into images
+directly, with the same names and alpha classes.
+
+**Evidence (confidence: lead-only).** `TextureArchive.cs:759-766` reads PNGs; alpha class from the
+manifest (`:1306-1315`); Rust `image` + `pixel-ops` 1,300 lines; palettes, RGB565, simple alpha;
+the `Rename` collision rule.
+
+**Approach.** Decode to the image model `TextureArchive` builds after PNG decode; reproduce the
+alpha class and rename rules; model diff on pixels and names; delete the PNG/zip path.
+
+**Model recommendation.** high, names feed HD packs and gamez.
+
+**Verify.** A2 diff clean, pixel for pixel, over all 49 archives; HD texture pack still resolves
+(`HdTextures.cs`); complete battery.
+
+**⚠ Traps.** HD packs and gamez reference textures by name, so the rename rule must match exactly.
+<TODO: where the alpha class is computed in the Rust, and whether it reads the pixels or a header.>
+
+# Wave C, large formats
+
+## C21 ☐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+
+**Goal.** `CompiledAnim` builds `AnimDefinition`s from the 61 anim archives directly.
+
+**Evidence (confidence: lead-only).** `CompiledAnim.cs:81,120,147-151`; Rust `anim` 8,369 (CS 2,111),
+`anim-events` 11,598, `anim-names` 3,897; six NaN deltas carried raw; `docs/formats/anim-definitions.md`
+and `compiled-archives.md`.
+
+**Approach.** Split by event family if the size demands it. <TODO: a sub-item split, decided by
+the implementer after reading `anim-definitions.md`.>
+
+**Model recommendation.** high.
+
+**Verify.** A2 diff clean over all 61 archives; complete battery; 8-chapter regression.
+
+**⚠ Traps.** NaN deltas compare by bits, not by value. Stderr notes such as "anim def duplicate
+anim ref" (`ZbdPlan.Classify`) mark data quirks the reader must tolerate the same way.
+
+## C22 ☐ GameZ and `planes.zbd`
+
+**Goal.** `GameZ` builds its node graph for every chapter and for `planes.zbd` from the game bytes.
+
+**Evidence (confidence: lead-only).** `GameZ.cs:108-123`; Rust `gamez` 20,228 (CS 5,127) and
+`nodes` 7,626; `docs/formats/gamez.md`, `world-structure.md`. The per-chapter image-pointer tables
+are taken to serve only repack (decision 14), not verified.
+
+**Approach.** Readers into `GameZNode` and its children; skip the pointer tables; model diff;
+delete the JSON and v0.6.1 shape paths. <TODO: a sub-item split (nodes, meshes, materials,
+planes).>
+
+**Model recommendation.** high.
+
+**Verify.** A2 diff clean over 8 chapters plus planes; complete battery; 8-chapter `--freecam`
+regression with identical mesh/node counts.
+
+**⚠ Traps.** If the diff shows a texture reference the engine needs coming only from the pointer
+tables, decision 14 is wrong; record it in this item, do not quietly port the tables. Stderr notes
+"object3d transform fail" and "VAL FAIL" mark tolerated quirks.
+
+# Wave D, ROF and disc sources
+
+## D31 ☐ ROF half read in place
+
+**Goal.** `crimson.rof`/`crimptch.rof`, `.BM` textures, `langui.dll`/`language.dll`, the menu
+layout and the cinemas are read from the game-file source; `extracted/rof/` is no longer written.
+
+**Evidence (confidence: lead-only).** The C# decoders already exist (data survey, C# ROF half);
+`MpegSystemStream.cs` decodes from a stream.
+
+**Approach.** Point the existing decoders' consumers at the source; drop the PNG/JSON writes and
+`MovieCopy`. <TODO: whether the cinema decoder needs a seekable stream, which matters for D33's
+in-memory CABs.>
+
+**Model recommendation.** medium.
+
+**Verify.** Menus, UI strings and all 10 cinemas unchanged in the complete battery's goldens.
+
+**⚠ Traps.** <TODO: none known.>
+
+## D32 ☐ ISO9660 reader
+
+**Goal.** An `.iso` file is a game-file source.
+
+**Evidence (confidence: lead-only).** The Rust walks the primary volume with 8.3 names only
+(`disc.rs:87-155`).
+
+**Approach.** Primary-volume directory walk into the A1 source interface.
+
+**Model recommendation.** medium.
+
+**Verify.** Every non-CAB file the engine reads opens from the ISO with the same bytes as from a
+copy.
+
+**⚠ Traps.** Names are 8.3 on the disc; the long `rtextureN` names come from D33's table.
+
+## D33 ☐ LZX CAB decoder and the `rtextureN` long names
+
+**Goal.** Chapter `.CAB` files on a disc or ISO unpack in memory per session, and their files
+appear under the names an install uses.
+
+**Evidence (confidence: lead-only).** CABs are LZX (`cab` crate, `crates/unzbd/Cargo.toml`); the
+long-name table is per chapter (`disc.rs:177-203`); no native .NET LZX decoder.
+
+**Approach.** Own CAB + LZX decoder in C#. In-memory per session (decision 15). <TODO: whether a
+compatible-licence C# LZX implementation exists to draw on; measure decompression time per
+chapter.>
+
+**Model recommendation.** high, a codec with no runtime fallback.
+
+**Verify.** Every CAB file's bytes match a known install's copy (hash compare); launch time from
+ISO measured against an install.
+
+**⚠ Traps.** If the measured cost is too high, the answer is a disk cache (decision 15), not a
+return to extraction.
+
+## D34 ☐ Optional copy into the data root
+
+**Goal.** A player can copy the needed game files, CABs unpacked, into an install tree under the
+data root, which the locator then finds.
+
+**Evidence (confidence: lead-only).** Decisions 2 and 9.
+
+**Approach.** Walk the file list the engine reads (the A1 source plus `ZbdManifest.cs` and the ROF
+list) and write it out. <TODO: the target folder name; the UI entry point (from E41's picker).>
+
+**Model recommendation.** medium.
+
+**Verify.** Copy from the ISO, unmount it, complete battery from the copy.
+
+**⚠ Traps.** A partial copy must not be found as a valid install; write to a temporary name and
+rename at the end.
+
+# Wave E, cutover
+
+## E41 ☐ Source picker and upgrade cleanup
+
+**Goal.** With no source found, the game opens a picker (folder, drive or `.iso`) in place of the
+Extract screen; once a source works, it offers once to delete an old `extracted/`.
+
+**Evidence (confidence: lead-only).** Decision 8. `ExtractionStamp.Standing` sends the player to
+the Extract screen today.
+
+**Approach.** Reuse the Extract screen's locator UI; replace the extraction run with source
+validation. <TODO: where "offered once" is remembered.>
+
+**Model recommendation.** medium.
+
+**Verify.** <TODO: a scripted check of the picker; the deletion prompt on a machine with an old
+`extracted/`.>
+
+**⚠ Traps.** The delete offer touches 1.6 GB of player data; it deletes only `extracted/`, after
+confirmation, and never follows reparse points (CLAUDE.md's junction warning).
+
+## E42 ☐ Dev-only `--dump`
+
+**Goal.** A headless flag writes the loader models as JSON/PNG/WAV into `.scratch` for analysis
+scripts and agents.
+
+**Evidence (confidence: lead-only).** Decision 7; 19 `analysis/` scripts read `extracted/`.
+
+**Approach.** Serialize the models with `System.Text.Json`; images through the existing
+`PngWriter.cs`. No player UI.
+
+**Model recommendation.** medium.
+
+**Verify.** A dump of one chapter loads in one of the existing analysis scripts after a path change.
+
+**⚠ Traps.** The engine never reads the dump; nothing may grow a fallback onto it.
+
+## E43 ☐ Delete the extraction pipeline
+
+**Goal.** `UnzbdTool`, `ZbdExtraction`, `ZbdPlan`, `ExtractionRun`, `ExtractionStamp`,
+`Extract.ps1`, the `--extract*` flags and their tests are gone.
+
+**Evidence (confidence: lead-only).** Data survey, Sources and `unzbd` modes.
+
+**Approach.** Delete, then fix callers. <TODO: the full caller list.>
+
+**Model recommendation.** medium.
+
+**Verify.** Build, complete battery, and a grep for `unzbd` outside history-only docs returns
+nothing in code.
+
+**⚠ Traps.** `ExtractionStampTests` guards the schema in three places; it goes with the stamp.
+
+## E44 ☐ Packaging, licences, credit and docs
+
+**Goal.** Releases carry no `unzbd`, `LICENSE-unzbd` or Rust build; README and the third-party
+notices credit TerranMechworks/mech3ax in one linked line; no link to the fork remains.
+
+**Evidence (confidence: lead-only).** `packaging/MANIFEST.md:23,32,36,54`, `ExportRelease.ps1`,
+`PublishRelease.ps1`, `packaging/BuildThirdPartyNotices.ps1`, `README.md:76-77,125,203-204`,
+`docs/tooling.md:916-930`, `PROJECT_CONTEXT.md:57,125`, `docs/upstream-pr/`.
+
+**Approach.** Remove the unzbd and Linux musl steps from the export and publish scripts and
+BUILD-INFO; rewrite `docs/formats/` citations into mech3ax code to cite the C# readers; drop the
+fork section of `docs/tooling.md`. <TODO: whether `docs/upstream-pr/` is deleted.>
+
+**Model recommendation.** medium.
+
+**Verify.** `ExportRelease.ps1` and the Linux export build; `CheckDocEntries.ps1` passes; a grep
+for `Laeresh/mech3ax` returns nothing.
+
+**⚠ Traps.** <TODO: none known.>
+
+## E45 ☐ Final ISO-only run
+
+**Goal.** The game runs from an `.iso` with no install, no copy and no `extracted/` present.
+
+**Evidence (confidence: lead-only).** Decision 10.
+
+**Approach.** Move `extracted/` aside, point the data root at an empty folder and the source at
+the ISO.
+
+**Model recommendation.** medium.
+
+**Verify.** Complete `RunTests.ps1` with every golden unchanged; 8-chapter `--freecam` regression.
+
+**⚠ Traps.** The suites must not find an old `extracted/` through `CSVM_DATA_ROOT`; check the
+environment before trusting a green run.
