@@ -163,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, foundation
 
 1. ☐ Game-file source and the ZBD archive reader
-2. ☐ Model-diff oracle harness
+2. ☑ Model-diff oracle harness
 
 ### Wave B, small formats
 
@@ -231,7 +231,83 @@ without an install, the counterpart of `ExtractedDataFact`.>
 **⚠ Traps.** Install folders are matched case-insensitively and output paths take case from
 `ZbdTree`; Linux installs under Wine/Proton are case-sensitive file systems.
 
-## A2 ☐ Model-diff oracle harness
+## A2 ☑ Model-diff oracle harness
+
+**Landed.** `CSVM.Tests/ModelDiff.cs` is one reflective comparer for every loader model:
+`ModelDiff.AssertEqual(expected, actual, params string[] skip)` fails with the first difference
+as `path: expected …, actual …` and otherwise returns the number of leaf values compared;
+`ModelDiff.FirstDifference` returns the same text, or null. `CSVM.Tests/ModelDiffTests.cs` seeds
+one difference per test into real model types (`GameZ`, `AnimDefinition`, `SiScript`, `TgaImage`)
+and pins the reported path; `ModelDiffDataTests` builds five real models from `extracted/` twice
+and finds no difference, then flips one bit in C1's world and finds exactly that path.
+
+**Verified.** <pending orchestrator run>
+
+**The rules.**
+
+- **Reflective, not per-model.** The walk reads every instance field, public or private, down the
+  base-type chain, and shows an auto-property's backing field under the property's name. That
+  covers the state the models keep behind accessors (`AnimData._props`, `ZrdrDict._props`,
+  `Messages._byKey`), records (`AnimNodePrereq.Path`), and Godot structs (`Vector3`, `Color`,
+  `Quaternion`, `Transform3D`) through their own fields. Computed properties are not read; they
+  derive from fields. A per-model comparer would have to be kept in step with every field a later
+  item adds, and a forgotten field passes silently.
+- **Leaves.** `float` and `double` compare by their bits: a NaN equals only the same NaN payload,
+  and `-0` differs from `0`. Other primitives, enums, strings (ordinal) and `decimal` compare by
+  `Equals`. A boxed value of a different type is a difference (`1f` against `1.0` in a reader
+  list), reported with both type names.
+- **Collections.** Lists and arrays: count first (`….Count`), then element by element in order.
+  Dictionaries and sets: their `Comparer` first, then each key must exist with exactly the same
+  spelling (even under `OrdinalIgnoreCase`, since `ZrdrDict.Keys` and the anim symbol tables expose
+  the spelling), then the values; key order is not compared. Any other `IEnumerable` compares in
+  order. `byte[]` takes a span fast path that names the first differing index. `Memory<T>` and
+  `ReadOnlyMemory<T>` compare by content.
+- **Cycles and shared nodes.** A reference pair met again counts as already compared, so
+  `AnimDefinition.Archive` pointing back at its `AnimArchive` terminates.
+- **Godot objects.** An `Image` compares by format, size, mipmap count and `GetData()`, which
+  needs a running engine, so that branch serves an in-engine suite only. Any other `GodotObject`
+  (`ImageTexture`, `AudioStreamWav`) throws: compare the engine-free bytes it is built from
+  (`TgaImage.Rgba`, the WAV bytes). `TextureArchive` and `SoundArchive` hold zip handles and
+  engine caches, so B13 and B15 compare per entry, not the archive object.
+- **Skips.** `GameZ._parent`, `_placed` and `_markerGizmo` are lazy caches and always skipped. A
+  caller adds a skip as `Type.member` (`"AnimArchive._path"`) or as one exact path
+  (`"SiScript.Frames[3].Translate.Delta.X"`). A lazily loaded part must be loaded on both sides
+  first: the `AnimArchive` theory calls `Script(i)` for every index before comparing.
+
+**NaN and `delta_raw`.** The extraction writes the six NaN deltas of `carneypkup_cam.zan;camera1`
+(C5/M02) as `delta: {x: 0.0, …}` beside `delta_raw: "AADA/…"`, and `SiVectorChannel.Parse` reads
+only `delta`, so today's model holds `+0.0` (`0x00000000`) where the file holds `0xFFC00000`. The
+same frame's spline blocks reach the model as base64, so they keep their NaN bits. The harness
+makes no exception for either: the C5/M02 archive self-compares clean with its NaN splines, and a
+reader that yields the file's NaN deltas is reported at
+`…Frames[k].Translate.Delta.X: expected 0 (0x00000000), actual NaN (0xFFC00000)`. C21 settles it
+one of two ways: read those deltas the way today's model holds them (decision 1, same in-memory
+data), or keep the file's NaN and name the six paths as skips with the reason beside them. The
+harness has no NaN tolerance switch, so neither choice can hide a seventh NaN.
+
+**Wiring contract (Wave B, C).** One theory per format, rows from `ZbdManifest`, the old model
+from the extraction and the new one from A1's source. `GameDataTheory`, `GameFiles.Open`,
+`OldLoader` and `NewReader` stand in for A1's names and the item's own:
+
+```csharp
+[GameDataTheory] // A1's install-skipping attribute
+[MemberData(nameof(InterpArchives))]
+public void TheReaderBuildsTheModelTheExtractionBuilds(string archive)
+{
+    var expected = OldLoader(SessionPaths.PreferUnzipped(...archive...));
+    var actual = NewReader(GameFiles.Open(archive));
+    Assert.True(ModelDiff.AssertEqual(expected, actual) > 0);
+}
+```
+
+A format whose loader is a bag of files (zrdr, sounds) compares a `Dictionary<string, …>` keyed by
+entry name, so a missing or extra entry is reported by name (`Dictionary["vehicle.zrd.json"]`).
+Assert the returned count is above zero, so a model whose every field was skipped cannot pass.
+
+**Measured.** 1,327,100 leaf values for C1's world in about one second; C1 `cam_anim` 236,657;
+C5/M02 `mis_anim` 239,193; shared zrdr 304,837; messages 1,024.
+
+**Original approach (kept for reference).**
 
 **Goal.** For any format, a test builds the loader model from today's `extracted/` and from the
 game bytes and reports the first differing field, floats compared bitwise.
@@ -240,8 +316,7 @@ game bytes and reports the first differing field, floats compared bitwise.
 cleanly without data.
 
 **Approach.** A reflective or hand-written deep comparer over the loader models, run as a theory
-over every archive of a mode. <TODO: reflective vs per-model comparers; how NaN and `delta_raw`
-compare.>
+over every archive of a mode. Reflective, as above; NaN and `delta_raw` as above.
 
 **Model recommendation.** high, every format's proof depends on its strictness.
 
