@@ -1008,7 +1008,8 @@ One notice the launcher posts for the player to read at the menu's next show: VR
 for the flat game it fell back to or a restart whose new process did not start
 (`Launch/XrRelaunch.cs`'s `MenuNotice`, posted through `Launch/ProcessMenu.cs`'s `Notice`), and a
 menu-launched flight one for an aircraft that flew without its bad `rig.json`
-(`Mech3/PlaneRigPatch.cs`'s `PlayerNotice`). Original
+(`Mech3/PlaneRigPatch.cs`'s `PlayerNotice`). Each post adds its message to the pending notice as
+a paragraph of its own, and a message already there is not repeated. Original
 raises it as the one-button warning box (`OriginalShell.ShowNotice`); a presentation takes it once,
 and a switch keeps one nothing has shown.
 

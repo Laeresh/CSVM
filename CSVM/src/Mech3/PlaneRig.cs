@@ -116,7 +116,8 @@ public sealed class PlaneRig
             }
 
             CheckKeys(root, SectionKeys, sourceName, "root");
-            var markers = new Dictionary<string, Vector3>(StringComparer.Ordinal);
+            // Without case, as PlaneRigPatch matches node names, so a name given twice in two cases is refused.
+            var markers = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
             var props = new List<RigProp>();
             var surfaces = new List<RigSurface>();
             string? left = null;
@@ -394,7 +395,7 @@ public sealed class PlaneRig
 
     private static void CheckUniqueNodes(List<string> nodes, string source, string section)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string node in nodes)
         {
             if (!seen.Add(node))

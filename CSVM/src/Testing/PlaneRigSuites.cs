@@ -45,8 +45,10 @@ internal static class PlaneRigSuites
         "about its own plane-frame axis, an unclassified one included; a rig surface deflects about " +
         "its plane-frame hinge; a rig flare side replaces the original flare on that side by " +
         "position, and the fuel leak's wing_flare2 darkens the rig flare standing for it; the wing " +
-        "split and every pylon's side are unchanged; a rig naming a node the model lacks fails the " +
-        "build with an error naming the file and the entry; and on a player's launch the same rig " +
+        "split and every pylon's side are unchanged; a rig naming a node the model lacks, a non-marker " +
+        "under markers, a firepoint past the reach outside the model box, a blur on a node that is no " +
+        "prop or rotor, or a flare holding airframe fails the build with an error naming the file and " +
+        "the entry, while a firepoint just inside that reach builds; and on a player's launch the same rig " +
         "posts one notice and builds the original airframe, none of its entries applied")]
     internal static void PlaneRigSuite(TestContext ctx)
     {
@@ -69,6 +71,7 @@ internal static class PlaneRigSuites
         Vector3 pylon1, firepoint1, firepoint2, camera;
         string surfaceName, spinName;
         Vector3 surfaceOrigin;
+        Aabb box;
         bool hasProp1;
         using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
         {
@@ -79,6 +82,7 @@ internal static class PlaneRigSuites
                 firepoint1 = MarkerAt(model, "firepoint1");
                 firepoint2 = MarkerAt(model, "firepoint2");
                 camera = builder.CockpitCameraOffset;
+                box = PlaneRigPatch.ModelBox(model) ?? default;
                 var meshes = PlainMeshNodes(model);
                 ctx.Check(meshes.Count >= 2, $"{plane} carries two plain mesh nodes to rig count={meshes.Count}");
                 if (meshes.Count < 2)
@@ -188,7 +192,7 @@ internal static class PlaneRigSuites
 
         CheckFlares(ctx, planesGamez, textures, plane, pylon1);
         CheckLeakFlare(ctx, planesGamez, textures);
-        CheckRefused(ctx, planesGamez, textures, plane, spinName);
+        CheckRefused(ctx, planesGamez, textures, plane, spinName, box);
         CheckPlayerFallback(ctx, planesGamez, textures, plane, pylon1, camera);
     }
 
@@ -1185,7 +1189,8 @@ internal static class PlaneRigSuites
         $"needles {g?.NeedleCount} lamps {g?.LampCount} readouts {g?.ReadoutCount} belts {g?.BeltCount} zones {g?.DamageZoneCount}";
 
     // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes
-    // dark, and with no rig wing_flare2 itself is.
+    // dark, and with no rig wing_flare2 itself is. The stand-in is a meshless marker, since a rig
+    // flare may not hold airframe.
     private static void CheckLeakFlare(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
         string flarePlane = Tooling.SyntheticPlane.Fighter;
@@ -1194,21 +1199,15 @@ internal static class PlaneRigSuites
             return;
         }
 
-        string side, standIn;
+        string side;
+        const string standIn = "cockpit_camera";
         using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
         {
             var bare = Build(ctx, planesGamez, textures, none, flarePlane, out var bareBuilder);
             try
             {
                 side = MarkerAt(bare, "wing_flare2").X < 0f ? "left" : "right";
-                var plain = PlainMeshNodes(bare);
-                ctx.Check(plain.Count > 0, $"{flarePlane} carries a plain mesh node to stand in for a flare");
-                if (plain.Count == 0)
-                {
-                    return;
-                }
-
-                standIn = AnimRuntime.NameOf(plain[0]);
+                ctx.Check(Named(bare, standIn).Any(), $"{flarePlane} carries {standIn} to stand in for a flare");
                 CheckLeak(ctx, bareBuilder, "wing_flare2", "with no rig");
             }
             finally
@@ -1354,11 +1353,13 @@ internal static class PlaneRigSuites
 
     // Each rig names one thing the model cannot honour, and the build must refuse it by file and entry.
     // A firepoint the model lacks is refused too, read on a copy of the airframe with one cut away.
-    private static void CheckRefused(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string spinName)
+    // A firepoint just inside the reach past the model box builds, one just past it is refused.
+    private static void CheckRefused(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string spinName, Aabb box)
     {
         var cut = GameZ.Load(ctx.PlanesGamezPath);
         string? lacking = CutFirepoint(cut, plane);
         ctx.Check(lacking != null, $"{plane} carries a firepoint to cut for the added-firepoint case");
+        Vector3 Aft(float past) => new(box.GetCenter().X, box.GetCenter().Y, box.End.Z + PlaneRigPatch.MarkerReach + past);
         var cases = new List<(string Label, string Json, string Entry, GameZ Gamez)>
         {
             ("unknown-prop", """{ "props": [ { "node": "no_such_node", "axis": [0, 0, 1], "deg_per_sec": 10 } ] }""", "props[0] (no_such_node)", planesGamez),
@@ -1366,6 +1367,10 @@ internal static class PlaneRigSuites
             ("unknown-flare", """{ "flares": { "right": "no_such_node" } }""", "flares.right", planesGamez),
             ("unknown-marker", """{ "markers": { "no_such_marker": [0, 0, 0] } }""", "markers.no_such_marker", planesGamez),
             ("spin-unspecified", $$"""{ "props": [ { "node": "{{spinName}}", "axis": [0, 0, 1] } ] }""", $"props[0] ({spinName})", planesGamez),
+            ("moved-mesh", $$"""{ "markers": { "{{spinName}}": [0, 0, -30] } }""", $"markers.{spinName}", planesGamez),
+            ("far-firepoint", $$"""{ "markers": { "firepoint1": {{Json(Aft(0.1f))}} } }""", "markers.firepoint1", planesGamez),
+            ("blur-unclassified", $$"""{ "props": [ { "node": "{{spinName}}", "axis": [0, 0, 1], "deg_per_sec": 10, "blur": true } ] }""", $"props[0] ({spinName}).blur", planesGamez),
+            ("mesh-flare", $$"""{ "flares": { "left": "{{spinName}}" } }""", "flares.left", planesGamez),
         };
         if (lacking != null)
         {
@@ -1388,6 +1393,19 @@ internal static class PlaneRigSuites
 
             ctx.Check(error != null && error.Contains(file, StringComparison.Ordinal) && error.Contains(entry, StringComparison.Ordinal),
                 $"a {label} rig fails the build naming the file and '{entry}': {error ?? "no error"}");
+        }
+
+        using var near = Pack(ctx, "near-firepoint", plane, $$"""{ "markers": { "firepoint1": {{Json(Aft(-0.1f))}} } }""");
+        try
+        {
+            var model = Build(ctx, planesGamez, textures, near, plane, out _);
+            ctx.Check(MarkerAt(model, "firepoint1").DistanceTo(Aft(-0.1f)) < PosTolerance,
+                $"a firepoint 0.1 m inside the {PlaneRigPatch.MarkerReach} m reach past the model box {box} builds there");
+            model.Free();
+        }
+        catch (InvalidDataException e)
+        {
+            ctx.Check(false, $"a firepoint 0.1 m inside the reach past the model box builds: {e.Message}");
         }
     }
 
