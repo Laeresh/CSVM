@@ -24,6 +24,7 @@
     "sun-per-view": "counts each splitscreen pane's rendered aircraft pixels and reads their shade back; headless renders none",
     "theater-screen": "aims a ray through each pause board row laid out against the root viewport, which headless sizes at 64 px, so every row lies off the screen and no ray lands",
     "trail-world-anchor": "reads the first drawn puff's instance transform back, which the headless renderer does not keep",
+    "vegetation-added-stamps": "counts the added stamps drawn from their MultiMesh instance transforms after each edit, which the headless renderer keeps no instances for",
     "vegetation-lab": "reads the drawn clutter buffers on the map and past its edge back after each edit, which the headless renderer keeps no instances for",
     "wing-flare-pose": "counts the flare's rendered pixels in a viewport; headless renders none",
     "xr-pointer": "aims the hand's laser at a pause board row laid out against the root viewport, which headless sizes at 64 px, so the row lies off the screen and the laser hits nothing"

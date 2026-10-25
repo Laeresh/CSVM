@@ -41,6 +41,7 @@ public sealed partial class VegetationLab : Node
     private readonly string? _savePath;
     private readonly List<(string Model, VegetationKind.Field Field, HSlider Slider, Label Value)> _rows = new();
     private readonly HashSet<string> _pickKinds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(string Set, HSlider Slider, Label Value, CheckBox Mass)> _setControls = new();
 
     private VegetationEntry _saved;
     private VegetationEntry _edit;
@@ -54,6 +55,8 @@ public sealed partial class VegetationLab : Node
     private Label? _seedValue;
     private Label? _status;
     private Label? _picksText;
+    private VBoxContainer? _setRows;
+    private string _setsShown = "";
     private bool _open;
     private bool _syncing;
     private float _pending = -1f;
@@ -224,6 +227,13 @@ public sealed partial class VegetationLab : Node
             _maskEdited = false;
             ApplyMask();
         }
+        Commit();
+    }
+
+    /// <summary>Sets a vegetation set's added stamps per hectare and whether they count as forest, and applies at once.</summary>
+    public void SetSet(string set, float density, bool mass)
+    {
+        _edit = _edit.WithSet(set, density, mass);
         Commit();
     }
 
@@ -466,9 +476,14 @@ public sealed partial class VegetationLab : Node
         _picksText = Small("");
         rows.AddChild(_picksText);
 
+        rows.AddChild(new Label { Text = "SETS", Modulate = Amber });
+        rows.AddChild(Small("A picked texture takes its set's kinds once per texture repeat, at the density a hectare under a neutral mask. Forest sets also feed the canopy clumps.", Dim));
+        _setRows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        rows.AddChild(_setRows);
+
         rows.AddChild(Small("Brush: hold the left button; the clutter follows on release.", Dim));
-        // The density rule never adds an original stamp, so a Thicken stroke shows nothing yet.
-        var thickenNote = Small("Thicken adds no trees until Wave C's added stamps exist; it is stored in the mask. Original trees can only be thinned or cleared.", Dim);
+        // The density rule never adds an original stamp, so Thicken reaches only the added ones.
+        var thickenNote = Small("Thicken shows more of a picked texture's added stamps, up to twice its set's density. Original trees can only be thinned or cleared.", Dim);
         thickenNote.Visible = Brush == VegetationBrush.Thicken;
         rows.AddChild(Choice(Enum.GetNames<VegetationBrush>(), (int)Brush, i =>
         {
@@ -646,8 +661,85 @@ public sealed partial class VegetationLab : Node
                 ? "no texture picked"
                 : string.Join("\n", _edit.Picks.Select(p => $"{p.Texture}: {string.Join(", ", _edit.SetFor(p.Texture)?.Models ?? Array.Empty<string>())}"));
         }
+        SyncSets();
         _syncing = false;
         UpdateStatus();
+    }
+
+    // One row per set a pick can stamp, made again when the sets themselves change, which a pick or revert does.
+    private void SyncSets()
+    {
+        if (_setRows == null)
+            return;
+        var sets = _edit.Sets.Where(s => !string.Equals(s.Name, CanopyMask.CanopySet, StringComparison.OrdinalIgnoreCase)).ToList();
+        string shown = string.Join("|", sets.Select(s => s.Name));
+        if (shown == _setsShown)
+        {
+            foreach (var (set, slider, value, mass) in _setControls)
+            {
+                var now = sets.First(s => s.Name == set);
+                slider.Value = now.Density;
+                value.Text = Format(now.Density);
+                mass.ButtonPressed = now.Mass;
+            }
+            return;
+        }
+        _setsShown = shown;
+        _setControls.Clear();
+        foreach (var child in _setRows.GetChildren())
+        {
+            _setRows.RemoveChild(child);
+            child.QueueFree();
+        }
+        if (sets.Count == 0)
+            _setRows.AddChild(Small("no set yet: a pick makes one", Dim));
+        foreach (var set in sets)
+            AddSetRow(set);
+    }
+
+    // A set's density slider, applied on release, and its forest box, applied at once.
+    private void AddSetRow(VegetationSet set)
+    {
+        var head = new HBoxContainer();
+        var name = Small($"{set.Name} (a hectare)");
+        name.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        head.AddChild(name);
+        var value = Small(Format(set.Density));
+        value.AutowrapMode = TextServer.AutowrapMode.Off;
+        head.AddChild(value);
+        var mass = new CheckBox { Text = "forest", ButtonPressed = set.Mass, FocusMode = Control.FocusModeEnum.None };
+        mass.AddThemeFontSizeOverride("font_size", 11);
+        mass.Toggled += on =>
+        {
+            if (!_syncing)
+                SetSet(set.Name, _edit.Sets.First(s => s.Name == set.Name).Density, on);
+        };
+        head.AddChild(mass);
+        _setRows!.AddChild(head);
+        var slider = new HSlider
+        {
+            MinValue = 0,
+            MaxValue = VegetationSet.MaxDensity,
+            Step = 0.05,
+            Value = set.Density,
+            FocusMode = Control.FocusModeEnum.None,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        slider.ValueChanged += v =>
+        {
+            if (_syncing)
+                return;
+            _edit = _edit.WithSet(set.Name, (float)v, _edit.Sets.First(s => s.Name == set.Name).Mass);
+            value.Text = Format((float)v);
+            Schedule();
+        };
+        slider.DragEnded += changed =>
+        {
+            if (changed)
+                Commit();
+        };
+        _setRows.AddChild(slider);
+        _setControls.Add((set.Name, slider, value, mass));
     }
 
     private void UpdateStatus()

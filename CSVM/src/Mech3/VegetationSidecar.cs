@@ -33,8 +33,18 @@ public sealed record VegetationKind(string Model, float JitterUv = 0f, float Yaw
     public sealed record Field(string Key, float Max, Func<VegetationKind, float> Get, Func<VegetationKind, float, VegetationKind> With);
 }
 
-/// <summary>A named list of listed kinds that a texture pick stamps on its ground texture.</summary>
-public sealed record VegetationSet(string Name, IReadOnlyList<string> Models);
+/// <summary>A named list of listed kinds that a texture pick stamps on its ground texture. <c>Density</c> is
+/// its added stamps per hectare of ground at a neutral mask. <c>Mass</c> says its kept stamps count as forest:
+/// they feed the canopy mask, the clump rate and the handover as the original's stamps do.</summary>
+public sealed record VegetationSet(string Name, IReadOnlyList<string> Models, float Density = VegetationSet.DefaultDensity, bool Mass = false)
+{
+    /// <summary>The original's own palm stand on C3's <c>cliff1_sandtrans</c>: six <c>palm1</c> cards a texture
+    /// repeat of 7,642 m², 7.85 a hectare.</summary>
+    public const float DefaultDensity = 7.85f;
+
+    /// <summary>The lab's and a load's upper bound, stamps per hectare: one a 10 m square.</summary>
+    public const float MaxDensity = 100f;
+}
 
 /// <summary>A ground texture given a vegetation set by the lab's paint tool.</summary>
 public sealed record TexturePick(string Texture, string Set);
@@ -121,6 +131,18 @@ public sealed class VegetationEntry
         }
 
         return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = picks };
+    }
+
+    /// <summary>A copy where set <paramref name="name"/> takes <paramref name="density"/> stamps a hectare, clamped,
+    /// and <paramref name="mass"/>, the lab's set edit. Throws for a set the entry lacks.</summary>
+    public VegetationEntry WithSet(string name, float density, bool mass)
+    {
+        var sets = new List<VegetationSet>(Sets);
+        int i = sets.FindIndex(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            throw new ArgumentException($"'{name}' is not a set of this entry", nameof(name));
+        sets[i] = sets[i] with { Density = Math.Clamp(density, 0f, VegetationSet.MaxDensity), Mass = mass };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = Picks };
     }
 
     /// <summary>The vegetation set picked for a ground texture, or null when the texture has no pick.</summary>
@@ -335,7 +357,17 @@ public sealed class VegetationSidecar
                 var models = new JsonArray();
                 foreach (var m in s.Models)
                     models.Add((JsonNode)m);
-                sets[s.Name] = models;
+                double density = Math.Round(Math.Clamp(s.Density, 0f, VegetationSet.MaxDensity), 4);
+                // The bare list while the set keeps its defaults, so a file that names none round-trips unchanged.
+                if (density == Math.Round(VegetationSet.DefaultDensity, 4) && !s.Mass)
+                {
+                    sets[s.Name] = models;
+                    continue;
+                }
+                var set = new JsonObject { ["kinds"] = models, ["density"] = density };
+                if (s.Mass)
+                    set["mass"] = true;
+                sets[s.Name] = set;
             }
             node["sets"] = sets;
         }
@@ -451,11 +483,13 @@ public sealed class VegetationSidecar
     private static List<VegetationSet> ReadSets(string chapter, JsonObject node, VegetationEntry entry, List<string> warnings)
     {
         var sets = new List<VegetationSet>();
-        foreach (var (name, members) in node)
+        foreach (var (name, value) in node)
         {
-            if (members is not JsonArray array)
+            // A bare list is the members at the default density; an object carries the set's values beside them.
+            var fields = value as JsonObject;
+            if ((fields?["kinds"] ?? value) is not JsonArray array)
             {
-                warnings.Add($"{chapter}: set '{name}' is not a list, ignored");
+                warnings.Add($"{chapter}: set '{name}' is neither a list nor an object with a 'kinds' list, ignored");
                 continue;
             }
             var models = new List<string>();
@@ -466,7 +500,28 @@ public sealed class VegetationSidecar
                 else
                     warnings.Add($"{chapter}: set '{name}' names '{member?.ToJsonString()}', which is not a listed kind, dropped");
             }
-            sets.Add(new VegetationSet(name, models));
+            var set = new VegetationSet(name, models);
+            foreach (var (key, field) in fields ?? new JsonObject())
+            {
+                if (key.StartsWith('_') || key == "kinds")
+                    continue;
+                if (key == "density" && field is JsonValue dv && dv.TryGetValue(out double density) && double.IsFinite(density))
+                {
+                    float held = Math.Clamp((float)density, 0f, VegetationSet.MaxDensity);
+                    if (held != (float)density)
+                        warnings.Add($"{chapter}: set '{name}': 'density' {density.ToString(System.Globalization.CultureInfo.InvariantCulture)} is held at {held.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                    set = set with { Density = held };
+                }
+                else if (key == "mass" && field is JsonValue mv && mv.TryGetValue(out bool mass))
+                {
+                    set = set with { Mass = mass };
+                }
+                else
+                {
+                    warnings.Add($"{chapter}: set '{name}': '{key}' is not a set field or not its type, ignored");
+                }
+            }
+            sets.Add(set);
         }
 
         return sets;

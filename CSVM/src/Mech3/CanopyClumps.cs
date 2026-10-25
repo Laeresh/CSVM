@@ -213,11 +213,15 @@ public static class CanopyClumps
     }
 
     /// <summary>Hands the listed cards over to the clumps, or back. Their Rich material fades them out over the
-    /// band while <paramref name="on"/>, and draws them at every distance otherwise.</summary>
+    /// band while <paramref name="on"/>, and draws them at every distance otherwise. An added kind that is not
+    /// forest keeps every distance, since no clump carries it.</summary>
     public static void Handover(IReadOnlyList<ClutterBuilder.KindExport>? kinds, bool on)
     {
         foreach (var kind in kinds ?? Array.Empty<ClutterBuilder.KindExport>())
-            (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, on ? new Vector2(HandoverNearM, HandoverFarM) : Vector2.Zero);
+        {
+            if (kind.Mass)
+                (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, on ? new Vector2(HandoverNearM, HandoverFarM) : Vector2.Zero);
+        }
     }
 
     /// <summary>The tile a species' clumps take on <paramref name="chapter"/>: the model pack's, else the one
@@ -232,7 +236,8 @@ public static class CanopyClumps
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         bool painted = entry.Picks.Any(p => CanopyMask.IsCanopy(entry, p.Texture));
-        var cards = painted ? Crowns(entry, textures) : kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
+        // A set the remake adds counts only as forest (KindExport.Mass): scattered bushes raise no clumps.
+        var cards = painted ? Crowns(entry, textures) : kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f && k.Mass)
             .Select(k => (Kind: k, Kept: k.Rich!.Placements.Count(p => p.Basis.Y.LengthSquared() > 0f)))
             .Where(k => k.Kept > 0)
             .GroupBy(k => k.Kind.Texture, StringComparer.OrdinalIgnoreCase)
@@ -252,7 +257,7 @@ public static class CanopyClumps
         float tileHeight = used.Select(t => t.HeightM).Append(TileHeight(sizes)).Max();
         float cardHeight = cards.Sum(c => c.Weight * c.Size.Y) / stamps;
         float meanTrees = MeanTrees(slots, strips.Select(t => t?.Tile.Trees).ToList(), weights, sizes);
-        var rate = painted ? Rate(mask, PaintedTreesPerCell, meanTrees) : Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f)
+        var rate = painted ? Rate(mask, PaintedTreesPerCell, meanTrees) : Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f && k.Mass)
             .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Y.LengthSquared() > 0f).Select(p => p.Origin)), meanTrees);
         float brightness = cards.Sum(c => c.Weight * (c.Look?.Brightness ?? 0f)) / stamps;
         float tint = cards.Sum(c => c.Weight * (c.Look?.Tint ?? 0f)) / stamps;

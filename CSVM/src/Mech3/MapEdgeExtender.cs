@@ -418,8 +418,14 @@ public sealed partial class MapEdgeExtender : Node3D
     }
 
     /// <summary>The clutter's Rich variant was baked again (<see cref="ClutterBuilder.ApplyVegetation"/>),
-    /// so the window's copies are built again from it at the next <see cref="Update"/>.</summary>
-    public void FollowVegetation() => DropWindow();
+    /// so the window's copies are built again from it at the next <see cref="Update"/>. The stamps are binned
+    /// again too, since the edit rebuilt the remake's added ones.</summary>
+    public void FollowVegetation()
+    {
+        DropWindow();
+        _sprites.Clear();
+        BinClutter();
+    }
 
     /// <summary>The canopy clumps the window's cells copy past the edge, null for none. Each live cell takes
     /// its copies now; the ground and the card copies stand.</summary>
@@ -684,6 +690,9 @@ public sealed partial class MapEdgeExtender : Node3D
         var byKind = new Dictionary<int, List<(Transform3D Xf, Color Fade, int Source)>>();
         foreach (var (kind, xf, fade, source) in sprites)
         {
+            // The remake's added stamps have no Original to copy.
+            if (!_rich && _clutter![kind].Added)
+                continue;
             if (!byKind.TryGetValue(kind, out var list))
                 byKind[kind] = list = new List<(Transform3D, Color, int)>();
             // A Rich card keeps its own mirror, which the card shader reads off the basis' X axis.

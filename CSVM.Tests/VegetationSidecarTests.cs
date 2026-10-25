@@ -148,6 +148,56 @@ public sealed class VegetationSidecarTests
         Assert.Null(entry.SetFor("crop04"));
     }
 
+    /// <summary>A set written as an object carries its density and forest flag, clamped and checked, and the lab's
+    /// set edit writes it back that way. A set at its defaults stays a bare list.</summary>
+    [Fact]
+    public void ASetCarriesItsDensityAndForestFlagThroughSave()
+    {
+        var sidecar = VegetationSidecar.Parse(
+            "{ \"C1\": { \"kinds\": { \"bush1.flt\": {}, \"firtree1.flt\": {} },"
+            + " \"sets\": { \"hedge\": [\"bush1.flt\"], \"wood\": { \"kinds\": [\"firtree1.flt\"], \"density\": 12.5, \"mass\": true },"
+            + " \"thick\": { \"kinds\": [\"bush1.flt\"], \"density\": 500, \"shade\": 1 }, \"none\": { \"density\": 1 } },"
+            + " \"picks\": { \"terpat03\": \"hedge\", \"grass1\": \"wood\" } } }");
+        Assert.Equal(3, sidecar.Warnings.Count);
+        Assert.Contains(sidecar.Warnings, w => w.Contains("'density' 500 is held at 100"));
+        Assert.Contains(sidecar.Warnings, w => w.Contains("'shade' is not a set field"));
+        Assert.Contains(sidecar.Warnings, w => w.Contains("set 'none' is neither a list nor an object"));
+        var entry = sidecar.For("C1");
+        Assert.Equal((VegetationSet.DefaultDensity, false), (entry.SetFor("terpat03")!.Density, entry.SetFor("terpat03")!.Mass));
+        Assert.Equal((12.5f, true), (entry.SetFor("grass1")!.Density, entry.SetFor("grass1")!.Mass));
+        Assert.Equal(VegetationSet.MaxDensity, entry.Sets.Single(s => s.Name == "thick").Density);
+
+        var edited = entry.WithSet("HEDGE", 3.25f, mass: true).WithSet("wood", -4f, mass: false);
+        Assert.Equal((3.25f, true), (edited.SetFor("terpat03")!.Density, edited.SetFor("terpat03")!.Mass));
+        Assert.Equal((0f, false), (edited.SetFor("grass1")!.Density, edited.SetFor("grass1")!.Mass));
+        Assert.Throws<System.ArgumentException>(() => entry.WithSet("crops", 1f, false));
+        Assert.Equal(entry.Picks, edited.Picks);
+
+        string written = Lf(VegetationSidecar.WithEntry(null, "C1", edited.WithSet("thick", VegetationSet.DefaultDensity, false)));
+        Assert.Contains("\"hedge\": {\n        \"kinds\": [\n          \"bush1.flt\"\n        ],\n        \"density\": 3.25,\n        \"mass\": true\n      }", written);
+        Assert.Contains("\"thick\": [\n        \"bush1.flt\"\n      ]", written);
+        var back = VegetationSidecar.Parse(written);
+        Assert.Empty(back.Warnings);
+        Assert.Equal((3.25f, true), (back.For("C1").SetFor("terpat03")!.Density, back.For("C1").SetFor("terpat03")!.Mass));
+        Assert.Equal(0f, back.For("C1").SetFor("grass1")!.Density);
+    }
+
+    /// <summary>C3 ships its cliff-top and side transitions picked to its three palms at twice the beach stand's
+    /// density, not as forest. The shoreline transition stays unpicked, so no palm stands in the reef water.</summary>
+    [Fact]
+    public void TheShippedFilePicksC3sTransitionsToItsPalms()
+    {
+        var c3 = VegetationSidecar.Parse(File.ReadAllText(ShippedPath)).For("C3");
+        foreach (string texture in new[] { "cliff1_toptrans.tif", "cliff1_sidetrans.tif" })
+        {
+            var set = VegetationScatter.Stamped(c3, texture);
+            Assert.NotNull(set);
+            Assert.Equal(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }, set!.Models);
+            Assert.Equal((15.7f, false), (set.Density, set.Mass));
+        }
+        Assert.All(new[] { "forest1.tif", "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
+    }
+
     /// <summary>Save writes the chapter's entry with only nonzero values, in a fixed order. Every other key
     /// stays where it was, and the file reads back as the entry it wrote.</summary>
     [Fact]

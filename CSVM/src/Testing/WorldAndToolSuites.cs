@@ -1643,7 +1643,8 @@ internal static class WorldAndToolSuites
     [Suite("canopy-mask",
         "C1's canopy mask bakes from its listed kinds' Rich stamps: jittered, it follows the Rich placements and not the Original ones; "
         + "a Clear stroke empties the cells it covers while their Original stamps stay, and a Neutral stroke gives the first mask back; "
-        + "its densest cells stand a fir's height over their ground; C3's bakes from the ground its entry picks as canopy, "
+        + "its densest cells stand a fir's height over their ground; added stamps from a C1 pick leave it as it was unless "
+        + "their set is forest, when they cover more cells; C3's bakes from the ground its entry picks as canopy, "
         + "covering about the 22 km2 of painted jungle the survey measured; a build with no entry has none")]
     internal static void CanopyMaskBake(TestContext ctx)
     {
@@ -1731,6 +1732,20 @@ internal static class WorldAndToolSuites
             b1.ApplyVegetationMask(brush);
             ctx.Check(b1.Canopy()!.Density.SequenceEqual(first.Density) && b1.Canopy()!.Top.SequenceEqual(first.Top),
                 $"a Neutral stroke gives the first C1 mask back");
+
+            // C21's added stamps feed the mass only as forest. Bushes scattered on C1's grassland leave the mask as it
+            // was, and the same pick marked forest covers more cells. The shipped entry gives the first mask back.
+            var grass = c1.WithPick("terpat03.tif", new[] { "bush1.flt", "bush2.flt" });
+            b1.ApplyVegetation(grass);
+            int grassKept = b1.AddedKept;
+            ctx.Check(grassKept > 0 && b1.Canopy()!.Density.SequenceEqual(first.Density),
+                $"a bush pick on terpat03 adds {grassKept} stamps and leaves the canopy mask as it was");
+            b1.ApplyVegetation(grass.WithSet(grass.SetFor("terpat03.tif")!.Name, VegetationSet.DefaultDensity, mass: true));
+            int forestCells = b1.Canopy()!.Density.Count(d => d > 0f);
+            ctx.Check(forestCells > sorted.Count, $"the same pick as forest covers {forestCells} cells against {sorted.Count}");
+            b1.ApplyVegetation(c1);
+            ctx.Check(b1.Canopy()!.Density.SequenceEqual(first.Density) && b1.AddedCandidates == 0,
+                $"the shipped entry gives the first mask back and adds no stamp");
 
             watch.Restart();
             var painted = Bake("C3", VegetationSidecar.Load().For("C3"), out var b3, out var g3, out var w3)!;

@@ -832,11 +832,143 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("vegetation-added-stamps",
+        "a C3 Enhanced flight at vegetation quality rich adds palms on the transition textures its entry picks, every one "
+        + "standing on a picked triangle, about the set's density under the neutral mask and none counted as forest; a live move to "
+        + "original and a live switch to Original draw none of them, and a move back draws the same again; a pick of another "
+        + "texture, a density edit and a Clear stroke each place them again live, the stroke dropping those under it alone, and the "
+        + "shipped entry gives the first stamps back exactly; a pick to the canopy set stamps none; C5 builds no added stamp")]
+    internal static void VegetationAddedStamps(TestContext ctx)
+    {
+        const string Chapter = "C3";
+        RequireData(ctx, Chapter);
+        RequireData(ctx, "C5");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        var gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, Chapter));
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            var c3 = Open(ctx, enhanced: true, chapter: Chapter);
+            try
+            {
+                if (!c3.Built || c3.Session.Clutter is not { ExportedKinds: { } kinds, Mask: { } mask, Vegetation: { } shipped } clutter)
+                {
+                    ctx.Check(false, $"the Enhanced {Chapter} flight builds with its clutter, mask and vegetation entry");
+                    return;
+                }
+                var opening = AddedOf(kinds);
+                var picked = shipped.Picks.Where(p => Mech3.VegetationScatter.Stamped(shipped, p.Texture) != null).Select(p => p.Texture).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var ground = Mech3.VegetationGround.Painted(gamez, picked.Contains);
+                var origins = opening.SelectMany(k => k.Rich.Select((xf, i) => (xf, Hidden: clutter.Activation?.IsHidden(k.Index, i) == true)))
+                    .Where(s => s.xf.Basis.Determinant() != 0f && !s.Hidden).Select(s => s.xf.Origin).ToList();
+                int off = origins.Where((_, i) => i % 25 == 0).Count(o => !OnTriangles(ground, o));
+                var models = kinds.Where(k => k.Added).Select(k => k.Model).Distinct().OrderBy(m => m).ToList();
+                double share = clutter.AddedKept / (double)Math.Max(1, clutter.AddedCandidates);
+                ctx.Check(picked.Count == 2 && origins.Count > 0 && off == 0 && models.SequenceEqual(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }),
+                    $"the flight adds {origins.Count} palms ({string.Join(", ", models)}) on {string.Join(", ", picked)}, {off} of a sample of {(origins.Count + 24) / 25} off a picked triangle");
+                ctx.Check(share > 0.45 && share < 0.55 && kinds.Where(k => k.Added).All(k => !k.Mass) && Handover(c3) == "off",
+                    $"the neutral mask keeps {clutter.AddedKept} of {clutter.AddedCandidates} candidates and none counts as forest ({Handover(c3)})");
+                int drawn = AddedDrawn(c3);
+                ctx.Same(origins.Count, drawn, $"rich draws every kept added stamp");
+
+                ApplyVegetation(c3, VegetationQualitySetting.Original);
+                ctx.Same(0, AddedDrawn(c3), $"a live move to original draws none of them");
+                ApplyVegetation(c3, VegetationQualitySetting.Rich);
+                ctx.Same(drawn, AddedDrawn(c3), $"and a move back draws them again");
+                Switch(c3, enhanced: false);
+                ctx.Same(0, AddedDrawn(c3), $"a live switch to Original draws none of them");
+                Switch(c3, enhanced: true);
+                ctx.Check(AddedDrawn(c3) == drawn && SameAdded(AddedOf(kinds), opening), $"and back in Enhanced the same ones");
+
+                var palms = shipped.SetFor(picked.First())!;
+                c3.Session.ApplyVegetation(shipped.WithPick("cliff1_sandtrans.tif", palms.Models));
+                Step(c3);
+                int withBeach = clutter.AddedCandidates;
+                c3.Session.ApplyVegetation(shipped.WithSet(palms.Name, palms.Density * 2f, palms.Mass));
+                Step(c3);
+                int doubled = clutter.AddedCandidates;
+                ctx.Check(withBeach > opening.Sum(k => k.Rich.Length) && doubled > 1.8 * opening.Sum(k => k.Rich.Length) && AddedDrawn(c3) > drawn,
+                    $"a pick of cliff1_sandtrans and a doubled density each place them again ({withBeach} and {doubled} candidates against {opening.Sum(k => k.Rich.Length)})");
+                c3.Session.ApplyVegetation(shipped);
+                Step(c3);
+                ctx.Check(SameAdded(AddedOf(kinds), opening) && AddedDrawn(c3) == drawn, $"the shipped entry gives the first added stamps back exactly");
+
+                const float Radius = 150f;
+                float texel = (mask.MaxX - mask.MinX) / mask.Side;
+                var at = origins[origins.Count / 2];
+                var brush = mask.Clone();
+                brush.Stroke(at.X, at.Z, Radius, 1f, Mech3.VegetationBrush.Clear);
+                c3.Session.ApplyVegetationMask(brush);
+                Step(c3);
+                var cleared = AddedOf(kinds);
+                int inside = 0, wrong = 0;
+                for (int k = 0; k < opening.Count; k++)
+                {
+                    for (int i = 0; i < opening[k].Rich.Length; i++)
+                    {
+                        float d = Flat(opening[k].Rich[i].Origin, at);
+                        bool stands = cleared[k].Rich[i].Basis.Determinant() != 0f;
+                        if (d < Radius - (2f * texel))
+                        {
+                            inside += opening[k].Rich[i].Basis.Determinant() != 0f ? 1 : 0;
+                            wrong += stands ? 1 : 0;
+                        }
+                        else if (d > Radius + (2f * texel))
+                        {
+                            wrong += cleared[k].Rich[i] == opening[k].Rich[i] ? 0 : 1;
+                        }
+                    }
+                }
+                ctx.Check(cleared.Count == opening.Count && inside > 0 && wrong == 0 && AddedDrawn(c3) <= drawn - inside,
+                    $"a Clear stroke drops the {inside} added palms under it and moves no other ({wrong} wrong)");
+                c3.Session.ApplyVegetationMask(mask);
+                Step(c3);
+                ctx.Check(SameAdded(AddedOf(kinds), opening), $"the neutral mask gives them back exactly");
+
+                c3.Session.ApplyVegetation(new Mech3.VegetationEntry
+                {
+                    Seed = shipped.Seed,
+                    Mask = shipped.Mask,
+                    Kinds = shipped.Kinds,
+                    Sets = shipped.Sets,
+                    Picks = shipped.Picks.Select(p => p with { Set = Mech3.CanopyMask.CanopySet }).ToList(),
+                });
+                Step(c3);
+                ctx.Check(clutter.AddedCandidates == 0 && !kinds.Any(k => k.Added) && AddedDrawn(c3) == 0,
+                    $"a pick to the canopy set stamps none ({clutter.AddedCandidates} candidates)");
+                c3.Session.ApplyVegetation(shipped);
+                Step(c3);
+            }
+            finally
+            {
+                c3.Close();
+            }
+
+            var c5 = Open(ctx, enhanced: true, chapter: "C5");
+            try
+            {
+                ctx.Check(c5.Built && c5.Session.Clutter is { Vegetation: null, AddedCandidates: 0 } city && city.ExportedKinds?.Any(k => k.Added) != true
+                        && AddedDrawn(c5) == 0,
+                    $"C5 has no vegetation entry and builds no added stamp");
+            }
+            finally
+            {
+                c5.Close();
+            }
+        }
+        finally
+        {
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("vegetation-lab",
         "the vegetation lab stands in an Enhanced --freecam C1 session at vegetation quality rich and nowhere in a --fly "
         + "one, opened on the session's entry and a neutral mask: a tint edit of one kind re-bakes that kind's Rich colours "
         + "alone and the drawn stamps follow, a seed edit rerolls every listed kind, and a pick names the texture under a "
-        + "stamp and moves none; a Clear stroke zero-scales the listed Rich stamps inside its radius and no other, which "
+        + "stamp, adds stamps of the kind there and moves no other, which a revert drops; a Clear stroke zero-scales the listed Rich stamps inside its radius and no other, which "
         + "draw nothing under rich and draw again after a live move to original, and a stamp it dropped stays hidden "
         + "through the activation's hide and show and through a crater, across a live move both ways; a cleared map hides "
         + "every copy past its edge; a Neutral stroke and a revert each draw the first build's stamps exactly; through the "
@@ -898,10 +1030,14 @@ internal static class GraphicsSwitchSuites
                 string? texture = lab.Pick(at, new[] { model });
                 long pickMs = watch.ElapsedMilliseconds;
                 Step(freecam);
-                ctx.Check(texture != null && lab.Edited.SetFor(texture)?.Models.Contains(model) == true && SameRich(RichOf(kinds), opening),
-                    $"a pick under a {model} stamp gives {texture ?? "nothing"} that kind and moves no stamp (pick and re-bake {pickMs} ms)");
+                int pickedAdded = freecam.Session.Clutter!.AddedKept;
+                ctx.Check(texture != null && lab.Edited.SetFor(texture)?.Models.Contains(model) == true && pickedAdded > 0
+                        && SameRich(RichOf(kinds).Take(opening.Count).ToList(), opening),
+                    $"a pick under a {model} stamp gives {texture ?? "nothing"} that kind, adds {pickedAdded} stamps of it and moves no other (pick and re-bake {pickMs} ms)");
                 lab.RevertToSaved();
                 Step(freecam);
+                ctx.Check(kinds.Count == opening.Count && freecam.Session.Clutter.AddedCandidates == 0,
+                    $"a revert drops the added stamps ({kinds.Count} kinds against {opening.Count})");
 
                 // Two texels inside and outside the stroke, where the bilinear sample is wholly cleared or wholly neutral.
                 const float Radius = 300f;
@@ -1950,6 +2086,41 @@ internal static class GraphicsSwitchSuites
         kinds.Select(k => k.Rich is { } r
             ? ((Transform3D[], Color[])?)(r.Placements.ToArray(), r.Colors?.ToArray() ?? Array.Empty<Color>())
             : null).ToList();
+
+    // The added kinds' Rich transforms as baked now, each with its index among the exports.
+    private static List<(int Index, string Model, Transform3D[] Rich)> AddedOf(IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds) =>
+        kinds.Select((k, i) => (k, i)).Where(p => p.k.Added).Select(p => (p.i, p.k.Model, p.k.Rich!.Placements.ToArray())).ToList();
+
+    private static bool SameAdded(List<(int Index, string Model, Transform3D[] Rich)> a, List<(int Index, string Model, Transform3D[] Rich)> b) =>
+        a.Count == b.Count && a.Zip(b).All(p => p.First.Model == p.Second.Model && p.First.Rich.SequenceEqual(p.Second.Rich));
+
+    // The added stamps the clutter draws now: those standing in their visible node's buffers.
+    private static int AddedDrawn(Rig rig)
+    {
+        int drawn = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is MultiMeshInstance3D { Multimesh: { } mm } mmi && Under(mmi, "clutter_added") && mmi.IsVisibleInTree() && !mmi.IsQueuedForDeletion())
+            {
+                for (int i = 0; i < mm.InstanceCount; i++)
+                    drawn += mm.GetInstanceTransform(i).Basis.Determinant() != 0f ? 1 : 0;
+            }
+        });
+        return drawn;
+    }
+
+    // Whether a point's XZ falls in any of the triangles' XZ shadows, three corners each.
+    private static bool OnTriangles(Vector3[] corners, Vector3 p)
+    {
+        for (int t = 0; t + 2 < corners.Length; t += 3)
+        {
+            Vector2 a = new(corners[t].X, corners[t].Z), b = new(corners[t + 1].X, corners[t + 1].Z), c = new(corners[t + 2].X, corners[t + 2].Z), q = new(p.X, p.Z);
+            float d0 = (b - a).Cross(q - a), d1 = (c - b).Cross(q - b), d2 = (a - c).Cross(q - c);
+            if ((d0 >= -0.01f && d1 >= -0.01f && d2 >= -0.01f) || (d0 <= 0.01f && d1 <= 0.01f && d2 <= 0.01f))
+                return true;
+        }
+        return false;
+    }
 
     private static bool SameRich((Transform3D[] Xf, Color[] Colors)? a, (Transform3D[] Xf, Color[] Colors)? b) =>
         a is not { } x ? b is null : b is { } y && x.Xf.SequenceEqual(y.Xf) && x.Colors.SequenceEqual(y.Colors);

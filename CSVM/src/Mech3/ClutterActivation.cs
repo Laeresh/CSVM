@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Utils;
 using Godot;
@@ -14,18 +15,26 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class ClutterActivation
 {
+    // The builder's own list, so the added stamps it rebuilds at the tail are read here as they stand.
     private readonly IReadOnlyList<ClutterBuilder.KindExport> _exports;
 
     // Per export, per placement: whether this collapsed it. Parallel to each export's Placements.
-    private readonly bool[][] _hidden;
+    private readonly List<bool[]> _hidden = new();
 
-    private ClutterActivation(IReadOnlyList<ClutterBuilder.KindExport> exports)
+    private readonly Node3D _world;
+
+    // The first export holding the remake's added stamps, and the handlers bound for them, dropped on a rebind.
+    private readonly int _addedFrom;
+    private readonly List<(Node3D Owner, Action Sync)> _addedSyncs = new();
+
+    private ClutterActivation(Node3D world, IReadOnlyList<ClutterBuilder.KindExport> exports, int addedFrom)
     {
+        _world = world;
         _exports = exports;
-        _hidden = new bool[exports.Count][];
-        for (int k = 0; k < exports.Count; k++)
+        _addedFrom = addedFrom;
+        foreach (var export in exports)
         {
-            _hidden[k] = new bool[exports[k].Placements.Count];
+            _hidden.Add(new bool[export.Placements.Count]);
         }
     }
 
@@ -48,45 +57,43 @@ public sealed class ClutterActivation
     /// became, found under <paramref name="world"/> by <see cref="AnimRuntime.IndexMeta"/>. Syncs
     /// on the node's <c>VisibilityChanged</c>, which Godot propagates to descendants. Also syncs on
     /// <c>TreeEntered</c>: the bootstrap switches a world before it joins the tree, when a
-    /// visibility write emits nothing. Null when nothing was exported.</summary>
-    public static ClutterActivation? Bind(Node3D world, IReadOnlyList<ClutterBuilder.KindExport>? exports)
+    /// visibility write emits nothing. Null when nothing was exported. The exports from
+    /// <paramref name="addedFrom"/> on are the remake's added stamps, which <see cref="RebindAdded"/> binds again.</summary>
+    public static ClutterActivation? Bind(Node3D world, IReadOnlyList<ClutterBuilder.KindExport>? exports, int addedFrom = int.MaxValue)
     {
         if (exports == null || exports.Count == 0)
         {
             return null;
         }
 
-        var activation = new ClutterActivation(exports);
-        var stamps = new Dictionary<int, List<(int Export, int Placement)>>();
-        for (int k = 0; k < exports.Count; k++)
-        {
-            var owners = exports[k].Owners;
-            for (int i = 0; i < owners.Count; i++)
-            {
-                if (!stamps.TryGetValue(owners[i], out var list))
-                {
-                    stamps[owners[i]] = list = new List<(int, int)>();
-                }
-                list.Add((k, i));
-            }
-        }
-
-        var built = new Dictionary<int, Node3D>();
-        Collect(world, stamps, built);
-        foreach (var (index, list) in stamps)
-        {
-            if (!built.TryGetValue(index, out var owner))
-            {
-                activation.UnboundOwners++;
-                continue;
-            }
-            activation.BoundOwners++;
-            owner.VisibilityChanged += () => activation.Sync(owner, list);
-            owner.TreeEntered += () => activation.Sync(owner, list);
-            activation.Sync(owner, list);
-        }
+        var activation = new ClutterActivation(world, exports, Math.Min(addedFrom, exports.Count));
+        activation.BindRange(0, activation._addedFrom, null);
+        activation.BindRange(activation._addedFrom, exports.Count, activation._addedSyncs);
         Log.Info("world", $"clutter activation: {activation.BoundOwners} stamping node(s) bound, {activation.UnboundOwners} never built");
         return activation;
+    }
+
+    /// <summary>The builder rebuilt its added stamps after a lab edit. What was bound for the old ones is
+    /// dropped, and the new ones follow their stamping nodes as the rest do.</summary>
+    public void RebindAdded()
+    {
+        foreach (var (owner, sync) in _addedSyncs)
+        {
+            owner.VisibilityChanged -= sync;
+            owner.TreeEntered -= sync;
+        }
+        _addedSyncs.Clear();
+        for (int k = _addedFrom; k < _hidden.Count; k++)
+        {
+            HiddenCount -= Array.FindAll(_hidden[k], h => h).Length;
+        }
+        _hidden.RemoveRange(_addedFrom, _hidden.Count - _addedFrom);
+        for (int k = _addedFrom; k < _exports.Count; k++)
+        {
+            _hidden.Add(new bool[_exports[k].Placements.Count]);
+        }
+        BindRange(_addedFrom, _exports.Count, _addedSyncs);
+        Version++;
     }
 
     /// <summary>Whether placement <paramref name="placement"/> of export <paramref name="export"/>
@@ -116,6 +123,42 @@ public sealed class ClutterActivation
         if (export.Colliders is { } colliders && colliders[i] is { } slot)
         {
             PhysicsServer3D.BodySetShapeDisabled(slot.Body, slot.Shape, !enabled);
+        }
+    }
+
+    // Binds exports [from, to) to their stamping nodes. The added stamps' handlers are kept in `added` so a
+    // rebind can drop them, and only the original's count toward the bound owners.
+    private void BindRange(int from, int to, List<(Node3D, Action)>? added)
+    {
+        var stamps = new Dictionary<int, List<(int Export, int Placement)>>();
+        for (int k = from; k < to; k++)
+        {
+            var owners = _exports[k].Owners;
+            for (int i = 0; i < owners.Count; i++)
+            {
+                if (!stamps.TryGetValue(owners[i], out var list))
+                {
+                    stamps[owners[i]] = list = new List<(int, int)>();
+                }
+                list.Add((k, i));
+            }
+        }
+
+        var built = new Dictionary<int, Node3D>();
+        Collect(_world, stamps, built);
+        foreach (var (index, list) in stamps)
+        {
+            if (!built.TryGetValue(index, out var owner))
+            {
+                UnboundOwners += added == null ? 1 : 0;
+                continue;
+            }
+            BoundOwners += added == null ? 1 : 0;
+            Action sync = () => Sync(owner, list);
+            owner.VisibilityChanged += sync;
+            owner.TreeEntered += sync;
+            added?.Add((owner, sync));
+            Sync(owner, list);
         }
     }
 

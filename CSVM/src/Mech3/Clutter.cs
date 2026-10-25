@@ -156,6 +156,14 @@ public sealed class ClutterBuilder
     // The canopy mask over the last Rich bake, made on first read; every bake drops it.
     private CanopyMask? _canopy;
 
+    // The last Build's root and exports. The remake-added stamps (C21) stand under their own node, shown
+    // while Rich is on. They are the exports from _addedFrom on, which a lab edit rebuilds.
+    private Node3D? _root;
+    private List<KindExport>? _exports;
+    private Node3D? _addedRoot;
+    private int _addedFrom;
+    private string _worldName = "world1";
+
     /// <param name="scene">The world's SceneBuilder for the 3D decorations; null leaves only sprites.</param>
     /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for
     /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
@@ -197,6 +205,13 @@ public sealed class ClutterBuilder
 
     /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
     public int InstanceCount { get; private set; }
+
+    /// <summary>The remake-added stamps' candidates on picked textures over the last bake, and of those the
+    /// brush mask keeps. Neither counts in <see cref="InstanceCount"/>.</summary>
+    public int AddedCandidates { get; private set; }
+
+    /// <inheritdoc cref="AddedCandidates"/>
+    public int AddedKept { get; private set; }
 
     /// <summary>Card kinds the last Build drew blended, and card kinds it cut to a hard silhouette,
     /// the census an isolation capture is read against. Counts KINDS, since a kind is one MultiMesh
@@ -485,6 +500,7 @@ public sealed class ClutterBuilder
             return null;
 
         ResolveProperties(templates);
+        _worldName = worldName;
         _stats = new LatticeStats();
         _stamps = _vegetation != null ? new List<RichStamp>() : null;
         PlaceOnWorld(templates, worldName);
@@ -594,8 +610,13 @@ public sealed class ClutterBuilder
             Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} clutter decoration mesh(es) drawn from the model pack");
         }
         Summary = string.Join(", ", parts);
-        ExportedKinds = exported.Count > 0 ? exported : null;
+        _root = root;
+        _exports = exported;
         _exportedFrom = exportedFrom;
+        _addedFrom = exported.Count;
+        _addedRoot = null;
+        BuildAdded();
+        ExportedKinds = exported.Count > 0 ? exported : null;
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
     }
 
@@ -630,8 +651,9 @@ public sealed class ClutterBuilder
         else
         {
             // The Rich placements, never the Original: the cards drawn are jittered and thinned by the brush.
+            // An added set counts only when it is forest (VegetationSet.Mass).
             var stamps = (ExportedKinds ?? new List<KindExport>())
-                .Where(k => k.Rich != null)
+                .Where(k => k.Rich != null && k.Mass)
                 .SelectMany(k => k.Rich!.Placements.Select(p => (p, k.Width, k.Height)));
             _canopy = CanopyMask.FromStamps(stamps, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom);
         }
@@ -643,7 +665,7 @@ public sealed class ClutterBuilder
     /// It shows again when that node is (<see cref="ClutterActivation"/>).
     /// <paramref name="world"/> is the built world the stamping nodes live under.</summary>
     public void FollowActivation(Node3D world) =>
-        Activation = ClutterActivation.Bind(world, ExportedKinds);
+        Activation = ClutterActivation.Bind(world, ExportedKinds, _addedFrom);
 
     /// <summary>Draws every exported kind again under the graphics mode and the clutter fade scale
     /// standing now (<see cref="ClutterInstances.Recut"/>). A live mode switch calls it, and so does a
@@ -653,6 +675,9 @@ public sealed class ClutterBuilder
     {
         foreach (var kind in ExportedKinds ?? System.Array.Empty<KindExport>())
             kind.Instances?.Recut();
+        // The added stamps have no Original to draw, so Original and Faithful draw none of them.
+        if (_addedRoot != null)
+            _addedRoot.Visible = VegetationQualitySetting.RichOn;
     }
 
     // The basis a card's vertices are turned by, the rendering half of its decoration model's own
@@ -717,35 +742,8 @@ public sealed class ClutterBuilder
         LatticeStats stats, Random rng, Random fadeRng, IReadOnlyList<FogVolumeBox> fogVolumes,
         List<RichStamp>? stamps)
     {
-        // ⚠ Guard world area and UV area independently. Neither implies the other, and a strip
-        // artifact with healthy UVs and no world area plants a row of trees along a line.
-        var tri = UvTriangle.Build(a, b, c, uva, uvb, uvc, out var fault);
-        if (tri == null)
-        {
-            if (fault == UvTriangleFault.ZeroWorldArea)
-                stats.ZeroWorldArea++;
-            else
-                stats.ZeroUvArea++;
+        if (Lattice(a, b, c, uva, uvb, uvc, stats) is not { } tri)
             return;
-        }
-
-        // A remake-only footprint floor; it fires on 14 triangles in C5 and nowhere else.
-        // ⚠ Do not add a slope cull beside it. The original's is authored per kind and defaults to
-        // no cull, and no chapter authors it; a hard-coded one measures as inert install-wide.
-        float area2 = (b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z);
-        float xzArea = 0.5f * Mathf.Abs(area2);
-        if (xzArea < 0.5f)
-            return;
-
-        // A tripwire for a corrupt UV array, not a knob: every shipped span is modest, so this
-        // should never fire, and the count in the summary line is a finding if it does.
-        if (tri.CellCount > MaxLatticeCells)
-        {
-            stats.OverLargeLattice++;
-            if (tri.CellCount > stats.WorstLatticeCells)
-                stats.WorstLatticeCells = tri.CellCount;
-            return;
-        }
 
         for (int uInt = tri.MinU; uInt <= tri.MaxU; uInt++)
             for (int vInt = tri.MinV; vInt <= tri.MaxV; vInt++)
@@ -814,6 +812,43 @@ public sealed class ClutterBuilder
                         target.Owners.Add(owner);
                     }
                 }
+    }
+
+    // The triangle's lattice, or null where a guard refuses it, counted in `stats`. The original's stamp and
+    // the remake's added one (C21) both pass these.
+    private static UvTriangle? Lattice(Vector3 a, Vector3 b, Vector3 c, Vector2 uva, Vector2 uvb, Vector2 uvc,
+        LatticeStats stats)
+    {
+        // ⚠ Guard world area and UV area independently. Neither implies the other, and a strip
+        // artifact with healthy UVs and no world area plants a row of trees along a line.
+        var tri = UvTriangle.Build(a, b, c, uva, uvb, uvc, out var fault);
+        if (tri == null)
+        {
+            if (fault == UvTriangleFault.ZeroWorldArea)
+                stats.ZeroWorldArea++;
+            else
+                stats.ZeroUvArea++;
+            return null;
+        }
+
+        // A remake-only footprint floor; it fires on 14 triangles in C5 and nowhere else.
+        // ⚠ Do not add a slope cull beside it. The original's is authored per kind and defaults to
+        // no cull, and no chapter authors it; a hard-coded one measures as inert install-wide.
+        float area2 = (b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z);
+        float xzArea = 0.5f * Mathf.Abs(area2);
+        if (xzArea < 0.5f)
+            return null;
+
+        // A tripwire for a corrupt UV array, not a knob. Every shipped span is modest, so this
+        // should never fire, and the count in the summary line is a finding if it does.
+        if (tri.CellCount > MaxLatticeCells)
+        {
+            stats.OverLargeLattice++;
+            if (tri.CellCount > stats.WorstLatticeCells)
+                stats.WorstLatticeCells = tri.CellCount;
+            return null;
+        }
+        return tri;
     }
 
     // Step 9: one uniform draw walked against the kind's cumulative substitution
@@ -1089,6 +1124,7 @@ public sealed class ClutterBuilder
                     continue;
                 }
                 kind = made;
+                kind.Lift = cell.MeshLift;
                 kinds[decoMesh.MeshIndex] = kind;
                 template.Kinds.Add(kind);
             }
@@ -1151,14 +1187,150 @@ public sealed class ClutterBuilder
         _vegetation = entry;
         _mask = mask;
         BakeRich();
-        for (int k = 0; k < ExportedKinds.Count; k++)
+        for (int k = 0; k < _addedFrom; k++)
         {
             var (kind, part) = _exportedFrom[k];
             var export = ExportedKinds[k];
             export.Rich = part == 0 ? RichVariantOf(kind) : null;
             export.Instances?.SetRich(export.Rich);
         }
+        // A pick, a set edit or a stroke can change how many added stamps there are, so they are built again.
+        BuildAdded();
+        Activation?.RebindAdded();
         Recut();
+    }
+
+    // The remake-added stamps on each picked texture (C21) as kinds of their own, built after the original's.
+    // Each listed card of a set draws as one such kind, two where both a forest set and another name it.
+    // They stand under one node that Recut shows while Rich is on. A lab edit drops and rebuilds them.
+    private void BuildAdded()
+    {
+        if (_addedRoot != null)
+        {
+            _addedRoot.GetParent()?.RemoveChild(_addedRoot);
+            _addedRoot.QueueFree();
+            _addedRoot = null;
+        }
+        if (_exports == null || _root == null)
+            return;
+        _exports.RemoveRange(_addedFrom, _exports.Count - _addedFrom);
+        _exportedFrom.RemoveRange(_addedFrom, _exportedFrom.Count - _addedFrom);
+        AddedCandidates = AddedKept = 0;
+        if (_vegetation is not { } entry || PlaceAdded(entry) is not { Count: > 0 } added)
+            return;
+
+        _addedRoot = new Node3D { Name = "clutter_added", Visible = VegetationQualitySetting.RichOn };
+        _root.AddChild(_addedRoot);
+        // The census counts the original's kinds; an added kind shares its card's verdict anyway.
+        int blend = BlendCardKinds, scissor = ScissorCardKinds;
+        foreach (var (kind, mass) in added)
+        {
+            if (BuildKindInstance(kind) is not { } mmi)
+                continue;
+            var rich = RichVariantOf(kind);
+            _exports.Add(new KindExport
+            {
+                Rich = rich,
+                Model = kind.Model,
+                Texture = kind.Label,
+                Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
+                Material = mmi.MaterialOverride,
+                NodeBias = NodeBiasOf(kind),
+                Width = kind.Width,
+                Height = kind.Height,
+                CullMargin = CullMarginOf(kind),
+                Placements = kind.Instances,
+                Fades = kind.Fades,
+                Owners = kind.Owners,
+                Instances = ClutterInstances.Draw(_addedRoot, mmi, kind.Instances, kind.Fades, rich),
+                Added = true,
+                Mass = mass,
+            });
+            _exportedFrom.Add((kind, 0));
+        }
+        BlendCardKinds = blend;
+        ScissorCardKinds = scissor;
+    }
+
+    // Walks the world for every picked texture's candidates and bakes each on a stream of its own, so no
+    // added stamp moves an original one. A candidate takes VegetationScatter.DrawsPerStamp draws whatever
+    // the mask holds, and one the mask drops keeps its index with a zero basis.
+    // Returns the added kinds with each one's forest flag, in first-stamped order.
+    private List<(Kind Kind, bool Mass)> PlaceAdded(VegetationEntry entry)
+    {
+        var added = new List<(Kind Kind, bool Mass)>();
+        var byMember = new Dictionary<(Kind, bool), Kind>();
+        var rich = new Dictionary<Kind, (List<Transform3D> Xf, List<Color> Colors)>();
+        var bySet = new Dictionary<string, Picked?>(StringComparer.OrdinalIgnoreCase);
+        int richSeed = VegetationVariation.Seed(PlacementSeed, entry.Seed);
+        var rng = new Random(VegetationScatter.StreamSeed(richSeed));
+        var seen = new HashSet<(int, int, int)>();
+        var stats = new LatticeStats();
+        int deduped = 0, overDense = 0, minted = 0;
+
+        ForEachTriangle(_worldName, Resolve, stats, (picked, a, b, c, uva, uvb, uvc, owner) =>
+        {
+            if (Lattice(a, b, c, uva, uvb, uvc, stats) is not { } tri)
+                return;
+            double perRepeat = VegetationScatter.PerRepeat(picked.Set.Density, tri);
+            if (perRepeat > VegetationScatter.MaxPerRepeat)
+            {
+                overDense++;
+                return;
+            }
+            var points = picked.Cell.Take((int)Math.Ceiling(perRepeat));
+            foreach (var cand in VegetationScatter.OnTriangle(tri, points, perRepeat, picked.Keys, seen, ref deduped))
+            {
+                var member = picked.Members[cand.Member];
+                var v = VegetationVariation.Draw(tri, cand.U, cand.V, entry.Find(member.Model)!, rng);
+                float fadeDraw = (float)rng.NextDouble();
+                if (!byMember.TryGetValue((member, picked.Set.Mass), out var kind))
+                {
+                    byMember[(member, picked.Set.Mass)] = kind = member.AddedTwin();
+                    rich[kind] = (new List<Transform3D>(), new List<Color>());
+                    added.Add((kind, picked.Set.Mass));
+                }
+                // The Original stands unvaried and is never drawn; Rich carries the variation and the mask's drop.
+                var at = tri.World(cand.U, cand.V) + member.Lift;
+                var origin = tri.World(v.U, v.V) + member.Lift;
+                bool kept = VegetationScatter.Keeps(cand, _mask?.At(origin.X, origin.Z) ?? 1f, v.Keep);
+                var fade = ClutterKindProps.FadeThresholds(member.FarFadeMin, member.FarFadeMax, fadeDraw);
+                kind.Instances.Add(new Transform3D(Basis.Identity, at));
+                kind.Fades.Add(new Color(fade.X, fade.Y, fade.Z, FogVolumeRow(_fogVolumes, at)));
+                kind.Owners.Add(owner);
+                var basis = Basis.Identity.Scaled(new Vector3(v.Mirror ? -1f : 1f, 1f, 1f));
+                rich[kind].Xf.Add(new Transform3D(kept ? basis : basis.Scaled(Vector3.Zero), origin));
+                rich[kind].Colors.Add(v.Tint);
+                AddedCandidates++;
+                AddedKept += kept ? 1 : 0;
+            }
+        });
+        foreach (var (kind, (xf, colors)) in rich)
+        {
+            kind.RichInstances = xf.ToArray();
+            kind.RichColors = colors.ToArray();
+        }
+        if (bySet.Count > 0)
+            Log.Info("world", $"clutter added stamps: sets={string.Join(",", bySet.Where(s => s.Value != null).Select(s => s.Key))} candidates={AddedCandidates} kept={AddedKept} dedup_rejected={deduped} over_dense={overDense} skipped_no_clutter_flag={stats.NoClutterFlagged} kinds={string.Join(", ", added.Select(k => $"{k.Kind.Label}{(k.Mass ? " (forest)" : "")} x{k.Kind.Instances.Count}"))}");
+        return added;
+
+        // The set a texture stamps with its members resolved to card kinds, once per set.
+        Picked? Resolve(string texture)
+        {
+            if (VegetationScatter.Stamped(entry, texture) is not { } set)
+                return null;
+            if (bySet.TryGetValue(set.Name, out var known))
+                return known;
+            var members = set.Models.Select(m => entry.Find(m) == null ? null : _kindsByModel.GetValueOrDefault(m) ?? ResolveModel(m, ref minted))
+                .Select(k => k is { Solid: false } ? k : null).ToArray();
+            Picked? picked = null;
+            if (members.All(k => k != null))
+                picked = new Picked(set, members!, members.Select(k => k!.MeshIndex).ToArray(), new VegetationScatter.Scatter(VegetationScatter.ScatterSeed(richSeed, set.Name)));
+            else
+                Log.Warn("world", $"clutter added stamps: set '{set.Name}' names a model this chapter draws no card for, so it stamps nothing");
+            bySet[set.Name] = picked;
+            return picked;
+        }
     }
 
     // Replays the kept card stamps in walk order on the Rich stream, drawing for each stamp whose
@@ -1269,10 +1441,11 @@ public sealed class ClutterBuilder
         {
             if (!string.Equals(node.Name, model, StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (FirstWithMesh(_gamez, node) is not { } meshNode)
+            if (FirstWithMesh(_gamez, node, true, out var toMesh) is not { } meshNode)
                 continue;
             if (MakeKind(meshNode, model, node) is not { } kind)
                 continue;
+            kind.Lift = toMesh.Origin;
             if (_props?.Find(model) is { } block)
                 AdoptBlock(kind, block);
             _kindsByModel[model] = kind;
@@ -1322,6 +1495,26 @@ public sealed class ClutterBuilder
     // every polygon textured with its ground texture.
     private void PlaceOnWorld(Dictionary<string, Template> templates, string worldName)
     {
+        var seen = new HashSet<(int Kind, int X, int Z)>(); // dedup across decal-layered coplanar polys
+
+        // ⚠ Seed this stream fixed, never from Rng.Master. A chapter's forest is the same forest on
+        // every launch in the original, and the master rerolls the species mix on an unpinned run.
+        // This is not the original's stream and cannot be, so do not try to match it.
+        var rng = new Random(PlacementSeed);
+        var fadeRng = new Random(PlacementSeed);   // the fade's own stream, see PlaceOnTriangle
+
+        ForEachTriangle(worldName, tex => templates.GetValueOrDefault(tex), _stats,
+            (template, a, b, c, uva, uvb, uvc, owner) =>
+                PlaceOnTriangle(template, a, b, c, uva, uvb, uvc, owner, seen, _stats, rng, fadeRng, _fogVolumes, _stamps));
+    }
+
+    // Every triangle of the placed world whose polygon's texture `select` answers, past the engine's two
+    // polygon gates. Each comes in world space with its UVs and its owner, the gamez node whose mesh it
+    // is, which every stamp carries (ClutterActivation).
+    private void ForEachTriangle<T>(string worldName, Func<string, T?> select, LatticeStats stats,
+        Action<T, Vector3, Vector3, Vector3, Vector2, Vector2, Vector2, int> place)
+        where T : class
+    {
         GameZNode? world = null;
         foreach (var n in _gamez.Nodes)
             if (n.Kind == "World" && string.Equals(n.Name, worldName, StringComparison.OrdinalIgnoreCase))
@@ -1331,14 +1524,6 @@ public sealed class ClutterBuilder
             }
         if (world == null)
             return;
-
-        var seen = new HashSet<(int Kind, int X, int Z)>(); // dedup across decal-layered coplanar polys
-
-        // ⚠ Seed this stream fixed, never from Rng.Master. A chapter's forest is the same forest on
-        // every launch in the original, and the master rerolls the species mix on an unpinned run.
-        // This is not the original's stream and cannot be, so do not try to match it.
-        var rng = new Random(PlacementSeed);
-        var fadeRng = new Random(PlacementSeed);   // the fade's own stream, see PlaceOnTriangle
 
         void Walk(int nodeIndex, Transform3D xf)
         {
@@ -1350,7 +1535,7 @@ public sealed class ClutterBuilder
             if (node.Local is { } local)
                 xf *= local;
             if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
-                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, nodeIndex, templates, seen, rng, fadeRng);
+                OnMesh(_gamez.Meshes[node.MeshIndex], xf, nodeIndex);
             foreach (var c in node.Children)
                 Walk(c, xf);
         }
@@ -1359,57 +1544,54 @@ public sealed class ClutterBuilder
         if (world.PartitionNodes != null)
             foreach (var idx in world.PartitionNodes)
                 Walk(idx, Transform3D.Identity);
-    }
 
-    // `owner` is the gamez node whose mesh is stamped; every stamp carries it (ClutterActivation).
-    private void PlaceOnMesh(GameZMesh mesh, Transform3D xf, int owner,
-        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen, Random rng,
-        Random fadeRng)
-    {
-        foreach (var poly in mesh.Polygons)
+        void OnMesh(GameZMesh mesh, Transform3D xf, int owner)
         {
-            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
-                continue;
-            var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
-            if (tex == null || !templates.TryGetValue(tex, out var template))
-                continue;
-            // The engine's gate: it picks which coplanar layer decorates, not whether ground is bare.
-            // ⚠ Never pair it with a map-wide cblock4/5/6 suppression. The gate alone empties C5's
-            // downtown, the suppression alone doubles the city; they are one coupled change.
-            if (poly.NoClutter)
+            foreach (var poly in mesh.Polygons)
             {
-                _stats.NoClutterFlagged++;
-                continue;
-            }
-            // Always layer 0: no polygon in the install names a registered template above it.
-            // A null UV array has no lattice, which the engine skips and so does this.
-            int n = poly.VertexIndices.Count;
-            var uvs = poly.UvCoords;
-            if (uvs == null || uvs.Count < n)
-            {
-                _stats.NoUvArray++;
-                continue;
-            }
-            // Same enumeration as SceneBuilder.EmitPolygon, so surface heights match what renders.
-            // ⚠ Index UVs by corner position, never by vertex id. C1 model 953 lists one vertex at
-            // two corners with two UVs, and the id route stamps it in the wrong texture frame.
-            if (poly.TriangleStrip)
-            {
-                for (int i = 0; i + 2 < n; i++)
-                    PlaceOnTriangle(template,
-                        xf * mesh.Vertices[poly.VertexIndices[i]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 2]],
-                        uvs[i], uvs[i + 1], uvs[i + 2], owner, seen, _stats, rng, fadeRng, _fogVolumes, _stamps);
-            }
-            else
-            {
-                for (int i = 1; i + 1 < n; i++)
-                    PlaceOnTriangle(template,
-                        xf * mesh.Vertices[poly.VertexIndices[0]],
-                        xf * mesh.Vertices[poly.VertexIndices[i]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        uvs[0], uvs[i], uvs[i + 1], owner, seen, _stats, rng, fadeRng, _fogVolumes, _stamps);
+                if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
+                    continue;
+                var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
+                if (tex == null || select(tex) is not { } picked)
+                    continue;
+                // The engine's gate: it picks which coplanar layer decorates, not whether ground is bare.
+                // ⚠ Never pair it with a map-wide cblock4/5/6 suppression. The gate alone empties C5's
+                // downtown, the suppression alone doubles the city; they are one coupled change.
+                if (poly.NoClutter)
+                {
+                    stats.NoClutterFlagged++;
+                    continue;
+                }
+                // Always layer 0: no polygon in the install names a registered template above it.
+                // A null UV array has no lattice, which the engine skips and so does this.
+                int n = poly.VertexIndices.Count;
+                var uvs = poly.UvCoords;
+                if (uvs == null || uvs.Count < n)
+                {
+                    stats.NoUvArray++;
+                    continue;
+                }
+                // Same enumeration as SceneBuilder.EmitPolygon, so surface heights match what renders.
+                // ⚠ Index UVs by corner position, never by vertex id. C1 model 953 lists one vertex at
+                // two corners with two UVs, and the id route stamps it in the wrong texture frame.
+                if (poly.TriangleStrip)
+                {
+                    for (int i = 0; i + 2 < n; i++)
+                        place(picked,
+                            xf * mesh.Vertices[poly.VertexIndices[i]],
+                            xf * mesh.Vertices[poly.VertexIndices[i + 1]],
+                            xf * mesh.Vertices[poly.VertexIndices[i + 2]],
+                            uvs[i], uvs[i + 1], uvs[i + 2], owner);
+                }
+                else
+                {
+                    for (int i = 1; i + 1 < n; i++)
+                        place(picked,
+                            xf * mesh.Vertices[poly.VertexIndices[0]],
+                            xf * mesh.Vertices[poly.VertexIndices[i]],
+                            xf * mesh.Vertices[poly.VertexIndices[i + 1]],
+                            uvs[0], uvs[i], uvs[i + 1], owner);
+                }
             }
         }
     }
@@ -1684,6 +1866,14 @@ public sealed class ClutterBuilder
         // map edge's copies take it while VegetationQualitySetting.RichOn.
         public ClutterInstances.Stamps? Rich;
 
+        // Stamps the remake added on a picked texture (C21), drawn under Rich alone. Their Placements
+        // are the unvaried points, which nothing draws.
+        public bool Added;
+
+        // Whether the kept Rich stamps count as forest for the canopy mask, the clumps and the handover.
+        // Every original kind does; an added one does when its set says so (VegetationSet.Mass).
+        public bool Mass = true;
+
         // Parallel to Placements, solid kinds in a collidable build only: the region body and
         // shape slot each placement's shared shape was attached at.
         public (Rid Body, int Shape)?[]? Colliders;
@@ -1758,6 +1948,16 @@ public sealed class ClutterBuilder
 
         /// <summary>World displacement per +1 of V.</summary>
         public Vector3 AxisV => new((float)_bX, (float)_bY, (float)_bZ);
+
+        /// <summary>The ground one texture repeat covers on this triangle's plane, in m².</summary>
+        public double RepeatArea
+        {
+            get
+            {
+                double x = (_aY * _bZ) - (_aZ * _bY), y = (_aZ * _bX) - (_aX * _bZ), z = (_aX * _bY) - (_aY * _bX);
+                return Math.Sqrt((x * x) + (y * y) + (z * z));
+            }
+        }
 
         /// <summary>Null when the triangle is degenerate in either space, with
         /// <paramref name="fault"/> saying which, the caller counts both, because they are
@@ -1980,7 +2180,31 @@ public sealed class ClutterBuilder
         // The Rich card material, made on first use (a card kind only).
         public Func<Material>? MakeRichMaterial;
         public Material? RichMaterial;
+
+        // The offset from the model's node down to its drawn mesh, which a stamp the remake adds carries.
+        public Vector3 Lift;
+
+        // An empty kind drawing this card, for the stamps the remake adds (C21). It takes this model's own
+        // fade, since a set places its member directly, and never a substitution or a scale.
+        public Kind AddedTwin() => new()
+        {
+            MeshIndex = MeshIndex,
+            NodeIndex = NodeIndex,
+            Model = Model,
+            Label = Label,
+            Width = Width,
+            Height = Height,
+            Billboard = Billboard,
+            Lit = Lit,
+            Fogged = Fogged,
+            FarFadeMin = FarFadeMin,
+            FarFadeMax = FarFadeMax,
+            Lift = Lift,
+        };
     }
+
+    // A picked texture's set with its members as card kinds, their dedup keys and its scatter, for one bake.
+    private sealed record Picked(VegetationSet Set, Kind[] Members, int[] Keys, VegetationScatter.Scatter Cell);
 
     // One kept card stamp as the Rich bake replays it: its kind and index, its triangle and texture
     // coordinate. The scale and mesh lift are the ones its Original transform took.

@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, density
 
-21. ☐ Remake-added stamps on picked textures, in texture space, under the mask
+21. ☑ Remake-added stamps on picked textures, in texture space, under the mask
 22. ☐ C1's grassland and fields: sparse original cards, hedgerows by mask
 23. ☐ C1B, C2 and C4 tuned in the lab
 24. ☐ Wave C budget and goldens
@@ -1205,7 +1205,7 @@ re-render; no other shot moved. The five hashes are re-pinned by hand from those
 
 # Wave C, density
 
-## C21 ☐ Remake-added stamps on picked textures, in texture space, under the mask
+## C21 ☑ Remake-added stamps on picked textures, in texture space, under the mask
 
 **Goal.** Under Rich, a picked texture gets stamps from its vegetation set, once per texture repeat
 like the original's, and the mask thins or thickens them. C3's transition textures
@@ -1215,12 +1215,83 @@ palmtree2/palmtree3 draw today as palmtree1's substitution targets.
 **Evidence (confidence: traced for the lattice, lead-only for the rest).** The lattice and its rules
 are `PlaceOnTriangle` (`Clutter.cs:556`) and [`org/clutter.md`](org/clutter.md), "The lattice rule".
 
-**Approach.** <TODO: how a vegetation set is laid out in the unit cell (a generated scatter on a
-fixed seed), and whether it reuses `PlaceOnTriangle` or a sibling.>
+**Approach (as built).** `Mech3/VegetationScatter.cs` (pure) lays a set out; `ClutterBuilder.BuildAdded`
+places and draws it. [`org/clutter.md`](org/clutter.md), "Where CSVM deliberately differs", states it
+against the lattice rule.
 
-**Model recommendation.** <TODO>
+- *The unit cell.* A set's `Scatter` is a fixed order of points on the unit texture repeat, seeded from
+  the Rich seed and the set's name (FNV-1a, never a per-process hash). Each point is the farthest of
+  eight draws from the points before it, so any prefix is spread and a prefix never depends on how far
+  the order grew. A point's member is read off a draw of its own, uniform over the set's kinds, so a
+  membership edit moves no point. The placement is a sibling of `PlaceOnTriangle`, not a reuse: it
+  shares the world walk (`ForEachTriangle`, with both polygon gates, `no_clutter` included) and the
+  per-triangle guards (`Lattice`: both areas, the footprint floor, the lattice tripwire), then
+  `VegetationScatter.OnTriangle` walks the triangle's integer repeats as the original walks a template,
+  under step 6's strict edge test and a quarter-metre dedup per member mesh of its own. No world grid
+  exists anywhere on the path.
+- *The count.* `VegetationSet.Density`, added stamps a hectare at a neutral mask. A repeat takes twice
+  the stamps the density gives the ground it covers on that triangle (`UvTriangle.RepeatArea`), the last
+  one weighted by the fraction left, so one set reads the same on C1's 64 m `grass1` repeat and its
+  256 m `terpat03` one. The default, 7.85,
+  is the original's own palm stand on C3's `cliff1_sandtrans`: six `palm1` a 7,642 m² repeat. A load
+  and the lab hold it at 100. The mask keeps a candidate when its keep draw is below the mask there
+  times one half times its weight (A6's rule, `added: true`): 0 clears, neutral keeps the density, 255
+  nearly twice. The sidecar writes a set as a bare list at its defaults, so the shipped file round-trips,
+  and as `{"kinds": [...], "density": n, "mass": true}` otherwise. Original reads none of it.
+- *Wave B.* A set's `Mass` flag decides, default false. A forest set's kept stamps feed the stamp-baked
+  canopy mask, B14's clump rate and atlas, and the handover, as an original stamp's do. Any other set's
+  do not, and its cards keep every distance, since no clump stands behind them: a bush scatter on C1's
+  grassland would otherwise raise fir clumps there and fade out past 1 km. Painted canopy (C3) bakes from
+  picks alone, so the palms feed nothing either way. A pick to the reserved `canopy` set stamps nothing,
+  even if the set were given a member (`VegetationScatter.Stamped`), so Decision 11 holds.
+- *Drawing and live behaviour.* Each listed card of a set draws as an added kind (`Kind.AddedTwin`: the
+  member's own fade, since a set places it directly, and its mesh lift; no substitution, no scale), two
+  where a forest set and another name it. They are exported after the original's kinds
+  (`KindExport.Added`, `KindExport.Mass`) under one `clutter_added` node that `Recut` shows only while
+  `RichOn`, so a live move to original and a live switch to Original drop every added stamp and a move
+  back draws the same ones. Their Original placements are the unvaried points, drawn by nothing; their
+  Rich ones carry the member's variation (jitter, mirror, tint) and the mask's drop, a zero basis kept at
+  its index. Every candidate takes `VegetationScatter.DrawsPerStamp` draws on an added stream of its own
+  whatever the mask holds, after the Rich bake, so no original stamp, stream or draw moves and a stroke
+  reshuffles no other added stamp. A lab pick, a set edit (the lab's SETS rows: a density slider a
+  hectare and a forest box) and a mask stroke rebuild the added kinds whole: `ClutterActivation.RebindAdded`
+  drops their old handlers and binds the new ones, and `MapEdgeExtender.FollowVegetation` bins the stamps
+  again, its copies of an added kind standing only under Rich. A crater or an activation hide carries
+  across a live Vegetation Quality move as for the original's stamps; a rebuild starts the added ones
+  afresh.
+- *Scope.* Only a chapter with a sidecar entry (C1, C1B, C2, C3, C4; `WorldSession` hands C5 and the
+  unlisted chapters none) and only a picked texture gets added stamps. C3 ships `palms`
+  (`palmtree1`, `palmtree2`, `palmtree3`) at 15.7 a hectare, twice the default, not forest, picked by
+  `cliff1_toptrans.tif` and `cliff1_sidetrans.tif`.
 
-**Verify.** <TODO>
+**Ruling.** `cliff1_watertrans2` stays unpicked: its palms stood in the reef shallows. The transitions
+take twice the beach stand's density so they read as palm groves; the value is yours to tune further
+with the lab's SETS slider. The yellow sand patch at the base of the palm cards stays until D32's model
+replaces them near the camera.
+
+**Model recommendation.** Opus: the mechanism crosses the builder's export list, the activation, the map
+edge and the canopy consumers, with the Original bit-identity held throughout. C22 and C23 are lab work
+over it and suit a mid-tier model driving the lab's pick, density and forest controls.
+
+**Verify.** Units: `VegetationScatterTests` (placement a function of the triangle's UVs and the seed, the
+same on a moved triangle; every repeat inside the triangle holds the same scatter, the fractional last
+weighted; the scatter prefix-stable and spread; a point on a shared diagonal claimed by neither triangle
+and a coplanar copy refused by the dedup; mask 0 keeps none, neutral about the density, 255 nearly all;
+only a picked set with members and density stamps, the canopy set never; the scatter seed fixed per set)
+and `VegetationSidecarTests` (a set's density and forest flag read, clamped, warned, edited by `WithSet`
+and written back, a default set as a bare list; C3 picks its cliff-top and side transitions to its palms; the shipped
+file round-trips). Engine: `vegetation-added-stamps` (a C3 Enhanced flight at rich adds palms,
+every sampled one on a picked triangle, half the candidates kept, none forest; a live move to original
+and a live switch to Original draw none and a move back the same ones; a pick of `cliff1_sandtrans`, a
+doubled density and a Clear stroke each place them again live, the stroke dropping only those under it,
+and the shipped entry and the neutral mask give the first stamps back exactly; a pick to the canopy set
+stamps none; C5 builds none); `canopy-mask` (a C1 bush pick leaves the mask as it was, the same pick as
+forest covers more cells, and the shipped entry gives the first mask back); `vegetation-lab` (a pick adds
+stamps of the kind and moves no other, a revert drops them); `clutter-activation`, `clutter-cells`,
+`canopy-clumps`, `graphics-vegetation-quality` and `clutter-rich-variation` pass as before. Look:
+`.scratch/c21/montage-c21.png`, C3 Rich before against after at A7's view, close along
+`cliff1_watertrans2`/`cliff1_sidetrans` and 300 m up, judged by you. Goldens: none should move. C3's
+two shots run Faithful, where the added node is hidden, and no other chapter ships a pick.
 
 **⚠ Traps.**
 - No world grid: added stamps walk the same UV lattice.

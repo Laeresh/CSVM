@@ -45,9 +45,10 @@ internal static class ClutterActivationSuites
         {
             var exports = world.Session.Clutter?.ExportedKinds;
             ClutterBuilder.KindExport? largest = null;
+            // The original's kinds: a remake-added one has no whole MultiMesh to match, since only Rich draws it.
             foreach (var export in exports ?? new List<ClutterBuilder.KindExport>())
             {
-                if (largest == null || export.Placements.Count > largest.Placements.Count)
+                if (!export.Added && (largest == null || export.Placements.Count > largest.Placements.Count))
                 {
                     largest = export;
                 }
