@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, near
 
 31. ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
-32. ☐ Near-radius 3D draw with a dither handover to the card
+32. ◐ Near-radius 3D draw with a dither handover to the card
 33. ☐ Look-alike models for every listed card species
 34. ☐ Ground cover prototype: new-art grass and crop cards
 35. ☐ Ground cover prototype: procedural shells; pick at the controls
@@ -1545,7 +1545,7 @@ handover, judged again in game.
 
 **Verified.** <pending orchestrator run>
 
-## D32 ☐ Near-radius 3D draw with a dither handover to the card
+## D32 ◐ Near-radius 3D draw with a dither handover to the card
 
 **Goal.** Within a near radius a listed stamp draws its 3D model, dithering over to the original card
 beyond it; from altitude nothing changes. Over C3's painted canopy, where no card stands, the near
@@ -1630,7 +1630,7 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
 
 **Ruling (yours, from the montages).** Brightness A: graded to the card with the card's sun-side gain.
 No shadows. The model sways with the card. The band: 150 to 250 m by default, with an option to push it
-out, which became the 3D Vegetation setting above (Off, Near, Far).
+out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). Open: C3's painted canopy inside 700 m needs a crown model and a model-only stamp source, which D33 brings.
 
 **Model recommendation.** Opus: the item crosses the clutter's drawn layouts, the map edge, the shader
 text the Rich card shares and a look iterated against captures.
