@@ -650,6 +650,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/MeasuredRenderTime.cs`, the root viewport's measured render CPU and GPU times, published by the render thread so a frame reads them without waiting for it.
 - `src/Utils/MasterVolume.cs`, the developer gain on bus 0: `--volume=` over the `audio.volume` key over silence in a repo run, resolution only, with the player's mix a separate product underneath it.
 - `src/Utils/MonitorSetting.cs`, the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
+- `src/Utils/UserData.cs`, the folder the player's own files live in: Godot's user folder, or `userdata/` beside the executable in portable mode (`portable.txt` or `--portable`).
 - `src/Utils/OptionsStore.cs`, version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PaneReadback.cs`, one frame of a viewport read back off the frame path: an async GPU copy, the image built on a worker, handed to the Danger Zone cameras and the screenshot key.
 - `src/Utils/PerfSample.cs`, ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.

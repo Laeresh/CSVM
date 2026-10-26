@@ -348,6 +348,9 @@ internal sealed class HumanFlightAdapter
                 : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
             Shake = new PlaneShake(_aircraft.Shakes),
         });
+        // The two gun aids, read on a human seat alone: a bot's rounds take its gunner's lead.
+        controller.LeadingAimAssist = _policy.LeadingAimAssist;
+        controller.LeadMarker = _policy.LeadMarker;
         onCreated(controller);
 
         // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to

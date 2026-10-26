@@ -51,6 +51,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
+    /// <summary>The Game Options aid's argument that scrolls its window to the foot, onto Lead Marker.</summary>
+    public const string GameOptionsScrolledAid = "scrolled";
+
     /// <summary>The aid value that opens the AUDIO page behind the Preferences page's second door.</summary>
     public const string AudioAid = "audio";
 
@@ -559,6 +562,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case GameOptionsAid:
                 case GameOptionsAid + ":" + GameOptionsOpenAid:
                     OpenGameOptionsAid(aid);
+                    break;
+                case GameOptionsAid + ":" + GameOptionsScrolledAid:
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.LeadMarkerKey);
                     break;
                 case AudioAid:
                     _shell.Options.Audio.Open();

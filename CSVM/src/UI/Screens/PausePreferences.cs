@@ -327,12 +327,12 @@ public sealed partial class PausePreferences : Control
         }
     }
 
-    // The Auto Head Turn and Next Target switches reaching the flight behind the leaf, the head turn
-    // taking effect mid-mission as the original's does. One saved value serves every human seat and
-    // both are read per frame or per kill, so the resume flies them. A never-set value falls back as
-    // a launch with nothing saved does: the head turn to the headLook.autohead config key, the
-    // targeting switch to the decoded head rule. The selection is written in place, never rebuilt,
-    // so the pilot keeps the cycle and lock the pause stood over. Difficulty takes the next sortie.
+    // The Game Options switches reaching the flight behind the leaf, mid-mission as the original's
+    // head turn does. One saved value serves every human seat, read per frame, shot or kill. A
+    // never-set value falls back as a launch with nothing saved does. The head turn takes the
+    // headLook.autohead config key, every other switch reads off. The selection is written in place,
+    // never rebuilt, so the pilot keeps the cycle and lock the pause stood over. Difficulty takes the
+    // next sortie.
     private void FeedGameOptions(OptionsApplyExit applied)
     {
         foreach (var seat in _flying)
@@ -340,6 +340,8 @@ public sealed partial class PausePreferences : Control
             if (IsInstanceValid(seat) && seat.IsHumanPiloted)
             {
                 seat.AutoHeadTurn = applied.AutoHeadTurn;
+                seat.LeadingAimAssist = applied.LeadingAimAssist == true;
+                seat.LeadMarker = applied.LeadMarker == true;
                 if (seat.Targeting is { } targeting)
                 {
                     targeting.NearestAfterKill = applied.NearestAfterKill == true;

@@ -47,6 +47,12 @@ public sealed class OptionsChoices
     /// <summary>The haptics setting, null while never set, which the consumer reads as on.</summary>
     public bool? Rumble { get; set; }
 
+    /// <summary>The leading aim assist, null while never set, which reads as off.</summary>
+    public bool? LeadingAimAssist { get; set; }
+
+    /// <summary>The lead marker, null while never set, which reads as off.</summary>
+    public bool? LeadMarker { get; set; }
+
     /// <summary>The <see cref="GraphicsMode"/> word.</summary>
     public string Graphics { get; set; } = GraphicsMode.Default;
 
@@ -108,6 +114,12 @@ public sealed class OptionsChoices
     /// <summary>The rumble as a switch reads it: on until set off, as the original ships it.</summary>
     public bool RumbleOn => Rumble != false;
 
+    /// <summary>The leading aim assist as a switch reads it: on only once set on.</summary>
+    public bool LeadingAimAssistOn => LeadingAimAssist == true;
+
+    /// <summary>The lead marker as a switch reads it: on only once set on.</summary>
+    public bool LeadMarkerOn => LeadMarker == true;
+
     /// <summary>The machine's screens, read through the reader on every access.</summary>
     public ScreenList Screens => _screens();
 
@@ -138,6 +150,8 @@ public sealed class OptionsChoices
         Rumble = saved?.Rumble;
         DefaultView = saved?.DefaultView;
         AutoHeadTurn = saved?.AutoHeadTurn;
+        LeadingAimAssist = saved?.LeadingAimAssist;
+        LeadMarker = saved?.LeadMarker;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
         Words = saved?.Words.Copy() ?? new WordValues();
         MonitorIndex = saved?.MonitorIndex;
@@ -158,7 +172,8 @@ public sealed class OptionsChoices
     public OptionsApplyExit ToExit() =>
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
-            NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette);
+            NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
+            LeadingAimAssist, LeadMarker);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

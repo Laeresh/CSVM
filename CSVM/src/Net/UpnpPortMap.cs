@@ -112,7 +112,7 @@ public static class UpnpPortMap
     }
 
     /// <summary>The user directory as an absolute path, where the router memories live.</summary>
-    internal static string UserDirectory() => ProjectSettings.GlobalizePath("user://");
+    internal static string UserDirectory() => Utils.UserData.Root;
 
     /// <summary>GETs <paramref name="url"/> from a LAN gateway, null on any failure or a non-200.
     /// Blocks until the answer or <paramref name="deadline"/>.</summary>

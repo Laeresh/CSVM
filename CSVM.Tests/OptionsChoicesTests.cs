@@ -81,6 +81,8 @@ public class OptionsChoicesTests
             VrMode = true,
             VrRenderScale = VrRenderScaleSetting.Words[0],
             VrVignette = VrVignetteSetting.Words[^1],
+            LeadingAimAssist = true,
+            LeadMarker = false,
         };
         foreach (var setting in WordSettings.All)
         {
@@ -93,7 +95,8 @@ public class OptionsChoicesTests
             new OptionsApplyExit(saved.GraphicsMode, saved.Difficulty, saved.MonitorIndex, saved.Resolution,
                 saved.DisplayMode, saved.VSync, saved.AudioMaster, saved.AudioMusic, saved.AudioEffects,
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
-                saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette),
+                saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette,
+                saved.LeadingAimAssist, saved.LeadMarker),
             choices.ToExit());
 
         choices.Load(null);

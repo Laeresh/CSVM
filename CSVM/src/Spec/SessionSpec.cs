@@ -629,6 +629,21 @@ public sealed record SessionSpec
     /// rather than by the cycle's head. No flag names it, an Options screen is its only source.</summary>
     public bool NearestAfterKill { get; private set; }
 
+    /// <summary><c>--leading-assist</c>, or the saved switch (<see cref="WithSavedLeadingAimAssist"/>).
+    /// Every human seat fires along this shot's own intercept, not the original's lagging slot
+    /// (<see cref="Flight.Airframe.FlightController.LeadingAimAssist"/>). Off by default.</summary>
+    public bool LeadingAimAssist { get; private set; }
+
+    /// <summary><c>--lead-marker</c>, or the saved switch (<see cref="WithSavedLeadMarker"/>): every human
+    /// pane marks the tracked hostile's intercept point (<see cref="Flight.Hud.TargetHud"/>). Off by default.</summary>
+    public bool LeadMarker { get; private set; }
+
+    /// <summary>True when <c>--leading-assist</c> was given, which outranks the saved value.</summary>
+    public bool LeadingAimAssistExplicit { get; private set; }
+
+    /// <summary>True when <c>--lead-marker</c> was given, which outranks the saved value.</summary>
+    public bool LeadMarkerExplicit { get; private set; }
+
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist, every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -1624,6 +1639,8 @@ public sealed record SessionSpec
             else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
             else if (arg == "--wake-generators") { s.WakeGenerators = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
+            else if (arg == "--leading-assist") { s.LeadingAimAssist = s.LeadingAimAssistExplicit = true; }
+            else if (arg == "--lead-marker") { s.LeadMarker = s.LeadMarkerExplicit = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }
             else if (arg.StartsWith("--target=")) { s.TargetSelect = arg["--target=".Length..].Trim(); }
@@ -2158,6 +2175,16 @@ public sealed record SessionSpec
     /// run reads no saved option.</summary>
     public SessionSpec WithSavedAutoHeadTurn(bool? saved) =>
         Det || saved is not { } on ? this : this with { AutoHeadTurn = on };
+
+    /// <summary>The saved leading aim assist folded in, on <see cref="WithSavedDifficulty"/>'s rules:
+    /// <c>--leading-assist</c> beats the saved value, and a <c>--det</c> run reads no saved option.</summary>
+    public SessionSpec WithSavedLeadingAimAssist(bool? saved) =>
+        LeadingAimAssistExplicit || Det || saved is not { } on ? this : this with { LeadingAimAssist = on };
+
+    /// <summary>The saved lead marker folded in, on <see cref="WithSavedLeadingAimAssist"/>'s rules with
+    /// <c>--lead-marker</c> as the flag.</summary>
+    public SessionSpec WithSavedLeadMarker(bool? saved) =>
+        LeadMarkerExplicit || Det || saved is not { } on ? this : this with { LeadMarker = on };
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>

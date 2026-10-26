@@ -157,6 +157,8 @@ internal sealed class LiveSettings
         options.Rumble = applied.Rumble;
         options.DefaultView = applied.DefaultView;
         options.AutoHeadTurn = applied.AutoHeadTurn;
+        options.LeadingAimAssist = applied.LeadingAimAssist;
+        options.LeadMarker = applied.LeadMarker;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;

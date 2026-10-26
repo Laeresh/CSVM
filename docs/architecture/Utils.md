@@ -563,3 +563,12 @@ Whether the run is in SteamOS Game Mode: `InGameMode` is read once from the envi
 (`SteamDeck` or `SteamOS` set to 1, under `XDG_CURRENT_DESKTOP=gamescope`) and is settable, so a
 suite takes either branch. `ScreenKeyboard.cs` raises its keyboard only there, and
 `FolderOpener.cs` refuses to open a folder there.
+
+## src/Utils/UserData.cs
+The one answer to where the player's own files live. `UserData.Root` is Godot's user folder until
+`Settle`, called by the launcher right after the command line is parsed, turns portable mode on: a
+`portable.txt` in the run's root or `--portable` moves every store to `userdata/` beside the
+executable (`.scratch/userdata/` in a repo run). Every production store resolves through it:
+`OptionsStore`, `BindingStore`, `CampaignProfileStore`, `CustomPlaneStore`, `ScoreStore`,
+`StickProfiles`, `StuntCapture` and the UPnP router memories. Godot's own files (its log,
+`Launch/XrShaderCache.cs`'s shader cache) stay in Godot's folder.

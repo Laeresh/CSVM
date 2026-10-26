@@ -104,8 +104,9 @@ folder:
 
 or by double-clicking `CSVM.x86_64` in your file manager. With no game data yet, CSVM opens
 a screen that offers to extract it. The install folder is filled in with the best guess it
-found (the last folder you used, then the Wine and Proton places above), and you can choose
-another folder instead. Choose the folder that holds `ZBD` and `GOSDATA` side by side; if
+found (the last folder you used, then a `GAME` folder or `.iso` image placed next to
+`CSVM.x86_64`, then the Wine and Proton places above), and you can choose another folder
+instead. Choose the folder that holds `ZBD` and `GOSDATA` side by side; if
 you choose a folder inside it or a folder that holds it, CSVM names the folder it expected.
 The extracted data lands in an `extracted` folder next to `CSVM.x86_64`, and the menu opens
 when it is done.
@@ -182,6 +183,11 @@ custom planes and the install folder you last extracted from are kept outside it
 (or under `$XDG_DATA_HOME/godot/app_userdata/CSVM` when `XDG_DATA_HOME` is set). Deleting
 those two folders removes everything CSVM has written; your copy of the original game is
 never modified.
+
+To keep all of it inside the CSVM folder instead, for example for a launcher such as Lutris,
+create an empty file named `portable.txt` next to `CSVM.x86_64`. CSVM then writes everything
+to a `userdata` folder there. Starting `./CSVM.x86_64 -- --portable` does the same for one
+launch. Files already in the folder above are not moved; copy them into `userdata` to keep them.
 
 Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
 model. The Controls screen writes those files for you. To edit one by hand, for example to
