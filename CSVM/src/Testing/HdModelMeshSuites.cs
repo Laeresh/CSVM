@@ -25,7 +25,9 @@ internal static class HdModelMeshSuites
         + "has suffixed that name .001, and imported once per pack key. Every mesh below the matched node "
         + "merges, placed by the transforms below it (a turned and a mirrored child), leaving out a subtree "
         + "named for a gamez descendant; a file with no node of the name merges whole from its roots, and "
-        + "a matched node with no mesh below it is an empty mesh")]
+        + "a matched node with no mesh below it is an empty mesh. Two imports out of one file share one "
+        + "parse, a node listed twice merges once, and a chapter's build drops another chapter's imports "
+        + "while keeping the bare and airframe ones")]
     internal static void ImportRoundTrip(TestContext ctx)
     {
         string root = Path.Combine(ctx.ScratchDir, "hd-model-mesh-import");
@@ -43,6 +45,8 @@ internal static class HdModelMeshSuites
         {
             ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "probe.glb")), $"glb write result");
             ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "c3", "probe.gltf")), $"gltf write result");
+            Directory.CreateDirectory(Path.Combine(pack, "planes", "probe_plane"));
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "planes", "probe_plane", "probe.glb")), $"airframe glb write result");
             // The probe as Blender re-exports a repeated object: renamed with a numeric suffix.
             scene.GetNode("probe").SetMeta(AnimRuntime.NameMeta, "probe.001");
             ctx.Same((long)Error.Ok, (long)GltfExporter.Export(scene, Path.Combine(pack, "c5", "probe.glb")), $"suffixed glb write result");
@@ -66,7 +70,9 @@ internal static class HdModelMeshSuites
             var gltf = meshes.For("probe", chapter: "C3");
             SameGeometry(ctx, source, gltf, "loose gltf");
             ctx.Check(gltf != null && !ReferenceEquals(gltf, glb), $"the chapter key imports its own file");
-            SameGeometry(ctx, source, meshes.For("probe", chapter: "C5"), "a node named probe.001 beside a decoy");
+            var c5 = meshes.For("probe", chapter: "C5");
+            SameGeometry(ctx, source, c5, "a node named probe.001 beside a decoy");
+            CheckKeepChapter(ctx, meshes, glb, gltf, c5);
 
             HdModels.Current = models;
             var shared = HdModelMeshes.Current.For("probe");
@@ -119,12 +125,58 @@ internal static class HdModelMeshSuites
                 $"a mirrored child's mesh is placed by its transform, its visible side kept");
         }
 
-        ctx.Same(5, meshes.For("assembly")?.GetSurfaceCount() ?? -1, $"without gamez descendants every child merges");
+        var full = meshes.For("assembly");
+        ctx.Same(5, full?.GetSurfaceCount() ?? -1, $"without gamez descendants every child merges");
+        if (merged?.GetSurfaceCount() == 4 && full?.GetSurfaceCount() == 5)
+        {
+            ctx.Check(ReferenceEquals(merged.SurfaceGetMaterial(0), full.SurfaceGetMaterial(0)),
+                $"two imports out of one file share one parse of it, so one material");
+            ctx.Check(SameTriangles(Triangles(probe, 0), Triangles(full, 0)) && Near(Placed(part, turned, mirrored: false), Triangles(full, 2)),
+                $"the second import out of the shared parse is reversed and placed once, not again");
+        }
+
+        CheckRepeatedChildren(ctx);
         var whole = meshes.For("unnamed", chapter: "C7");
         ctx.Check(whole?.GetSurfaceCount() == 5 && Near(Placed(probe, assembly, mirrored: false, surface: 0), Triangles(whole, 0)),
             $"a file with no node of the name merges every mesh, placed from the scene roots");
         var empty = meshes.For("empty_part", chapter: "C8");
         ctx.Check(empty != null && empty.GetSurfaceCount() == 0, $"a matched node with nothing below it is an empty mesh, not a failure");
+    }
+
+    // A C5 world build drops C3's imports, its parse with them, and keeps C5's, the bare and the airframe's.
+    private static void CheckKeepChapter(TestContext ctx, HdModelMeshes meshes, ArrayMesh? bare, ArrayMesh? c3, ArrayMesh? c5)
+    {
+        var plane = meshes.For("probe", airframe: "probe_plane");
+        ctx.Check(plane != null && !ReferenceEquals(plane, bare), $"the airframe key imports its own file");
+        meshes.KeepChapter("C5");
+        ctx.Check(bare != null && ReferenceEquals(bare, meshes.For("probe")), $"a chapter's build keeps a bare key's import");
+        ctx.Check(plane != null && ReferenceEquals(plane, meshes.For("probe", airframe: "probe_plane")), $"a chapter's build keeps an airframe's import");
+        ctx.Check(c5 != null && ReferenceEquals(c5, meshes.For("probe", chapter: "C5")), $"a chapter's build keeps its own chapter's import");
+        var again = meshes.For("probe", chapter: "C3");
+        ctx.Check(c3 != null && again != null && !ReferenceEquals(c3, again)
+                && !ReferenceEquals(c3.SurfaceGetMaterial(0), again.SurfaceGetMaterial(0)),
+            $"a chapter's build drops another chapter's import and its parse, so it imports afresh");
+    }
+
+    // A file listing each child twice on 16 levels. Visited once per path, its one leaf mesh would
+    // merge 32768 times.
+    private static void CheckRepeatedChildren(TestContext ctx)
+    {
+        const int Levels = 16;
+        var nodes = new Godot.Collections.Array<GltfNode>();
+        for (int i = 0; i < Levels; i++)
+        {
+            nodes.Add(new GltfNode
+            {
+                Children = i < Levels - 1 ? new[] { i + 1, i + 1 } : System.Array.Empty<int>(),
+                Mesh = i == Levels - 1 ? 0 : -1,
+            });
+        }
+
+        var gltfMeshes = new Godot.Collections.Array<GltfMesh> { new GltfMesh { Mesh = Unindexed() } };
+        var into = new List<HdSurface>();
+        HdModelMeshes.Collect(nodes, gltfMeshes, 0, Transform3D.Identity, new HashSet<string>(), into, new HashSet<int>());
+        ctx.Same(1, into.Count, $"a node listed twice under each parent merges once");
     }
 
     // A part of several meshes: its own on the exporter's "mesh" child, then a turned and a mirrored

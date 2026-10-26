@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Utils;
@@ -19,6 +20,15 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class PlaneRigPatch
 {
+    /// <summary>Metres a rig's firepoint or pylon may stand outside the airframe's gamez model box
+    /// (<see cref="ModelBox"/>), room for a pack drawn larger than the original. Past it a round
+    /// leaves from open air, and every peer takes a shot's origin as sent.</summary>
+    internal const float MarkerReach = 3f;
+
+    // Triangles a rig flare's subtree may hold: an original flare's sprite is one four-corner quad.
+    // A flare is built hidden, and a hidden node leaves the hit hull, so more would be airframe lost.
+    private const int FlareTriangles = 2;
+
     // The non-weapon nodes of the original's markers group (docs/formats/markers.md, Marker group),
     // which a rig may add to a model that lacks one.
     private static readonly HashSet<string> ReferenceMarkers = new(StringComparer.OrdinalIgnoreCase)
@@ -136,13 +146,48 @@ public static class PlaneRigPatch
         }
     }
 
+    /// <summary>The plane-frame box of the gamez models under <paramref name="built"/>, as the hit hull
+    /// reads them (<see cref="SceneBuilder.GameplayAabb"/>), from local transforms alone; null with no mesh.</summary>
+    internal static Aabb? ModelBox(Node3D built)
+    {
+        Aabb? box = null;
+        foreach (var mi in built.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
+        {
+            var local = SceneBuilder.GameplayAabb(mi);
+            if (local.Size.LengthSquared() > 1e-9f)
+            {
+                var at = NodeFrame.Under(mi, built) * local;
+                box = box is { } b ? b.Merge(at) : at;
+            }
+        }
+
+        return box;
+    }
+
     // A marker moves to its rig position by rewriting its local origin under the parent's plane frame.
     // A missing one is added under the markers group, so Loadout's cs_name walk finds it like any other.
+    // ⚠ Move only marker names: the hit hull and terrain sweep are built from every other node's transform.
     private static int MoveMarkers(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
     {
         int added = 0;
+        var box = ModelBox(built);
         foreach (var (name, pos) in rig.Markers)
         {
+            bool weapon = MarkerRig.Classify(name, out var kind, out _);
+            if (!weapon && !ReferenceMarkers.Contains(name))
+            {
+                throw Fail(rig, "markers." + name, $"not a marker (firepointN, pylonN, target, {string.Join(", ", ReferenceMarkers)})");
+            }
+
+            float outside = weapon && kind != MarkerRig.MarkerKind.Target && box is { } b
+                ? ((b.Position - pos).Max(Vector3.Zero) + (pos - b.End).Max(Vector3.Zero)).Length()
+                : 0f;
+            if (outside > MarkerReach)
+            {
+                throw Fail(rig, "markers." + name, string.Create(CultureInfo.InvariantCulture,
+                    $"stands {outside:0.##} m outside the airframe's model box, past the {MarkerReach} m a firepoint or pylon may reach"));
+            }
+
             if (byName.TryGetValue(name, out var nodes))
             {
                 var node = nodes[0];
@@ -185,7 +230,7 @@ public static class PlaneRigPatch
                 {
                     PropParts.Kind.PropMain or PropParts.Kind.PropGhost => blur ? PropParts.Kind.PropGhost : PropParts.Kind.PropMain,
                     PropParts.Kind.RotorMain or PropParts.Kind.RotorGhost => blur ? PropParts.Kind.RotorGhost : PropParts.Kind.RotorMain,
-                    _ => kind,
+                    _ => throw Fail(rig, label + ".blur", "only a prop or rotor node (propN, propNb, rotorN, rotorNb) has a blur disc to choose"),
                 };
             }
 
@@ -271,6 +316,11 @@ public static class PlaneRigPatch
             if (name != null)
             {
                 var nodes = Find(rig, side, name, known, byName);
+                if (nodes.Find(n => !WingLights.IsFlare(n.Name) && Triangles(n) > FlareTriangles) is { } held)
+                {
+                    throw Fail(rig, side, $"'{name}' holds {Triangles(held)} triangles of airframe, which a flare's hiding takes out of the hit hull; name an empty node or a flare sprite");
+                }
+
                 chosen.UnionWith(nodes);
                 edits.Add(() => nodes.ForEach(n => n.SetMeta(WingLights.StandsForMeta, names.ToArray())));
             }
@@ -279,6 +329,11 @@ public static class PlaneRigPatch
         displaced.ExceptWith(chosen);
         return new FlareChoice(chosen, displaced);
     }
+
+    // The gamez triangles the hit hull reads under a node (SceneBuilder.GameplayMesh), itself included.
+    private static int Triangles(Node3D node) =>
+        node.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).Append(node).OfType<MeshInstance3D>()
+            .Sum(mi => (SceneBuilder.GameplayMesh(mi)?.GetFaces().Length ?? 0) / 3);
 
     private static GameZNode? FindIn(GameZ gamez, GameZNode node, Predicate<GameZNode> match)
     {

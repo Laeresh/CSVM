@@ -44,6 +44,9 @@ public static class BotSeats
     private const string TorpedoMilitia = "Black Hat";
     private const string TorpedoAirframe = "Warhawk";
 
+    // The rocket table's Aerial Torpedoes row, the torpedo pair's wep_14.
+    private const int TorpedoRow = 10;
+
     // The message table's character names (ids 13001-13036) that name a person. Rows naming an
     // aircraft or a role are left out: Getaway Plane, Bomber, Stunt Plane, the three regional aces.
     // So is MSG_PLAYER_NAME, the player's own character.
@@ -229,12 +232,15 @@ public static class BotSeats
     /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
     /// The fit a bot on its airframe's stock arms flies under <paramref name="rules"/>. It is
     /// the stock fit where they allow it. Otherwise every gun takes the first ammunition they allow
-    /// and every pylon the first rocket, none only where they allow none. Enforce clears to none,
-    /// and a bot has no second Ready to pick again.</summary>
+    /// and every pylon the first rocket other than the torpedo, none where they allow no other.
+    /// Enforce clears to none, and a bot has no second Ready to pick again. The torpedo stays
+    /// with the torpedo pair, so the one-per-team cap holds.</summary>
     public static CoopFit LegalFit(NetPlaneRules rules)
     {
         int ammo = rules.AmmoOutlawed(default) ? FirstAllowed(rules.AmmoAllowed, NetPlaneRules.NoAmmo) : -1;
-        int row = rules.RocketsOutlawed(default) ? FirstAllowed(rules.RocketAllowed, NetPlaneRules.NoRocket) : -1;
+        int row = rules.RocketsOutlawed(default)
+            ? FirstAllowed(r => r != TorpedoRow && rules.RocketAllowed(r), NetPlaneRules.NoRocket)
+            : -1;
         var ammoPicks = new int[CoopFit.GunSlots];
         Array.Fill(ammoPicks, ammo);
         var cells = new int[CoopFit.Cells];

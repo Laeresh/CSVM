@@ -31,7 +31,7 @@ internal static class BuildStampSuites
         + "in Game Mode the real opener refuses without the shell and logs the refusal, which stands in the Original menu's "
         + "warning box where a messagebox is wired and in the stamp's own pad-focusable dialog where none is; "
         + "a newer release's line stays hidden until a check answers, then stands above the version, unfocusable, "
-        + "and hands the shell the release page")]
+        + "and hands the shell the release page, which in Game Mode it refuses with the stamp's dialog")]
     internal static void BuildStampIcons(TestContext ctx)
     {
         var stamp = new BuildStamp(ctx.RepoRoot, exported: false);
@@ -308,13 +308,25 @@ internal static class BuildStampSuites
             handed.Add(path);
             return Error.Ok;
         };
+        bool was = SteamOs.InGameMode;
+        var notice = stamp.DesktopModeNotice;
         try
         {
+            SteamOs.InGameMode = true;
+            line.EmitSignal(BaseButton.SignalName.Pressed);
+            ctx.Check(handed.Count == 0 && notice.Visible && notice.DialogText == BuildStamp.ReleaseDesktopModeOnly,
+                $"in Game Mode a click never reaches the shell and raises the stamp's dialog ({handed.Count}, {notice.Visible}, \"{notice.DialogText}\")");
+            notice.Hide();
+
+            // ABLE-TO-FAIL CONTROL: out of Game Mode the same click opens the page.
+            SteamOs.InGameMode = false;
             line.EmitSignal(BaseButton.SignalName.Pressed);
         }
         finally
         {
             FolderOpener.Shell = shell;
+            SteamOs.InGameMode = was;
+            notice.Hide();
         }
 
         ctx.Check(handed.Count == 1 && handed[0] == Page, $"a click hands the shell the release page ({string.Join("; ", handed)})");

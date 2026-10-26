@@ -75,14 +75,15 @@ internal static class HdModelSwapSuites
     [Suite("hd-model-swap",
         "a model pack replacement swaps the mesh SceneBuilder draws for a world node by its chapter key, "
         + "a plane node by its airframe key and a flyout body node by its bare name; each keeps its "
-        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls, ground shadow and damage-panel centre stay the gamez model's, unless the airframe's own shadow file (never a bare or chapter one) gives the shadow's still shape; a "
+        + "name and index metas, transform, colliders and node_bias as built without the pack, and the plane's hulls, ground shadow and damage-panel centre stay the gamez model's, unless the airframe's own shadow file (never a bare or chapter one, nor one over the triangle cap) gives the shadow's still shape; a "
         + "terrain tile, a facade and a glow sprite named in the pack keep their gamez models, an "
         + "unrelated node is untouched, and a builder with no chapter or airframe replaces nothing. "
         + "A replaced surface wears the remake's shader: a glTF material named after an original "
         + "texture takes the very material an original surface of it takes, clamped by its own UVs, "
         + "and repaints with it, unlit where the file says so; any other takes the file's base colour times its texture, "
         + "two-sided, cut at its alphaCutoff, blended or unlit as glTF says, follows a graphics-mode switch, and the "
-        + "shared import keeps its own materials. Replacement surfaces count in the surface census and drop under --hide-alpha. "
+        + "shared import keeps its own materials. Replacement surfaces count in the surface census and drop under --hide-alpha, "
+        + "and a fullbright builder keeps their arrays for the world's merge. "
         + "A glTF export of an original node, put unedited into the pack, wears that node's original material. "
         + "A decal surface draws at the highest priority its original polygons have, a matched node holding no "
         + "mesh draws nothing and keeps its bindings, and a file with no usable mesh draws the gamez model. "
@@ -858,6 +859,8 @@ internal static class HdModelSwapSuites
                     && Bias(0) < packedBuilder.PriorityBias(1)
                     && Bias(1) >= packedBuilder.PriorityBias(2) && Bias(1) < packedBuilder.PriorityBias(3),
                 $"the skin surface draws at its polygons' priority 0 and the decal at the higher of its 1 and 2");
+            ctx.Check(sign != null && ReferenceEquals(packedBuilder.SurfaceArrays(sign, 0), packedBuilder.SurfaceArrays(sign, 0)),
+                $"a fullbright builder keeps a replacement's arrays for the world's merge, so it reads none back off the GPU");
 
             var plain = Build(plainBuilder, none, Hidden);
             var hidden = Build(packedBuilder, models, Hidden);
@@ -1003,14 +1006,16 @@ internal static class HdModelSwapSuites
     }
 
     // A pack's planes/<airframe>/shadow file stands in for the airframe's triangles, blur discs kept.
-    // An empty one leaves the discs alone. A bare or chapter
-    // shadow file is a world prop's and leaves the gamez mask.
+    // An empty one leaves the discs alone. One over the triangle cap, and a bare or chapter
+    // shadow file, which is a world prop's, leave the gamez mask.
     private static void CheckPackShadow(TestContext ctx, GameZ planesGamez, TextureArchive textures, string root, HdModels none)
     {
         string node = GroundShadowSilhouette.PackShadowNode;
         string own = $"planes/{ctx.PlaneName}/{node}";
         string Pack(string name, string key) => Path.Combine(root, name, "pack", key);
         ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowOwn", own + ".glb"), node), $"{own}.glb write result");
+        int heavyCopies = (GroundShadowSilhouette.PackShadowTriangleCap / 4) + 1;
+        ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowHeavy", own + ".glb"), node, copies: heavyCopies), $"a heavy {own}.glb write result");
         ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowWorld", node + ".glb"), node), $"bare {node}.glb write result");
         ctx.Same((long)Error.Ok, (long)WriteModel(Pack("ShadowWorld", $"{Chapter}/{node}.glb"), node), $"{Chapter}/{node}.glb write result");
         Directory.CreateDirectory(Path.GetDirectoryName(Pack("ShadowEmpty", own))!);
@@ -1038,6 +1043,9 @@ internal static class HdModelSwapSuites
             var world = Shape("ShadowWorld");
             var empty = Shape("ShadowEmpty");
             var file = Shape("ShadowOwn");
+            var heavy = Shape("ShadowHeavy");
+            ctx.Check(heavy.TriangleCount == gamez.TriangleCount && heavy.Box == gamez.Box && SameMask(heavy, gamez),
+                $"a {own} file of {heavyCopies * 4} triangles, over the cap of {GroundShadowSilhouette.PackShadowTriangleCap}, leaves the gamez shadow, {heavy.TriangleCount} triangles of {gamez.TriangleCount}");
             ctx.Check(world.TriangleCount == gamez.TriangleCount && world.Box == gamez.Box && SameMask(world, gamez),
                 $"a bare and a chapter {node} file leave {ctx.PlaneName}'s shadow the gamez model's, {world.TriangleCount} triangles of {gamez.TriangleCount}");
             ctx.Check(gamez.TurningCount > 0 && empty.TurningCount == gamez.TurningCount && empty.TriangleCount < gamez.TriangleCount,
@@ -1395,18 +1403,22 @@ internal static class HdModelSwapSuites
 
     // One tetrahedron under a node named for the key, the shape SceneBuilder builds and the exporter
     // writes. Given materials, one tetrahedron surface each, with UVs inside the unit square or tiling.
-    private static Error WriteModel(string path, string node, IReadOnlyList<(StandardMaterial3D Material, float UvScale)>? materials = null)
+    // Given copies, each surface holds that many, a millimetre apart along x, so none merges.
+    private static Error WriteModel(string path, string node, IReadOnlyList<(StandardMaterial3D Material, float UvScale)>? materials = null, int copies = 1)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var mesh = new ArrayMesh();
         materials ??= new[] { (new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.3f, 0.2f) }, 1f) };
+        var corners = new[] { new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 3, 0), new Vector3(0, 0, 1) };
+        var faces = new[] { 0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2 };
         foreach (var (material, uvScale) in materials)
         {
+            var uvs = new[] { new Vector2(0, 0), new Vector2(uvScale, 0), new Vector2(0, uvScale), new Vector2(uvScale, uvScale) };
             var arrays = new Godot.Collections.Array();
             arrays.Resize((int)Mesh.ArrayType.Max);
-            arrays[(int)Mesh.ArrayType.Vertex] = new[] { new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 3, 0), new Vector3(0, 0, 1) };
-            arrays[(int)Mesh.ArrayType.TexUV] = new[] { new Vector2(0, 0), new Vector2(uvScale, 0), new Vector2(0, uvScale), new Vector2(uvScale, uvScale) };
-            arrays[(int)Mesh.ArrayType.Index] = new[] { 0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2 };
+            arrays[(int)Mesh.ArrayType.Vertex] = Enumerable.Range(0, copies).SelectMany(c => corners.Select(v => v + new Vector3(c * 1e-3f, 0, 0))).ToArray();
+            arrays[(int)Mesh.ArrayType.TexUV] = Enumerable.Range(0, copies).SelectMany(_ => uvs).ToArray();
+            arrays[(int)Mesh.ArrayType.Index] = Enumerable.Range(0, copies).SelectMany(c => faces.Select(i => i + (4 * c))).ToArray();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
             mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, material);
         }

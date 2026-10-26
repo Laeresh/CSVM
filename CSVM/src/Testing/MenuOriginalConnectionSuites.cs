@@ -644,7 +644,8 @@ internal static class MenuOriginalConnectionSuites
         + "from the shipped pilot names after the guest, on both ends, with the guest's bot controls "
         + "greyed and its list holding no row it can pick. Fill to, its count stepped down to five, "
         + "fills the field to five pilots and then greys. A press on a bot's row opens Select Plane "
-        + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, and "
+        + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, its plane "
+        + "list greying an airframe the outlaw list refuses, and "
         + "Remove takes a row out. A full field outgrows the player list's eleven rows and its scroll "
         + "bar reaches every row below them. With the host, the guest and both bots on one team, LAUNCH! "
         + "raises langui 10519 and hands nothing out. With no team standing it launches, the "
@@ -3871,6 +3872,7 @@ internal static class MenuOriginalConnectionSuites
             $"a press on the bot's row opens Select Plane on that bot ({host.Shell.Lobby.Tab}, {host.Shell.Lobby.PickedBot})");
         ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey);
         ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey + ":8");
+        OutlawedPlaneGreys(ctx, host, ends);
         ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey);
         ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey + ":2");
         ClickRow(ctx, host, OriginalLobbyScreen.BotNameKey);
@@ -3894,6 +3896,23 @@ internal static class MenuOriginalConnectionSuites
         SettleEnds(ends);
         ctx.Check(lobby.Bots.Count == 2 && lobby.BotById(third) == null && guest.Door.Dogfight!.Players.Count == 4 && host.Shell.Lobby.PickedBot == -1,
             $"Remove takes the picked bot's row out on both ends ({lobby.Bots.Count}, {guest.Door.Dogfight!.Players.Count})");
+    }
+
+    // An airframe the outlaw list refuses greys in the picked bot's open plane list, so neither a
+    // sideways step nor a pick lands on it. Clearing the tick afterwards empties the list again.
+    private static void OutlawedPlaneGreys(TestContext ctx, End host, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        int outlawed = Enumerable.Range(0, 7).First(a => lobby.Players.All(p => p.Airframe != a));
+        string row = OriginalLobbyScreen.BotPlaneKey + ":" + (outlawed + 1).ToString(CultureInfo.InvariantCulture);
+        ctx.Check(lobby.SetOutlawComponents(true) && lobby.SetOutlawed(NetPlaneRules.AirframeFlag + outlawed, true),
+            $"the host outlaws stock airframe {outlawed}, which no pilot flies");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey);
+        ctx.Check(Row(host.Shell, row) is { Enabled: false } && Row(host.Shell, OriginalLobbyScreen.BotPlaneKey + ":8") is { Enabled: true },
+            $"the bot's open plane list greys the outlawed airframe and keeps the Fury ({Row(host.Shell, row)?.Enabled})");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey + ":8");
+        ctx.Check(lobby.SetOutlawComponents(false), $"clearing Outlaw Components empties the list");
+        SettleEnds(ends);
     }
 
     // A full field outgrows the list's eleven rows, and its scroll bar brings the last bot's row into

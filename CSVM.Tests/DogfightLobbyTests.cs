@@ -1074,6 +1074,13 @@ public sealed class DogfightLobbyTests
         Assert.False(host.SetBotAirframe(host.Bots[1].Id, fury));
         Assert.Equal(warhawk, host.Bots[1].Airframe);
 
+        // The bot's plane list greys and steps over exactly what the setter refuses.
+        Assert.False(host.AdmitsBotAirframe(fury));
+        foreach (int airframe in Enumerable.Range(0, DogfightLobby.AirframeCount).Append(DogfightLobbySeat.RandomAirframe))
+        {
+            Assert.Equal(host.AdmitsBotAirframe(airframe), host.SetBotAirframe(host.Bots[0].Id, airframe));
+        }
+
         // A stock gun's calibre refuses the airframe too: the Warhawk's guns are .50 and .70.
         Assert.True(host.SetOutlawed(NetPlaneRules.GunFlag + 2, true));
         Assert.True(host.Bots[1].RandomPlane);

@@ -124,6 +124,8 @@ public sealed class WorldSession
         // to know which mission it is standing in before it stamps any team.
         builder.MissionSlot = GameZ.MissionSlotOf(o.Mission);
         builder.HdChapter = o.Chapter;
+        // The last chapter's replacement imports would otherwise stay for the rest of the run.
+        HdModelMeshes.Current.KeepChapter(o.Chapter);
         s.Builder = builder;
         // every chapter has exactly one world node; --node= replaces it with one named subtree
         var root = o.NodeSubtree is { } only

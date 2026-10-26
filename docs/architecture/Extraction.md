@@ -166,7 +166,9 @@ the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 The enumeration both HD pack folders share: every zip and subfolder under the folder read in place,
 in name order, each with its own top folder dropped and filtered to the caller's extensions. Files
 within one pack also load in name order, and a later file wins its key. The caller's key function
-names or refuses each file, and the index owns the open zips and the locked read. Engine-free; read
+names or refuses each file, and the index owns the open zips and the locked read. A zip entry named
+with backslashes reads as one named with slashes, and a damaged entry or locked file reads as null
+with a warning, never an exception. Engine-free; read
 `HdTextures.cs` and `HdModels.cs` next. Coverage: `CSVM.Tests/PackIndexTests.cs`.
 
 ## src/Extraction/HdTextures.cs

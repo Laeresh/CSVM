@@ -178,6 +178,13 @@ public class PlaneRigTests
             "markers." + name,
             "needs x");
 
+    [Theory]
+    [InlineData("""{ "markers": { "cockpit_camera": [0, 1, 0], "Cockpit_Camera": [0, 2, 0] } }""", "markers.Cockpit_Camera", "defined twice")]
+    [InlineData("""{ "props": [ { "node": "prop1", "blur": true }, { "node": "PROP1", "blur": false } ] }""", "props (PROP1)", "listed twice")]
+    [InlineData("""{ "surfaces": [ { "node": "l_rudder1", "kind": "rudder" }, { "node": "L_Rudder1", "kind": "rudder" } ] }""", "surfaces (L_Rudder1)", "listed twice")]
+    public void ANameGivenTwiceInTwoCasesIsRejected(string json, string entry, string problem) =>
+        Rejects(json, entry, problem);
+
     [Fact]
     public void AnUnknownSurfaceKindIsRejected() =>
         Rejects("""{ "surfaces": [ { "node": "flap1", "kind": "flap", "side": "left" } ] }""", "surfaces[0] (flap1).kind", "'flap'");
