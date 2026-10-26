@@ -44,8 +44,9 @@ project published, rather than something a third party rebuilt or altered.
 
 **1. Extract your game's assets.** This is done once. Double-click **`CSVM.exe`**. With no
 game data yet, CSVM opens a screen that offers to extract it. The install folder is filled
-in with the best guess it found (the last folder you used, then the places Crimson Skies is
-normally installed), and you can choose another folder instead.
+in with the best guess it found (the last folder you used, then a `GAME` folder or `.iso`
+image placed next to `CSVM.exe`, then the places Crimson Skies is normally installed), and
+you can choose another folder instead.
 
 The folder it wants is the one containing the `ZBD` and `GOSDATA` subfolders. Open your
 install until you see those two side by side, and use that folder; if you choose a folder
@@ -184,6 +185,11 @@ and custom planes are kept outside it, in:
 
 (paste that into Explorer's address bar). Deleting those two folders removes everything
 CSVM has written; your Crimson Skies install is never modified.
+
+To keep all of it inside this folder instead, for example on a USB stick, create an empty
+file named `portable.txt` next to `CSVM.exe`. CSVM then writes everything to a `userdata`
+folder here. Starting `CSVM.exe -- --portable` does the same for one launch. Files already
+in the folder above are not moved; copy them into `userdata` to keep them.
 
 Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
 model. The Controls screen writes those files for you. To edit one by hand, for example to

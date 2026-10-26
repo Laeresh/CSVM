@@ -344,9 +344,9 @@ public sealed class OptionsStore
     /// read it would pass or fail with the last choice saved at the controls.</summary>
     public static string? DirectoryOverride { get; set; }
 
-    /// <summary>The production store, <c>user://</c> resolved to its OS path, or the
+    /// <summary>The production store, in <see cref="UserData.Root"/>, or the
     /// <see cref="DirectoryOverride"/> while one is set.</summary>
-    public static OptionsStore UserOptions() => new(DirectoryOverride ?? Godot.ProjectSettings.GlobalizePath("user://"));
+    public static OptionsStore UserOptions() => new(DirectoryOverride ?? UserData.Root);
 
     /// <summary>The canonical JSON text for <paramref name="def"/>.</summary>
     public static string Serialize(OptionsDef def)

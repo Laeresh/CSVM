@@ -71,6 +71,9 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 **Data paths, override where the extraction is read from**
 `--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--hd` · `--hd-models` · `--no-hd-models` · `--messages`
 
+**User data, where the player's own files are kept**
+`--portable`
+
 **Extraction, build `extracted/` from an original install and exit**
 `--extract` · `--extract-force` · `--extract-unzip` · `--extract-allow-missing` · `--unzbd`
 
@@ -376,6 +379,7 @@ flags and 225 bullet lines**.
 - `--spawn-at=x,y,z` / `--spawn-dir=x,y,z` (**deprecated**, the pre-A5 flight-only spelling of `--pos`/`--direction`; each logs `WARN [core] deprecated flag=… use=…` once per run and otherwise behaves exactly as it did. They still carry their old per-mode meaning, which `--pos` deliberately does not copy: in `--anim-lab` `--spawn-at` moves the parked stage prop as well as the camera, and in `--freecam` it moves the camera through the spawn path, where `--pos` beats it)
 - `--sky-zone=zone1|zone2|zone3` (horizon zone, default `zone2`. It also selects that zone's distance fog and enables fog, whiteout and the map-edge extension in a static view. **The names are per chapter**: C1 to C4 ship `zone1`+`zone2`, **C5 ships `zone1`+`zone3`**, and a zone the chapter does not define falls back to the first its `weather.json` lists. The default is also corrected by the horizon's geometry: where the named zone builds no dome, the one that has renders. **Passing the flag explicitly opts out of that correction**, pins the fog and forces the `zone_id` gate to that zone)
 - `--data-root=` (where `extracted/` lives; default the repo root. Also settable as the **`CSVM_DATA_ROOT`** environment variable, which the flag overrides. It exists so a **git worktree can run the game**: `/extracted/`, `/CrimsonSkiesGame/` and `/tools/` are git-ignored, so a worktree checkout has none of them. Point it at the primary tree and a worktree session renders **byte-identically** to that tree. It affects asset lookup only: `planes.zip`, `zrdr.zip`, `soundsh.zip`, `interp.json`, `messages.json`, `rof/`, and the per-chapter `gamez`/`texture` and mission `zrdr` paths)
+- `--portable` (**keep the player's own files beside the executable**: options, bindings, campaign profiles, custom planes, stunt scores, stick profiles and stunt screenshots go to `userdata/` there instead of Godot's user folder. A `portable.txt` beside the executable does the same without the flag. A repo run uses `.scratch/userdata/`. Godot's own log and shader cache stay in Godot's folder. The `[core] user=` line names the folder in use. `Utils/UserData.cs`)
 - `--synthetic-data` (**read an invented test tree instead of the data root**: writes an `extracted/` of `CSVM.Tests/fixtures/` records and generated files into `.scratch/synthetic-data/<pid>/`, stamped synthetic, and reads it in place of the root named. Logged as `WARN [core] SYNTHETIC DATA`; `test-report.json`'s `syntheticData` reads true. An unwritable tree quits 1. With no `--plane=` it flies the armed stand-in `probe_plane`. Needs a repo checkout, so an export refuses it; dropped beside `--extract`. `Tooling/SyntheticData.cs`)
 - `--gamez=`
 - `--textures=`

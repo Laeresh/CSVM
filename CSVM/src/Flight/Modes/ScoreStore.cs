@@ -5,7 +5,7 @@ namespace CSVM.Flight.Modes;
 
 /// <summary>
 /// Best-time persistence for stunt runs. The player's record is one JSON object in
-/// <c>user://stunt_scores.json</c>, the engine's writable user dir, never the repo. It is keyed
+/// <c>stunt_scores.json</c> in <see cref="UserData.Root"/>, never the repo. It is keyed
 /// <c>chapter/mission/plane</c> (e.g. <c>C1/IA1/player_bhawk</c>) →
 /// <c>{ best: seconds, date: "YYYY-MM-DD" }</c>. A pinned or scripted run records into a
 /// throwaway store instead (<see cref="ForSession(string, bool)"/>).
@@ -16,7 +16,7 @@ namespace CSVM.Flight.Modes;
 /// </summary>
 public sealed class ScoreStore
 {
-    private const string DefaultStorePath = "user://stunt_scores.json";
+    private const string StoreFile = "stunt_scores.json";
 
     // Null for a throwaway store, which records in memory and never writes a file.
     private readonly string? _storePath;
@@ -36,7 +36,7 @@ public sealed class ScoreStore
     /// throwaway when <paramref name="throwaway"/> holds, else the player's own
     /// <c>user://stunt_scores.json</c>.</summary>
     public static ScoreStore ForSession(string? scoresPath, bool throwaway) =>
-        ForSession(scoresPath, throwaway, DefaultStorePath);
+        ForSession(scoresPath, throwaway, System.IO.Path.Combine(UserData.Root, StoreFile));
 
     /// <summary>The stored best total, seconds, for this run key, or null if none is recorded yet.</summary>
     public float? GetBest(string key)

@@ -63,10 +63,10 @@ public sealed class BindingStore
     /// never loads or overwrites the keymap saved at this machine's controls.</summary>
     public static string? DirectoryOverride { get; set; }
 
-    /// <summary>The production store, <c>user://</c> resolved to its OS path, or the
+    /// <summary>The production store, in <see cref="Utils.UserData.Root"/>, or the
     /// <see cref="DirectoryOverride"/> while one is set.</summary>
     public static BindingStore UserBindings() =>
-        new(DirectoryOverride ?? ProjectSettings.GlobalizePath("user://"));
+        new(DirectoryOverride ?? Utils.UserData.Root);
 
     /// <summary>The file one player's keymap lives in. Per player, because two players at one
     /// machine hold two different maps and a single file would make them fight over it.</summary>

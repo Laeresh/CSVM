@@ -398,8 +398,10 @@ x86_64, `embed_pck=true`, so a single `CSVM.exe` with the pck inside, plus the *
 to the exe's own folder: it reads `extracted/` from there and writes its logs to a plain `logs\`
 beside the exe rather than to the `.scratch\logs\` a repo run uses (`Log.DirectoryFor` is the one
 switch); F12 screenshots go to a `Screenshots\` folder beside the exe (`CaptureDirector.ShotDirFor`).
-Per-user state is not in that folder at all: options, bindings, campaign profiles, scores
-and custom planes are written through `user://`, which is `%APPDATA%\Godot\app_userdata\CSVM`.
+Per-user state is not in that folder by default: options, bindings, campaign profiles, scores
+and custom planes are written to `%APPDATA%\Godot\app_userdata\CSVM` (Godot's `user://`). A
+`portable.txt` beside the exe, or `--portable`, keeps them in a `userdata\` folder there instead
+(`Utils/UserData.cs`).
 
 **One-time template install.** The Godot export templates are user-global, not part of the repo's
 pinned editor: extract the inner `templates/` FILES of `tools/godot-4.7-mono-export-templates.tpz`
@@ -586,6 +588,12 @@ stays off, because a build that is hidden from the repository's Latest badge is 
 visitor lands on. Because the tag, the executables' stamped version, the archives' names, the
 published checksums and the notes all come out of that single run, none of them can disagree with
 another.
+
+Each archive is uploaded twice: under its versioned name, and as a byte-identical copy named
+`CSVM-win64.zip` or `CSVM-linux-x64.tar.gz`, staged in `.scratch\latest\`. GitHub serves
+`releases/latest/download/<name>` from the release marked Latest, so a link to a version-free name
+always fetches the newest build; the Lutris install script follows the latest release that way. The
+notes say the copies share the published checksums.
 
 `-NotesFile` supplies the prose that goes above the generated sections; the script writes the
 verification and provenance sections itself, so the file never states a checksum or a commit of its

@@ -62,9 +62,9 @@ public sealed class CustomPlaneStore
         return safe;
     }
 
-    /// <summary>The production store, <c>user://Planes/</c> resolved to its OS path.</summary>
+    /// <summary>The production store, <c>Planes/</c> in <see cref="Utils.UserData.Root"/>.</summary>
     public static CustomPlaneStore UserPlanes() =>
-        new(Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "Planes"));
+        new(Path.Combine(Utils.UserData.Root, "Planes"));
 
     /// <summary>The canonical JSON text for <paramref name="def"/>. Field order and formatting
     /// are fixed so that load then save reproduces a file byte for byte; the def is clamped

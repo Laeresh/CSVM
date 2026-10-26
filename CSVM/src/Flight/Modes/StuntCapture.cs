@@ -92,10 +92,10 @@ public sealed class StuntCapture
     /// <summary>How many photographs this run has latched.</summary>
     public int Count { get; private set; }
 
-    /// <summary><c>screenshots/stunts/</c> beside the saves: Godot's writable user directory,
+    /// <summary><c>screenshots/stunts/</c> beside the saves, in <see cref="UserData.Root"/>,
     /// where <c>stunt_scores.json</c> and the profiles already live.</summary>
     public static string ShotDir() => Path.Combine(
-        DirectoryOverride ?? ProjectSettings.GlobalizePath("user://"), "screenshots", "stunts");
+        DirectoryOverride ?? UserData.Root, "screenshots", "stunts");
 
     /// <summary>The file one latch writes: chapter, marker and run clock, e.g.
     /// <c>C4_dz3_0m12.4s.png</c>. Invariant culture and the run clock rather than the wall clock,

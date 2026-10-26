@@ -14,13 +14,13 @@ Traps do not live here; the rule is in `docs/architecture.md`. The output layout
 
 ## src/Extraction/InstallLocator.cs
 Finds the install and every file in it without regard to case. `ResolveDirectory`/`ResolveFile`
-walk a path one segment at a time and answer the disk's spelling (an exact match wins), never
-renaming. `IsInstall` is the silent rule: `ZBD` plus `GOSDATA/ASSETS`. `Check` judges a pick, naming
-the install when the pick sits inside it or holds it two levels down. A `ZBD` with archives at its
-root alone is refused (`NoChapters`). The disc, its `GAME` folder or an `.iso` is a `Disc` (chapter
-`.cab`s in `ZBD`), which `ExtractionRun` lays out with `unzbd cs disc` into a temporary install.
-`Candidates` lists the remembered path, then Program Files and each fixed drive on Windows, or Wine
-and every Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
+walk a path one segment at a time and answer the disk's spelling, never renaming. `IsInstall` is
+the silent rule: `ZBD` plus `GOSDATA/ASSETS`. `Check` judges a pick, naming the install when the
+pick sits inside or holds it. A `ZBD` with root archives alone is refused (`NoChapters`). The disc,
+its `GAME` folder or an `.iso` is a `Disc` (chapter `.cab`s), laid out by `unzbd cs disc` first.
+`Candidates` lists the remembered path, then `BesidePlaces` (CSVM's folder or its `GAME`, and each
+`.iso`, where a disc counts), then Program Files and fixed drives on Windows, or Wine and every
+Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
 
 ## src/Extraction/RememberedInstall.cs
 The install folder the last extraction read, stored as `OptionsDef.InstallPath` in
