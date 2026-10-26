@@ -536,7 +536,7 @@ internal static class NetCombatSuites
             pair.Under == null ? new[] { pair.Top } : new[] { pair.Top, pair.Under };
         var want = Lines(worded);
         // The victim's own crash notice is the ground impact's line, not the kill's, and is left out.
-        string crash = Messages.Load(ctx.MessagesPath).Get(HudMessages.CrashKey);
+        string crash = ctx.Data.Messages.Get(HudMessages.CrashKey);
         string[] Read(HudMessages? stack) => stack == null
             ? new[] { "no stack" }
             : Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt)
@@ -1621,7 +1621,7 @@ internal static class NetCombatSuites
 
         private MatchWording(Messages rows) => _rows = rows;
 
-        internal static MatchWording Read(TestContext ctx) => new(Messages.Load(ctx.MessagesPath));
+        internal static MatchWording Read(TestContext ctx) => new(ctx.Data.Messages);
 
         internal string Row(string key) => _rows.Get(key);
 
@@ -1675,7 +1675,7 @@ internal static class NetCombatSuites
                 InterpPath: ctx.InterpPath,
                 MessagesPath: ctx.MessagesPath,
                 RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"))
-            { Game = ctx.Game };
+            { Game = ctx.Game, Data = ctx.Data };
             var session = new GameSession(spec, new LauncherContext
             {
                 Decode = ctx.Decode,

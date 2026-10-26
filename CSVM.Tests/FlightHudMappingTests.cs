@@ -4,6 +4,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using Godot;
 using Xunit;
@@ -448,7 +449,7 @@ public class FlightHudMappingTests
     [Fact]
     public void ALimitedLivesDeathPicksItsLineByTheLivesLeft()
     {
-        var strings = Messages.Parse(
+        var strings = MessagesLegacy.Parse(
             "{\"language_id\":1033,\"entries\":["
             + "{\"key\":\"MSG_NO_LIVES\",\"id\":209,\"value\":\"You Are Out of Lives!\"},"
             + "{\"key\":\"MSG_NUM_LIVES\",\"id\":210,\"value\":\"You Have %1!d! Lives Left!\"},"
@@ -465,7 +466,7 @@ public class FlightHudMappingTests
     [Fact]
     public void ADogfightDeathWordsTheVictimOverItsKillerForEachCause()
     {
-        var strings = Messages.Parse(
+        var strings = MessagesLegacy.Parse(
             "{\"language_id\":1033,\"entries\":["
             + "{\"key\":\"MSG_DESTROYED_BY_X\",\"id\":214,\"value\":\"Destroyed by %1\"},"
             + "{\"key\":\"MSG_UNKNOWN\",\"id\":6007,\"value\":\"Unknown\"},"
@@ -493,7 +494,7 @@ public class FlightHudMappingTests
     }
 
     // The two rows the prompt reads, as messages.json carries them (ids 181 and 182).
-    private static Messages AutoLandMessages() => Messages.Parse(
+    private static Messages AutoLandMessages() => MessagesLegacy.Parse(
         "{\"language_id\":1033,\"entries\":["
         + "{\"key\":\"MSG_PRESS_AUTOLAND\",\"id\":181,\"value\":\"Press %1 to autodock\"},"
         + "{\"key\":\"MSG_CLICK_AUTOLAND\",\"id\":182,\"value\":\"Click %1 to autodock\"}]}");

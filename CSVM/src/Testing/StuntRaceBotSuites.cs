@@ -113,7 +113,7 @@ internal static class StuntRaceBotSuites
         const string cell = "menu";
         string chapter = Course(ctx, "C1");
         var setup = new PlayerSetupFeature();
-        setup.Bots.CallsignPool = Session.Roster.BotSeats.CallsignPool(Mech3.Messages.Load(ctx.MessagesPath));
+        setup.Bots.CallsignPool = Session.Roster.BotSeats.CallsignPool(ctx.Data.Messages);
         setup.AddBot();
         int row = setup.Bots.Rows[0].Id;
         setup.RenameBot(row, Callsign);
@@ -138,7 +138,7 @@ internal static class StuntRaceBotSuites
             exit.Seats.Select(s => s.PlaneNode).ToArray(), exit.Mode, exit.InstantAction, bots: exit.Bots);
         ctx.Check(exit.Bots is { Count: 1 } && spec is { Stunt: true, VsBots.Count: 1 },
             $"[{cell}] with the race toggle on the Stunt Flying exit carries the join board's row into the spec ({exit.Bots?.Count ?? 0} row(s), {spec.VsBots.Count} bot(s))");
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
         ctx.Check(roster is { Length: 2 } && roster[BotSeat] is { IsBot: true, Callsign: Callsign },
             $"[{cell}] the launch seats the pane and then the row's bot '{Callsign}'");
         if (roster == null)
@@ -190,7 +190,7 @@ internal static class StuntRaceBotSuites
         var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
             MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
             bots: new[] { new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign), new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Rival) });
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
         if (roster is not { Length: 3 })
         {
             ctx.Check(false, $"[{cell}] the local launch seats a pane and two bots ({roster?.Length ?? 0} seat(s))");
@@ -369,7 +369,7 @@ internal static class StuntRaceBotSuites
     private static int Fly(TestContext ctx, SessionSpec spec, bool objective, int? limit)
     {
         string cell = objective ? "objective" : "objective off";
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
         ctx.Check(roster is { Length: 2 } && roster[PaneSeat].HasPane && roster[BotSeat] is { IsBot: true, Callsign: Callsign },
             $"[{cell}] the local launch seats a pane and the bot '{Callsign}'");
         if (roster == null)
@@ -533,7 +533,7 @@ internal static class StuntRaceBotSuites
     private static void Shielded(TestContext ctx, SessionSpec spec, bool shut)
     {
         string cell = shut ? "gate" : "gate unshut";
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
         var end = roster == null ? null : NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
         try
         {

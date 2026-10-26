@@ -87,7 +87,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Zeppelins.cs`, the mission `zeppelins.zrd.json` reader: each instance's motion, net, damage zones and cannons.
 - `src/Mech3/InstantAction.cs`, `InstantActionDef` and its three producers: a chapter's file, `--ia=`, and the launchscreen wizard.
 - `src/Mech3/AiSkills.cs`, `player.json`'s `ai_skill_parameters` endpoint pairs by rating, plus the aiv roster block accessors.
-- `src/Mech3/Messages.cs`, the game's localized string table: the key→value map behind every `MSG_*` key, from `messages.json` or `strings.dll`.
+- `src/Mech3/Messages.cs`, the game's localized string table: the key→value map behind every `MSG_*` key, read from `strings.dll`.
 - `src/Mech3/UiStrings.cs`, the original's UI string table by id: `langui` rows, with its placeholders converted for composite format.
 - `src/Mech3/TgaImage.cs`, the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
@@ -724,7 +724,9 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
 - `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
 - `src/Tooling/SyntheticTextures.cs`, the synthetic tree's C1 texture archive: the fixture manifest plus one generated PNG per entry.
-- `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket, shakes and messages.
+- `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket and shakes.
+- `src/Tooling/SyntheticGameData.cs`, the game data a `--synthetic-data` run reads, every model built in memory with no game-file source.
+- `src/Tooling/SyntheticMessages.cs`, the synthetic run's invented message table, built in code.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
 - `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry, and the `voice.json` accent table.
 - `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
@@ -1046,6 +1048,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 - `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
+- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table) and its per-session chapter part, handed down in place of paths.
 
 ### `CSVM.Tests/`, the unit tests
 

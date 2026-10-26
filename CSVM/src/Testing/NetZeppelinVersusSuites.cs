@@ -303,7 +303,7 @@ internal static class NetZeppelinVersusSuites
                                  && p.Dogfight!.Match.TeamTermOf(1) == 0 && p.Dogfight!.Match.TeamTermOf(2) == 0),
             $"and no seat gains a kill or a point and neither side's term moves ({Boards()})");
 
-        var strings = Messages.Load(ctx.MessagesPath);
+        var strings = ctx.Data.Messages;
         var turretLines = HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Turret, "guest2", TeamNames[2]);
         var suicideLines = HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.NoKiller, "guest2", null);
         string[] Read(HudMessages? stack) => stack == null ? new[] { "no stack" }

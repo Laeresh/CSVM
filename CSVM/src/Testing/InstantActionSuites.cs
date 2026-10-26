@@ -429,10 +429,10 @@ internal static class InstantActionSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"string table");
+        ctx.RequireMessages();
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var strings = Messages.Load(ctx.MessagesPath);
+        var strings = ctx.Data.Messages;
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var textures = new TextureArchive(texturesPath);
@@ -464,7 +464,7 @@ internal static class InstantActionSuites
                     ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
                     MissionZrdrPath = missionZrdr,
                     ZrdrPath = ctx.ZrdrPath,
-                    MessagesPath = ctx.MessagesPath,
+                    Messages = ctx.Data.Messages,
                     SpawnList = SpawnPoints.LoadIa(missionZrdr, def.MissionType),
                     SpawnBase = 0,
                     LiveryResolver = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
@@ -881,7 +881,7 @@ internal static class InstantActionSuites
         ctx.RequireData(texturesPath, $"C1 textures");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
         // The stunt runs fly C1/IA1's markers in the host's one physics space. A cached collidable
         // C1 world's scenery would stand there too and crash them mid-hold.
         ctx.EvictCollidableWorlds();
@@ -1207,7 +1207,7 @@ internal static class InstantActionSuites
         // ---- stunt_flying: the zone sets' all-finished rule over the authored zones ----------
         ctx.WithWorld("C1", collision: false, mission: "IA1", world =>
         {
-            var zones = StuntMission.Load(world.Gamez, missionZrdr, Messages.Load(ctx.MessagesPath));
+            var zones = StuntMission.Load(world.Gamez, missionZrdr, ctx.Data.Messages);
             ctx.Check(zones != null, $"C1/IA1 ships danger zones for a stunt_flying mission");
             if (zones == null)
             {
@@ -1472,9 +1472,9 @@ internal static class InstantActionSuites
 
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
         if (StuntMission.Load(GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1")), missionZrdr,
-                Messages.Load(ctx.MessagesPath)) is { } run)
+                ctx.Data.Messages) is { } run)
         {
             StuntCaptureSuites.CheckShortRunWrapup(ctx, run, "C1");
         }
@@ -1503,10 +1503,10 @@ internal static class InstantActionSuites
         ctx.RequireData(gamezPath, $"{chapter} gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
 
         var gamez = GameZ.Load(gamezPath);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
             ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
 
@@ -1582,9 +1582,9 @@ internal static class InstantActionSuites
         ctx.RequireData(gamezPath, $"{chapter} gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
         var gamez = GameZ.Load(gamezPath);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
             ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
 
@@ -1744,7 +1744,7 @@ internal static class InstantActionSuites
     {
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
         ctx.RequireData(gamezPath, $"C1 gamez");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         ctx.Check(run is { TotalCount: >= 2 }, $"C1/IA1 ships at least two danger zones for the hold's stunt run");
         if (run is not { TotalCount: >= 2 })
         {

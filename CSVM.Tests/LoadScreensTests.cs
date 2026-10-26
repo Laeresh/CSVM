@@ -2,6 +2,8 @@ using System.IO;
 using System.Linq;
 using CSVM;
 using CSVM.Extraction;
+using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using Xunit;
@@ -36,7 +38,7 @@ public class LoadScreensTests
     [Fact]
     public void AModeOfOursWritesItsHeadingAloneAtTheAuthoredPlace()
     {
-        var lines = LoadScreens.Texts(null, "FREE FLIGHT", "no-zrdr", "no-messages");
+        var lines = LoadScreens.Texts(null, "FREE FLIGHT", "no-zrdr", new Messages());
 
         var only = Assert.Single(lines);
         Assert.Equal("FREE FLIGHT", only.Text);
@@ -163,9 +165,9 @@ public class LoadScreensTests
     [Fact]
     public void AnUnreadableSheetKeepsTheFrameAndTheBar()
     {
-        Assert.Null(LoadSheet.Load("no-zrdr", "no-messages", "no-mission", "loading_c61", "none"));
+        Assert.Null(LoadSheet.Load("no-zrdr", new Messages(), "no-mission", "loading_c61", "none"));
 
-        var board = LoadScreens.For(true, "unused", null, "no-zrdr", "no-messages");
+        var board = LoadScreens.For(true, "unused", null, "no-zrdr", new Messages());
 
         Assert.Equal("loadframe", Assert.Single(board.Backdrop).Art.Name);
         Assert.Equal("prog_blkload", Assert.Single(board.Pictures).Art.Name);
@@ -180,8 +182,8 @@ public class LoadScreensTests
     public void TheBlackboardDrawsOnePropellerWhetherPumpedOrStill()
     {
         var motion = LoadScreens.MotionFor(false, null);
-        var pumped = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", "no-messages", pumped: true);
-        var still = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", "no-messages");
+        var pumped = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", new Messages(), pumped: true);
+        var still = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", new Messages());
 
         Assert.Equal(1, PropellerDraws(still, motion));
         Assert.Equal(0, PropellerDraws(pumped, motion));
@@ -219,7 +221,7 @@ public class LoadScreensTests
     [Fact]
     public void AMissingExtractionWritesNothingRatherThanThrowing()
     {
-        Assert.Empty(LoadScreens.Texts("stunt_flying", "unused", "no-zrdr", "no-messages"));
+        Assert.Empty(LoadScreens.Texts("stunt_flying", "unused", "no-zrdr", new Messages()));
     }
 
     /// <summary>A Dogfight's dialog name. It is the number the original's session setup writes for
@@ -416,6 +418,6 @@ public class LoadScreensTests
     private static string Zrdr() =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
-    private static string MessagesPath() =>
-        Path.Combine(TestData.ExtractedRoot!, "messages.json");
+    private static Messages MessagesPath() =>
+        MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
 }

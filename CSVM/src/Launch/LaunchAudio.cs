@@ -28,6 +28,7 @@ internal sealed class LaunchAudio(Node host)
     private UI.Screens.CinemaScreen? _cinemaShown;
     // The data root the films are read from, settled by Build.
     private string _dataRoot = string.Empty;
+    private Mech3.Messages _messages = new();
     // The master gain ApplyMasterVolume resolved, which a cinema warns against when it is zero.
     private float _masterVolume = MasterVolume.Unattenuated;
 
@@ -96,6 +97,7 @@ internal sealed class LaunchAudio(Node host)
     public void Build(BasePaths paths, ulong masterSeed)
     {
         _dataRoot = paths.DataRoot;
+        _messages = paths.Data.Messages;
         try
         {
             _archive = new SoundArchive(paths.SoundsPath);
@@ -184,7 +186,7 @@ internal sealed class LaunchAudio(Node host)
     /// and the next begins. Whether the original abandoned the rest of the block instead is not
     /// decoded (docs/formats/cinemas.md).</summary>
     public void PlayBoot(System.Action then) =>
-        UI.Screens.BootCard.Play(host, _dataRoot, PlayCinema, then);
+        UI.Screens.BootCard.Play(host, _dataRoot, _messages, PlayCinema, then);
 
     /// <summary>Closes the score's archive on an ordinary quit.</summary>
     public void Exit()

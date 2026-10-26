@@ -63,7 +63,7 @@ internal static class MultiplayerBoardSuites
     private static void Sweep(TestContext ctx, Font font)
     {
         var judge = new Judge(ctx, font);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         int offered = 0, screens = 0, unwrapped = 0, unlifted = 0;
         for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
         {
@@ -77,14 +77,14 @@ internal static class MultiplayerBoardSuites
 
                 offered++;
                 if (LoadScreens.MultiplayerKey(chapter, mode.Type, mode.Teamed) is not { } key
-                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.MessagesPath, key) is not { } sheet)
+                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.Data.Messages, key) is not { } sheet)
                 {
                     ctx.Check(false, $"{chapter}'s Dogfight ({mode}) resolves a multiplayer dialog");
                     continue;
                 }
 
                 var load = LoadScreens.For(
-                    false, string.Empty, null, ctx.ZrdrPath, ctx.MessagesPath, briefing: key);
+                    false, string.Empty, null, ctx.ZrdrPath, ctx.Data.Messages, briefing: key);
                 var pause = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
                 if (load.Pictures.Count == 0 || pause.Backdrop.Count == 0)
                 {

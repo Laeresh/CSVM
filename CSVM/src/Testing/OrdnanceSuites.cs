@@ -689,8 +689,8 @@ internal static class OrdnanceSuites
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || PickWeapon(ctx, weapons, "wep_06", w => w.HighExplosive && !w.Targetable
                 && w.DetonationDistance is > AimAssist.MinFuseDistance) is not { } rocket)
@@ -971,10 +971,10 @@ internal static class OrdnanceSuites
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
         // Every check reads a body built off C1's FLYOUT models, so the world gates the whole suite.
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"), $"chapter C1 gamez");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         if (!weapons.TryGet("wep_15", out var flare) || !weapons.TryGet("wep_14", out var torpedo))
         {
             ctx.Check(false, $"wep_15 and wep_14 both resolve");

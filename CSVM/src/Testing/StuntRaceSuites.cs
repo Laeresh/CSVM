@@ -67,8 +67,8 @@ internal static class StuntRaceSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(gamezPath, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         if (zones is not { TotalCount: >= 4 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than four danger zones");
@@ -91,7 +91,7 @@ internal static class StuntRaceSuites
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,
@@ -361,8 +361,8 @@ internal static class StuntRaceSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(gamezPath, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         if (zones is not { TotalCount: >= 2 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than two danger zones");
@@ -385,7 +385,7 @@ internal static class StuntRaceSuites
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,
@@ -756,8 +756,8 @@ internal static class StuntRaceSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(gamezPath, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         if (zones is not { TotalCount: >= 1 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads no danger zone");
@@ -784,7 +784,7 @@ internal static class StuntRaceSuites
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,

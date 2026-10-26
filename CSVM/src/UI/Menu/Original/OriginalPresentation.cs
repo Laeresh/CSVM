@@ -307,12 +307,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     private bool _revealRunning;
 
     /// <summary>A presentation drawing under <paramref name="parent"/> over the art beneath
-    /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>, opening its first show
-    /// on <paramref name="aid"/> (an Original <c>--menu=</c> value or "") and every later one on
-    /// the destination itself, binding pads over seat 0's poller <paramref name="player1"/>, and seating
-    /// <paramref name="debugJoin"/> device-less players once, the screenshot aid.</summary>
-    public OriginalPresentation(Node parent, string dataRoot, MenuLayout layout, string aid, MenuInput player1, int debugJoin = 0)
+    /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>. Its first show opens on
+    /// <paramref name="aid"/> (an Original <c>--menu=</c> value or ""), every later one on the
+    /// destination. Pads bind over seat 0's poller <paramref name="player1"/>, and the screenshot aid
+    /// seats <paramref name="debugJoin"/> device-less players once. The shell's screens read
+    /// <paramref name="data"/>, none when null.</summary>
+    public OriginalPresentation(
+        Node parent, string dataRoot, MenuLayout layout, string aid, MenuInput player1, int debugJoin = 0, Spec.GameData? data = null)
     {
+        Data = data ?? Spec.GameData.Empty;
         _parent = parent ?? throw new ArgumentNullException(nameof(parent));
         _dataRoot = dataRoot ?? throw new ArgumentNullException(nameof(dataRoot));
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
@@ -348,6 +351,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// sees then never depends on the player's own builds. The first show hands it to the shell,
     /// so it is set with the presentation.</summary>
     public CustomPlaneStore? Planes { get; init; }
+
+    /// <summary>The launch's game data the shell hands its screens.</summary>
+    public Spec.GameData Data { get; }
 
     /// <summary>The viewer showing the wrap-up page's open photograph, for a suite reading it back;
     /// null while the presentation has no layer.</summary>
@@ -432,6 +438,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 profiles: () => CampaignProfiles ?? CampaignProfileStore.UserProfiles(),
                 stock: () => StockLoadouts.Load(),
                 dataRoot: _dataRoot,
+                data: Data,
                 options: () => OptionsStore.UserOptions().Load(),
                 screenSizes: ResolutionSetting.ScreenSizes,
                 screens: MonitorSetting.Screens,

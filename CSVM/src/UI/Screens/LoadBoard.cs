@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text;
+using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
@@ -38,14 +39,14 @@ public sealed partial class LoadBoard : Control
     /// is the campaign screen's whole content, null where the extraction could not answer for it.
     /// The briefing is a Dogfight's multiplayer dialog key.</summary>
     public static LoadBoard Build(
-        string dataRoot, string zrdrPath, string messagesPath, bool campaign, string subject,
+        string dataRoot, string zrdrPath, Messages messages, bool campaign, string subject,
         string? missionType, LoadSheet? sheet = null, string? briefing = null)
     {
         var board = new LoadBoard
         {
             _dataRoot = dataRoot,
             _board = LoadScreens.For(
-                campaign, subject, missionType, zrdrPath, messagesPath, sheet, pumped: true,
+                campaign, subject, missionType, zrdrPath, messages, sheet, pumped: true,
                 briefing: briefing),
             _motion = LoadScreens.MotionFor(campaign, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,

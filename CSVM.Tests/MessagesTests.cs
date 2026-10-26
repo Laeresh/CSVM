@@ -1,5 +1,6 @@
 using System.IO;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -31,7 +32,7 @@ public class MessagesTests
     public void AMissingTableIsEmptyRatherThanAThrow()
     {
         // Display strings are cosmetic; a mission must still load without them.
-        var messages = Messages.Load(Path.Combine(TestData.TempDir(), "absent.json"));
+        var messages = MessagesLegacy.Load(Path.Combine(TestData.TempDir(), "absent.json"));
         Assert.Equal(0, messages.Count);
         Assert.Equal("MSG_ANYTHING", messages.Get("MSG_ANYTHING"));
     }
@@ -68,5 +69,5 @@ public class MessagesTests
         Assert.Equal("", Messages.Fill(""));
     }
 
-    private static Messages Load() => Messages.Load(TestData.Fixture("messages.json"));
+    private static Messages Load() => MessagesLegacy.Load(TestData.Fixture("messages.json"));
 }

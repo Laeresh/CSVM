@@ -141,7 +141,7 @@ internal static class AiWaveLaunchHitchSuites
             var spec = SessionSpec.Parse(Array.Empty<string>());
             var factory = new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
             var resources = SuiteConstants.AircraftResources(ctx, planesGamez, textures,
-                Messages.Load(ctx.MessagesPath));
+                ctx.Data.Messages);
             for (int i = 0; i < rigCount; i++)
             {
                 humans.Add(HumanRig(ctx, planesGamez, textures, live, i,

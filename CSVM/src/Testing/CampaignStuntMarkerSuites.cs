@@ -69,7 +69,7 @@ internal static class CampaignStuntMarkerSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -306,7 +306,7 @@ internal static class CampaignStuntMarkerSuites
             ZrdrPath = ctx.ZrdrPath,
             StockLoadouts = StockLoadouts.Load(),
             WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };

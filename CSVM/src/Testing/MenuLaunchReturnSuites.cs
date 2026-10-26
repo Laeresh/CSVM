@@ -490,7 +490,7 @@ internal static class MenuLaunchReturnSuites
             _aid = aid;
             var registry = new PresentationRegistry();
             registry.Register(PresentationId.Original, () => new OriginalPresentation(
-                ctx.Host, ctx.DataRoot, layout, _aid ?? string.Empty, new MenuInput { Keyboard = true })
+                ctx.Host, ctx.DataRoot, layout, _aid ?? string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
             {
                 CampaignProfiles = store,
                 Planes = planes,
@@ -501,7 +501,7 @@ internal static class MenuLaunchReturnSuites
                 Exits.Add(exit);
                 _hidden.Add(Host is { Shown: false });
             });
-            MenuSuiteHost.AddFeatures(Host, ctx.DataRoot);
+            MenuSuiteHost.AddFeatures(Host, ctx.DataRoot, ctx.Data);
             Host.AddSeat(Seat);
         }
 

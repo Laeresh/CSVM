@@ -654,7 +654,7 @@ internal static class MenuOriginalConnectionSuites
     internal static void TheLobbyBots(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireMessages();
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -700,7 +700,7 @@ internal static class MenuOriginalConnectionSuites
                 return;
             }
 
-            var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+            var pool = CSVM.Session.Roster.BotSeats.CallsignPool(ctx.Data.Messages);
             AddAndFillBots(ctx, host, guest, ends, pool);
             EditTheBots(ctx, host, guest, ends);
             ScrollTheList(ctx, host, ends);
@@ -3986,7 +3986,7 @@ internal static class MenuOriginalConnectionSuites
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
-        var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+        var pool = CSVM.Session.Roster.BotSeats.CallsignPool(ctx.Data.Messages);
         var (roster, seatFits) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), lobby.Rules,
             lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
         string random = roster.Length == 4 ? roster[3].PlaneNode : string.Empty;
@@ -4350,13 +4350,13 @@ internal static class MenuOriginalConnectionSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = CampaignAidProfiles.Store(seeded: true, progressed: true),
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exit => exits?.Add(exit));
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, netDoor: door);
         host.AddSeat(seat);
         host.Select("original");
         host.Show(MenuReturnDestination.TopLevel);

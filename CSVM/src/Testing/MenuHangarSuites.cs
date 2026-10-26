@@ -85,12 +85,12 @@ internal static class MenuHangarSuites
         var registry = new PresentationRegistry();
         var store = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-hangar");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = store,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         string scratch = ScratchName();
         ctx.Check(store.List().Count == 0, $"the suite's scratch store starts empty ({store.List().Count})");

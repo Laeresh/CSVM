@@ -330,7 +330,7 @@ internal static class PauseWorldIconSuites
 
     private static PauseSheet? SheetOf(TestContext ctx, CampaignMission mission) =>
         PauseSheet.Load(
-            ctx.ZrdrPath, ctx.MessagesPath,
+            ctx.ZrdrPath, ctx.Data.Messages,
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), instantAction: false);
 
     private static BoardPicture? FindArt(ComposedBoard board, string name)

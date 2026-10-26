@@ -353,7 +353,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private readonly Func<IReadOnlyList<CustomPlaneDef>> _customs;
     private readonly OriginalOutlawList _outlaw;
     private readonly OriginalTeamBox _teamBox;
-    private readonly string? _dataRoot;
     private string? _open;
 
     // The team row picked for Join Team, 0 for none. A pick is a team or a player, never both.
@@ -401,7 +400,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _net = net ?? throw new ArgumentNullException(nameof(net));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _text = new MultiplayerBoardText(_host, dataRoot);
-        _dataRoot = dataRoot;
         _outlaw = new OriginalOutlawList(_text);
         _teamBox = new OriginalTeamBox(_host, _text);
         _stock = stock ?? (() => null);
@@ -1277,11 +1275,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     /// <summary>The shipped pilot names a new bot row draws its callsign from, read once from the
-    /// message table under the data root. A missing table leaves every bot "Bot n".</summary>
+    /// host's message table. A missing table leaves every bot "Bot n".</summary>
     internal IReadOnlyList<string> BotNames() =>
-        _botNames ??= _dataRoot == null
-            ? Array.Empty<string>()
-            : BotSeats.LoadCallsignPool(_dataRoot);
+        _botNames ??= BotSeats.CallsignPool(_host.Data.Messages);
 
     /// <summary>LAUNCH!'s plaque under Mission Options' left column, keyed <paramref name="key"/>.
     /// </summary>

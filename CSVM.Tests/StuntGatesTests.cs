@@ -4,6 +4,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Testing;
+using CSVM.Tests.Oracle;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -36,7 +37,7 @@ public class StuntGatesTests
 
     private static void Run()
     {
-        var mission = StuntMission.Load(GameZ.Load(GamezPath), MissionPath, Messages.Load(MessagesPath));
+        var mission = StuntMission.Load(GameZ.Load(GamezPath), MissionPath, MessagesLegacy.Load(MessagesPath));
         Assert.True(mission != null, "C4 IA1 loads authored Danger Zone gates");
         if (mission == null)
             return;

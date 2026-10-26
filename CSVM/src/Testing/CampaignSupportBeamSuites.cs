@@ -55,7 +55,7 @@ internal static class CampaignSupportBeamSuites
 
         var shipped = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
 
         // Appended past the last shipped number, so OBJECTIVE7's own real TRAVELERS-gated
         // ADD_OBJECTIVE_TARGET (the mission's real path to these six keys) is untouched and the

@@ -97,7 +97,7 @@ internal static class CampaignLoopSuites
 
         var strings = UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty;
         var stock = StockLoadouts.Load();
-        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock);
+        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock, data: ctx.Data);
         var profile = WalkToTheFlightCheck(ctx, flow, store, report);
         int group = ChangeAmmo(ctx, flow, store, report);
         var fit = PressFlyMission(ctx, flow, store, profile, stock, group, report);
@@ -654,7 +654,7 @@ internal static class CampaignLoopSuites
             return;
         }
 
-        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock);
+        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock, data: ctx.Data);
         flow.SelectProfile(reread);
         ctx.Check(flow.Screen == CampaignScreen.Cabin, $"the return lands on the cabin, screen={flow.Screen}");
         ctx.Same(FirstSeq + 1, reread.MissionsCompleted, $"the profile file carries the flown mission");
@@ -698,7 +698,8 @@ internal static class CampaignLoopSuites
     {
         var recorder = new FilmRecorder();
         var feature = new CampaignFeature(
-            strings, StockAirframes.Node, closingCinema: new ClosingCinema(recorder.Play));
+            strings, StockAirframes.Node, closingCinema: new ClosingCinema(recorder.Play))
+        { Data = ctx.Data };
         feature.Open(new CampaignProfileStore(dir), null, null, ctx.DataRoot);
         var flow = new CampaignFlow(feature);
 

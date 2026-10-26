@@ -31,7 +31,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
-        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.MessagesPath, ctx.PlanesGamezPath, ctx.DataRoot,
+        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.Data.Messages, ctx.PlanesGamezPath, ctx.DataRoot,
             "", ctx.LoadoutOverride);
         ctx.Check(r.Error == null, $"loadout inputs load error={r.Error ?? "-"}");
         if (r.Error != null)
@@ -55,7 +55,7 @@ internal static class CombatSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         var stock = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
         try
@@ -212,7 +212,7 @@ internal static class CombatSuites
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         // The pool holds the archive past construction (it bakes the tracer and impact stand-ins),
         // so it is disposed only after the self-test has run.
         var textures = new TextureArchive(texturesPath);
@@ -807,7 +807,7 @@ internal static class CombatSuites
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         var stock = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
         try

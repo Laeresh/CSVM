@@ -9,6 +9,7 @@ using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -898,6 +899,10 @@ public sealed class TestContext
     /// <summary>The run's game-file source, null without an install; a suite that builds its own
     /// <c>BasePaths</c> hands it on.</summary>
     public IGameFileSource? Game { get; init; }
+
+    /// <summary>The run's game data, the launch's own: read from <see cref="Game"/>, or built in
+    /// memory on the synthetic tree. A suite that builds its own <c>BasePaths</c> hands it on.</summary>
+    public required GameData Data { get; init; }
     public required string PlaneName { get; init; }
     public required bool Mute { get; init; }
 
@@ -1036,8 +1041,15 @@ public sealed class TestContext
     /// <summary>The install's boot scripts, or SKIP the way <see cref="RequireData"/> does when
     /// the run has no install or the install no <c>interp.zbd</c>.</summary>
     public InterpScripts RequireInterp() =>
-        InterpScripts.Load(Game)
+        Data.Interp
         ?? throw new SuiteSkippedException($"{InterpScripts.GamePath} not found: {Game?.Location ?? "no game install"}");
+
+    /// <summary>The run's message table, or SKIP the way <see cref="RequireData"/> does when it
+    /// is empty: no install, or an install without <c>strings.dll</c>.</summary>
+    public Messages RequireMessages() =>
+        Data.Messages.Count > 0
+            ? Data.Messages
+            : throw new SuiteSkippedException($"{Messages.GameFile} not found: {Game?.Location ?? "no game install"}");
 
     /// <summary>On the synthetic tree, skips a suite whose body reads a shipped texture by
     /// <paramref name="name"/> that the invented archive does not carry. ⚠ Never skip on a real
@@ -1350,7 +1362,7 @@ public sealed class TestContext
                     Chapter = chapter,
                     Mission = mission,
                     ZrdrPath = ZrdrPath,
-                    Interp = InterpScripts.Load(Game),
+                    Interp = Data.Interp,
                     MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
                     ChapterZrdrPath = SessionPaths.ChapterZrdr(DataRoot, chapter),
                     EffectsParent = stage,

@@ -103,7 +103,7 @@ public class SyntheticPlaneTests
     {
         string root = Built();
         string zrdr = Path.Combine(root, "extracted", "zrdr");
-        var messages = Messages.Load(Path.Combine(root, "extracted", "messages.json"));
+        var messages = SyntheticGameData.Build().Messages;
 
         var weapons = WeaponDefs.Load(zrdr, messages);
         var gun = weapons.Get("wep_probe_gun");

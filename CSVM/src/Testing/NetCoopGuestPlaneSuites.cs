@@ -322,7 +322,7 @@ internal static class NetCoopGuestPlaneSuites
 
     private static CampaignFeature OpenHost(TestContext ctx, string root, CampaignProfileStore store, CampaignMission mission)
     {
-        var host = new CampaignFeature(UiStrings.Empty, StockAirframes.Node);
+        var host = new CampaignFeature(UiStrings.Empty, StockAirframes.Node) { Data = ctx.Data };
         host.Open(store, new CustomPlaneStore(Path.Combine(root, "Planes")), StockLoadouts.Load(), ctx.DataRoot);
         host.SeatProfile(HostPilot);
         host.SetMission(mission.Seq);

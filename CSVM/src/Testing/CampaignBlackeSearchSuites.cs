@@ -863,7 +863,7 @@ internal static class CampaignBlackeSearchSuites
             ZrdrPath = ctx.ZrdrPath,
             StockLoadouts = StockLoadouts.Load(),
             WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };

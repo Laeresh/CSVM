@@ -30,19 +30,19 @@ public sealed partial class BootCard : Node
     private Action? _then;
     private double _left;
 
-    private BootCard(string dataRoot)
+    private BootCard(string dataRoot, Mech3.Messages messages)
     {
         Name = "boot_card";
         _dataRoot = dataRoot;
-        _card = BootSequence.Card(dataRoot);
+        _card = BootSequence.Card(messages);
     }
 
     /// <summary>Runs the whole boot sequence on <paramref name="host"/>: this node puts up the
     /// stills, <paramref name="film"/> plays the three movies, and <paramref name="then"/> runs
     /// after the last of them, by which point nothing of the sequence is left on screen.</summary>
-    public static void Play(Node host, string dataRoot, CinemaPlay film, Action then)
+    public static void Play(Node host, string dataRoot, Mech3.Messages messages, CinemaPlay film, Action then)
     {
-        var card = new BootCard(dataRoot);
+        var card = new BootCard(dataRoot, messages);
         host.AddChild(card);
         new BootSequence(film, card.Hold, card.Drop).Run(() =>
         {

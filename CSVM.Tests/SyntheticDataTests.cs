@@ -41,6 +41,20 @@ public class SyntheticDataTests
         Assert.Empty(lines);
     }
 
+    /// <summary>A synthetic launch resolves no game source and reads the invented message table out
+    /// of memory. The tree it runs over carries no <c>messages.json</c>.</summary>
+    [Fact]
+    public void ASyntheticLaunchBuildsItsGameDataInMemoryWithNoSource()
+    {
+        string root = Built();
+        var paths = Spec.BasePaths.Resolve(TestData.RepoRoot, root, Spec.SessionSpec.Parse(new[] { "--synthetic-data" }));
+
+        Assert.Null(paths.Game);
+        Assert.Equal("Probe Gun", paths.Data.Messages.Get("MSG_PROBE_GUN"));
+        Assert.Null(paths.Data.Interp);
+        Assert.False(File.Exists(Path.Combine(root, "extracted", "messages.json")));
+    }
+
     [Fact]
     public void ARealLookingStampIsNotSynthetic()
     {

@@ -61,7 +61,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         string? briefing = briefingKey
             ?? (campaign || missionType != null ? null : LaunchBriefing(teamedLobby));
         var board = UI.Screens.LoadBoard.Build(
-            paths.DataRoot, paths.ZrdrPath, paths.MessagesPath, campaign, subject, missionType, sheet, briefing);
+            paths.DataRoot, paths.ZrdrPath, paths.Data.Messages, campaign, subject, missionType, sheet, briefing);
         if (briefing != null)
         {
             Log.Info("ui", $"load screen: {spec.Chapter} Dogfight reads {briefing}");
@@ -74,7 +74,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     /// <paramref name="subject"/>.</summary>
     public UI.Screens.LoadBoard SwitchScreen(string subject)
     {
-        var board = UI.Screens.LoadBoard.Build(paths.DataRoot, paths.ZrdrPath, paths.MessagesPath, false, subject, null);
+        var board = UI.Screens.LoadBoard.Build(paths.DataRoot, paths.ZrdrPath, paths.Data.Messages, false, subject, null);
         board.CaptureDir = spec.DebugLoad ?? string.Empty;
         return board;
     }
@@ -129,7 +129,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 
         string key = UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission);
         var sheet = UI.Screens.LoadSheet.Load(
-            paths.ZrdrPath, paths.MessagesPath,
+            paths.ZrdrPath, paths.Data.Messages,
             SessionPaths.MissionZrdr(paths.DataRoot, named.ChapterFolder, named.MissionFolder),
             key, SeatedMemento());
         if (sheet == null)
@@ -178,7 +178,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 
         string missionZrdr = SessionPaths.MissionZrdr(paths.DataRoot, named.ChapterFolder, named.MissionFolder);
         var sheet = UI.Screens.PauseSheet.Load(
-            paths.ZrdrPath, paths.MessagesPath,
+            paths.ZrdrPath, paths.Data.Messages,
             UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
         if (sheet == null)
         {
@@ -205,7 +205,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 
         string key = UI.Menu.EscapeDialog.InstantActionKey(
             Mech3.CampaignSequence.ChapterNumber(chapter), letter);
-        var sheet = UI.Screens.PauseSheet.Load(paths.ZrdrPath, paths.MessagesPath, key, instantAction: true);
+        var sheet = UI.Screens.PauseSheet.Load(paths.ZrdrPath, paths.Data.Messages, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
@@ -226,7 +226,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             return;
         }
 
-        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(paths.ZrdrPath, paths.MessagesPath, key);
+        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(paths.ZrdrPath, paths.Data.Messages, key);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause aid: no escape.zrd or Loading.zrd sheet for {chapter} ({key})");
@@ -253,7 +253,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, string missionZrdr, int completed)
     {
         var objectives = UI.Menu.BriefingObjectives.Load(
-            Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(paths.MessagesPath));
+            Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), paths.Data.Messages);
         var rows = new List<UI.Screens.PauseObjective>(objectives.Count);
         for (int i = 0; i < objectives.Count; i++)
         {

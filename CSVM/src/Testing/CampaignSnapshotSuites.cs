@@ -292,7 +292,7 @@ internal static class CampaignSnapshotSuites
             return;
         }
 
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         if (run == null)
         {
             return;

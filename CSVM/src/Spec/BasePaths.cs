@@ -23,27 +23,37 @@ public sealed record BasePaths(
     /// Readers that build a model from the game bytes take it in place of an extracted path.</summary>
     public IGameFileSource? Game { get; init; }
 
-    /// <summary>The paths under <paramref name="dataRoot"/>, and the game-file source by
-    /// <see cref="GameFileSource.Locate"/>'s order. A spec override is used verbatim, and
-    /// an archive the spec does not name prefers its unpacked sibling folder.
+    /// <summary>The models read from <see cref="Game"/>, or built in memory for a synthetic run.
+    /// Every consumer of a switched format reads its model here.</summary>
+    public GameData Data { get; init; } = GameData.Empty;
+
+    /// <summary>The paths under <paramref name="dataRoot"/>, the game-file source by
+    /// <see cref="GameFileSource.Locate"/>'s order, and the game data read through it. A spec
+    /// override is used verbatim, and an archive the spec does not name prefers its unpacked
+    /// sibling folder.
     /// ⚠ Do not call it before <see cref="SessionPaths.ForceZipped"/> is settled; that preference
     /// reads it.</summary>
-    public static BasePaths Resolve(string repoRoot, string dataRoot, SessionSpec spec) => new BasePaths(
-        repoRoot,
-        dataRoot,
-        SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "planes.zip")),
-        spec.Zrdr ?? SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "zrdr.zip")),
-        spec.Sounds ?? SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "soundsh.zip")),
-        spec.Interp ?? Path.Combine(dataRoot, "extracted", "interp.json"),
-        spec.Messages ?? Path.Combine(dataRoot, "extracted", "messages.json"),
-        spec.Rof ?? Path.Combine(dataRoot, "extracted", "rof"))
+    public static BasePaths Resolve(string repoRoot, string dataRoot, SessionSpec spec)
     {
         // A deterministic run ignores saved options, the remembered install among them. A
         // synthetic run reads no install at all, or its result would depend on the machine.
-        Game = spec.SyntheticData ? null : GameFileSource.Locate(
+        var game = spec.SyntheticData ? null : GameFileSource.Locate(
             System.Environment.GetEnvironmentVariable(GameFileSource.InstallVariable),
             dataRoot,
             spec.Det ? null : RememberedInstall.Get(),
-            InstallSearchRoots.ForThisMachine()),
-    };
+            InstallSearchRoots.ForThisMachine());
+        return new BasePaths(
+            repoRoot,
+            dataRoot,
+            SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "planes.zip")),
+            spec.Zrdr ?? SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "zrdr.zip")),
+            spec.Sounds ?? SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "soundsh.zip")),
+            spec.Interp ?? Path.Combine(dataRoot, "extracted", "interp.json"),
+            spec.Messages ?? Path.Combine(dataRoot, "extracted", "messages.json"),
+            spec.Rof ?? Path.Combine(dataRoot, "extracted", "rof"))
+        {
+            Game = game,
+            Data = spec.SyntheticData ? Tooling.SyntheticGameData.Build() : GameData.Load(game),
+        };
+    }
 }

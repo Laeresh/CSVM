@@ -55,7 +55,7 @@ internal static class RacePresenceSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"string table");
+        ctx.RequireMessages();
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -149,7 +149,7 @@ internal static class RacePresenceSuites
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             SuiteConstants.AircraftResources(ctx, planesGamez, textures,
-                Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+                ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,

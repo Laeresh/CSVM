@@ -187,7 +187,7 @@ internal static class InstantActionNetSeatSuites
             ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter),
             MissionZrdrPath = missionZrdr,
             ZrdrPath = ctx.ZrdrPath,
-            MessagesPath = ctx.MessagesPath,
+            Messages = ctx.Data.Messages,
             SpawnList = spawnList,
             SpawnBase = 0,
             LiveryResolver = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),

@@ -74,7 +74,7 @@ internal static class LocalBotSuites
     // One local launch, built as the launcher builds it, flown through the readings and freed.
     private static void Fly(TestContext ctx, SessionSpec spec, string cell, Action<GameSession> readings)
     {
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
         ctx.Check(roster is { Length: > 1 } && roster[0].HasPane
                   && roster.Skip(1).All(s => s is { IsBot: true, FlownHere: true } && s.PeerId == roster[0].PeerId),
             $"[{cell}] the local launch seats its pane first and then {spec.VsBots.Count} bot(s) on the pane's own peer ({Seats(roster)})");
@@ -267,7 +267,7 @@ internal static class LocalBotSuites
     private static void PanesAlone(TestContext ctx, SessionSpec spec, IReadOnlyList<SpawnPoint> table)
     {
         const string cell = "panes alone";
-        ctx.Check(SeatFields.LocalVersusField(spec, ctx.MessagesPath) == null,
+        ctx.Check(SeatFields.LocalVersusField(spec, ctx.Data.Messages) == null,
             $"[{cell}] a local launch with no bots builds no roster");
         var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster: null);
         try
@@ -310,7 +310,7 @@ internal static class LocalBotSuites
         var seat = setup.Join(new UI.Menu.MenuIdleSource())!;
         setup.Select(seat);
         setup.Confirm(seat);
-        setup.Bots.CallsignPool = Session.Roster.BotSeats.CallsignPool(Mech3.Messages.Load(ctx.MessagesPath));
+        setup.Bots.CallsignPool = Session.Roster.BotSeats.CallsignPool(ctx.Data.Messages);
         setup.AddBot();
         setup.AddBot();
         int ace = setup.Bots.Rows[0].Id;

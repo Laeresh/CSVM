@@ -47,11 +47,11 @@ internal static class HudKillLineSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireMessages();
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var strings = Messages.Load(ctx.MessagesPath);
+        var strings = ctx.Data.Messages;
         string shotDown = strings.Get(HudMessages.ShotDownKey);
         string wingman = strings.Get(HudMessages.WingmanKey);
         string destroyed = strings.Get(HudMessages.DestroyedKey);

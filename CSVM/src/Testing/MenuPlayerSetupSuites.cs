@@ -56,7 +56,7 @@ internal static class MenuPlayerSetupSuites
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat0);
         var setup = host.Features.Get<PlayerSetupFeature>();
         const string Fly = CSVM.UI.Menu.Original.OriginalShell.FlyKey;

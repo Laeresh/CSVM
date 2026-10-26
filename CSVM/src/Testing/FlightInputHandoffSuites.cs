@@ -191,7 +191,7 @@ internal static class FlightInputHandoffSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(gamezPath, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         if (run is not { TotalCount: >= 3 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than three danger zones");
@@ -312,7 +312,7 @@ internal static class FlightInputHandoffSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(gamezPath, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
         if (run is not { TotalCount: >= 3 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than three danger zones");

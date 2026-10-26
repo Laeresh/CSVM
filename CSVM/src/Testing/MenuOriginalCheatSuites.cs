@@ -79,13 +79,13 @@ internal static class MenuOriginalCheatSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = store,
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         var campaign = host.Features.Get<CampaignFeature>();
         try

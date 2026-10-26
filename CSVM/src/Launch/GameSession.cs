@@ -682,8 +682,8 @@ public partial class GameSession : Node3D
             DataRoot = _paths.DataRoot,
             ZrdrPath = _paths.ZrdrPath,
             SoundsPath = _paths.SoundsPath,
-            Interp = InterpScripts.Load(_paths.Game),
-            MessagesPath = _paths.MessagesPath,
+            Data = _paths.Data,
+            Chapter = _paths.Data.LoadChapter(_spec.Chapter, _spec.Mission),
             PlanesGamezPath = _paths.PlanesGamezPath,
             Mute = _spec.Mute,
             DebugCollision = _spec.DebugCollision,
@@ -1527,7 +1527,7 @@ public partial class GameSession : Node3D
                 Chapter = _spec.Chapter,
                 Mission = _spec.Mission,
                 ZrdrPath = state.ZrdrPath,
-                Interp = state.Interp,
+                Interp = state.Data.Interp,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
                 Decode = _decode,
@@ -1895,7 +1895,7 @@ public partial class GameSession : Node3D
             PauseOptions = _pauseOptionsFactory,
             LockCandidates = LockCandidateAircraft,
             ZrdrPath = _paths.ZrdrPath,
-            MessagesPath = _paths.MessagesPath,
+            Messages = _paths.Data.Messages,
             DataRoot = _paths.DataRoot,
         });
         var boards = _boards;
@@ -1925,7 +1925,7 @@ public partial class GameSession : Node3D
         // every player's guns fire into, since projectiles live in the shared world. The pool
         // reuses the session archives and the world gamez, so rockets get their flyout bodies.
         mark = StartupProfile.Mark();
-        var weaponMessages = Messages.Load(state.MessagesPath);
+        var weaponMessages = state.Data.Messages;
         var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
         // Decode the catalogue's own sounds while the archive is open. Nothing else covers them:
         // weapons.json names them, not the anim program, and every one is first reached in flight
@@ -2000,7 +2000,7 @@ public partial class GameSession : Node3D
         }
         else if (wantStunt)
         {
-            stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, Messages.Load(state.MessagesPath));
+            stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, state.Data.Messages);
             if (stuntZones == null)
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B), a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
@@ -2329,7 +2329,7 @@ public partial class GameSession : Node3D
                 ChapterZrdrPath = worldBindings.ChapterZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ZrdrPath = state.ZrdrPath,
-                MessagesPath = state.MessagesPath,
+                Messages = state.Data.Messages,
                 SpawnList = spawnList,
                 SpawnBase = spawnBase,
                 LiveryResolver = _liveryResolver,
@@ -2452,7 +2452,7 @@ public partial class GameSession : Node3D
         _worldRuntime = state.WorldRuntime;
         // Loaded before the graph is armed rather than with the readouts below: a SET_HELP_LABEL
         // write reaches a marker-carrying aircraft through the director, which needs the table.
-        var objectiveMessages = _campaign != null ? Messages.Load(state.MessagesPath) : null;
+        var objectiveMessages = _campaign != null ? state.Data.Messages : null;
         _campaign?.Attach(new CampaignDirector.WorldInputs
         {
             Runtime = state.WorldRuntime,
@@ -3414,7 +3414,7 @@ public partial class GameSession : Node3D
         _surfaceVehicles = new SurfaceVehicleRuntime(gamez, scene, runtime,
             VehicleDefs.Load(state.ZrdrPath), runtime.WorldRoot ?? _worldRoot)
         {
-            Strings = Messages.Load(state.MessagesPath),
+            Strings = state.Data.Messages,
         };
         _worldRoot.AddChild(_surfaceVehicles);
         return _surfaceVehicles;

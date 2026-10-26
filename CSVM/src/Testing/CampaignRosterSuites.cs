@@ -524,7 +524,7 @@ internal static class CampaignRosterSuites
             // BL-493: the block's own pilot name (aiv slot 20) is what the original's readout
             // prints, and it outranks the airframe title. The plain block authors none, so the two
             // sources are told apart in one run rather than agreeing by accident.
-            var strings = Messages.Load(ctx.MessagesPath);
+            var strings = ctx.Data.Messages;
             string aceName = PlaneRoster.PlaneDisplayName(aceRig.Stats!);
             string plainName = PlaneRoster.PlaneDisplayName(plainRig.Stats!);
             string wingName = PlaneRoster.PlaneDisplayName(wingRig.Stats!);
@@ -1104,7 +1104,7 @@ internal static class CampaignRosterSuites
             WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
             // The string table the assembler resolves a spawn's authored name through. Without it
             // every rig falls back to the def-name derivation and the name checks pass vacuously.
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };

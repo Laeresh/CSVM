@@ -79,7 +79,6 @@ internal sealed class OriginalBotPanel
     private readonly MultiplayerBoardText _text;
     private readonly Func<StockLoadouts?> _stock;
     private readonly Func<string, OriginalRow> _plaque;
-    private readonly string? _dataRoot;
     private bool _poolRead;
     private int _picked = -1;
     private int _fillTo = DogfightLobby.DefaultFillTo;
@@ -89,14 +88,13 @@ internal sealed class OriginalBotPanel
     private string _draft = string.Empty;
 
     /// <summary>A panel over <paramref name="setup"/>'s bot rows, its plaques built by
-    /// <paramref name="plaque"/> (the board's own paper strip, placed by the caller). The words and
-    /// pilot names come from the tables under <paramref name="dataRoot"/>.</summary>
+    /// <paramref name="plaque"/> (the board's own paper strip, placed by the caller). The words come
+    /// from the tables under <paramref name="dataRoot"/>, the pilot names from the host's game data.</summary>
     internal OriginalBotPanel(IOriginalScreenHost host, PlayerSetupFeature setup, string? dataRoot,
         Func<StockLoadouts?>? stock, Func<string, OriginalRow> plaque)
     {
         _host = host;
         _setup = setup;
-        _dataRoot = dataRoot;
         _text = new MultiplayerBoardText(host, dataRoot);
         _stock = stock ?? (() => null);
         _plaque = plaque;
@@ -414,8 +412,8 @@ internal sealed class OriginalBotPanel
 
     private string PlaneWord(int airframe) => _text.Word(10565, "Stock") + " " + AirframeName(airframe);
 
-    // The shipped pilot names, read once off the message table under the data root before the
-    // first row draws one. A missing table leaves every bot "Bot n".
+    // The shipped pilot names, read once off the host's message table before the first row draws
+    // one. A missing table leaves every bot "Bot n".
     private void PoolOnce()
     {
         if (_poolRead)
@@ -424,9 +422,9 @@ internal sealed class OriginalBotPanel
         }
 
         _poolRead = true;
-        if (_dataRoot != null && _setup.Bots.CallsignPool.Count == 0)
+        if (_setup.Bots.CallsignPool.Count == 0)
         {
-            _setup.Bots.CallsignPool = BotSeats.LoadCallsignPool(_dataRoot);
+            _setup.Bots.CallsignPool = BotSeats.CallsignPool(_host.Data.Messages);
         }
     }
 

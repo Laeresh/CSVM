@@ -65,7 +65,7 @@ internal static class LoadSheetSuites
         {
             string key = EscapeDialog.CampaignKey(mission.Campaign, mission.Mission);
             var sheet = LoadSheet.Load(
-                ctx.ZrdrPath, ctx.MessagesPath,
+                ctx.ZrdrPath, ctx.Data.Messages,
                 SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
                 key, memento);
             if (sheet == null)
@@ -304,7 +304,7 @@ internal static class LoadSheetSuites
 
         var mission = sheets[0].Mission;
         var bare = LoadSheet.Load(
-            ctx.ZrdrPath, ctx.MessagesPath,
+            ctx.ZrdrPath, ctx.Data.Messages,
             SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), seeded);
         var board = bare == null ? null : Compose(bare);
@@ -334,7 +334,7 @@ internal static class LoadSheetSuites
     // which is the whole of what this screen can promise while everything else is still loading.
     private static void CheckBareSheet(TestContext ctx)
     {
-        var bare = LoadScreens.For(true, "unused", null, "no-zrdr", "no-messages");
+        var bare = LoadScreens.For(true, "unused", null, "no-zrdr", new Messages());
         ctx.Same(1, bare.Backdrop.Count, $"an unreadable sheet keeps the frame behind the screen");
         ctx.Check(
             bare.Pictures.Count == 1 && bare.Pictures[0].Art.Name == "prog_blkload"
@@ -393,7 +393,7 @@ internal static class LoadSheetSuites
 
         var mission = sheets[0].Mission;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign: true, string.Empty, null,
+            ctx.DataRoot, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null,
             sheets[0].Sheet);
         ctx.Host.AddChild(board);
         try
@@ -432,7 +432,7 @@ internal static class LoadSheetSuites
     }
 
     private static ComposedBoard Compose(LoadSheet sheet) =>
-        LoadScreens.For(true, string.Empty, null, "unused", "unused", sheet);
+        LoadScreens.For(true, string.Empty, null, "unused", new Messages(), sheet);
 
     // How many objectives the dialog's script binds, which is how many rows the parchment lists.
     private static int ObjectiveBeats(LoadSheet sheet)

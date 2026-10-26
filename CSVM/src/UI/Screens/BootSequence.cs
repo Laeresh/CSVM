@@ -107,11 +107,10 @@ public sealed class BootSequence
 
     /// <summary>The copyright card in the original's 800x600 space: the splash art under the two
     /// message-table lines <c>SHOWIMAGE</c> carries. It composes like any other screen, so the art
-    /// and the strings resolve out of the extraction rather than out of this file, and a data root
-    /// with neither yields a card of the same shape with its keys showing.</summary>
-    public static ComposedBoard Card(string dataRoot)
+    /// and the strings resolve out of the game data rather than out of this file. An empty table
+    /// yields a card of the same shape with its keys showing.</summary>
+    public static ComposedBoard Card(Messages messages)
     {
-        var messages = Messages.Load(Path.Combine(dataRoot, "extracted", "messages.json"));
         var lines = new List<BoardLine>();
         Write(lines, messages.Get("MSG_COPYRIGHT1"), FirstLineY);
         Write(lines, messages.Get("MSG_COPYRIGHT2"), SecondLineY);

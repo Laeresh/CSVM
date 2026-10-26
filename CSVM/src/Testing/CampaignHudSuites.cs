@@ -50,7 +50,7 @@ internal static class CampaignHudSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.MessagesPath, $"messages file");
+        ctx.RequireMessages();
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
@@ -60,7 +60,7 @@ internal static class CampaignHudSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         var report = new StringBuilder();

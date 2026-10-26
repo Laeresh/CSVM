@@ -108,7 +108,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // flag into the flight, and the profile the cabin seated must load there.
         var profiles = cli.ProfilesDir is { } profilesDir ? CampaignProfileStore.ForSession(profilesDir) : null;
         registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(parent, at.DataRoot, _originalLayout!, _aid ?? string.Empty, seatInput, spec.DebugJoin)
+            () => new OriginalPresentation(parent, at.DataRoot, _originalLayout!, _aid ?? string.Empty, seatInput, spec.DebugJoin, at.Data)
             {
                 DebugPointer = spec.DebugPointer,
                 CampaignProfiles = profiles,
@@ -135,7 +135,8 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         _chapterCinema = new ChapterCinema(audio.PlayCinema, audio.StopCinema);
         _closingCinema = new ClosingCinema(audio.PlayCinema, audio.StopCinema);
         host.Features.Add(new CampaignFeature(
-            strings, StockAirframes.Node, _chapterCinema, _closingCinema));
+            strings, StockAirframes.Node, _chapterCinema, _closingCinema)
+        { Data = at.Data });
         // The keymap editor writes through the per-player binding store, with player 1's stick rows split
         // off to the profile files. A reset takes them from the stick defaults. Injected so the
         // feature stays engine-free for a suite.

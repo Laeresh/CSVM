@@ -170,12 +170,12 @@ internal static class XrModeSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, suite);
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new UI.Boards.MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new UI.Boards.MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(new MenuIdleSource());
         return host;
     }

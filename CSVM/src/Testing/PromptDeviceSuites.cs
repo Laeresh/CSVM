@@ -31,8 +31,8 @@ internal static class PromptDeviceSuites
     {
         RumbleFollowsTheSide(ctx);
 
-        ctx.RequireData(ctx.MessagesPath, $"the install's message table");
-        var strings = Messages.Load(ctx.MessagesPath);
+        ctx.RequireMessages();
+        var strings = ctx.Data.Messages;
         string onKey = strings.Format(PressKey, "A");
         string onPad = strings.Format(PressKey, "Pad Left Stick");
         var rig = new FlightController
@@ -84,9 +84,9 @@ internal static class PromptDeviceSuites
         + "prompts still stand")]
     internal static void HudAutoDockLine(TestContext ctx)
     {
-        ctx.RequireData(ctx.MessagesPath, $"the install's message table");
+        ctx.RequireMessages();
         Anchor(ctx);
-        var strings = Messages.Load(ctx.MessagesPath);
+        var strings = ctx.Data.Messages;
         string onKey = strings.Format(PressKey, "A");
         string onPad = strings.Format(PressKey, "Pad Left Stick");
         var canvas = new CanvasLayer();

@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Weapons;
+using CSVM.Tests.Oracle;
 using CSVM.Tooling;
 using Xunit;
 
@@ -26,7 +27,7 @@ public class WeaponsDefsTests
     [ExtractedDataFact]
     public void EveryBallisticsEntryReadsThroughTheTypedReader()
     {
-        var r = Probes.Weapons(ZrdrPath, MessagesPath, "");
+        var r = Probes.Weapons(ZrdrPath, MessagesLegacy.Load(MessagesPath), "");
         Assert.True(r.Error == null, $"weapons.json loads error={r.Error ?? "-"}");
         Assert.Equal(WeaponDefCount, r.Total);
         Assert.Equal(0, r.UnhandledTotal);

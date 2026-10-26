@@ -166,12 +166,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Game-file source and the ZBD archive reader
 2. ☑ Model-diff oracle harness
-3. ☐ Session game-data seam and in-memory synthetic models
+3. ☑ Session game-data seam and in-memory synthetic models
 
 ### Wave B, small formats
 
 11. ☑ `interp.zbd`
-12. ◐ `strings.dll` messages
+12. ☑ `strings.dll` messages
 13. ☐ Sound archives
 14. ☐ Reader archives (`zrdr.zbd`)
 15. ◐ Texture archives
@@ -359,7 +359,60 @@ over every archive of a mode. Reflective, as above; NaN and `delta_raw` as above
 
 **⚠ Traps.** An unchanged result is not evidence until the harness has been seen to fail.
 
-## A3 ☐ Session game-data seam and in-memory synthetic models
+## A3 ☑ Session game-data seam and in-memory synthetic models
+
+**Landed.** `CSVM/src/Spec/GameData.cs` is the one game-data value: `Interp` and `Messages` (the
+chapter-independent part) and `LoadChapter(chapter, mission)`, which builds the per-chapter part,
+`ChapterData`; it names its chapter and mission and holds no model yet. `BasePaths.Resolve` loads
+it once per launch into `BasePaths.Data`: `GameData.Load(game)` from the install, or
+`Tooling/SyntheticGameData.Build()` under `--synthetic-data`, where `Game` stays null. Everything
+that holds a `BasePaths` reaches it: sessions through `LauncherContext.Paths`, `GameSession` into
+`BuildState.Data` (B11's `BuildState.Interp` folded in) and `BuildState.Chapter`, the probes
+through `ProbeRunner`'s paths, the suites through the new required `TestContext.Data`
+(`RequireInterp`, and `RequireMessages`, which SKIPs on an empty table), `LaunchAudio` for the
+boot card, and the Original menu through `OriginalPresentation`'s `data` argument, which the
+shell exposes as `IOriginalScreenHost.Data`, and `CampaignFeature.Data` (set where `ProcessMenu`
+builds it; `CampaignFlow`'s store-first constructor takes `data:`). Messages is fully switched:
+every engine signature that took a messages path takes a `Messages` (`LoadScreens`, `PauseSheet`,
+`LoadBoard`, `SeatFields`, `NetFlight`, `Probes`, `SessionBoards.Inputs`,
+`InstantActionDirector.ActorBuildInputs`), the four data-root sites read the game data
+(`BootSequence.Card(Messages)`, `CampaignBriefing.Load(root, messages, seq)`,
+`CampaignFlightCheckPage` through `Flow.Feature.Data`, and the bot rows through
+`BotSeats.CallsignPool(host.Data.Messages)`, `LoadCallsignPool` deleted), and a session shares one
+table where each consumer used to parse its own. The JSON read moved to
+`CSVM.Tests/Oracle/MessagesLegacy.cs` (`Load`, `Parse`, and `Data(dataRoot)` for units that hand a
+screen an extracted data root); the B12 model diff's expected side and the units that state a table
+as JSON read through it. `Messages.Of(pairs)` builds a table in code.
+`Tooling/SyntheticMessages.cs` holds the invented table, and the tree no longer writes
+`messages.json` (`fixtures/synthetic/messages.json` deleted). Unused now, for E43:
+`BasePaths.MessagesPath`, `TestContext.MessagesPath` (still filled into the five suites' own
+`BasePaths`), `--messages=` (`SessionSpec.Messages`) and the `messages` step of `ZbdExtraction`.
+
+**Synthetic fixtures become code.** Every synthetic model is built by code in `Tooling/`, never
+read from a JSON fixture, because the synthetic run is an engine run: a legacy JSON parser lives in
+the test project only, so the engine has no reader for a fixture once its format switches, and
+Decision 17 rules out synthetic files. The hand-authored records under `CSVM.Tests/fixtures/synthetic/`
+stay JSON only until their own format switches. The unit fixtures (`fixtures/*.json` outside
+`synthetic/`) stay JSON, read by the oracle. The recipe, with messages as the worked example:
+
+1. **Slot.** A chapter-independent model is an init property on `GameData` (`Messages`), a
+   per-chapter one on `ChapterData`.
+2. **Real loader.** The reader's `Load(IGameFileSource?)`, called in `GameData.Load` (or in the
+   `LoadChapter` delegate `GameData.Load` sets), null or empty without a source.
+3. **Synthetic builder.** `Tooling/Synthetic<Format>.cs` returns the model built in code (records as
+   C# literals or generated, `SyntheticMessages.Table()` over `Messages.Of`), assigned in
+   `SyntheticGameData.Build` (or its `LoadChapter`). The format's `SyntheticFamily` entry and its
+   fixture are deleted in the same change, and a unit pins what the suites rely on
+   (`SyntheticDataTests.ASyntheticLaunchBuildsItsGameDataInMemoryWithNoSource`).
+4. **Consumers.** Every engine path that took the format's path takes the model, reached through
+   `BasePaths.Data`, `BuildState.Data`/`Chapter`, `TestContext.Data`, `IOriginalScreenHost.Data` or
+   `CampaignFeature.Data`; a suite that skipped on a missing file skips on an empty model.
+5. **Oracle.** The JSON parse moves to `CSVM.Tests/Oracle/<Format>Legacy.cs`, which the model diff
+   and the JSON-literal units read.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A session receives its loaded models (interp scripts, messages, and the slots later
 items fill: root and chapter readers, sounds, planes, textures, gamez, anim) through one game-data
@@ -381,8 +434,7 @@ synthetic factory in `Tooling/`. Fold B11's `Interp` into it, then switch messag
 as the first full migration: one `Messages` object in place of the path, the four data-root sites
 included, and the synthetic tool building its invented messages in memory instead of writing
 `messages.json`. Later B and C items add their slot and their synthetic builder the same way.
-<TODO: whether the synthetic fixtures under `CSVM.Tests/fixtures/` stay as JSON read by the
-legacy oracles into models, or become code.>
+The synthetic fixtures become code (**Landed**, the recipe).
 
 **Model recommendation.** high, it reshapes how every session gets its data.
 
@@ -438,9 +490,11 @@ and the diff compares names and lines only. A run without an install now reads n
 before it read `extracted/interp.json`: mission setup, clutter, flares and the C5 mip bias then
 fall back to their "nothing authored" behaviour, as they did without an extraction.
 
-## B12 ◐ `strings.dll` messages
+## B12 ☑ `strings.dll` messages
 
-**Reader landed, engine switch held.** `Messages.Load(IGameFileSource?)` and
+**Engine switch landed with A3**, which carries the record; the gaps below are closed there.
+
+**Reader landed.** `Messages.Load(IGameFileSource?)` and
 `Messages.FromStringsDll(byte[])` (`CSVM/src/Mech3/Messages.cs`) build the existing model from
 `strings.dll`; `PeStringTable.Section` (`CSVM/src/Extraction/PeStringTable.cs`) gives the `.data`
 bytes and load address the key table's pointers need, and `Read` is unchanged in behaviour.

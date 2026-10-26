@@ -69,12 +69,12 @@ internal static class MenuOriginalSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new RecordingAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -172,13 +172,13 @@ internal static class MenuOriginalSuites
         string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer-core", "Profiles");
         var player1 = new MenuInput { Keyboard = true };
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1, data: ctx.Data)
         {
             CampaignProfiles = new CSVM.Session.Campaign.CampaignProfileStore(profiles),
             Planes = planes,
         });
         var host = new MenuHost(registry, audio, exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -242,12 +242,12 @@ internal static class MenuOriginalSuites
         var player1 = new MenuInput { Keyboard = true };
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-join-board");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new RecordingAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {

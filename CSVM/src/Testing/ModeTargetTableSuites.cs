@@ -51,7 +51,7 @@ internal static class ModeTargetTableSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
 
         var report = new StringBuilder();
         Mode(ctx, messages, report, "IA1", NoKeys, new[] { RadioTower });

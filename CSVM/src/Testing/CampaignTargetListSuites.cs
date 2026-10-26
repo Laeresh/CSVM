@@ -129,7 +129,7 @@ internal static class CampaignTargetListSuites
         ctx.RequireData(texturesPath, $"{flown.Chapter} textures");
 
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         bool control = false;

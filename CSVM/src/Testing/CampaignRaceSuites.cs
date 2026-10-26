@@ -68,7 +68,7 @@ internal static class CampaignRaceSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         report.AppendLine($"{Chapter}/{Mission}: {targets.Count} target entries, {script.Objectives.Count} objectives");
 

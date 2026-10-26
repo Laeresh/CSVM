@@ -211,9 +211,9 @@ internal static class MenuOriginalScoresSuites
     {
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data));
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, netDoor: door);
         host.AddSeat(seat);
         host.Select("original");
         host.Show(MenuReturnDestination.TopLevel);

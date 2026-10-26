@@ -910,10 +910,10 @@ internal static class LandingApproachSuites
         report.AppendLine($"drawn on a realtime frame: DrawsTextBlock={rig.PilotHud.DrawsTextBlock}, " +
             $"text='{rig.PilotHud.DrawnText}', prompt='{rig.PilotHud.AutoDock?.Line}'");
         ctx.Check(rig.PilotHud.DrawsTextBlock, $"the flown pane still holds a text block to draw into");
-        // The shipped wording out of messages.json, not a stand-in: this rig reads no keyboard, so
+        // The shipped wording out of the message table, not a stand-in: this rig reads no keyboard, so
         // MSG_PRESS_AUTOLAND's %1 carries its pad control. It lands on the prompt's own centred
         // line, never in the text block.
-        string wanted = Messages.Load(ctx.MessagesPath).Format("MSG_PRESS_AUTOLAND", "Pad Left Stick");
+        string wanted = ctx.Data.Messages.Format("MSG_PRESS_AUTOLAND", "Pad Left Stick");
         ctx.Check(rig.PilotHud.AutoDock?.Line == wanted,
             $"…and a realtime frame actually puts '{wanted}' on the prompt's own line");
         ctx.Check(rig.PilotHud.DrawnText is { Length: > 0 } drawn && !drawn.Contains(wanted),
@@ -3920,7 +3920,7 @@ internal static class LandingApproachSuites
                 Vector3.Forward, ApproachThrottle, ApproachSpeedMps);
             // What FlightControllerBuild.Bind does for a session rig; this suite builds the
             // controller by hand, so the prompt would otherwise stay at its data-less stand-in.
-            rig.UseMessages(Messages.Load(ctx.MessagesPath));
+            rig.UseMessages(ctx.Data.Messages);
             return rig;
         }
         finally

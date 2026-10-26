@@ -156,13 +156,13 @@ internal static class XrPointerSuites
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "xr-pointer-original-menu");
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var exits = new List<MenuExit>();
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         // Seat 0's pointer exactly as the launcher builds it: the position and the button off the
         // one pointer source, which the laser overrides.
         host.AddSeat(new PointerSeat(new IdleSeat(),

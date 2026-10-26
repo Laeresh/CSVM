@@ -151,7 +151,7 @@ internal static class AiAirframePoolSuites
                 new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
                 SuiteConstants.AircraftResources(ctx, planesGamez, textures,
-                    Messages.Load(ctx.MessagesPath)),
+                    ctx.Data.Messages),
                 new FlightWorldBindings
                 {
                     Projectiles = live,

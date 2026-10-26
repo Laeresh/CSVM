@@ -9,6 +9,7 @@ using CSVM.Flight.Ai;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
+using CSVM.Tests.Oracle;
 using Godot;
 using Xunit;
 
@@ -34,7 +35,7 @@ public class NamedAceTests
     private static string Cm02 => SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M05");
 
     private static Messages Strings =>
-        Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
 
     /// <summary>The ace flag is a flag, not an inference from a full skill vector. 29 blocks carry
     /// the complete nine-value vector and only 26 of those are flagged; the three that are not are

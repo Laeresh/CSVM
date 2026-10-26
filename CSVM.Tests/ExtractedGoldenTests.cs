@@ -6,6 +6,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -125,7 +126,7 @@ public class ExtractedGoldenTests
     [ExtractedDataFact]
     public void TheMessageTableResolvesTheInstallsStrings()
     {
-        Assert.Equal(1023, Messages.Load(Path.Combine(Extracted, "messages.json")).Count);
+        Assert.Equal(1023, MessagesLegacy.Load(Path.Combine(Extracted, "messages.json")).Count);
     }
 
     [ExtractedDataFact]

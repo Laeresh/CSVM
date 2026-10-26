@@ -100,13 +100,12 @@ public sealed class StuntGate
 }
 
 /// <summary>
-/// The Stunt Flying instant-action mode. A stunt run's objective is to
-/// fly through every Danger Zone by crossing both authored apertures, order-free within and
-/// between zones, and the run ends when all are done.
+/// The Stunt Flying instant-action mode: a run crosses both authored apertures of every Danger
+/// Zone, in any order, and ends when all are done.
 ///
-/// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs); each
-/// <c>dzN</c>'s world position comes straight from the chapter gamez (a point marker under the
-/// identity World root), and its display strings from targets.json → messages.json. Detection,
+/// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs). Each
+/// <c>dzN</c>'s world position is a point marker in the chapter gamez, under the identity World
+/// root. Its display strings come from targets.json through the message table. Detection,
 /// completion and the objective-target feed (<see cref="CollectTargets"/>); the run HUD and timed
 /// scoring build on this.
 /// </summary>

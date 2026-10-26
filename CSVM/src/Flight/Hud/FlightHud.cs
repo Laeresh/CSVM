@@ -181,7 +181,7 @@ public sealed class FlightHud
     private const float ReticleRatePerGap = 1.9848576f; // rate ceiling per metre of remaining gap
     private const float ReticleFarGap = 900f;          // m past which the ceiling is flat
     private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
-    // What the prompt reads when messages.json is absent, so a data-less rig still says the offer
+    // What the prompt reads when the message table is empty, so a data-less rig still says the offer
     // is live. Plain English, not the shipped wording, which only the message table carries.
     private const string AutoLandFallback = "AUTO-LAND AVAILABLE";
     private const string AutoLandFallbackTemplate = AutoLandFallback + " - %1";

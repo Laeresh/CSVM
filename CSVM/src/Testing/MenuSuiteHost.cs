@@ -21,7 +21,7 @@ internal static class MenuSuiteHost
     /// the seat: the host lends the setup feature's seat list once the feature is in, so seat 0
     /// has to be joined through it.</summary>
     internal static void AddFeatures(
-        MenuHost host, string dataRoot, Action<int, BindingProfile>? saveBindings = null,
+        MenuHost host, string dataRoot, Spec.GameData data, Action<int, BindingProfile>? saveBindings = null,
         ChapterCinema? chapterCinema = null, ClosingCinema? closingCinema = null,
         NetPlayFeature? netDoor = null)
     {
@@ -34,7 +34,8 @@ internal static class MenuSuiteHost
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), zrdr));
         host.Features.Add(new CampaignFeature(
-            strings, StockAirframes.Node, chapterCinema, closingCinema));
+            strings, StockAirframes.Node, chapterCinema, closingCinema)
+        { Data = data });
         // No save by default: a suite must never write over the keymap saved at this machine's
         // controls, and only a suite holding the store's directory override may pass one.
         host.Features.Add(new ControlsFeature(saveBindings));

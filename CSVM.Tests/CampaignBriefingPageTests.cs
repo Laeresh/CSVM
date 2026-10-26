@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
@@ -209,7 +210,7 @@ public class CampaignBriefingPageTests
     {
         var dir = Path.Combine(TestData.TempDir(), "Profiles");
         Directory.CreateDirectory(dir);
-        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot);
+        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: MessagesLegacy.Data(dataRoot));
         flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
         flow.SetMission(seq);
         return flow;

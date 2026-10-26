@@ -1757,7 +1757,7 @@ internal static class GraphicsSwitchSuites
             InterpPath: ctx.InterpPath,
             MessagesPath: ctx.MessagesPath,
             RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"))
-        { Game = ctx.Game };
+        { Game = ctx.Game, Data = ctx.Data };
         var session = new GameSession(spec, new LauncherContext
         {
             Decode = ctx.Decode,

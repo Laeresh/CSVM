@@ -68,12 +68,12 @@ internal static class MenuOriginalWrapupSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, scratch);
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -190,8 +190,8 @@ internal static class MenuOriginalWrapupSuites
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
         ctx.RequireData(gamez, $"C4 gamez");
         ctx.RequireData(zrdr, $"C4/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var run = StuntMission.Load(GameZ.Load(gamez), zrdr, Messages.Load(ctx.MessagesPath))
+        ctx.RequireMessages();
+        var run = StuntMission.Load(GameZ.Load(gamez), zrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException("C4/IA1 ships no Danger Zones");
 
         string? previous = StuntCapture.DirectoryOverride;

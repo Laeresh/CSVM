@@ -157,6 +157,10 @@ public sealed class CampaignFeature : IMenuFeature
     /// mission entry and the briefing then read as absent.</summary>
     public string? DataRoot { get; private set; }
 
+    /// <summary>The launch's game data the briefing and the flight check read their models from,
+    /// empty unless the menu sets it.</summary>
+    public Spec.GameData Data { get; init; } = Spec.GameData.Empty;
+
     /// <summary>Every stored profile's name, sorted, re-read by <see cref="RefreshRoster"/> and by
     /// every operation that creates or deletes one.</summary>
     public IReadOnlyList<string> Roster { get; private set; }
@@ -225,7 +229,7 @@ public sealed class CampaignFeature : IMenuFeature
             if (_briefingSeq != MissionSeq)
             {
                 _briefingSeq = MissionSeq;
-                _briefing = DataRoot is { } root && MissionSeq >= 0 ? CampaignBriefing.Load(root, MissionSeq) : null;
+                _briefing = DataRoot is { } root && MissionSeq >= 0 ? CampaignBriefing.Load(root, Data.Messages, MissionSeq) : null;
             }
 
             return _briefing;

@@ -89,7 +89,7 @@ internal static class TargetClassCycleSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Mission}");
         var script = ObjectiveScript.Load(missionZrdr);
         var missionTargets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         ctx.ExtraPrewarmSoundNames = script.SoundGroupNames();
 
         var report = new StringBuilder();

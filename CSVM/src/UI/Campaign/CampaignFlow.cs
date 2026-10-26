@@ -206,14 +206,15 @@ public sealed class CampaignFlow
     private CampaignLayout? _layout;
 
     /// <summary>Opens a flow over <paramref name="store"/> through a private feature, reading its
-    /// roster once. <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
-    /// <paramref name="planes"/> is the hangar's build store the flight check and ammo screens
-    /// read an owned plane's guns and hardpoints from; null (every off-engine caller) means no
-    /// hangar build exists and each plane reads as its airframe's stock fit, which is also what
-    /// the two profile-seeded starters are.</summary>
+    /// roster once. A null <paramref name="dataRoot"/> loads no page art, and a null
+    /// <paramref name="data"/> no game data. The flight check and ammo screens read an owned plane's
+    /// guns and hardpoints from <paramref name="planes"/>, the hangar's build store. Null (every
+    /// off-engine caller) leaves each plane on its airframe's stock fit, as the two profile-seeded
+    /// starters are.</summary>
     public CampaignFlow(CampaignProfileStore store, UiStrings strings, string? dataRoot = null,
-        CustomPlaneStore? planes = null, StockLoadouts? stock = null, CampaignLayout? layout = null)
-        : this(Opened(new CampaignFeature(strings, StockAirframes.Node), store, planes, stock, dataRoot))
+        CustomPlaneStore? planes = null, StockLoadouts? stock = null, CampaignLayout? layout = null,
+        Spec.GameData? data = null)
+        : this(Opened(new CampaignFeature(strings, StockAirframes.Node) { Data = data ?? Spec.GameData.Empty }, store, planes, stock, dataRoot))
     {
         _layout = layout;
     }

@@ -818,8 +818,8 @@ public partial class Launcher : Node3D
         }
 
         // Before the build, because the session reads its wire in its own constructor.
-        _net.OpenCli(_spec, _paths.MessagesPath);
-        _net.SeatLocalField(_spec, _paths.MessagesPath);
+        _net.OpenCli(_spec, _paths.Data.Messages);
+        _net.SeatLocalField(_spec, _paths.Data.Messages);
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -1370,7 +1370,7 @@ public partial class Launcher : Node3D
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
-        float mipBias = Mech3.TextureArchive.MipBias(Mech3.InterpScripts.Load(_paths.Game), _spec.Chapter);
+        float mipBias = Mech3.TextureArchive.MipBias(_paths.Data.Interp, _spec.Chapter);
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         LoadProgress.Report(LoadStep.ChapterPaths);
@@ -1816,7 +1816,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.MessagesPath, _paths.ZrdrPath);
+        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.Data.Messages, _paths.ZrdrPath);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
@@ -1827,7 +1827,7 @@ public partial class Launcher : Node3D
         StepSortieSeed();
         // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
         // one does. It follows the seed step, since its draws read the master.
-        _net.SeatLocalField(_spec, _paths.MessagesPath);
+        _net.SeatLocalField(_spec, _paths.Data.Messages);
         BindMenuPads(pads);
         BeginLaunch();
     }

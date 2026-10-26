@@ -36,8 +36,8 @@ internal static class DisplayScoresSuites
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
         ctx.RequireData(gamezPath, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var messages = Messages.Load(ctx.MessagesPath);
+        ctx.RequireMessages();
+        var messages = ctx.Data.Messages;
         var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, messages);
         if (zones is not { TotalCount: >= 1 })
         {
@@ -82,8 +82,8 @@ internal static class DisplayScoresSuites
         + "P1's stay; the release takes both back")]
     internal static void DogfightDisplayScores(TestContext ctx)
     {
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var messages = Messages.Load(ctx.MessagesPath);
+        ctx.RequireMessages();
+        var messages = ctx.Data.Messages;
         var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
         match.RegisterKill(1, 0);
         var source = new ScoresSource { Match = match, Words = OriginalScoresWords.From(messages) };
@@ -187,7 +187,7 @@ internal static class DisplayScoresSuites
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
                 new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-                SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+                SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
                 new FlightWorldBindings
                 {
                     Projectiles = pool,

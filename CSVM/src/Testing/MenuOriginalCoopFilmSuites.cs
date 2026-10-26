@@ -321,14 +321,14 @@ internal static class MenuOriginalCoopFilmSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = profiles,
         });
         var chapter = new FilmRecorder();
         var closing = new FilmRecorder();
         var menu = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(menu, ctx.DataRoot,
+        MenuSuiteHost.AddFeatures(menu, ctx.DataRoot, ctx.Data,
             chapterCinema: new ChapterCinema(chapter.Play, chapter.Stop),
             closingCinema: new ClosingCinema(closing.Play, closing.Stop),
             netDoor: door);

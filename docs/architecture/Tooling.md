@@ -99,9 +99,20 @@ shipped airframe names the suites fly (`player_pfighter`, the lobby door's start
 pair and six more), each carrying what the code keys on (`is_autogyro`, a turret mount). `plane` writes
 `planes/` (`nodes.json`, `materials.json`, and a `models.json` generated from `boxes.json`, one
 outward-wound box per entry) and `vehicle.json`, `engines.json`, `player.json` and `maneuvers.json`.
-`armament` writes the weapons, the `ai.json` turret table, `shakes.json` and `messages.json`. `Launcher`
+`armament` writes the weapons, the `ai.json` turret table and `shakes.json`; their names are in `SyntheticMessages.cs`. `Launcher`
 sets the fits as `StockLoadouts.Supplement` and the probe as `SessionSpec.DefaultPlane` under the switch.
 Shapes: [gamez](../formats/gamez.md), [markers](../formats/markers.md), [vehicle](../formats/vehicle.md), [weapons](../formats/weapons.md), [turrets](../formats/turrets.md).
+
+## src/Tooling/SyntheticGameData.cs
+The game data (`Spec/GameData.cs`) `BasePaths.Resolve` hands a `--synthetic-data` run: every model
+built in memory from records written in code, with no game-file source, so nothing in the run can
+reach an install. A format switched to `GameData` adds its builder here and drops its tree family
+and fixture. Engine-free, so the units build the same models. Read `SyntheticMessages.cs`.
+
+## src/Tooling/SyntheticMessages.cs
+The synthetic run's message table: the `MSG_*` keys the stand-in records name and the ones the HUD,
+the match lines and the dock prompt read directly, every value invented, built through
+`Messages.Of`.
 
 ## src/Tooling/SyntheticImages.cs
 The synthetic tree's JPEG and TGA writers, for menu art a layout or a script names by those

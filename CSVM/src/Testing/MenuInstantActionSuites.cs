@@ -71,12 +71,12 @@ internal static class MenuInstantActionSuites
         var registry = new PresentationRegistry();
         var store = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-instant-action");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = store,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         string scratch = ScratchName();
         string built = ScratchName();

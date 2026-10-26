@@ -67,7 +67,7 @@ internal static class PausePreferencesSuites
 
         var mission = missions[0];
         var sheet = PauseSheet.Load(
-            ctx.ZrdrPath, ctx.MessagesPath,
+            ctx.ZrdrPath, ctx.Data.Messages,
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), instantAction: false);
         if (sheet == null)
         {

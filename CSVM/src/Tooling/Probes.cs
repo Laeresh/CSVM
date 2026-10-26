@@ -147,7 +147,7 @@ public static class Probes
 
     // ---- weapons -----------------------------------------------------------------------------
 
-    public static WeaponsResult Weapons(string zrdrPath, string messagesPath, string filter)
+    public static WeaponsResult Weapons(string zrdrPath, Messages messages, string filter)
     {
         // A committed verification artifact must read the same everywhere: a German machine
         // otherwise writes "6,25" where an invariant one writes "6.25".
@@ -156,7 +156,6 @@ public static class Probes
         WeaponDefs weapons;
         try
         {
-            var messages = Messages.Load(messagesPath);
             weapons = WeaponDefs.Load(zrdrPath, messages);
         }
         catch (Exception e)
@@ -237,7 +236,7 @@ public static class Probes
 
     // ---- loadouts ----------------------------------------------------------------------------
 
-    public static LoadoutResult Loadouts(string zrdrPath, string messagesPath, string planesGamezPath,
+    public static LoadoutResult Loadouts(string zrdrPath, Messages messages, string planesGamezPath,
         string dataRoot, string filter, string? loadoutOverride, bool forRig = false)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -249,7 +248,7 @@ public static class Probes
         try
         {
             stock = StockLoadouts.Load();
-            weapons = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+            weapons = WeaponDefs.Load(zrdrPath, messages);
             planesGamez = GameZ.Load(planesGamezPath);
             // Any texture archive resolves the (meshless) markers; the C1 set is the viewer default.
             textures = new TextureArchive(SessionPaths.ChapterTextures(dataRoot, "C1"));

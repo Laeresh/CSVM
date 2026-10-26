@@ -165,7 +165,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private CustomPlaneStore? _planes;
     private StockLoadouts? _stock;
-    private Messages? _messages;
 
     // The objectives note, read once per mission rather than once per repaint: it reads files, and
     // the flow keeps one page instance across every screen it draws. -2 is "not yet read for any
@@ -706,7 +705,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         {
             var script = ObjectiveScript.Load(
                 SessionPaths.MissionZrdr(root, mission.ChapterFolder, mission.MissionFolder));
-            var messages = MessagesFor(root);
+            var messages = Flow.Feature.Data.Messages;
             var lines = new List<string>();
             foreach (var identity in script.DisplayIdentities())
             {
@@ -734,9 +733,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         _resolvedSeq = Flow.MissionSeq;
         _objectives = ReadObjectivesNote();
     }
-
-    private Messages MessagesFor(string root) =>
-        _messages ??= Messages.Load(Path.Combine(root, "extracted", "messages.json"));
 
     // One airframe's blueprint TGA, the hangar's own plane preview path
     // (extracted/rof/ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA, HangarAirframePage), reused rather

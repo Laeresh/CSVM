@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using Godot;
 using Xunit;
 using Xunit.Abstractions;
@@ -301,7 +302,7 @@ public class ModelDiffDataTests
                 return Zrdr.LoadFilesNamed(SessionPaths.PreferUnzipped(Path.Combine(root, "zrdr.zip")), _ => true)
                     .ToDictionary(f => f.Name, f => f.Root);
             case "messages":
-                return Messages.Load(Path.Combine(root, "messages.json"));
+                return MessagesLegacy.Load(Path.Combine(root, "messages.json"));
             default:
                 throw new ArgumentException(model);
         }

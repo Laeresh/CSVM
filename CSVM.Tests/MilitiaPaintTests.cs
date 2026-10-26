@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -84,5 +85,5 @@ public class MilitiaPaintTests
     }
 
     private static Dictionary<string, string> Patterns() =>
-        MilitiaPaint.PatternByMilitia(ZrdrPath, Messages.Load(MessagesPath));
+        MilitiaPaint.PatternByMilitia(ZrdrPath, MessagesLegacy.Load(MessagesPath));
 }

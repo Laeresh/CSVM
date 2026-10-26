@@ -11,9 +11,9 @@ namespace CSVM.Tooling;
 /// suites fly, in two families. The plane family is their models under <c>planes/</c>, box-built
 /// airframes each carrying the marker rig. It also holds the <c>vehicle.json</c>,
 /// <c>engines.json</c> and <c>player.json</c> records and the maneuver library. The armament
-/// family is the weapons in <c>weapons.json</c>, the turret table in <c>ai.json</c>, the shake
-/// sources and the message table. Every record is hand-authored from <c>docs/formats/</c>; only
-/// <c>models.json</c> is generated, from the box list beside the nodes.
+/// family is the weapons in <c>weapons.json</c>, the turret table in <c>ai.json</c> and the shake
+/// sources; their names are in <c>SyntheticMessages.cs</c>. Every record is hand-authored from
+/// <c>docs/formats/</c>; only <c>models.json</c> is generated, from the box list beside the nodes.
 /// </summary>
 public static class SyntheticPlane
 {
@@ -56,7 +56,6 @@ public static class SyntheticPlane
         (Records + "zrdr/weapons.json", "zrdr/weapons.json"),
         (Records + "zrdr/shakes.json", "zrdr/shakes.json"),
         (Records + "zrdr/ai.json", "zrdr/ai.json"),
-        (Records + "messages.json", "messages.json"),
     };
 
     // A box's six faces as indices into its eight corners, with each face's outward normal. Each
@@ -90,7 +89,7 @@ public static class SyntheticPlane
         tree.Folder(SyntheticTextures.Chapter + "/zrdr");
     }
 
-    /// <summary>Writes the weapon catalogue, the shake sources and the message table.</summary>
+    /// <summary>Writes the weapon catalogue, the turret table and the shake sources.</summary>
     public static void WriteArmament(SyntheticTree tree)
     {
         foreach (var (fixture, target) in ArmamentRecords)

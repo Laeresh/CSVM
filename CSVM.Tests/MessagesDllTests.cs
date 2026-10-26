@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -57,7 +58,7 @@ public class MessagesDllTests
     [InlineData(Messages.GameFile)]
     public void TheDllBuildsTheModelTheExtractionBuilds(string file)
     {
-        var expected = Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var expected = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         var actual = Messages.Load(GameFilesData.Source);
 
         Assert.Equal(1023, actual.Count);
@@ -72,7 +73,7 @@ public class MessagesDllTests
         int at = Find(pe, Encoding.Unicode.GetBytes(value));
         pe[at] = (byte)'X';
 
-        var expected = Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var expected = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         string? difference = ModelDiff.FirstDifference(expected, Messages.FromStringsDll(pe));
 
         Assert.NotNull(difference);

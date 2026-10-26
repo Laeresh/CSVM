@@ -10,6 +10,7 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.Roster;
 using CSVM.Spec;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -221,11 +222,11 @@ public sealed class LobbyBotOutlawTests
         Assert.True(SeatFields.BotArmsUnder(list, zrdr, messages, Stock)!(medusa, "player_kestrel"));
     }
 
-    private static (string Zrdr, string Messages, MilitiaFits Militias) Install()
+    private static (string Zrdr, Messages Messages, MilitiaFits Militias) Install()
     {
         string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
-        string messages = Path.Combine(TestData.ExtractedRoot!, "messages.json");
-        return (zrdr, messages, MilitiaFits.Load(zrdr, Messages.Load(messages)));
+        var messages = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        return (zrdr, messages, MilitiaFits.Load(zrdr, messages));
     }
 
     // Three bots are hand-set on the Warhawk so an outlawed pick meets the draw; the rest are Random.

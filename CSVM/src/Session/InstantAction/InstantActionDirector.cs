@@ -904,7 +904,7 @@ public sealed class InstantActionDirector
         try
         {
             _militiaPatterns = MilitiaPaint.PatternByMilitia(inputs.ZrdrPath,
-                Messages.Load(inputs.MessagesPath));
+                inputs.Messages);
         }
         catch (Exception e)
         {
@@ -923,7 +923,7 @@ public sealed class InstantActionDirector
         public string ChapterZrdrPath = "";
         public string MissionZrdrPath = "";
         public string ZrdrPath = "";
-        public string MessagesPath = "";
+        public Messages Messages = new();
         public List<SpawnPoint>? SpawnList;
         public int SpawnBase;
         public LiveryResolver LiveryResolver = null!;

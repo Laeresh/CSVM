@@ -337,7 +337,7 @@ internal sealed class HumanFlightAdapter
             // The keyboard is this machine's first seat's, which on a guest is not seat 0.
             UseKeyboard = !paneless && MenuSeatOf(pi) == 0,
             MouseCaptureAllowed = !paneless && _policy.MouseCaptureAllowed,
-            // The whole messages.json table, not just the weapon rows: the pilot HUD words its
+            // The whole message table, not just the weapon rows: the pilot HUD words its
             // auto-land prompt out of the same file.
             Strings = _aircraft.WeaponMessages,
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is

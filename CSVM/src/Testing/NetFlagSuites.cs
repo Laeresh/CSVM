@@ -164,7 +164,7 @@ internal static class NetFlagSuites
                 Park(peers, seat);
             }
 
-            var rows = Messages.Load(ctx.MessagesPath);
+            var rows = ctx.Data.Messages;
             Worded(ctx, rows);
             HomeMarkers(ctx, peers, rows);
             Capture(ctx, peers, rows);

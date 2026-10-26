@@ -129,7 +129,7 @@ internal sealed class SkyStage
         // ⚠ Build the flare after the weather. Its sun node is a child of each rig's horizon, and
         // finding it is one of the two gates. The chapter data decides whether anything is built.
         _flareTextures = state.Textures;
-        _flareInterp = state.Interp;
+        _flareInterp = state.Data.Interp;
         BuildFlare();
     }
 

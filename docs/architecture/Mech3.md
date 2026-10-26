@@ -471,13 +471,13 @@ one consumer; `FindMapSpanningSlab` the test for a chapter's map-edge-continuati
 halves pin off engine for all eight chapters (`CSVM.Tests/FogVolumeTests.cs`); schema in [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Mech3/Messages.cs
-The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
-(NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
-`Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format). `Parse`
-takes the JSON itself, so a unit with no file on disk reads the same rows; it is internal, since
-every shipped caller holds a path. `Load(IGameFileSource?)` builds the same model from the install's
-`strings.dll` (`FromStringsDll`: the `.data` key table joined to the `STRINGTABLE` by id through
-`Extraction/PeStringTable.cs`), empty without a source; no engine caller uses it yet.
+The game's localized string table, a case-insensitive key→value map resolving the `MSG_*` keys
+missions reference. `Load(IGameFileSource?)` reads the install's `strings.dll` (`FromStringsDll`: the
+`.data` key table joined to the `STRINGTABLE` by id through `Extraction/PeStringTable.cs`), empty
+without a source. A launch loads it once into `Spec/GameData.cs`, and every consumer takes that one
+object. `Of` builds a table from pairs, for `Tooling/SyntheticMessages.cs` and the test oracle
+(`CSVM.Tests/Oracle/MessagesLegacy.cs`, the old `messages.json` read). `Fill`/`Format` substitute a
+template's `%1`…`%9` placeholders (the HUD strings' format).
 
 ## src/Mech3/UiStrings.cs
 The original's UI string table by id, read from `extracted/rof/ui_strings.json`. Only the `langui`
@@ -633,9 +633,9 @@ The engine boot scripts, read from `ZBD/interp.zbd` through the session's game-f
 (`BasePaths.Game`): every script's name and lines in file order, looked up by name without regard
 to case. `Load` returns null without a source or without the file, and each consumer reads that as
 "nothing authored": `MissionSetup.Load`, `ClutterBuilder.TemplateNames`,
-`LensFlareRig.FlareTextureNames` and `TextureArchive.MipBias`. `GameSession` reads the file once
-per build into `BuildState.Interp`, which `WorldSession.Options.Interp` and the flare rigs share;
-the launcher's mip bias and the probes read it on their own. `Read` refuses a file whose table
+`LensFlareRig.FlareTextureNames` and `TextureArchive.MipBias`. It is read once per launch into
+`Spec/GameData.cs`, which every session (`BuildState.Data`), the launcher's mip bias, the probes
+and the suites (`TestContext.RequireInterp`) read it from. `Read` refuses a file whose table
 and bodies do not tile it. Layout: [../formats/interp.md](../formats/interp.md).
 
 ## src/Mech3/TextureZbd.cs

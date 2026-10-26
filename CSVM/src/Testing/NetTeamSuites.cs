@@ -143,7 +143,7 @@ internal static class NetTeamSuites
     /// <summary>The name line <paramref name="seat"/>'s aeroplane should read on another pane: its
     /// callsign, or the messages table's "Unknown" for a nameless player.</summary>
     internal static string MarkerNameOf(TestContext ctx, NetSeat seat) =>
-        seat.Unnamed ? Mech3.Messages.Load(ctx.MessagesPath).Get(HudMessages.UnknownKey) : seat.Callsign;
+        seat.Unnamed ? ctx.Data.Messages.Get(HudMessages.UnknownKey) : seat.Callsign;
 
     // The opening placement, read before any step. Each seat stands on its team's block, walked by
     // its place in the team, on the same entry on every machine.

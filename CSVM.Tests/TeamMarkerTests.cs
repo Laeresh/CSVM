@@ -2,6 +2,7 @@ using System.IO;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using Godot;
 using Xunit;
 
@@ -62,7 +63,7 @@ public sealed class TeamMarkerTests
     [ExtractedDataFact]
     public void EveryMarkerReadsYourToItsTeamAndEnemyToTheOther()
     {
-        var strings = Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var strings = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         var held = new FlagRow(1, FlagState.Held, 2);
         var site = new ObjectiveSite { Side = FlagMarkers.Side(FlagMarker.Away, held, Red, "Red Squadron", "Ace", strings) };
 
@@ -86,7 +87,7 @@ public sealed class TeamMarkerTests
     [ExtractedDataFact]
     public void AHullIsDefendToItsSideAndDestroyToTheOtherUnderItsTeamName()
     {
-        var strings = Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var strings = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         var site = new ObjectiveSite
         {
             Category = "Destroy",

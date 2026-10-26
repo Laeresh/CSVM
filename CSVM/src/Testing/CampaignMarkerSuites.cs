@@ -82,8 +82,8 @@ internal static class CampaignMarkerSuites
     // The climb the balloon assembly is flown by, well past the 26 m the assembly is tall.
     private static readonly Vector3 Climb = new(0f, 300f, 0f);
 
-    // C1C/M01's three flown objective targets as the script authors them, with the label lines
-    // the chapter's targets.zrd and messages.json give each, and whether the action draws red.
+    // C1C/M01's three flown objective targets as the script authors them. Each carries the label
+    // lines its targets.zrd row and the message table give, and whether the action draws red.
     private static readonly (string Key, string Line1, string Line2, bool Red)[] LabelCases =
     {
         ("workersvoyagezep", "Zeppelin [Disable] -", "Worker's Voyage", true),
@@ -117,7 +117,7 @@ internal static class CampaignMarkerSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         report.AppendLine($"seq {FirstSeq} -> {chapter}/{folder}: " +
             $"{targets.Count} target entries, {script.Objectives.Count} objectives");
@@ -173,7 +173,7 @@ internal static class CampaignMarkerSuites
             },
         });
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
@@ -227,7 +227,7 @@ internal static class CampaignMarkerSuites
         {
             new List<object?> { "OBJECTIVE1", new List<object?> { "ADD_OBJECTIVE_TARGET", adds } },
         });
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(chapter, collision: false, folder, world =>
@@ -269,7 +269,7 @@ internal static class CampaignMarkerSuites
 
         var shipped = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         report.AppendLine($"seq {BalloonSeq} -> {chapter}/{folder}");
         CheckBalloonData(ctx, shipped, targets, report);

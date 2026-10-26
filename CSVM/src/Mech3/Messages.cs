@@ -3,18 +3,15 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using CSVM.Extraction;
 
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The game's localized string table (mech3ax extracts the message resource to a plain
-/// JSON object: <c>{ "language_id": 1033, "entries": [{ "key", "id", "value" }, …] }</c>).
-/// Reader files reference display text indirectly by <c>MSG_*</c> key, targets.json's
-/// objective descriptions, briefing lines, UI labels, and this resolves them.
-/// Unlike the zrdr archives this is a single top-level file (default
-/// <c>extracted/messages.json</c>), so it is not a <see cref="Zrdr"/> list.
+/// The game's localized string table, read from <c>strings.dll</c>. Reader files reference display
+/// text indirectly by <c>MSG_*</c> key, targets.json's objective descriptions, briefing lines, UI
+/// labels, and this resolves them. A launch loads it once into <c>Spec/GameData.cs</c>, which every
+/// consumer reads it from.
 /// </summary>
 public sealed class Messages
 {
@@ -28,14 +25,9 @@ public sealed class Messages
 
     public int Count => _byKey.Count;
 
-    /// <summary>Loads the message table from a messages.json file. Missing file → an empty
-    /// table (every lookup then falls back to the raw key), never throws, display strings
-    /// are cosmetic and a mission must still load without them.</summary>
-    public static Messages Load(string path) =>
-        File.Exists(path) ? Read(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
-
     /// <summary>Loads the table from the install's <c>strings.dll</c>. No source or no file gives
-    /// an empty table, as a missing JSON file does; a malformed DLL throws
+    /// an empty table, whose lookups fall back to the raw key. Display strings are cosmetic, and a
+    /// mission must still load without them. A malformed DLL throws
     /// <see cref="InvalidDataException"/>.</summary>
     public static Messages Load(IGameFileSource? game) =>
         game != null && game.Exists(GameFile) ? FromStringsDll(game.ReadAllBytes(GameFile)) : new Messages();
@@ -96,10 +88,18 @@ public sealed class Messages
     /// <c>Fill(Get(key), args)</c>.</summary>
     public string Format(string? key, params string?[] args) => Fill(Get(key), args);
 
-    /// <summary>The same table out of JSON already in hand, for a caller with no file to point at.
-    /// Internal rather than public because every shipped caller holds a path, and only the unit
-    /// project builds a table out of a literal.</summary>
-    internal static Messages Parse(string json) => Read(JsonDocument.Parse(json));
+    /// <summary>A table out of key and value pairs, a later pair replacing an earlier one under the
+    /// same key. What the synthetic game data and the test oracle build a table with.</summary>
+    internal static Messages Of(IEnumerable<(string Key, string Value)> entries)
+    {
+        var msgs = new Messages();
+        foreach (var (key, value) in entries)
+        {
+            msgs._byKey[key] = value;
+        }
+
+        return msgs;
+    }
 
     /// <summary>The table out of a <c>strings.dll</c>'s bytes. The values are its
     /// <c>STRINGTABLE</c>; the keys are a table of name-pointer and id pairs in its <c>.data</c>
@@ -137,23 +137,6 @@ public sealed class Messages
             throw new InvalidDataException("strings.dll names " + used + " of its " + text.Count + " strings");
         }
 
-        return msgs;
-    }
-
-    // The one reader both entry points share. Takes the document over so a malformed file leaks
-    // nothing on the way back out.
-    private static Messages Read(JsonDocument doc)
-    {
-        var msgs = new Messages();
-        using (doc)
-        {
-            if (doc.RootElement.TryGetProperty("entries", out var entries)
-                && entries.ValueKind == JsonValueKind.Array)
-                foreach (var e in entries.EnumerateArray())
-                    if (e.TryGetProperty("key", out var k) && k.GetString() is { } key
-                        && e.TryGetProperty("value", out var v) && v.GetString() is { } value)
-                        msgs._byKey[key] = value;
-        }
         return msgs;
     }
 }

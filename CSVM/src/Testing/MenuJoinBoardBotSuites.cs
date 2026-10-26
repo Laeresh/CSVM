@@ -28,7 +28,7 @@ internal static class MenuJoinBoardBotSuites
     internal static void JoinBoardBots(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireMessages();
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -40,12 +40,12 @@ internal static class MenuJoinBoardBotSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-join-board-bots");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new SilentAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(new MenuIdleSource());
         try
         {
@@ -84,7 +84,7 @@ internal static class MenuJoinBoardBotSuites
     {
         shell.JoinBoard.Open();
         Press(shell, OriginalJoinBoard.AddBotKey);
-        var pool = BotSeats.CallsignPool(Messages.Load(ctx.MessagesPath));
+        var pool = BotSeats.CallsignPool(ctx.Data.Messages);
         var first = setup.Bots.Rows.FirstOrDefault();
         ctx.Check(setup.Bots.Count == 1 && pool.Contains(first.Callsign) && first.RandomPlane && first.Skill == NetBotSkill.Veteran,
             $"Add Bot lists one row on a Random plane at veteran, named from the shipped pilot names ('{first.Callsign}', {pool.Count} in the pool)");

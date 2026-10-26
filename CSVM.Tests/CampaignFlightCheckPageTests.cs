@@ -4,6 +4,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using Xunit;
@@ -453,7 +454,7 @@ public class CampaignFlightCheckPageTests
         var def = CampaignProfileDef.NewProfile("Zachary");
         store.Save(def);
 
-        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot);
+        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot, data: MessagesLegacy.Data(TestData.DataRoot));
         flow.SelectProfile(store.Load("Zachary")!);
         flow.SetMission(0);
         var planes = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "Planes"));
@@ -496,7 +497,7 @@ public class CampaignFlightCheckPageTests
         var def = CampaignProfileDef.NewProfile("Zachary");
         store.Save(def);
 
-        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot);
+        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot, data: MessagesLegacy.Data(TestData.DataRoot));
         flow.SelectProfile(store.Load("Zachary")!);
         flow.SetMission(seq);
         var planes = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "Planes"));

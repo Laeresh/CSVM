@@ -8,11 +8,11 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// One mission's briefing as the campaign feature holds it: the <c>cm_sequence</c> entry, the
-/// dialog state the <c>brief_c&lt;campaign&gt;&lt;mission&gt;</c> formula names, the narration wav
-/// its sound resolves to, the objectives note, and the running <see cref="BriefingReveal"/> whose
-/// progress is feature state. The clock is the presentation's: it calls <see cref="Advance"/> once
+/// dialog state its <c>brief_c&lt;campaign&gt;&lt;mission&gt;</c> formula names, the narration and
+/// the note. Its running <see cref="BriefingReveal"/> keeps its progress as feature
+/// state. The clock is the presentation's: it calls <see cref="Advance"/> once
 /// a frame while the briefing shows and <see cref="Restart"/> on REPLAY BRIEFING, and it decides
-/// when to draw. Every string a presentation labels the screen with comes from the same data root
+/// when to draw. Every string a presentation labels the screen with comes from the game data
 /// through <see cref="Messages"/>. A broken or absent extraction loads as a briefing with no
 /// state, which a presentation shows as its buttons alone rather than refusing to open.
 /// </summary>
@@ -48,9 +48,9 @@ public sealed class CampaignBriefing
     public bool Complete => Reveal?.Complete ?? true;
 
     /// <summary>Loads the briefing for story position <paramref name="seq"/> under
-    /// <paramref name="dataRoot"/>, or null when the sequence carries no such entry or cannot be
-    /// read at all. Everything is read once here, never per repaint.</summary>
-    public static CampaignBriefing? Load(string dataRoot, int seq)
+    /// <paramref name="dataRoot"/>, labelled from <paramref name="messages"/>. Null when the sequence
+    /// carries no such entry or cannot be read. Everything is read once here, never per repaint.</summary>
+    public static CampaignBriefing? Load(string dataRoot, Messages messages, int seq)
     {
         try
         {
@@ -69,7 +69,7 @@ public sealed class CampaignBriefing
                 return null;
             }
 
-            var briefing = new CampaignBriefing(entry);
+            var briefing = new CampaignBriefing(entry) { Messages = messages };
             briefing.Read(dataRoot, shared);
             return briefing;
         }
@@ -92,7 +92,6 @@ public sealed class CampaignBriefing
     {
         try
         {
-            Messages = Messages.Load(Path.Combine(root, "extracted", "messages.json"));
             State = BriefingDialog.Load(shared).Find(Mission.Campaign, Mission.Mission);
             Objectives = BriefingObjectives.Load(
                 Zrdr.LoadFile(

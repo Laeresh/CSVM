@@ -337,7 +337,7 @@ internal static class NetRearmSuites
         string? own = guest.MessageStack?.LineAt(0);
         string? hosts = peers[0].SeatRigs[0].Controller!.MessageStack?.LineAt(0);
         // Read off the run's own table; a missing row reads as its key, which the pane would match.
-        string rearmed = Messages.Load(ctx.MessagesPath).Get(HudMessages.RearmedKey);
+        string rearmed = ctx.Data.Messages.Get(HudMessages.RearmedKey);
         ctx.Check(rearmed != HudMessages.RearmedKey && own == rearmed && hosts != rearmed,
             $"its own pane posts the message table's \"{rearmed}\" and the host's pane does not ('{own}' / '{hosts}')");
         if (!ctx.SyntheticData)

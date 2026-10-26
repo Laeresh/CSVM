@@ -72,7 +72,7 @@ internal static class CrashRespawnSuites
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
-            var roster = SeatFields.LocalVersusField(bots, ctx.MessagesPath);
+            var roster = SeatFields.LocalVersusField(bots, ctx.Data.Messages);
             ctx.Check(roster is { Length: 2 } && roster[BotSeat].IsBot, $"the local launch seats a pane and a bot");
             if (roster != null)
             {

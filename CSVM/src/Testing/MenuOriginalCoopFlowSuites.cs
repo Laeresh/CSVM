@@ -564,12 +564,12 @@ internal static class MenuOriginalCoopFlowSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = profiles,
         });
         var menu = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(menu, ctx.DataRoot, netDoor: door);
+        MenuSuiteHost.AddFeatures(menu, ctx.DataRoot, ctx.Data, netDoor: door);
         menu.AddSeat(seat);
         menu.Select("original");
         menu.Show(MenuReturnDestination.TopLevel);

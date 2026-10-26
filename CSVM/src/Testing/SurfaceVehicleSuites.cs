@@ -104,7 +104,7 @@ internal static class SurfaceVehicleSuites
             var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
                 world.Runtime, defs, worldRoot)
             {
-                Strings = Messages.Load(ctx.MessagesPath),
+                Strings = ctx.Data.Messages,
             };
             worldRoot.AddChild(vessels);
             int aircraftAsked = 0;
@@ -357,7 +357,7 @@ internal static class SurfaceVehicleSuites
             var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
                 world.Runtime, defs, worldRoot)
             {
-                Strings = Messages.Load(ctx.MessagesPath),
+                Strings = ctx.Data.Messages,
             };
             worldRoot.AddChild(vessels);
             int aircraftAsked = 0;

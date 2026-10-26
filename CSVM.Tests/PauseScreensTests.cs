@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using CSVM;
 using CSVM.Extraction;
+using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Overlays;
@@ -390,7 +392,7 @@ public class PauseScreensTests
     [Fact]
     public void AMissingExtractionBuildsNoSheetRatherThanThrowing()
     {
-        Assert.Null(PauseSheet.Load("no-zrdr", "no-messages", "loading_c61", instantAction: false));
+        Assert.Null(PauseSheet.Load("no-zrdr", new Messages(), "loading_c61", instantAction: false));
     }
 
     /// <summary>The campaign block's two columns, with PHOTO MODE in the channel on RESUME's row.
@@ -457,7 +459,7 @@ public class PauseScreensTests
         var objectives = BriefingObjectives.Load(
             Mech3.Zrdr.LoadFile(
                 SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M01"), "objectives.json"),
-            Mech3.Messages.Load(MessagesPath()));
+            MessagesPath());
         var rows = new List<PauseObjective>();
         for (int i = 0; i < objectives.Count; i++)
         {
@@ -470,6 +472,6 @@ public class PauseScreensTests
     private static string Zrdr() =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
-    private static string MessagesPath() =>
-        Path.Combine(TestData.ExtractedRoot!, "messages.json");
+    private static Messages MessagesPath() =>
+        MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
 }

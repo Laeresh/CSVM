@@ -110,7 +110,7 @@ internal sealed class SessionProbes
             return false;
 
         long mark = StartupProfile.Mark();
-        var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
+        var labWeapons = WeaponDefs.Load(state.ZrdrPath, state.Data.Messages);
         StartupProfile.Record("zrdr", mark);
         // The bench fires the airframe's WHOLE rig, seeded from the plane's stock entry if any.
         // A weapon stock never mounts still gets a mount of its own class.

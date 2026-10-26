@@ -164,7 +164,7 @@ internal static class PauseSheetSuites
         foreach (var mission in missions)
         {
             string key = EscapeDialog.CampaignKey(mission.Campaign, mission.Mission);
-            var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.MessagesPath, key, instantAction: false);
+            var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.Data.Messages, key, instantAction: false);
             if (sheet == null)
             {
                 ctx.Check(false, $"{mission.ChapterFolder}/{mission.MissionFolder} resolves {key}");
@@ -231,7 +231,7 @@ internal static class PauseSheetSuites
                 }
 
                 string key = EscapeDialog.InstantActionKey(environment, letter);
-                var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.MessagesPath, key, instantAction: true);
+                var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.Data.Messages, key, instantAction: true);
                 if (sheet == null)
                 {
                     ctx.Check(false, $"{key} resolves an ia_escape.zrd dialog");
@@ -374,14 +374,14 @@ internal static class PauseSheetSuites
     {
         foreach (string heading in new[] { "FREE FLIGHT", "STUNT RACE" })
         {
-            if (PauseSheet.LoadOwnMode(ctx.ZrdrPath, ctx.MessagesPath, heading) is not { } sheet)
+            if (PauseSheet.LoadOwnMode(ctx.ZrdrPath, ctx.Data.Messages, heading) is not { } sheet)
             {
                 ctx.Check(false, $"{heading} resolves the bare blackboard");
                 continue;
             }
 
             var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
-            var expected = LoadScreens.Texts(null, heading, ctx.ZrdrPath, ctx.MessagesPath);
+            var expected = LoadScreens.Texts(null, heading, ctx.ZrdrPath, ctx.Data.Messages);
             report.AppendLine(
                 $"{heading}: backdrop={string.Join(",", board.Backdrop.Select(p => p.Art.Name))} "
                 + $"pictures={board.Pictures.Count} lines={string.Join("|", board.Lines.Select(l => l.Text))}");
@@ -581,7 +581,7 @@ internal static class PauseSheetSuites
                 offered++;
                 if (LoadScreens.MultiplayerKey(
                         chapter, mode.Type, mode.Teamed) is not { } key
-                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.MessagesPath, key) is not { } sheet)
+                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.Data.Messages, key) is not { } sheet)
                 {
                     ctx.Check(false, $"{chapter}'s Dogfight ({mode}) resolves a multiplayer sheet");
                     continue;
@@ -739,7 +739,7 @@ internal static class PauseSheetSuites
 
         return PauseSheet.Load(
             ctx.ZrdrPath,
-            ctx.MessagesPath,
+            ctx.Data.Messages,
             EscapeDialog.InstantActionKey(CampaignSequence.ChapterNumber(chapter), letter),
             instantAction: true);
     }
@@ -1101,7 +1101,7 @@ internal static class PauseSheetSuites
             SessionPaths.MissionZrdr(
                 ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder),
             "objectives.json");
-        var note = BriefingObjectives.Load(reader, Messages.Load(ctx.MessagesPath));
+        var note = BriefingObjectives.Load(reader, ctx.Data.Messages);
         ctx.Check(
             note.Count == 2 && note[0].Priority == 1 && note[0].Number == 15
             && note[1].Priority == 2 && note[1].Number == 14,
@@ -1350,7 +1350,7 @@ internal static class PauseSheetSuites
                 SessionPaths.MissionZrdr(
                     ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder),
                 "objectives.json"),
-            Messages.Load(ctx.MessagesPath));
+            ctx.Data.Messages);
         int fromBlock = 0;
         int priority = 0;
         foreach (var line in note)
@@ -1409,7 +1409,7 @@ internal static class PauseSheetSuites
             Zrdr.LoadFile(
                 SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
                 "objectives.json"),
-            Messages.Load(ctx.MessagesPath));
+            ctx.Data.Messages);
         var rows = new List<PauseObjective>(objectives.Count);
         for (int i = 0; i < objectives.Count; i++)
         {

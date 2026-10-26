@@ -95,7 +95,7 @@ internal static class ObjectiveReadouts
             // Instant Action, the multiplayer modes, and a campaign launch flying without a
             // director take the same site feed with no graph behind it. The table's own objective
             // and other_target keys are the whole answer (see BindsMissionTargetTable).
-            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
+            var sites = new ObjectiveSites(state.Data.Messages,
                 MissionTargets.Load(state.MissionZrdrPath, chapterZrdr), state.WorldRuntime);
             // A team mode labels its flags and hulls by side over the table's own lines.
             var dogfight = inputs.Dogfight;
@@ -110,7 +110,7 @@ internal static class ObjectiveReadouts
         {
             // The empty stage's arena ships no targets.zrd and has no world index. It flags its own
             // flag markers and finds them among its own nodes. The flag runtime labels them.
-            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
+            var sites = new ObjectiveSites(state.Data.Messages,
                 MissionTargets.Objectives(EmptyStage.ArenaTargets), key => EmptyStage.ArenaNode(arena, key));
             var dogfight = inputs.Dogfight;
             sites.Sides = key => dogfight?.SideOf(key);

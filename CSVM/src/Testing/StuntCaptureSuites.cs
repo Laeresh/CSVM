@@ -45,10 +45,10 @@ internal static class StuntCaptureSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         ctx.RequireData(gamezPath, $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
 
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath))
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} ships no Danger Zones");
 
         // The sting has something to play: the definition is a data orphan no SOUND_GROUPS entry

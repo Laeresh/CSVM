@@ -10,9 +10,10 @@ namespace CSVM.Launch;
 /// ⚠ Nothing here may be cached across a rebuild.</summary>
 internal sealed class BuildState
 {
-    public string DataRoot = "", ZrdrPath = "", SoundsPath = "",
-        MessagesPath = "", PlanesGamezPath = "";
-    public InterpScripts? Interp;
+    public string DataRoot = "", ZrdrPath = "", SoundsPath = "", PlanesGamezPath = "";
+    // The launch's game data, and this session's chapter part of it.
+    public Spec.GameData Data = Spec.GameData.Empty;
+    public Spec.ChapterData Chapter = null!;
     public bool Mute, DebugCollision;
     public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
 
