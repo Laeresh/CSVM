@@ -128,7 +128,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Remake-added stamps on picked textures, in texture space, under the mask
 22. ☑ C1's grassland and fields: sparse original cards, hedgerows by mask
 23. ☑ C1B, C2 and C4 tuned in the lab
-24. ☐ Wave C budget and goldens
+24. ☑ Wave C budget and goldens
 
 ### Wave D, near
 
@@ -1416,17 +1416,62 @@ rock tops and should move (902 pixels at its pose); every other C1B, C2 and C4 s
 
 **⚠ Traps.** C2's suburbs and parked cars are solid decorations: never list them.
 
-## C24 ☐ Wave C budget and goldens
+## C24 ☑ Wave C budget and goldens
 
 **Goal.** As A7, for Wave C.
 
-**Evidence (confidence: lead-only).** Decision 18.
+**Evidence (confidence: measured).** Decision 18. A7's instrument, views and ceiling.
 
-**Approach.** <TODO>
+**Approach.** `measure.ps1 -Launches 4`, unchanged, on an idle machine with gaming mode off. Since the
+A7 views frame little of the ground Wave C dresses, three more views over it, three launches each,
+Rich against Original at the same settings: C1's fields from 300 m (`--pos=-3000,430,-3900
+--lookat=-1200,128,-5000`), C1's grassland 45 m up (`--pos=-3700,175,-4500 --lookat=-5800,128,-4650`)
+and C3's palm transitions close (`--pos=-6090,35,-3290 --lookat=-6208,15,-3460`). The goldens stage
+re-pinned by hand for the shots Wave C moved.
 
-**Model recommendation.** <TODO>
+**Result (Wave C).** Median (range of the launch medians), four launches a case:
 
-**Verify.** <TODO>
+| Chapter | Case | `gpu_ms` | `render_cpu_ms` | `proc_ms` | draws | prims |
+|---|---|---:|---:|---:|---:|---:|
+| C1 | Faithful | 0.70 (0.70-0.74) | 0.29 (0.28-0.30) | 1.26 (1.24-1.29) | 240 | 88,596 |
+| C1 | Enhanced Original | 5.95 (5.94-5.96) | 0.47 (0.45-0.49) | 1.29 (1.27-1.37) | 421 | 322,531 |
+| C1 | Enhanced Rich | 6.03 (6.02-6.04) | 0.54 (0.49-0.63) | 1.43 (1.26-1.66) | 497 | 461,289 |
+| C1B | Faithful | 0.65 (0.65-0.65) | 0.34 (0.33-0.48) | 0.19 (0.18-0.21) | 211 | 2,452 |
+| C1B | Enhanced Original | 3.51 (3.50-3.53) | 0.51 (0.49-0.69) | 0.21 (0.21-0.25) | 282 | 272,580 |
+| C1B | Enhanced Rich | 3.51 (3.50-3.52) | 0.51 (0.49-0.73) | 0.21 (0.21-0.24) | 286 | 274,074 |
+| C2 | Faithful | 0.86 (0.85-0.87) | 1.13 (1.08-1.22) | 0.57 (0.56-0.61) | 1,474 | 308,853 |
+| C2 | Enhanced Original | 2.99 (2.99-3.00) | 1.26 (1.22-1.71) | 0.61 (0.58-0.70) | 1,606 | 485,367 |
+| C2 | Enhanced Rich | 3.00 (2.99-3.01) | 1.55 (1.21-2.07) | 0.66 (0.59-0.81) | 1,606 | 485,367 |
+| C3 | Faithful | 1.35 (1.35-1.36) | 0.97 (0.80-1.34) | 0.78 (0.72-1.00) | 1,061 | 19,173 |
+| C3 | Enhanced Original | 4.28 (4.27-4.29) | 1.18 (1.06-1.95) | 0.77 (0.72-1.11) | 1,211 | 287,593 |
+| C3 | Enhanced Rich | 4.30 (4.30-4.31) | 1.14 (1.11-1.15) | 0.75 (0.73-0.83) | 1,255 | 375,769 |
+| C4 | Faithful | 0.74 (0.74-0.74) | 0.39 (0.39-0.50) | 0.48 (0.47-0.62) | 382 | 205,459 |
+| C4 | Enhanced Original | 2.70 (2.70-2.71) | 0.48 (0.47-0.53) | 0.48 (0.47-0.50) | 462 | 59,806 |
+| C4 | Enhanced Rich | 2.70 (2.69-2.73) | 0.48 (0.48-0.50) | 0.47 (0.46-0.48) | 476 | 61,870 |
+
+Off the A7 views, three launches a case, Rich against Original:
+
+| View | `gpu_ms` Original | `gpu_ms` Rich | `render_cpu_ms` Original | `render_cpu_ms` Rich |
+|---|---:|---:|---:|---:|
+| C1 fields, 300 m | 2.62 (2.61-2.63) | 2.69 (2.68-2.70) | 0.43 (0.43-0.45) | 0.55 (0.46-0.59) |
+| C1 grassland, 45 m | 4.71 (4.70-4.72) | 4.73 (4.73-4.74) | 1.39 (1.27-1.42) | 1.33 (1.22-1.42) |
+| C3 palm transitions | 5.25 (5.24-5.25) | 5.39 (5.39-5.39) | 1.16 (1.10-1.90) | 1.20 (1.16-1.76) |
+
+**Wave C costs at most 0.14 ms of GPU, inside its 0.25 ms share.** At the A7 views it adds 0.08 ms on
+C1 (the grassland and hedges in frame: 497 draws against Wave B's 469, 461k prims against 335k) and at
+most 0.02 ms elsewhere; C1B's bushes and C4's treeline add 4 and 14 draws and no measurable time, and
+C2 is unchanged. The worst view is C3's palm transitions, 0.14 ms over Original, which also holds B15's
+crowns. CPU: C1's fields add up to 0.12 ms of `render_cpu_ms` (the 32k added cards' culling), every
+other view moves inside its noise (C2, unchanged, moves 0.30 ms between identical cases). Wave D keeps
+the remaining 1.8 ms of the 2.0 ms GPU ceiling.
+
+**Model recommendation.** A mid-tier model suffices, as A7.
+
+**Verify.** Every launch exit 0. Goldens: Wave C moved exactly five Enhanced shots, `c1-lake-enhanced`,
+`c1-rocket-hit-enhanced`, `c1-cockpit-enhanced` and `c1-cockpit-xr-sim-enhanced` (C22's grassland and
+hedges) and `c1b-ocean-enhanced` (C23's rock-top bushes); each rendered to one hash in its batch and its
+re-render. The five hashes are re-pinned by hand (never `-RegenGoldens`), and two further goldens runs
+pass 38 of 38.
 
 **⚠ Traps.** As A7.
 
