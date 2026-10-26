@@ -1514,7 +1514,8 @@ public partial class Launcher : Node3D
         // The screen honours --unzbd= as --extract does, which is how a worktree names a tool.
         string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(_paths.RepoRoot, _exported);
         string? remembered = Extraction.RememberedInstall.Get();
-        var candidates = Extraction.InstallLocator.Candidates(Extraction.InstallSearchRoots.ForThisMachine(), remembered);
+        var roots = Extraction.InstallSearchRoots.ForThisMachine() with { Beside = _paths.RepoRoot };
+        var candidates = Extraction.InstallLocator.Candidates(roots, remembered);
         string preFill = UI.Screens.ExtractionFlow.PreFill(remembered, candidates);
         Log.Info("core", $"extraction screen: problem={problem} remembered={remembered ?? "none"} candidates={candidates.Count} prefill={(preFill.Length == 0 ? "none" : preFill)} unzbd={unzbd}");
 

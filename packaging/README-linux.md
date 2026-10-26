@@ -104,8 +104,9 @@ folder:
 
 or by double-clicking `CSVM.x86_64` in your file manager. With no game data yet, CSVM opens
 a screen that offers to extract it. The install folder is filled in with the best guess it
-found (the last folder you used, then the Wine and Proton places above), and you can choose
-another folder instead. Choose the folder that holds `ZBD` and `GOSDATA` side by side; if
+found (the last folder you used, then a `GAME` folder or `.iso` image placed next to
+`CSVM.x86_64`, then the Wine and Proton places above), and you can choose another folder
+instead. Choose the folder that holds `ZBD` and `GOSDATA` side by side; if
 you choose a folder inside it or a folder that holds it, CSVM names the folder it expected.
 The extracted data lands in an `extracted` folder next to `CSVM.x86_64`, and the menu opens
 when it is done.

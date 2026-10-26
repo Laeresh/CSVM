@@ -64,6 +64,10 @@ public sealed record InstallSearchRoots(
     IReadOnlyList<string> ProgramFiles,
     IReadOnlyList<string> FixedDrives)
 {
+    /// <summary>Gets the folder CSVM runs from, searched before the machine's places, or null to
+    /// skip it. A launcher's install script puts the game's disc copy or ISO there.</summary>
+    public string? Beside { get; init; }
+
     /// <summary>This process's platform, home folder, Program Files folders and ready fixed
     /// drives.</summary>
     public static InstallSearchRoots ForThisMachine()
@@ -237,31 +241,67 @@ public static class InstallLocator
                 + $"look like a complete Crimson Skies install. Choose {ExpectedFolder}.");
     }
 
-    /// <summary>Every install found where the game is normally put, best guess first and without
-    /// duplicates: <paramref name="remembered"/>, then the Windows or the Linux places
-    /// <paramref name="roots"/> names. Only folders passing <see cref="IsInstall"/> are returned,
-    /// so a stale remembered path drops out. The first entry pre-fills the picker.</summary>
+    /// <summary>Every install found where the game is normally put, best guess first, without
+    /// duplicates. The order is <paramref name="remembered"/>, <see cref="BesidePlaces"/>, then the
+    /// Windows or Linux places. Only installs are returned, so a stale remembered path drops out;
+    /// beside CSVM a disc or ISO counts too. The first entry pre-fills the picker.</summary>
     public static IReadOnlyList<string> Candidates(InstallSearchRoots roots, string? remembered)
     {
         var comparer = roots.Windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var seen = new HashSet<string>(comparer);
         var found = new List<string>();
-        var places = new List<string>();
+        var places = new List<(string Place, bool DiscCounts)>();
         if (!string.IsNullOrWhiteSpace(remembered))
         {
-            places.Add(Normalize(remembered));
+            places.Add((Normalize(remembered), false));
         }
 
-        places.AddRange(roots.Windows ? WindowsPlaces(roots) : LinuxPlaces(roots));
-        foreach (string place in places)
+        if (roots.Beside is { } beside)
         {
-            if (Directory.Exists(place) && IsInstall(place) && seen.Add(Canonical(place)))
+            places.AddRange(BesidePlaces(beside).Select(place => (place, true)));
+        }
+
+        places.AddRange((roots.Windows ? WindowsPlaces(roots) : LinuxPlaces(roots)).Select(place => (place, false)));
+        foreach (var (place, discCounts) in places)
+        {
+            bool install = discCounts ? Check(place).IsInstall : Directory.Exists(place) && IsInstall(place);
+            if (install && seen.Add(Canonical(place)))
             {
                 found.Add(place);
             }
         }
 
         return found;
+    }
+
+    /// <summary>Where a copy of the game sits beside CSVM: its <c>GAME</c> folder (the disc's
+    /// layout), else <paramref name="folder"/> itself, then each <c>.iso</c> in ordinal order. Never
+    /// both folders, since <see cref="Check"/> already reads a disc's <c>GAME</c> through its parent.</summary>
+    public static IEnumerable<string> BesidePlaces(string folder)
+    {
+        yield return ResolveDirectory(folder, "GAME") ?? folder;
+
+        foreach (string iso in IsoFiles(folder))
+        {
+            yield return iso;
+        }
+    }
+
+    private static List<string> IsoFiles(string folder)
+    {
+        try
+        {
+            var options = new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive };
+            return Directory.EnumerateFiles(folder, "*.iso", options).OrderBy(f => f, StringComparer.Ordinal).ToList();
+        }
+        catch (IOException)
+        {
+            return new List<string>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new List<string>();
+        }
     }
 
     // Today's Windows places: the installer's folder under each Program Files, then the places a

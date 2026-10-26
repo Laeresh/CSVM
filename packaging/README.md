@@ -44,8 +44,9 @@ project published, rather than something a third party rebuilt or altered.
 
 **1. Extract your game's assets.** This is done once. Double-click **`CSVM.exe`**. With no
 game data yet, CSVM opens a screen that offers to extract it. The install folder is filled
-in with the best guess it found (the last folder you used, then the places Crimson Skies is
-normally installed), and you can choose another folder instead.
+in with the best guess it found (the last folder you used, then a `GAME` folder or `.iso`
+image placed next to `CSVM.exe`, then the places Crimson Skies is normally installed), and
+you can choose another folder instead.
 
 The folder it wants is the one containing the `ZBD` and `GOSDATA` subfolders. Open your
 install until you see those two side by side, and use that folder; if you choose a folder
