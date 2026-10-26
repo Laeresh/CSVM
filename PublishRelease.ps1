@@ -34,9 +34,14 @@
     tag: the run is a real tag, upload and release under a name of its own, deleted
     afterwards, and the release version's tag is still minted exactly once.
 
-    Every release carries both platforms: one tag, two assets. The tarball gets the zip's
+    Every release carries both platforms: one tag, two archives. The tarball gets the zip's
     checks, and sandbox\LinuxRelease.ps1 must pass on it before anything is tagged, so a
     machine without the WSL Debian toolchain (docs/tooling.md, "-Linux") cannot publish.
+
+    Each archive is also uploaded a second time under a name without the version
+    (CSVM-win64.zip, CSVM-linux-x64.tar.gz), byte for byte the same file, so
+    releases/latest/download/<name> always resolves to the newest build. Installers that
+    follow the latest release (the Lutris script) link those names.
 
 .PARAMETER NotesFile
     Markdown prepended to the release notes. The verification and provenance sections are
@@ -176,6 +181,12 @@ $ZipName = "CSVM-v$Version-win64.zip"
 $ZipPath = Join-Path $RepoRoot ".scratch\$ZipName"
 $TarName = "CSVM-v$Version-linux-x64.tar.gz"
 $TarPath = Join-Path $RepoRoot ".scratch\$TarName"
+# The version-free copies get a folder of their own because gh names an asset after its file.
+$LatestDir     = Join-Path $RepoRoot '.scratch\latest'
+$LatestZipName = 'CSVM-win64.zip'
+$LatestTarName = 'CSVM-linux-x64.tar.gz'
+$LatestZipPath = Join-Path $LatestDir $LatestZipName
+$LatestTarPath = Join-Path $LatestDir $LatestTarName
 foreach ($needed in @($LinuxCheck, $WindowsTar)) {
     if (-not (Test-Path $needed)) { throw "The Linux tarball's checks need $needed, which is missing." }
 }
@@ -270,6 +281,7 @@ Write-Host "  version $Version" -ForegroundColor Cyan
 Write-Host "  tag     $Tag on $($CsvmCommit.Substring(0,10))" -ForegroundColor Cyan
 Write-Host "  asset   $ZipName" -ForegroundColor Cyan
 Write-Host "  asset   $TarName" -ForegroundColor Cyan
+Write-Host "  asset   $LatestZipName, $LatestTarName (the same files, version-free names)" -ForegroundColor Cyan
 Write-Host ''
 
 $exportStarted = Get-Date
@@ -347,6 +359,13 @@ $ZipSize = [string]::Format([cultureinfo]::InvariantCulture, '{0:N1} MB',
 $TarSha256 = (Get-FileHash $TarPath -Algorithm SHA256).Hash.ToLower()
 $TarSize = [string]::Format([cultureinfo]::InvariantCulture, '{0:N1} MB',
     ((Get-Item $TarPath).Length / 1MB))
+
+# Copied after the checksums so the copies are of the files those hashes describe. Emptied first:
+# a leftover from an earlier run would otherwise be uploaded under this release's name.
+if (Test-Path $LatestDir) { Remove-Item $LatestDir -Recurse -Force }
+New-Item -ItemType Directory -Path $LatestDir | Out-Null
+Copy-Item $ZipPath $LatestZipPath
+Copy-Item $TarPath $LatestTarPath
 $forkLine = if ($ForkRepoUrl) {
     "[``$($ForkCommit.Substring(0,10))``]($ForkRepoUrl/commit/$ForkCommit)"
 } else {
@@ -373,6 +392,9 @@ sha256sum {2}
 - `{0}` SHA-256: `{6}`
 - `{2}` SHA-256: `{7}`
 
+`{11}` and `{12}` are the same two files under names without the version, for links that follow
+the latest release (`{4}/releases/latest/download/{12}`). Their hashes are the ones above.
+
 ### Built from
 
 Every binary in both archives is built from public source, and each archive repeats these two
@@ -383,7 +405,7 @@ commits in its own `BUILD-INFO.txt`.
 '@
 $notes = $notesBody + ($notesTemplate -f $ZipName, $ZipSize, $TarName, $TarSize,
     $RepoUrl, $CsvmCommit, $Sha256, $TarSha256, $Version, $CsvmCommit.Substring(0, 10),
-    $forkLine)
+    $forkLine, $LatestZipName, $LatestTarName)
 
 $notesPath = Join-Path $RepoRoot ".scratch\release-notes-$Tag.md"
 [System.IO.File]::WriteAllText($notesPath, $notes, (New-Object System.Text.UTF8Encoding($false)))
@@ -397,6 +419,8 @@ Write-Host "  asset       $ZipPath ($ZipSize)"
 Write-Host "  sha-256     $Sha256"
 Write-Host "  asset       $TarPath ($TarSize)"
 Write-Host "  sha-256     $TarSha256"
+Write-Host "  asset       $LatestZipPath (copy)"
+Write-Host "  asset       $LatestTarPath (copy)"
 Write-Host "  linux check sandbox\LinuxRelease.ps1 passed on this tarball"
 Write-Host "  notes       $notesPath$(if (-not $NotesFile) { ' (generated sections only)' })"
 
@@ -436,7 +460,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Pushing tag $Tag failed (exit $LASTEXITCODE). The local tag was removed; re-run."
 }
 
-$assets = @($ZipPath, $TarPath)
+$assets = @($ZipPath, $TarPath, $LatestZipPath, $LatestTarPath)
 Write-Host "Creating release $Tag with $((($assets | ForEach-Object { Split-Path $_ -Leaf }) -join ' and '))..." -ForegroundColor Cyan
 & $gh release create $Tag @assets --repo $RepoSlug --title $Title --notes-file $notesPath `
     --verify-tag --latest

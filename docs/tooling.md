@@ -587,6 +587,12 @@ visitor lands on. Because the tag, the executables' stamped version, the archive
 published checksums and the notes all come out of that single run, none of them can disagree with
 another.
 
+Each archive is uploaded twice: under its versioned name, and as a byte-identical copy named
+`CSVM-win64.zip` or `CSVM-linux-x64.tar.gz`, staged in `.scratch\latest\`. GitHub serves
+`releases/latest/download/<name>` from the release marked Latest, so a link to a version-free name
+always fetches the newest build; the Lutris install script follows the latest release that way. The
+notes say the copies share the published checksums.
+
 `-NotesFile` supplies the prose that goes above the generated sections; the script writes the
 verification and provenance sections itself, so the file never states a checksum or a commit of its
 own, and it refuses a notes file that does. The generated text restates `BUILD-INFO.txt`'s two
