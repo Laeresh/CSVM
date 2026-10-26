@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, small formats
 
-11. ☐ `interp.zbd`
+11. ☑ `interp.zbd`
 12. ☐ `strings.dll` messages
 13. ☐ Sound archives
 14. ☐ Reader archives (`zrdr.zbd`)
@@ -357,7 +357,32 @@ over every archive of a mode. Reflective, as above; NaN and `delta_raw` as above
 
 # Wave B, small formats
 
-## B11 ☐ `interp.zbd`
+## B11 ☑ `interp.zbd`
+
+**Landed.** `CSVM/src/Mech3/InterpScripts.cs` reads `ZBD/interp.zbd` through `BasePaths.Game` into
+one model, `InterpScripts` (a list of `InterpScript(Name, Lines)` in file order, `Lines(name)`
+matched without regard to case); `Load(game)` is null without a source or the file. The layout is
+in [formats/interp.md](formats/interp.md): a 12-byte header (signature `0x08971119`, version 7,
+count), a 128-byte entry per script (120-byte name, timestamp, start), then null-separated lines
+each with a size and an argument count equal to its nulls. The reader refuses a file whose bodies
+do not tile it. All four consumers take the model in place of the path: `MissionSetup.Load`,
+`ClutterBuilder.TemplateNames`, `LensFlareRig.FlareTextureNames` (and both flare rigs' `Build`)
+and `TextureArchive.MipBias`. `GameSession` loads it once per build into `BuildState.Interp`, which
+feeds `WorldSession.Options.Interp` and `SkyStage`; the launcher's mip bias and `--dump-mips` load
+it themselves. Suites call `TestContext.RequireInterp()` (SKIP without an install), the harness
+world build loads it from the new `TestContext.Game`, and the five suites that build their own
+`BasePaths` pass `Game = ctx.Game` on. The JSON read moved to `CSVM.Tests/Oracle/InterpLegacy.cs`;
+`CSVM.Tests/InterpScriptsTests.cs` holds the CI-safe units over a hand-encoded file and the model
+diff. Unused now, for E43: `BasePaths.InterpPath`, `TestContext.InterpPath`, `--interp=`
+(`SessionSpec.Interp`) and the `interp` `ZbdExtraction` mode.
+
+**Verified.** <pending orchestrator run>
+
+**Premise correction.** `TextureArchive.MipBias` is one of **four** readers of the interp data,
+each parsing `interp.json` on its own; `MissionSetup`, the clutter registry and the lens flare
+slots are the other three. All four moved, so no engine path reads the JSON.
+
+**Original approach (kept for reference).**
 
 **Goal.** `TextureArchive`'s interp read comes from `interp.zbd` directly.
 
@@ -370,7 +395,10 @@ over every archive of a mode. Reflective, as above; NaN and `delta_raw` as above
 
 **Verify.** A2 diff clean; complete `RunTests.ps1` with goldens unchanged.
 
-**⚠ Traps.** <TODO: none known.>
+**⚠ Traps.** The extraction's timestamp (`datetime`) has no consumer, so the model leaves it out
+and the diff compares names and lines only. A run without an install now reads no scripts, where
+before it read `extracted/interp.json`: mission setup, clutter, flares and the C5 mip bias then
+fall back to their "nothing authored" behaviour, as they did without an extraction.
 
 ## B12 ☐ `strings.dll` messages
 

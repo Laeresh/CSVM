@@ -38,8 +38,9 @@ public sealed record BasePaths(
         spec.Messages ?? Path.Combine(dataRoot, "extracted", "messages.json"),
         spec.Rof ?? Path.Combine(dataRoot, "extracted", "rof"))
     {
-        // A deterministic run ignores saved options, the remembered install among them.
-        Game = GameFileSource.Locate(
+        // A deterministic run ignores saved options, the remembered install among them. A
+        // synthetic run reads no install at all, or its result would depend on the machine.
+        Game = spec.SyntheticData ? null : GameFileSource.Locate(
             System.Environment.GetEnvironmentVariable(GameFileSource.InstallVariable),
             dataRoot,
             spec.Det ? null : RememberedInstall.Get(),

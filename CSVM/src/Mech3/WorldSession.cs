@@ -97,10 +97,10 @@ public sealed class WorldSession
         }
         else
         {
-            missionSetup = MissionSetup.Load(o.InterpPath, o.Chapter, o.Mission);
+            missionSetup = MissionSetup.Load(o.Interp, o.Chapter, o.Mission);
             if (missionSetup == null)
             {
-                Log.Info("world", $"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
+                Log.Info("world", $"mission setup: no script for {o.Chapter}/{o.Mission} (boot scripts {(o.Interp == null ? "absent" : "read")})");
             }
         }
         StartupProfile.Record("zrdr", mark);
@@ -163,7 +163,7 @@ public sealed class WorldSession
             ? new List<string>()
             : o.ClutterTemplates is { } wanted
                 ? ClutterBuilder.OverrideTemplateNames(gamez, wanted)
-                : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
+                : ClutterBuilder.TemplateNames(o.Interp, o.Chapter);
         if (o.NoClutter)
         {
             Log.Info("world", $"clutter: skipped (--no-clutter)");
@@ -193,7 +193,7 @@ public sealed class WorldSession
         }
         else if (o.NodeSubtree == null)
         {
-            Log.Info("world", $"clutter: no templates for {o.Chapter} ({o.InterpPath})");
+            Log.Info("world", $"clutter: no templates for {o.Chapter} (boot scripts {(o.Interp == null ? "absent" : "read")})");
         }
         StartupProfile.Record("clutter", mark);
         LoadProgress.Report(LoadStep.Clutter);
@@ -673,7 +673,7 @@ public sealed class WorldSession
         public required string Chapter { get; init; }
         public required string Mission { get; init; }
         public required string ZrdrPath { get; init; }
-        public required string InterpPath { get; init; }
+        public InterpScripts? Interp { get; init; }
         public required string MissionZrdrPath { get; init; }
 
         /// <summary>The chapter's own zrdr scope, which <c>templates.zrd</c>, <c>landings.zrd</c>

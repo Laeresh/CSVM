@@ -626,6 +626,16 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTransla
 while the gamez is in hand, and `Apply`'s `setActiveByIndex` delegate switches them in the built
 world. Without the bind the verb is counted unapplied. Decode: [../formats/interp.md](../formats/interp.md).
 
+## src/Mech3/InterpScripts.cs
+The engine boot scripts, read from `ZBD/interp.zbd` through the session's game-file source
+(`BasePaths.Game`): every script's name and lines in file order, looked up by name without regard
+to case. `Load` returns null without a source or without the file, and each consumer reads that as
+"nothing authored": `MissionSetup.Load`, `ClutterBuilder.TemplateNames`,
+`LensFlareRig.FlareTextureNames` and `TextureArchive.MipBias`. `GameSession` reads the file once
+per build into `BuildState.Interp`, which `WorldSession.Options.Interp` and the flare rigs share;
+the launcher's mip bias and the probes read it on their own. `Read` refuses a file whose table
+and bodies do not tile it. Layout: [../formats/interp.md](../formats/interp.md).
+
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
 resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only

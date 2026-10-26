@@ -256,6 +256,7 @@ public sealed class ProbeRunner
             MessagesPath = _paths.MessagesPath,
             PlanesGamezPath = _paths.PlanesGamezPath,
             InterpPath = _paths.InterpPath,
+            Game = _paths.Game,
             SoundsPath = _paths.SoundsPath,
             PlaneName = spec.PlaneName,
             Mute = spec.Mute,
@@ -351,7 +352,7 @@ public sealed class ProbeRunner
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         var r = Probes.MipChains(SessionPaths.ChapterTextures(_paths.DataRoot, spec.Chapter),
-            spec.Chapter, spec.DumpMipsFilter, _paths.InterpPath);
+            spec.Chapter, spec.DumpMipsFilter, InterpScripts.Load(_paths.Game));
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-mips: {r.Error}");

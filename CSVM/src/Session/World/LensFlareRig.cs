@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
-using System.Text.Json;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Spec;
@@ -68,31 +66,19 @@ public sealed class LensFlareRig
     /// chapter but C2 and C3.</summary>
     public int InstanceCount => _instances.Count;
 
-    /// <summary>Reads the chapter's <c>LensFlareTexture</c> slot registrations out of the interp
-    /// extraction, returning the texture name per slot in slot order. Empty when the chapter
+    /// <summary>Reads the chapter's <c>LensFlareTexture</c> slot registrations out of the boot
+    /// scripts, returning the texture name per slot in slot order. Empty when the chapter
     /// registers none, which is the gate, not an error. Mirrors
-    /// <see cref="Clutter.TemplateNames"/>, which reads <c>adjust.gw</c> from the same file the
-    /// same way.</summary>
-    public static List<string> FlareTextureNames(string interpPath, string chapter)
+    /// <see cref="Clutter.TemplateNames"/>, which reads <c>adjust.gw</c> the same way.</summary>
+    public static List<string> FlareTextureNames(InterpScripts? interp, string chapter)
     {
         var bySlot = new SortedDictionary<int, string>();
-        if (!File.Exists(interpPath))
-            return new List<string>();
-        var wanted = $"support\\{chapter.ToLowerInvariant()}\\init.gw";
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(interpPath));
-        foreach (var script in doc.RootElement.EnumerateArray())
+        foreach (var line in interp?.Lines($"support\\{chapter.ToLowerInvariant()}\\init.gw") ?? [])
         {
-            if (!script.TryGetProperty("name", out var n)
-                || !string.Equals(n.GetString(), wanted, System.StringComparison.OrdinalIgnoreCase))
-                continue;
-            foreach (var line in script.GetProperty("lines").EnumerateArray())
-            {
-                var parts = (line.GetString() ?? "").Split(' ',
-                    System.StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 3 && parts[0] == "LensFlareTexture"
-                    && int.TryParse(parts[1], out int slot))
-                    bySlot[slot] = parts[2];
-            }
+            var parts = line.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3 && parts[0] == "LensFlareTexture"
+                && int.TryParse(parts[1], out int slot))
+                bySlot[slot] = parts[2];
         }
         return new List<string>(bySlot.Values);
     }
@@ -100,9 +86,9 @@ public sealed class LensFlareRig
     /// <summary>Builds one flare per rig, or nothing at all when either gate is closed. Safe to
     /// call for every chapter, the gates do the deciding.</summary>
     public void Build(IReadOnlyList<PlayerRig> rigs, TextureArchive textures,
-        string interpPath, string chapter)
+        InterpScripts? interp, string chapter)
     {
-        var names = FlareTextureNames(interpPath, chapter);
+        var names = FlareTextureNames(interp, chapter);
         // Gate 1: the registered textures. Gate 2: a `sun` node in this rig's dome, checked per rig
         // below (each pane builds its own horizon copy, so each has its own sun).
         bool anySun = false;

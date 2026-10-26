@@ -1370,7 +1370,7 @@ public partial class Launcher : Node3D
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
-        float mipBias = Mech3.TextureArchive.MipBias(_paths.InterpPath, _spec.Chapter);
+        float mipBias = Mech3.TextureArchive.MipBias(Mech3.InterpScripts.Load(_paths.Game), _spec.Chapter);
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         LoadProgress.Report(LoadStep.ChapterPaths);

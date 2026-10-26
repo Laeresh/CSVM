@@ -265,7 +265,7 @@ public class ClutterQuadUvTests
     private static IEnumerable<(string Template, string Model, Vector3 Lift)> Decorations(string chapter)
     {
         var gamez = Gamez(chapter);
-        var interp = Path.Combine(TestData.DataRoot!, "extracted", "interp.json");
+        var interp = InterpScripts.Load(GameFilesData.Source) ?? throw new System.InvalidOperationException(GameFilesData.NoSourceReason);
         foreach (var name in ClutterBuilder.TemplateNames(interp, chapter))
         {
             // A registered template the chapter does not carry is normal in the original's data: C2B

@@ -10,8 +10,9 @@ namespace CSVM.Launch;
 /// ⚠ Nothing here may be cached across a rebuild.</summary>
 internal sealed class BuildState
 {
-    public string DataRoot = "", ZrdrPath = "", SoundsPath = "", InterpPath = "",
+    public string DataRoot = "", ZrdrPath = "", SoundsPath = "",
         MessagesPath = "", PlanesGamezPath = "";
+    public InterpScripts? Interp;
     public bool Mute, DebugCollision;
     public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
 

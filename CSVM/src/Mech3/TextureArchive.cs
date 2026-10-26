@@ -893,37 +893,21 @@ public sealed class TextureArchive : IDisposable
     public static bool IsNamedSoftAlpha(string materialTextureName) =>
         SoftAlphaNamed.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
 
-    /// <summary>The chapter's authored mip LOD bias, read from the interp extraction's
-    /// <c>MipBias</c> lines and clamped like the original's own command. 0 when the chapter authors
-    /// none, which is every chapter but C5 (docs/org/textures.md).
+    /// <summary>The chapter's authored mip LOD bias, read from the boot scripts'
+    /// <c>MipBias</c> lines and clamped like the original's own command. It is 0 without scripts or
+    /// when the chapter authors none, which is every chapter but C5 (docs/org/textures.md).
     /// ⚠ Read <c>adjust.gw</c> only. <c>load.gw</c> is the data-compile path, which a retail
     /// install cannot run: it sources the terrain <c>.flt</c> the install does not ship.</summary>
-    public static float MipBias(string interpPath, string chapter)
+    public static float MipBias(InterpScripts? interp, string chapter)
     {
         float bias = 0f;
-        if (!File.Exists(interpPath))
+        foreach (var line in interp?.Lines($"support\\{chapter.ToLowerInvariant()}\\adjust.gw") ?? [])
         {
-            return bias;
-        }
-
-        var wanted = $"support\\{chapter.ToLowerInvariant()}\\adjust.gw";
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(interpPath));
-        foreach (var script in doc.RootElement.EnumerateArray())
-        {
-            if (!script.TryGetProperty("name", out var n)
-                || !string.Equals(n.GetString(), wanted, StringComparison.OrdinalIgnoreCase))
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 && parts[0] == "MipBias"
+                && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
             {
-                continue;
-            }
-
-            foreach (var line in script.GetProperty("lines").EnumerateArray())
-            {
-                var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2 && parts[0] == "MipBias"
-                    && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
-                {
-                    bias = Math.Clamp(v, -MipBiasLimit, MipBiasLimit);
-                }
+                bias = Math.Clamp(v, -MipBiasLimit, MipBiasLimit);
             }
         }
 

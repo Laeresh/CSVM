@@ -1,6 +1,6 @@
 # `interp.zbd`, the engine boot scripts (`.gw`)
 
-`interp.zbd` (extracted by `unzbd cs interp` to a single `interp.json`) holds the game's
+`interp.zbd` holds the game's
 **engine boot scripts**: 98 named command lists, one per `support\…\*.gw` file of the
 original build tree. They are what the engine runs to *assemble* a world, set search paths,
 load models, register clutter templates, define the partition grid, and then, per mission,
@@ -9,19 +9,28 @@ switch off everything that mission does not show.
 This page documents the script format and the two families this project consumes. The
 clutter half is described in more detail in [clutter.md](clutter.md).
 
-## Container shape
+## File layout
 
-`interp.json` is a flat JSON array of script objects:
+`ZBD/interp.zbd` (188,296 bytes in this install) is its own format, not the named-entry
+archive of [zbd-archive.md](zbd-archive.md). All integers are little-endian `u32`.
 
-```json
-[ { "name": "support\\c1\\ia1.gw",
-    "datetime": "2000-08-26T08:08:30.0Z",
-    "lines": ["FindNode hk_zep", "NodeSetActive off", …] } ]
-```
+| Part | Layout |
+|---|---|
+| Header, 12 bytes | signature `0x08971119`, version `7`, script count (98) |
+| Script table, 128 bytes per script | name (120 bytes ASCII, null-padded), timestamp (Unix seconds), start offset |
+| Script bodies, in table order | per line: byte size, argument count, then the line's bytes; a size of `0` ends the script |
 
-`name` is the original build-tree path (backslash-separated, always lower case);
-`lines` is the command list in execution order. One command per line, space-separated,
-no quoting or escaping anywhere in this install.
+A line's bytes are its words separated by `\0` and terminated by one more `\0`, so the
+argument count equals the number of nulls in the line, terminator included. Each start
+offset equals the end of the previous body (the first follows the table), and the last
+body ends the file. `CSVM/src/Mech3/InterpScripts.cs` reads it and refuses a file where
+any of these does not hold.
+
+`name` is the original build-tree path (backslash-separated, always lower case); the
+lines are the command list in execution order. One command per line, space-separated
+once the nulls are read as spaces, with no quoting or escaping anywhere in this install.
+The extraction writes the same content as `interp.json`, an array of
+`{ "name", "datetime", "lines" }` objects; no consumer reads the timestamp.
 
 ## Script families
 

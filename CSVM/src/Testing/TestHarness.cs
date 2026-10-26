@@ -894,6 +894,10 @@ public sealed class TestContext
     public required string PlanesGamezPath { get; init; }
     public required string InterpPath { get; init; }
     public required string SoundsPath { get; init; }
+
+    /// <summary>The run's game-file source, null without an install; a suite that builds its own
+    /// <c>BasePaths</c> hands it on.</summary>
+    public IGameFileSource? Game { get; init; }
     public required string PlaneName { get; init; }
     public required bool Mute { get; init; }
 
@@ -1028,6 +1032,12 @@ public sealed class TestContext
             throw new SuiteSkippedException($"{Log.Format(what)} not found: {path}");
         }
     }
+
+    /// <summary>The install's boot scripts, or SKIP the way <see cref="RequireData"/> does when
+    /// the run has no install or the install no <c>interp.zbd</c>.</summary>
+    public InterpScripts RequireInterp() =>
+        InterpScripts.Load(Game)
+        ?? throw new SuiteSkippedException($"{InterpScripts.GamePath} not found: {Game?.Location ?? "no game install"}");
 
     /// <summary>On the synthetic tree, skips a suite whose body reads a shipped texture by
     /// <paramref name="name"/> that the invented archive does not carry. ⚠ Never skip on a real
@@ -1340,7 +1350,7 @@ public sealed class TestContext
                     Chapter = chapter,
                     Mission = mission,
                     ZrdrPath = ZrdrPath,
-                    InterpPath = InterpPath,
+                    Interp = InterpScripts.Load(Game),
                     MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
                     ChapterZrdrPath = SessionPaths.ChapterZrdr(DataRoot, chapter),
                     EffectsParent = stage,

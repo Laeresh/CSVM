@@ -1,20 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
 using Godot;
 
 namespace CSVM.Mech3;
 
 /// <summary>
 /// The engine's per-mission world setup script: <c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>
-/// from the interp extraction, one per mission (53 in this install). Decides which world
+/// from <see cref="InterpScripts"/>, one per mission (53 in this install). Decides which world
 /// entities a mission shows: a chapter's gamez holds every mission's content, and this switches
 /// off what the current mission does not want. Full decode: <c>docs/formats/interp.md</c>.
-/// ⚠ Entities are present by default and switched off here, the same polarity as <c>zepstate</c>;
-/// <c>aiv.zrd.json</c> and <c>zeppelins.zrd.json</c> are not spawn rosters and gate nothing.
+/// ⚠ Entities are present by default and switched off here, the same polarity as <c>zepstate</c>.
+/// The files <c>aiv.zrd.json</c> and <c>zeppelins.zrd.json</c> are not spawn rosters and gate nothing.
 /// Runs as bootstrap pass 0, before the animation passes, so an animation state can override a
 /// script state.
 /// </summary>
@@ -36,26 +34,18 @@ public sealed class MissionSetup
     public IReadOnlyList<Op> Ops => _ops;
 
     /// <summary>
-    /// Reads <c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c> out of the interp extraction.
-    /// Null when the file or the script is missing, a mission with no setup script is normal
+    /// Reads <c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c> out of the boot scripts.
+    /// Null when the scripts or the script are missing. A mission with no setup script is normal
     /// (the engine simply leaves the world as loaded), so callers treat null as "nothing to do".
     /// </summary>
-    public static MissionSetup? Load(string interpPath, string chapter, string mission)
+    public static MissionSetup? Load(InterpScripts? interp, string chapter, string mission)
     {
-        if (!File.Exists(interpPath))
-            return null;
         var wanted = $"support\\{chapter.ToLowerInvariant()}\\{mission.ToLowerInvariant()}.gw";
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(interpPath));
-        foreach (var script in doc.RootElement.EnumerateArray())
-        {
-            if (!script.TryGetProperty("name", out var n)
-                || !string.Equals(n.GetString(), wanted, StringComparison.OrdinalIgnoreCase))
-                continue;
-            var setup = new MissionSetup { ScriptName = wanted };
-            setup.Parse(script.GetProperty("lines"));
-            return setup;
-        }
-        return null;
+        if (interp?.Lines(wanted) is not { } lines)
+            return null;
+        var setup = new MissionSetup { ScriptName = wanted };
+        setup.Parse(lines);
+        return setup;
     }
 
     /// <summary>The script's <c>Object3DSetScroll</c> statements, resolved to gamez model index →
@@ -313,12 +303,12 @@ public sealed class MissionSetup
     // The script is a flat command list with a stateful selector: FindNode picks a node by
     // name, FindSubNode narrows to a descendant, and the following verb acts on that selection.
     // Quit ends the script (it is always the last line, in C4's and C5's scripts).
-    private void Parse(JsonElement lines)
+    private void Parse(IReadOnlyList<string> lines)
     {
         string? target = null, sub = null;
-        foreach (var line in lines.EnumerateArray())
+        foreach (var line in lines)
         {
-            var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
                 continue;
             switch (parts[0])

@@ -47,7 +47,7 @@ internal sealed class SkyStage
 
     // What the flare was built from, kept so a live graphics switch can build the other rig.
     private TextureArchive? _flareTextures;
-    private string _flareInterpPath = "";
+    private InterpScripts? _flareInterp;
 
     /// <summary>The stage over one session's world. The rigs are the session's pane list, read at
     /// each build call. The cloud band's per-object gate moves the gated objects between layers,
@@ -129,7 +129,7 @@ internal sealed class SkyStage
         // ⚠ Build the flare after the weather. Its sun node is a child of each rig's horizon, and
         // finding it is one of the two gates. The chapter data decides whether anything is built.
         _flareTextures = state.Textures;
-        _flareInterpPath = state.InterpPath;
+        _flareInterp = state.Interp;
         BuildFlare();
     }
 
@@ -180,12 +180,12 @@ internal sealed class SkyStage
         if (UsesWorldFlare(_xrHead != null, GraphicsMode.Enhanced, _spec.ScreenFlare))
         {
             WorldFlare = new WorldFlareRig(_spec, _xrHead);
-            WorldFlare.Build(_rigs, _flareTextures!, _flareInterpPath, _spec.Chapter, _worldRoot);
+            WorldFlare.Build(_rigs, _flareTextures!, _flareInterp, _spec.Chapter, _worldRoot);
         }
         else
         {
             Flare = new LensFlareRig(_spec);
-            Flare.Build(_rigs, _flareTextures!, _flareInterpPath, _spec.Chapter);
+            Flare.Build(_rigs, _flareTextures!, _flareInterp, _spec.Chapter);
         }
     }
 

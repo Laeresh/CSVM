@@ -73,7 +73,7 @@ internal static class StereoPaneSuites
     {
         string texturesPath = Extraction.SessionPaths.ChapterTextures(ctx.DataRoot, "C3");
         ctx.RequireData(texturesPath, $"C3 textures");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        ctx.RequireInterp();
         var root = new Node3D { Name = "world-flare-layers" };
         ctx.Host.AddChild(root);
         using var textures = new Mech3.TextureArchive(texturesPath);
@@ -191,7 +191,7 @@ internal static class StereoPaneSuites
         }
 
         var rig = new WorldFlareRig(Spec.SessionSpec.Parse(new[] { "--chapter=C3" }), null);
-        rig.Build(rigs, textures, ctx.InterpPath, "C3", root);
+        rig.Build(rigs, textures, ctx.RequireInterp(), "C3", root);
         var quads = new System.Collections.Generic.List<(int Pane, MeshInstance3D Quad)>(rig.Quads());
         ctx.Check(rig.InstanceCount == paneMasks.Length && quads.Count == paneMasks.Length * WorldFlareRig.Elements.Count,
             $"{label}: C3 builds a flare per pane, {quads.Count} quads for {rig.InstanceCount} pane(s)");

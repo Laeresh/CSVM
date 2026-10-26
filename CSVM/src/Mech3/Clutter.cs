@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text.Json;
 using CSVM.Utils;
 using Godot;
 
@@ -186,29 +184,19 @@ public sealed class ClutterBuilder
         return 0f;
     }
 
-    /// <summary>The chapter's registered clutter template names, read from the interp extraction's
-    /// <c>AddClutterTemplates</c> lines. Empty when the file or script is missing.
+    /// <summary>The chapter's registered clutter template names, read from the boot scripts'
+    /// <c>AddClutterTemplates</c> lines. Empty when the scripts or the chapter's script are missing.
     /// ⚠ Return every registered name, unfiltered. Which district dresses a given patch is the
     /// per-polygon <c>no_clutter</c> gate's decision, never a curated exclusion list here.</summary>
-    public static List<string> TemplateNames(string interpPath, string chapter)
+    public static List<string> TemplateNames(InterpScripts? interp, string chapter)
     {
         var names = new List<string>();
-        if (!File.Exists(interpPath))
-            return names;
-        var wanted = $"support\\{chapter.ToLowerInvariant()}\\adjust.gw";
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(interpPath));
-        foreach (var script in doc.RootElement.EnumerateArray())
+        foreach (var line in interp?.Lines($"support\\{chapter.ToLowerInvariant()}\\adjust.gw") ?? [])
         {
-            if (!script.TryGetProperty("name", out var n)
-                || !string.Equals(n.GetString(), wanted, StringComparison.OrdinalIgnoreCase))
-                continue;
-            foreach (var line in script.GetProperty("lines").EnumerateArray())
-            {
-                var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2 && parts[0] == "AddClutterTemplates")
-                    for (int i = 1; i < parts.Length; i++)
-                        names.Add(parts[i]);
-            }
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 && parts[0] == "AddClutterTemplates")
+                for (int i = 1; i < parts.Length; i++)
+                    names.Add(parts[i]);
         }
         return names;
     }

@@ -1459,11 +1459,11 @@ internal static class WorldAndToolSuites
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
         ctx.RequireData(gamezPath, $"{chapter} gamez");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var interp = ctx.RequireInterp();
 
         var gamez = GameZ.Load(gamezPath);
         using var textures = new TextureArchive(texturesPath);
-        var names = ClutterBuilder.TemplateNames(ctx.InterpPath, chapter);
+        var names = ClutterBuilder.TemplateNames(interp, chapter);
         var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
         ctx.Check(props != null && props.Kinds.Count > 0, $"{chapter} templates.zrd read");
 
@@ -2694,13 +2694,13 @@ internal static class WorldAndToolSuites
         "the sun's lens flare is gated on chapter data alone, and its two independent gates (the gamez `sun` node and init.gw's LensFlareTexture slots) agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
     internal static void LensFlareGates(TestContext ctx)
     {
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var interp = ctx.RequireInterp();
         int withFlare = 0;
         foreach (var (chapter, _, _) in Census)
         {
             bool expected = chapter is "C2" or "C3";
 
-            var slots = LensFlareRig.FlareTextureNames(ctx.InterpPath, chapter);
+            var slots = LensFlareRig.FlareTextureNames(interp, chapter);
             ctx.Same(expected ? 4 : 0, slots.Count, $"{chapter} LensFlareTexture slots");
 
             string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
@@ -3655,10 +3655,10 @@ internal static class WorldAndToolSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
         ctx.RequireData(gamezPath, $"{chapter} gamez");
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var interp = ctx.RequireInterp();
         using var textures = new TextureArchive(texturesPath);
         var builder = new ClutterBuilder(GameZ.Load(gamezPath), textures);
-        var root = builder.Build(ClutterBuilder.TemplateNames(ctx.InterpPath, chapter));
+        var root = builder.Build(ClutterBuilder.TemplateNames(interp, chapter));
         try
         {
             return root == null ? new List<(string, bool)>() : ShaderTextUnder(root);
