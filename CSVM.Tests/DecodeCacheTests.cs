@@ -1,6 +1,5 @@
 using System.IO;
 using CSVM;
-using CSVM.Extraction;
 using CSVM.Mech3;
 using Xunit;
 
@@ -44,21 +43,17 @@ public class DecodeCacheTests
         Assert.Equal(0, cache.Hits);
     }
 
-    [ExtractedDataFact]
-    public void RepeatingOneGamezPathReturnsTheSameDocumentAndADifferentChapterMisses()
+    [Fact]
+    public void RepeatingOneGamezChapterReturnsTheSameDocumentAndADifferentChapterMisses()
     {
         var cache = new DecodeCache();
-        string root = TestData.DataRoot!;
-        string c1 = SessionPaths.ChapterGamez(root, "C1");
-        string c3 = SessionPaths.ChapterGamez(root, "C3");
 
-        var first = cache.Gamez(c1);
-        var second = cache.Gamez(c1);
-        var other = cache.Gamez(c3);
+        var first = cache.Gamez("C1", () => new GameZ());
+        var second = cache.Gamez("c1", () => new GameZ());
+        var other = cache.Gamez("C3", () => new GameZ());
 
         Assert.Same(first, second);
         Assert.NotSame(first, other);
-        Assert.NotEmpty(first.Nodes);
         Assert.Equal(2, cache.Misses);
         Assert.Equal(1, cache.Hits);
     }

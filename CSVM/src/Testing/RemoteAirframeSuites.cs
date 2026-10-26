@@ -48,13 +48,13 @@ internal static class RemoteAirframeSuites
         + "each against an identical locally flown rig that answers all three")]
     internal static void RemoteAirframe(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
         var textures = new TextureArchive(texturesPath);
-        var planes = GameZ.Load(ctx.PlanesGamezPath);
+        var planes = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);

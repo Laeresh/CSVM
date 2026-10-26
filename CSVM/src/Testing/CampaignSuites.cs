@@ -542,7 +542,7 @@ internal static class CampaignSuites
         + "taken once rather than once per human")]
     internal static void CampaignCoopAttempt(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -565,7 +565,7 @@ internal static class CampaignSuites
         ctx.RequireData(texturesPath, $"{mission.ChapterFolder} textures");
 
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = Flight.Weapons.WeaponDefs.Load(ctx.ZrdrPath, null);
         var cannon = weaponDefs.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
         ctx.Check(cannon != null, $"a CANNON gun exists in the data");
@@ -691,7 +691,7 @@ internal static class CampaignSuites
             throw new SuiteSkippedException($"{CashChapter}/{CashMission} carries no paying reward record");
         }
 
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{CashChapter}/{CashMission} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
@@ -710,7 +710,7 @@ internal static class CampaignSuites
         TextureSet texturesPath = ctx.ChapterTextures(mission.ChapterFolder);
         ctx.RequireData(texturesPath, $"{CashChapter} textures");
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var seatedPos = new Vector3(0f, 800f, 0f);
         var guestPos = new Vector3(0f, 800f, -2000f);
         var profile = CampaignProfileDef.NewProfile("Zachary");
@@ -1282,13 +1282,13 @@ internal static class CampaignSuites
     // drawn, for the whole episode. Driven at two seats, cockpit and chase, over both exits.
     private static void PresentingFramesTheAirframe(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(IntroChapter);
         ctx.RequireData(texturesPath, $"{IntroChapter} textures");
 
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var host = new CutsceneController();
         var world = new Node3D { Name = "PresentationWorld" };
         var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };

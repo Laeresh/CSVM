@@ -110,7 +110,7 @@ internal static class CampaignBlackeSearchSuites
         + "primary, and a player four radii away reads FALSE rather than unanswered")]
     internal static void CampaignBlackeSearch(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -148,7 +148,7 @@ internal static class CampaignBlackeSearchSuites
         + "and a control director drawing for itself lands elsewhere")]
     internal static void NetBlackeWarp(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -200,7 +200,7 @@ internal static class CampaignBlackeSearchSuites
         + "terrain measured under it")]
     internal static void BlackeIntroHandoff(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
@@ -236,14 +236,14 @@ internal static class CampaignBlackeSearchSuites
         + "every held step")]
     internal static void CutsceneHandoffSpeed(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var textures = new TextureArchive(ctx.ChapterTextures(ctx.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         Node3D? marker = null;
         try
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
             var pos = new Vector3(0f, 500f, 0f);
@@ -310,7 +310,7 @@ internal static class CampaignBlackeSearchSuites
         ctx.Host.AddChild(cutscene);
         try
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var rig = HumanRig(ctx, planesGamez, textures, pool, spawn.Position,
                 spawn.Position + spawn.Forward);
             cutscene.BindWorld(world.Runtime, world.Session.Aircraft);
@@ -446,7 +446,7 @@ internal static class CampaignBlackeSearchSuites
         TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -560,7 +560,7 @@ internal static class CampaignBlackeSearchSuites
         string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var live = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(live);
         var pose = PlayerPose(blocks);

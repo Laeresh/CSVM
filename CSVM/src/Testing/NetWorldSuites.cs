@@ -81,11 +81,11 @@ internal static class NetWorldSuites
         + "a host burst that crosses no stage reaches the guest's pool as one sample")]
     internal static void TheHostOwnsTheWorld(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
         var spec = SessionSpec.Parse(new[]
         {
@@ -161,12 +161,12 @@ internal static class NetWorldSuites
         + "nothing of its own for its replicated copies")]
     internal static void TheHostVoicesItsAi(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
         // ⚠ Not --mute: a muted session loads no sound defs and so builds no combat voice at all.
         var spec = SessionSpec.Parse(new[]

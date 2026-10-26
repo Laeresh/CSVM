@@ -853,11 +853,11 @@ internal static class DestroyChoreographySuites
         "a killed AI aircraft's whole fall: the kill starts its self-named destroy def and no ai_crash_* def, the airframe is drawn on every frame of the fall, the hull travels under the flight model until Callback 15 releases it at the authored 3.0 s, Callback 16 hands the anim the velocity it reached THERE, a wreck that meets the ground first plays its surface-indexed crash def and is hidden only then (D21), and the lever/surface command last written by the AI think reads back bit-identical every frame of the fall (BL-451)")]
     internal static void AiWreckFall(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: true, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             ProjectilePool? pool = null;
             try
@@ -926,11 +926,11 @@ internal static class DestroyChoreographySuites
         "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the def's own Callback 3 reaches the view seam the kill binds rather than going counted (D25)")]
     internal static void PlayerDestroyChoreography(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
@@ -961,11 +961,11 @@ internal static class DestroyChoreographySuites
         "after a shot-down player's death and a respawn, mid-eject (a Versus respawn's 3 s) and after the whole choreography, every airframe, wreck and bailing-pilot node the death defs touched is back on its built parent, transform and visibility, on a fixed-wing airframe and on the autogyro, and the cockpit interior stays in its own pass")]
     internal static void DeathRespawnRestPose(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
@@ -996,10 +996,10 @@ internal static class DestroyChoreographySuites
         "binding the crash rig leaves the airframe model under the controller (even the Devastator, whose model root shares the crash defs' authored NAME) and stages every pooled copy in the same reset pose")]
     internal static void CrashRigAnchors(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
@@ -1171,10 +1171,10 @@ internal static class DestroyChoreographySuites
     internal static void NitroBoostAnchors(TestContext ctx)
     {
         const string model = "player_warhawk";
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
@@ -1232,11 +1232,11 @@ internal static class DestroyChoreographySuites
     internal static void NitroBoostFlownRig(TestContext ctx)
     {
         const string model = "player_warhawk";
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             FlightController? player = null;
             try
@@ -1352,11 +1352,11 @@ internal static class DestroyChoreographySuites
         const string model = "player_warhawk";
         const float Dt = 1f / 60f;
         const int Running = 2, Executed = 3;   // AnimRuntime.AnimStateOf's ANIM_STATE numbering
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var built = new List<FlightController>();
             try
@@ -1629,11 +1629,11 @@ internal static class DestroyChoreographySuites
         const string model = "player_warhawk";
         const float Dt = 1f / 60f;
         const int Frames = 900;
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
             using var sounds = new SoundArchive(ctx.SoundsPath);
@@ -1796,11 +1796,11 @@ internal static class DestroyChoreographySuites
     {
         const string model = "player_warhawk";
         const float Dt = 1f / 60f;
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             FlightController? ai = null;
             try
@@ -1937,10 +1937,10 @@ internal static class DestroyChoreographySuites
     internal static void EmitterPrewarm(TestContext ctx)
     {
         const string model = "player_bhawk";
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var controller = new Node3D { Name = "controller_replica" };
             var fake = new CountingEmitterFactory();
@@ -2086,11 +2086,11 @@ internal static class DestroyChoreographySuites
         "a mid-flight AI introduction leaves its crash rig armed rather than built, the roster's pump takes more than one frame to finish it, and the finished rig is the same one an undeferred build makes, while a second aeroplane that is hit before the pump reaches it builds its rig on the damage intake instead (BL-641)")]
     internal static void AiCrashRigDeferral(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             ProjectilePool? pool = null;
             FlightController? pumped = null;
@@ -2201,11 +2201,11 @@ internal static class DestroyChoreographySuites
         "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id, dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck, while a human rig off the same factory keeps player_crash_* (G21)")]
     internal static void AiCrashDefs(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             var factory = new Session.World.WorldEffectsFactory(

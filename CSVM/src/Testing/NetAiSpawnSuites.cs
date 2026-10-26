@@ -60,11 +60,11 @@ internal static class NetAiSpawnSuites
         + "AI reaches its copy as the whole pair, building the copy's pending crash rig first")]
     internal static void GuestsBuildTheHostsLaunches(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, Chapter), $"{Chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         var spec = SessionSpec.Parse(new[]
         {

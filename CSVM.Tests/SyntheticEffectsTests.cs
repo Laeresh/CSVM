@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The synthetic tree's anim and effect records. The compiled archive loads through the engine's
-/// reader, and every definition anchors on a template root the gamez carries. The reader
+/// reader, and every definition anchors on a template root the in-memory gamez carries. The reader
 /// destructibles and the two puffer readers parse. Staging and playing them needs Godot, so the
 /// in-engine suites cover that half.
 /// </summary>
@@ -19,9 +19,8 @@ public class SyntheticEffectsTests
     [Fact]
     public void EveryCompiledDefinitionAnchorsOnATemplateRoot()
     {
-        string root = Built();
-        var gamez = GameZ.Load(SyntheticEffects.GamezUnder(root));
-        var archive = AnimArchive.Load(SyntheticEffects.AnimUnder(root), SyntheticEffects.Folder);
+        var gamez = SyntheticEffects.Gamez();
+        var archive = AnimArchive.Load(SyntheticEffects.AnimUnder(Built()), SyntheticEffects.Folder);
 
         Assert.NotNull(archive);
         Assert.Contains(archive.Defs, d => d.AnimName == "he_ground_effect");
@@ -36,7 +35,7 @@ public class SyntheticEffectsTests
     [Fact]
     public void EveryMeshedTemplateNodeHasItsBox()
     {
-        var gamez = GameZ.Load(SyntheticEffects.GamezUnder(Built()));
+        var gamez = SyntheticEffects.Gamez();
 
         var meshed = gamez.Nodes.Where(n => n.MeshIndex >= 0).ToList();
         Assert.NotEmpty(meshed);
@@ -63,7 +62,6 @@ public class SyntheticEffectsTests
         string fixtures = TestData.TempDir();
         string folder = Path.Combine(fixtures, "synthetic", SyntheticEffects.Folder);
         Directory.CreateDirectory(folder);
-        File.Copy(TestData.Fixture("synthetic", SyntheticEffects.Folder, "templates.json"), Path.Combine(folder, "templates.json"));
         File.WriteAllText(Path.Combine(folder, "cam_anim.json"), "{ \"defs\": [ { \"def\": {} } ] }");
         string zrdr = Path.Combine(fixtures, "synthetic", "zrdr");
         Directory.CreateDirectory(zrdr);

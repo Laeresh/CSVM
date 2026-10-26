@@ -882,7 +882,7 @@ internal static class WorldFidelitySuites
     private static void WithGeneratorLaunch(TestContext ctx, bool collision,
         Action<List<Vector3>, AiGeneratorRuntime, FlightController> body)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(RunChapter);
         ctx.RequireData(texturesPath, $"{RunChapter} textures");
@@ -921,7 +921,7 @@ internal static class WorldFidelitySuites
                 return;
             }
 
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(texturesPath);
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);

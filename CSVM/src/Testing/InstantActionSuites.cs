@@ -44,7 +44,7 @@ internal static class InstantActionSuites
         "was seated on at its parking pose")]
     internal static void InstantActionAce(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -125,7 +125,7 @@ internal static class InstantActionSuites
         // The actual spawn integration: FlightRoster.SpawnAi given an authored scheme/team
         // (the C8 extension) wears them as-is, the ace lands on team 2 flying the configured
         // airframe, not a pilot-index-derived team.
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         var stockLoadouts = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
@@ -427,14 +427,14 @@ internal static class InstantActionSuites
         + "enemy_name and the wingmen read Jack, Tex, Buck, Big John and Betty in slot order")]
     internal static void InstantActionMarkerNames(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireMessages();
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var strings = ctx.Data.Messages;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         var built = new List<FlightController>();
@@ -556,7 +556,7 @@ internal static class InstantActionSuites
         "(leaving off only the descendants that are themselves deactivated)")]
     internal static void InstantActionZeppelin(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -596,7 +596,7 @@ internal static class InstantActionSuites
         if (zepDefs.Count != 1)
             return;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -875,7 +875,7 @@ internal static class InstantActionSuites
         "same seat under a solo scoreboard holds its finish pose")]
     internal static void InstantActionEnd(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -890,7 +890,7 @@ internal static class InstantActionSuites
         // the host's one physics space. A cached collidable C1 world from an earlier suite crashes them there.
         ctx.EvictCollidableWorlds();
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1390,12 +1390,12 @@ internal static class InstantActionSuites
         "Photo Mode, opens one full size and closes it on its cell, and refuses a pending one")]
     internal static void InstantActionWrapup(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         WeaponDef? cannon = weaponDefs.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
         WeaponDef? rocket = weaponDefs.All.FirstOrDefault(w => w.IsRocket);
@@ -1473,7 +1473,7 @@ internal static class InstantActionSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         ctx.RequireMessages();
-        if (StuntMission.Load(GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1")), missionZrdr,
+        if (StuntMission.Load(ctx.ChapterGamez("C1")!, missionZrdr,
                 ctx.Data.Messages) is { } run)
         {
             StuntCaptureSuites.CheckShortRunWrapup(ctx, run, "C1");
@@ -1498,14 +1498,14 @@ internal static class InstantActionSuites
     internal static void InstantActionStuntSummary(TestContext ctx)
     {
         string chapter = "C1", mission = "IA1";
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var chapterGamez = ctx.ChapterGamez(chapter);
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
         ctx.RequireMessages();
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         var messages = ctx.Data.Messages;
         StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
             ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
@@ -1578,12 +1578,12 @@ internal static class InstantActionSuites
     internal static void StuntScoresScripted(TestContext ctx)
     {
         string chapter = "C1", mission = "IA1";
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        var chapterGamez = ctx.ChapterGamez(chapter);
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
         ctx.RequireMessages();
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         var messages = ctx.Data.Messages;
         StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
             ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
@@ -1742,9 +1742,9 @@ internal static class InstantActionSuites
     // the finish pose.
     private static void StuntRunFliesOn(TestContext ctx, FlightController seat, string missionZrdr)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
+        var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         ctx.Check(run is { TotalCount: >= 2 }, $"C1/IA1 ships at least two danger zones for the hold's stunt run");
         if (run is not { TotalCount: >= 2 })
         {

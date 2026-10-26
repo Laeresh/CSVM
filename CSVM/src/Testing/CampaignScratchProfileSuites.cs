@@ -37,7 +37,7 @@ internal static class CampaignScratchProfileSuites
         + "and the original's file stays byte-identical, with no third folder created")]
     internal static void CampaignScratchProfiles(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
@@ -128,7 +128,7 @@ internal static class CampaignScratchProfileSuites
         TextureSet texturesPath, StringBuilder report)
     {
         using var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var human = CampaignPlayerDeathSuites.HumanRig(ctx, planesGamez, textures, pool,

@@ -40,7 +40,7 @@ internal static class CampaignStuntMarkerSuites
         + "OBJECTIVE1, awake from mission start, is still open")]
     internal static void CampaignCm11StuntMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -106,7 +106,7 @@ internal static class CampaignStuntMarkerSuites
         MissionTargets targets, Messages messages, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;

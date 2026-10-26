@@ -231,7 +231,7 @@ internal static class CampaignTravelersDeleteSuites
 
     private static Mission Open(TestContext ctx, string chapter, string mission, string? subject)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} zrdr");
@@ -262,7 +262,7 @@ internal static class CampaignTravelersDeleteSuites
     {
         var blocks = AiSkills.LoadRoster(run.Zrdr);
         var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var director = CampaignDirector.Create(run.Script, run.Campaign,
             CampaignProfileDef.NewProfile("Zachary"), null, run.Zrdr);
         var textures = new TextureArchive(ctx.ChapterTextures(run.Chapter));

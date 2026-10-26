@@ -1904,7 +1904,7 @@ internal static class LandingApproachSuites
     {
         var planes = BranchPlanes(world);
         ctx.Check(planes.Count > 0, $"'{ExtendHookAnim}' authors the airframe branches this reads");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         int read = 0;
         foreach (string plane in planes)
         {
@@ -3549,7 +3549,7 @@ internal static class LandingApproachSuites
     private static void SpawnRoster(TestContext ctx, TestWorld world, CampaignDirector director,
         string missionZrdr, ProjectilePool pool, StringBuilder report)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
@@ -3899,7 +3899,7 @@ internal static class LandingApproachSuites
         try
         {
             var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
-            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures,
+            var model = new PlaneBuilder(ctx.Planes, textures,
                 dockingHook: true).Build(planeNode);
             var rig = new FlightController
             {

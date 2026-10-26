@@ -187,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, large formats
 
 21. ◐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
-22. ◐ GameZ and `planes.zbd`
+22. ☑ GameZ and `planes.zbd`
 
 ### Wave D, ROF and disc sources
 
@@ -933,9 +933,53 @@ and `compiled-archives.md`.
 Stderr notes such as "anim def duplicate
 anim ref" (`ZbdPlan.Classify`) mark data quirks the reader must tolerate the same way.
 
-## C22 ◐ GameZ and `planes.zbd`
+## C22 ☑ GameZ and `planes.zbd`
 
-**Reader landed, engine switch pending.** `GameZZbd.Read(byte[])` and
+**Landed.** By default no engine path reads an extracted gamez or planes tree. `GameData.Planes`
+holds `planes.zbd` (`GameZZbd.Load(game, GameData.PlanesPath)`, loaded in `GameData.Load` and read
+as absent on a decode failure, as the other slots are), and `ChapterData.Gamez` the chapter's
+`gamez.zbd`, decoded on its first read through `ChapterData.GamezSource`, a `Lazy` the install's
+chapter loader holds beside the chapter's textures, so a texture-only caller and the empty stage
+never decode it. `SessionArchives.OpenFor` takes a `Func<GameZ?>` in place of `gamezPath` (read
+inside the `gamez` startup phase, so a first decode is still timed there; a null world fails the
+build) and lost its `decode` argument; `DecodeCache.Gamez(chapter, load)` keys by chapter
+(Mech3 cannot name `ChapterData`, family 3 under Spec's 11). `GameSession` picks the empty stage's
+`Data.Planes` or the chapter's world (through the cache when the launcher hands one);
+`BuildState.GamezPath` and `PlanesGamezPath` are deleted; `WorldSession.Options.PlanesGamez`
+replaces `PlanesGamezPath`; `InspectionLabs`, `Probes.Markers`/`Loadouts` and `ProbeRunner` take
+the model. The suites read `TestContext.ChapterGamez(chapter)` (the run's cache over the game
+data), `ctx.Planes` (SKIP without one), a `RequireData(GameZ?, ...)` overload, and
+`ctx.PlanesCopy()`, a fresh decode for a suite that edits the model: `plane-rig`'s cut firepoint
+did, and leaked into later suites once planes became shared (`remote-airframe`,
+`targeting-candidates`); `clutter-mesh-lift` restores the chains it clears in a `finally`. The
+synthetic aircraft are built in memory (`SyntheticPlane.Gamez` over the new
+`Tooling/SyntheticPlaneRecords.cs`, 551 nodes and 158 boxes as code) and handed out as
+`SyntheticGameData.Planes`; the effect templates likewise (`SyntheticEffects.Gamez`, which
+`EffectStageSuiteHelper` reads). Both were checked equal to the JSON trees they replace before the
+fixtures went (`ModelDiff`, planes 54,319 leaves, effects 6,973). `fixtures/synthetic/planes/` and
+`fixtures/synthetic/probe_effects/templates.json` are deleted; the `plane` and `effects` families
+stay for their reader and anim records. `GameZ.Load` stays as the modding path (Decision 18) and
+reads the fork's shape only (Decision 20): `models.json`, `textures.json`, flat nodes with `data`,
+`translate`/`rotate`/`original`, `tri_strip`, `show_backface`, `priority`, light `vertices`,
+`texture_index`. The `gamez-plane` and `gamez-lights` unit fixtures were rewritten into that shape
+and gained a `textures.json`; the model diff keeps comparing `GameZ.Load(extracted)` with
+`GameZZbd` in place.
+
+Unused now, for E43: `BasePaths.PlanesGamezPath` (still filled by `Resolve` and the suites'
+own `BasePaths`), `TestContext.PlanesGamezPath`, `SessionPaths.ChapterGamez` (read by units over
+an extraction only), `SessionSpec.Gamez` (`--gamez=`, ignored by `GameSession`), `PreferUnzipped`
+for gamez and planes, and the `gamez` `ZbdExtraction` mode (`ZbdPlan`'s `gamez`/`planes` row).
+Still reading `extracted/`: `SessionPaths.HasAnyChapterWorld`, which picks
+`Launcher.FailedBuildWarning`'s words (E41's source picker should replace it).
+
+Known costs: `planes.zbd` decodes at launch (about 39 ms Debug) and stays resident; the install's
+chapter loader holds the last chapter's world; one `GameZ` per chapter is now shared by every
+rebuild of it, so the read-only contract `DecodeCache` states binds game sessions too. A suite
+world's chapter decode runs before the harness's build watch starts, as B15's textures do.
+
+**Verified.** <pending orchestrator run>
+
+**Reader (kept from the reader landing).** `GameZZbd.Read(byte[])` and
 `GameZZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/GameZZbd.cs`) decode a chapter's
 `gamez.zbd` or the root `planes.zbd` into the existing `GameZ` model: nodes, meshes, materials and
 the texture table, which `GameZ` now exposes to the reader as the internal `TextureNames` (the one
@@ -978,7 +1022,10 @@ they record the free-list links of free slots, which the reader skips.
 ms, C1B 24, C1C 17, C2 32, C2B 14, C3 35, C4 43, C5 56, planes 39. A session decodes its chapter
 plus planes, under 100 ms.
 
-**Remaining switch work (after A3).**
+**Original approach (kept for reference).**
+
+**Switch plan (after A3).** Changed in the landing: the legacy path stayed in the engine as the
+modding path (Decision 18) rather than moving to `CSVM.Tests/Oracle/`.
 
 1. **The game-data slot.** The chapter part of A3's value carries the chapter's `GameZ`
    (`ZBD/<chapter>/gamez.zbd`), the chapter-independent part the planes `GameZ`
@@ -994,10 +1041,6 @@ plus planes, under 100 ms.
    `TextureNames` as the reader does, and the theory compares that against the reader. Unused
    afterwards, for E43: `BasePaths.PlanesGamezPath`, `SessionPaths.ChapterGamez`, the `gamez`
    `ZbdExtraction` mode.
-
-**Verified.** <pending orchestrator run>
-
-**Original approach (kept for reference).**
 
 **Goal.** `GameZ` builds its node graph for every chapter and for `planes.zbd` from the game bytes.
 
@@ -1364,8 +1407,9 @@ folder holds loads from there, and every other archive from the game files; with
 nothing reads unzbd output.
 
 **Evidence (confidence: lead-only).** Decisions 18-22. The readers exist: B11, A3 and B15 moved
-interp's, messages' and textures' JSON/zip readers to `CSVM.Tests/Oracle/*Legacy.cs`; C22, B13,
-C21 and B14 keep theirs in the engine until their switch.
+interp's, messages' and textures' JSON/zip readers to `CSVM.Tests/Oracle/*Legacy.cs`; C22 kept
+`GameZ.Load` in the engine, fork shape only, unwired; B13, C21 and B14 keep theirs in the engine
+until their switch.
 
 **Approach.** Move the three oracles back into the engine. In `GameData.Load` and its chapter
 loader, pick per archive: the modding folder's file when present (the path layout today's

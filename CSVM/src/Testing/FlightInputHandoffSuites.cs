@@ -115,7 +115,7 @@ internal static class FlightInputHandoffSuites
         + "pilot holding the button flies again with a full tank")]
     internal static void FlightLiveRespawnGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
@@ -126,7 +126,7 @@ internal static class FlightInputHandoffSuites
         FlightController? pilot = null;
         try
         {
-            pilot = HumanRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures, pool);
+            pilot = HumanRig(ctx, ctx.Planes, textures, pool);
             float tank = pilot.Fuel.Capacity;
             if (tank <= 0f)
             {
@@ -183,15 +183,15 @@ internal static class FlightInputHandoffSuites
         + "takes neither in flight while a crash still returns it")]
     internal static void StuntRespawnTapHold(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        var chapterGamez = ctx.ChapterGamez("C1");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
+        var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         if (run is not { TotalCount: >= 3 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than three danger zones");
@@ -203,7 +203,7 @@ internal static class FlightInputHandoffSuites
         FlightController? pilot = null;
         try
         {
-            pilot = HumanRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures, pool, StuntSpawnSpeed);
+            pilot = HumanRig(ctx, ctx.Planes, textures, pool, StuntSpawnSpeed);
             pilot.Stunt = run;
             var start = pilot.WorldPosition;
             Fly(pilot, 30);
@@ -304,15 +304,15 @@ internal static class FlightInputHandoffSuites
         + "crash runs the count as well")]
     internal static void StuntStartCount(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        var chapterGamez = ctx.ChapterGamez("C1");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
+        var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         if (run is not { TotalCount: >= 3 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than three danger zones");
@@ -324,7 +324,7 @@ internal static class FlightInputHandoffSuites
         FlightController? pilot = null;
         try
         {
-            pilot = HumanRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures, pool, StuntSpawnSpeed);
+            pilot = HumanRig(ctx, ctx.Planes, textures, pool, StuntSpawnSpeed);
             pilot.Stunt = run;
             pilot.RerunCount = StartCount.Rerun;
             // The spawn state a plain respawn leaves, which GO must reproduce bit for bit.

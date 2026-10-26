@@ -437,7 +437,7 @@ internal static class NetCombatSuites
     internal static SessionSpec MatchSpec(TestContext ctx, out IReadOnlyList<SpawnPoint> table,
         params string[] extraArgs)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
@@ -471,7 +471,7 @@ internal static class NetCombatSuites
 
         if (gateChapterGamez)
         {
-            ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+            ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         }
 
         ctx.Note($"arena: {ctx.Chapter}/{mission} and its net.zrd table");

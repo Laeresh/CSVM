@@ -35,7 +35,7 @@ internal static class ExhaustSmokeSuites
         + "which a scheduled capture press reaches the same way")]
     internal static void ExhaustSmokeCharge(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
@@ -44,7 +44,7 @@ internal static class ExhaustSmokeSuites
         FlightController? pilot = null;
         try
         {
-            pilot = IdlingRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures);
+            pilot = IdlingRig(ctx, ctx.Planes, textures);
             if (pilot.ExhaustSmoke is not { } smoke)
             {
                 ctx.Check(false, $"{ctx.PlaneName}: the flown airframe carries the exhaust markers the smoke needs");
@@ -103,12 +103,12 @@ internal static class ExhaustSmokeSuites
         + "plume on its own step once the desired lever runs ahead of the live one")]
     internal static void ExhaustSmokeAi(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ai = null;

@@ -81,7 +81,7 @@ internal static class NetPositionalStartSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
@@ -126,10 +126,10 @@ internal static class NetPositionalStartSuites
         + "host building none of the guest's rounds")]
     internal static void SwapRewire(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(SwapChapter), $"{SwapChapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, SwapChapter), $"{SwapChapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(SwapChapter), $"{SwapChapter} gamez");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, SwapChapter, SwapStage), $"{SwapChapter}/{SwapStage} zrdr");
         AirframeSwapCode? found = null;
         foreach (var code in AirframeSwapCodes.Table)

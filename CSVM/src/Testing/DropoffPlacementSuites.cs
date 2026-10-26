@@ -88,7 +88,7 @@ internal static class DropoffPlacementSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {MissionSeq} -> {chapter}/{folder}");
@@ -131,7 +131,7 @@ internal static class DropoffPlacementSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {UnposedMissionSeq} -> {chapter}/{folder}");
@@ -418,7 +418,7 @@ internal static class DropoffPlacementSuites
         var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
-            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures).Build(PlaneNode);
+            var model = new PlaneBuilder(ctx.Planes, textures).Build(PlaneNode);
             var rig = new FlightController
             {
                 PlaneModel = model,

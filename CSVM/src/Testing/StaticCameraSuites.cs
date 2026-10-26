@@ -263,7 +263,7 @@ internal static class StaticCameraSuites
 
     private static (TextureArchive Textures, string ChapterZrdr) Inputs(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
@@ -386,7 +386,7 @@ internal static class StaticCameraSuites
     private static void Fly(TestContext ctx, TextureArchive textures, string chapterZrdr,
         string? pinnedView, float altitude, Action<FlightController, Camera3D, GameClock> body)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();

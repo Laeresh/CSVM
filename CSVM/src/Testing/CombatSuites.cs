@@ -28,10 +28,10 @@ internal static class CombatSuites
     [Suite("loadout-bind", "every stock loadout binds to its model with every marker resolved")]
     internal static void LoadoutBind(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
-        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.Data.Messages, ctx.PlanesGamezPath, ctx.ChapterTextures("C1"),
+        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.Data.Messages, ctx.Data.Planes, ctx.ChapterTextures("C1"),
             "", ctx.LoadoutOverride);
         ctx.Check(r.Error == null, $"loadout inputs load error={r.Error ?? "-"}");
         if (r.Error != null)
@@ -54,7 +54,7 @@ internal static class CombatSuites
         // belt lights land at the original's physical positions, gaps included.
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         var stock = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
@@ -206,12 +206,12 @@ internal static class CombatSuites
     [Suite("weapons-fire", "all 48 weapons mount and fire from a built plane")]
     internal static void WeaponsFire(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         // The pool holds the archive past construction (it bakes the tracer and impact stand-ins),
         // so it is disposed only after the self-test has run.
@@ -800,13 +800,13 @@ internal static class CombatSuites
     [Suite("loadout-forrig", "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock")]
     internal static void LoadoutForRig(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         var stock = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
@@ -1454,13 +1454,13 @@ internal static class CombatSuites
         + "first round while a Dogfight pair both spend it and ring the ricochet")]
     internal static void IncomingFireCues(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -1706,10 +1706,10 @@ internal static class CombatSuites
         + "exterior overlay only outside first person, where it poses at the rig's own camera1")]
     internal static void CanopyHoleDraws(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
@@ -1832,12 +1832,12 @@ internal static class CombatSuites
         "no surface test anywhere in it")]
     internal static void GrazeBounce(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         float? authoredBounce = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "bounce_factor", "crash");
         ctx.Check(authoredBounce is { } bounce && Mathf.IsEqualApprox(stats.BounceFactor, bounce),
@@ -2052,11 +2052,11 @@ internal static class CombatSuites
 
         // --- the spawn half: through the real spawner, the glue that can silently drop either the
         // damage ledger or the loadout.
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         FlightController? spawned = null;
         ProjectilePool? projectiles = null;
@@ -2131,12 +2131,12 @@ internal static class CombatSuites
         "every later spawn and every human rig reads come out unperturbed")]
     internal static void AiSpawnJitter(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         FlightController? flying = null;
         ProjectilePool? pool = null;
@@ -2796,12 +2796,12 @@ internal static class CombatSuites
         "correction), and a Fury dies to a few HE rockets")]
     internal static void AirToAir(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         // The first gun carrying both damage magnitudes, data-driven, not a hardcoded id.
         WeaponDef? gun = weapons.All.FirstOrDefault(w =>
@@ -3363,12 +3363,12 @@ internal static class CombatSuites
         "gated, damage never is)")]
     internal static void TeamModel(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         WeaponDef? gun = weapons.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");

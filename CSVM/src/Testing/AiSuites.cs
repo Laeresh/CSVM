@@ -43,14 +43,14 @@ internal static class AiSuites
         "bindings, and a late AI failure restores pilot/RNG state and consumes no identity")]
     internal static void FlightRosterTransaction(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         FlightController? spawned = null;
@@ -210,12 +210,12 @@ internal static class AiSuites
         "of those flips back")]
     internal static void InertAircraft(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         WeaponDef? gun = weaponDefs.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
@@ -397,13 +397,13 @@ internal static class AiSuites
         "a crashed host, plus the aim assist's turret candidate list is fed")]
     internal static void CarriedTurrets(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         ctx.Check(turretDefs.All.Any(d => d.Carried),
@@ -619,13 +619,13 @@ internal static class AiSuites
         "when the emplacement's own destructible dies")]
     internal static void WorldTurrets(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         ctx.Check(turretDefs.All.Count(d => !d.Carried) == 26,
@@ -1115,13 +1115,13 @@ internal static class AiSuites
         "or by its burst's splash, while a neighbour's burst still reaches it")]
     internal static void TurretSelfFire(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
 
@@ -1284,7 +1284,7 @@ internal static class AiSuites
         + "no earlier carrier (the same log applied with a cut that reaches it kills them all)")]
     internal static void C1AaGuns(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -1307,7 +1307,7 @@ internal static class AiSuites
         ctx.Check(carryThrough == null,
             $"CM07 is chapter 1's first mission, so the backwards walk finds no earlier carrier (got {carryThrough})");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
 
@@ -1448,12 +1448,12 @@ internal static class AiSuites
         "and killable with the kill attributed to the shooter through Downed")]
     internal static void AiActor(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         WeaponDef? gun = weapons.All.FirstOrDefault(w =>
             w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
@@ -1643,12 +1643,12 @@ internal static class AiSuites
         "throttle x fd_speed + 5 m/s where the near rig on the same orders does not")]
     internal static void AiFarFieldPlant(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         var humanPos = new Vector3(0f, 500f, 0f);
@@ -1770,12 +1770,12 @@ internal static class AiSuites
         "gate, A/B'd in place)")]
     internal static void AiGunnery(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var skills = AiSkills.Load(ctx.ZrdrPath);
@@ -2126,12 +2126,12 @@ internal static class AiSuites
         "same geometry, every transition in the original's own mode vocabulary")]
     internal static void AiModes(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var skills = AiSkills.Load(ctx.ZrdrPath);
@@ -2659,7 +2659,7 @@ internal static class AiSuites
         + "for 30 s, nor does a live friendly holding the same human")]
     internal static void AiVoice(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
         // The WA-Turret leg builds the carrier's gunner off the turret table.
@@ -2669,7 +2669,7 @@ internal static class AiSuites
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var defs = SoundDefs.Load(ctx.ZrdrPath);
@@ -3359,13 +3359,13 @@ internal static class AiSuites
         + "direction keeps restoring on the very same frame throughout")]
     internal static void AiEngineRearm(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var textures = new TextureArchive(texturesPath);
@@ -3537,7 +3537,7 @@ internal static class AiSuites
         + "gives that pair, where the old inverse-distance mapping's MaxDistance fade was zero")]
     internal static void AiWeaponEmitters(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
@@ -3547,7 +3547,7 @@ internal static class AiSuites
         // the reach the session ships.
         using var authored = TestContext.AtAuthoredSoundRadii();
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -3716,13 +3716,13 @@ internal static class AiSuites
         + "`sound` log line either way")]
     internal static void AiEngineListeners(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var textures = new TextureArchive(texturesPath);
@@ -3902,7 +3902,7 @@ internal static class AiSuites
         "its authored altitude, never seating on the edgeless anchor node")]
     internal static void AiNetFollow(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -3937,7 +3937,7 @@ internal static class AiSuites
         }
         ctx.Check(anchorEdgeless, $"…and the anchor node 10 is parked off the ring, edgeless");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         FlightController? ai = null;
@@ -4045,7 +4045,7 @@ internal static class AiSuites
         + "replacing all three of the gates player.json and the airframe def seated")]
     internal static void EmptyStageNet(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -4086,7 +4086,7 @@ internal static class AiSuites
         ctx.Check(closed,
             $"…and its {net.Edges.Count} edges close the loop, every node degree 2, so the walk never dead-ends");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, ctx.PlaneName, null);
         var textures = new TextureArchive(texturesPath);

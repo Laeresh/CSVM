@@ -285,14 +285,14 @@ internal static class CampaignSnapshotSuites
     // in the profile directory or in its own.
     private static void StuntRunWritesNoSnap(TestContext ctx, string root, string profileDir, StringBuilder report)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C4");
+        var chapterGamez = ctx.ChapterGamez("C4");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
-        if (!File.Exists(gamezPath) || !Directory.Exists(missionZrdr))
+        if (chapterGamez == null || !Directory.Exists(missionZrdr))
         {
             return;
         }
 
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages);
+        var run = StuntMission.Load(chapterGamez, missionZrdr, ctx.Data.Messages);
         if (run == null)
         {
             return;

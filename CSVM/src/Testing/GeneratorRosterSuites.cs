@@ -47,7 +47,7 @@ internal static class GeneratorRosterSuites
         + "surface launch of the patrolboat hull")]
     internal static void GeneratorRosterParams(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -77,7 +77,7 @@ internal static class GeneratorRosterSuites
         CheckUnresolvedLabel(ctx, defs);
         var skills = AiSkills.Load(ctx.ZrdrPath);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         FlightController? launched = null;

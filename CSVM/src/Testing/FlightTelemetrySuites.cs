@@ -39,12 +39,12 @@ internal static class FlightTelemetrySuites
         "step, in the invariant culture")]
     internal static void FlightTelemetryGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         var textures = new TextureArchive(texturesPath);
         bool wasCollected = Log.ConsoleShows("flight", Log.Level.Debug);

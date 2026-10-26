@@ -7,8 +7,8 @@ One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traf
 Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Mech3/GameZ.cs
-Loads a mech3ax GameZ extraction (zip or unpacked dir) into plain C# objects (nodes, models,
-materials, textures), reading both the v0.6.1 "legacy" and the fork "unified" shapes. It carries
+The GameZ model (nodes, models, materials, textures). `GameZZbd` builds it from the game files;
+`Load` reads unzbd's output (zip or unpacked dir) in the fork's shape, the modding path. It carries
 the fields the builders read: `IntersectSurface`, `Active`, `ZoneId`, `MissionTargetWord`,
 `SoilId`, `OverlayPasses`, `ZoneSet`, each model's `Lighting`/`Fog`, and the World node's partition
 grid as both a flat `PartitionNodes` and the per-cell `PartitionCellNodes` a `WorldPartitionGrid`
@@ -967,19 +967,19 @@ binds; `StageFlown` puts the one flown airframe in the node table and parks its 
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
-`OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
+`OpenFor(ArchiveIntent, gamez, textures, soundsPath, zrdrPath, mute)` opens the five
 archives one chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns
 the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair the intent implies:
 `Session` and `Lab` set the texture flag, only `Lab` the sound flag, `Suite` neither, though the
 harness's `TestWorld` owns its texture archive until the world is destroyed. One seam for
 `GameSession`, the anim lab and the harness, so none hand-sets those flags. `StartupProfile` calls
 are unconditional, a no-op with no session under measurement, so the harness drives the same code
-blind. The optional `decode` argument makes only the returned `Gamez` a shared read-only instance.
+blind. `gamez` is a function read inside the `gamez` phase, so a chapter's first decode is timed.
 
 ## src/Mech3/DecodeCache.cs
-The decoded inputs a world build can reuse, keyed by the absolute paths they were decoded from:
-`Gamez(path)` and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`. The paths are
-the whole key because they already carry data root, chapter and mission; collision, mute, the
+The decoded inputs a world build can reuse: `Gamez(chapter, load)`, keyed by chapter since one store
+serves one launch's game data, and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`,
+keyed by the paths, which carry data root, chapter and mission; collision, mute, the
 emitter factory and the prewarm list all act after the decode, on objects this never holds. It owns
 nothing disposable and nothing Godot. **Everything handed back is shared and read-only by
 contract**, which is why `AnimProgram`'s three collections are `IReadOnlyList`; `GameZ` has no such

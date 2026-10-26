@@ -5,15 +5,17 @@ This page documents format facts only and contains no game asset data. The binar
 `gamez.zbd` and `planes.zbd`, and the reader that builds the same model from it, are in
 [gamez-zbd.md](gamez-zbd.md).
 
-> **The extracted JSON has two supported shapes.** The project fork emits a flat node with the
+> **CSVM reads the fork's JSON shape only.** The v0.6.1 shape is no longer read; its spellings
+> survive below as the mapping. The project fork emits a flat node with the
 > variant under `data`: `mesh_index` -> `model_index`; `children` -> `child_indices`;
 > `transformation` -> `transform` (no transform is the string `"Initial"`); `matrix.a...i` ->
 > `original.r00...r22` plus `scale`; `meshes.json` -> `models.json`; polygon `unk04` -> `priority`;
 > `triangle_strip` -> `tri_strip`; mesh light `extra` -> `vertices`; material texture names become
 > `texture_index` into `textures.json`; and partition-cell `nodes[].index` becomes
 > `values[].node_index`. The legacy shape wraps variants in `{"Object3d": {...}}`. In the fork,
-> a node's own 1-based, duplicated `index` is not the value `child_indices` reference. The Godot
-> loader accepts both shapes; see `GameZ.cs` in [architecture.md](../architecture.md).
+> a node's own 1-based, duplicated `index` is not the value `child_indices` reference. The
+> session reads the game files; `GameZ.Load` reads this JSON as the modding path; see `GameZ.cs`
+> in [architecture.md](../architecture.md).
 ## Reference
 
 - `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).

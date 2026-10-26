@@ -69,9 +69,9 @@ internal static class NetStuntRaceSuites
     internal static void ANetworkRaceKeepsOneBoard(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var ambient = NetCombatSuites.Ambient.Save();
@@ -97,9 +97,9 @@ internal static class NetStuntRaceSuites
     internal static void ANetworkRaceEndsOnTheHostsWord(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var ambient = NetCombatSuites.Ambient.Save();
@@ -131,9 +131,9 @@ internal static class NetStuntRaceSuites
     {
         const string cell = "respawn";
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var ambient = NetCombatSuites.Ambient.Save();

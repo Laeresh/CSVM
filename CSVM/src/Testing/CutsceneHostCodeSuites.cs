@@ -71,7 +71,7 @@ internal static class CutsceneHostCodeSuites
         + "out of play changes nothing")]
     internal static void CampaignWingmanRemoval(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, HookChapter, HookMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, HookChapter);
@@ -171,7 +171,7 @@ internal static class CutsceneHostCodeSuites
             $"the event straight after it is the wingman's own line, '{SoundAfterCode(world.Runtime, HookAnim, RemoveWingmanCode) ?? "(none)"}'");
 
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;

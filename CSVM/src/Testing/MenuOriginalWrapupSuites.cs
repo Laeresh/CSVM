@@ -186,12 +186,12 @@ internal static class MenuOriginalWrapupSuites
     // post-its. The last frame is held back past the page waking and fills its print on landing.
     private static void Photographs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
-        string gamez = SessionPaths.ChapterGamez(ctx.DataRoot, "C4");
+        var gamez = ctx.ChapterGamez("C4");
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
         ctx.RequireData(gamez, $"C4 gamez");
         ctx.RequireData(zrdr, $"C4/IA1 zrdr");
         ctx.RequireMessages();
-        var run = StuntMission.Load(GameZ.Load(gamez), zrdr, ctx.Data.Messages)
+        var run = StuntMission.Load(gamez!, zrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException("C4/IA1 ships no Danger Zones");
 
         string? previous = StuntCapture.DirectoryOverride;

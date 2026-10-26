@@ -27,7 +27,7 @@ public class SyntheticPlaneTests
     [Fact]
     public void TheModelCarriesTheRootTheMarkerRigAndTheCockpit()
     {
-        var gamez = GameZ.Load(Path.Combine(Built(), "extracted", "planes"));
+        var gamez = SyntheticPlane.Gamez();
 
         Assert.NotNull(gamez.FindByName(SyntheticPlane.Plane));
         foreach (string name in new[] { "geometry", "healthy", "markers", "dontmove", "destroyed", "cockpit1",
@@ -51,7 +51,7 @@ public class SyntheticPlaneTests
     [Fact]
     public void EveryGeneratedBoxIsClosedAndWoundOutward()
     {
-        var gamez = GameZ.Load(Path.Combine(Built(), "extracted", "planes"));
+        var gamez = SyntheticPlane.Gamez();
 
         Assert.NotEmpty(gamez.Meshes);
         foreach (var mesh in gamez.Meshes)
@@ -143,7 +143,7 @@ public class SyntheticPlaneTests
     public void TheFighterIsASecondDistinctAirframeWithItsOwnRigDefsAndFit()
     {
         string root = Built();
-        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        var gamez = SyntheticPlane.Gamez();
         string zrdr = Path.Combine(root, "extracted", "zrdr");
 
         var probeRig = MarkerRig.Extract(gamez, SyntheticPlane.Plane)!;
@@ -183,7 +183,7 @@ public class SyntheticPlaneTests
     public void TheCustomPlaneAirframesAreDistinctAndArmTheIdsACustomBuildComposes()
     {
         string root = Built();
-        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        var gamez = SyntheticPlane.Gamez();
         string zrdr = Path.Combine(root, "extracted", "zrdr");
         var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter)!;
         var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
@@ -227,7 +227,7 @@ public class SyntheticPlaneTests
     public void TheSixMoreShippedNamesAreDistinctAirframesWithTheirOwnDefsRowsAndFits()
     {
         string root = Built();
-        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        var gamez = SyntheticPlane.Gamez();
         string zrdr = Path.Combine(root, "extracted", "zrdr");
         var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter)!;
         var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
@@ -263,7 +263,7 @@ public class SyntheticPlaneTests
     public void TheVariantsAndTheTurretTableResolveAgainstTheirAirframes()
     {
         string root = Built();
-        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        var gamez = SyntheticPlane.Gamez();
         string zrdr = Path.Combine(root, "extracted", "zrdr");
         var weapons = WeaponDefs.Load(zrdr, null);
 

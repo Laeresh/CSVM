@@ -1463,10 +1463,10 @@ internal static class GraphicsSwitchSuites
     private static void RequireData(TestContext ctx, string? chapter = null)
     {
         chapter ??= ctx.Chapter;
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
     }
 
     // A Water Quality apply as the Options accept makes it, then the steps a reading waits for.

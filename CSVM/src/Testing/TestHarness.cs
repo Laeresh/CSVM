@@ -966,6 +966,11 @@ public sealed class TestContext
     /// concurrent run can overwrite its report or its per-suite artifacts.</summary>
     public string ScratchDir => ShardScratch ?? Path.Combine(RepoRoot, ".scratch");
 
+    /// <summary>The aircraft archive out of the run's game data, or SKIP the way
+    /// <see cref="RequireData(GameZ, FormattableString)"/> does. Shared, so read-only.</summary>
+    public GameZ Planes =>
+        Data.Planes ?? throw new SuiteSkippedException($"{GameData.PlanesPath} not found: {Game?.Location ?? "no game install"}");
+
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
@@ -1051,6 +1056,30 @@ public sealed class TestContext
     /// <summary>The chapter's texture archive out of the run's game data, empty where it has none.</summary>
     public TextureSet ChapterTextures(string chapter) => Data.LoadChapter(chapter, Mission).Textures;
 
+    /// <summary>Ends the suite as SKIP when a world the suite needs is not in the game data. That is
+    /// no install, or a chapter or aircraft archive the synthetic data does not carry.</summary>
+    public void RequireData(GameZ? gamez, FormattableString what)
+    {
+        if (gamez == null)
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>A private aircraft archive, decoded afresh, for a suite that edits the model; the
+    /// shared <see cref="Planes"/> must never be written. SKIP as that one does.</summary>
+    public GameZ PlanesCopy() =>
+        (SyntheticData ? Tooling.SyntheticPlane.Gamez() : GameZZbd.Load(Game, GameData.PlanesPath))
+        ?? throw new SuiteSkippedException($"{GameData.PlanesPath} not found: {Game?.Location ?? "no game install"}");
+
+    /// <summary>The chapter's world out of the run's game data, null where it has none. Decoded once
+    /// per run and shared with every world built on the chapter, so read-only.</summary>
+    public GameZ? ChapterGamez(string chapter)
+    {
+        var data = Data.LoadChapter(chapter, Mission);
+        return _decode.Gamez(chapter, () => data.Gamez);
+    }
+
     /// <summary>The install's boot scripts, or SKIP the way <see cref="RequireData"/> does when
     /// the run has no install or the install no <c>interp.zbd</c>.</summary>
     public InterpScripts RequireInterp() =>
@@ -1098,9 +1127,7 @@ public sealed class TestContext
             return;
         }
 
-        RequireData(PlanesGamezPath, $"planes gamez");
-        _syntheticPlaneNodes ??= new HashSet<string>(
-            GameZ.Load(PlanesGamezPath).Nodes.Select(n => n.Name), StringComparer.Ordinal);
+        _syntheticPlaneNodes ??= new HashSet<string>(Planes.Nodes.Select(n => n.Name), StringComparer.Ordinal);
         foreach (string name in nodeNames)
         {
             if (!_syntheticPlaneNodes.Contains(name))
@@ -1343,9 +1370,9 @@ public sealed class TestContext
 
     private TestWorld BuildWorld(string chapter, bool collision, string mission)
     {
-        string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
+        var gamez = ChapterGamez(chapter);
         var texturesPath = ChapterTextures(chapter);
-        RequireData(gamezPath, $"chapter {chapter} gamez");
+        RequireData(gamez, $"chapter {chapter} gamez");
         RequireData(texturesPath, $"chapter {chapter} textures");
 
         var buildWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1360,8 +1387,8 @@ public sealed class TestContext
             var stage = new Node3D { Name = $"TestWorld_{chapter}" };
             Host.AddChild(stage);
             // The sound archive is this scope's, the texture archive the returned world's.
-            var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
-                SoundsPath, ZrdrPath, Mute, _decode);
+            var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, () => gamez, texturesPath,
+                SoundsPath, ZrdrPath, Mute);
             textures = archives.Textures;
             using var sounds = archives.Sounds;
             var ambience = Ambience;
@@ -1387,7 +1414,7 @@ public sealed class TestContext
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
                     Cutscenes = CutsceneRoots ? CSVM.Launch.GameSession.CutsceneWorldNames : null,
                     LandingTriggers = CutsceneRoots,
-                    PlanesGamezPath = PlanesGamezPath,
+                    PlanesGamez = Data.Planes,
                     Decode = _decode,
                     TexturesOutliveBuild = archives.TexturesOutliveBuild,
                     SoundsOutliveBuild = archives.SoundsOutliveBuild,

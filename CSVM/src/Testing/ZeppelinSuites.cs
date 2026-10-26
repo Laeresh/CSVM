@@ -381,7 +381,7 @@ internal static class ZeppelinSuites
         "clone stops after one live spawn")]
     internal static void ZeppelinLaunch(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -443,7 +443,7 @@ internal static class ZeppelinSuites
         if (zepDefs.Count != 1)
             return;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         var spawned = new List<FlightController>();
@@ -845,7 +845,7 @@ internal static class ZeppelinSuites
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"), $"C3/M03 zrdr");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"), $"C5/M04 zrdr");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var wep28 = weapons.Get(ZeppelinRuntime.BroadsideWeaponId);
         ctx.Check(wep28 is { Velocity: not null },
@@ -868,7 +868,7 @@ internal static class ZeppelinSuites
                 return;
 
             var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             TextureArchive? textures = null;
             ProjectilePool? pool = null;
@@ -1231,7 +1231,7 @@ internal static class ZeppelinSuites
             return;
 
         var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"));
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         TextureArchive? textures = null;
         ProjectilePool? pool = null;

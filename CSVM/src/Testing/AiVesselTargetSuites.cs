@@ -59,7 +59,7 @@ internal static class AiVesselTargetSuites
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
         ctx.RequireData(texturesPath, $"{BoatChapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
 
         var mission = MissionOf(ctx, BoatChapter, BoatMission);
         var script = ObjectiveScript.Load(missionZrdr);
@@ -68,7 +68,7 @@ internal static class AiVesselTargetSuites
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Vessels"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
 
         // The authored lists, read off the same roster the director spawns from.

@@ -31,7 +31,7 @@ internal static class XrRigSuites
         "the VR seat's eye stands on the cockpit_camera marker through XrCockpit.EyeInAircraft, a per-plane eye offset moves the eye and not the interior, a recenter puts an offset head back on that eye with its tilt kept, and the sky follows the tracked head while the headset flies the pane; lifted, the interior sorts the collimated reticle's overlay a fixed offset after its glass")]
     internal static void XrRigSeat(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
@@ -48,7 +48,7 @@ internal static class XrRigSuites
         bool added = false;
         try
         {
-            var builder = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures, spinningProps: true,
+            var builder = new PlaneBuilder(ctx.Planes, textures, spinningProps: true,
                 cockpitInterior: true);
             var model = builder.Build(ctx.PlaneName);
             var aircraft = new Node3D { Name = "xr-rig-aircraft" };

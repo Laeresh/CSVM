@@ -47,7 +47,7 @@ internal static class CampaignPlayerDeathSuites
         + "the under-map backstop teleported ends nothing at all")]
     internal static void CampaignPlayerDeath(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -131,7 +131,7 @@ internal static class CampaignPlayerDeathSuites
         CampaignMission mission, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         try
         {

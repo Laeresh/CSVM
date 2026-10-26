@@ -31,14 +31,14 @@ internal static class TurretPlayerWeightSuites
         "one up to 440 m nearer, and the AI aeroplane 40 m past either margin")]
     internal static void TurretPlayerWeight(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequirePlane(PlaneNode);
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == PlaneNode);
 
         // Each through the path its pilot spawns by: GameSession's human load and the AI one. The

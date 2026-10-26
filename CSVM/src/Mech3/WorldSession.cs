@@ -318,9 +318,8 @@ public sealed class WorldSession
         // ⚠ Every cutscene, not an intro alone: a mid-mission definition poses the flown aeroplane
         // on the same `player` marker, and with no stage the pilot is held undrawn throughout.
         // Before the bind, like the roots above (docs/architecture.md).
-        if (o.Cutscenes != null && cutscenes && o.PlanesGamezPath is { Length: > 0 } planesPath)
+        if (o.Cutscenes != null && cutscenes && o.PlanesGamez is { } planesGamez)
         {
-            var planesGamez = o.Decode == null ? GameZ.Load(planesPath) : o.Decode.Gamez(planesPath);
             s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, planesGamez, textures);
         }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
@@ -683,16 +682,15 @@ public sealed class WorldSession
         /// root's layout is the session's to know.</summary>
         public required string ChapterZrdrPath { get; init; }
 
-        /// <summary>Where this build takes its <see cref="AnimProgram"/> and its aircraft archive
-        /// from, when the caller has one. Null (the default) loads both fresh, so a session that
+        /// <summary>Where this build takes its <see cref="AnimProgram"/> from, when the caller has
+        /// one. Null (the default) loads it fresh, so a session that
         /// leaves a chapter retains nothing of it. See <see cref="DecodeCache"/> for what a
         /// non-null value makes shared, and the read-only contract that binds.</summary>
         public DecodeCache? Decode { get; init; }
 
-        /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Read only when
-        /// this mission bootstraps an intro; every other session leaves it unopened, so its node
-        /// census is exactly what it was.</summary>
-        public string? PlanesGamezPath { get; init; }
+        /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Staged only when
+        /// this mission bootstraps an intro, so every other session's node census is what it was.</summary>
+        public GameZ? PlanesGamez { get; init; }
 
         /// <summary>Parent for the effect siblings the bootstrap builds, the world's ambient
         /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session

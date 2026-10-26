@@ -63,7 +63,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         + "one Objective-ranked target named Tex once OBJECTIVE21 wakes it, nothing after it dies")]
     internal static void CampaignCm15RosterObjectiveMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -113,7 +113,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         + "Cabbie once it wakes, coloured blue rather than red or green, and none after it is shot down")]
     internal static void CampaignCm21CabbieMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, CabbieChapter, CabbieMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, CabbieChapter);
@@ -169,7 +169,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         + "throughout")]
     internal static void CampaignCm02RosterMarkerRelabel(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RelabelChapter, RelabelMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, RelabelChapter);
@@ -244,7 +244,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         string block, string pilotName, string? typeLabel, string category, int wakeObjective)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -352,7 +352,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         MissionTargets targets, Messages messages, ObjectiveScript script, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;

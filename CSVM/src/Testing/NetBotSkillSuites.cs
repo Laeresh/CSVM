@@ -39,7 +39,7 @@ internal static class NetBotSkillSuites
         + "enemy durability scale would have cut them")]
     internal static void BotSkillTiers(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter);
@@ -69,7 +69,7 @@ internal static class NetBotSkillSuites
         };
         NetSeats.Validate(roster, hostPeer: 1);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);

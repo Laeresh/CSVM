@@ -29,12 +29,12 @@ internal static class TargetingCandidateSuites
         "at all")]
     internal static void TargetingCandidates(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var skills = AiSkills.Load(ctx.ZrdrPath);
@@ -176,12 +176,12 @@ internal static class TargetingCandidateSuites
         "on the structure, the flight law closes the range on it and the gunner opens fire")]
     internal static void AiPursuesStructure(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var skills = AiSkills.Load(ctx.ZrdrPath);
@@ -301,13 +301,13 @@ internal static class TargetingCandidateSuites
         "spent is back to the engine")]
     internal static void GasbagOrdnanceGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var gunStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -452,7 +452,7 @@ internal static class TargetingCandidateSuites
         "target_bias and struct_bias ranking it about 100 m ahead of the aeroplane")]
     internal static void AircraftFirstTargeting(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
@@ -460,7 +460,7 @@ internal static class TargetingCandidateSuites
 
         const string PlaneNode = "player_bhawk";
         const string WingmanDef = "wbloodhawk";
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         var allyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
@@ -657,7 +657,7 @@ internal static class TargetingCandidateSuites
         "nothing further (BL-789)")]
     internal static void AiTargetRescore(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -665,7 +665,7 @@ internal static class TargetingCandidateSuites
 
         const string PlaneNode = "player_bhawk";
         const string WingmanDef = "wbloodhawk";
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var allyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
         var enemyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
@@ -826,13 +826,13 @@ internal static class TargetingCandidateSuites
         "turret, while a world emplacement in the same scene still reaches the pool")]
     internal static void RankedPoolCarriedTurretDedup(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
 

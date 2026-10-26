@@ -59,7 +59,7 @@ internal static class CoopDropoffSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -89,7 +89,7 @@ internal static class CoopDropoffSuites
     internal static FlightController BuildPlane(TestContext ctx, TextureArchive textures,
         ProjectilePool pool, int index, Vector3 at)
     {
-        var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures).Build(PlaneNode);
+        var model = new PlaneBuilder(ctx.Planes, textures).Build(PlaneNode);
         var plane = new FlightController
         {
             PlaneModel = model,

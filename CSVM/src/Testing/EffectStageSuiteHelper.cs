@@ -26,7 +26,7 @@ internal sealed record AnimWorld(Node3D Root, AnimRuntime Runtime, AnimProgram P
 internal static class EffectStageSuiteHelper
 {
     /// <summary>The run's chapter world on an extraction. Under <c>--synthetic-data</c>, the
-    /// invented <c>probe_effects</c> gamez and archive plus the zrdr reader definitions. ⚠ Keep the
+    /// invented template gamez and <c>probe_effects</c> archive plus the zrdr reader definitions. ⚠ Keep the
     /// extraction branch the chapter world: the real install's suites read its shipped program.</summary>
     internal static void WithAnimSource(TestContext ctx, Action<AnimSource> body) =>
         WithAnimSource(ctx, ctx.Chapter, body);
@@ -40,9 +40,7 @@ internal static class EffectStageSuiteHelper
             return;
         }
 
-        string gamezPath = SyntheticEffects.GamezUnder(ctx.DataRoot);
-        ctx.RequireData(gamezPath, $"synthetic effect templates");
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = SyntheticEffects.Gamez();
         var defs = new List<AnimDefinition>(
             AnimArchive.Load(SyntheticEffects.AnimUnder(ctx.DataRoot), SyntheticEffects.Folder)?.Defs
             ?? new List<AnimDefinition>());

@@ -33,12 +33,12 @@ internal static class DisplayScoresSuites
     internal static void StuntRaceDisplayScores(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         ctx.RequireMessages();
         var messages = ctx.Data.Messages;
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, messages);
+        var zones = StuntMission.Load(chapterGamez!, missionZrdr, messages);
         if (zones is not { TotalCount: >= 1 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads no danger zone");
@@ -167,11 +167,11 @@ internal static class DisplayScoresSuites
 
         public static TwoSeats Build(TestContext ctx, HumanRosterBindings human)
         {
-            ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+            ctx.RequireData(ctx.Data.Planes, $"planes gamez");
             ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
             TextureSet texturesPath = ctx.ChapterTextures("C1");
             ctx.RequireData(texturesPath, $"C1 textures");
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(texturesPath);
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);

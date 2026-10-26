@@ -439,8 +439,7 @@ internal static class NetCoopMissionSuites
         var stock = StockLoadouts.Load();
         string store = Path.Combine(Path.GetTempPath(), $"csvm-coop-persist-{System.Environment.ProcessId}");
         var profile = CampaignProfileDef.NewProfile(LogHost);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, BridgeChapter);
-        var bridgeNodes = (ctx.Decode?.Gamez(gamezPath) ?? GameZ.Load(gamezPath)).Nodes
+        var bridgeNodes = ctx.ChapterGamez(BridgeChapter)!.Nodes
             .Where(n => n.Name.Equals(BridgeDef, StringComparison.OrdinalIgnoreCase)).Select(n => n.Index).ToArray();
         int? carriedSeq = CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(ctx.ZrdrPath), mission.Seq)?.Seq;
         ctx.Check(bridgeNodes.Length > 0 && carriedSeq != null,
@@ -840,14 +839,14 @@ internal static class NetCoopMissionSuites
     private static CampaignMission IntroMission(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C1", StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals("M04", StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no C1/M04");
         ctx.RequireData(ctx.ChapterTextures("C1"), $"C1 textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"), $"C1 gamez");
+        ctx.RequireData(ctx.ChapterGamez("C1"), $"C1 gamez");
         return mission;
     }
 
@@ -933,14 +932,14 @@ internal static class NetCoopMissionSuites
     private static CampaignMission CabbieMission(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C5", StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals("M01", StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no C5/M01");
         ctx.RequireData(ctx.ChapterTextures("C5"), $"C5 textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C5"), $"C5 gamez");
+        ctx.RequireData(ctx.ChapterGamez("C5"), $"C5 gamez");
         return mission;
     }
 
@@ -1005,14 +1004,14 @@ internal static class NetCoopMissionSuites
     private static CampaignMission WingmanMission(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0 && m.Value.Wingman)
             ?? throw new SuiteSkippedException($"cm_sequence carries no wingman mission with a chapter");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
         return mission;
     }
 
@@ -1022,14 +1021,14 @@ internal static class NetCoopMissionSuites
     private static CampaignMission MissionAt(TestContext ctx, string chapter, string folder)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no {chapter}/{folder}");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
         return mission;
     }
 
@@ -1902,14 +1901,14 @@ internal static class NetCoopMissionSuites
     private static CampaignMission Mission(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0)
             ?? throw new SuiteSkippedException($"cm_sequence carries no mission with a chapter");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
         return mission;
     }
 

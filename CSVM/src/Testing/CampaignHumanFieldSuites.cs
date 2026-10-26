@@ -48,7 +48,7 @@ internal static class CampaignHumanFieldSuites
         + "guest the red one, which neither half completes by itself")]
     internal static void CampaignCoopHumanField(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
@@ -119,7 +119,7 @@ internal static class CampaignHumanFieldSuites
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightController? p1 = null, guest = null;
         try

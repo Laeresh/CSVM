@@ -96,7 +96,7 @@ internal static class SurfaceVehicleGunSuites
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Guns"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -250,7 +250,7 @@ internal static class SurfaceVehicleGunSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, VoiceChapter);
         TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
@@ -277,7 +277,7 @@ internal static class SurfaceVehicleGunSuites
         }
 
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Voices"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         var ears = new List<Vector3> { Vector3.Zero };

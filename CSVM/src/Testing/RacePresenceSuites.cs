@@ -53,7 +53,7 @@ internal static class RacePresenceSuites
         + "on the other airframe and compiles the ghost into its shaders")]
     internal static void RacePresence(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireMessages();
         TextureSet texturesPath = ctx.ChapterTextures("C1");
@@ -62,7 +62,7 @@ internal static class RacePresenceSuites
         // ⚠ Do not remove this eviction. A cached collidable world from an earlier suite shares the
         // host's one physics space, and would be struck instead of the other seat.
         ctx.EvictCollidableWorlds();
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         try
         {

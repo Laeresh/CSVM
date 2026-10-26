@@ -36,7 +36,7 @@ internal static class VersusSpawnSuites
         + "roomiest candidate's share, and a second downing moves it again")]
     internal static void VersusSpawnRotationSeam(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
@@ -61,7 +61,7 @@ internal static class VersusSpawnSuites
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var rigs = new List<FlightController>();
         try

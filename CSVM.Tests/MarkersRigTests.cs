@@ -1,5 +1,5 @@
-using System.IO;
-using CSVM.Extraction;
+using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.Tooling;
 using Xunit;
 
@@ -15,13 +15,10 @@ public class MarkersRigTests
 {
     private const int PlayerAirframes = 11;
 
-    private static string PlanesGamezPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "planes.zip"));
-
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void EveryPlayerAirframeHasAFirepointPylonRig()
     {
-        var r = Probes.Markers(PlanesGamezPath, "");
+        var r = Probes.Markers(GameZZbd.Load(GameFilesData.Source, GameData.PlanesPath), "");
         Assert.True(r.Error == null, $"planes gamez loads error={r.Error ?? "-"}");
         Assert.Equal(PlayerAirframes, r.Requested);
         Assert.Equal(PlayerAirframes, r.Done);

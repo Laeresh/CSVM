@@ -41,8 +41,8 @@ public class SyntheticDataTests
         Assert.Empty(lines);
     }
 
-    /// <summary>A synthetic launch resolves no game source and reads the invented message table out
-    /// of memory. The tree it runs over carries no <c>messages.json</c>.</summary>
+    /// <summary>A synthetic launch resolves no game source and reads the invented message table and
+    /// aircraft out of memory. The tree it runs over carries neither, and its chapters no world.</summary>
     [Fact]
     public void ASyntheticLaunchBuildsItsGameDataInMemoryWithNoSource()
     {
@@ -53,6 +53,9 @@ public class SyntheticDataTests
         Assert.Equal("Probe Gun", paths.Data.Messages.Get("MSG_PROBE_GUN"));
         Assert.Null(paths.Data.Interp);
         Assert.False(File.Exists(Path.Combine(root, "extracted", "messages.json")));
+        Assert.NotNull(paths.Data.Planes?.FindByName(SyntheticPlane.Plane));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "planes")));
+        Assert.Null(paths.Data.LoadChapter("C1", "M01").Gamez);
     }
 
     [Fact]

@@ -629,7 +629,7 @@ internal static class XrViewSuites
     private static bool WithHeadsetFlight(TestContext ctx, PilotViewMode mode, string hold, XrChase? headset,
         Action<GameClock, FlightController, XrRig, Vector3> sortie)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
@@ -641,7 +641,7 @@ internal static class XrViewSuites
             return false;
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);

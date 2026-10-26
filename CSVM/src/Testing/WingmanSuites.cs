@@ -172,12 +172,12 @@ internal static class WingmanSuites
         StationGeometry(ctx);
         JitterGate(ctx);
 
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         try
@@ -216,14 +216,14 @@ internal static class WingmanSuites
         "state never leaves the formation, which is FUN_0041e760's own shape")]
     internal static void WingmanEngage(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         EngageGates(ctx);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         try
         {
@@ -243,7 +243,7 @@ internal static class WingmanSuites
         + "fields off a stale pursuit pair, while a wingman whose leader flies no net is left alone")]
     internal static void WingmanLostLeader(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, LostLeaderChapter);
         ctx.RequireData(chapterZrdr, $"{LostLeaderChapter} chapter zrdr");
@@ -256,7 +256,7 @@ internal static class WingmanSuites
         }
 
         float minActive = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist;
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         try
         {

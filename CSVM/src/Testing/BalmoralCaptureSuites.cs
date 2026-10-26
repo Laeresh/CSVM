@@ -71,7 +71,7 @@ internal static class BalmoralCaptureSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {MissionSeq} -> {chapter}/{folder}");
@@ -111,7 +111,7 @@ internal static class BalmoralCaptureSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {OtherMissionSeq} -> {chapter}/{folder}");
@@ -150,7 +150,7 @@ internal static class BalmoralCaptureSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
         string rof = Path.Combine(ctx.DataRoot, "extracted", "rof");
         ctx.RequireData(rof, $"extracted UI archive (paint patterns)");
 

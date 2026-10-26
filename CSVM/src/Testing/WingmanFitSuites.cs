@@ -42,11 +42,11 @@ internal static class WingmanFitSuites
         var defs = VehicleDefs.Load(ctx.ZrdrPath);
         WingmanDefCensus(ctx, defs);
 
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var spawned = new List<FlightController>();
         ProjectilePool? projectiles = null;

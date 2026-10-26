@@ -56,7 +56,7 @@ internal static class CampaignCabbieSuites
         + "buildings, sampled as altitude above the ground under it")]
     internal static void CampaignCabbieRun(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
@@ -79,7 +79,7 @@ internal static class CampaignCabbieSuites
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null, missionZrdr);
         var report = new StringBuilder();

@@ -1,139 +1,210 @@
 [
   {
-    "Object3d": {
-      "name": "probe_plane",
-      "mesh_index": -1,
-      "children": [1],
-      "transformation": {
-        "translation": { "x": 100.0, "y": 0.0, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "markers",
-      "mesh_index": -1,
-      "children": [9, 2, 3, 4, 5, 6],
-      "transformation": {
-        "translation": { "x": 0.0, "y": 1.0, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "firepoint1",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": -2.0, "y": 0.0, "z": -3.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "firepoint2",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": 2.0, "y": 0.0, "z": -3.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "pylon1",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": -2.0, "y": 0.0, "z": -3.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "target",
-      "mesh_index": -1,
-      "children": [],
-      "flags": { "active": true, "intersect_surface": false, "can_modify": true },
-      "transformation": {
-        "translation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "cockpit_camera",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": 0.0, "y": 0.5, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "probe_euler_mixed",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-        "rotation": { "x": 0.3, "y": 0.7, "z": 1.1 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "probe_euler_y90",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 1.5707963267948966, "z": 0.0 }
-      }
-    }
-  },
-  {
-    "Object3d": {
-      "name": "probe_matrix_y90",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-        "matrix": {
-          "a": 0.0, "b": 0.0, "c": -1.0,
-          "d": 0.0, "e": 1.0, "f": 0.0,
-          "g": 1.0, "h": 0.0, "i": 0.0
+    "name": "probe_plane",
+    "model_index": -1,
+    "child_indices": [1],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 100.0, "y": 0.0, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
         }
       }
     }
   },
   {
-    "Object3d": {
-      "name": "cockpit1",
-      "mesh_index": -1,
-      "children": [10],
-      "transformation": {
-        "translation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    "name": "markers",
+    "model_index": -1,
+    "child_indices": [9, 2, 3, 4, 5, 6],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 1.0, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
       }
     }
   },
   {
-    "Object3d": {
-      "name": "cockpit_camera",
-      "mesh_index": -1,
-      "children": [],
-      "transformation": {
-        "translation": { "x": 9.0, "y": 9.0, "z": 9.0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    "name": "firepoint1",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": -2.0, "y": 0.0, "z": -3.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "firepoint2",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 2.0, "y": 0.0, "z": -3.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "pylon1",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": -2.0, "y": 0.0, "z": -3.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "target",
+    "model_index": -1,
+    "child_indices": [],
+    "flags": { "active": true, "intersect_surface": false, "can_modify": true },
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "cockpit_camera",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 0.5, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "probe_euler_mixed",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rotate": { "x": 0.3, "y": 0.7, "z": 1.1 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "probe_euler_y90",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 1.5707963267948966, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "probe_matrix_y90",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": {
+              "r00": 0.0, "r01": 0.0, "r02": -1.0,
+              "r10": 0.0, "r11": 1.0, "r12": 0.0,
+              "r20": 1.0, "r21": 0.0, "r22": 0.0
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "cockpit1",
+    "model_index": -1,
+    "child_indices": [10],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "cockpit_camera",
+    "model_index": -1,
+    "child_indices": [],
+    "data": {
+      "Object3d": {
+        "transform": {
+          "RotateTranslateScale": {
+            "translate": { "x": 9.0, "y": 9.0, "z": 9.0 },
+            "rotate": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+            "original": null
+          }
+        }
       }
     }
   }

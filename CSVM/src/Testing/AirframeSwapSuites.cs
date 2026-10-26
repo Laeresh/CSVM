@@ -138,7 +138,7 @@ internal static class AirframeSwapSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -178,7 +178,7 @@ internal static class AirframeSwapSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
@@ -250,7 +250,7 @@ internal static class AirframeSwapSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm07Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm07Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -291,7 +291,7 @@ internal static class AirframeSwapSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm19Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm19Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -1719,7 +1719,7 @@ internal static class AirframeSwapSuites
             spec = spec.WithSeatedAircraft(plane, null, fit);
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,

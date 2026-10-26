@@ -459,7 +459,7 @@ internal static class OrdnanceSuites
     internal static void OrdnanceEndConditions(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -500,7 +500,7 @@ internal static class OrdnanceSuites
                 $"the torpedo alone carries both halves of the intersect gate (RANGE_MINIMUM 300 m and FLYOUT_HEALTH)");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -973,7 +973,7 @@ internal static class OrdnanceSuites
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireMessages();
         // Every check reads a body built off C1's FLYOUT models, so the world gates the whole suite.
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"), $"chapter C1 gamez");
+        ctx.RequireData(ctx.ChapterGamez("C1"), $"chapter C1 gamez");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
         if (!weapons.TryGet("wep_15", out var flare) || !weapons.TryGet("wep_14", out var torpedo))
         {
@@ -1185,7 +1185,7 @@ internal static class OrdnanceSuites
     internal static void OrdnanceGuidance(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -1214,7 +1214,7 @@ internal static class OrdnanceSuites
                 $"LOCK_ON_LEAD's carriers ({string.Join(",", carriers.Select(w => w.Id))}) all pair it with the sentinel rate");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         var tags = new BeeperTags<FlightController>();
@@ -1525,7 +1525,7 @@ internal static class OrdnanceSuites
         "and a layer going down ends its screen on the spot")]
     internal static void SmokeScreenSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -1551,7 +1551,7 @@ internal static class OrdnanceSuites
                 $"player.json reads 600 m, 5 s and 170° stored as cos 85° ({tunables.RangeM:0}/{tunables.StunIntervalS:0}/{tunables.HalfAngleCos:0.####})");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1750,7 +1750,7 @@ internal static class OrdnanceSuites
         "while it lives and lets the timer run once gone; and no ledger moves")]
     internal static void DisablingHits(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -1779,7 +1779,7 @@ internal static class OrdnanceSuites
             ctx.Check(bounds == (5f, 13f), $"the catalogue's ENGINE_DEAD pair is [5, 13] ({bounds.Min}, {bounds.Max})");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -2598,7 +2598,7 @@ internal static class OrdnanceSuites
     internal static void OrdnanceImpactEffects(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -2647,7 +2647,7 @@ internal static class OrdnanceSuites
 
         string? gunHit = gun.ImpactFor(SurfaceRegistry.Player)?.Animation;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -2897,7 +2897,7 @@ internal static class OrdnanceSuites
         ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, null) == null,
             $"and an AI with no aim to clamp keeps the mount's own axis");
 
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -2908,7 +2908,7 @@ internal static class OrdnanceSuites
             ctx.Check(false, $"wep_13 resolves and carries a SMOKE_SCREEN TIME");
             return;
         }
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stockLoadouts = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
         // The synthetic tree carries the stand-in alone, so the shipped census is the install's.

@@ -64,7 +64,7 @@ internal static class CrashRespawnSuites
         var bots = NetCombatSuites.MatchSpec(ctx, out _, "--vs-bots=1");
         var panes = NetCombatSuites.MatchSpec(ctx, out _, "--players=2");
         string raceZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(raceZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
         var race = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), RaceChapter, Airframes,
             MenuMode.Stunt, missionType: DogfightMissionType.StuntRace);

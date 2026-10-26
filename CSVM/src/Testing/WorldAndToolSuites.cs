@@ -45,11 +45,11 @@ internal static class WorldAndToolSuites
     [Suite("gltf-export", "the viewer plane exports to glTF textured and wound the right way out")]
     internal static void GltfExport(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
         string path = Path.Combine(ctx.ScratchDir, $"gltf-export-{ctx.PlaneName}.glb");
@@ -303,11 +303,11 @@ internal static class WorldAndToolSuites
         "a second aircraft build reuses the first's Shader resources instead of generating its own copies of the same text, which is what keeps a mid-flight generator launch off Godot's per-shader compile")]
     internal static void PlaneShaderReuse(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? first = null, second = null;
         try
@@ -344,11 +344,11 @@ internal static class WorldAndToolSuites
         "a subtree build that throws below a meshed node frees that node and its mesh instance before the exception leaves, so no render instance outlives the renderer and crashes the process at exit")]
     internal static void SceneBuildThrowFrees(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         var scene = new SceneBuilder(gamez, textures, cullBackfaces: true);
         GameZNode? parent = null;
@@ -448,11 +448,11 @@ internal static class WorldAndToolSuites
         "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11) in that pilot's own pane alone, while another pane and the Danger Zone photograph still draw the whole airframe")]
     internal static void CockpitInterior(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? exterior = null, withInterior = null;
         try
@@ -634,7 +634,7 @@ internal static class WorldAndToolSuites
         "the Danger Zone photograph's frame raises its own pilot's aircraft to the decoded fill ambient for its eye alone: the pane on the same frame is out of reach, another plane is never armed, and the next frame is disarmed")]
     internal static void DangerZonePhotographFill(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
@@ -655,7 +655,7 @@ internal static class WorldAndToolSuites
                 $"the fill lights brighter than the zone's ambient half ambient={ambient} fill={fill}");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var controller = new Node3D { Name = "photo_fill_pilot" };
         var stranger = new Node3D { Name = "photo_fill_stranger", Position = new Vector3(40f, 0f, 0f) };
@@ -722,11 +722,11 @@ internal static class WorldAndToolSuites
         "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform")]
     internal static void CockpitOverlayPass(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
         Node? host = null;
@@ -1448,12 +1448,12 @@ internal static class WorldAndToolSuites
     {
         const string chapter = "C1";
         TextureSet texturesPath = ctx.ChapterTextures(chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
         var interp = ctx.RequireInterp();
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
         var names = ClutterBuilder.TemplateNames(interp, chapter);
         var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
@@ -1541,11 +1541,11 @@ internal static class WorldAndToolSuites
         const string chapter = "C5";
         const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
         TextureSet texturesPath = ctx.ChapterTextures(chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
         var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
 
@@ -1595,14 +1595,22 @@ internal static class WorldAndToolSuites
         }
 
         var lifted = Take(new ClutterBuilder(gamez, textures, null, props), template);
-        foreach (var (node, _, _) in chains)
+        Dictionary<string, List<Transform3D>> dropped;
+        // ⚠ The chapter gamez is the run's shared one: every cleared chain is put back, even on a throw.
+        try
         {
-            node.Local = Transform3D.Identity;
+            foreach (var (node, _, _) in chains)
+            {
+                node.Local = Transform3D.Identity;
+            }
+            dropped = Take(new ClutterBuilder(gamez, textures, null, props), template);
         }
-        var dropped = Take(new ClutterBuilder(gamez, textures, null, props), template);
-        foreach (var (node, local, _) in chains)
+        finally
         {
-            node.Local = local;
+            foreach (var (node, local, _) in chains)
+            {
+                node.Local = local;
+            }
         }
 
         ctx.Same(dropped.Count, lifted.Count, $"both builds export the same kinds");
@@ -1659,11 +1667,11 @@ internal static class WorldAndToolSuites
         const string chapter = "C5";
         const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
         TextureSet texturesPath = ctx.ChapterTextures(chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
         var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
         var clutter = new ClutterBuilder(gamez, textures, null, props);
@@ -1722,12 +1730,12 @@ internal static class WorldAndToolSuites
         const string plane = "player_pfighter";
         const int paneEdge = 64;
         const float range = 6f;
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(plane);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
         var built = builder.Build(plane);
@@ -1831,12 +1839,12 @@ internal static class WorldAndToolSuites
         const int paneEdge = 64;
         const float range = 3f;
         TextureSet texturesPath = ctx.ChapterTextures(chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
 
         using var textures = new TextureArchive(texturesPath);
-        var builder = new WorldBuilder(GameZ.Load(gamezPath), textures);
+        var builder = new WorldBuilder(chapterGamez!, textures);
         var dome = builder.BuildHorizon();
         builder.Cycler.Free();
         var moon = (dome?.FindChild("moon", true, false)?.GetChildren() ?? new Godot.Collections.Array<Node>())
@@ -1960,11 +1968,11 @@ internal static class WorldAndToolSuites
         const float onMount = 0.1f;
         const float aftShift = 0.5f;
         string[] judged = { "player_warhawk", "player_pfighter" };
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(judged);
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
         {
@@ -2094,11 +2102,11 @@ internal static class WorldAndToolSuites
         "in the Cockpit view the Warhawk's pilot lights sit on its interior fin peaks and its side props on its interior nacelles, the Firebrand's and Devastator's open-air lights are hidden, the Brigand's stay as built, the originals leave only the pilot's own pane, and each copy follows its original's visibility and spin")]
     internal static void CockpitReseatSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk", "player_fbrand", "player_pfighter", "player_brigand");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
         {
@@ -2127,11 +2135,11 @@ internal static class WorldAndToolSuites
         "at full roll, pitch and yaw every cockpit interior's ailerons, elevators and rudders deflect about their leading edge in place in the wing, each one's origin offset noted, except the Hellhound's and Balmoral's interior ailerons, which hold still past the gap in their numbering, while the outside surfaces still turn about their own origin")]
     internal static void CockpitSurfaceHinges(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk", "player_avenger", "player_balmoral");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         // Past a gap in the plane's numbering, so the original never finds them: neither plane has
         // an l/r_aileron2 (docs/org/cameraViews.md's interior table).
@@ -2695,9 +2703,9 @@ internal static class WorldAndToolSuites
             var slots = LensFlareRig.FlareTextureNames(interp, chapter);
             ctx.Same(expected ? 4 : 0, slots.Count, $"{chapter} LensFlareTexture slots");
 
-            string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-            ctx.RequireData(gamezPath, $"{chapter} gamez");
-            var gamez = GameZ.Load(gamezPath);
+            var chapterGamez = ctx.ChapterGamez(chapter);
+            ctx.RequireData(chapterGamez, $"{chapter} gamez");
+            var gamez = chapterGamez!;
             int sunNodes = 0;
             foreach (var n in gamez.Nodes)
             {
@@ -3083,11 +3091,11 @@ internal static class WorldAndToolSuites
         "with two pilots in the cockpit each pane's camera leaves out its own pilot's body and draws the other pilot's, each spyglass disc likewise, and Nose takes markers/dontmove out of the own pane alone; one pilot on the main camera hides the body as before")]
     internal static void SplitscreenCockpitBody(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var made = new List<Node>();
         try
@@ -3643,13 +3651,13 @@ internal static class WorldAndToolSuites
     // without the stamped decorations, so their shaders are not under its stage to read.
     private static List<(string Code, bool Sprite)> ClutterShaderText(TestContext ctx, string chapter)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         TextureSet texturesPath = ctx.ChapterTextures(chapter);
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
         ctx.RequireData(texturesPath, $"{chapter} textures");
         var interp = ctx.RequireInterp();
         using var textures = new TextureArchive(texturesPath);
-        var builder = new ClutterBuilder(GameZ.Load(gamezPath), textures);
+        var builder = new ClutterBuilder(chapterGamez!, textures);
         var root = builder.Build(ClutterBuilder.TemplateNames(interp, chapter));
         try
         {

@@ -81,17 +81,12 @@ public static class Probes
 
     // ---- markers -----------------------------------------------------------------------------
 
-    public static MarkersResult Markers(string planesGamezPath, string filter)
+    public static MarkersResult Markers(GameZ? planesGamez, string filter)
     {
         var r = new MarkersResult();
-        GameZ gamez;
-        try
+        if (planesGamez is not { } gamez)
         {
-            gamez = GameZ.Load(planesGamezPath);
-        }
-        catch (Exception e)
-        {
-            r.Error = $"could not load planes gamez ({planesGamezPath}): {e.Message}";
+            r.Error = "the game data holds no planes.zbd";
             r.Summary = $"markers dump: {r.Error}";
             return r;
         }
@@ -120,7 +115,7 @@ public static class Probes
         r.Requested = wanted.Count;
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# Aircraft marker rig: {planesGamezPath}");
+        sb.AppendLine("# Aircraft marker rig: planes.zbd");
         sb.AppendLine("# Positions are plane frame, metres (nose -Z, right +X, up +Y). See docs/formats/markers.md.");
         sb.AppendLine();
         foreach (var (model, display) in wanted)
@@ -236,7 +231,7 @@ public static class Probes
 
     // ---- loadouts ----------------------------------------------------------------------------
 
-    public static LoadoutResult Loadouts(string zrdrPath, Messages messages, string planesGamezPath,
+    public static LoadoutResult Loadouts(string zrdrPath, Messages messages, GameZ? planes,
         TextureSet c1Textures, string filter, string? loadoutOverride, bool forRig = false)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -249,7 +244,7 @@ public static class Probes
         {
             stock = StockLoadouts.Load();
             weapons = WeaponDefs.Load(zrdrPath, messages);
-            planesGamez = GameZ.Load(planesGamezPath);
+            planesGamez = planes ?? throw new FileNotFoundException("the game data holds no planes.zbd");
             // Any texture archive resolves the (meshless) markers; the C1 set is the viewer default.
             textures = new TextureArchive(c1Textures);
         }

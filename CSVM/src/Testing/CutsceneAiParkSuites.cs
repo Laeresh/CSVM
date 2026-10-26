@@ -55,7 +55,7 @@ internal static class CutsceneAiParkSuites
         + "with it")]
     internal static void CutsceneParksAiWithNoAuthored913(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
@@ -80,7 +80,7 @@ internal static class CutsceneAiParkSuites
 
         var nets = AiNets.Load(chapterZrdr);
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var report = new StringBuilder();
         try
         {
@@ -104,7 +104,7 @@ internal static class CutsceneAiParkSuites
         + "bootstrap definition's own 914 lands")]
     internal static void MissionStartParksAiWithNoIntro(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(IaChapter);
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, IaChapter, IaMission),
@@ -112,7 +112,7 @@ internal static class CutsceneAiParkSuites
         ctx.RequireData(texturesPath, $"{IaChapter} textures");
 
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var report = new StringBuilder();
         try
         {

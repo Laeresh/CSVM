@@ -43,13 +43,13 @@ internal static class WarhawkTorpedoRunSuites
         + "rocketeer takes the torpedo pylon and gets at least one away")]
     internal static void WarhawkTorpedoRun(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
@@ -184,7 +184,7 @@ internal static class WarhawkTorpedoRunSuites
         + "flies, keeps the decoded gun-lead steering and its close launch")]
     internal static void BotTorpedoLead(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -269,7 +269,7 @@ internal static class WarhawkTorpedoRunSuites
     // crossing its nose at HullSpeed. The range to the gasbag at its first torpedo launch, or null.
     private static float? LaunchRange(TestContext ctx, TextureSet texturesPath, bool botSeat)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");

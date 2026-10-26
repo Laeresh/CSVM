@@ -142,7 +142,7 @@ internal static class CampaignRosterSuites
         + "the wingman-station leash")]
     internal static void CampaignRoster(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RosterChapter, RosterMission);
         ctx.RequireData(missionZrdr, $"{RosterChapter}/{RosterMission} zrdr");
@@ -165,7 +165,7 @@ internal static class CampaignRosterSuites
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         var report = new StringBuilder();
@@ -283,7 +283,7 @@ internal static class CampaignRosterSuites
         + "unattributed one reach neither")]
     internal static void CampaignKillCredit(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
         ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
@@ -306,7 +306,7 @@ internal static class CampaignRosterSuites
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         var report = new StringBuilder();
@@ -429,7 +429,7 @@ internal static class CampaignRosterSuites
         + "role takes the human rig over a nearer aircraft")]
     internal static void RosterSpawnNames(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
@@ -482,7 +482,7 @@ internal static class CampaignRosterSuites
         var report = new StringBuilder();
         report.AppendLine($"{BiasChapter}/{BiasMission}: {plan.Spawns.Count} planned block(s)");
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? human = null;
@@ -657,7 +657,7 @@ internal static class CampaignRosterSuites
         + "own side keeps its authored dead eye of 1")]
     internal static void RosterSkillDifficulty(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
@@ -690,7 +690,7 @@ internal static class CampaignRosterSuites
             $"the three blocks author ace natural-touch/dead-eye, plain natural-touch/steady-hand and friendly dead-eye as {authored}");
 
         var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
@@ -752,7 +752,7 @@ internal static class CampaignRosterSuites
         + "authored rating on their own curve rather than the session's rating-5 fallback")]
     internal static void RosterVoiceRatings(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
@@ -777,7 +777,7 @@ internal static class CampaignRosterSuites
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
@@ -892,7 +892,7 @@ internal static class CampaignRosterSuites
         + "mission radio's flat Voice-bus player, building no positional one-shot")]
     internal static void AiVoiceMission(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
@@ -918,7 +918,7 @@ internal static class CampaignRosterSuites
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
@@ -1159,7 +1159,7 @@ internal static class CampaignRosterSuites
     private static StringBuilder WithBomberRoster(TestContext ctx, bool collision,
         Action<CampaignDirector, List<FlightController>, ProjectilePool, StringBuilder> flight)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
         ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
@@ -1182,7 +1182,7 @@ internal static class CampaignRosterSuites
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         var report = new StringBuilder();

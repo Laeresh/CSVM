@@ -56,12 +56,12 @@ internal static class ClutterCardDepthSuites
     internal static void CardDepth(TestContext ctx)
     {
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
+        var chapterGamez = ctx.ChapterGamez(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        ctx.RequireData(gamezPath, $"{Chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{Chapter} gamez");
         var interp = ctx.RequireInterp();
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
         var names = ClutterBuilder.TemplateNames(interp, Chapter);
         ctx.Check(names.Count > 0, $"{Chapter} registers clutter templates count={names.Count}");

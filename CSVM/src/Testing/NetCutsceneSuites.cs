@@ -51,7 +51,7 @@ internal static class NetCutsceneSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");

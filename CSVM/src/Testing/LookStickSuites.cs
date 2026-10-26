@@ -93,7 +93,7 @@ internal static class LookStickSuites
         "the look controls flown in both views with --look= standing in for the right stick and --view= for a held numpad key: the flags parse, clamp and survive a typo, one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, a snap pans the chase camera through the same head at the decoded azimuth rate onto the table's own direction, and L padlocks that head onto a real selection's own bearing and hands it back to snap, every path returning to its settled pose on release")]
     internal static void LookStick(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
@@ -133,7 +133,7 @@ internal static class LookStickSuites
         "the look stick's activation edge flown in both views: easing the stick off centre and back, the camera's per-frame displacement and turn across the frames the look takes and releases the view stay within what the stick's own motion accounts for, letting go of a held deflection in snap mode eases the view home over many frames rather than cutting to the chase pose, and in smooth mode (J) the stick turns the view at the decoded pan rate times its deflection, steadily while held, not at all once let go, with pushes adding up and a push the other way turning it back, until the centre key or K returns it")]
     internal static void LookStickEdge(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
@@ -376,7 +376,7 @@ internal static class LookStickSuites
     private static bool WithFlight(TestContext ctx, TextureSet texturesPath, string chapterZrdr,
         PilotViewMode mode, string look, Action<GameClock, FlightController> sortie)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);

@@ -75,7 +75,7 @@ internal static class CampaignLoopSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -420,7 +420,7 @@ internal static class CampaignLoopSuites
         try
         {
             var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
-            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures).Build(planeNode);
+            var model = new PlaneBuilder(ctx.Planes, textures).Build(planeNode);
             var rig = new FlightController
             {
                 PlaneModel = model,

@@ -205,12 +205,12 @@ internal static class SpawnPropsSuites
     private static void WithSessionRoster(TestContext ctx, string playerPlane,
         Action<FlightRoster, FlightController, SoundArchive, Dictionary<string, SoundDef>> body)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(ctx.Chapter));
             using var sounds = new SoundArchive(ctx.SoundsPath);
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);

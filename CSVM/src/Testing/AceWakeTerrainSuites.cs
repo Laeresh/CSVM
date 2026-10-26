@@ -45,7 +45,7 @@ internal static class AceWakeTerrainSuites
         "descent to the under-map backstop")]
     internal static void AceWakeTerrain(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
@@ -70,7 +70,7 @@ internal static class AceWakeTerrainSuites
         report.AppendLine($"{AceBlock} authored at ({ace.Pos.X:0.00}, {ace.Pos.Y:0.00}, {ace.Pos.Z:0.00}) yaw {ace.YawDeg:0}");
         report.AppendLine($"{PlayerBlock} authored at ({player.Pos.X:0}, {player.Pos.Y:0}, {player.Pos.Z:0}); wake range {wakeRangeM:0} m");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var defs = VehicleDefs.Load(ctx.ZrdrPath);
         string plane = ctx.PlaneName;
         if (defs.DefForBlock(AceBlock) is { } aceDef && defs.AirframeFor(aceDef) is { } airframe)

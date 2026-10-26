@@ -64,13 +64,13 @@ internal static class BotContactSuites
         + "aeroplane bounces off it and flies on, where world AI on that ram gains no rebound")]
     internal static void GrazeBounceBot(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(StockAirframes.Nodes.ToArray());
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         StaticBody3D? floor = null;
         FlightController? parked = null;

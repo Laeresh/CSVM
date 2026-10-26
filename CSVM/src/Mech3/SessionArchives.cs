@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Utils;
@@ -48,17 +49,16 @@ public sealed class SessionArchives
     /// <summary>See <see cref="WorldSession.Options.SoundsOutliveBuild"/>.</summary>
     public required bool SoundsOutliveBuild { get; init; }
 
-    /// <summary>Opens gamez, textures, sounds, sound defs and sound groups for one chapter build,
-    /// timing each into <see cref="StartupProfile"/> exactly as <c>WorldSession.Build</c>'s own
-    /// phases do, unconditionally even under the test harness's no-op <c>Record</c>.
+    /// <summary>Opens the five for one chapter build, each timed into <see cref="StartupProfile"/>
+    /// as <c>WorldSession.Build</c>'s phases are. The world comes from <paramref name="gamez"/>
+    /// inside the <c>gamez</c> phase, which times a first decode; a null world fails the build.
     /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
-    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match. A non-null
-    /// <paramref name="decode"/> shares the <see cref="Gamez"/> alone (<see cref="DecodeCache"/>).</summary>
-    public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, TextureSet texturesSet,
-        string soundsPath, string zrdrPath, bool mute, DecodeCache? decode = null)
+    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
+    public static SessionArchives OpenFor(ArchiveIntent intent, Func<GameZ?> gamez, TextureSet texturesSet,
+        string soundsPath, string zrdrPath, bool mute)
     {
         long mark = StartupProfile.Mark();
-        var gamez = decode == null ? GameZ.Load(gamezPath) : decode.Gamez(gamezPath);
+        var world = gamez() ?? throw new FileNotFoundException("the game data holds no world for this build");
         StartupProfile.Record("gamez", mark);
 
         mark = StartupProfile.Mark();
@@ -80,7 +80,7 @@ public sealed class SessionArchives
 
         return new SessionArchives
         {
-            Gamez = gamez,
+            Gamez = world,
             Textures = textures,
             Sounds = sounds,
             SoundDefs = loadedSoundDefs,

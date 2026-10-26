@@ -199,7 +199,7 @@ public sealed class ProbeRunner
     {
         // Windowed launches shouldn't steal focus for a report that renders nothing and quits.
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Markers(_paths.PlanesGamezPath, spec.DumpMarkersPlane);
+        var r = Probes.Markers(_paths.Data.Planes, spec.DumpMarkersPlane);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-markers: {r.Error}");
@@ -332,7 +332,7 @@ public sealed class ProbeRunner
     public bool DumpLoadout(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Loadouts(_paths.ZrdrPath, _paths.Data.Messages, _paths.PlanesGamezPath, _paths.Data.LoadChapter("C1", spec.Mission).Textures,
+        var r = Probes.Loadouts(_paths.ZrdrPath, _paths.Data.Messages, _paths.Data.Planes, _paths.Data.LoadChapter("C1", spec.Mission).Textures,
             spec.DumpLoadoutFilter, spec.LoadoutOverride, forRig: spec.WeaponLab);
         if (r.Error != null)
         {

@@ -41,14 +41,14 @@ internal static class StuntCaptureSuites
         + "filled on landing, no strip without a camera or a shot)")]
     internal static void StuntCaptureRun(TestContext ctx)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
+        var chapterGamez = ctx.ChapterGamez(Chapter);
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        ctx.RequireData(gamezPath, $"{Chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireMessages();
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
 
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, ctx.Data.Messages)
+        var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} ships no Danger Zones");
 
         // The sting has something to play: the definition is a data orphan no SOUND_GROUPS entry

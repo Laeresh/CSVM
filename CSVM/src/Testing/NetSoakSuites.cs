@@ -333,7 +333,7 @@ internal static class NetSoakSuites
 
     private static SessionSpec SoakSpec(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         // Both limits off, so no number of kills or minutes ends the match mid-matrix and holds

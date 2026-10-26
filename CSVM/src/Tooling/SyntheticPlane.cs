@@ -1,19 +1,19 @@
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Text.Json;
+using CSVM.Mech3;
+using Godot;
 
 namespace CSVM.Tooling;
 
 /// <summary>
 /// The synthetic tree's stand-in aircraft, <see cref="Plane"/>, <see cref="Fighter"/>,
 /// <see cref="Firebrand"/>, <see cref="Avenger"/> and six more under shipped airframe names the
-/// suites fly, in two families. The plane family is their models under <c>planes/</c>, box-built
-/// airframes each carrying the marker rig. It also holds the <c>vehicle.json</c>,
-/// <c>engines.json</c> and <c>player.json</c> records and the maneuver library. The armament
-/// family is the weapons in <c>weapons.json</c>, the turret table in <c>ai.json</c> and the shake
-/// sources; their names are in <c>SyntheticMessages.cs</c>. Every record is hand-authored from
-/// <c>docs/formats/</c>; only <c>models.json</c> is generated, from the box list beside the nodes.
+/// suites fly. Their models are <see cref="Gamez"/>, box-built airframes each carrying the marker
+/// rig, built in memory from <see cref="SyntheticPlaneRecords"/>. The plane family writes the
+/// <c>vehicle.json</c>, <c>engines.json</c> and <c>player.json</c> records and the maneuver
+/// library. The armament family is the weapons in <c>weapons.json</c>, the turret table in
+/// <c>ai.json</c> and the shake sources; their names are in <c>SyntheticMessages.cs</c>. Every
+/// record is hand-authored from <c>docs/formats/</c>.
 /// </summary>
 public static class SyntheticPlane
 {
@@ -36,15 +36,10 @@ public static class SyntheticPlane
     // A record written for the tree keeps its path under extracted/ beneath this fixtures folder.
     private const string Records = "synthetic/";
 
-    // models.json is generated from this list: one box mesh per entry, in mesh-index order.
-    private const string BoxList = Records + "planes/boxes.json";
-
     // Each record as (fixture, path under extracted/). The maneuver library is the unit tests'
     // own, which already holds every step shape the AI pilot's reader takes.
     private static readonly (string Fixture, string Target)[] PlaneRecords =
     {
-        (Records + "planes/nodes.json", "planes/nodes.json"),
-        (Records + "planes/materials.json", "planes/materials.json"),
         (Records + "zrdr/vehicle.json", "zrdr/vehicle.json"),
         (Records + "zrdr/engines.json", "zrdr/engines.json"),
         (Records + "zrdr/player.json", "zrdr/player.json"),
@@ -76,8 +71,8 @@ public static class SyntheticPlane
     public static string LoadoutsUnder(string fixturesRoot) =>
         Path.Combine(fixturesRoot, "synthetic", "stock_loadouts.json");
 
-    /// <summary>Writes the models under <c>planes/</c> and the plane records under <c>zrdr/</c>.
-    /// It also writes the empty C1 chapter scope a flight is handed for its speed cue.</summary>
+    /// <summary>Writes the plane records under <c>zrdr/</c>, and the empty C1 chapter scope a
+    /// flight is handed for its speed cue. The models are <see cref="Gamez"/>'s, in memory.</summary>
     public static void WritePlane(SyntheticTree tree)
     {
         foreach (var (fixture, target) in PlaneRecords)
@@ -85,7 +80,6 @@ public static class SyntheticPlane
             tree.CopyFixture(fixture, target);
         }
 
-        tree.WriteBytes("planes/models.json", Models(tree.Fixture(BoxList)));
         tree.Folder(SyntheticTextures.Chapter + "/zrdr");
     }
 
@@ -98,124 +92,84 @@ public static class SyntheticPlane
         }
     }
 
-    /// <summary>The legacy-shape <c>models.json</c> for a box list. Each entry's <c>min</c> and
-    /// <c>max</c> corners become one closed box of six quads. Every face takes the entry's
-    /// <c>material</c> and a whole-texture UV square.</summary>
-    public static byte[] Models(string boxListPath)
+    /// <summary>The stand-ins' aircraft archive, built in memory from
+    /// <see cref="SyntheticPlaneRecords"/>: what <c>planes.zbd</c> is to an install.</summary>
+    public static GameZ Gamez()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(boxListPath));
-        var boxes = new List<(float[] Lo, float[] Hi, int Material)>();
-        foreach (var box in doc.RootElement.EnumerateArray())
+        var gz = new GameZ();
+        gz.Materials.Add(new GameZMaterial { TextureName = "probe_skin" });
+        gz.Materials.Add(Colored(150, 156, 166));
+        gz.Materials.Add(Colored(40, 40, 44));
+        gz.Materials.Add(new GameZMaterial { TextureName = "probe_panel" });
+        foreach (var (r, g, b) in new[]
+                 {
+                     (170, 60, 40), (92, 108, 70), (52, 70, 128), (178, 152, 98), (150, 40, 46),
+                     (206, 176, 60), (60, 132, 120), (120, 120, 150), (84, 70, 52), (110, 70, 136),
+                 })
         {
-            boxes.Add((Corner(box, "min"), Corner(box, "max"), box.GetProperty("material").GetInt32()));
+            gz.Materials.Add(Colored(r, g, b));
         }
 
-        return Models(boxes);
-    }
-
-    /// <summary>The legacy-shape <c>models.json</c> for boxes given as corners, one closed box of
-    /// six quads each, in mesh-index order.</summary>
-    internal static byte[] Models(IEnumerable<(float[] Lo, float[] Hi, int Material)> boxes)
-    {
-        using var stream = new MemoryStream();
-        using (var json = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        foreach (var (lo, hi, material) in SyntheticPlaneRecords.Boxes)
         {
-            json.WriteStartArray();
-            foreach (var (lo, hi, material) in boxes)
-            {
-                WriteBox(json, lo, hi, material);
-            }
-
-            json.WriteEndArray();
+            AddBox(gz, lo, hi, material);
         }
 
-        return stream.ToArray();
-    }
-
-    private static float[] Corner(JsonElement box, string key)
-    {
-        var values = new List<float>();
-        foreach (var v in box.GetProperty(key).EnumerateArray())
+        foreach (var row in SyntheticPlaneRecords.Nodes)
         {
-            values.Add(v.GetSingle());
+            var node = AddNode(gz, row.Kind, row.Name, row.Mesh, new Vector3(row.X, row.Y, row.Z));
+            node.Children.AddRange(row.Children);
         }
 
-        return values.Count == 3
-            ? values.ToArray()
-            : throw new InvalidDataException($"box '{key}' needs three coordinates, has {values.Count.ToString(CultureInfo.InvariantCulture)}");
+        return gz;
     }
 
-    private static void WriteBox(Utf8JsonWriter json, float[] lo, float[] hi, int material)
+    /// <summary>An opaque untextured material of the colour given in 0-255 channels.</summary>
+    internal static GameZMaterial Colored(int r, int g, int b) => new() { Color = new Color(r / 255f, g / 255f, b / 255f, 1f) };
+
+    /// <summary>Appends a node at the next flat index, translated by <paramref name="at"/>. A
+    /// <c>Lod</c> node takes the nearest range, 0.</summary>
+    internal static GameZNode AddNode(GameZ gz, string kind, string name, int mesh, Vector3 at)
     {
-        json.WriteStartObject();
-        json.WriteStartArray("vertices");
+        var node = new GameZNode
+        {
+            Kind = kind,
+            Name = name,
+            MeshIndex = mesh,
+            Index = gz.Nodes.Count,
+            Local = new Transform3D(Basis.FromEuler(Vector3.Zero, EulerOrder.Yxz), at),
+            LodRangeMin = kind == "Lod" ? 0f : -1f,
+        };
+        gz.Nodes.Add(node);
+        return node;
+    }
+
+    /// <summary>Appends one closed box of six quads between corners <paramref name="lo"/> and
+    /// <paramref name="hi"/>, and returns its mesh index. Every face takes
+    /// <paramref name="material"/> and a whole-texture UV square.</summary>
+    internal static int AddBox(GameZ gz, float[] lo, float[] hi, int material)
+    {
+        var mesh = new GameZMesh { ModelType = "Default" };
         for (int i = 0; i < 8; i++)
         {
             // Corners 0-3 run round the near (min z) face, 4-7 the far one in the same order.
-            WriteVec(json, (i & 3) is 1 or 2 ? hi[0] : lo[0], (i & 3) >= 2 ? hi[1] : lo[1], i >= 4 ? hi[2] : lo[2]);
+            mesh.Vertices.Add(new Vector3((i & 3) is 1 or 2 ? hi[0] : lo[0], (i & 3) >= 2 ? hi[1] : lo[1], i >= 4 ? hi[2] : lo[2]));
         }
 
-        json.WriteEndArray();
-        json.WriteStartArray("normals");
-        foreach (var face in Faces)
-        {
-            WriteVec(json, face.X, face.Y, face.Z);
-        }
-
-        json.WriteEndArray();
-        json.WriteStartArray("polygons");
         for (int f = 0; f < Faces.Length; f++)
         {
-            json.WriteStartObject();
-            WriteInts(json, "vertex_indices", Faces[f].Corners);
-            WriteInts(json, "normal_indices", new[] { f, f, f, f });
-            json.WriteStartObject("flags");
-            json.WriteBoolean("unk2", false);
-            json.WriteBoolean("triangle_strip", false);
-            json.WriteEndObject();
-            json.WriteNumber("unk04", 0);
-            json.WriteStartArray("materials");
-            json.WriteStartObject();
-            json.WriteNumber("material_index", material);
-            json.WriteStartArray("uv_coords");
-            foreach (var (u, v) in new[] { (0f, 1f), (1f, 1f), (1f, 0f), (0f, 0f) })
+            mesh.Normals.Add(new Vector3(Faces[f].X, Faces[f].Y, Faces[f].Z));
+            var poly = new GameZPolygon
             {
-                json.WriteStartObject();
-                json.WriteNumber("u", u);
-                json.WriteNumber("v", v);
-                json.WriteEndObject();
-            }
-
-            json.WriteEndArray();
-            json.WriteEndObject();
-            json.WriteEndArray();
-            json.WriteEndObject();
+                NormalIndices = new List<int> { f, f, f, f },
+                MaterialIndex = material,
+                UvCoords = new List<Vector2> { new(0f, 1f), new(1f, 1f), new(1f, 0f), new(0f, 0f) },
+            };
+            poly.VertexIndices.AddRange(Faces[f].Corners);
+            mesh.Polygons.Add(poly);
         }
 
-        json.WriteEndArray();
-        json.WriteStartArray("lights");
-        json.WriteEndArray();
-        json.WriteString("model_type", "Default");
-        json.WriteEndObject();
-    }
-
-    private static void WriteVec(Utf8JsonWriter json, float x, float y, float z)
-    {
-        json.WriteStartObject();
-        json.WriteNumber("x", x);
-        json.WriteNumber("y", y);
-        json.WriteNumber("z", z);
-        json.WriteEndObject();
-    }
-
-    private static void WriteInts(Utf8JsonWriter json, string name, int[] values)
-    {
-        json.WriteStartArray(name);
-        foreach (int v in values)
-        {
-            json.WriteNumberValue(v);
-        }
-
-        json.WriteEndArray();
+        gz.Meshes.Add(mesh);
+        return gz.Meshes.Count - 1;
     }
 }

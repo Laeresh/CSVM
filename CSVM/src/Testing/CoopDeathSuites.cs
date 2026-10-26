@@ -44,7 +44,7 @@ internal static class CoopDeathSuites
         + "lost; and a solo death ends the mission on its only human")]
     internal static void CampaignCoopDeath(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
@@ -79,7 +79,7 @@ internal static class CoopDeathSuites
         CampaignMission mission, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         try
         {

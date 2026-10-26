@@ -95,12 +95,20 @@ The tree writes no texture file.
 ## src/Tooling/SyntheticPlane.cs
 The synthetic tree's stand-in aircraft, every record invented: `probe_plane`, the default, and nine under
 shipped airframe names the suites fly (`player_pfighter`, the lobby door's starter, the custom-plane
-pair and six more), each carrying what the code keys on (`is_autogyro`, a turret mount). `plane` writes
-`planes/` (`nodes.json`, `materials.json`, and a `models.json` generated from `boxes.json`, one
-outward-wound box per entry) and `vehicle.json`, `engines.json`, `player.json` and `maneuvers.json`.
+pair and six more), each carrying what the code keys on (`is_autogyro`, a turret mount). `Gamez`
+builds their archive in memory from `SyntheticPlaneRecords.cs`, one outward-wound box per entry,
+for `SyntheticGameData`'s `Planes`. `plane` writes `vehicle.json`, `engines.json`, `player.json` and `maneuvers.json`.
 `armament` writes the weapons, the `ai.json` turret table and `shakes.json`; their names are in `SyntheticMessages.cs`. `Launcher`
 sets the fits as `StockLoadouts.Supplement` and the probe as `SessionSpec.DefaultPlane` under the switch.
 Shapes: [gamez](../formats/gamez.md), [markers](../formats/markers.md), [vehicle](../formats/vehicle.md), [weapons](../formats/weapons.md), [turrets](../formats/turrets.md).
+
+## src/Tooling/SyntheticPlaneRecords.cs
+The stand-in aircraft archive as code: `Nodes`, every node in flat order (children by flat index,
+rotations zero, no flags), and `Boxes`, one box per mesh index with its material. Each airframe has
+`geometry` → `healthy` → one LOD, the `markers` rig (eight firepoints in mirror pairs, eight pylons
+odd to port, `target`, `cockpit_camera`, two exhausts), `dontmove` props, `destroyed` pieces, `pdpN`
+panels and a `cockpit1` interior; the autogyro adds a `rotor1` blade, the kestrel and the fbrand a
+turret rig. Shapes: [gamez](../formats/gamez.md), [markers](../formats/markers.md).
 
 ## src/Tooling/SyntheticGameData.cs
 The game data (`Spec/GameData.cs`) `BasePaths.Resolve` hands a `--synthetic-data` run: every model
@@ -139,12 +147,12 @@ mission address enters the tree, so a suite gated on one still skips. Shapes are
 [../formats/](../formats/README.md): `weather.md`, `net-spawns.md`, `campaign-sequence.md`.
 
 ## src/Tooling/SyntheticEffects.cs
-The synthetic tree's `effects` family. Under `extracted/probe_effects/` it writes `gamez/`, one
-legacy-shape node per entry of `fixtures/synthetic/probe_effects/templates.json` with a box per meshed
-node, and `cam_anim/`, the compiled archive shape (`metadata.json` and one file per definition) split
-out of `cam_anim.json`. It copies the reader destructibles, `flame_ball.json` and `pufftrails.json`
-into `zrdr/`. No session loader reads `probe_effects/`; `Testing/EffectStageSuiteHelper.cs` does,
-under the switch. Names the engine or a suite looks up are kept over invented content.
+The synthetic tree's `effects` family. `Gamez` builds the template gamez in memory, one node per
+template root and child with a box per meshed node. Under `extracted/probe_effects/` it writes
+`cam_anim/`, the compiled archive shape (`metadata.json` and one file per definition) split out of
+`cam_anim.json`. It copies the reader destructibles, `flame_ball.json` and `pufftrails.json` into
+`zrdr/`. No session loader reads either; `Testing/EffectStageSuiteHelper.cs` does, under the switch.
+Names the engine or a suite looks up are kept over invented content.
 
 ## src/Tooling/WavWriter.cs
 Encodes mono 16-bit samples as a RIFF/WAVE file, plain PCM or MS ADPCM (the seven standard

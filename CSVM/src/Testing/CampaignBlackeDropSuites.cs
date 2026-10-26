@@ -73,7 +73,7 @@ internal static class CampaignBlackeDropSuites
         + "rather than sweeping from where the trigger found him back into the drop site")]
     internal static void BlackeDropCameras(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         var report = new StringBuilder();
@@ -277,7 +277,7 @@ internal static class CampaignBlackeDropSuites
     private static FlightController HumanRig(TestContext ctx, TextureArchive textures,
         ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController

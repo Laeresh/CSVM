@@ -201,11 +201,11 @@ internal static class TargetingSuites
             $"and the next press taps again, so a hold leaves no state behind");
 
         // --- the attacker queue, wired through a real hit ------------------------------------
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
@@ -919,7 +919,7 @@ internal static class TargetingSuites
         "below or 45 above the anchor")]
     internal static void HostileMarkerHud(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -1119,7 +1119,7 @@ internal static class TargetingSuites
             $"a source with no health model (enemyRef carries none) omits BOTH figures rather than printing H100 A100: '{noHealthTag}'");
 
         // --- the live tracker, against real AI planes registered in a real pool ---
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1275,7 +1275,7 @@ internal static class TargetingSuites
         + "shaft starting on the rim, and the label 3 under the disc's bottom or 45 over its top")]
     internal static void SpyglassMarkerHud(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -1310,7 +1310,7 @@ internal static class TargetingSuites
             $"CONTROL: with no picture the same two anchors take the bare rule, 3 below and 45 above the marker itself ({TargetHud.EdgeLabelAnchor(high, pane.Y, 1f)} / {TargetHud.EdgeLabelAnchor(low, pane.Y, 1f)}), which is what the disc variant has to differ from");
 
         // --- the gate, against a real hud, a real SubViewport and a spawned plane ----------------
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1450,12 +1450,12 @@ internal static class TargetingSuites
         "path for it; nothing selected does not throw")]
     internal static void DebugKillTargetRouting(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;

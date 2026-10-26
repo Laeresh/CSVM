@@ -52,12 +52,12 @@ internal static class PlaneRigSuites
         "posts one notice and builds the original airframe, none of its entries applied")]
     internal static void PlaneRigSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
@@ -206,11 +206,11 @@ internal static class PlaneRigSuites
         "hidden through Visible, Nose still drops the body, and an external pose draws all of it")]
     internal static void PlaneRigCockpitBody(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
 
@@ -290,12 +290,12 @@ internal static class PlaneRigSuites
         "naming no gauge binds no panel")]
     internal static void PlaneRigCockpitGauges(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
 
@@ -407,15 +407,15 @@ internal static class PlaneRigSuites
         "it notes how far the stereo eye's mount puts each dial from the flat one")]
     internal static void PlaneRigCockpitTemplate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         // The CLI's own source, then the run's plane where the player airframe list leaves it out.
-        var templates = Tooling.Probes.Markers(ctx.PlanesGamezPath, string.Empty).RigTemplates.ToList();
+        var templates = Tooling.Probes.Markers(ctx.Data.Planes, string.Empty).RigTemplates.ToList();
         if (templates.All(t => t.Model != ctx.PlaneName) && MarkerRig.Extract(planesGamez, ctx.PlaneName) is { } own)
         {
             templates.Add((ctx.PlaneName, own.FormatRigTemplate()));
@@ -444,12 +444,12 @@ internal static class PlaneRigSuites
         "per readout character")]
     internal static void PlaneRigCockpitInside(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer", "gungauge");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string gungaugeFile = Path.Combine(PackRoot(ctx, "cockpit-inside-export"), "gungauge.glb");
@@ -555,12 +555,12 @@ internal static class PlaneRigSuites
         + "takes the pass off and gives the originals back")]
     internal static void PlaneRigCockpitPass(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string? hide;
@@ -625,12 +625,12 @@ internal static class PlaneRigSuites
         + "lowers the panel back onto the airframe")]
     internal static void PlaneRigCockpitStereo(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         // The stereo shader reads the eye feed's globals; declared without making the run stereo.
@@ -1356,7 +1356,7 @@ internal static class PlaneRigSuites
     // A firepoint just inside the reach past the model box builds, one just past it is refused.
     private static void CheckRefused(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string spinName, Aabb box)
     {
-        var cut = GameZ.Load(ctx.PlanesGamezPath);
+        var cut = ctx.PlanesCopy();
         string? lacking = CutFirepoint(cut, plane);
         ctx.Check(lacking != null, $"{plane} carries a firepoint to cut for the added-firepoint case");
         Vector3 Aft(float past) => new(box.GetCenter().X, box.GetCenter().Y, box.End.Z + PlaneRigPatch.MarkerReach + past);

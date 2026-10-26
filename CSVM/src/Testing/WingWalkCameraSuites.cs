@@ -89,7 +89,7 @@ internal static class WingWalkCameraSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -151,7 +151,7 @@ internal static class WingWalkCameraSuites
         TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs, Vector3 near)
     {
         var spec = SessionSpec.Parse(new[] { $"--plane={StartPlane}" });
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,

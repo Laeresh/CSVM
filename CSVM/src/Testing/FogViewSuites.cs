@@ -190,7 +190,7 @@ internal static class FogViewSuites
     {
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, SunChapter, SunMission);
         ctx.RequireData(zrdr, $"{SunChapter}/{SunMission} mission zrdr");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(SunChapter);
         ctx.RequireData(texturesPath, $"{SunChapter} textures");
         var weatherState = WeatherState.Load(zrdr);
@@ -207,7 +207,7 @@ internal static class FogViewSuites
         ctx.Check(below.SunOrientation != above.SunOrientation && below.SunAmbient != above.SunAmbient,
             $"the two zones author a different SUNLIGHT bearing and ambient");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var world = new World3D();
         var paneA = Pane(world, SunPaneEdge);

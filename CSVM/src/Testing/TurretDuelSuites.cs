@@ -30,14 +30,14 @@ internal static class TurretDuelSuites
         "enemy gun 20 m inside DETECTION_RANGE is still taken; a nearer friendly emplacement is never taken")]
     internal static void TurretDuel(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequirePlane(PlaneNode);
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == PlaneNode);
         var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
         ctx.Check(aiStats.AiTargetBias == 0f, $"the AI aeroplane carries no target_bias={aiStats.AiTargetBias:0}");

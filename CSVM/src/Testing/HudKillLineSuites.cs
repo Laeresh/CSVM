@@ -45,7 +45,7 @@ internal static class HudKillLineSuites
         "posts that notice alone with no kill line behind it")]
     internal static void HudKillLine(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireMessages();
         TextureSet texturesPath = ctx.ChapterTextures("C1");
@@ -69,7 +69,7 @@ internal static class HudKillLineSuites
         Colours(ctx);
         Geometry(ctx);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ai = null;

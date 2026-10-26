@@ -64,12 +64,12 @@ internal static class NetHumanFieldSuites
         + "completes nothing and loses on the host's death")]
     internal static void GuestsAreTheHostsHumanField(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string scriptZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, ScriptMission);
         string stageZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, StageMission);
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, Chapter), $"{Chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
         ctx.RequireData(scriptZrdr, $"{Chapter}/{ScriptMission} zrdr");
         ctx.RequireData(stageZrdr, $"{Chapter}/{StageMission} zrdr");
 

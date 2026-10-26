@@ -35,7 +35,7 @@ the rows and the pair list, and is the authority where this paragraph and it dif
 Everything that turns the player's install into a live scene: the mech3ax extraction readers, the
 GameZ→Godot builders, and the animation runtime that drives the world.
 
-- `src/Mech3/GameZ.cs`, GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
+- `src/Mech3/GameZ.cs`, the GameZ model and its reader of unzbd's output (zip or dir, the fork's shape): nodes/models/materials/textures JSON → C# objects.
 - `src/Mech3/TextureArchive.cs`, texture lookup over one decoded archive: resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/HdModelMeshes.cs`, a model pack's replacement mesh for a gamez node, imported once per pack key with its winding reversed back.
@@ -129,7 +129,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/SubtreeBounds.cs`, a built subtree's world-space extent from its own meshes, skipping a tool's overlay drawings.
 - `src/Mech3/AircraftStage.cs`, stages the aircraft-archive subtrees a cutscene animates into a chapter world's node table, at that chapter's pointer base.
 - `src/Mech3/SessionArchives.cs`, opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, per `ArchiveIntent`.
-- `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by their source paths, so one chapter built many times is decoded once.
+- `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by chapter or source paths, so one chapter built many times is decoded once.
 - `src/Mech3/EmptyStage.cs`, the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
@@ -728,13 +728,14 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
 - `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
 - `src/Tooling/SyntheticTextures.cs`, the synthetic run's C1 texture archive, built in memory: one checker record per entry.
-- `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket and shakes.
+- `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model in memory, plane records, one gun, one rocket and shakes.
+- `src/Tooling/SyntheticPlaneRecords.cs`, the stand-in aircraft archive's records as code: every node in flat order and one box per mesh.
 - `src/Tooling/SyntheticGameData.cs`, the game data a `--synthetic-data` run reads, every model built in memory with no game-file source.
 - `src/Tooling/SyntheticMessages.cs`, the synthetic run's invented message table, built in code.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
 - `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry, and the `voice.json` accent table.
 - `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
-- `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez, a compiled anim archive, reader destructibles and two puffer readers.
+- `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez in memory, a compiled anim archive, reader destructibles and two puffer readers.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
 - `src/Tooling/DumpGameFiles.cs`, `--dump`: the game files read through the C# readers, their models written as JSON, PNG and WAV for analysis scripts; never read back.
 
@@ -1059,7 +1060,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 - `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
-- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art) and its per-session chapter part (the chapter's textures), handed down in place of paths.
+- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`) and its per-session chapter part (the chapter's textures and world), handed down in place of paths.
 
 ### `CSVM.Tests/`, the unit tests
 

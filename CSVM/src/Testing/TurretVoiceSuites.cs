@@ -61,7 +61,7 @@ internal static class TurretVoiceSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
@@ -80,7 +80,7 @@ internal static class TurretVoiceSuites
             return;
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         var ears = new List<Vector3> { Vector3.Zero };

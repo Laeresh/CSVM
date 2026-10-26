@@ -40,7 +40,7 @@ internal static class CampaignMilitiaLiverySuites
         + "naming no def at all under that same reading stays unpainted")]
     internal static void CampaignMilitiaLivery(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         string rof = Path.Combine(ctx.DataRoot, "extracted", "rof");
@@ -55,7 +55,7 @@ internal static class CampaignMilitiaLiverySuites
         }
 
         var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         var built = new List<FlightController>();

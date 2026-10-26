@@ -710,7 +710,7 @@ internal static class NetFlagSuites
 
     private static SessionSpec Spec(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         return SessionSpec.Parse(new[] { "--vs" }
             .Concat(NetCombatSuites.Arena(ctx, mission: SessionSpec.CtfMission))

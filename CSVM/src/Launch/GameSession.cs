@@ -684,16 +684,9 @@ public partial class GameSession : Node3D
             SoundsPath = _paths.SoundsPath,
             Data = _paths.Data,
             Chapter = _paths.Data.LoadChapter(_spec.Chapter, _spec.Mission),
-            PlanesGamezPath = _paths.PlanesGamezPath,
             Mute = _spec.Mute,
             DebugCollision = _spec.DebugCollision,
         };
-        // --zep= grafts one chapter node onto the empty stage, so it needs that chapter's gamez
-        // where the bare stage needs only planes.zbd. Chapter is already the flag's own by here.
-        state.GamezPath = _spec.Gamez
-            ?? (_spec.WorldMode || _spec.Zep != null
-                ? SessionPaths.ChapterGamez(_paths.DataRoot, _spec.Chapter)
-                : _paths.PlanesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_paths.DataRoot, _spec.Chapter, _spec.Mission);
         LoadProgress.Report(LoadStep.Paths);
 
@@ -1365,11 +1358,18 @@ public partial class GameSession : Node3D
     // texture/sound archives to whichever owner outlives this build scope.
     private void LoadArchives(BuildState state)
     {
+        // --zep= grafts one chapter node onto the empty stage, so it needs that chapter's gamez.
+        // The bare stage needs only planes.zbd. Chapter is already the flag's own by here.
+        var chapter = state.Chapter;
+        Func<GameZ?> gamez = !_spec.WorldMode && _spec.Zep == null ? () => state.Data.Planes
+            : _decode != null ? () => _decode.Gamez(chapter.Chapter, () => chapter.Gamez)
+            : () => chapter.Gamez;
+
         // ⚠ Do not defer this to the flight audio below: the animation bootstrap builds the world's
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            state.GamezPath, state.Chapter.Textures, state.SoundsPath, state.ZrdrPath, state.Mute, _decode);
+            gamez, state.Chapter.Textures, state.SoundsPath, state.ZrdrPath, state.Mute);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;
@@ -1596,7 +1596,7 @@ public partial class GameSession : Node3D
                 // its codes the instant startanims starts it, long before a rig exists.
                 Cutscenes = _cutscene != null ? CutsceneWorldNames : null,
                 LandingTriggers = _landings != null,
-                PlanesGamezPath = state.PlanesGamezPath,
+                PlanesGamez = state.Data.Planes,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
                 // No owner named: the opening cutscene has no triggering human, so the episode is
                 // the scripted player's, which is what the intro has always meant.
@@ -1827,12 +1827,12 @@ public partial class GameSession : Node3D
         var voices = _voices = new SessionVoices(_spec, _paths.ZrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
             onWire: _wire.Link != null);
         long mark = StartupProfile.Mark();
-        // On the empty stage the session gamez IS planes.zbd (there is no chapter world), so there
-        // is nothing to load a second time. ⚠ Unless --zep= grafted a chapter node on: the session
-        // gamez is then that chapter's, and planes.zbd has to be loaded here as everywhere else.
+        // On the empty stage the session gamez IS planes.zbd (there is no chapter world). ⚠ Unless
+        // --zep= grafted a chapter node on: the session gamez is then that chapter's. The aircraft
+        // then come from the game data's planes model, as everywhere else.
         var planesGamez = _spec.EmptyStage && _spec.Zep == null
             ? state.Gamez
-            : _decode?.Gamez(state.PlanesGamezPath) ?? GameZ.Load(state.PlanesGamezPath);
+            : state.Data.Planes ?? throw new FileNotFoundException("the game data holds no planes.zbd");
         StartupProfile.Record("gamez", mark);
         // Stats are per plane, not per player (splitscreen players can pick
         // different aircraft), load each distinct one once, logging it as it appears.

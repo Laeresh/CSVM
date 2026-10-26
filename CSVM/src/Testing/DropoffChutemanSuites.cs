@@ -56,7 +56,7 @@ internal static class DropoffChutemanSuites
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+        ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {MissionSeq} -> {chapter}/{folder}");

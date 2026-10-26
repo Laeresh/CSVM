@@ -164,7 +164,7 @@ internal sealed class InspectionLabs
         if (spec.PlaneNames.Count > 0)
         {
             long mark = StartupProfile.Mark();
-            var planesGamez = GameZ.Load(state.PlanesGamezPath);
+            var planesGamez = state.Data.Planes ?? throw new System.IO.FileNotFoundException("the game data holds no planes.zbd");
             StartupProfile.Record("gamez", mark);
             mark = StartupProfile.Mark();
             var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,

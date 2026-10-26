@@ -357,9 +357,9 @@ internal static class StuntRaceBotSuites
     // The course's data gates, and its chapter.
     private static string Course(TestContext ctx, string chapter)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, SessionSpec.StuntRaceMission), $"{chapter}/{SessionSpec.StuntRaceMission} zrdr");
         return chapter;
     }

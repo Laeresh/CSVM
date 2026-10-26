@@ -14,6 +14,7 @@ public static class SyntheticGameData
     public static GameData Build() => new()
     {
         Messages = SyntheticMessages.Table(),
+        Planes = SyntheticPlane.Gamez(),
         LoadChapter = (chapter, mission) => new ChapterData { Chapter = chapter, Mission = mission, Textures = SyntheticTextures.For(chapter) },
     };
 }

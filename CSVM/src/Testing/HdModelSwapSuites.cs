@@ -93,7 +93,7 @@ internal static class HdModelSwapSuites
     internal static void SwapSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -105,7 +105,7 @@ internal static class HdModelSwapSuites
             return;
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string planeNode = PlaneMeshNode(planesGamez, textures, ctx.PlaneName);
         ctx.Check(planeNode.Length > 0, $"{ctx.PlaneName} carries a mesh node to replace");
@@ -163,10 +163,10 @@ internal static class HdModelSwapSuites
         + "count, bounds in the node's frame, texture names, unlit surfaces and each textured surface's draw priority")]
     internal static void CockpitInteriorSwap(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string root = Path.Combine(ctx.ScratchDir, "hd-model-cockpit1");
@@ -258,10 +258,10 @@ internal static class HdModelSwapSuites
         + "the stock reticles read from the drawn glass equal one overlay per gamez glass polygon in count, plane, pane and bias")]
     internal static void CockpitInteriorStereo(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         // The stereo shader reads the eye feed's globals; declared without making the run stereo.
