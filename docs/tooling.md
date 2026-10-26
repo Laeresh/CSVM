@@ -804,20 +804,26 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   card's model without `.flt`; `veg_blender.py` beside it holds the shared scene, export and render
   code and the conventions. Geometry is built with `bmesh` and the texture is drawn in the script
   with numpy, so nothing needs a download (Sapling Tree Gen is an extension since Blender 4.2 and
-  ships with none of the installed versions).
+  ships with none of the installed versions). Species that share a builder keep it beside
+  `veg_blender.py`: `veg_palm.py` builds the palms, and `palmtree1.py`, `palmtree2.py` and
+  `palmtree3.py` each hold one card species' numbers (trunk, crown, frond shape and colours) and
+  call it. A module named `veg_*.py` is a helper, not a species, and is never passed to `-Species`.
 - The output is `CSVM/data/vegetation_models/<chapter>/<species>.glb.bin`, committed beside its
   generator: GLB bytes under the `.bin` extension, so Godot imports nothing, no `.import` file
   exists, and the export's `data/*.bin` filter packs it. Nothing in the game reads one yet; the
   near draw is to load it at run time with `GltfDocument.AppendFromBuffer`. A rerun writes it byte
   for byte the same under the same Blender build; the exporter writes its own version into the
-  file (`Khronos glTF Blender I/O v5.2.41`), so a Blender update changes those bytes alone. Keep
-  the committed file when nothing else moved.
+  file (`Khronos glTF Blender I/O v5.2.<n>`), so a Blender update changes those bytes alone. Keep
+  the committed file when nothing else moved. A generator writes one file per chapter in its
+  `CARDS`; where the chapters' cards are one species at one size (the palms on C2 and C3), the
+  files are identical.
 - Conventions: metres, the pivot at the trunk base on the ground, Y up in the GLB (Blender's Z up,
   converted by the exporter), the height of the card it replaces, one mesh with one alpha-masked,
   double-sided material on one texture atlas, and normals bent out from the trunk axis so the
   crown shades as a volume. The chapter folder exists because one model name carries different
   cards per chapter (`firtree1` is 10 x 18 m on C1 and 10 x 13 m on C4).
-- **The clump tiles** (`veg_blender.clump_render`) sit beside the model: `<species>.clump.png.bin`,
+- **The clump tiles** (`veg_blender.clump_render`), for a species that draws as forest mass (the
+  palms do not, and write none), sit beside the model: `<species>.clump.png.bin`,
   `<species>.clump.side.png.bin` and `<species>.clump.json`, the far forest's tiles for that card
   ([formats/model-packs.md](formats/model-packs.md), "Clump tiles"). Each tile is a group of the
   generator's `CLUMP_TREES` count of the model's trees (2 to 4), laid out as `CanopyClumps` composes

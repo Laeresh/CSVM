@@ -1,8 +1,8 @@
 # Regenerates one vegetation model with its comparison renders, headless in the pinned Blender.
 #
 # Runs CSVM/data/vegetation_models/<Species>.py in Blender 5.2 with --background (never a window,
-# never Godot), which writes CSVM/data/vegetation_models/<Chapter>/<Species>.glb.bin, the species'
-# clump tiles beside it (<Species>.clump.png.bin, .clump.side.png.bin, .clump.json) and, unless
+# never Godot), which writes CSVM/data/vegetation_models/<Chapter>/<Species>.glb.bin, a forest
+# species' clump tiles beside it (<Species>.clump.png.bin, .clump.side.png.bin, .clump.json) and, unless
 # -NoRender, the model beside the original card into .scratch/vegetation/. The card is read from
 # <data root>/extracted: $env:CSVM_DATA_ROOT, else this tree, else the main checkout (a worktree
 # has no extracted/). Pipeline and conventions: docs/tooling.md, "Vegetation models".

@@ -120,7 +120,9 @@ def read_card(data_root, chapter, model):
     gz = os.path.join(data_root, "extracted", chapter, "gamez")
     load = lambda f: json.load(open(os.path.join(gz, f), encoding="utf-8"))
     nodes, models, mats, texs = load("nodes.json"), load("models.json"), load("materials.json"), load("textures.json")
-    node = next(n for n in nodes if n["name"] == model)
+    # A placed copy carries the name without a model (C3's palmtree2): take the first that resolves one.
+    node = next(n for n in nodes if n["name"] == model
+                and (n["model_index"] >= 0 or any(nodes[c]["model_index"] >= 0 for c in n["child_indices"])))
     mi = node["model_index"]
     if mi < 0:
         mi = next(nodes[c]["model_index"] for c in node["child_indices"] if nodes[c]["model_index"] >= 0)

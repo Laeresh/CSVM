@@ -1572,11 +1572,68 @@ brushes, C3's palms, C4's firs.
 
 **Approach.** D31's pipeline per species, judged beside its card.
 
-**Model recommendation.** <TODO>
+*The palms (as built).* `palmtree1`, `palmtree2` and `palmtree3` are three species, not one at three
+sizes: a date palm with a thick scarred trunk and a dark crown lit in yellow-green (7.589 × 13.189 m,
+`palm1`), a coconut palm with a slender ringed trunk and an open olive crown over nuts (5.744 ×
+9.983 m, `palm2`) and a weeping palm with a red-brown trunk and dead red-brown fronds under a
+grey-green crown (5.744 × 9.983 m, `palm3`). Each has its own generator holding its numbers; the
+shared builder is `veg_palm.py`, beside `veg_blender.py`.
+- *One model for C2 and C3.* Each card has the same size on both chapters, and C3's texture is
+  C2's at half the resolution (64 × 128 against 128 × 256), with a base patch added on `palm1` and
+  `palm3`. Each generator has a `CARDS` entry per chapter and its own render per chapter, and
+  writes the same bytes to `C2/` and `C3/`.
+- *Geometry.* A tapered trunk (six or eight sides), a bulb where the frond bases meet, and fronds:
+  each one a strip folded down along its rachis, leaving the crown at an elevation from 88° down
+  to the horizon or below and bending down progressively along its length. The top fronds stand
+  slim and nearly straight in a tuft, and the ones below arch over and weep. `palm3` adds a skirt of
+  dead fronds hanging down the trunk and draws its lowest third of fronds dead; `palm2` adds six
+  nuts. The trunk base is the pivot; `palm2`'s trunk leans 0.45 m, because the card's trunk stands
+  0.5 m off its centre under a centred crown.
+- *Texture.* Leaflets drawn either side of a rachis, slanted toward the tip, their tips on an
+  envelope so the frond tapers to a point, cut by the alpha with gaps between them; a bark patch
+  (leaf-base crescents or rings), a core patch and a nut patch. The colours are read off the card's
+  crown and trunk texels and tuned until the render's crown mean sits within about 5 sRGB levels of
+  the card's in each channel. A frond takes one palette with a narrow spread, so the crown keeps
+  one coherent colour (B15's rejection of the palm cards for colour variation). `palmtree1`'s
+  second strip (`frond_b`) is its lit fronds: every other frond draws nearly black-green with few
+  highlights and the rest mostly in the yellow-green highlight, so the crown carries the card's
+  dark body and whole fronds catching the sun. Its side render's crown mean is sRGB (72, 77, 64)
+  against the card's (69, 74, 61), the 10th luminance percentile 37 against the card's 20 and the
+  90th 120 against 133. The card's darker shadows are partly hard photo edges, which the model's
+  antialiased leaflets against the sky do not reach.
+- *Not modelled:* the yellow-green base patch on the cards. The ground under the stamp supplies it.
+- *No clump tiles.* No chapter builds palm forest (the palms are not `mass`, and C3's painted
+  canopy clumps are cut from its canopy textures), so the palm generators write no clump tiles.
 
-**Verify.** <TODO>
+| Model | Chapters | Model size (w × d × h, m) | Triangles | GLB bytes |
+|---|---|---|---|---|
+| `palmtree1` | C2, C3 | 8.15 × 8.16 × 12.99 | 992 | 110,048 |
+| `palmtree2` | C2, C3 | 5.65 × 6.41 × 9.90 | 546 | 84,420 |
+| `palmtree3` | C2, C3 | 6.23 × 6.85 × 9.78 | 1,234 | 122,120 |
+
+**Ruling (yours, from the renders).** The palms: `palmtree1` takes a darker crown body with
+stronger yellow highlights, closer to the card's punch (the lit-frond strip above). `palmtree2` stays
+symmetric: stamps turn at random, so a lopsided crown would show its lean from every side.
+`palmtree3` keeps its red skirt as rendered. The crown tops of `palmtree1` and `palmtree3`, wider than
+the cards' narrow tufts, stand for now and are judged at D32's handover in game.
+
+**Model recommendation.** Opus for a new species: the work is a look iterated against renders. A
+mid-tier model can retune an existing generator's numbers against a ruling.
+
+**Verify.** `.\MakeVegetationModel.ps1 -Species <model> -Chapter <C>` exits 0 for each model and
+chapter it ships for, with Blender headless and no Godot launch. Each GLB's JSON reads one mesh with
+one primitive, one material with `alphaMode: MASK` and `doubleSided: true`, and POSITION y from 0 to
+the model's height. A second run writes the same bytes, and `C2/` and `C3/` hold identical files.
+Rerunning `firtree1` after a change to `veg_blender.py` changes nothing but the exporter's version
+string. The look is yours: each model's `_side` and `_above` renders beside its card per chapter,
+and the contact sheet of all six.
 
 **⚠ Traps.** Match the card's silhouette and colour, or the handover in D32 shows.
+- The first node named after a card can be a placed copy without a model (C3's `palmtree2`);
+  `read_card` takes the first node that resolves one.
+- The palm cards carry a yellow patch of ground cover at their base. Leave it out of the model: it
+  is the patch C21's ruling wants gone near the camera, and the ground supplies what is under the
+  trunk.
 
 ## D34 ☐ Ground cover prototype: new-art grass and crop cards
 
