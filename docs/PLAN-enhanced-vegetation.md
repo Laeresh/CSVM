@@ -1568,8 +1568,8 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   `GltfDocument.AppendFromBuffer`: the first mesh, its first surface's base-colour texture, the clear
   texels bled to the solid mean before the mips (black clear texels darkened the model with distance).
   A file that fails to import passes to the next source. A species with no model gets no `Near`, its
-  card's band stays zero and the card draws as before; today that is every species but C1's `firtree1`
-  (its scrub-set twin on the grassland included).
+  card's band stays zero and the card draws as before. The species with a model are D33's table; a
+  scrub-set twin of a modelled card (C21's added stamps on the grassland) takes the model too.
 - *Band.* A registered word setting, 3D Vegetation (`Utils/VegetationModelsSetting.cs`, the VIDEO
   page's row under Vegetation, `--vegetation-models=off|near|far`, saved as `vegetationModels`): `near`,
   the default on every machine and under `--det` (the Deck and Linux included until D36 measures them),
@@ -1608,14 +1608,31 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   in its generator. Grades: C1 `firtree1` (0.271, 0.261, 0.295); C2 `palmtree1` (0.509, 0.553, 0.611),
   `palmtree2` (0.53, 0.499, 0.567), `palmtree3` (0.649, 0.745, 0.793); C3 `palmtree1` (0.326, 0.33,
   0.375), `palmtree2` (0.526, 0.502, 0.569), `palmtree3` (0.693, 0.79, 0.847). `firtree1` keeps its
-  warmer yellow-green, where the per-channel grade had pulled it to the card's blue-green.- *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
+  warmer yellow-green, where the per-channel grade had pulled it to the card's blue-green.
+- *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
   ground where the cards cast none, and casting re-renders the models into each Ultra cascade.
 - *The draw.* `ClutterInstances` cuts the Rich variant again into `CellM` (256 m) cells, one MultiMesh
   of the model mesh each, ranged at the word's far edge plus the cell's radius. Godot's own range and frustum cull
   pick the cells per camera, so splitscreen panes and the XR stereo pair need no per-frame CPU work;
   inside a reached cell a stamp outside the band collapses in the vertex stage. The cells are cut once
   at the first Rich draw and kept, and stand under `vegetation_models` beside the clutter root, so the
-  crater walk and the suites' censuses read each stamp once. Not solid: no collider exists.
+  crater walk and the suites' censuses read each stamp once. Not solid: no collider exists. A cell
+  exists only where its species stands: C1 cuts 5,635 model cells over its ten modelled kinds
+  (`firtree1` 1,416, `dougfirtree1` 1,393, `firtree2` 1,417, the bushes' cards 54 to 60 each, and
+  C21's added `bush1` 489, `bush2` 490 and `firtree1` 201), logged as `vegetation models:` at the
+  build, and the map edge 348 model copies at its corner.
+- *No instance uniform.* The model shader declares none: it reads the card's fog as always on and
+  takes no debug tint, which no overlay ever set on a model. Godot gives every node whose shader
+  declares one a block of 16 slots in a global buffer of 65,536 blocks, so a cut of the cells took
+  5,635 blocks, against 4,470 for the rest of the build. A suite runs in one engine frame, where a
+  lab re-bake's queued-free cells keep their blocks until the frame ends, and the battery's first
+  overflow came about eight re-bakes into `vegetation-lab`. The cell count now costs no block, so
+  the cut holds for every species D33 adds; `vegetation-models` fails a C1 build whose model nodes
+  declare one, or whose nodes that do pass a quarter of the buffer. A C1 build at the A7 view
+  carries 5,645 more scene nodes with the models than without (15,555 against 9,910, the cells and
+  their ten groups) and its `render_cpu_ms` does not move, so the cells stay at 256 m. A 512 m cell
+  would cut the nodes about four times, and by its reach (the band plus half its diagonal) draw
+  about twice the collapsed instances in the vertex stage.
 - *Following the card.* Every stamp write reaches the model cells, so an activation hide, a crater and
   a show move the model with its card, through live switches both ways. A lab re-bake re-cuts them; an
   added kind's models stand under a child rebuilt with the added kinds. Past the map edge each Rich
@@ -1641,7 +1658,9 @@ reads only the texels its triangles cover, weighted by area; both read only the 
 ladder, `near` on every machine, the flag and the file keep a known word, each word's band) and the
 options tests (`OptionsChoicesTests`, `OriginalOptionsTests`: the row is dead under Original and walks
 between Vegetation and VR Mode). Engine: `vegetation-models` (C1 Enhanced
-at rich: firtree1 alone takes the shipped model and its card the band, every other card none; the cells
+at rich: every card with a model shipped for C1 takes it and its card the band, every other card none;
+no model node declares an instance uniform and the build's nodes that do stay under a quarter of the
+buffer; the cells
 stand outside the clutter root with no collider, ranged inside the band, drawing exactly the card's
 Rich stamps; the shader keeps the cells the card gives up; a crater, a hide and a show reach the model;
 a live move to original and a switch to Original draw none and back the same, the map edge copies them
@@ -1657,7 +1676,9 @@ worktree's battery running (so `gpu_ms` reads about four times C24's and its ran
 `measure.ps1`'s C1 view `rich` against `nomodels` reads 505 against 497 draws and 511,689 against
 461,289 primitives, `gpu_ms` 25.7 against 26.5 and `render_cpu_ms` 0.85 against 0.81; at the low view
 among firs (`--pos=-9230,206,-6235 --lookat=-9330,196,-6335`) 405 against 395 draws and 548,823
-against 466,223 primitives, with `gpu_ms` inside its noise. D37 measures it on an idle machine with
+against 466,223 primitives, with `gpu_ms` inside its noise. With D33's five C1 models the same
+views read 527 against 497 draws and 780,853 against 464,801 primitives, and 429 against 395 draws
+and 666,111 against 470,049 primitives. D37 measures it on an idle machine with
 `measure.ps1 -Modes rich,nomodels`. Goldens: rendered at their manifest args with the models on and
 off, `c1-lake-enhanced` moves 344 pixels by at most 2 levels, `c1-cockpit-xr-sim-enhanced` 12 and
 `c1-rocket-hit-enhanced` 5 at that bound, and `c1-cloud-deck-enhanced` and `c1-cockpit-enhanced`
@@ -1670,6 +1691,8 @@ none; D37 re-pins.
   screen half, and the handover shows wherever the two disagree.
 - Bleed the model texture's clear texels before its mips, or the model darkens as it recedes into the
   band.
+- Never give the model shader an instance uniform: every model cell would take a block of Godot's
+  global buffer, and the cell count grows with each species.
 
 ## D33 ☐ Look-alike models for every listed card species
 

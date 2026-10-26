@@ -625,8 +625,9 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("vegetation-models",
-        "the near 3D models in a C1 Enhanced flight at rich: firtree1 alone takes the model shipped beside its clump tile and "
-        + "its Rich card material the band, every other listed card none; the model cells stand outside the clutter root with "
+        "the near 3D models in a C1 Enhanced flight at rich: every listed card with a model shipped for C1 takes it and its "
+        + "Rich card material the band, every other card none; no model node declares an instance uniform, and the build's "
+        + "instance-uniform nodes stay under a quarter of Godot's buffer; the model cells stand outside the clutter root with "
         + "no collider, ranged inside the band's far edge, and draw exactly the card's Rich stamps; the model keeps the dither "
         + "cells the card gives up; a crater and an activation hide collapse a stamp's model with its card and a show restores "
         + "it; a live move to original and a live switch to Original draw none, and back draws the same; the map edge copies "
@@ -654,13 +655,15 @@ internal static class GraphicsSwitchSuites
                     return;
                 }
                 var withModel = kinds.Where(k => k.Near != null).ToList();
-                ctx.Check(withModel.Count > 0 && withModel.All(k => k.Model.Equals("firtree1.flt", StringComparison.OrdinalIgnoreCase) && k.Rich != null),
-                    $"firtree1 alone takes a model ({string.Join(", ", withModel.Select(k => $"{k.Model}{(k.Added ? " added" : "")}"))})");
+                bool Ships(Mech3.ClutterBuilder.KindExport k) =>
+                    Godot.FileAccess.FileExists($"{Mech3.CanopyClumps.ShippedRoot}/C1/{HdModels.NodeKey(k.Model)}.glb.bin");
+                ctx.Check(withModel.Count > 0 && kinds.All(k => (k.Near != null) == (k.Rich?.Material is ShaderMaterial && Ships(k))),
+                    $"every Rich card with a shipped model takes it, and no other ({string.Join(", ", withModel.Select(k => $"{k.Model}{(k.Added ? " added" : "")}"))})");
                 string bands = string.Join(", ", kinds.Where(k => k.Rich?.Material is ShaderMaterial)
                     .Select(k => $"{k.Model}={((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2()}").Distinct());
                 ctx.Check(kinds.Where(k => k.Rich?.Material is ShaderMaterial).All(k => ((ShaderMaterial)k.Rich!.Material!)
                         .GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2() == (k.Near != null ? Mech3.VegetationModels.Band : Vector2.Zero)),
-                    $"the firtree1 cards' Rich material carries the band and every other card none, so it draws as before ({bands})");
+                    $"a modelled card's Rich material carries the band and every other card none, so it draws as before ({bands})");
                 ctx.Check(!Under(models, "clutter") && models.IsInsideTree() && !HasCollider(models),
                     $"the models stand outside the clutter root, in the tree, with no collider");
 
@@ -703,6 +706,12 @@ internal static class GraphicsSwitchSuites
 
                 live.Session.EdgeExtender!.Update(live.Session.EdgeExtender.BeyondCorner);
                 int edge = EdgeModels(live);
+                // Godot gives every node whose shader declares an instance uniform 16 slots of one global buffer.
+                int capacity = ProjectSettings.GetSetting("rendering/limits/global_shader_variables/buffer_size").AsInt32() / 16;
+                var (carriers, modelCarriers) = InstanceUniformNodes(live.Session);
+                ctx.Note($"{drawn.Count} model cell(s) over {withModel.Count} kind(s), {edge} edge model node(s); {carriers} instance-uniform node(s) of {capacity}");
+                ctx.Check(modelCarriers == 0 && carriers < capacity / 4,
+                    $"no model node declares an instance uniform ({modelCarriers}), and the build's {carriers} such node(s) stay under a quarter of the buffer's {capacity}");
                 Switch(live, enhanced: false);
                 int edgeOriginal = EdgeModels(live);
                 ctx.Check(ModelCells(models).Count == 0 && edge > 0 && edgeOriginal == 0,
@@ -755,7 +764,7 @@ internal static class GraphicsSwitchSuites
                     var model = Mech3.VegetationModels.For("C1", "firtree1", null);
                     ctx.Check(model?.Source.EndsWith(packed, StringComparison.Ordinal) == true,
                         $"a pack's C1/firtree1.glb replaces the shipped model ({model?.Source ?? "none"})");
-                    ctx.Check(Mech3.VegetationModels.For("C1", "bush1", null) == null && Mech3.VegetationModels.For("C4", "firtree1", null) == null,
+                    ctx.Check(Mech3.VegetationModels.For("C1", "no_such_card", null) == null && Mech3.VegetationModels.For("C5", "firtree1", null) == null,
                         $"a species or chapter with no model reads none");
                 }
             }
@@ -2220,6 +2229,42 @@ internal static class GraphicsSwitchSuites
     // Where a stamp stands, to the centimetre. A hidden stamp keeps its place.
     private static string Key(Transform3D xf) => string.Create(CultureInfo.InvariantCulture,
         $"{Mathf.RoundToInt(xf.Origin.X * 100f)},{Mathf.RoundToInt(xf.Origin.Y * 100f)},{Mathf.RoundToInt(xf.Origin.Z * 100f)}");
+
+    // The geometry nodes in the tree whose materials declare an instance uniform, and how many of them draw a near model.
+    private static (int All, int Models) InstanceUniformNodes(Node root)
+    {
+        var declares = new Dictionary<Shader, bool>();
+        bool Declares(Material? m)
+        {
+            for (; m != null; m = m.NextPass)
+            {
+                if (m is ShaderMaterial { Shader: { } s })
+                {
+                    if (!declares.TryGetValue(s, out bool d))
+                        declares[s] = d = s.Code.Contains("instance uniform", StringComparison.Ordinal) || s.Code.Contains("csky_instance_uniforms", StringComparison.Ordinal);
+                    if (d)
+                        return true;
+                }
+            }
+            return false;
+        }
+        int all = 0, models = 0;
+        Walk(root, node =>
+        {
+            if (node is not GeometryInstance3D g || !g.IsInsideTree() || g.IsQueuedForDeletion())
+                return;
+            var mesh = g switch { MeshInstance3D mi => mi.Mesh, MultiMeshInstance3D mm => mm.Multimesh?.Mesh, _ => null };
+            bool any = Declares(g.MaterialOverride) || Declares(g.MaterialOverlay);
+            for (int s = 0; !any && mesh != null && s < mesh.GetSurfaceCount(); s++)
+                any = Declares(mesh.SurfaceGetMaterial(s)) || (g is MeshInstance3D mi && Declares(mi.GetSurfaceOverrideMaterial(s)));
+            if (!any)
+                return;
+            all++;
+            if (node.Name.ToString().EndsWith("_model", StringComparison.Ordinal) || Under(node, "vegetation_models"))
+                models++;
+        });
+        return (all, models);
+    }
 
     // The map edge's near model copies standing shown in the tree.
     private static int EdgeModels(Rig rig)

@@ -644,6 +644,9 @@ public sealed class ClutterBuilder
         _addedRoot = null;
         BuildAdded();
         ExportedKinds = exported.Count > 0 ? exported : null;
+        var modelled = exported.Where(k => k.Near != null).ToList();
+        if (modelled.Count > 0)
+            Log.Info("world", $"vegetation models: {modelled.Sum(k => k.Instances?.ModelCellCount ?? 0)} node(s) over {modelled.Count} kind(s), {string.Join(", ", modelled.Select(k => $"{k.Model}{(k.Added ? " added" : "")} {k.Instances?.ModelCellCount ?? 0}"))}");
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
     }
 

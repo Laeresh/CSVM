@@ -221,10 +221,11 @@ public static class VegetationModels
         return new Model(mesh, TextureUpload.Create(image), grade, source);
     }
 
-    // The card's look on a mesh. The far fade is the card's own. Over the band the model keeps the dither cells
+    // The card's look on a mesh, under the card's own far fade. Over the band the model keeps the dither cells
     // the card gives up, so a stamp never draws both or neither. It turns by a hash of its planted point and
     // mirrors as its card does. It leans in the card's breeze and gains on the card's sun half, by screen side.
     // ⚠ Never light it with the scene's lights: the card is unlit, and a lit model shows at the band.
+    // ⚠ Never give it an instance uniform: each model cell would take 16 slots of Godot's global buffer.
     private static string ShaderCode(bool lit, bool fogged) => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{SceneBuilder.CoverageMode}};
@@ -238,8 +239,8 @@ public static class VegetationModels
         #include "res://shaders/csky_clutter_fade.gdshaderinc"
         #include "res://shaders/csky_mip_bias.gdshaderinc"
         #include "res://shaders/csky_time.gdshaderinc"
-        #include "res://shaders/csky_instance_uniforms.gdshaderinc"
 
+        const float csky_fog_on = 1.0;
         uniform float half_width = 1.0;
 
         varying flat float v_far;
@@ -273,7 +274,7 @@ public static class VegetationModels
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb * grade{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
-        {{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}{{SceneBuilder.TintLine}}
+        {{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
             ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;
         {{SceneBuilder.CoverageLines}}

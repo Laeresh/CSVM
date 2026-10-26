@@ -66,6 +66,9 @@ public sealed class ClutterInstances
     /// <summary>How many nodes draw the kind: 1 for the whole MultiMesh.</summary>
     public int CellCount => _drawn.Meshes.Length;
 
+    /// <summary>How many nodes draw the kind's near model now, 0 while none does.</summary>
+    public int ModelCellCount => _nearCells?.Node?.GetChildCount() ?? 0;
+
     // RichOn already requires Enhanced, so the whole layout is always the Original variant.
     private bool RichWanted => _richVariant != null && VegetationQualitySetting.RichOn;
 
