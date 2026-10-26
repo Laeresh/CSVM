@@ -787,9 +787,11 @@ public sealed class DogfightLobby
     /// <summary>Puts bot row <paramref name="id"/> on one of the eleven stock airframes or on
     /// <see cref="DogfightLobbySeat.RandomAirframe"/>. Refused on an airframe the plane rules refuse
     /// a person's stock pick of.</summary>
-    public bool SetBotAirframe(int id, int airframe) =>
-        EditsBots && (airframe == DogfightLobbySeat.RandomAirframe || _rules.AdmitsStock(airframe))
-        && _bots.SetAirframe(id, airframe);
+    public bool SetBotAirframe(int id, int airframe) => EditsBots && AdmitsBotAirframe(airframe) && _bots.SetAirframe(id, airframe);
+
+    /// <summary>Whether <see cref="SetBotAirframe"/> takes <paramref name="airframe"/> under the
+    /// plane rules, so the bot's plane list greys and steps over what it would refuse.</summary>
+    public bool AdmitsBotAirframe(int airframe) => airframe == DogfightLobbySeat.RandomAirframe || _rules.AdmitsStock(airframe);
 
     /// <summary>Sets bot row <paramref name="id"/>'s skill tier.</summary>
     public bool SetBotSkill(int id, NetBotSkill skill) => EditsBots && _bots.SetSkill(id, skill);

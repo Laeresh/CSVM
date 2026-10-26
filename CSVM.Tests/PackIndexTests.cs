@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -84,6 +85,36 @@ public class PackIndexTests
         var root = TestData.TempDir();
         Assert.Null(PackIndex.Open(root, "Packs", Glb, f => f.RelativePath).Root);
         Assert.Equal(0, PackIndex.Open(root, "", Glb, f => f.RelativePath).Count);
+    }
+
+    [Fact]
+    public void AZipEntryNamedWithBackslashesDropsItsTopFolder()
+    {
+        var root = TestData.TempDir();
+        Zip(Path.Combine(root, "Packs", "a.zip"), ("mypack\\planes\\player_bhawk\\body.glb", "body"));
+
+        using var index = PackIndex.Open(root, "Packs", Glb, f => PackIndex.KeyOf(f.RelativePath));
+
+        Assert.Equal("body", Text(index.Read("planes/player_bhawk/body")));
+    }
+
+    [Fact]
+    public void ADamagedZipEntryReadsAsNullAndTheRestStillReads()
+    {
+        var root = TestData.TempDir();
+        string zip = Path.Combine(root, "Packs", "a.zip");
+        Zip(zip, ("top/broken.glb", new string('x', 4096)), ("top/fine.glb", "fine"));
+        // The first entry's deflate data follows its local header, name and extra field. 0xFF opens
+        // a block of the reserved type, which the inflater refuses.
+        var bytes = File.ReadAllBytes(zip);
+        int data = 30 + BitConverter.ToUInt16(bytes, 26) + BitConverter.ToUInt16(bytes, 28);
+        Array.Fill(bytes, (byte)0xFF, data, 8);
+        File.WriteAllBytes(zip, bytes);
+
+        using var index = PackIndex.Open(root, "Packs", Glb, f => PackIndex.KeyOf(f.RelativePath));
+
+        Assert.Null(index.Read("broken"));
+        Assert.Equal("fine", Text(index.Read("fine")));
     }
 
     private static string? Text(byte[]? bytes) => bytes == null ? null : Encoding.UTF8.GetString(bytes);

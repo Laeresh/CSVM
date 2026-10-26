@@ -765,8 +765,8 @@ stranger sends carries its build and the number is not read as the original game
 PromptFont icons left of it open the logs folder (the open log file's directory) and Godot's user
 folder through `Utils/FolderOpener.cs`; a line above it names a newer release (`Utils/ReleaseCheck.cs`)
 and opens its page. All three are mouse-only and never focusable, and `Launcher` keeps their clicks
-from Original's polled pointer. A Game Mode refusal shows in `Messagebox` (Original's box) or
-`DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
+from Original's polled pointer. In Game Mode all three refuse, since the shell there answers Ok and
+shows no window, and the refusal shows in `Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
 or `NoGameDataScreen.cs`: deeper screens' bottom plaques sit under it at a Steam Deck's aspect. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs
@@ -1008,7 +1008,8 @@ One notice the launcher posts for the player to read at the menu's next show: VR
 for the flat game it fell back to or a restart whose new process did not start
 (`Launch/XrRelaunch.cs`'s `MenuNotice`, posted through `Launch/ProcessMenu.cs`'s `Notice`), and a
 menu-launched flight one for an aircraft that flew without its bad `rig.json`
-(`Mech3/PlaneRigPatch.cs`'s `PlayerNotice`). Original
+(`Mech3/PlaneRigPatch.cs`'s `PlayerNotice`). Each post adds its message to the pending notice as
+a paragraph of its own, and a message already there is not repeated. Original
 raises it as the one-button warning box (`OriginalShell.ShowNotice`); a presentation takes it once,
 and a switch keeps one nothing has shown.
 
