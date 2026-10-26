@@ -67,6 +67,7 @@ tables is work this plan does not do.
 | 20 | Which unzbd output shapes | **The fork's shape only**, what v0.4.0's bundled `unzbd.exe` writes; the v0.6.1 shape support goes. |
 | 21 | Does CSVM run unzbd | **No.** A modder runs their own unzbd; CSVM documents the folder layout it reads. E43 deletes the extraction runner. The modding folder covers unzbd's archives (and `messages.json`/`interp.json`), not the `rof/` part CSVM's own extractor wrote: the ROF half reads in place, and HD packs mod its art. |
 | 22 | An upgrading player's `extracted/` (amends 8) | **One prompt: keep or delete.** Kept, it is not read unless chosen as the modding folder, and the prompt says how. |
+| 23 | A source without the patch archive (`crimptch.rof`) | **Runs as the unpatched original, with one note.** The English pressing carries no `crimptch.rof` (D34); the source picker says once that the patch is absent and where its archive goes. E45 runs from the disc and records each golden the patch moves. |
 
 ## ⚠ Read this before implementing anything
 
@@ -1435,7 +1436,8 @@ the Extract screen today.
 
 **Approach.** Reuse the Extract screen's locator UI; replace the extraction run with source
 validation. The optional copy into the data root is `GameFileCopy.Run`, called by D34's wiring
-contract. <TODO: where "offered once" is remembered.>
+contract. A source without `crimptch.rof` gets a one-time note (Decision 23).
+<TODO: where "offered once" is remembered.>
 
 **Model recommendation.** medium.
 
@@ -1550,7 +1552,9 @@ the ISO.
 **⚠ Traps.** The suites must not find an old `extracted/` through `CSVM_DATA_ROOT`; check the
 environment before trusting a green run. The goldens are English: run from an English image
 (the user's raw dump `Z:\CSVM\tmp\CRIMSON.cue` is the English pressing, D35), never the German
-disc. The user's disc data stays out of every commit and release.
+disc. The user's disc data stays out of every commit and release. That pressing has no
+`crimptch.rof`, so a golden the patch's `AIRFRAME.SCRIPT` or menu overlay reaches may move; record
+each one rather than overlaying the install's patch (Decision 23).
 
 ## E46 ☐ The modding folder: unzbd's output read per archive, opt-in
 
