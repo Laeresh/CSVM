@@ -243,6 +243,8 @@ public partial class Launcher : Node3D
         // effects, and the warnings below, emitted before the log so they read in launch order.
         _cli = SessionSpec.Parse(OS.GetCmdlineUserArgs());
         _spec = _cli;
+        // Before anything opens a store: every one of them resolves against this folder.
+        UserData.Settle(repoRoot, _exported, OS.GetCmdlineUserArgs());
         Tooling.ShaderDiagnostics.Enabled = _spec.DebugShaders;
         MouseCapture.ScriptedLaunch = _cli.IsScripted || _cli.Det;
         foreach (var note in _spec.Warnings)
@@ -362,9 +364,9 @@ public partial class Launcher : Node3D
         // console additionally shows.
         Log.Open(repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
         // Every persisted store resolves against this root (profiles, hangar planes, bindings,
-        // options), and it is derived from the project name alone, so a worktree run shares it with
-        // the main checkout. Printed so a "not found" against a file on disk is answered, not guessed.
-        Log.Info("core", $"user={ProjectSettings.GlobalizePath("user://")}");
+        // options). Outside portable mode it derives from the project name alone, so a worktree run
+        // shares it with the main checkout. Printed so a "not found" is answered, not guessed.
+        Log.Info("core", $"user={UserData.Root}{(UserData.Portable ? " (portable)" : "")}");
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");

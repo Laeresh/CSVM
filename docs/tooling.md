@@ -398,8 +398,10 @@ x86_64, `embed_pck=true`, so a single `CSVM.exe` with the pck inside, plus the *
 to the exe's own folder: it reads `extracted/` from there and writes its logs to a plain `logs\`
 beside the exe rather than to the `.scratch\logs\` a repo run uses (`Log.DirectoryFor` is the one
 switch); F12 screenshots go to a `Screenshots\` folder beside the exe (`CaptureDirector.ShotDirFor`).
-Per-user state is not in that folder at all: options, bindings, campaign profiles, scores
-and custom planes are written through `user://`, which is `%APPDATA%\Godot\app_userdata\CSVM`.
+Per-user state is not in that folder by default: options, bindings, campaign profiles, scores
+and custom planes are written to `%APPDATA%\Godot\app_userdata\CSVM` (Godot's `user://`). A
+`portable.txt` beside the exe, or `--portable`, keeps them in a `userdata\` folder there instead
+(`Utils/UserData.cs`).
 
 **One-time template install.** The Godot export templates are user-global, not part of the repo's
 pinned editor: extract the inner `templates/` FILES of `tools/godot-4.7-mono-export-templates.tpz`

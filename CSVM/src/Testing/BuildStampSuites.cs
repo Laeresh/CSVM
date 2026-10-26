@@ -197,11 +197,11 @@ internal static class BuildStampSuites
         ctx.Check(BuildStamp.LogsFolderFor(null, ctx.RepoRoot, false) == Log.DirectoryFor(ctx.RepoRoot, false)
             && BuildStamp.LogsFolderFor(null, ctx.RepoRoot, true) == Log.DirectoryFor(ctx.RepoRoot, true),
             $"with no log file open it falls back to where the sink would write, for a repo run and an export alike");
-        ctx.Check(BuildStamp.UserFolder == OS.GetUserDataDir(), $"the user icon opens Godot's user folder ({BuildStamp.UserFolder})");
+        ctx.Check(BuildStamp.UserFolder == UserData.Root, $"the user icon opens the user data folder ({BuildStamp.UserFolder})");
 
         logs.EmitSignal(BaseButton.SignalName.Pressed);
         user.EmitSignal(BaseButton.SignalName.Pressed);
-        ctx.Check(opened.Count == 2 && opened[0].Path == stamp.LogsFolder && opened[1].Path == OS.GetUserDataDir(),
+        ctx.Check(opened.Count == 2 && opened[0].Path == stamp.LogsFolder && opened[1].Path == UserData.Root,
             $"a click hands the opener exactly its own folder ({string.Join("; ", opened)})");
     }
 

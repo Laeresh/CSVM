@@ -183,6 +183,11 @@ custom planes and the install folder you last extracted from are kept outside it
 those two folders removes everything CSVM has written; your copy of the original game is
 never modified.
 
+To keep all of it inside the CSVM folder instead, for example for a launcher such as Lutris,
+create an empty file named `portable.txt` next to `CSVM.x86_64`. CSVM then writes everything
+to a `userdata` folder there. Starting `./CSVM.x86_64 -- --portable` does the same for one
+launch. Files already in the folder above are not moved; copy them into `userdata` to keep them.
+
 Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
 model. The Controls screen writes those files for you. To edit one by hand, for example to
 set a deadzone, fly two sticks together, or stop a keypad being read as a stick, follow
