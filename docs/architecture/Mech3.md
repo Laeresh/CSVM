@@ -666,6 +666,23 @@ or today's zip spelling, case ignored, the first `player.zrd` for `player.json`.
 engine calls it yet; the switch hands the files to the session in place of the zip path.
 Value encoding and lookup rule: [../formats/zrdr.md](../formats/zrdr.md#binary-encoding).
 
+## src/Mech3/AnimZbd.cs
+The reader for a chapter's `cam_anim.zbd` and a mission's `mis_anim.zbd`, engine-free: `Read`
+decodes a whole file into the same `AnimArchive` model `AnimArchive.Load` builds from the
+extraction, every SI script decoded up front, and `Load(game, path, label)` returns null without a
+source or without the file. It rebuilds each definition and script as the property tree the
+model's `Parse` members take, so the model is the same by construction; `AnimArchive.FromDecoded`
+is the one entry it adds to the model. Nothing in the engine calls it yet. `Read` refuses a file
+whose records do not tile it. Layout and rules:
+[../formats/anim-definitions/compiled-archives.md](../formats/anim-definitions/compiled-archives.md).
+
+## src/Mech3/AnimZbdEvents.cs
+The sequence events of a compiled anim archive for `AnimZbd`: each of the 35 shipped event types'
+payload, as the bag `AnimEvent.Data` holds, with node, light, puffer and sound indices resolved
+through the definition's support arrays (`AnimZbdNames`, repeated node names spelled `~2`, `~3`).
+An event type no archive ships is refused. Payload layouts:
+[../formats/anim-definitions/compiled-archives.md](../formats/anim-definitions/compiled-archives.md).
+
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
 resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only

@@ -115,6 +115,26 @@ public sealed class AnimArchive
         return _scriptCache[index] = script;
     }
 
+    /// <summary>An archive decoded in memory by <see cref="AnimZbd"/>: its definitions, and every
+    /// script already built under its pool name, so <see cref="Script"/> reads no file.</summary>
+    internal static AnimArchive FromDecoded(string label, List<AnimDefinition> defs, List<(string Name, SiScript Script)> scripts)
+    {
+        var archive = new AnimArchive("", isDir: false) { Label = label };
+        for (int i = 0; i < scripts.Count; i++)
+        {
+            archive._scriptNames.Add(scripts[i].Name);
+            archive._scriptCache[i] = scripts[i].Script;
+        }
+
+        foreach (var def in defs)
+        {
+            def.Archive = archive;
+            archive.Defs.Add(def);
+        }
+
+        return archive;
+    }
+
     private static AnimData ParseObject(byte[] bytes)
     {
         using var doc = JsonDocument.Parse(bytes);

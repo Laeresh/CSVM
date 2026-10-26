@@ -205,3 +205,57 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   hangar-door motions; the train's steam `PUFFER_STATE` is fully inline in `train.json`
   (all emitter params + `smokestack` attach node). Firetrucks / fueltrucks / patrol boat
   are `ON_CALL` only (mission-event driven, nothing calls them in free flight).
+
+## C# reader
+
+`CSVM/src/Mech3/AnimZbd.cs` reads an archive from its bytes into the `AnimArchive` model;
+`AnimZbdEvents.cs` holds the event payloads. Both rebuild each definition, sequence and script as
+the property tree the model's own `Parse` members take (`AnimData`), and every payload field is
+present, an absent option null and a union a one-key bag. The model therefore cannot differ from
+the one built from the extraction's JSON, and the model diff (`CSVM.Tests/AnimZbdTests.cs`) holds
+that over all 61 archives. Every script is decoded on read.
+
+**Layout facts the reader relies on**, beyond the reference above:
+
+- **Placeholder records.** The objects, nodes, lights, puffers, dynamic-sound and static-sound
+  arrays each start with an empty record that their count includes, so events index them 1-based.
+  The NAME1 path, the activation prerequisites, the anim refs and the script-id list have none.
+- **Record layouts.** Object 92 B (`name[32]`, 0, `ptr` @36, `flags u16`, `root_idx u16`, affine);
+  node 44 B (`flags u16`, `root_idx u16`, `name[32]` @4, 0, `ptr` @40); light, puffer and
+  dynamic sound 44 B (`name[32]`, `flags`, `ptr` @36, 0); static sound 40 B, one name field;
+  activation prerequisite 48 B (`optional u32`, `type u32`: 1 animation `{name[32]}`, 2 object
+  and 3 parent `{active u32, name[32], ptr}`); anim ref 72 B (`name[64]`, `ref_ty` @64). Every
+  name field ends at its first NUL; what follows is padding or garbage.
+- **Repeated node names.** A def's node list can repeat a name with different pointers. The second
+  and later copies are spelled `name~2`, `name~3` in `NodeList` and in every event that names
+  them, since events reach nodes by index.
+- **Sequences.** A 64-byte header (`name[32]`, `seq_state u8` 0 Initial / 3 OnCall,
+  `reset_state u8`, event bytes `u32` @60) and its events. The reset sequence's header is named
+  `RESET_SEQUENCE`, and the model keeps only its events.
+- **Event start.** An event whose start offset is Animation (1) and whose time is zero has no
+  start: `AnimEvent.StartOffset` is null. Any other pair is kept.
+- **Script pool.** All 28-byte headers first (`script_name_len u8` @8, `object_name_len u8` @9,
+  `spline_interp` @12, `frame_count` @16, `script_data_len` @20), then each script's two
+  NUL-terminated names and frames. A script's pool name is its source path without `.zan` and
+  the leading `..\`, backslashes as hyphens, then `-<object>.zan`; a repeated def or script name
+  becomes `stem-N.ext` with the first free N.
+
+**Reader rules and edge cases.**
+
+- **A non-finite delta reads as zero.** Where any component of a frame channel's `delta` is not
+  finite, all three read `+0`, the value the model has always held. Only the degenerate frame of
+  C5/M02 `carneypkup_cam.zan;camera1` has one (six `0xFFC00000` NaNs, translate and rotate). Its
+  spline blocks keep their NaN bits.
+- **A non-finite payload float reads as null**, the form JSON gives it. No shipped event has one.
+- **`VAL FAIL`** in the extraction's log marks a stored value the compiler's formula does not
+  reproduce, kept beside the inputs. `DELTA VAL FAIL` is an OBJECT_OPACITY_FROM_TO or
+  FBFX_COLOR_FROM_TO whose stored rate is not `(to - from) / run_time` (`opacity_delta`,
+  `alpha_delta`; 8 alpha events over the 61 archives, no opacity event). `INTERVAL VAL FAIL` is a PUFFER_STATE whose
+  interval type and value flags are not both set; the payload carries `interval_garbage` in
+  place of `interval`. The OBJECT_MOTION_FROM_TO channel deltas follow the same rule without a log
+  line (`translate_delta`, `rotate_delta`, `scale_delta`).
+- **`anim def duplicate anim ref`** marks a def whose anim-ref list names the same animation twice
+  in the LOCAL_NAME form (171 repeats in 115 defs over the 61 archives, the plane defs among them). Nothing in the
+  model reads the anim-ref list: CALL_ANIMATION carries its slot as a raw index.
+- **Event types never shipped** (EFFECT 3, OBJECT_CONNECTOR 18, CALL_OBJECT_CONNECTOR 19,
+  CAMERA_FROM_TO 21, FBFX_CSINWAVE_FROM_TO 37, ANIM_VERBOSE 39) are refused rather than guessed.

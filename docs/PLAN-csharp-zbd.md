@@ -178,7 +178,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, large formats
 
-21. ☐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+21. ◐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
 22. ◐ GameZ and `planes.zbd`
 
 ### Wave D, ROF and disc sources
@@ -741,7 +741,71 @@ alpha class and rename rules; model diff on pixels and names; delete the PNG/zip
 
 # Wave C, large formats
 
-## C21 ☐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+## C21 ◐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+
+**Reader landed, engine switch pending.** `AnimZbd.Read(byte[], label)` and
+`AnimZbd.Load(IGameFileSource?, path, label)` (`CSVM/src/Mech3/AnimZbd.cs`) decode a chapter's
+`cam_anim.zbd` or a mission's `mis_anim.zbd` into the existing `AnimArchive` model: every
+definition, its support arrays, reset sequence, sequences and destruction slot, and every SI
+script, decoded up front. `CSVM/src/Mech3/AnimZbdEvents.cs` holds the 35 shipped event payloads.
+The reader rebuilds each definition and script as the property tree the model's own `Parse`
+members take (`AnimData`), so the model cannot drift from the JSON path's: `AnimEvent.Data` keeps
+the whole payload bag, every field present and every option null where absent. The one edit to
+`CompiledAnim.cs` is the additive `internal static AnimArchive.FromDecoded`, which fills the
+script cache so `Script(i)` reads no file. The layout facts the reader relies on are the new
+**C# reader** section of [formats/anim-definitions/compiled-archives.md](formats/anim-definitions/compiled-archives.md).
+`CSVM.Tests/AnimZbdTests.cs` holds seven CI-safe tests, eight cases (the archive count, the rename
+rule, two script pool names, a hand-encoded archive with a repeated node name, a node prerequisite, a reset sequence,
+six event kinds and a NaN script delta, and two refusals) and the model diff over all 61 archives
+against `AnimArchive.Load` on today's extraction with every script loaded on both sides, skipping
+only `AnimArchive._path` and `AnimArchive._isDir`: every leaf equal, 5,350,835 in all (C1
+`cam_anim` 236,655 and C5/M02 `mis_anim` 239,191, A2's figures less the two skipped fields). A
+changed script frame time and a changed event payload in the direct model are both found.
+
+**The split.** Two files by layer, both landed together because the diff settled every family in
+one pass: the container, definitions, support arrays, sequences and script pool in `AnimZbd`, and
+the event payloads in `AnimZbdEvents` (sound and light, object state and motion, camera and fog,
+control flow, puffer, and the two raw-byte CS events). The six event types no archive ships
+(EFFECT, OBJECT_CONNECTOR, CALL_OBJECT_CONNECTOR, CAMERA_FROM_TO, FBFX_CSINWAVE_FROM_TO,
+ANIM_VERBOSE) are refused rather than written blind.
+
+**What the stderr notes mark.**
+
+- **The six NaN deltas** read as `+0`: where any component of a frame channel's `delta` is not
+  finite, the extraction moved the vector to `delta_raw` and zeroed it, and the reader zeroes it
+  the same way. The C5/M02 diff is clean with no skip.
+- **"VAL FAIL"** marks a stored value the compiler's formula does not reproduce, which the model
+  keeps beside the inputs: `DELTA VAL FAIL` is an opacity or FBFX-colour from-to whose stored rate
+  is not `(to - from) / run_time` (8 alpha events over the 61 archives, no opacity event), and `INTERVAL VAL FAIL` a
+  puffer state with only one of its two interval flags set, carried as `interval_garbage`. The
+  reader recomputes the rate and the flags and keeps the same fields.
+- **"anim def duplicate anim ref"** marks a def whose anim-ref list names one animation twice in
+  the LOCAL_NAME form (171 repeats in 115 defs over the 61 archives). Nothing in the model reads that list, so the
+  reader skips it.
+
+**Decode cost** (Debug build, one thread, from bytes in memory): at most about 60 ms per archive,
+C1 `cam_anim` 40 ms, about 0.85 s for all 61. A session decodes one chapter and one mission
+archive, under 100 ms.
+
+**Remaining switch work (after A3).**
+
+1. **The game-data slot.** The chapter part of A3's value carries the chapter's `AnimArchive`
+   (`ZBD/<chapter>/cam_anim.zbd`) and the mission's (`ZBD/<chapter>/<mission>/mis_anim.zbd`,
+   absent for some missions, which `Load` returns as null as today). ⚠ The labels stay `cam_anim`
+   and `mis_anim`: `AnimProgram.Load` decides the mission scope by the label. Its two path
+   parameters become the two models; the other `AnimArchive.Load` sites are `OrdnanceSuites`,
+   `ZeppelinSuites` and `EffectStageSuiteHelper`.
+2. **The synthetic builder**, per the A3 recipe: `Tooling/SyntheticEffects.cs` writes an anim
+   extraction today and builds the `AnimArchive` in memory instead (`FromDecoded` takes the
+   parsed definitions and scripts).
+3. **The legacy path moves**: `AnimArchive.Load`, `ReadAll`, `ReadEntry` and `JsonConvert` go to
+   `CSVM.Tests/Oracle/AnimLegacy.cs`; the `Parse(AnimData)` members stay, since the reader builds
+   through them. Unused afterwards, for E43: the `anim` `ZbdExtraction` mode and the anim paths
+   in `SessionPaths`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `CompiledAnim` builds `AnimDefinition`s from the 61 anim archives directly.
 
@@ -749,8 +813,7 @@ alpha class and rename rules; model diff on pixels and names; delete the PNG/zip
 `anim-events` 11,598, `anim-names` 3,897; six NaN deltas carried raw; `docs/formats/anim-definitions.md`
 and `compiled-archives.md`.
 
-**Approach.** Split by event family if the size demands it. <TODO: a sub-item split, decided by
-the implementer after reading `anim-definitions.md`.>
+**Approach.** Split by event family if the size demands it; the split is under **The split** above.
 
 **Model recommendation.** high.
 

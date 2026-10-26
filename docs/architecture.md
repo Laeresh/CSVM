@@ -106,6 +106,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TextureZbd.cs`, the engine-free reader for `texture`/`rtextureN`/`rimage.zbd`: each texture's name, alpha class, flags and pixels.
 - `src/Mech3/GameZZbd.cs`, the engine-free reader for `gamez.zbd`/`planes.zbd` into the `GameZ` model.
 - `src/Mech3/ZrdrZbd.cs`, the engine-free reader for `zrdr.zbd` into each reader file's list, with the lookup by name.
+- `src/Mech3/AnimZbd.cs`, the engine-free reader for `cam_anim.zbd`/`mis_anim.zbd` into the `AnimArchive` model.
+- `src/Mech3/AnimZbdEvents.cs`, the compiled anim archive's sequence-event payloads, for `AnimZbd`.
 - `src/Mech3/AnimRuntime.cs`, the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
 - `src/Mech3/Anim/`, `AnimRuntime`'s motion value types and bind-census enums, split into their own namespace for size; the dispatch-axis modules share it.
 - `src/Mech3/Anim/MotionSet.cs`, the live motion collection: registration and eviction, the per-frame sweep, and the predicates the runtime asks it.
