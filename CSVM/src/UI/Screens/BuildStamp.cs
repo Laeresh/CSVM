@@ -71,9 +71,9 @@ public sealed partial class BuildStamp : Node
         _exported = exported;
     }
 
-    /// <summary>Gets the folder the user icon opens, Godot's user data folder. It holds the
-    /// settings, the bindings, the campaign profiles, the custom planes and Godot's own log.</summary>
-    public static string UserFolder => OS.GetUserDataDir();
+    /// <summary>Gets the folder the user icon opens, <see cref="UserData.Root"/>. It holds the
+    /// settings, the bindings, the campaign profiles and the custom planes.</summary>
+    public static string UserFolder => UserData.Root;
 
     /// <summary>Gets or sets what an icon's click runs, given the folder and its log name.
     /// <see cref="FolderOpener.Open"/> by default; a suite swaps it so no window opens.</summary>

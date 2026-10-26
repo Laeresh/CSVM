@@ -8,7 +8,7 @@ namespace CSVM.Sticks;
 /// <summary>
 /// The engine side of the stick profiles: where the files live and the one live
 /// <see cref="StickProfileSet"/>. Shipped profiles are read through Godot's file API, since an
-/// exported build keeps them in the pck. User profiles live in <c>user://stick_profiles/</c>, the
+/// exported build keeps them in the pck. User profiles live in <c>stick_profiles/</c> in the user folder, the
 /// only place a save writes. The pump (<see cref="StickPump"/>) starts the set and refreshes it on
 /// every roster change, so a companion plugged in mid-flight switches files that frame.
 /// </summary>
@@ -18,10 +18,11 @@ public static class StickProfiles
     /// and exported through the preset's <c>data/*.json</c> include filter.</summary>
     public const string ShippedDirectory = "res://data/stick_profiles";
 
-    /// <summary>The player's own profiles, and the folder the controls screen opens.</summary>
-    public const string UserDirectory = "user://stick_profiles";
+    /// <summary>The player's own profiles' folder in <see cref="Utils.UserData.Root"/>, and the
+    /// folder the controls screen opens.</summary>
+    public const string UserFolderName = "stick_profiles";
 
-    /// <summary>Where user profiles are read and written instead of <see cref="UserDirectory"/>
+    /// <summary>Where user profiles are read and written instead of <see cref="UserFolderName"/>
     /// while set, so a suite never loads or overwrites the profiles on this machine.</summary>
     public static string? DirectoryOverride { get; set; }
 
@@ -31,7 +32,7 @@ public static class StickProfiles
 
     /// <summary>The user profile folder as an OS path, or the <see cref="DirectoryOverride"/>.
     /// </summary>
-    public static string UserPath() => DirectoryOverride ?? ProjectSettings.GlobalizePath(UserDirectory);
+    public static string UserPath() => DirectoryOverride ?? System.IO.Path.Combine(Utils.UserData.Root, UserFolderName);
 
     /// <summary>Builds and loads the live set over <paramref name="roster"/>, and registers it as
     /// seat 1's stick rows (<see cref="LaunchBindings.StickRows"/>).</summary>
