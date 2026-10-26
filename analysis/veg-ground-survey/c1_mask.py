@@ -13,8 +13,9 @@ classed by the ground texture under its centre (layer 0, up-facing, the walk sur
 - Strips. Each tarmac01 (the runway texture: centre line, edge marks) piece of at least STRIP_TEXELS is a strip, boxed
   along its principal axis. A texel inside the box grown by side_m to each side and end_m off each end is 0 (bare), so
   no added stamp stands beside a strip or under its approach.
-- Every other texel is 128. Only picked ground (PICKED, the sidecar's picks) goes below neutral, and only where all
-  eight neighbours are picked ground too, so no bilinear sample on the forest or the river thins an original stamp.
+- Every other texel is 128. A texel goes below neutral only where neither it nor any of its eight neighbours is ground
+  a template stamps (the forest, the river banks), so no bilinear sample there thins an original stamp, while picked
+  ground beside the aprons, hangars and roads, which nothing stamps, clears with the strip.
 """
 import json
 import math
@@ -33,13 +34,12 @@ EX = os.path.join(os.environ.get("CSVM_DATA_ROOT", REPO), "extracted")  # a work
 N, X0, SIZE = 1024, -12288.0, 12288.0
 TEXEL = SIZE / N
 CROPS = ("crop04.tif", "crop05.tif")
-PICKED = CROPS + ("terpat03.tif", "terpat03b.tif", "grass1.tif")
 STRIP, STRIP_TEXELS = "tarmac01.tif", 300  # about 4 ha; the smaller tarmac01 pieces are joins inside the margins
 
 
 def raster():
     """Per texel centre: the index into the returned names of the ground texture there (0 none), and its u."""
-    nodes, meshes, _, _ = E.load_chapter("C1", EX)
+    nodes, meshes, mats, _ = E.load_chapter("C1", EX)
     raw = json.load(open(os.path.join(EX, "C1", "gamez", "models.json"), encoding="utf-8"))
     names = [""]
     tex = np.zeros((N, N), np.int32)
@@ -61,6 +61,14 @@ def raster():
             names.append(t)
         tex[win][inside] = names.index(t)  # the last polygon drawn over a texel decides it, as for the survey's census
         U[win][inside] = (l1 * ua + l2 * ub + (1 - l1 - l2) * uc)[inside]
+
+    per, ok = E.load_interp_templates(EX)
+    assert ok
+    stamped = set()
+    for name in per["C1"]:
+        t = E.parse_template(nodes, meshes, mats, name)
+        if t is not None:
+            stamped.add(t.ground_texture.lower())
 
     def walk(idx, xf):
         n = nodes[idx]
@@ -92,7 +100,7 @@ def raster():
     world = next(n for n in nodes if n.kind == "World" and n.name.lower() == "world1")
     for i in list(world.children) + list(world.world_partition_roots or []):
         walk(i, E.IDENTITY)
-    return tex, names, U
+    return tex, names, U, stamped
 
 
 def ringed(m):
@@ -126,7 +134,7 @@ def strips(tex, names, side, end):
     return zone, boxes
 
 
-def mask(tex, names, U, interior=2, hedge=255, side=150.0, end=600.0):
+def mask(tex, names, U, stamped, interior=2, hedge=255, side=150.0, end=600.0):
     crop = np.isin(tex, [names.index(t) for t in CROPS if t in names])
     lo = X0 + np.arange(N) * TEXEL
     edge = crop & ~ringed(crop)
@@ -140,18 +148,18 @@ def mask(tex, names, U, interior=2, hedge=255, side=150.0, end=600.0):
     out = np.full((N, N), 128, np.uint8)
     out[crop] = interior
     out[edge] = hedge
-    inner = ringed(np.isin(tex, [names.index(t) for t in PICKED if t in names]))
+    safe = ringed(~np.isin(tex, [names.index(t) for t in stamped if t in names]))
     zone, boxes = strips(tex, names, side, end)
-    out[zone & inner] = 0
-    assert not ((out < 128) & ~inner).any()
-    return out, edge, zone & inner, boxes
+    out[zone & safe] = 0
+    assert not ((out < 128) & ~safe).any()
+    return out, edge, zone & safe, boxes
 
 
 if __name__ == "__main__":
     a = sys.argv[1:]
     path = a[0] if a else os.path.join(REPO, "CSVM", "data", "vegetation", "C1.bin")
-    tex, names, U = raster()
-    out, edge, cleared, boxes = mask(tex, names, U, *(int(v) for v in a[1:3]), *(float(v) for v in a[3:5]))
+    tex, names, U, stamped = raster()
+    out, edge, cleared, boxes = mask(tex, names, U, stamped, *(int(v) for v in a[1:3]), *(float(v) for v in a[3:5]))
     out.tofile(path)
     print(f"{path}: {edge.sum()} edge texels, {cleared.sum()} cleared beside {len(boxes)} strips")
     for mid, deg, length, width in boxes:

@@ -1329,10 +1329,11 @@ one knob a lab slider tunes later, so each ground that wants its own density tak
   east-west pair north of the hangar apron and the diagonal pair south-west of it, each boxed along its principal axis.
   A texel inside a box grown by 150 m to each side and 600 m off each end is 0. Six hundred metres is where a 3° glide
   path stands 31 m up, above the tallest card (dougfirtree1, 22 m); 150 m to each side keeps a plane that drifts off
-  the strip, or circles low over it, clear of an 18 m fir. The clearance leaves 31,865 of the 32,186 kept added stamps.
-- *The original's stamps.* A texel goes below neutral only where it and its eight neighbours are picked ground
-  (`terpat03`, `terpat03b`, `grass1`, `crop04`, `crop05`), so no bilinear sample on `terpat02` or the river thins an
-  original stamp: the firs and river bushes inside a strip's margins stand as in the original (`mask_dropped=0`).
+  the strip, or circles low over it, clear of an 18 m fir. The clearance leaves 31,812 of the 32,186 kept added stamps.
+- *The original's stamps.* A texel goes below neutral only where neither it nor any of its eight neighbours is ground
+  a C1 template stamps (`terpat02`, the river banks), so no bilinear sample there thins an original stamp: the firs
+  and river bushes inside a strip's margins stand as in the original (`mask_dropped=0`). Picked ground beside the
+  hangar apron, the hangars and the roads, which nothing stamps, clears with the strip.
 - *Not forest.* Neither set is `mass`. Marked forest, the grassland's bushes and firs and the hedges would raise fir
   clumps over the grassland and the fields past 1 to 1.6 km (the clump tile is firtree1) and fade their own cards
   there, so the fields would turn to forest at a distance.
