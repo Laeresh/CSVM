@@ -18,11 +18,8 @@
     What it refuses, and why each refusal exists:
 
       - A dirty CSVM worktree. The release says the zip was built from a commit; an
-        uncommitted edit makes that false in a way nobody downstream can detect.
-      - A dirty tools/mech3ax cs-anim, or a cs-anim that is not on its origin. unzbd.exe's
-        source commit is published as a fact about the binary in the zip, and a commit that
-        exists only on this workstation is not a source anybody can read. (The CSVM commit
-        needs no such check: pushing the tag publishes it.)
+        uncommitted edit makes that false in a way nobody downstream can detect. (The commit
+        needs no pushed-check: pushing the tag publishes it.)
       - A tag that already exists, locally or on the remote. A moved tag makes the source
         correspondence false for a binary somebody already downloaded, and nothing on their
         machine says so. There is no -Force here on purpose: the way to fix a bad release is
@@ -81,14 +78,6 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot      = $PSScriptRoot
 $ExportScript  = Join-Path $RepoRoot 'ExportRelease.ps1'
 $ProjectGodot  = Join-Path $RepoRoot 'CSVM\project.godot'
-# The mech3ax checkout is found the way ExportRelease.ps1 finds its tools: this tree's own, or
-# CSVM_DATA_ROOT's when this tree has no tools\godot (a worktree). The fork commit checked here has
-# to be the one the export records.
-$ToolsRoot     = $RepoRoot
-if ((-not (Test-Path (Join-Path $RepoRoot 'tools\godot'))) -and $env:CSVM_DATA_ROOT) {
-    $ToolsRoot = $env:CSVM_DATA_ROOT
-}
-$Mech3axRepo   = Join-Path $ToolsRoot 'tools\mech3ax'
 $ExportDir     = Join-Path $RepoRoot '.scratch\export'
 $BuildInfoPath = Join-Path $ExportDir 'BUILD-INFO.txt'
 $LinuxCheck    = Join-Path $RepoRoot 'sandbox\LinuxRelease.ps1'
@@ -221,39 +210,6 @@ if ($CsvmCommit -notmatch '^[0-9a-f]{40}$') {
     throw "Could not resolve HEAD in $RepoRoot."
 }
 
-# cs-anim is checked against the REMOTE rather than the local tracking ref, which goes stale
-# without a fetch. Unlike the CSVM commit, this one is never pushed by anything in this run:
-# it is a different repository, so it has to be published already or the zip's BUILD-INFO.txt
-# names a commit nobody but this workstation can read.
-$forkHead = Invoke-Probe git -C $Mech3axRepo rev-parse cs-anim
-$ForkCommit = if ($forkHead.Lines.Count -gt 0) { $forkHead.Lines[0] } else { '' }
-if ($forkHead.ExitCode -ne 0 -or $ForkCommit -notmatch '^[0-9a-f]{40}$') {
-    throw "Could not resolve cs-anim in $Mech3axRepo -- unzbd.exe's source commit is published " +
-        "with the release."
-}
-$forkDirty = @(& git -C $Mech3axRepo status --porcelain)
-if ($forkDirty.Count -gt 0) {
-    throw "The mech3ax worktree is dirty ($($forkDirty.Count) path(s)). unzbd.exe would not match " +
-        "the cs-anim commit the release names; commit or stash there first."
-}
-$forkRemote = Invoke-Probe git -C $Mech3axRepo ls-remote origin 'refs/heads/cs-anim'
-if ($forkRemote.ExitCode -ne 0) {
-    throw "Could not reach the mech3ax origin to check cs-anim -- $($forkRemote.Lines -join ' ')"
-}
-if ($forkRemote.Lines.Count -eq 0) {
-    throw "The mech3ax origin has no cs-anim branch -- the release states this commit as " +
-        "unzbd.exe's source, so it has to be pushed there first."
-}
-$forkRemoteCommit = ($forkRemote.Lines[0] -split '\s+')[0]
-if ($forkRemoteCommit -ne $ForkCommit) {
-    throw "cs-anim is at $ForkCommit but origin/cs-anim is at $forkRemoteCommit -- push the fork " +
-        "first. The release states this commit as unzbd.exe's source, and an unpushed commit is " +
-        "not a source anyone can read."
-}
-$forkOrigin = Invoke-Probe git -C $Mech3axRepo remote get-url origin
-$forkSlug = if ($forkOrigin.Lines.Count -gt 0) { Get-GitHubSlug $forkOrigin.Lines[0] } else { $null }
-$ForkRepoUrl = if ($forkSlug) { "https://github.com/$forkSlug" } else { $null }
-
 # Not a refusal: the tag push publishes the commit either way, so the release's links all
 # resolve. It is worth saying out loud, because a reader who opens the branch expects to find
 # the release's commit in its history.
@@ -327,7 +283,7 @@ if ((& git -C $RepoRoot rev-parse HEAD) -ne $CsvmCommit) {
 }
 
 # BUILD-INFO.txt is what the zip itself tells its reader about where it came from, and the
-# release notes restate its two commits. Read it back rather than restating the same variables
+# release notes restate its commit. Read it back rather than restating the same variables
 # twice: if the export recorded a qualifier, the notes are about to claim something the zip
 # already denies.
 $buildInfos = [ordered]@{ 'zip' = [System.IO.File]::ReadAllText($BuildInfoPath) }
@@ -340,14 +296,12 @@ if ($tarInfo.ExitCode -ne 0 -or $tarInfo.Lines.Count -eq 0) {
 $buildInfos['tarball'] = $tarInfo.Lines -join "`n"
 foreach ($archive in $buildInfos.Keys) {
     $buildInfo = $buildInfos[$archive]
-    foreach ($commit in @($CsvmCommit, $ForkCommit)) {
-        if ($buildInfo -notmatch $commit) {
-            throw "BUILD-INFO.txt in the $archive does not name $commit -- the release notes and " +
-                "the $archive would disagree about what was built."
-        }
+    if ($buildInfo -notmatch $CsvmCommit) {
+        throw "BUILD-INFO.txt in the $archive does not name $CsvmCommit -- the release notes and " +
+            "the $archive would disagree about what was built."
     }
-    if ($buildInfo -match 'MODIFIED' -or $buildInfo -match 'pushed:\s+NO') {
-        throw "BUILD-INFO.txt in the $archive records a dirty or unpushed source. Nothing was tagged."
+    if ($buildInfo -match 'MODIFIED') {
+        throw "BUILD-INFO.txt in the $archive records a dirty source. Nothing was tagged."
     }
 }
 
@@ -366,11 +320,6 @@ if (Test-Path $LatestDir) { Remove-Item $LatestDir -Recurse -Force }
 New-Item -ItemType Directory -Path $LatestDir | Out-Null
 Copy-Item $ZipPath $LatestZipPath
 Copy-Item $TarPath $LatestTarPath
-$forkLine = if ($ForkRepoUrl) {
-    "[``$($ForkCommit.Substring(0,10))``]($ForkRepoUrl/commit/$ForkCommit)"
-} else {
-    "``$ForkCommit``"
-}
 
 # Single-quoted here-string with -f placeholders: the notes are full of backticks, which a
 # double-quoted here-string would read as escapes. The Linux README is linked at the tagged
@@ -392,20 +341,19 @@ sha256sum {2}
 - `{0}` SHA-256: `{6}`
 - `{2}` SHA-256: `{7}`
 
-`{11}` and `{12}` are the same two files under names without the version, for links that follow
-the latest release (`{4}/releases/latest/download/{12}`). Their hashes are the ones above.
+`{10}` and `{11}` are the same two files under names without the version, for links that follow
+the latest release (`{4}/releases/latest/download/{11}`). Their hashes are the ones above.
 
 ### Built from
 
-Every binary in both archives is built from public source, and each archive repeats these two
-commits in its own `BUILD-INFO.txt`.
+Every binary in both archives is built from public source, and each archive repeats this commit
+in its own `BUILD-INFO.txt`.
 
 - `CSVM.exe` and `CSVM.x86_64` (version {8}): [`{9}`]({4}/commit/{5})
-- `tools\unzbd.exe` and `tools/unzbd`: mech3ax fork, branch `cs-anim`, {10}
 '@
 $notes = $notesBody + ($notesTemplate -f $ZipName, $ZipSize, $TarName, $TarSize,
     $RepoUrl, $CsvmCommit, $Sha256, $TarSha256, $Version, $CsvmCommit.Substring(0, 10),
-    $forkLine, $LatestZipName, $LatestTarName)
+    $LatestZipName, $LatestTarName)
 
 $notesPath = Join-Path $RepoRoot ".scratch\release-notes-$Tag.md"
 [System.IO.File]::WriteAllText($notesPath, $notes, (New-Object System.Text.UTF8Encoding($false)))

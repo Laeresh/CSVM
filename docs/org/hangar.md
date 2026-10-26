@@ -11,7 +11,7 @@ from; no decompiler output is reproduced.
 the in-memory record this page's screens edit). The paint system itself (region masks, colour
 formula, decals) is the rest of that page. The UI scripts that lay the screens out
 (`GUNS.SCRIPT`, `HARDPOINTS.SCRIPT`, `ARMOR.SCRIPT`, `PURCHASE.SCRIPT`) are pure layout in
-`extracted/rof/ASSETS/SCRIPTS/`; everything they display comes from the engine through the
+`crimson.rof`'s `ASSETS/SCRIPTS/`; everything they display comes from the engine through the
 callbacks below. `AIRFRAME.SCRIPT` is the exception, carrying the airframe swap's own question in
 script rather than in the engine ("When the airframe swap asks").
 
@@ -124,7 +124,7 @@ turret mask / slot-title ids):
 | 9 | Peacemaker | 5228 | 2695 | 7205 | 17 | 85 | 3 | 0x00 | 3065, 3066, 3067, 3068 |
 | 10 | Warhawk | 2423 | 5005 | 14675 | 2 | 120 | 19 | 0x00 | 3061, 3070, 3062, 3069 |
 
-Slot-title strings are `extracted/rof/ui_strings.json` (3060 Nose Turret, 3061 Inner Wing
+Slot-title strings are `langui.dll` rows (`ui_strings.json`: 3060 Nose Turret, 3061 Inner Wing
 Guns, 3062 Outer Wing Guns, 3073 Rear Turret, …). The turret bitmask lines up with which
 titles are turrets: the Hellhound/Brigand/Firebrand/Kestrel slot 3 is the Rear Turret (bit 3),
 the Balmoral's slots 2 and 3 are Nose plus Rear Turret (0x0c).

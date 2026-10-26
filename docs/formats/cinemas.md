@@ -243,8 +243,8 @@ Ogg Theora and play through a stock `VideoStreamPlayer`, which uses a decoder th
 rather than one this project owns and debugs. It was rejected on the download it obliges. The
 release zip is 78 MB and a stock ffmpeg is roughly 80 to 90 MB, so ten short videos would about
 double what anyone downloads, on top of a second licence file and a third payload version for the
-notices to lock. A trimmed ffmpeg built from source, on the `mech3ax` model, would land near 5 to
-10 MB and remains the fallback if the decoder work stalls.
+notices to lock. A trimmed ffmpeg built from source would land near 5 to 10 MB and remains the
+fallback if the decoder work stalls.
 
 ## Frame counts and durations
 

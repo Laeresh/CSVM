@@ -70,7 +70,7 @@ be invented.
 Three sources, and a reader should know which one is under any given number.
 
 - **`ASSETS\LAYOUT.CSV`**, for the script-driven screens, read at run time from the decoded
-  `extracted/rof/menu_layout.json` through `CampaignLayout`. Every button, pane and text slot in
+  `menu_layout.json`, which `RofFiles` builds from `crimson.rof`, through `CampaignLayout`. Every button, pane and text slot in
   `CampaignBoards` and in the pages names its section and row, and each read carries the value the
   board drew before the layout existed as its fallback: a row that is present answers, a missing
   file, section, row or column answers with the fallback whole (never one coordinate from the row

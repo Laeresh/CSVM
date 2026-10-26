@@ -609,12 +609,11 @@ public sealed class SiVectorChannel
 }
 
 /// <summary>
-/// Rotate channel. Two decode facts, both load-bearing (see docs/formats/anim-definitions.md):
-/// the cubics are HALF-ANGLE radians RELATIVE to the frame's base (constant term 0) and
-/// compose as <c>q(t) = exp(f(t)) ⊗ base</c>; and the JSON quaternion's field labels are
-/// shifted, because mech3ax reads the file's (w,x,y,z) order into a repr(C) {x,y,z,w}
-/// struct, so real w = json x, real x = json y, real y = json z, real z = json w.
-/// <see cref="Parse"/> undoes that shift, so nothing downstream has to know.
+/// Rotate channel, two decode facts (docs/formats/anim-definitions.md). The cubics are
+/// HALF-ANGLE radians RELATIVE to the frame's base (constant term 0), composed as
+/// <c>q(t) = exp(f(t)) ⊗ base</c>. The JSON quaternion's labels are shifted: unzbd reads the
+/// file's (w,x,y,z) order into an {x,y,z,w} quaternion, so real w = json x, and so on.
+/// Nothing downstream has to know, since <see cref="Parse"/> undoes that shift.
 /// </summary>
 public sealed class SiRotateChannel
 {

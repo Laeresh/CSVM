@@ -59,6 +59,6 @@ person's project. If you would like to be named in the advisory, say so.
   says so.
 - **The retail Crimson Skies game**, its files and its installer. Not this project's code.
 - Anything that needs an attacker to already be running code as you on your own machine.
-- Vulnerabilities in the upstream projects this build carries, [Godot](https://godotengine.org/)
-  and [mech3ax](https://github.com/TerranMechworks/mech3ax). Report those to them; tell us
+- Vulnerabilities in the upstream projects this build carries, such as
+  [Godot](https://godotengine.org/). Report those to them; tell us
   as well if a CSVM release ships an affected build, and the release will be rebuilt.

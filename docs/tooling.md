@@ -1,7 +1,7 @@
-# Tooling, the extraction pipeline, the launch scripts, and the fork
+# Tooling, the extraction pipeline, the launch scripts, and the release scripts
 
-How game files become `extracted/`, how the game gets launched, and how the mech3ax fork is
-maintained. For *which* archive types extract and how far each is validated, see
+How game files become `extracted/`, how the game gets launched, and how a release is exported and
+published. For *which* archive types extract and how far each is validated, see
 [extraction](formats/extraction.md); for the engine's own flags, [cli.md](cli.md).
 
 ## `extracted/`, the extraction workdir (git-ignored)
@@ -398,7 +398,8 @@ while real pads keep working via XInput/HIDAPI. Removal conditions are in #227.
 `CSVM/export_presets.cfg` (committed) holds one preset, **"Windows Desktop"**: release export,
 x86_64, `embed_pck=true`, so a single `CSVM.exe` with the pck inside, plus the **self-contained**
 .NET publish output beside it as `data_CSVM_windows_x86_64/`. The exported build resolves every root
-to the exe's own folder: it reads `extracted/` from there and writes its logs to a plain `logs\`
+to the exe's own folder: the optional copy of the game files lands there as `CrimsonSkiesGame\`,
+and the build writes its logs to a plain `logs\`
 beside the exe rather than to the `.scratch\logs\` a repo run uses (`Log.DirectoryFor` is the one
 switch); F12 screenshots go to a `Screenshots\` folder beside the exe (`CaptureDirector.ShotDirFor`).
 Per-user state is not in that folder by default: options, bindings, campaign profiles, scores
@@ -412,33 +413,23 @@ into `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the dir; do not
 `templates/` level).
 
 **`ExportRelease.ps1` (repo root)** run with no parameters runs the whole Windows sequence: it checks the
-export templates, the fork-built `tools\mech3ax\target\release\unzbd.exe` and the rest of the
-payload exist (named errors up front), empties `.scratch\export\`,
+export templates and the rest of the payload exist (named errors up front), empties `.scratch\export\`,
 builds, imports headless, exports, copies the payload in beside the output, and zips the folder to
 `.scratch\CSVM-v<version>-win64.zip`. That folder is cleared because all of it is zipped, and the
 clear refuses to run if it holds a junction, since PowerShell 5.1's recursive delete follows one
-into its target. In a worktree, which has no `tools\`, it takes Godot, `unzbd.exe` and the mech3ax
-checkout from the tree `CSVM_DATA_ROOT` names, as `RunTests.ps1` does.
+into its target. In a worktree, which has no `tools\`, it takes Godot and SDL2 from the tree
+`CSVM_DATA_ROOT` names, as `RunTests.ps1` does. A release carries no extractor and no Rust
+build: the engine reads the game files itself.
 
 **`-Linux`** is opt-in and leaves the Windows zip as it is. After the zip it exports the
 `Linux/X11` preset into `.scratch\export-linux\`, stages the Linux payload (`packaging/MANIFEST.md`'s
 Linux table) and packs `.scratch\CSVM-v<version>-linux-x64.tar.gz` inside WSL (`wsl -d Debian`),
 since only a tar written on Linux can carry the executable bit: the files are copied into the
-distro's own filesystem, given `0755` (`CSVM.x86_64`, `tools/unzbd`, directories) or `0644`
-(everything else), and archived root-owned. The script reads both executables' modes back from the
-archive and prints its SHA-256. Before the Windows build starts, the script builds the Linux
-`unzbd` from the same `tools\mech3ax` checkout as `unzbd.exe`: `cargo build --release --locked
---target x86_64-unknown-linux-musl --bin unzbd` inside WSL, with `CARGO_TARGET_DIR` at
-`~/cargo-target/mech3ax` in the distro (a target dir on `/mnt/z` is slow and would put a Linux tree
-in the checkout), then copies the static binary to
-`tools\mech3ax\target\x86_64-unknown-linux-musl\release\unzbd`. `-LinuxUnzbd <path>` ships an
-existing binary instead and skips the build. A missing toolchain, target or compiler, a missing
-`-LinuxUnzbd` file, a missing Linux export template or an unreachable WSL distro is a named error
-before the Windows build starts. One-time setup in WSL Debian: `sudo apt install build-essential
-curl musl-tools`, rustup from <https://rustup.rs> (into `~/.cargo/bin`, where the script looks),
-then `rustup target add --toolchain 1.91.1 x86_64-unknown-linux-musl`. The toolchain is the one
-`tools/mech3ax/rust-toolchain.toml` pins; adding the target to `stable` does not reach it. The
-musl `unzbd` of a given fork commit writes byte-identical archives to `unzbd.exe`'s. The engine csproj sets
+distro's own filesystem, given `0755` (`CSVM.x86_64`, directories) or `0644`
+(everything else), and archived root-owned. The script reads the executable's mode back from the
+archive and prints its SHA-256. A missing Linux export template or an unreachable WSL distro is a
+named error before the Windows build starts; the one-time setup is `wsl --install -d Debian`,
+whose image carries `tar`. The engine csproj sets
 `InvariantGlobalization`, so the self-contained .NET runtime never loads `libicu`; without it, a
 system lacking that library (the author's WSL Debian among them) aborts at startup with "Couldn't
 find a valid ICU package installed on the system". `sandbox\LinuxRelease.ps1` checks the tarball
@@ -489,11 +480,11 @@ copy of the launcher shows the arguments and the working directory it gets.
 **`packaging/README.md` is the whole of what a downloader is told**, written for someone who found
 the zip on the releases page and knows nothing else about the project: where the download comes
 from and how to check its SHA-256 against the release page, the requirements including the renderer
-floor below, the in-game extraction on first start, the `logs\` and `user://` locations, what the other files
+floor below, choosing the game files and the optional copy on first start, the `logs\` and `user://` locations, what the other files
 at the zip root are, and where a report goes. Four things in it restate facts that live in code or
 in this file, and go stale silently when one of them moves: the renderer floor and the
 `[perf] gpu=` line a below-floor machine writes, the log directory and the version on the log's
-first line, the extraction screen's behaviour, and the payload list. ⚠ **The author reviews it before
+first line, the source screen's behaviour (`UI/Screens/SourceFlow.cs`), and the payload list. ⚠ **The author reviews it before
 any release**, since outward communication is theirs; it is the one payload file that is not
 finished when it is correct.
 
@@ -507,68 +498,46 @@ Deck" section. It restates the same facts as the Windows README plus the install
 
 **Two of the zip's files are about the build rather than part of it.**
 `LICENSE-thirdparty.txt` carries the notices the payload's own contents oblige it to carry, which
-`LICENSE` (CSVM, GPL-3) and `LICENSE-unzbd` (mech3ax, EUPL-1.2) do not cover: the Godot engine
-linked into `CSVM.exe`, the engine's own third-party components, the self-contained .NET runtime in
-`data_CSVM_windows_x86_64\`, and the Rust crates linked into `unzbd.exe`.
+`LICENSE` (CSVM, GPL-3) does not cover: the Godot engine linked into `CSVM.exe`, the engine's own
+third-party components and the self-contained .NET runtime in `data_CSVM_windows_x86_64\`, plus
+`pl_mpeg` and PromptFont; its header also carries the one line crediting
+[TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax).
 `packaging/BuildThirdPartyNotices.ps1` assembles it, reading every text out of the shipped artefact
 rather than off a website: ⚠ the Godot Windows distribution and the export-template archive ship no
 `LICENSE.txt` or `COPYRIGHT.txt` on disk at all, so the script runs the pinned editor headless over
 a throwaway project in `TEMP` and reads them back through `Engine.get_license_text()`,
-`get_copyright_info()` and `get_license_info()`; the .NET half is `LICENSE.TXT` and
+`get_copyright_info()` and `get_license_info()`; and the .NET half is `LICENSE.TXT` and
 `THIRD-PARTY-NOTICES.TXT` from the `Microsoft.NETCore.App.Runtime.win-x64` NuGet pack the publish
-draws from, not the machine-wide `dotnet` install, which is usually a newer build; and the crate
-half is `cargo metadata --offline --filter-platform x86_64-pc-windows-msvc` over the fork, with each
-crate's licence text taken from the registry checkout it was built from and deduplicated by content.
-Section 9 is the Rust standard library, which every Rust binary links (Apache-2.0 OR MIT, with
-third-party crates of its own) and which cargo's crate list does not include. Its part A is the pinned
-toolchain's `share/doc/rust/COPYRIGHT-library.html` as plain text, part B the licence texts that file
-names for the library's own sources from `share/doc/rust/licenses/`, and part C the crates the
-target's rust-std rlibs name as their sources (each rlib carries `/rust/deps/<crate>-<version>/`
-paths) that the file does not list: none for msvc, std's backtrace crates (`addr2line`, `adler2`,
-`memchr`, `miniz_oxide`, `object`) for musl, read from their crates.io releases, which the script
-fetches into the cargo registry when absent. ⚠ The converter accepts only the tags that file uses
-and refuses any other, and the script refuses an rlib that names neither a crates.io release nor an
-in-tree `library/` directory, so a changed layout stops the run instead of losing text.
-The file's header states the Godot build, the .NET runtime version, the runtime pack, the crate
-target and the `cs-anim` commit it was assembled for, and `ExportRelease.ps1` re-checks all of them
-against what it is packaging, so a stale notice is a build failure rather than a wrong claim inside
-a shipped zip. Regenerate when one of them throws; ⚠ a moved `cs-anim` counts even when the fork's
-own code did not change, because the crate list enumerates that commit's dependency tree.
+draws from, not the machine-wide `dotnet` install, which is usually a newer build.
+The file's header states the Godot build, the .NET runtime version and the runtime pack it was
+assembled for, and `ExportRelease.ps1` re-checks all of them against what it is packaging, so a
+stale notice is a build failure rather than a wrong claim inside a shipped zip. Regenerate when
+one of them throws.
 
 **The tarball ships its own notice**, `packaging/LICENSE-thirdparty-linux.txt` under the same name
 `LICENSE-thirdparty.txt`, written beside the zip's by `BuildThirdPartyNotices.ps1 -Linux` (which
 rewrites both). Its .NET half is the `Microsoft.NETCore.App.Runtime.linux-x64` pack of the same
-version, its crate half is `--filter-platform x86_64-unknown-linux-musl` (the trees differ: `libc`,
-`addr2line`, `gimli` and `object` on Linux, `windows-sys` and its companions on Windows), its
-section 9 reads the WSL toolchain's files and musl rlibs, and a section 10 carries the musl C
-library that Rust's musl target links statically into `tools/unzbd`, from `packaging/LICENSE-musl`
-(the musl-1.2.3 release's `COPYRIGHT`, byte-identical; the bundled `libc.a` carries no text).
-`.gitattributes` marks that file `-text`, so every checkout is upstream's LF bytes and can be
-compared by hash. The Godot sections are the editor's, which is valid because the engine compiles its
+version. The Godot sections are the editor's, which is valid because the engine compiles its
 licence tables from one `COPYRIGHT.txt` on every platform; the script runs the Linux template's
-`--version` in WSL and refuses a template of another build. ⚠ The script also refuses a
-`rust-toolchain.toml` pin other than Rust 1.91.1, because a new toolchain can bundle another musl
-and section 10 would then name the wrong release, and section 9's converter was checked against
-that release's file only. Neither notice may name the other platform's
-runtime pack, crate target or file names: the script, `ExportRelease.ps1` and
+`--version` in WSL and refuses a template of another build. Neither notice may name the other
+platform's runtime pack or file names: the script, `ExportRelease.ps1` and
 `sandbox\LinuxRelease.ps1`'s payload stage each refuse one that does, so the zip's notice cannot
 ship in the tarball. Neither notice has an SDL section; the zip carries SDL's own licence as
 `LICENSE-SDL2.txt`, and the tarball ships no SDL2.
 
 **The tarball's text files are LF.** Git stores every payload text file LF and `core.autocrlf`
 checks it out CRLF, so the zip, a plain copy, carries CRLF, the Windows convention. The Linux
-staging marks its text rows (`README.md`, `LICENSE`, `LICENSE-unzbd`, `LICENSE-thirdparty.txt`)
+staging marks its text rows (`README.md`, `LICENSE`, `LICENSE-thirdparty.txt`)
 `Lf` in `$LinuxReleaseFiles` and drops the CR of every CRLF pair as it copies them, which gives the
 committed bytes (`git hash-object` of the source equals `git hash-object --no-filters` of the staged
 copy); `BUILD-INFO.txt` is written LF. This is done at staging rather than by a `.gitattributes`
-`eol=lf` rule because `LICENSE` and `LICENSE-unzbd` also ship in the zip, and a rule would change
+`eol=lf` rule because `LICENSE` also ships in the zip, and a rule would change
 what every worktree checks out. `sandbox\LinuxRelease.ps1`'s payload stage fails any top-level
 tarball file without a NUL byte that contains a CR.
 
 `BUILD-INFO.txt` is the one payload file generated rather than copied, because what it states is
-different on every run: the CSVM commit and the mech3ax `cs-anim` commit the two shipped binaries
-were built from, each with whether its worktree was clean, plus whether `cs-anim` is pushed. The
-export records those qualifiers instead of refusing on them, since building off a dirty tree is the
+different on every run: the CSVM commit the executable was built from, with whether its worktree
+was clean. The export records that qualifier instead of refusing on it, since building off a dirty tree is the
 normal development case and only a published binary makes a false source-correspondence claim to
 anybody; `PublishRelease.ps1` is where a qualifier becomes a refusal.
 
@@ -586,7 +555,7 @@ CWD** and no `CSVM_DATA_ROOT`; either can mask a broken default root.
 `CSVM/project.godot`, runs `ExportRelease.ps1 -Linux`, checks the zip and the tarball that came
 out, computes their SHA-256s, creates the annotated tag on the commit that was built, pushes it, and
 creates the GitHub release with both archives as its assets. Every release carries both platforms,
-so publishing needs the WSL Debian toolchain that `-Linux` above describes. The pre-release flag
+so publishing needs the WSL Debian distro that `-Linux` above describes. The pre-release flag
 stays off, because a build that is hidden from the repository's Latest badge is not the one a
 visitor lands on. Because the tag, the executables' stamped version, the archives' names, the
 published checksums and the notes all come out of that single run, none of them can disagree with
@@ -600,8 +569,8 @@ notes say the copies share the published checksums.
 
 `-NotesFile` supplies the prose that goes above the generated sections; the script writes the
 verification and provenance sections itself, so the file never states a checksum or a commit of its
-own, and it refuses a notes file that does. The generated text restates `BUILD-INFO.txt`'s two
-commits as links, so the release page and the archive give the same account of what was built.
+own, and it refuses a notes file that does. The generated text restates `BUILD-INFO.txt`'s
+commit as a link, so the release page and the archive give the same account of what was built.
 `-DryRun` runs every check and the export and stops before the tag. `-TagSuffix rehearsal`
 publishes under `v<version>-rehearsal` instead: a real tag, upload and release to exercise the whole
 path, deleted afterwards with the `gh release delete ... --cleanup-tag` command the run prints, so
@@ -611,24 +580,20 @@ which is otherwise the last point at which the tag and the upload can be called 
 **The Linux tarball** goes into the same release as the zip: one tag, two assets. It gets the
 zip's checks (it exists and
 postdates the run; its `BUILD-INFO.txt`, read out of the archive with Windows' own `tar.exe`, names
-both commits and records no qualifier). Then `sandbox\LinuxRelease.ps1` runs in full on the tarball
+the commit and records no qualifier). Then `sandbox\LinuxRelease.ps1` runs in full on the tarball
 (see "The Linux release check in WSL" below), and a failure ends the run before the tag with nothing
 created. The tree and `HEAD` re-check comes after that check, so it covers its minutes too. The
 generated notes then list both downloads with their sizes and SHA-256 (`Get-FileHash` for the zip,
 `sha256sum` for the tarball), link the Linux README's "On Steam Deck" section at the tagged commit
-rather than restating it, and name both executables and both `unzbd` builds under the two commits;
+rather than restating it, and name both executables under the commit;
 the tag message carries both checksums and `gh release create` uploads both files. The Windows
-Sandbox run (`sandbox\PublicRelease.ps1`) is not part of the publish; it is run by hand. The mech3ax checkout is
-found the way `ExportRelease.ps1` finds its tools, from `CSVM_DATA_ROOT` in a worktree, so both
-scripts read the same `cs-anim` commit.
+Sandbox run (`sandbox\PublicRelease.ps1`) is not part of the publish; it is run by hand.
 
 **What it refuses.** A dirty CSVM worktree, since the release says the zip was built from a commit.
-A dirty `tools/mech3ax` `cs-anim`, or one that is not on its origin: `unzbd.exe`'s source commit is
-published as a fact about a binary in the zip, and a commit that exists only on this workstation is
-not a source anyone can read. The CSVM commit needs no pushed-check of its own because pushing the
+The commit needs no pushed-check of its own because pushing the
 tag publishes it, though the script says so when `HEAD` is on no remote branch, since a reader who
 opens the branch expects to find the release's commit in its history. It also refuses a `BUILD-INFO.txt`
-that records a dirty or unpushed source, an existing release, and a tag that already exists either
+that records a dirty source, an existing release, and a tag that already exists either
 locally or on the remote. ⚠ **A tag is never re-pointed**, which is why there is no `-Force`: it is
 the source correspondence for binaries that may already be downloaded, and nothing on the
 downloader's machine says it moved. The way to correct a bad release is another version, not another
@@ -743,13 +708,12 @@ can:
 - **payload**: the archive's listing against `packaging/MANIFEST.md`'s Linux table, read from that
   file rather than restated: every named entry present (a folder name must hold a file, a name
   with a `*` must match one), nothing
-  at the root the table does not name, `CSVM.x86_64` and `tools/unzbd` at `-rwxr-xr-x`, the
+  at the root the table does not name, `CSVM.x86_64` at `-rwxr-xr-x`, the
   notice stamped for the Linux payload, and no carriage return in any top-level text file (a file
   with no NUL byte).
 - **extract**: the unpacked `CSVM.x86_64 --headless -- --extract=<install>` into a fresh data root
-  with the player's defaults (zips only), which must exit 0 and stamp `VERSION.json`. A `tools/unzbd`
-  without its bit fails here too ("Permission denied" starting the process), and a missing runtime
-  file in `data_CSVM_linuxbsd_x86_64/` fails the launch.
+  with the player's defaults (zips only), which must exit 0 and stamp `VERSION.json`. A missing
+  runtime file in `data_CSVM_linuxbsd_x86_64/` fails the launch.
 - **engine** (skipped by `-NoSuites`): `--run-tests=shard:<i>/<n>` over that same zips-only root,
   the shape every player's install reads, in `-Shards` processes (default 6, the alone suite taking one of them), shard `k` with
   `--net-port-base=30000 + (k - 1) * 100`, below Linux's ephemeral range. The suite list is the harness registry's and the division is `analysis/engine-suite-weights.json`,
@@ -807,9 +771,10 @@ What the check had to learn:
 
 ## `tools/` (git-ignored)
 
-Downloaded binaries: mech3ax v0.6.1 (pinned pre-fork extractor, for rollback), the fork checkout
-(below), the Godot 4.7 .NET editor at `tools/godot/Godot_v4.7-stable_mono_win64/` (use
-`*_console.exe` for CLI runs), and the SDL2 runtime at `tools/sdl2/` (below).
+Downloaded binaries: the Godot 4.7 .NET editor at `tools/godot/Godot_v4.7-stable_mono_win64/` (use
+`*_console.exe` for CLI runs) and the SDL2 runtime at `tools/sdl2/` (below). `tools/mech3ax/` is a
+local checkout of the Rust extractor kept as a read-only reference for format edge cases; nothing
+builds it, ships it or pushes it.
 
 ### SDL2 for flight sticks (`tools/sdl2/`)
 
@@ -849,7 +814,7 @@ sticks and logs one line naming the paths it tried; a missing DLL never stops a 
 export runs `InstallSdl2.ps1 -Verify` before building, ships `SDL2.dll` and `README-SDL.txt`
 beside the exe with the licence as `LICENSE-SDL2.txt`, and records the SDL version, commit and DLL
 hash in `BUILD-INFO.txt`. With `-ToolsRoot <checkout>` a worktree's export takes the SDL2 files
-from that checkout's `tools/sdl2/`, as it does Godot and the mech3ax fork.
+from that checkout's `tools/sdl2/`, as it does Godot.
 
 **Linux.** The bridge is SDL2's joystick API alone. `Sdl2Sticks` uses no `DllImport`: it loads
 one library through `NativeLibrary` and binds every export by name with `TryGetExport`, and
@@ -924,21 +889,11 @@ xUnit project (`server/MasterServer.Tests/`), both in `CSVM.sln`, so `dotnet bui
 stage cover them. It compiles the game's `CSVM/src/Net/MasterProtocol.cs` rather than a copy. The
 Dockerfile, `docker-compose.yml` (master, coturn, Caddy), the coturn configuration, a systemd unit
 and the step-by-step deployment are in `server/README.md`.
-## The mech3ax fork (`tools/mech3ax/`)
 
-**Crimson Skies support lives in the fork, not upstream.** Upstream removed it, so the fork is its
-home and upstream commits get merged *into* the fork. Upstream is dormant, so syncing is a
-check-occasionally rather than a routine.
+## Scripted launches
 
-- **Remotes:** `origin` = `git@github.com:Laeresh/mech3ax.git`,
-  `upstream` = `https://github.com/TerranMechworks/mech3ax.git`.
-- **Branches, all three pushed to `origin`**, since the fork and not this workstation is the
-  authoritative copy: `cs-anim` = integration, and what the release binary is built from;
-  `pr-cs-anim` / `pr-cs-gamez` = the same work split by concern; `main` = an upstream mirror.
-- **Sync:** `git fetch upstream && git merge upstream/main` into the fork, then rebuild
-  `target/release/unzbd.exe` and re-extract if the output shape moved.
-
-The shelved upstream-contribution package is archived at [upstream-pr/](upstream-pr/).
+How a scripted Godot launch from `RunTests.ps1`, `RunProbe.ps1` or a launch script keeps out of the
+way of the desktop, the machine's memory and a game the user is playing.
 
 ### Window focus: scripted runs stay out of your way
 

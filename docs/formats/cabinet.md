@@ -141,5 +141,5 @@ holding `~` that starts with `RT`.
   Windows' `makecab` (LZX with two data blocks, E8 translation and aliased tiers; stored; MSZIP),
   and hand-built uncompressed LZX blocks of odd length.
 - **Sources.** The decoder is written from Microsoft's published cabinet (`[MS-CAB]`) and LZX
-  format specifications. The alias pairing is the rule `unzbd cs disc` applied; the byte
+  format specifications. The alias pairing is the rule `CabinetSource.cs` applies; the byte
   comparison above confirms it for every chapter.

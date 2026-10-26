@@ -11,10 +11,10 @@
 
     Stages, each reported PASS/FAIL in RunTests.ps1's style:
       payload      the archive's listing against packaging/MANIFEST.md's Linux table: every row
-                   present, nothing at the root the table does not name, CSVM.x86_64 and
-                   tools/unzbd marked -rwxr-xr-x, and LICENSE-thirdparty.txt stamped for the
-                   linux-x64 runtime pack and the musl crate tree, naming nothing of Windows',
-                   and no top-level text file (one without a NUL byte) carrying a CR
+                   present, nothing at the root the table does not name, CSVM.x86_64
+                   marked -rwxr-xr-x, and LICENSE-thirdparty.txt stamped for the linux-x64
+                   runtime pack, naming nothing of Windows', and no top-level text file (one
+                   without a NUL byte) carrying a CR
       extract      ./CSVM.x86_64 --headless -- --extract=<install> into a fresh data root, the
                    player's defaults (zips only): exit 0 and a stamped VERSION.json
       engine       (unless -NoSuites) --run-tests over that same zips-only data root, the shape
@@ -23,7 +23,7 @@
                    analysis/engine-suite-weights.json, so the suite list is the registry's and
                    never a copy of it; on the safe render thread (see the shard launch)
 
-    A stage that fails does not stop the ones after it that can still run: a tarball whose unzbd
+    A stage that fails does not stop the ones after it that can still run: a tarball whose CSVM.x86_64
     lost its bit fails the payload stage AND shows what the extraction does with it.
 
     Everything in the distro lives under ~/csvm-linux-check (wiped at the start of each run, left
@@ -322,7 +322,7 @@ if ((Read-Exit "listing") -ne 0) {
             $problems += "the archive carries $($entry.Name), which MANIFEST.md's Linux table does not name"
         }
     }
-    foreach ($exe in @("CSVM.x86_64", "tools/unzbd")) {
+    foreach ($exe in @("CSVM.x86_64")) {
         $entry = $files | Where-Object { $_.Name -eq $exe } | Select-Object -First 1
         if ($entry -and $entry.Mode -ne '-rwxr-xr-x') {
             $problems += "$exe is $($entry.Mode) in the archive, not -rwxr-xr-x: a player's unpack cannot run it"
@@ -332,19 +332,18 @@ if ((Read-Exit "listing") -ne 0) {
 if ((Read-Exit "unpack") -ne 0) {
     $problems += "the archive did not unpack: $([IO.File]::ReadAllText((Join-Path $OutDir 'unpack.log')).Trim())"
 }
-# The notice must speak for what this archive ships: the linux-x64 runtime pack and the musl crate
-# tree, stated as the header stamps packaging\BuildThirdPartyNotices.ps1 -Linux writes, and none of
-# the Windows payload's names. The zip's notice, shipped here by mistake, fails on both counts.
+# The notice must speak for what this archive ships: the linux-x64 runtime pack, stated as the
+# header stamp packaging\BuildThirdPartyNotices.ps1 -Linux writes, and none of the Windows
+# payload's names. The zip's notice, shipped here by mistake, fails on both counts.
 $noticePath = Join-Path $OutDir "LICENSE-thirdparty.txt"
 if (Test-Path $noticePath) {
     $notice = [IO.File]::ReadAllText($noticePath, $Utf8)
-    foreach ($stamp in @(".NET runtime pack: Microsoft.NETCore.App.Runtime.linux-x64",
-                         "unzbd crate target: x86_64-unknown-linux-musl")) {
+    foreach ($stamp in @(".NET runtime pack: Microsoft.NETCore.App.Runtime.linux-x64")) {
         if ($notice.IndexOf($stamp, [StringComparison]::Ordinal) -lt 0) {
             $problems += "LICENSE-thirdparty.txt does not state '$stamp': it was not assembled for the Linux payload"
         }
     }
-    foreach ($marker in @("win-x64", "x86_64-pc-windows-msvc", "data_CSVM_windows_x86_64", "unzbd.exe", "CSVM.exe")) {
+    foreach ($marker in @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe")) {
         if ($notice.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             $problems += "LICENSE-thirdparty.txt names '$marker', which is the Windows payload's"
         }

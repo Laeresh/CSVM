@@ -240,9 +240,8 @@ Three traps for anyone reimplementing it:
   cell toggles nothing at all**. An inclusive `<=` over-selects by one row and one column.
 - ⚠ **The two axes index in opposite directions.** The x origin is the grid's LOW edge and its
   cell size is positive; the z origin is the grid's HIGH edge and its authored cell size is
-  **negative** (`virt_partition_y_size == -256`, `virt_partition_y_inv == 1/-256` in the mech3ax
-  world reader, `crates/nodes/src/pm/world/data.rs`), so `z` cell indices grow as z falls. The
-  extraction preserves it: each cell stores its own low x and its own **high** z, and the file's
+  **negative** (the world record's partition y size is -256 and its inverse 1/-256), so `z` cell
+  indices grow as z falls. The world record preserves it (`GameZZbd.ReadWorld`): each cell stores its own low x and its own **high** z, and the file's
   row order runs z downward from the grid's high edge, which is the engine's own row table. Read
   the origin and cell size off the cells rather than deriving them from `area`, and a rectangle
   mirrors onto the wrong half of the map cannot happen.

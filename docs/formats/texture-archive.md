@@ -19,7 +19,7 @@ file layout and the decode to 8-bit RGB(A).
 An archive is a flat list of named textures, each either 16-bit RGB565 or 8-bit indices into a
 palette of RGB565 colours, with an optional 8-bit alpha plane. It is not the named-entry container
 of [zbd-archive.md](zbd-archive.md). The `rtextureN` tiers hold the same names as their chapter's
-`texture.zbd`, downscaled ([README.md](README.md#extraction-map)).
+`texture.zbd`, downscaled ([README.md](README.md#reader-map)).
 
 ## Layout
 

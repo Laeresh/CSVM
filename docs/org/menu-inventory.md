@@ -2,7 +2,7 @@
 
 The authoritative census behind `PLAN-menu-presentations`: what the original's own data ships,
 what the Original presentation answers of it, and what it does not answer yet. Part 1 is the
-`--menu=` aid map; part 2 is read out of the extracted UI archive at `extracted/rof/` and the format
+`--menu=` aid map; part 2 is read out of the UI archive `crimson.rof` (through `RofFiles`) and the format
 decodes that already cover parts of it; part 4 names the gaps as owed captures.
 
 ⚠ **A filename or a rectangle proves composition, not interaction.** Every row below says which of
@@ -582,7 +582,7 @@ which is why the required count is 94 layout names plus the five the scripts nam
 | `PX_0..10_BLUEPRINT.TGA` | 11 | not classified | assembled at runtime; `IHangarPage.Art` already returns null on a miss |
 | scrapbook art | 238 files | not classified | assembled at runtime; a `Snap_*` row is already skipped when the file is not on disk |
 | paint `.BM` masks | 184 | not classified | assembled at runtime per pattern; 14 pattern folders, `FORTUNE` has all 62 skins, `BLCKSWAN` 5 |
-| `CrimFlag.MPG`, `Final.MPG` | 2 | optional | `LAYOUT.CSV` names both under `extracted/rof/ASSETS/GRAPHICS/MPG/`, where the extraction puts the install's loose MPGs; `CrimFlag.MPG` is the top level's and Preferences' backdrop, on an 8.0 s loop ([`../formats/cinemas.md`](../formats/cinemas.md)), and runs behind the five Preferences leaves too, which author no row of their own and show it in every leaf still; a screen whose movie is missing draws whole without it |
+| `CrimFlag.MPG`, `Final.MPG` | 2 | optional | `LAYOUT.CSV` names both under `ASSETS/GRAPHICS/MPG/`, where `RofFiles` answers the install's loose MPGs; `CrimFlag.MPG` is the top level's and Preferences' backdrop, on an 8.0 s loop ([`../formats/cinemas.md`](../formats/cinemas.md)), and runs behind the five Preferences leaves too, which author no row of their own and show it in every leaf still; a screen whose movie is missing draws whole without it |
 | `MM_BackGround.png`, `MM_SplashBackground.jpg` | 2 | not classified | neither appears in any layout row, and the shipped `MM_BackGround.png` is a placeholder reading "CS BACKGROUND" |
 
 **Not classified** means the manifest carries no entry: the name is assembled at runtime from a
@@ -811,7 +811,7 @@ equivalence).
 
 ## The decoded layout
 
-The extraction emits `extracted/rof/menu_layout.json`: the 34 sections bound to their scripts,
+`RofFiles` builds `menu_layout.json` in memory (`MenuLayoutDecoder`): the 34 sections bound to their scripts,
 both macro mechanisms resolved, every type's field order, the 46 `ScriptToExe` edges, the button
 colour tail and frame counts, the `ResID` → `RESOURCE.H` → string join with the symbol kept beside
 the text, each screen's script-created keys, the art the scripts name outside the layout,

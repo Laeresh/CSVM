@@ -1,6 +1,6 @@
 # Mech3
 
-Everything that turns the player's install into a live scene: the mech3ax extraction readers, the GameZ to Godot builders, and the animation runtime that drives the world (including its `Mech3/Anim/` subfolder).
+Everything that turns the player's install into a live scene: the game-file readers, the GameZ to Godot builders, and the animation runtime that drives the world (including its `Mech3/Anim/` subfolder).
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 

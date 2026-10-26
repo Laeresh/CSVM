@@ -132,7 +132,7 @@ classification and per-target shapes are in the retired `analysis/death-effect-c
 (`git show analysis-archive:analysis/death-effect-closure/FINDINGS.md`).
 
 **`unknown_seq` is not the death sequence.** The compiled def carries one structurally-distinct
-trailing sequence slot the mech3ax fork surfaces as `unknown_seq` (see
+trailing sequence slot the model (`AnimZbd.cs`) carries as `unknown_seq` (see
 [anim-definitions.md](anim-definitions.md) for the container detail); it is non-null on 1,544
 defs, all of them `health > 0`. It holds destruction-time content, but *which* sequence lands
 there varies, for the water tower it is the second puffer sequence (`h2twr_puffer2`), while the

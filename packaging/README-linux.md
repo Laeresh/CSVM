@@ -5,8 +5,8 @@ Microsoft): a modern engine that plays the original game using your own legally-
 game files.
 
 **You must own Crimson Skies.** This archive contains no game data of any kind, only the
-engine and an extraction tool. Everything you see and hear in the game is read from your
-own copy of the original game.
+engine. Everything you see and hear in the game is read from your own copy of the original
+game.
 
 **The Linux build is community-tested, on a best-effort basis.** It is built from the same
 source as the Windows build, and a Steam Deck is the machine it is tried on before a
@@ -41,9 +41,11 @@ project published, rather than something a third party rebuilt or altered.
   compatibility renderer, which the engine may switch to on a machine without Vulkan.
   Current Mesa drivers (AMD and Intel) and NVIDIA's own driver provide Vulkan.
 - **A copy of the original game's installed folder**, the folder a Windows install of
-  Crimson Skies (the original 2000 PC game) creates, or the game's disc or an ISO image of
-  it. "Getting the original game's folder" below covers where it can come from.
-- **About 1 GB of free disk space** for the game data you extract.
+  Crimson Skies (the original 2000 PC game) creates, or the game's disc or an image of it
+  (`.iso`, `.cue` with its `.bin` or `.img`, or `.ccd` with its `.img`). "Getting the
+  original game's folder" below covers where it can come from.
+- **About 1 GB of free disk space** only if you copy the game files beside CSVM, which is
+  optional (see below).
 - **For a flight stick only:** the system's SDL2 library, `libSDL2-2.0.so.0`. SteamOS and
   most desktop distributions install it already; elsewhere it is the `SDL2` or
   `libsdl2-2.0-0` package. Without it CSVM runs as usual and reads no flight stick, and the
@@ -63,15 +65,15 @@ mkdir CSVM
 tar -xzf CSVM-v0.4.0-linux-x64.tar.gz -C CSVM
 ```
 
-`tar` keeps the executable permission that `CSVM.x86_64` and `tools/unzbd` carry in the
-archive. Put the folder somewhere your user can write to, because the extracted game data
-and the logs are written inside it.
+`tar` keeps the executable permission that `CSVM.x86_64` carries in the archive. Put the
+folder somewhere your user can write to, because the logs, and the copy of the game files if
+you make one, are written inside it.
 
-If a graphical archive tool unpacked it and `CSVM.x86_64` will not start, restore the two
-permissions from a terminal in the CSVM folder:
+If a graphical archive tool unpacked it and `CSVM.x86_64` will not start, restore the
+permission from a terminal in the CSVM folder:
 
 ```
-chmod +x CSVM.x86_64 tools/unzbd
+chmod +x CSVM.x86_64
 ```
 
 ## Getting the original game's folder
@@ -93,33 +95,38 @@ Skies`. That search has not been tried on a real install, and whether the origin
 installer works under Proton or Wine at all is not known. If you try it, please report what
 happened at <https://github.com/Laeresh/CSVM/issues>, whether it worked or not.
 
-## Setup: extract, then fly
+## Setup: choose your game files, then fly
 
-**1. Extract your game's assets.** This is done once. Start CSVM from a terminal in its
-folder:
+**1. Choose your game files.** Start CSVM from a terminal in its folder:
 
 ```
 ./CSVM.x86_64
 ```
 
-or by double-clicking `CSVM.x86_64` in your file manager. With no game data yet, CSVM opens
-a screen that offers to extract it. The install folder is filled in with the best guess it
-found (the last folder you used, then a `GAME` folder or `.iso` image placed next to
-`CSVM.x86_64`, then the Wine and Proton places above), and you can choose another folder
-instead. Choose the folder that holds `ZBD` and `GOSDATA` side by side; if
-you choose a folder inside it or a folder that holds it, CSVM names the folder it expected.
-The extracted data lands in an `extracted` folder next to `CSVM.x86_64`, and the menu opens
-when it is done.
+or by double-clicking `CSVM.x86_64` in your file manager. CSVM looks for the game by
+itself: a copy next to `CSVM.x86_64` (a `GAME` folder or an `.iso` image), the copy you
+chose last, then the Wine and Proton places above. When it finds none, it opens a screen
+that asks for one: the game's folder, the disc's drive, or an image of the disc. For a
+folder, choose the one that holds `ZBD` and `GOSDATA` side by side; if you choose a folder
+inside it or a folder that holds it, CSVM names the folder it expected. CSVM reads the files
+where they are and never changes them, and it remembers your choice.
+
+Once the files read, the screen offers **Copy, then play**: it copies the game files CSVM
+reads (about 830 MB) into a `CrimsonSkiesGame` folder next to `CSVM.x86_64`, so the disc or
+image need not stay in place. **Play** goes straight to the menu without a copy.
 
 **2. Fly.** Pick a mode, chapter and plane in the menu.
 
-A later CSVM version may need the data extracted again. When it does, the same screen
-appears at startup with the folder you used last filled in, and one confirmation extracts
-it again.
+The game's disc does not hold `crimptch.rof`, the archive the official patch installs. When
+your copy lacks it, CSVM says so once, plays the game as the disc shipped it, and names the
+folder the archive goes in.
 
-## Disk space
+## An `extracted` folder from an older CSVM
 
-Extraction produces about **0.6 GB** in the `extracted` folder. Leave 1 GB free to be safe.
+Earlier versions extracted the game into an `extracted` folder next to `CSVM.x86_64`. This
+version reads the game files directly and does not use it. The first start asks once
+whether to keep it, to mod the game with (it is read again only when you name it as the
+modding folder), or to delete it and free the space.
 
 ## On Steam Deck
 
@@ -131,7 +138,7 @@ The Deck runs the Linux build directly; do not set a Proton version for it.
 2. In Desktop mode, open Steam and add `CSVM.x86_64` with **Add a Non-Steam Game to My
    Library**, browsing to the CSVM folder. In the new entry's properties, leave the Steam
    Play compatibility tool option off, since `CSVM.x86_64` is a native Linux program.
-3. Run the first extraction in Desktop mode, where a keyboard, a mouse pointer and the file
+3. Start CSVM the first time in Desktop mode, where a keyboard, a mouse pointer and the file
    manager are at hand for choosing the original game's folder. Start CSVM from Steam or
    from the file manager and follow "Setup" above.
 4. After that, start CSVM from Game mode like any other entry in your library.
@@ -160,8 +167,8 @@ rather than answered to a schedule.
 
 Two failures answer themselves:
 
-- **Extraction stopped with an error.** The message names the step that failed and the
-  folder it was working on. That text is the useful part of a report about extraction.
+- **The game files cannot be read.** The screen names the folder or image it tried and why
+  it was refused. That text is the useful part of a report about it.
 - **The game disappears after it starts, or draws nothing.** Open the newest file in
   `logs/` and find the line beginning `[perf] gpu=`. It names your graphics adapter and the
   renderer in use. An adapter named `llvmpipe` means Mesa is rendering in software with no
@@ -172,9 +179,10 @@ Two failures answer themselves:
 
 ## Where your files live
 
-The engine, your `extracted` game assets and the `logs` and `Screenshots` folders all sit in the CSVM folder,
-wherever you unpacked it. Your settings, control bindings, campaign profiles, stunt scores,
-custom planes and the install folder you last extracted from are kept outside it, in:
+The engine, the `logs` and `Screenshots` folders and, if you made one, the
+`CrimsonSkiesGame` copy of the game files all sit in the CSVM folder, wherever you unpacked
+it. Your settings, control bindings, campaign profiles, stunt scores, custom planes and the
+game files you chose last are kept outside it, in:
 
 ```
 ~/.local/share/godot/app_userdata/CSVM
@@ -199,18 +207,15 @@ file that binds every action.
 
 - `CSVM.x86_64` and the `data_CSVM_linuxbsd_x86_64` folder beside it are the engine. They
   belong together; moving one without the other breaks the build.
-- `tools/unzbd` is the extraction tool the engine runs to unpack the game's archives.
-- `LICENSE` is the GNU GPL v3 the engine is under, and `LICENSE-unzbd` the EUPL-1.2 the
-  bundled extraction tool is under.
-- `LICENSE-thirdparty.txt` carries the copyright notices for the software built into those
-  two binaries: the Godot engine and its own third-party components, the bundled .NET
-  runtime, and the Rust libraries inside `tools/unzbd`. It also carries the notice for
-  `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from, and the SIL Open
-  Font License for PromptFont, the font the controller button pictures are drawn from.
+- `LICENSE` is the GNU GPL v3 the engine is under.
+- `LICENSE-thirdparty.txt` carries the copyright notices for the software built into the
+  engine: the Godot engine and its own third-party components, and the bundled .NET
+  runtime. It also carries the notice for `pl_mpeg`, the MIT-licensed library CSVM's video
+  decoder is ported from, and the SIL Open Font License for PromptFont, the font the
+  controller button pictures are drawn from.
 - `libwebrtc_native.linux.template_release.x86_64.so` is the WebRTC library internet games run
   over, and `LICENSE-webrtc/` holds its licences.
-- `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
-  Quote it in a bug report when you are not sure which build you have.
+- `BUILD-INFO.txt` records which commit the engine was built from. Quote it in a bug report when you are not sure which build you have.
 
 ## Legal
 
@@ -241,11 +246,8 @@ commit `BUILD-INFO.txt` names.
     You should have received a copy of the GNU General Public License along with this
     program. If not, see <https://www.gnu.org/licenses/>.
 
-The bundled extraction tool `tools/unzbd` is built from
-[our fork](https://github.com/Laeresh/mech3ax/tree/cs-anim) of
-[mech3ax](https://github.com/TerranMechworks/mech3ax), which is licensed under the
-**EUPL-1.2** (see `LICENSE-unzbd` in this folder) and carries its own license terms. It is
-a separate tool, not linked into the engine.
+CSVM's readers of the game files build on the format research of
+[TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax).
 
 ## AI assistance disclosure
 

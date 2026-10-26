@@ -179,7 +179,7 @@ values are read off the branch directly:
 and [`hangar.md`](hangar.md) previously gave the high tier as `1.125`; both are refuted by the
 `0xfffffffe` immediate and the `CMP EAX,0x2` above. The spread is symmetric at two eighths either
 side of 1.0, not one. The campaign selector's own labels are `IDS_DIFFICULTY` in
-`rof/ui_strings.json` ids 109-111, Normal / Hard / Hardest in that order, so the default campaign
+`langui.dll` (`ui_strings.json`) ids 109-111, Normal / Hard / Hardest in that order, so the default campaign
 setting is difficulty 0 and enemies there carry **three quarters** of their authored pools.
 
 ⚠ **The gate is hostility, not inequality with the player's team.** `0x0047ca79`-`0x0047ca8b`

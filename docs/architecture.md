@@ -32,7 +32,7 @@ the rows and the pair list, and is the authority where this paragraph and it dif
 
 ### `src/Mech3/`, extraction readers, world and scene building
 
-Everything that turns the player's install into a live scene: the mech3ax extraction readers, the
+Everything that turns the player's install into a live scene: the game-file readers, the
 GameZ→Godot builders, and the animation runtime that drives the world.
 
 - `src/Mech3/GameZ.cs`, the GameZ model and its reader of unzbd's output (zip or dir, the fork's shape): nodes/models/materials/textures JSON → C# objects.

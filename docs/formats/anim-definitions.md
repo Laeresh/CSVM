@@ -466,8 +466,8 @@ carrier, gating the whole zeppelin breakup on 65 m under the hull and each engin
 [`org/sequences.md`](../org/sequences.md).
 
 **Condition node references are 1-based indices into the definition's own `nodes` support
-array**, not gamez node indices and not names, mech3ax resolves index→name for every other
-event kind but leaves conditions raw. Two negative sentinels ride in the same u32 field:
+array**, not gamez node indices and not names; the model (`AnimZbdEvents.cs`, as unzbd's
+output does) resolves index→name for every other event kind but leaves conditions raw. Two negative sentinels ride in the same u32 field:
 `-100` `MAIN_ROOT_NODE` and `-200` `INPUT_NODE` (arriving as 4294967196 / 4294967096), both
 meaning "the node this definition was invoked on" = the anchor. float32 JSON parsing cannot
 tell those two apart, which does not matter since they resolve identically.
@@ -1347,8 +1347,8 @@ are not visible from the byte format alone, each measured against this install.
   `anim+0xb0`) / `Sequence` (since this sequence started, gated against `seq+0x24`) / `Event`
   (since the **previous event completed**, gated against `seq+0x28`), `FUN_004ecbb0` evaluates
   whichever origin is named exclusively against the event that carries the `start`. An absent
-  `start`, 174,938 of the install's events, encodes as `Animation + 0.0` (mech3ax's `common.rs`
-  collapses that pair to `None`), not `Event + 0`; it behaves as "as soon as the previous event
+  `start`, 174,938 of the install's events, encodes as `Animation + 0.0` (`AnimZbdEvents.cs`, like
+  unzbd's output, carries that pair as no `start`), not `Event + 0`; it behaves as "as soon as the previous event
   finishes" only because the gate above is evaluated exclusively once the previous event has
   reported completion, regardless of which origin it names. The discriminating case is the C1
   train: each car's sequence is `[ObjectMotionSiScript, Loop{-1}]` with no start offsets, and only
@@ -1443,11 +1443,11 @@ are not visible from the byte format alone, each measured against this install.
   1.2 (60% speed) and an absolute `Sequence 0.01` collects the untimed-loop frame floor (16.7 s for
   an authored 10 s). Both are fixed in `SequenceRunner`; the traps are why the seconds/frames split
   is not the whole story.
-- **JSON-layer trap: the `.zan` rotate quaternion's field labels are shifted.** mech3ax reads the
-  file's `(w, x, y, z)` float order straight into a `#[repr(C)] struct Quaternion {x, y, z, w}`,
-  so in the emitted JSON **real `w` = json `x`, real `x` = json `y`, real `y` = json `z`, real
+- **JSON-layer trap: the `.zan` rotate quaternion's field labels are shifted.** unzbd reads the
+  file's `(w, x, y, z)` float order straight into a quaternion laid out `{x, y, z, w}`,
+  so in its JSON **real `w` = json `x`, real `x` = json `y`, real `y` = json `z`, real
   `z` = json `w`**. Byte-identical round-trip is unaffected (the bytes never change meaning), so
-  nothing on the mech3ax side reveals it. Verified on the C1 passenger engine: under that remap
+  nothing in unzbd's own round trip reveals it. Verified on the C1 passenger engine: under that remap
   every base quaternion is unit-norm and the yaw tracks the frame-to-frame chord heading to ~1°
   (frame 1 quat-yaw −33.11° against a chord of −43.12°, spanned by the frame's own −0.0505 rad/s
   rate); read literally the values are not even normalised. Undo the shift at the parse boundary.

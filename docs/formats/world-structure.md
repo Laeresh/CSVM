@@ -114,10 +114,10 @@ A model's point-light array is `model+0x20` (count) and `model+0x40` (pointer), 
 read by `gmod_const.c`'s model reader `FUN_00560dc0` and walked by both model draws: the software
 one `FUN_005524d0` over `00552bf5`-`00552d1c` and the hardware one `FUN_00554550` over
 `00554619`-`00554730`, which share the per-light plot `FUN_00558b30`. The blink lives at
-`00552cb6` and `005546c8`, the fade in `FUN_00558b30` at `00558d53`. mech3ax's `unkNN` names are byte offsets, so the table below reads
-against `PointLightC` in `crates/gamez/src/model/common.rs`.
+`00552cb6` and `005546c8`, the fade in `FUN_00558b30` at `00558d53`. The middle column is the field's name in unzbd's output, where an
+`unkNN` name is the field's byte offset; `GameZZbd.ReadLights` reads the record into `GameZLight`.
 
-| Offset | mech3ax | What the original does with it |
+| Offset | unzbd name | What the original does with it |
 | --- | --- | --- |
 | `0x00` | `unk00` | Draw mode. 0 plots the first vertex; 1 walks the vertex list one step per interval and also plots the step behind it in the stashed colour. **Mode 1 is authored nowhere in this install** (0 on all 715 lights), so the walking form is untestable data. |
 | `0x04` | `unk04` | Blink gate for mode 0: 1 makes the light flash, 0 leaves it steady. 56 of the install's 715 lights carry it, all of them in C1 (5) and C5 (51). |

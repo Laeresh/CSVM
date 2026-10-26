@@ -244,12 +244,11 @@ included.
   node order nor the launchscreen roster, and its first two entries break the otherwise
   alphabetical run; a consumer should map by name rather than by index.
 
-## Extraction
+## The string table CSVM builds
 
-The extraction (`UiStringTable`) writes `extracted\rof\ui_strings.json`, one row per string with
-`id`, `symbol` (from `RESOURCE.H`, or null), `font` (the parsed `[FONTID]`), `text` (tag
-stripped) and `dll`. It needs the `.rof` extracted first for `RESOURCE.H`, which the same run
-does.
+`UiStringTable` builds `ui_strings.json` in memory, on the first read through `RofFiles`, one row
+per string with `id`, `symbol` (from `RESOURCE.H`, or null), `font` (the parsed `[FONTID]`),
+`text` (tag stripped) and `dll`. It reads `RESOURCE.H` out of `crimson.rof`.
 
 ## Evidence & limits
 

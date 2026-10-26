@@ -1,8 +1,9 @@
 # Crimson Skies format documentation
 
 Reverse-engineered format reference for **Crimson Skies** (2000, Zipper Interactive /
-Microsoft), validated against a retail install with this project's [mech3ax](https://github.com/TerranMechworks/mech3ax)
-fork (`unzbd cs <mode>`; see [extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
+Microsoft), validated against a retail install read by CSVM's own readers (the [reader map](#reader-map)
+below) and cross-checked against the output of unzbd, the extractor of
+[mech3ax](https://github.com/TerranMechworks/mech3ax) ([extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
 model: **format documentation and code only, no game asset data.** Pages carry field
 tables and tiny excerpt values, never bulk extracted content.
 
@@ -107,8 +108,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 
 ## Shared conventions (zrdr readers)
 
-The zrdr "reader" files are the engine's config/script lists; mech3ax extracts each to a
-JSON file of nested arrays. Conventions that recur across every reader family:
+The zrdr "reader" files are the engine's config/script lists, each a tree of nested lists
+(`ZrdrZbd.cs`; unzbd writes each as a JSON file of nested arrays). Conventions that recur across every reader family:
 
 - **All numbers arrive as floats.** The file tags integers (`i32`) and floats (`f32`)
   apart ([zrdr.md](zrdr.md#binary-encoding)), but CSVM's model reads both as `float`, so
@@ -144,21 +145,30 @@ JSON file of nested arrays. Conventions that recur across every reader family:
 - **Units** are meters, seconds, and degrees throughout (`fd_speed 135` m/s ≈ 302 mph =
   the Bloodhawk's published top speed; `RANGE` distances in meters; rotations in degrees).
 
-## Extraction map
+## Reader map
 
-The extraction (`CSVM/src/Extraction/`) runs the right `unzbd cs` mode per archive type:
-`interp` → `interp.json` (boot scripts); `planes.zbd`/`gamez.zbd` → `gamez` (JSON + mesh
-data); `soundsh/soundsl` → `sounds` (WAVs); `zrdr` → `reader` (JSON);
-`rimage`/`texture`/`rtexture*` → `textures` (PNGs). The per-chapter `rtextureN` archives
-are *downscaled* quality tiers of the base `texture` set (never higher-res); `rimage` is
-menu/briefing UI only. `cam_anim.zbd`/`mis_anim.zbd` → `anim` (JSON defs + SI scripts),
-**supported in this project's mech3ax fork**, not in upstream or in the pinned v0.6.1 binary;
-the schema lives in [anim-definitions.md](anim-definitions.md). Per-type support and
-round-trip status: [extraction.md](extraction.md).
+CSVM reads every file in place through one game-file source
+(`CSVM/src/Extraction/GameFileSource.cs`): an install, a drive, an `.iso` or a `.cue`/`.img`,
+a disc's chapters coming out of their LZX cabinets ([cabinet.md](cabinet.md),
+[disc-image.md](disc-image.md)). Under `CSVM/src/`:
 
-Its second half covers the non-ZBD half of the install: the `.rof` UI resource
-archives and the `langui.dll` string table, into `extracted\rof\`. These are decoded by this
-project rather than by mech3ax, see [rof.md](rof.md) and [strings.md](strings.md).
+- `interp.zbd` → `Mech3/InterpScripts.cs` (boot scripts, [interp.md](interp.md)).
+- `planes.zbd`/`gamez.zbd` → `Mech3/GameZZbd.cs` ([gamez.md](gamez.md)).
+- `soundsh.zbd`/`soundsl.zbd` → `Mech3/SoundZbd.cs`, and `zrdr.zbd` → `Mech3/ZrdrZbd.cs`
+  ([zrdr.md](zrdr.md)), both over the named-entry container `Extraction/ZbdArchive.cs`
+  ([zbd-archive.md](zbd-archive.md)).
+- `rimage`/`texture`/`rtexture*` → `Mech3/TextureZbd.cs`. The per-chapter `rtextureN` archives
+  are *downscaled* quality tiers of the base `texture` set (never higher-res); `rimage` is
+  menu/briefing UI only.
+- `cam_anim.zbd`/`mis_anim.zbd` → `Mech3/AnimZbd.cs` and `AnimZbdEvents.cs`; the schema lives in
+  [anim-definitions.md](anim-definitions.md).
+- `strings.dll` → `Mech3/Messages.cs` ([strings.md](strings.md)).
+- The non-ZBD half, the `.rof` UI resource archives, the `langui.dll`/`language.dll` string
+  tables and the cinemas → `Extraction/RofFiles.cs` over `RofArchive.cs` and `PeStringTable.cs`
+  ([rof.md](rof.md), [strings.md](strings.md)).
+
+unzbd's output of the ZBD archives, in the layout the build CSVM v0.4.0 bundled writes, is what an
+opt-in modding folder holds; [extraction.md](extraction.md) describes it.
 
 ## License
 

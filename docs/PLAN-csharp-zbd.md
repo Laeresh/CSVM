@@ -203,7 +203,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 41. ☑ Source picker and upgrade cleanup
 42. ☑ Dev-only `--dump`
 43. ☐ Delete the extraction pipeline
-44. ☐ Packaging, licences, credit and docs
+44. ☑ Packaging, licences, credit and docs
 45. ☐ Final ISO-only run
 46. ☐ The modding folder: unzbd's output read per archive, opt-in
 
@@ -1594,7 +1594,57 @@ nothing; the modding-path diffs still pass.
 
 **⚠ Traps.** `ExtractionStampTests` guards the schema in three places; it goes with the stamp.
 
-## E44 ☐ Packaging, licences, credit and docs
+## E44 ☑ Packaging, licences, credit and docs
+
+**Landed.** A release carries the engine and its libraries only. `ExportRelease.ps1` stages no
+`tools\unzbd.exe`, `tools/unzbd` or `LICENSE-unzbd`, builds nothing in Rust (the WSL musl build,
+`-LinuxUnzbd` and the `cs-anim` checks are gone), and `BUILD-INFO.txt` names the CSVM commit
+alone; the tarball's one executable is `CSVM.x86_64`. `PublishRelease.ps1` checks only the CSVM
+commit, and its notes list one source line. `packaging/BuildThirdPartyNotices.ps1` writes seven
+sections (Godot 1-3, .NET 4-5, pl_mpeg 6, PromptFont 7) and three header stamps (Godot build,
+.NET runtime version, runtime pack); the crate, Rust standard library and musl sections, the crate
+target and fork commit stamps, `packaging/LICENSE-unzbd` and `packaging/LICENSE-musl` (and its
+`.gitattributes` rule) are deleted. Both notice files were rebuilt through the new script's own
+`Build-Notice` from their existing Godot and .NET bodies, which are the same build's. The
+credit is one line, "CSVM's readers of the game files build on the format research of
+[TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax)", in `README.md`,
+`packaging/README.md`, `packaging/README-linux.md` and both notices' headers; no file links the
+fork. `sandbox/LinuxRelease.ps1`'s payload stage checks `CSVM.x86_64`'s mode and the runtime pack
+stamp only.
+
+The docs describe the in-place model: `README.md` (status, download, building from source, a
+modding paragraph: run your own unzbd, the build v0.4.0 bundled, and name the folder as the
+modding folder), both player READMEs (choose the game files, the optional copy, the patch note,
+the old `extracted/` prompt), `packaging/MANIFEST.md`, `PROJECT_CONTEXT.md` (architecture, licensing,
+`tools/`), `CSVM/README.md`, `.github/SECURITY.md`, and the export, notices and publish parts of
+`docs/tooling.md`, whose fork section is replaced by a `## Scripted launches` heading over the
+window-focus, job-object, ledger and gaming-mode subsections that had been filed under it.
+`docs/formats/` cites the C# readers where it cited mech3ax code (`compiled-archives.md`,
+`anim-definitions.md`, `gamez.md`, `interp.md`, `weather.md`, `world-structure.md`,
+`weather/atmosphere.md`, `cabinet.md`, `clutter.md`, `destructibles.md`, `cinemas.md`), its
+README's "Extraction map" is a "Reader map" of archive to reader, `extraction.md` describes unzbd's
+output as the modding path, and `strings.md`/`campaign-screens.md` name `crimson.rof` and
+`RofFiles` for the old `extracted/rof/` paths, as do the live mentions in `docs/org/`
+(`campaign-board`, `debrief`, `hangar`, `menu-inventory`, `vehicleDamage`, and `flightModel`'s
+one path into the Rust) and `playtest.md` (line 94, and PT-131's look-fors, now the source screen).
+Two code comments that cited Rust source (`CompiledAnim.SiRotateChannel`,
+`csky_atmosphere.gdshaderinc`) name unzbd's behaviour instead.
+
+**`docs/upstream-pr/` (the TODO): deleted.** Its only reference was the fork section of
+`docs/tooling.md`, and it served only the PRs to TerranMechworks/mech3ax from the fork, all closed
+or never opened; its own README named the private fork.
+
+**Left for E43** (they describe or exercise the extraction pipeline it deletes):
+`docs/tooling.md`'s `extracted/`, "The extraction, in the engine" and `Extract.ps1` sections,
+`docs/cli.md`'s `--unzbd=`, `docs/architecture/Extraction.md`, `PROJECT_CONTEXT.md`'s
+`extracted/`, `Extract.ps1` and `sandbox/` bullets, and the extract stages of
+`sandbox/LinuxRelease.ps1` and `sandbox/PublicRelease.ps1`. ⚠ Those two stages run
+`--extract` against the release's own `unzbd`, which the archives no longer carry, so both fail
+until E43 replaces them.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Releases carry no `unzbd`, `LICENSE-unzbd` or Rust build; README and the third-party
 notices credit TerranMechworks/mech3ax in one linked line; no link to the fork remains.
@@ -1605,14 +1655,15 @@ notices credit TerranMechworks/mech3ax in one linked line; no link to the fork r
 
 **Approach.** Remove the unzbd and Linux musl steps from the export and publish scripts and
 BUILD-INFO; rewrite `docs/formats/` citations into mech3ax code to cite the C# readers; drop the
-fork section of `docs/tooling.md`. <TODO: whether `docs/upstream-pr/` is deleted.>
+fork section of `docs/tooling.md`. Whether `docs/upstream-pr/` is deleted is answered in
+**Landed** above.
 
 **Model recommendation.** medium.
 
 **Verify.** `ExportRelease.ps1` and the Linux export build; `CheckDocEntries.ps1` passes; a grep
-for `Laeresh/mech3ax` returns nothing.
+for the fork's repository path returns nothing.
 
-**⚠ Traps.** <TODO: none known.>
+**⚠ Traps.** The release check's extract stages depend on the bundled `unzbd` (see **Landed**).
 
 ## E45 ☐ Final ISO-only run
 

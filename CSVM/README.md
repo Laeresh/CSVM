@@ -1,24 +1,16 @@
 # Crimson Skies remake — Godot project
 
 Godot 4 (.NET/C#) engine remake of Crimson Skies (2000). This project ships **no game
-assets**: it reads the player's own legally-owned install at runtime, via
-[mech3ax](https://github.com/TerranMechworks/mech3ax) extraction output.
+assets**: it reads the player's own legally-owned copy of the game in place at runtime,
+through its own C# readers.
 
 ## Prerequisites
 
 - Godot 4.7 (.NET edition)
 - .NET SDK 8+
-- mech3ax `unzbd` extraction output from your own Crimson Skies install. The easiest
-  way is the repo-root `Extract.ps1` script, which runs the engine's own extraction into
-  `extracted/`, mirroring the game's folder structure (`extracted/C1/gamez.zip`,
-  `extracted/C1/texture.zip`, `extracted/planes.zip`, …):
-  - `.\Extract.ps1 -Unzip`
-  - or manually, the two the viewer needs by default:
-    - `unzbd cs gamez <install>/ZBD/planes.zbd extracted/planes.zip`
-    - `unzbd cs textures <install>/ZBD/C1/texture.zbd extracted/C1/texture.zip`
-
-By default the viewer looks for the `extracted/` directory next to (one level above)
-this project directory; override with `--gamez=` / `--textures=`.
+- Your own Crimson Skies install, as `CrimsonSkiesGame/` next to (one level above) this
+  project directory, or wherever `CSVM_INSTALL_ROOT` points. A menu launch without one asks
+  for an install folder, the disc's drive or a disc image, and remembers it.
 
 ## Run the plane viewer
 

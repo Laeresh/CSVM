@@ -575,8 +575,8 @@ List-valued dict keys:
 
 `FOG_RANGES` is a D3D `FOGSTART`/`FOGEND` pair, and the *mode* is declared beside it in the
 gamez: every chapter's `world1` node carries a `World` struct whose `fog_state` field is the raw
-u32 **1 = LINEAR** (mech3ax `nodes/src/cs/world/data.rs` **asserts** it, so it is present and
-identical in all eight chapters; `0` in that field would mean OFF and `2` EXPONENTIAL). The rest
+u32 **1 = LINEAR**, present and identical in all eight chapters (`0` in that field would mean
+OFF and `2` EXPONENTIAL). The rest
 of that struct, `fog_color`, `fog_range`, `fog_altitude`, `fog_density`, is zeroed, which is
 what makes a *written* 1 significant rather than doubtful: the runtime fog parameters come from
 this file, and the node declares only the mode. So `csky_fog_amount` ramps

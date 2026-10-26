@@ -5,8 +5,8 @@ Microsoft): a modern engine that plays the original game using your own legally-
 game files.
 
 **You must own Crimson Skies.** This zip contains no game data of any kind, only the
-engine and an extraction tool. Everything you see and hear in the game is read from your
-own retail install.
+engine. Everything you see and hear in the game is read from your own copy of the game:
+the installed game, its disc, or an image of the disc.
 
 ## Where this download comes from
 
@@ -35,35 +35,42 @@ project published, rather than something a third party rebuilt or altered.
   vanishes at the intro film, before any menu; "The game disappears after it starts" below
   says how to recognise that case.
 - **A retail Crimson Skies install** (the original 2000 PC game) on this machine, or the
-  game's disc or an ISO image of it.
-- **About 1 GB of free disk space** for the game data you extract.
+  game's disc or an image of it (`.iso`, `.cue` with its `.bin` or `.img`, or `.ccd` with
+  its `.img`).
+- **About 1 GB of free disk space** only if you copy the game files beside CSVM, which is
+  optional (see below).
 - Nothing else. The .NET runtime this engine needs is inside the download, so there is no
   runtime or framework to install.
 
-## Setup: extract, then fly
+## Setup: choose your game files, then fly
 
-**1. Extract your game's assets.** This is done once. Double-click **`CSVM.exe`**. With no
-game data yet, CSVM opens a screen that offers to extract it. The install folder is filled
-in with the best guess it found (the last folder you used, then a `GAME` folder or `.iso`
-image placed next to `CSVM.exe`, then the places Crimson Skies is normally installed), and
-you can choose another folder instead.
+**1. Choose your game files.** Double-click **`CSVM.exe`**. CSVM looks for the game by
+itself: a copy next to `CSVM.exe` (a `GAME` folder or an `.iso` image), the copy you chose
+last, then the places Crimson Skies is normally installed. When it finds none, it opens a
+screen that asks for one: your install folder, the game disc's drive, or an image of the
+disc. CSVM reads the files where they are and never changes them, and it remembers your
+choice.
 
-The folder it wants is the one containing the `ZBD` and `GOSDATA` subfolders. Open your
-install until you see those two side by side, and use that folder; if you choose a folder
-inside it or a folder that holds it, CSVM names the folder it expected. Your install is only
-read, never modified. The extracted data lands in an `extracted` folder next to `CSVM.exe`,
-and the menu opens when it is done.
+For an install, the folder it wants is the one containing the `ZBD` and `GOSDATA`
+subfolders. Open your install until you see those two side by side, and use that folder; if
+you choose a folder inside it or a folder that holds it, CSVM names the folder it expected.
+
+Once the files read, the screen offers **Copy, then play**: it copies the game files CSVM
+reads (about 830 MB) into a `CrimsonSkiesGame` folder next to `CSVM.exe`, so the disc or
+image need not stay in place. **Play** goes straight to the menu without a copy.
 
 **2. Fly.** Pick a mode, chapter and plane in the menu.
 
-A later CSVM version may need the data extracted again. When it does, the same screen
-appears at startup with the folder you used last filled in, and one confirmation extracts
-it again.
+The game's disc does not hold `crimptch.rof`, the archive the official patch installs. When
+your copy lacks it, CSVM says so once, plays the game as the disc shipped it, and names the
+folder the archive goes in.
 
-## Disk space and time
+## An `extracted` folder from an older CSVM
 
-Extraction produces about **0.6 GB** in the `extracted` folder (leave 1 GB free to be
-safe) and takes **well under a minute** on an SSD, around 15 seconds on a fast machine.
+Earlier versions extracted the game into an `extracted` folder next to `CSVM.exe`. This
+version reads the game files directly and does not use it. The first start asks once
+whether to keep it, to mod the game with (it is read again only when you name it as the
+modding folder), or to delete it and free the space.
 
 ## Windows SmartScreen
 
@@ -144,11 +151,11 @@ worked on in its issue rather than answered to a schedule.
 
 Three failures answer themselves:
 
-- **Extraction stopped with an error.** The message names the step that failed and the
-  folder it was working on. That text is the useful part of a report about extraction.
-- **The game asks to extract again when it starts.** This build reads the game data in a
-  way the data you extracted earlier does not match. Confirm, and it extracts again from
-  the folder you used last.
+- **The game files cannot be read.** The screen names the folder or image it tried and why
+  it was refused. That text is the useful part of a report about it.
+- **The game asks for the game files again when it starts.** The copy you chose last is no
+  longer where it was: the disc is not in its drive, or the image or folder moved. Choose it
+  again, or copy the game files next to `CSVM.exe` so this cannot happen.
 - **The game disappears after it starts.** Read on.
 
 ### The game disappears after it starts
@@ -156,8 +163,8 @@ Three failures answer themselves:
 The window opens, the boot card shows, and a few seconds later, as the intro film begins,
 the program vanishes with no window and no message. That is what this build does on a
 machine below the requirement above, and there is no setting inside the game that changes
-it. Without extracted data the same machine still shows the "No game data found" screen,
-so seeing that screen does not mean the machine can play.
+it. Without game files the same machine still shows the screen that asks for them, so
+seeing that screen does not mean the machine can play.
 
 To tell that case apart from a genuine crash, open the newest file in `logs\` and find the
 line beginning `[perf] gpu=`. It names your graphics adapter and the renderer in use. A
@@ -175,8 +182,9 @@ where there is one.
 
 ## Where your files live
 
-The engine, your `extracted` game assets and the `logs` and `Screenshots` folders all sit in this one folder,
-wherever you unzipped it. Your settings, control bindings, campaign profiles, stunt scores
+The engine, the `logs` and `Screenshots` folders and, if you made one, the
+`CrimsonSkiesGame` copy of the game files all sit in this one folder, wherever you unzipped
+it. Your settings, control bindings, campaign profiles, stunt scores
 and custom planes are kept outside it, in:
 
 ```
@@ -203,18 +211,15 @@ file that binds every action.
   belong together; moving one without the other breaks the build.
 - `CSVM-VR.cmd` starts `CSVM.exe` in VR ("VR (experimental)" above). It holds one command line,
   readable in any text editor.
-- `tools\unzbd.exe` is the extraction tool the engine runs to unpack the game's archives.
-- `LICENSE` is the GNU GPL v3 the engine is under, and `LICENSE-unzbd` the EUPL-1.2 the
-  bundled extraction tool is under.
-- `LICENSE-thirdparty.txt` carries the copyright notices for the software built into those
-  two binaries: the Godot engine and its own third-party components, the bundled .NET
-  runtime, and the Rust libraries inside `tools\unzbd.exe`. It also carries the notice for
-  `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from, and the SIL Open
-  Font License for PromptFont, the font the controller button pictures are drawn from.
+- `LICENSE` is the GNU GPL v3 the engine is under.
+- `LICENSE-thirdparty.txt` carries the copyright notices for the software built into the
+  engine: the Godot engine and its own third-party components, and the bundled .NET
+  runtime. It also carries the notice for `pl_mpeg`, the MIT-licensed library CSVM's video
+  decoder is ported from, and the SIL Open Font License for PromptFont, the font the
+  controller button pictures are drawn from.
 - `libwebrtc_native.windows.template_release.x86_64.dll` is the WebRTC library internet games run
   over, and `LICENSE-webrtc\` holds its licences.
-- `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
-  Quote it in a bug report when you are not sure which build you have.
+- `BUILD-INFO.txt` records which commit the engine was built from. Quote it in a bug report when you are not sure which build you have.
 
 ## Legal
 
@@ -245,11 +250,8 @@ commit `BUILD-INFO.txt` names.
     You should have received a copy of the GNU General Public License along with this
     program. If not, see <https://www.gnu.org/licenses/>.
 
-The bundled extraction tool `tools\unzbd.exe` is built from
-[our fork](https://github.com/Laeresh/mech3ax/tree/cs-anim) of
-[mech3ax](https://github.com/TerranMechworks/mech3ax), which is licensed under the
-**EUPL-1.2** (see `LICENSE-unzbd` in this folder) and carries its own license terms. It is
-a separate tool, not linked into the engine.
+CSVM's readers of the game files build on the format research of
+[TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax).
 
 ## AI assistance disclosure
 

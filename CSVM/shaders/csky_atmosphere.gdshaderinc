@@ -182,9 +182,8 @@ bool csky_night_fog(vec3 fog_linear) {
 // This expression was duplicated verbatim in four shaders before 2026-07-23.
 //
 // The RANGE term is a LINEAR ramp, D3D's own `(d - start) / (end - start)` clamped, because that
-// is what the data declares: every gamez's `world1` node carries `fog_state == 1` = LINEAR, and
-// mech3ax ASSERTS it (`nodes/src/cs/world/data.rs`), so the value is present and identical in all
-// eight chapters. 0 in that field would be OFF — the rest of the struct being zeroed is what
+// is what the data declares: every gamez's `world1` node carries `fog_state == 1` = LINEAR,
+// present and identical in all eight chapters. 0 in that field would be OFF; the rest of the struct being zeroed is what
 // makes a written 1 significant, not what makes it doubtful. It replaced a `smoothstep`, which
 // was ours and rested on nothing (2026-08-08).
 // ⚠ The ALTITUDE term keeps its smoothstep deliberately. `fog_state` is D3D's distance-fog mode

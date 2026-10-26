@@ -15,9 +15,8 @@ weights and ranges rather than `AddClutterTemplates`. Template-root lookup is sh
 
 ## Boot scripts
 
-`interp.zbd` (extracted by `unzbd cs interp`) is a JSON array of scripts
-`{ "name": "support\\<chapter>\\adjust.gw", "lines": [ … ] }`, the engine's boot/setup
-command lists. The chapter's `adjust.gw` script registers clutter templates via lines of
+`interp.zbd` (read by `InterpScripts.cs`, [interp.md](interp.md)) is a list of scripts, each a
+name such as `support\<chapter>\adjust.gw` and its lines, the engine's boot/setup command lists. The chapter's `adjust.gw` script registers clutter templates via lines of
 the form:
 
 ```

@@ -4,7 +4,9 @@ CSVM is a fan-made remake engine for **Crimson Skies** (2000, Zipper Interactive
 a modern engine that plays the original game using your own legally-owned game files.
 
 This repository ships **code and documentation only**. It contains no game assets of
-any kind, and reproduces no game code. The engine reads your existing retail install at runtime.
+any kind, and reproduces no game code. The engine reads your own copy of the game in place at
+runtime: an install, the disc's drive, or an image of the disc (`.iso`, `.cue`/`.bin`/`.img`,
+`.ccd`/`.img`).
 
 ## Status
 
@@ -22,24 +24,24 @@ What this build plays:
 - 11 aircraft and 8 chapter worlds, in the original's liveries, animated and with sound.
 - Guns and rockets, AI aircraft that patrol, engage and evade, turrets, zeppelins, and world
   objects that take damage and die.
-- Asset extraction, complete: every ZBD archive type this game ships round-trips
-  byte-identically.
+- Every game file format the engine uses, read by CSVM's own C# readers straight from the
+  original files, with no extraction step.
 
 This is an early build; the release page lists what is known broken in it.
 
 ## Download and play
 
 You need Windows 10 or 11, 64-bit, a graphics card with a working Vulkan or Direct3D 12 driver,
-a retail Crimson Skies install on the same machine, and about 1 GB of free disk space for the
-data you extract. Nothing else: the .NET runtime the engine needs is inside the download, so
-there is no runtime or framework to install.
+and a retail Crimson Skies install, the game's disc or an image of it. Nothing else: the .NET
+runtime the engine needs is inside the download, so there is no runtime or framework to install.
 
 1. Download the `CSVM-v<version>-win64.zip` asset from the
    [latest release](https://github.com/Laeresh/CSVM/releases/latest).
 2. Unzip it wherever you like.
-3. Double-click **`CSVM.exe`**. With no game data yet it offers to extract it: point it at
-   your Crimson Skies install, the folder holding the `ZBD` and `GOSDATA` subfolders. This is
-   done once, and your install is only read, never modified.
+3. Double-click **`CSVM.exe`**. It looks for the game by itself, and when it finds none it asks
+   for your install folder (the one holding the `ZBD` and `GOSDATA` subfolders), the disc's
+   drive or a disc image. Your copy is only read, never modified. An optional copy puts the
+   game files beside `CSVM.exe` (about 830 MB), so a disc or image need not stay in place.
 4. Pick a mode, chapter and plane in the menu.
 
 [`packaging/README.md`](packaging/README.md) is the long form of those four steps and ships in
@@ -70,13 +72,15 @@ git clone https://github.com/Laeresh/CSVM.git
 ```
 
 You need a legally-owned copy of Crimson Skies, [Godot 4.7 (.NET)](https://godotengine.org/)
-and the .NET 8 SDK. Extract your install's assets with `.\Extract.ps1 -Unzip`, then see
-[`CSVM/README.md`](CSVM/README.md) to build and run.
+and the .NET 8 SDK. Put your install (or a copy of it) in `CrimsonSkiesGame\` at the repo
+root, or point `CSVM_INSTALL_ROOT` at it, then see [`CSVM/README.md`](CSVM/README.md) to build
+and run. The engine reads the game files in place through its own readers
+(`CSVM/src/Extraction/`, `CSVM/src/Mech3/`); there is no extraction step and no external tool.
 
-Extraction is done by our fork of mech3ax, which is where the Crimson Skies format support
-lives: **[Laeresh/mech3ax, branch `cs-anim`](https://github.com/Laeresh/mech3ax/tree/cs-anim)**
-— that branch is what the extractor binary is built from. (The fork's `main` is an upstream
-mirror and does *not* carry the Crimson Skies work.)
+**Modding.** Players who want to edit the game's archives run unzbd, mech3ax's extractor,
+themselves (the build CSVM v0.4.0 bundled writes the layout CSVM reads), edit its output, and
+name that folder as the modding folder in Options or with a command-line flag. CSVM then loads
+each archive the folder holds from there and everything else from the game files.
 
 ### Build and run
 
@@ -103,10 +107,9 @@ Godot export templates are user-global, not part of the repo. One-time setup: ex
 `ExportRelease.ps1` builds, imports, and exports the release preset to `.scratch\export\CSVM.exe`,
 checking the export templates are installed and clearing `.scratch\export\` before it starts.
 This produces a self-contained `CSVM.exe` (the .NET runtime is bundled, so a recipient installs
-nothing) plus its data folder. It then copies the rest of the release in beside it, the built
-`unzbd.exe` the engine runs to extract a recipient's own game install, and `packaging/README.md`
-/ `LICENSE` / `LICENSE-unzbd` / `LICENSE-thirdparty.txt`, generates `BUILD-INFO.txt`, and zips
-the folder to
+nothing) plus its data folder. It then copies the rest of the release in beside it,
+`packaging/README.md` / `LICENSE` / `LICENSE-thirdparty.txt`, SDL2 and the WebRTC library,
+generates `BUILD-INFO.txt`, and zips the folder to
 `.scratch\CSVM-v<version>-win64.zip`, the archive to hand over. The version is
 `application/config/version` in `CSVM/project.godot`, which the exe's file properties and the
 first line of every log state as well. See [`packaging/MANIFEST.md`](packaging/MANIFEST.md) for
@@ -121,15 +124,15 @@ the layout and [`docs/tooling.md`](docs/tooling.md) for the full export and pack
 the run before the tag), computes both archives' SHA-256s, creates the annotated tag on the
 commit that was built, pushes it, and creates the GitHub release with the zip and the tarball,
 so the tag, the executables' version, the archives' names, the published checksums and the
-notes cannot disagree with each other. It needs `gh` installed and authenticated and the WSL
-Debian toolchain for the Linux export, and it refuses a dirty tree, a `tools/mech3ax`
-`cs-anim` that is dirty or unpushed, and a tag that already exists; a tag is never re-pointed. `-DryRun` runs every check and the export and stops before the tag.
+notes cannot disagree with each other. It needs `gh` installed and authenticated and WSL
+Debian for the Linux export, and it refuses a dirty tree and a tag that already exists; a tag
+is never re-pointed. `-DryRun` runs every check and the export and stops before the tag.
 
 ## Format documentation
 
 The reverse-engineered format reference lives in [`docs/formats/`](docs/formats/) — 48 pages
 covering the GameZ container, reader archives, paint schemes, animation definitions, world
-structure and more. Most of it was decoded by inspecting extracted data and matching
+structure and more. Most of it was decoded by inspecting the game's data and matching
 behaviour against the original game. Most of those pages also rest on static analysis of the
 retail `crimson.exe` wherever it settles a question the data cannot, naming the function or
 address at the point of use rather than reproducing code. Findings that come from
@@ -200,9 +203,8 @@ under **Creative Commons Attribution 4.0 International**
 by any project regardless of its own license. Attribute to **CSVM**, linking
 <https://github.com/Laeresh/CSVM>.
 
-Asset extraction uses [our fork](https://github.com/Laeresh/mech3ax) of
-[mech3ax](https://github.com/TerranMechworks/mech3ax), which is licensed under the EUPL-1.2
-and carries its own license terms. It is a separate tool, not linked into this engine.
+CSVM's readers of the game files build on the format research of
+[TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax).
 
 ## AI assistance disclosure
 

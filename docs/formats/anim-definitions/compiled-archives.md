@@ -4,17 +4,16 @@ Part of: [animation definitions](../anim-definitions.md).
 
 ## Compiled archive reference
 
-The binary archives upstream mech3ax does not support for CS. The project's mech3ax fork
-(`tools/mech3ax`) implements them in `crates/anim/src/cs/`: the container, the full semantic
-`AnimDef` + event decode, and the SI-script frame decode round-trip **byte-identically on
-all 61 archives of this install** with no raw regions left except the per-axis spline
-coefficient blocks (kept as bytes by upstream's own MW/PM convention; their semantics are
-decoded below). The CLI commands `unzbd cs anim <archive> <zip>` / `rezbd cs anim <zip> <archive>`
-extract to the same zip-of-JSON shape as MW/PM/RC (per-def JSONs + per-script `*.zan.json`
-+ `metadata.json`; the CS-only container data, the two base-file entries and the raw
-runtime pointers `defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`, which vary
-per archive and fit no PM-style mission table, ride in optional metadata fields).
-Everything below is byte-verified against this install.
+`cam_anim.zbd` and `mis_anim.zbd`, the compiled animation archives. CSVM reads them with
+`CSVM/src/Mech3/AnimZbd.cs` (the container, every `AnimDef` field and support array, the
+SI-script pool) and `AnimZbdEvents.cs` (the sequence events), straight into the
+`AnimDefinition` model `CompiledAnim` hands the runtime; the model diff against unzbd's
+zip-of-JSON output agrees on all 61 archives of this install. The per-axis spline coefficient
+blocks are carried as bytes, by the MW/PM convention; their semantics are decoded below. unzbd's
+output of these archives (per-def JSONs, per-script `*.zan.json` and a `metadata.json` holding
+the CS-only container data, the two base-file entries and the raw runtime pointers
+`defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`) is what the modding folder
+reads. Everything below is byte-verified against this install.
 
 **Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
 spline scripts that exist **nowhere as loose files**, they are compiled only into these
@@ -27,26 +26,24 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   the chapter-scope compiled anim archive, holding chapter + shared defs **including all
   vehicle SI scripts** (C1: the 4 train cars, 2 fueltrucks, mission-intro cameras,
   `cpilot_eject` body parts, 48 scripts total).
-- **Container** (same family as MW3/PM `anim.zbd`, which mech3ax fully supports, **PM is
-  the closest sibling**, verified against mech3ax's own structs): 16-byte header
+- **Container** (same family as MW3/PM `anim.zbd`, **PM is the closest sibling**): 16-byte header
   `{signature u32 = 0x08170616` (identical to MW3), `version u32 = 53` (RC 28 / MW 39 /
   PM 50), `nBase u32 = 2, nAnimFiles u32}` (byte order confirmed: C1 = `16 06 17 08 | 35 |
   02 | AA`); then nBase × `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the
   archive was built against, a CS-only list), then nAnimFiles × `{path char[80], mtime u32}`
-  (the `.zrd`/`.zan` sources; mtimes are year-2000 Unix timestamps; entry shape = mech3ax's
-  common `AnimDefFileC` exactly, though CS keeps the count in the header rather than before
+  (the `.zrd`/`.zan` sources; mtimes are year-2000 Unix timestamps; the entry shape is MW/PM's
+  anim-file entry exactly, though CS keeps the count in the header rather than before
   the entries). Then the anim-info block, **PM's 108-byte (0x6c) `AnimInfoC` layout
   verbatim**, decoded field-for-field on C1 cam_anim @0x38E0: `def_count u16` @10 (476),
   `defs_ptr` @12, `script_count u32` @16 (48, the SI-script pool count), `scripts_ptr` @20,
   `msg_count/msgs_ptr` @24/28 (0), `world_ptr` @32, `gravity f32` @36 (−9.8), `unk40` @40
   (1), `one60` @60 (1), zeros elsewhere; the three pointers are per-archive runtime garbage
-  (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C, mech3ax's
-  per-game `Mission` tables preserve these for byte-identical round-trip). Then `def_count`
+  (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C; a byte-identical
+  repack has to preserve them, and nothing that reads the archive uses them). Then `def_count`
   AnimDef records, then the SI-script pool, which runs byte-exactly to EOF.
-- **AnimDef records (semantic decode COMPLETE, fork plan item 4**, every field,
-  support array and sequence event is decoded into mech3ax's API types in
-  `crates/anim/src/cs/`; round-trip **byte-identical on all 61 archives**, and the decoded
-  `hangar3_doors` matches its reader-JSON source field-for-field, activation, SAVE_LOG,
+- **AnimDef records (semantic decode COMPLETE**, every field, support array and sequence
+  event is decoded by `AnimZbd.cs`/`AnimZbdEvents.cs`; the model diff agrees on **all 61
+  archives**, and the decoded `hangar3_doors` matches its reader-JSON source field-for-field, activation, SAVE_LOG,
   all five RESET_STATE ops, all four sequences with their door motions**)**: each record is
   a **272-byte** C struct, PM's 268-byte `AnimDefC` layout with one extra dword, with the
   same field offsets as PM (`anim_name`[32]@0, `name`[32]@40, `anim_root_name`[32]@76,
@@ -72,13 +69,14 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   OBJECT_MOTION_SI_SCRIPT events index into it. Object refs are PM's 92-byte shape (node
   *indices* where PM stores pointers, and live `root_idx`); node refs PM's 44-byte shape
   with live `flags`/`root_idx`/`ptr`; a def's node list can contain **duplicate names**
-  (same name, different pointers, the mech3ax fork disambiguates with a reversible `~N`
-  suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
+  (same name, different pointers; `AnimZbd.cs` suffixes a repeat `~2`, `~3`, as unzbd's
+  output spells it, since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
   static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
   byte 32); **activation prereqs (48 B) ARE used** (contra the survey note): object
   prereqs carry a two-bit state word (`active_raw` ∈ {0,1,2}: bit 0 ACTIVE_LIST 1 /
-  INACTIVE_LIST 0, bit 1 the def's LOCAL_NODES_ONLY scope, written by `FUN_0051d7b0`; mech3ax's
-  `active` reads 2 as true, which is wrong) and real pointers, `min_to_satisfy` up to the count;
+  INACTIVE_LIST 0, bit 1 the def's LOCAL_NODES_ONLY scope, written by `FUN_0051d7b0`; the
+  `active` flag unzbd writes, and `AnimZbd.cs` copies, reads 2 as true, which is wrong, so
+  `active_raw` carries the word) and real pointers, `min_to_satisfy` up to the count;
   anim refs 72 B, `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
   halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
   `Default_node_name` padding convention, with zero-padded and garbage exceptions.
