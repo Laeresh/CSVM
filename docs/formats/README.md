@@ -55,6 +55,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
   share.
 - [texture-archive.md](texture-archive.md), the `texture`, `rtextureN` and `rimage` archives:
   layout, pixel decode, alpha class and the rename rule.
+- [gamez-zbd.md](gamez-zbd.md), the `gamez.zbd` and `planes.zbd` layout: textures, materials,
+  the sparse model array and the node array.
 
 ### World and scene
 

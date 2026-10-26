@@ -1,7 +1,9 @@
 # GameZ format facts
 
 Part of the [format documentation](README.md); see also [world-structure.md](world-structure.md).
-This page documents format facts only and contains no game asset data.
+This page documents format facts only and contains no game asset data. The binary layout of
+`gamez.zbd` and `planes.zbd`, and the reader that builds the same model from it, are in
+[gamez-zbd.md](gamez-zbd.md).
 
 > **The extracted JSON has two supported shapes.** The project fork emits a flat node with the
 > variant under `data`: `mesh_index` -> `model_index`; `children` -> `child_indices`;

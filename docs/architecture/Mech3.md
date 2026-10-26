@@ -647,6 +647,15 @@ in the engine calls it yet: `TextureArchive` still reads the extraction's PNGs a
 switch hands it these records instead. `Read` refuses a file whose textures do not tile it.
 Layout, pixel decode and the alpha class: [../formats/texture-archive.md](../formats/texture-archive.md).
 
+## src/Mech3/GameZZbd.cs
+The reader for a chapter's `gamez.zbd` and the root `planes.zbd`, engine-free: `Read` decodes a
+whole file into the same `GameZ` model `GameZ.Load` builds from the extraction (nodes, meshes,
+materials and the texture table behind `GameZ.TextureNames`), and `Load(game, path)` returns null
+without a source or without the file. A node's mesh index is its model's position among the live
+models, not the file's sparse slot. Nothing in the engine calls it yet; the switch hands its model
+to the session in place of the zip path. `Read` refuses a file whose regions do not meet where its
+header says. Layout and the matrix-or-rotation rule: [../formats/gamez-zbd.md](../formats/gamez-zbd.md).
+
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
 resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only

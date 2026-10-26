@@ -76,6 +76,9 @@ public sealed class GameZ
     public List<GameZMesh> Meshes { get; } = new();
     public List<GameZMaterial> Materials { get; } = new();
 
+    /// <summary>The material texture table, filled by <see cref="GameZZbd"/>.</summary>
+    internal List<string> TextureNames => _textureNames;
+
     /// <summary>The mission's own number inside its chapter, which is what indexes a node's
     /// ownership slots: the digits ending the mission folder name (<c>m05</c>, <c>mp3</c>,
     /// <c>ia1</c>), 1-based as the original's own table is. Falls back to the first mission for a

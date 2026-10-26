@@ -179,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, large formats
 
 21. ☐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
-22. ☐ GameZ and `planes.zbd`
+22. ◐ GameZ and `planes.zbd`
 
 ### Wave D, ROF and disc sources
 
@@ -635,7 +635,71 @@ the implementer after reading `anim-definitions.md`.>
 Stderr notes such as "anim def duplicate
 anim ref" (`ZbdPlan.Classify`) mark data quirks the reader must tolerate the same way.
 
-## C22 ☐ GameZ and `planes.zbd`
+## C22 ◐ GameZ and `planes.zbd`
+
+**Reader landed, engine switch pending.** `GameZZbd.Read(byte[])` and
+`GameZZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/GameZZbd.cs`) decode a chapter's
+`gamez.zbd` or the root `planes.zbd` into the existing `GameZ` model: nodes, meshes, materials and
+the texture table, which `GameZ` now exposes to the reader as the internal `TextureNames` (the one
+edit to `GameZ.cs`, additive). Engine-free apart from the Godot math structs the model already
+holds. The layout is the new [formats/gamez-zbd.md](formats/gamez-zbd.md).
+`CSVM.Tests/GameZZbdTests.cs` holds seven CI-safe tests, eleven cases (a hand-encoded archive with a cycled and
+a coloured material, a sparse model array and three node kinds; the texture-name rule; the
+matrix-recompose test; two refusals) and the model diff over all nine archives against
+`GameZ.Load` on today's extraction, every leaf equal: C1 1,327,100 (A2's figure), C1B 642,096, C1C
+629,280, C2 928,179, C2B 543,068, C3 1,089,113, C4 1,561,538, C5 1,690,471, planes 1,365,159. A
+one-field change to the direct model is found as `GameZ.Meshes[m].Polygons[2].Priority`.
+
+**The split.** One reader file in four families, all landed together because each is small:
+materials (with the texture table and flipbooks), models (the sparse array, lights, polygons),
+nodes (the seven classes, the Object3d transform, the world's partition grid), and planes, which
+is the same reader with no special case.
+
+**Decision 14 holds.** The model needs nothing from the per-chapter image-pointer tables. Every
+material texture name comes from the texture table's own name field; the image pointer only
+distinguishes two runtime states that no part of the model reads, and the diff is clean without
+it. The C4 and planes model-slot remap tables in the Rust (`fixup.rs`) are repack-only as well:
+they record the free-list links of free slots, which the reader skips.
+
+**What the stderr notes mark.**
+
+- **"object3d transform fail"** is the extraction finding that an Object3d's stored matrix is not
+  bitwise the one its rotation and scale recompose to (`R = Ry * Rx * Rz` in single precision).
+  The extraction then writes the stored matrix as `original`, and `GameZ` uses it; otherwise
+  `GameZ` takes the rotation through `Basis.FromEuler`. The reader repeats the recompose test
+  (`GameZZbd.Recomposes`) and makes the same choice: 172 nodes keep their matrix (C1 17, C1B 1, C2
+  4, C3 8, C4 10, C5 5, planes 127). ⚠ The test calls `MathF.Sin`/`MathF.Cos`, which on Windows
+  match the extraction's single-precision sine and cosine for every node of the nine archives. A C
+  runtime whose `sinf` rounds differently (glibc on Linux) could flip a borderline node between the
+  two forms, a float-noise difference in one node's basis; unmeasured, since CI has no game files.
+- **"VAL FAIL"** is not a gamez note. It is printed only by three anim event readers
+  (`DELTA VAL FAIL` in object-opacity and fbfx-colour from-to events, `INTERVAL VAL FAIL` in the
+  puffer state), so it belongs to C21.
+
+**Decode cost** (Debug build, one thread, from bytes in memory, after the first row's JIT): C1 47
+ms, C1B 24, C1C 17, C2 32, C2B 14, C3 35, C4 43, C5 56, planes 39. A session decodes its chapter
+plus planes, under 100 ms.
+
+**Remaining switch work (after A3).**
+
+1. **The game-data slot.** The chapter part of A3's value carries the chapter's `GameZ`
+   (`ZBD/<chapter>/gamez.zbd`), the chapter-independent part the planes `GameZ`
+   (`ZBD/planes.zbd`). `SessionArchives.OpenFor` takes the model in place of `gamezPath`, and
+   `DecodeCache.Gamez`, keyed by path today, keys by chapter. The engine's other `GameZ.Load`
+   sites are `GameSession`, `WorldSession`, `InspectionLabs`, `Probes` and `TestHarness`; about 120
+   engine suites load a gamez by `SessionPaths.ChapterGamez` and move to the slot.
+2. **The synthetic builder**, per the A3 recipe: `Tooling/SyntheticPlane.cs` and
+   `Tooling/SyntheticEffects.cs` write gamez JSON today and build the `GameZ` in memory instead.
+   The `gamez-plane` and `gamez-lights` test fixtures stay JSON read by the legacy oracle.
+3. **The legacy path moves**: `GameZ.Load` and its `Parse*` members go to
+   `CSVM.Tests/Oracle/GameZLegacy.cs`, the v0.6.1 shape dropped, filling the model through
+   `TextureNames` as the reader does, and the theory compares that against the reader. Unused
+   afterwards, for E43: `BasePaths.PlanesGamezPath`, `SessionPaths.ChapterGamez`, the `gamez`
+   `ZbdExtraction` mode.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `GameZ` builds its node graph for every chapter and for `planes.zbd` from the game bytes.
 
@@ -644,8 +708,7 @@ anim ref" (`ZbdPlan.Classify`) mark data quirks the reader must tolerate the sam
 are taken to serve only repack (decision 14), not verified.
 
 **Approach.** Readers into `GameZNode` and its children; skip the pointer tables; model diff;
-delete the JSON and v0.6.1 shape paths. <TODO: a sub-item split (nodes, meshes, materials,
-planes).>
+delete the JSON and v0.6.1 shape paths. The sub-item split is under **The split** above.
 
 **Model recommendation.** high.
 
