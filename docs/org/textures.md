@@ -140,8 +140,8 @@ upload (see "No colour key, and a truncated 4-bit alpha" below).
 
 | Bit | Name | C1 textures carrying it |
 |---|---|---|
-| `0x01` | `STRETCH_U` (provisional) | `cliff01_trans1/2`, `compassticks2`, `dougfirtree1`, `firtree1/2`, `river2`, `sky1`, `terpat02_trans2` (plus everything in `Both`) |
-| `0x02` | `STRETCH_V` (provisional) | `tracer1`, `water1_trans1` (plus everything in `Both`) |
+| `0x01` | `STRETCH_V` (provisional) | `tracer1`, `water1_trans1` (plus everything in `Both`) |
+| `0x02` | `STRETCH_U` (provisional) | `cliff01_trans1/2`, `compassticks2`, `dougfirtree1`, `firtree1/2`, `river2`, `sky1`, `terpat02_trans2` (plus everything in `Both`) |
 | `0x08` | `FULL_ALPHA_UPLOAD` | `cloud1`, `cloud2`, `rotorblur`, and nothing else |
 
 Values observed across the install: 0, 1, 2, 3, 4, 7, 8. `Both` (3) is `lkshad2/3/5/6`,
@@ -295,14 +295,18 @@ and hides the additive flag behind an `Unk` name. Suggested:
 
 ```
 render_flags: u16     // was: stretch
-  bit 0  STRETCH_U             (provisional, not traced)
-  bit 1  STRETCH_V             (provisional, not traced)
+  bit 0  STRETCH_V             (provisional, not traced)
+  bit 1  STRETCH_U             (provisional, not traced)
   bit 2  ADDITIVE_TRANSPARENT  (traced: FUN_005a4210, FUN_005a6160)
   bit 3  FULL_ALPHA_UPLOAD     (traced: 0x005a1b58, ARGB8888 instead of ARGB4444)
 ```
 
-The existing enum values map as: `None` = 0, `Horizontal` = 1, `Vertical` = 2, `Both` = 3,
-`Unk4` = additive alone, `Unk7` = additive plus both stretch bits, `Unk8` = bit 3 alone.
+The existing enum values map as: `None` = 0, `Vertical` = 1, `Horizontal` = 2, `Both` = 3,
+`Unk4` = additive alone, `Unk7` = additive plus both stretch bits, `Unk8` = bit 3 alone. C1's
+`sky1` (`Horizontal`) carries the raw word 2 and `tracer1` (`Vertical`) 1
+([formats/texture-archive.md](../formats/texture-archive.md)). ⚠ `TextureArchive.RenderFlagsOf`
+reads `Horizontal` as 1 and `Vertical` as 2; nothing consumes bits 0 and 1, so no behaviour rests
+on the swap.
 
 Nothing else in the header needs renaming; `flags`, `width`, `height`, `palette_count` and `zero08`
 all match the engine's use.

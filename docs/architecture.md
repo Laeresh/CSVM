@@ -103,6 +103,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldLights.cs`, packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs`, parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/InterpScripts.cs`, the engine boot scripts read from `interp.zbd` in the game files, looked up by script name.
+- `src/Mech3/TextureZbd.cs`, the engine-free reader for `texture`/`rtextureN`/`rimage.zbd`: each texture's name, alpha class, flags and pixels.
 - `src/Mech3/AnimRuntime.cs`, the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
 - `src/Mech3/Anim/`, `AnimRuntime`'s motion value types and bind-census enums, split into their own namespace for size; the dispatch-axis modules share it.
 - `src/Mech3/Anim/MotionSet.cs`, the live motion collection: registration and eviction, the per-frame sweep, and the predicates the runtime asks it.

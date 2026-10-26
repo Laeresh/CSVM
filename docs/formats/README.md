@@ -53,6 +53,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 - [zrdr.md](zrdr.md), reader archives and their family index.
 - [zbd-archive.md](zbd-archive.md), the named-entry container `zrdr.zbd` and the sound archives
   share.
+- [texture-archive.md](texture-archive.md), the `texture`, `rtextureN` and `rimage` archives:
+  layout, pixel decode, alpha class and the rename rule.
 
 ### World and scene
 

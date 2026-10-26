@@ -638,6 +638,15 @@ per build into `BuildState.Interp`, which `WorldSession.Options.Interp` and the 
 the launcher's mip bias and the probes read it on their own. `Read` refuses a file whose table
 and bodies do not tile it. Layout: [../formats/interp.md](../formats/interp.md).
 
+## src/Mech3/TextureZbd.cs
+The reader for the texture archives `texture.zbd`, `rtextureN.zbd` and `rimage.zbd`, engine-free:
+`Read` decodes a whole file into `TextureImage`s in file order (name, collision rename, size, the
+header's alpha class and render-flags word, and the pixels as RGB8 or RGBA8, the layout today's
+extracted PNG has). `Load(game, path)` returns null without a source or without the file. Nothing
+in the engine calls it yet: `TextureArchive` still reads the extraction's PNGs and manifest, and the
+switch hands it these records instead. `Read` refuses a file whose textures do not tile it.
+Layout, pixel decode and the alpha class: [../formats/texture-archive.md](../formats/texture-archive.md).
+
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
 resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only

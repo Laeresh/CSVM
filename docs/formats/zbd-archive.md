@@ -16,7 +16,8 @@ reads it with `CSVM/src/Extraction/ZbdArchive.cs`. What an entry holds is its fa
 
 An archive is a folder flattened into one file: no compression, no directories, no alignment. The
 other `.zbd` files of an install (`interp`, `gamez`, `planes`, `texture`, `rtextureN`, `rimage`,
-`cam_anim`, `mis_anim`) are formats of their own and do not end in this table. The saved-game
+`cam_anim`, `mis_anim`) are formats of their own and do not end in this table; the texture ones
+are [texture-archive.md](texture-archive.md). The saved-game
 files use the same 148-byte entry and two-word tail ([saved-games.md](saved-games.md)).
 
 ## Layout

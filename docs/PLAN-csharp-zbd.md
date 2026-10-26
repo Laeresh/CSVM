@@ -174,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ◐ `strings.dll` messages
 13. ☐ Sound archives
 14. ☐ Reader archives (`zrdr.zbd`)
-15. ☐ Texture archives
+15. ◐ Texture archives
 
 ### Wave C, large formats
 
@@ -523,7 +523,76 @@ the diff compares bitwise. Entry names are `.zrd`, renamed `.json`/`.zrd.json` i
 The root `zrdr.zbd` holds `player.zrd` twice; today's zip keeps the repeat as `stem-N.ext` (A1's
 finding).
 
-## B15 ☐ Texture archives
+## B15 ◐ Texture archives
+
+**Reader landed, engine switch pending.** `TextureZbd.Read(byte[])` and
+`TextureZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/TextureZbd.cs`) decode a texture
+archive into `TextureImage` records in file order: the stored name, the collision rename (null for
+a first occurrence; `Key` is the name a lookup uses, today's PNG base name), width, height,
+`TextureArchive.AlphaClass`, the raw render-flags word, and the pixels as RGBA8 when the texture
+has an alpha channel and RGB8 otherwise, the two layouts today's PNGs carry, so the switch can
+build the same `Image` format the PNG decode gives. Engine-free, no Godot type in the decode. The
+layout is the new [formats/texture-archive.md](formats/texture-archive.md).
+`CSVM.Tests/TextureZbdTests.cs` holds nine CI-safe units over archives encoded in code (16-bit and
+paletted, local and global palette, the three alpha classes, the rename rule, rounding, three
+refusals), the model diff over all 49 archives, and a one-pixel corruption found as
+`[k].Pixels`. The diff builds today's model from each zip's `manifest.json` (name, rename, alpha,
+width, height, `stretch`) and its PNGs decoded engine-free with `PngImage` (colour type deciding RGB
+or RGBA, no `gAMA` asserted), and compares field for field and pixel for pixel: 37,004 textures,
+166,547,780 pixels, all equal.
+
+**Where the alpha class comes from (the TODO).** The header, never the pixels. The Rust computes it
+in `crates/image/src/read.rs` (`convert_info_from_c`) from the storage flags byte: `0x04` is
+`None`, else `0x02` with `0x08` is `Full` and without it `Simple`. The pixels then follow the class:
+`Full` takes the alpha plane, a 16-bit `Simple` texture is clear only where the texel is `0x0000`
+(`pixel-ops` `simple_alpha`), and a paletted `Simple` texture gets no alpha channel at all, which is
+why 22 `texture.zbd` textures read `Simple` with an opaque PNG.
+
+**Findings.**
+
+- **No rename fires on shipped data.** No name repeats within any of the 49 archives, with or
+  without regard to case, and no manifest carries `rename`. The rule is reproduced exactly
+  (case-sensitive, `stem-N.suffix` split at the last period, a rename itself taken) and unit-tested
+  only, so HD packs and gamez see exactly the stored names.
+- **No archive ships a global palette**, and every paletted texture (6,125, local palette) is in a
+  `texture.zbd`; the five tiers and `rimage` are all 16-bit.
+- **The render-flags spelling is swapped in CSVM.** The extraction's `Vertical` is 1 and
+  `Horizontal` 2 (C1 `sky1` raw 2, `tracer1` raw 1), but `TextureArchive.RenderFlagsOf` reads
+  `Horizontal` as 1, and [org/textures.md](org/textures.md) listed the two bits' textures under each
+  other's bit (corrected there). Nothing reads bits 0 or 1 (`IsAdditive` is bit 2, the upload depth
+  bit 3), so the switch, which carries the raw word, changes no behaviour; `RenderFlags()` returns
+  the raw word from then on.
+- **Decode cost** (Debug build, one thread, from bytes in memory): 7 to 21 ms for a `rtexture2` tier,
+  32 to 56 ms for a chapter's top tier, 27 to 49 ms for a `texture.zbd`, 142 ms for `rimage.zbd` (37.9 MB,
+  16.0 M pixels). A session needs one chapter tier plus `rimage`, about 200 ms.
+
+**Remaining switch work (after A3).**
+
+1. **The game-data slot.** The chapter part of A3's game-data value carries the chapter's top
+   `rtextureN` tier (what `SessionPaths.ChapterTextures` picks today: the highest `N` present,
+   else `texture`), and the chapter-independent part carries `rimage`. `TextureArchive` takes the
+   records in place of the path: `_byBaseName` keyed by `Key`, `_alphaClasses` and `_renderFlags`
+   keyed by `Name` (as the manifest keys them today), and `Build` makes its `Image` with
+   `Image.CreateFromData(w, h, false, HasAlphaChannel ? Rgba8 : Rgb8, Pixels)` where it now calls
+   `LoadPngFromBuffer`; `InstallAuthoredMips` the same for the `_1`/`_2` siblings. `ReadPngBytes`,
+   `HdTextures.ForWorld` (keyed by the archive's folder path) and `TextureDropIn.CheckNames` need a
+   key that is not a path.
+2. **`rimage` is not read through `TextureArchive`.** It is opened as `extracted/rimage/*.png` by
+   path in ten engine files (`HudFont`, `ImpactReticle`, `GameSession`, `ObjectiveReadouts`,
+   `ObjectivesHud`, `CampaignBriefingPage`, `ComposedBoard`, `ComposedBoardView`,
+   `OriginalWidgets`, `ExtractionFlow`'s always-unpacked rule), plus six suites and the HD pack's
+   `rimage/` entries (`HdTextures`, `PackIndex`). Each moves to a lookup by name in the `rimage` records, returning a
+   `TgaImage` (`TgaImage.FromRgba`, expanding RGB to RGBA) where it decodes a PNG today.
+3. **The synthetic builder**, per the A3 recipe: `Tooling/SyntheticTextures.cs` builds
+   `TextureImage` records in memory instead of writing the unpacked `C1/texture` tree.
+4. **The legacy path moves**: `TextureArchive`'s PNG/zip/folder reading and `ReadTextureManifest`
+   go to `CSVM.Tests/Oracle/TexturesLegacy.cs`, and the theory compares that against the reader.
+   Unused afterwards, for E43: `SessionPaths.ChapterTextures`, `PreferUnzipped` for textures, the
+   `textures` `ZbdExtraction` mode.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `TextureArchive` decodes `texture.zbd`, `rtextureN.zbd` and `rimage.zbd` into images
 directly, with the same names and alpha classes.
