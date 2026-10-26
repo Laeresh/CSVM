@@ -595,7 +595,7 @@ Unused now, for E43: `BasePaths.SoundsPath` (still filled by `Resolve` and the s
 `ProbeRunner`), `--sounds=` (`SessionSpec.Sounds`), `PreferUnzipped` and `--zip-assets` for sounds,
 `WavCues.ReadFrom` (units only), and the `sounds` `ZbdExtraction` mode.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Reader (kept from the reader landing).** `SoundZbd.Load(IGameFileSource?, path)` and
 `SoundZbd.Read(stream, name)` (`CSVM/src/Mech3/SoundZbd.cs`) open `soundsh.zbd` or `soundsl.zbd`
@@ -921,7 +921,7 @@ caller, read only by `SessionPathsTests` and the two extraction units), `WorldSe
 (read only by that call; still set by both callers), and the `anim` mode of `ZbdPlan`'s
 extraction. No `BasePaths` field, `SessionPaths` member or `--` flag carried an anim path.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -1047,7 +1047,7 @@ chapter loader holds the last chapter's world; one `GameZ` per chapter is now sh
 rebuild of it, so the read-only contract `DecodeCache` states binds game sessions too. A suite
 world's chapter decode runs before the harness's build watch starts, as B15's textures do.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Reader (kept from the reader landing).** `GameZZbd.Read(byte[])` and
 `GameZZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/GameZZbd.cs`) decode a chapter's
@@ -1175,7 +1175,7 @@ log's `rof: 1227 files ... in 38-54 ms`), `ui_strings.json` 4-27 ms, `menu_layou
 and Original's availability check over them 18-24 ms, about 100-160 ms on a menu launch. The view
 holds `crimson.rof` (60 MB) for the process. A `.BM` PNG costs about 1 ms on read.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -1370,7 +1370,7 @@ messages, rimage, planes, C1's textures and world) and the whole `RofFiles` view
 one `[RealCueFact]` (`CSVM_TEST_CUE`) that copies the raw image and compares each copied file with
 the install. Both real-data tests delete their copy.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -1501,7 +1501,7 @@ inputs, and `ExtractionRun.Header`/`Summary` as screen output. ⚠ Until B14 and
 engine still reads `extracted/zrdr.zip` and the anim zips, so the prompt's Delete breaks a
 session that needs them; the prompt's "does not use it" is true only once both land.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Original approach (kept for reference).**
 
