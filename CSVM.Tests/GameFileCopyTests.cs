@@ -227,6 +227,9 @@ public class GameFileCopyTests
     {
         Assert.All(GameFileCopy.Files, file => Assert.Equal(source.Exists(file), copy.Exists(file)));
         var data = GameData.Load(copy);
+        // The launch-long sound archive holds its file open, which would block the copy's delete.
+        using var sounds = data.Sounds;
+        Assert.NotNull(sounds);
         Assert.NotNull(data.Interp);
         Assert.True(data.Messages.Count > 0);
         Assert.True(data.Rimage.Count > 0);

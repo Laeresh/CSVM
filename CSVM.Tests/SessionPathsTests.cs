@@ -25,25 +25,21 @@ public class SessionPathsTests
             SessionPaths.MissionZrdr(root, "C4", "IA1"));
     }
 
-    /// <summary>An extraction of a disc's contents holds the root archives and no chapter world,
-    /// zipped or unpacked; one chapter's GameZ in either shape is enough.</summary>
+    /// <summary>A copy of a disc without its chapters holds the root archives and no chapter world.
+    /// One chapter's GameZ is enough; no game files hold none.</summary>
     [Fact]
-    public void AChapterWorldIsFoundZippedOrUnpackedAndNeverAtTheRoot()
+    public void AChapterWorldIsFoundInTheGameFilesAndNeverAtTheRoot()
     {
         var root = TestData.TempDir();
-        string extracted = Directory.CreateDirectory(Path.Combine(root, "extracted")).FullName;
-        File.WriteAllText(Path.Combine(extracted, "planes.zip"), "x");
-        Directory.CreateDirectory(Path.Combine(extracted, "rimage"));
-        Assert.False(SessionPaths.HasAnyChapterWorld(root));
-        Assert.False(SessionPaths.HasAnyChapterWorld(Path.Combine(root, "absent")));
+        Directory.CreateDirectory(Path.Combine(root, "ZBD"));
+        File.WriteAllText(Path.Combine(root, "ZBD", "planes.zbd"), "x");
+        var game = new InstallFolderSource(root);
+        Assert.False(SessionPaths.HasAnyChapterWorld(game));
+        Assert.False(SessionPaths.HasAnyChapterWorld(null));
 
-        Directory.CreateDirectory(Path.Combine(extracted, "C3", "gamez"));
-        Assert.True(SessionPaths.HasAnyChapterWorld(root));
-
-        var zipped = TestData.TempDir();
-        Directory.CreateDirectory(Path.Combine(zipped, "extracted", "C1"));
-        File.WriteAllText(Path.Combine(zipped, "extracted", "C1", "gamez.zip"), "x");
-        Assert.True(SessionPaths.HasAnyChapterWorld(zipped));
+        Directory.CreateDirectory(Path.Combine(root, "ZBD", "c3"));
+        File.WriteAllText(Path.Combine(root, "ZBD", "c3", "GAMEZ.ZBD"), "x");
+        Assert.True(SessionPaths.HasAnyChapterWorld(game));
     }
 
     /// <summary>The campaign sequence names its folders <c>c3</c>/<c>m01</c>; the extraction

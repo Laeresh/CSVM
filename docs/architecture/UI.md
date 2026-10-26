@@ -767,7 +767,7 @@ folder through `Utils/FolderOpener.cs`; a line above it names a newer release (`
 and opens its page. All three are mouse-only and never focusable, and `Launcher` keeps their clicks
 from Original's polled pointer. In Game Mode all three refuse, since the shell there answers Ok and
 shows no window, and the refusal shows in `Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
-or `NoGameDataScreen.cs`: deeper screens' bottom plaques sit under it at a Steam Deck's aspect. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+or `SourceScreen.cs`: deeper screens' bottom plaques sit under it at a Steam Deck's aspect. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs
 A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its
@@ -783,25 +783,23 @@ under the flag, so an ordinary run and the golden sweep never build it, and fed 
 second from `Launcher.TickNetReadout`, which logs the same line. Hidden while no session holds a
 wire. Drawn on `HudLayers.Debug`, unscaled, in the top-left corner.
 
-## src/UI/Screens/NoGameDataScreen.cs
-The screen a launch reaches instead of the menu when `ExtractionFlow.ProblemAt` names a problem (no
-extraction, an unfinished run, a stamp naming another schema), or as `Unusable` when `Launcher`'s
-`OriginalAvailability.Load` refuses a current tree, the fault riding `ExtractionFlow.Detail` into the
-body. Views follow `ExtractionFlow.View`: the folder field with Choose folder, Extract (focused) and
-Quit, plus Play anyway on stale data; the phase, bar and latest line with Cancel; the failures with
-Try again and Choose another folder. Each press is a focusable button, so a pad's d-pad and A drive
-it; Esc or B cancels a run and quits otherwise. A success hands back once to `Launcher`, which
-re-resolves the data paths and enters the menu. A pad's A or a tap on the folder field raises `Utils/ScreenKeyboard.cs`; the picker's hint label does not wrap.
+## src/UI/Screens/SourceScreen.cs
+Shown instead of the menu (`Launcher.ShowSourceScreen`) when `BasePaths.Game` is null, when
+`OriginalAvailability.Load` refuses the located files (`SourceFlow.Refused`), or when a question is
+owed. It lays out `SourceFlow`'s title, body and buttons per view, the first focused and Quit last
+except while a worker runs; the field shows in the asking view, the bar in the copy and delete.
+Esc cancels a copy, waits out a delete, quits otherwise. `Launcher.LeaveSourceScreen` rebinds
+`BasePaths.Game`, `GameData` and `RofFiles` after a pick or a copy, and asks again if its menus do
+not read. A pad's A or a tap on the field raises `Utils/ScreenKeyboard.cs`.
 
-## src/UI/Screens/ExtractionFlow.cs
-The extraction screen's state, engine-free so a unit drives it with a fake runner. A stamp naming
-another schema, or the `UnfinishedMarker` a run leaves until it succeeds, stops the launch; an
-unstamped tree stays the boot's warning. The field starts with the remembered install while it is
-still one, else the first found candidate, else the remembered path as a hint. Stale or unfinished
-data re-extracts with `Force`, since the incremental rule compares file times, and adds `Unzip`
-when the tree already has unpacked siblings the loaders would prefer. The run goes to a dedicated
-worker thread rather than the thread pool, so a pool held by other blocking work cannot delay its
-start; progress and its outcome cross only through `Tick`, once a frame. Success remembers the install.
+## src/UI/Screens/SourceFlow.cs
+The game-file screen's engine-free state. `Validate` opens a pick through `GameFileSource.Open` or
+names why not (`InstallLocator.Check`'s message, or the image reader's). A pick is remembered and
+offers `GameFileCopy.Run`, never onto its own folder, asking before a replace. The questions asked
+once (`OptionsDef.ExtractedPromptAnswered`, `PatchNoteShown`, never in a scripted or `--det` run):
+keep or delete an old `extracted/`, never adopted, deleted after a second confirmation by
+`DeleteWithoutFollowingLinks`, which unlinks a junction and never enters it; and game files without
+`crimptch.rof`, naming where it goes. Workers run on a dedicated thread, crossing only through `Tick`.
 
 ## src/UI/Screens/InstallPicker.cs
 Godot's own `FileDialog` in folder mode over the whole file system, never the native dialog, so

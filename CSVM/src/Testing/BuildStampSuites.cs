@@ -18,7 +18,7 @@ namespace CSVM.Testing;
 /// <summary>
 /// The version stamp's two folder icons as built controls. They are mouse-only, carry their
 /// PromptFont glyphs and tooltips, and share the stamp's visibility. They open the log file's own
-/// directory and Godot's user folder, and Godot's focus walk on the extraction screen never reaches
+/// directory and Godot's user folder, and Godot's focus walk on the game-file screen never reaches
 /// them. The opener is swapped for a recorder, so no suite opens a window on the desktop.
 /// ⚠ This pins the wiring, not the look; the menu-original-flag golden is where the icons are seen.
 /// </summary>
@@ -67,30 +67,30 @@ internal static class BuildStampSuites
     }
 
     [Suite("build-stamp-focus",
-        "Godot's focus walk over the extraction screen, forward, back and in all four directions from every "
+        "Godot's focus walk over the game-file screen, forward, back and in all four directions from every "
         + "control it reaches, never lands on either folder icon while the stamp is shown over the screen, and "
-        + "a click pushed through the viewport reaches the logs icon over the screen's backdrop and leaves Extract focused")]
+        + "a click pushed through the viewport reaches the logs icon over the screen's backdrop and leaves Use these files focused")]
     internal static void BuildStampFocus(TestContext ctx)
     {
         string root = Directory.CreateDirectory(Path.Combine(ctx.ScratchDir, "build-stamp-" + Guid.NewGuid().ToString("N"))).FullName;
-        var flow = new ExtractionFlow(DataProblem.Missing, root, "unzbd", root, (r, _, _) => new ExtractionResult { Install = InstallLocator.Check(r.InstallFolder) }, _ => { }, work => work());
-        var screen = NoGameDataScreen.Build(flow, () => { }, () => { });
+        var flow = new SourceFlow(root, null, root, null, ask: false, work => work());
+        var screen = SourceScreen.Build(flow, () => { }, () => { });
         var stamp = new BuildStamp(ctx.RepoRoot, exported: false) { Opener = (path, _) => new FolderOpenResult(FolderOpenOutcome.Opened, path) };
         ctx.Host.AddChild(screen);
         ctx.Host.AddChild(stamp);
         try
         {
             stamp.Tick(true);
-            var reached = Walk(screen.ExtractButton);
+            var reached = Walk(screen.DefaultButton);
             ctx.Note($"the focus walk reached {reached.Count} controls");
-            ctx.Check(reached.Count > 1, $"the walk moved off Extract, so it ran over a real screen ({reached.Count})");
+            ctx.Check(reached.Count > 1, $"the walk moved off Use these files, so it ran over a real screen ({reached.Count})");
             ctx.Check(!reached.Contains(stamp.LogsButton) && !reached.Contains(stamp.UserButton),
                 $"and never reached a folder icon");
 
             // A real click through the viewport's GUI dispatch. It has to reach the icon over the
             // screen's full-window backdrop, and leave the focus where the pad left it.
             var viewport = screen.GetViewport();
-            ctx.Check(viewport.GuiGetFocusOwner() == screen.ExtractButton, $"Extract holds the focus before the click");
+            ctx.Check(viewport.GuiGetFocusOwner() == screen.DefaultButton, $"Use these files holds the focus before the click");
             var at = Settle(stamp.LogsButton).GetCenter();
             string? opened = null;
             stamp.Opener = (path, _) =>
@@ -101,8 +101,8 @@ internal static class BuildStampSuites
             viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
             viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
             ctx.Check(opened == stamp.LogsFolder, $"a click at {at} reaches the logs icon above the screen ({opened ?? "nothing opened"})");
-            ctx.Check(viewport.GuiGetFocusOwner() == screen.ExtractButton,
-                $"and leaves Extract focused, so Enter or A after a click still extracts ({viewport.GuiGetFocusOwner()?.Name})");
+            ctx.Check(viewport.GuiGetFocusOwner() == screen.DefaultButton,
+                $"and leaves Use these files focused, so Enter or A after a click still presses it ({viewport.GuiGetFocusOwner()?.Name})");
         }
         finally
         {

@@ -168,7 +168,7 @@ public partial class Launcher : Node3D
     // --destroy= probe wrapper delegates to it (see src/Tooling/ProbeRunner.cs).
     private Tooling.ProbeRunner _probeRunner = null!;
     // The screen a menu launch stops at over missing or stale data, null once it hands back.
-    private UI.Screens.NoGameDataScreen? _extractionScreen;
+    private UI.Screens.SourceScreen? _sourceScreen;
 
     // The flight's two exits are this node's, so the network state is built over them here. The
     // sound is built with the node, since a focus change can arrive before _Ready settles anything.
@@ -273,7 +273,7 @@ public partial class Launcher : Node3D
         // The extraction tree's provenance check, at most one warning line, never a block. An
         // --extract run is about to write that tree, and a missing one has no stamp to read. A
         // warning about either would only mislead.
-        if (_spec.ExtractInstall == null && !UI.Screens.NoGameDataScreen.Missing(dataRoot))
+        if (_spec.ExtractInstall == null && UI.Screens.SourceFlow.HasExtracted(dataRoot))
         {
             ExtractionStamp.Check(dataRoot);
         }
@@ -786,21 +786,12 @@ public partial class Launcher : Node3D
             AddChild(_netReadout);
         }
 
-        // Only on the path a recipient takes. Every other entry carries a content arg, which is a
-        // developer's launch, and the log is where that reader already looks. ⚠ Keep this ahead of
-        // the music's build: a stale tree is rewritten by the screen, and an open sound archive would hold it.
+        // Only on the path a recipient takes; a content arg is a developer's, who reads the log.
+        // ⚠ Keep this ahead of the music's build. A copy may replace the data root's copy, which an
+        // open sound archive would hold. The source-notes aid asks the questions in a scripted run.
         if (_spec.ShowsMenu && _spec.MovieName == null
-            && UI.Screens.ExtractionFlow.ProblemAt(dataRoot) is var problem && problem != UI.Screens.DataProblem.None)
+            && ShowSourceScreen(ask: (!_spec.Det && !_spec.IsScripted) || _cli.MenuStartScreen == "source-notes"))
         {
-            ShowExtractionScreen(problem);
-            return;
-        }
-
-        // A current tree the Original menus cannot read stops at the same screen, naming the fault.
-        if (_spec.ShowsMenu && _spec.MovieName == null
-            && UI.Menu.Original.OriginalAvailability.Load(dataRoot, out string? unusable) == null)
-        {
-            ShowExtractionScreen(UI.Screens.DataProblem.Unusable, unusable);
             return;
         }
 
@@ -985,7 +976,7 @@ public partial class Launcher : Node3D
         // The main menu only: deeper screens have plaques along the bottom edge that the stamp
         // overlaps at a Steam Deck's aspect. The
         // extraction screen too, since a player whose extraction failed needs the logs icon most.
-        _buildStamp?.Tick(_menu.Host is { OnMainMenu: true } || _extractionScreen != null);
+        _buildStamp?.Tick(_menu.Host is { OnMainMenu: true } || _sourceScreen != null);
         TickNetReadout(delta);
         _instruments.EndFrame(delta, ClockNow);
         // Wall time, like the instruments above: the score is not part of the simulation, and a
@@ -993,7 +984,7 @@ public partial class Launcher : Node3D
         _audio.Tick((float)delta);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null || _spec.MovieName != null);
+            _session?.Plane, _menu.Host is { Shown: true } || _sourceScreen != null || _spec.MovieName != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
@@ -1079,7 +1070,7 @@ public partial class Launcher : Node3D
             return dataRoot;
         }
         string replaced = dataRoot;
-        bool installThere = !UI.Screens.NoGameDataScreen.Missing(replaced);
+        bool installThere = UI.Screens.SourceFlow.HasExtracted(replaced);
         string synthetic = Tooling.SyntheticData.ScratchRoot(repoRoot);
         try
         {
@@ -1285,12 +1276,12 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The words of Original's failed-build box. An extraction with no chapter world fails every
-    // flight the same way, so it names the fix; anything else is the log's to explain.
-    private string FailedBuildWarning() => SessionPaths.HasAnyChapterWorld(_paths.DataRoot)
+    // The words of Original's failed-build box. Game files with no chapter world fail every flight
+    // the same way, so it names the fix; anything else is the log's to explain.
+    private string FailedBuildWarning() => _spec.SyntheticData || SessionPaths.HasAnyChapterWorld(_paths.Game)
         ? $"The mission could not be loaded. The log says why: open it with the \"{UI.Screens.BuildStamp.LogsTooltip}\" icon beside the version number."
-        : "The extracted game data holds no chapter worlds, so no mission can be flown. "
-            + $"Extract again from a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}.";
+        : $"The game files at '{_paths.Game?.Location}' hold no chapter worlds, so no mission can be flown. "
+            + $"Point CSVM at a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}, or at the game disc.";
 
     // A build that throws counts as one that failed. The caller's own failure path then takes the
     // load screen down and returns a menu launch to the menu. An escaped exception would leave the
@@ -1503,96 +1494,72 @@ public partial class Launcher : Node3D
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
-    // The screen a menu launch stops at when the data root holds no extraction, or one stamped under
-    // another schema. Nothing that reads the tree is built yet. Esc leaves through _UnhandledInput,
-    // which quits with neither a menu nor a session up; the screen keeps Esc while a run is going.
-    private void ShowExtractionScreen(UI.Screens.DataProblem problem, string? detail = null)
+    // The screen a menu launch stops at, before any sound archive opens. It is the picker when no
+    // game files were found or the menus cannot read them, else the questions still owed once.
+    // False when there is nothing to show. Esc leaves through _UnhandledInput, which quits.
+    // ⚠ Only a player at the controls is asked a question; a scripted run never saves an answer.
+    private bool ShowSourceScreen(bool ask)
     {
-        string extracted = Path.Combine(_paths.DataRoot, Extraction.ExtractionRun.ExtractedFolder);
-        if (problem == UI.Screens.DataProblem.Missing)
+        bool readable = UI.Menu.Original.OriginalAvailability.Load(_paths.DataRoot, out string? fault) != null;
+        if (_spec.SyntheticData && readable)
         {
-            Log.Error("core", $"no extracted game data path={extracted}, {UI.Screens.NoGameDataScreen.Instruction}");
+            return false;
         }
-        else if (problem == UI.Screens.DataProblem.Unusable)
+
+        string? refused = readable ? null : _paths.Game is { } game ? $"'{game.Location}' ({fault})" : _spec.SyntheticData ? fault : null;
+        var store = _spec.IsScripted ? null : OptionsStore.UserOptions();
+        string? remembered = _spec.Det ? null : Extraction.RememberedInstall.Get();
+        var roots = Extraction.InstallSearchRoots.ForThisMachine() with { Beside = _paths.RepoRoot };
+        var candidates = Extraction.InstallLocator.Candidates(roots, remembered);
+        string preFill = candidates.Count > 0 ? candidates[0] : remembered ?? string.Empty;
+        var flow = new UI.Screens.SourceFlow(_paths.DataRoot, readable ? _paths.Game : null, preFill, store, ask) { Refused = refused };
+        if (flow.View == UI.Screens.SourceView.Done)
         {
-            Log.Error("core", $"the menus cannot read the game data ({detail}) path={extracted}, asking to extract again");
+            return false;
         }
-        else if (problem == UI.Screens.DataProblem.Incomplete)
+
+        if (flow.View == UI.Screens.SourceView.Asking)
         {
-            Log.Warn("core", $"the last extraction did not finish path={extracted}, asking to extract again");
+            Log.Error("core", $"no game files: {(refused == null ? "none found" : "the menus cannot read " + refused)}, showing the picker remembered={remembered ?? "none"} candidates={candidates.Count} prefill={(preFill.Length == 0 ? "none" : preFill)}");
         }
         else
         {
-            ExtractionStamp.Standing(_paths.DataRoot, out int? found);
-            Log.Warn("core", $"extraction stamp schema={found} but this build reads schema={ExtractionStamp.Schema} path={extracted}, asking to re-extract ({problem})");
+            Log.Info("core", $"game files: {_paths.Game?.Location}, asking {flow.View} once");
         }
 
-        // The screen honours --unzbd= as --extract does, which is how a worktree names a tool.
-        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(_paths.RepoRoot, _exported);
-        string? remembered = Extraction.RememberedInstall.Get();
-        var roots = Extraction.InstallSearchRoots.ForThisMachine() with { Beside = _paths.RepoRoot };
-        var candidates = Extraction.InstallLocator.Candidates(roots, remembered);
-        string preFill = UI.Screens.ExtractionFlow.PreFill(remembered, candidates);
-        Log.Info("core", $"extraction screen: problem={problem} remembered={remembered ?? "none"} candidates={candidates.Count} prefill={(preFill.Length == 0 ? "none" : preFill)} unzbd={unzbd}");
-
-        // ⚠ A run that drives itself never writes the player's options, the rule --run-tests keeps.
-        System.Action<string> remember = _spec.IsScripted
-            ? _ => { }
-        : Extraction.RememberedInstall.Set;
-        var flow = new UI.Screens.ExtractionFlow(problem, _paths.DataRoot, unzbd, preFill,
-            (request, progress, cancel) => RunExtraction(request, progress, cancel), remember)
-        {
-            Detail = detail,
-        };
-        _extractionScreen = UI.Screens.NoGameDataScreen.Build(flow, LeaveExtractionScreen, BlankAndQuit);
-        AddChild(_extractionScreen);
-        Callable.From(() => ApplyExtractionAid(_cli.MenuStartScreen)).CallDeferred();
+        _sourceScreen = UI.Screens.SourceScreen.Build(flow, LeaveSourceScreen, BlankAndQuit);
+        AddChild(_sourceScreen);
+        Callable.From(() => ApplySourceAid(_cli.MenuStartScreen)).CallDeferred();
+        return true;
     }
 
-    // The worker's side of the screen: the one pipeline, with its console lines in the log.
-    private Extraction.ExtractionResult RunExtraction(Extraction.ExtractionRequest request,
-        System.Action<Extraction.ExtractionProgress> progress, System.Threading.CancellationToken cancel)
+    // The screen's hand-back. A pick or a copy rebinds the game files, their models and the UI
+    // archive's view, as the launch bound them after BasePaths.Resolve. Nothing rebinds itself.
+    private void LeaveSourceScreen()
     {
-        foreach (string line in Extraction.ExtractionRun.Header(request))
+        var flow = _sourceScreen!.Flow;
+        RemoveChild(_sourceScreen);
+        _sourceScreen.QueueFree();
+        _sourceScreen = null;
+        if (flow.Picked && flow.Source is { } source)
         {
-            Log.Raw(line);
-        }
-
-        var result = Extraction.ExtractionRun.Run(request, report =>
-        {
-            foreach (string line in report.Lines)
+            foreach (string missing in flow.Missing)
             {
-                Log.Raw(line);
+                Log.Warn("core", $"game files: the copy found no {missing} in the source");
             }
 
-            progress(report);
-        }, cancel);
-        foreach (string line in result.Summary(request.Unzip))
-        {
-            Log.Raw(line);
-        }
+            Log.Info("core", $"game files: {source.Location}, picked");
+            _paths = _paths with { Game = source, Data = GameData.Load(source) };
+            BindRofFiles();
+            _probeRunner = new Tooling.ProbeRunner(_paths);
 
-        return result;
-    }
-
-    // The screen's hand-back, after a run or the stale screen's Play anyway. The base paths were
-    // resolved against a tree that has since changed, so they and the music are resolved again.
-    private void LeaveExtractionScreen()
-    {
-        if (_extractionScreen is { } screen)
-        {
-            foreach (string warning in screen.Flow.Warnings)
+            // The pick's own menus may not read either, which asks again with the fault named.
+            if (ShowSourceScreen(ask: false))
             {
-                Log.Warn("core", $"extraction: {warning}");
+                return;
             }
-
-            RemoveChild(screen);
-            screen.QueueFree();
-            _extractionScreen = null;
         }
 
-        _paths = BasePaths.Resolve(_paths.RepoRoot, _paths.DataRoot, _spec, Tooling.SyntheticGameData.Build);
-        BindRofFiles();
         _audio.Build(_paths, _masterSeed);
         EnterMenu();
     }
@@ -1607,11 +1574,11 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The screen's screenshot doors, through --menu= like the menu's own: extract-picker[:<folder>]
-    // opens the picker, and extract-run:<install> fills the field and presses Extract.
-    private void ApplyExtractionAid(string aid)
+    // The screen's screenshot doors, through --menu= like the menu's own: source-picker[:<folder>]
+    // opens the picker, and source-pick:<path> fills the field and presses Use these files.
+    private void ApplySourceAid(string aid)
     {
-        if (_extractionScreen is not { } screen)
+        if (_sourceScreen is not { } screen)
         {
             return;
         }
@@ -1621,16 +1588,12 @@ public partial class Launcher : Node3D
         string? argument = colon < 0 ? null : aid[(colon + 1)..];
         switch (name)
         {
-            case "extract-picker":
+            case "source-picker":
                 screen.OpenPicker(argument);
                 break;
-            case "extract-run":
-                if (argument != null)
-                {
-                    screen.Flow.InstallPath = argument;
-                }
-
-                screen.Extract();
+            case "source-pick" when argument != null && screen.Flow.View == UI.Screens.SourceView.Asking:
+                screen.Flow.InstallPath = argument;
+                screen.Press(screen.DefaultButton.Text);
                 break;
         }
     }

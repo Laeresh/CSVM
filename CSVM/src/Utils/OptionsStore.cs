@@ -219,10 +219,18 @@ public sealed class OptionsDef
     /// <summary>The Voice level, on the same range as <see cref="AudioMusic"/>.</summary>
     public int? AudioVoice { get; set; }
 
-    /// <summary>The Crimson Skies install folder the last extraction read, fully qualified, which
-    /// pre-fills the next picker (<c>Extraction.RememberedInstall</c>). Not a display setting and
-    /// never read by a golden shot.</summary>
+    /// <summary>The game files last picked, a folder, drive or disc image, fully qualified, which
+    /// <c>GameFileSource.Locate</c> tries and the next picker pre-fills
+    /// (<c>Extraction.RememberedInstall</c>). Not a display setting and never read by a golden shot.</summary>
     public string? InstallPath { get; set; }
+
+    /// <summary>Whether the player answered the question about an old <c>extracted</c> folder,
+    /// keeping or deleting it, so it is asked once (<c>UI.Screens.SourceFlow</c>).</summary>
+    public bool? ExtractedPromptAnswered { get; set; }
+
+    /// <summary>Whether the player was told that the game files hold no patch archive, which is
+    /// said once (<c>UI.Screens.SourceFlow</c>).</summary>
+    public bool? PatchNoteShown { get; set; }
 
     /// <summary>The network callsign the Player Information box last took, which prefills it next
     /// session. At most <see cref="OptionsStore.NameLimit"/> characters. Not a display setting.
@@ -382,6 +390,8 @@ public sealed class OptionsStore
             WriteLevel(w, "audioEffects", def.AudioEffects);
             WriteLevel(w, "audioVoice", def.AudioVoice);
             Write(w, "installPath", def.InstallPath);
+            WriteFlag(w, "extractedPromptAnswered", def.ExtractedPromptAnswered);
+            WriteFlag(w, "patchNoteShown", def.PatchNoteShown);
             Write(w, "netCallsign", def.NetCallsign);
             if (def.NetVoice is { } voice)
             {
@@ -459,6 +469,8 @@ public sealed class OptionsStore
                 AudioEffects = ReadLevel(root, "audioEffects"),
                 AudioVoice = ReadLevel(root, "audioVoice"),
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
+                ExtractedPromptAnswered = ReadFlag(root, "extractedPromptAnswered"),
+                PatchNoteShown = ReadFlag(root, "patchNoteShown"),
                 NetCallsign = ReadShaped(root, "netCallsign", static v => v.Length <= NameLimit),
                 NetVoice = root.TryGetProperty("netVoice", out var voice) && voice.ValueKind == JsonValueKind.Number
                     && voice.TryGetInt32(out int place) && place >= 0 && place <= MaxVoice

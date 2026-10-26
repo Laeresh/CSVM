@@ -70,10 +70,11 @@ public static class GameFileSource
     /// <summary>The first install found, or null when there is none. <paramref name="installOverride"/>
     /// is the <see cref="InstallVariable"/> value, <paramref name="dataRoot"/> the session's data
     /// root, <paramref name="remembered"/> <see cref="RememberedInstall.Get()"/>; any may be null.
-    /// A place that is not an install is passed over.</summary>
+    /// A place that is not an install is passed over. The remembered place is opened as it is, so
+    /// a remembered disc image is found too.</summary>
     public static IGameFileSource? Locate(string? installOverride, string? dataRoot, string? remembered, InstallSearchRoots roots)
     {
-        foreach (string? place in new[] { installOverride, dataRoot == null ? null : Path.Combine(dataRoot, DataRootFolder) })
+        foreach (string? place in new[] { installOverride, dataRoot == null ? null : Path.Combine(dataRoot, DataRootFolder), remembered })
         {
             if (!string.IsNullOrWhiteSpace(place) && Open(place) is { } source)
             {
@@ -81,7 +82,7 @@ public static class GameFileSource
             }
         }
 
-        foreach (string candidate in InstallLocator.Candidates(roots, remembered))
+        foreach (string candidate in InstallLocator.Candidates(roots, null))
         {
             if (Open(candidate) is { } source)
             {

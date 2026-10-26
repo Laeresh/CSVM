@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 
 namespace CSVM.Extraction;
 
@@ -78,26 +79,9 @@ public static class SessionPaths
     public static string MissionZrdr(string dataRoot, string chapter, string mission) =>
         PreferUnzipped(Extraction.ZbdTree.Under(dataRoot, $"{chapter}/{mission}/zrdr.zip"));
 
-    /// <summary>Whether any chapter folder under <c>extracted/</c> holds its world GameZ, zipped or
-    /// unpacked. False for an extraction of a disc's contents, which carries the menus and no
-    /// chapter, so every flight fails to build.</summary>
-    public static bool HasAnyChapterWorld(string dataRoot)
-    {
-        string extracted = Path.Combine(dataRoot, ExtractionRun.ExtractedFolder);
-        if (!Directory.Exists(extracted))
-        {
-            return false;
-        }
-
-        foreach (string chapter in Directory.EnumerateDirectories(extracted))
-        {
-            string gamez = Path.Combine(chapter, "gamez.zip");
-            if (File.Exists(gamez) || Directory.Exists(PreferUnzipped(gamez)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    /// <summary>Whether <paramref name="game"/> holds any chapter's world GameZ
+    /// (<c>ZBD/&lt;chapter&gt;/gamez.zbd</c>). False with no game files, and for a copy of a disc
+    /// without its chapters, so every flight fails to build.</summary>
+    public static bool HasAnyChapterWorld(IGameFileSource? game) =>
+        game != null && ZbdManifest.Expected.Any(path => path.EndsWith("/gamez.zbd", StringComparison.Ordinal) && game.Exists("ZBD/" + path));
 }

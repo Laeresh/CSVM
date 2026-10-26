@@ -208,7 +208,7 @@ public static class InstallLocator
             if (!HasArchives(zbd))
             {
                 return new InstallCheck(InstallCheckKind.EmptyZbd, folder, null,
-                    $"The folder '{zbd}' holds no .zbd archives, so there is nothing to extract. '{folder}' looks like an "
+                    $"The folder '{zbd}' holds no .zbd archives, so there is nothing to read. '{folder}' looks like an "
                     + $"incomplete Crimson Skies install. Reinstall the game, or choose a complete install: {ExpectedFolder}.");
             }
 

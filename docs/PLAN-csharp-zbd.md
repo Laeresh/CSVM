@@ -200,7 +200,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E, cutover
 
-41. ☐ Source picker and upgrade cleanup
+41. ☑ Source picker and upgrade cleanup
 42. ☑ Dev-only `--dump`
 43. ☐ Delete the extraction pipeline
 44. ☐ Packaging, licences, credit and docs
@@ -1452,7 +1452,58 @@ the real-disc check when a raw image of the disc exists.
 
 # Wave E, cutover
 
-## E41 ☐ Source picker and upgrade cleanup
+## E41 ☑ Source picker and upgrade cleanup
+
+**Landed.** `UI/Screens/SourceScreen.cs` and its engine-free state `UI/Screens/SourceFlow.cs`
+replace the Extract screen (`NoGameDataScreen.cs`, `ExtractionFlow.cs` and their units deleted;
+suites `source-screen`, `source-upgrade`, `source-picker` replace `extraction-screen` and
+`extraction-picker`). A menu launch shows it (`Launcher.ShowSourceScreen`, ahead of the music's
+build) when `BasePaths.Game` is null, when `OriginalAvailability.Load` refuses the located files
+(the fault named, another copy asked for), or when a question is owed; nothing reads the extraction
+stamp to decide it any more. The view reuses the old screen's theme, field, picker and pad
+handling. Use these files runs `SourceFlow.Validate`: `GameFileSource.Open`, else the reason, which
+is `InstallLocator.Check`'s message for a folder or drive and the reader's own (`IsoImage.Read`,
+`RawCdImage.Read`) for a file, or "a disc image, but not of Crimson Skies". The picker's filter
+takes `.iso`, `.cue`, `.ccd`, `.bin` and `.img`. A working pick is remembered
+(`OptionsDef.InstallPath`); `GameFileSource.Locate` now opens the remembered place as it is, so a
+remembered image is found too. The found view offers Play, Copy then play (`GameFileCopy.Run` on
+a worker, bar and file line, Cancel, Replace it/Back when `GameFileCopy.Target` exists, never
+offered onto the folder the pick reads from), and Choose others. The hand-back
+(`Launcher.LeaveSourceScreen`) rebinds `_paths with { Game, Data = GameData.Load(source) }`,
+`RofFiles` and the probe runner after a pick or a copy (the copy's `Target` opened), then builds the
+music and enters the menu; it asks again if the pick's menus do not read.
+
+The two questions follow a working source, asked once: an old non-empty `<data root>/extracted/`
+(Keep it, focused, or Delete it... then a second Delete/Back with Back focused) and game files
+without `crimptch.rof` (`RofFiles.PatchPath`), which names where the archive goes: the install's
+`GOSDATA/ASSETS`, or for a disc or image a copy first (the view offers Copy the game files). The
+prompt says a kept folder is read only once named as the modding folder (Options or a flag, E46)
+and never adopts it. The delete is `SourceFlow.DeleteWithoutFollowingLinks`, on a worker: a
+junction or symbolic link, `extracted` itself included, is unlinked and never entered; read-only
+files go too. A delete that fails part way names the error and leaves the question open.
+`SessionPaths.HasAnyChapterWorld(IGameFileSource?)` asks the source for any chapter's `gamez.zbd`,
+so `Launcher.FailedBuildWarning` names game files without chapters, never an absent `extracted/`.
+Screenshot aids `--menu=source-picker[:<folder>]`, `source-pick:<path>` and `source-notes` replace
+`extract-picker`/`extract-run`.
+
+**Where "offered once" is remembered (the TODO).** In the options file beside `InstallPath`:
+`OptionsDef.ExtractedPromptAnswered` and `PatchNoteShown`, nullable flags, set when Keep it or a
+finished delete answers the prompt and when OK is pressed on the note. They are read and written
+through `OptionsStore.UserOptions()`, so portable mode's user-data folder holds them. A scripted
+run saves nothing, and neither a scripted nor a `--det` run asks either question (goldens and
+suites never see them); `source-notes` forces them for a capture.
+
+**Still reachable from the extraction pipeline, for E43:** `ExtractionStamp.Check` (the boot
+warning, now behind `SourceFlow.HasExtracted`), the `--extract*`/`--unzbd=` flags and
+`ExtractionRun`. Unused after this item: `ExtractionRun.DefaultUnzbd` from the launcher,
+`ExtractionStamp.Standing` outside its tests, `ExtractionProgress`/`ExtractionPhase` as screen
+inputs, and `ExtractionRun.Header`/`Summary` as screen output. ⚠ Until B14 and C21 switch, the
+engine still reads `extracted/zrdr.zip` and the anim zips, so the prompt's Delete breaks a
+session that needs them; the prompt's "does not use it" is true only once both land.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With no source found, the game opens a picker (folder, drive or `.iso`) in place of the
 Extract screen; once a source works, it asks once whether to keep or delete an old `extracted/`
@@ -1463,13 +1514,13 @@ the Extract screen today.
 
 **Approach.** Reuse the Extract screen's locator UI; replace the extraction run with source
 validation. The optional copy into the data root is `GameFileCopy.Run`, called by D34's wiring
-contract. A source without `crimptch.rof` gets a one-time note (Decision 23).
-<TODO: where "offered once" is remembered.>
+contract. A source without `crimptch.rof` gets a one-time note (Decision 23). Where "offered once"
+is remembered is answered in **Landed** above.
 
 **Model recommendation.** medium.
 
-**Verify.** <TODO: a scripted check of the picker; the deletion prompt on a machine with an old
-`extracted/`.>
+**Verify.** CI-safe units for the decisions (`CSVM.Tests/SourceFlowTests.cs`, a junction built in
+a temp folder) and the three engine suites; screenshots of the picker, the prompt and the note.
 
 **⚠ Traps.** The delete offer touches 1.6 GB of player data; it deletes only `extracted/`, after
 confirmation, and never follows reparse points (CLAUDE.md's junction warning).

@@ -551,7 +551,7 @@ through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam
 `Available` starts as `SteamOs.InGameMode`; Desktop Mode would open it behind the window.
 One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
 tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
-`Original/OriginalShell.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
+`Original/OriginalShell.cs`, `Screens/SourceScreen.cs` and `Launch/SessionNet.cs`.
 
 ## src/Utils/ScreenKeyboardField.cs
 One field the on-screen keyboard can be raised for: its owner and id, the label and the live text

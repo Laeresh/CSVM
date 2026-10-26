@@ -23,8 +23,8 @@ its `GAME` folder or an `.iso` is a `Disc` (chapter `.cab`s), laid out by `unzbd
 Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
 
 ## src/Extraction/RememberedInstall.cs
-The install folder the last extraction read, stored as `OptionsDef.InstallPath` in
-`user://options.json`. `Get` and `Set` take an `OptionsStore` for tests, and default to
+The game files last picked (a folder, drive or disc image), stored as `OptionsDef.InstallPath` in
+the options file. `Get` and `Set` take an `OptionsStore` for tests, and default to
 `OptionsStore.UserOptions()`, which needs the engine. A save loads first and changes only this
 field; the value is fully qualified, and the store drops one that is not.
 
@@ -35,8 +35,8 @@ case, and `ReadAllBytes` throws naming `Location`. `InstallFolderSource` reads a
 mounted drive through `InstallLocator.ResolveFile`. `GameFileSource.Open` alone turns a path into a
 source: an `.iso` or a raw CD image (`RawCdImage.Descriptor`) is an `IsoImage` and a disc folder
 (`Check` gives `Disc`) its `GAME` folder, each wrapped in a `CabinetSource`. `Locate` takes the
-`CSVM_INSTALL_ROOT` override, then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then
-`InstallLocator.Candidates`. Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install.
+`CSVM_INSTALL_ROOT` override, then `<dataRoot>/CrimsonSkiesGame`, then the remembered place opened
+as it is (so a remembered image counts), then `InstallLocator.Candidates`. Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install.
 
 ## src/Extraction/GameFileCopy.cs
 `Run(source, dataRoot, replace, progress, cancel)` copies `Files` (`strings.dll`, `ZBD/` plus each
@@ -222,7 +222,8 @@ Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`
 `MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`)
 and the `--zip-assets` switch that inverts it. A chapter or mission in either case maps through
 `Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
-the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
+the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here. `HasAnyChapterWorld`
+asks the game-file source for any chapter's `gamez.zbd`, which picks the failed-build box's words.
 
 ## src/Extraction/PackIndex.cs
 The enumeration both HD pack folders share: every zip and subfolder under the folder read in place,
@@ -256,7 +257,7 @@ Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.js
 line, exe hash, fork commit, schema integer) and compares its schema against this class's own
 `Schema` const, in `Launcher._Ready` right after the data root settles, with at most one warning line
 per boot naming the fix. An unstamped tree only warns, since a dev tree holds valid extractions older
-than the stamp. `Standing` (unstamped, current, older, newer) is what stops a menu launch at the
-extraction screen on another schema (`UI/Screens/ExtractionFlow.cs`); `Behind` is the read for a
+than the stamp. `Standing` (unstamped, current, older, newer) no longer stops a launch: the game
+files are read in place, and a stale tree is only the upgrade question's to offer; `Behind` is the read for a
 caller that blocks, true only for a stamped schema under the one asked for. `Schema` also lives in both
 extraction scripts, and `CSVM.Tests/ExtractionStampTests.cs` refuses a bump that moves fewer than all three.

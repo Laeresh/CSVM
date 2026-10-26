@@ -504,9 +504,9 @@ section's art, those rows' art and the media a script names are optional; the fi
 and Original draws anyway (the two pointers, the font, the two export plaques) are required. `Check`
 reads no bitmap (existence plus the PNG signature and header size for required entries, existence
 alone for optional ones) and answers one report naming every fault with its section, row and file.
-A required fault makes the presentation unavailable. A menu start then stops at the extraction
-screen (`UI/Screens/NoGameDataScreen.cs`, `DataProblem.Unusable`), whose body names the fault and
-whose Extract re-extracts every output; it reaches no menu. A switch that gets past that check
+A required fault makes the presentation unavailable. A menu start then stops at the game-file
+picker (`UI/Screens/SourceScreen.cs`, `SourceFlow.Refused`), whose body names the fault and asks
+for another copy of the game; it reaches no menu. A switch that gets past that check
 keeps Original selected with the reason logged. An optional absence is logged once and degrades where it is drawn (a row with no readable strip keeps
 a fallback rectangle and no picture). The layout, the art and the movies are read in place from
 the game files (`Extraction/RofFiles.cs`), so no extraction stamp bears on Original.
