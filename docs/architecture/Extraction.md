@@ -38,6 +38,15 @@ source: an `.iso` or a raw CD image (`RawCdImage.Descriptor`) is an `IsoImage` a
 `CSVM_INSTALL_ROOT` override, then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then
 `InstallLocator.Candidates`. Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install.
 
+## src/Extraction/GameFileCopy.cs
+`Run(source, dataRoot, replace, progress, cancel)` copies `Files` (`strings.dll`, `ZBD/` plus each
+`ZbdManifest.Expected` archive, `RofFiles.GamePaths`) into `Target(dataRoot)`, the folder `Locate`
+takes as an install. A disc's chapters come out of their cabinets. The tree is written under
+`CrimsonSkiesGame.partial` and renamed in last; a failure or cancel deletes it. An existing copy
+throws unless `replace`, which renames it to `.old`, swaps the new one in and deletes the old whole.
+A file the source lacks is named in `Missing`. `RunToLog` is `--copy-game-files=`, never replacing.
+Coverage: `CSVM.Tests/GameFileCopyTests.cs`.
+
 ## src/Extraction/IsoImage.cs
 The disc's `.iso` read in place ([../formats/disc-image.md](../formats/disc-image.md)), rooted at
 its `GAME` folder. `Read` walks the primary volume once into a path-to-extent table: 8.3 names
@@ -97,7 +106,8 @@ install, and `ui_strings.json` and `menu_layout.json`, each made once on first r
 reads and walks the archive on the first lookup (about 40-80 ms); `Exists`, `Read`, `Head` and
 `Text` take a path in any case, and a file that does not read is logged and null. A launch `Bind`s
 its view to its data root (`Launch/Launcher.cs`; the synthetic shell binds its own), which `For`
-answers. `Of` and `Live` hold files in memory or follow a test's folder. Coverage: `CSVM.Tests/RofFilesTests.cs`.
+answers. `Of` and `Live` hold files in memory or follow a test's folder. `GamePaths` lists the
+install files it reads, for `GameFileCopy`. Coverage: `CSVM.Tests/RofFilesTests.cs`.
 
 ## src/Extraction/RofTree.cs
 The one case every `RofFiles` path is held in, upper, and the mapping a reader puts a game-data

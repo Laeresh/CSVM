@@ -194,7 +194,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ ROF half read in place
 32. ☑ ISO9660 reader (the original disc's image is still to be read: `CSVM_TEST_ISO`)
 33. ☑ LZX CAB decoder and the `rtextureN` long names
-34. ☐ Optional copy into the data root
+34. ☑ Optional copy into the data root
 35. ☑ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
 
 ### Wave E, cutover
@@ -1283,7 +1283,68 @@ ISO measured against an install.
 **⚠ Traps.** If the measured cost is too high, the answer is a disk cache (decision 15), not a
 return to extraction.
 
-## D34 ☐ Optional copy into the data root
+## D34 ☑ Optional copy into the data root
+
+**Landed.** `CSVM/src/Extraction/GameFileCopy.cs` copies the game files a session reads out of any
+`IGameFileSource` into `<data root>/CrimsonSkiesGame` (`GameFileSource.DataRootFolder`), which
+`Locate` then takes as an install ahead of the remembered one. The list (`GameFileCopy.Files`, 199
+paths) is derived, never restated: `Messages.GameFile`, `ZBD/` plus every `ZbdManifest.Expected`
+archive (interp, planes, rimage and the sound archives among them), and `RofFiles.GamePaths`, a new
+list of what the view reads (both `.rof` archives, `BINARIES/langui.dll` and `language.dll`, the ten
+cinemas under `RofFiles.InstallCinemaFolder`), which `RofFiles.Load` reads through as well. A disc's
+chapters come out of `CabinetSource` as plain files, and no `.CAB` is copied, so the copy is an
+`Install`, never a `Disc`. The tree is written under `CrimsonSkiesGame.partial` (a stale one is
+deleted first) and renamed into place last; any failure or cancellation deletes it and leaves an
+existing copy as it was. An existing copy throws `IOException` unless `replace`; a replace renames
+it to `CrimsonSkiesGame.old`, moves the new tree in (moving the old back if that fails) and deletes
+the old one whole. Between the two renames no copy exists, so a lookup in that moment falls through
+to the next place, never to a partial tree. A file the source lacks is skipped and named in
+`Missing`.
+
+**The English pressing holds no `crimptch.rof`.** A copy of `Z:\CSVM\tmp\CRIMSON.cue` holds 198
+of the 199 files (825,917,466 bytes, 7 to 11 s in Debug from a cached image); the missing one is the
+patch archive, which the install has from the patch and the disc has nowhere. Every one of the 198
+is byte-identical to the English install. A session from the disc, in place or copied, therefore
+reads no `_crimptch/ASSETS/SCRIPTS/AIRFRAME.SCRIPT`, and `menu_layout.json` has no patch overlay.
+The complete battery from a disc copy may differ from the install's goldens wherever that script
+shows; the battery from an install copy reads exactly what the install does.
+
+**The UI entry point (the TODO): a wiring contract for E41.** The picker calls, off the main thread,
+`GameFileCopy.Run(IGameFileSource source, string dataRoot, bool replace = false,
+Action<GameFileCopyProgress>? progress = null, CancellationToken cancel = default)` with the source
+`GameFileSource.Open(picked)` returned and the launch's data root. `GameFileCopyProgress(Done, Total,
+Bytes, File)` arrives on that thread after every 1 MiB chunk and every file (an absent file counts as
+done), so the UI marshals it; no total byte count is known up front, since sizing a disc's files
+would unpack every cabinet twice. It returns `GameFileCopyResult(Folder, Files, Bytes, Missing)`, and
+throws `OperationCanceledException` on cancel and `IOException`, `UnauthorizedAccessException` or
+`InvalidDataException` (a damaged cabinet) on failure, each with the partial tree gone.
+`GameFileCopy.Target(dataRoot)` is the folder, for the "a copy exists, replace it?" question. ⚠ A
+replace deletes the whole old folder, files outside the list included; in a dev tree that folder is
+the install itself. ⚠ On Windows the rename fails while the running session holds a file of the old
+copy open (a sound archive stays open), so replace before the session reads from it, or rebind
+after a restart. After a copy the picker re-runs `Locate` (or opens `Target`) and rebinds
+`BasePaths.Game` and `RofFiles`; nothing rebinds itself.
+
+**The dev flag.** `--copy-game-files=<source>` (`GameFileCopy.RunToLog`, `docs/cli.md`) opens the
+source, copies it into the data root, logs each file and quits 0, or 1 when the source does not
+open, the copy fails or `CrimsonSkiesGame` already exists. It never replaces. Through
+`RunProbe.ps1 -EngineArgs '--headless' --data-root=<scratch> --copy-game-files=Z:\CSVM\tmp\CRIMSON.cue`
+it exited 0 with the 198 files. The orchestrator's battery from a copy needs a data root whose
+`CrimsonSkiesGame` is the copy, so `--data-root`/`CSVM_DATA_ROOT` at a scratch root, or
+`CSVM_INSTALL_ROOT` at the copied folder.
+
+**Coverage.** `CSVM.Tests/GameFileCopyTests.cs`: eight CI-safe units over a source held in memory
+(the list against the readers' constants; a complete copy found by `Locate` with every byte and the
+progress; a file the source lacks; an existing copy kept, then replaced; a cancel with and without
+an old copy; a read that throws; a stale `.partial`; the flag's refusals), one `[GameFilesFact]`
+that copies the install into a temp data root, locates it, and reads every `GameData` slot (interp,
+messages, rimage, planes, C1's textures and world) and the whole `RofFiles` view back from it, and
+one `[RealCueFact]` (`CSVM_TEST_CUE`) that copies the raw image and compares each copied file with
+the install. Both real-data tests delete their copy.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A player can copy the needed game files, CABs unpacked, into an install tree under the
 data root, which the locator then finds.
@@ -1292,8 +1353,8 @@ data root, which the locator then finds.
 
 **Approach.** Walk the file list the engine reads (the A1 source plus `ZbdManifest.cs` and the ROF
 list) and write it out to `<data root>/CrimsonSkiesGame` (`GameFileSource.DataRootFolder`), which
-`GameFileSource.Locate` ranks above the remembered install. <TODO: the UI entry point (from E41's
-picker).>
+`GameFileSource.Locate` ranks above the remembered install. The UI entry point is E41's picker,
+calling `GameFileCopy.Run` by the wiring contract above.
 
 **Model recommendation.** medium.
 
@@ -1373,7 +1434,8 @@ Extract screen; once a source works, it asks once whether to keep or delete an o
 the Extract screen today.
 
 **Approach.** Reuse the Extract screen's locator UI; replace the extraction run with source
-validation. <TODO: where "offered once" is remembered.>
+validation. The optional copy into the data root is `GameFileCopy.Run`, called by D34's wiring
+contract. <TODO: where "offered once" is remembered.>
 
 **Model recommendation.** medium.
 

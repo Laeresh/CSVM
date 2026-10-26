@@ -71,8 +71,8 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 **Data paths, override where the extraction is read from**
 `--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--hd` · `--hd-models` · `--no-hd-models` · `--messages`
 
-**Extraction, build `extracted/` from an original install and exit**
-`--extract` · `--extract-force` · `--extract-unzip` · `--extract-allow-missing` · `--unzbd`
+**Extraction, build `extracted/` or copy the game files from an original install and exit**
+`--extract` · `--extract-force` · `--extract-unzip` · `--extract-allow-missing` · `--unzbd` · `--copy-game-files`
 
 **Audio**
 `--mute` · `--volume` · `--sound-range-scale`
@@ -97,8 +97,8 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
 section further down; `--perf` carries four further bullets for its other readouts, and
-`--dump-sticks` and `--menu` one more each. The counts reconcile as **219 index entries, 219 parser
-flags and 226 bullet lines**.
+`--dump-sticks` and `--menu` one more each. The counts reconcile as **220 index entries, 220 parser
+flags and 227 bullet lines**.
 
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world for deterministic weather, fog and edge screenshots. It hosts three labs, always built and needing no extra flag: the damage lab on **F19**, the livery lab on **L** and the mesh lab on **M**. All three start hidden, so an unadorned `--viewer` screenshot matches the pre-paint viewer. F19 toggles the damage lab as a whole, slider panel and HUD gauges together; the panel's own checkbox controls the gauges while it is up. **P** halts the simulation and **`.`** advances one frame)
@@ -390,6 +390,7 @@ flags and 226 bullet lines**.
 - `--extract-force` (with `--extract`, **re-extract archives the stamp calls up to date**; without it an unchanged archive is skipped. Ignored with a warning when `--extract` is absent)
 - `--extract-unzip` (with `--extract`, **also expand every extracted `.zip` into a sibling folder**, the dev tree's shape. The root `rimage.zip` is expanded either way, since the HUD font, the reticle and the board art read its PNGs loose. Ignored with a warning when `--extract` is absent)
 - `--extract-allow-missing` (with `--extract`, **extract an install missing some expected archives**, each named as a warning instead of failing the run. The in-game Extract screen always fails. Ignored with a warning when `--extract` is absent)
+- `--copy-game-files=<source>` (**copy the game files a session reads into `<data-root>/CrimsonSkiesGame` and exit**, where the install lookup then finds them ahead of the remembered install. The source is an install, a disc folder, an `.iso` or a raw `.cue`/`.ccd` image; a disc's chapter cabinets come out unpacked. The tree is written under `CrimsonSkiesGame.partial` and renamed into place last, so a stopped copy is never found. Refuses, exit 1, when the data root already holds `CrimsonSkiesGame` (a dev tree's is the install itself) or the source does not open. Logs each file. `GameFileCopy`)
 - `--unzbd=<path>` (with `--extract`, **the unzbd executable to run**. Default: next to the executable in an exported build, else `tools/mech3ax/target/release/` under the repo root, which a worktree lacks, so a worktree run passes this flag. A missing tool fails the run before anything is written. The in-game extraction screen runs the same tool, so the flag applies there too and is not warned about without `--extract`)
 - `--mips=authored|generated` (**which mip levels a texture gets**, default `authored`. A chapter ships hand-drawn half- and quarter-resolution siblings (`cblock1_1`, `cblock1_2`) that no gamez material references, the original's own mip chain (`docs/formats/gamez.md`). `authored` installs those siblings as levels 1 and 2 wherever one exists, box-filtering the rest; a texture with no sibling is untouched. `generated` runs `Image.GenerateMipmaps()` all the way down. A sibling whose size disagrees with the level it claims is refused with a warning, never installed. Measure it with `--dump-mips`)
 - `--graphics=original|enhanced` (the opt-in lit-world mode, default `original`. Precedence: **this flag**, then the **saved `graphicsMode` option** (`user://options.json`), then the **`graphics.mode`** config key, then `original`. Under `--det` only the flag survives, so it is the one way to ask for the enhanced path in a scripted or golden capture. It resolves at launch (`GraphicsMode.Resolve`), announced on the `[world] graphics mode:` line; an Options apply or **G** in flight switches it live after that. An unrecognised word at any layer warns and falls back to `original`)

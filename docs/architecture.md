@@ -963,6 +963,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/InstallLocator.cs`, the case-insensitive install lookup: the segment walk, the picked-folder check with its mis-pick messages, and the per-platform candidate list.
 - `src/Extraction/RememberedInstall.cs`, the last-used install folder, kept in `user://options.json` to pre-fill the next picker.
 - `src/Extraction/GameFileSource.cs`, the one seam loaders read the original's files through: a game-relative path opened case-insensitively from an install folder, and the session's install located in order.
+- `src/Extraction/GameFileCopy.cs`, the files a session reads copied out of any source into `<data root>/CrimsonSkiesGame`, written under a temporary name and renamed into place, with progress and cancel.
 - `src/Extraction/IsoImage.cs`, the game disc's `.iso` read in place as a game-file source: the primary volume walked once, 8.3 names without versions, each file a window onto the image.
 - `src/Extraction/CabinetSource.cs`, the cabinet layer over a disc, `.iso` or raw image: each chapter's paths answered from its `.CAB`, unpacked in memory on first use, the `rtextureN` names restored.
 - `src/Extraction/Cabinet.cs`, a Microsoft cabinet's tables and one folder's unpacked output, stored or LZX.

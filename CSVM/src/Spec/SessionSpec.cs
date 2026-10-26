@@ -334,7 +334,7 @@ public sealed record SessionSpec
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
     /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
     public string ModeName =>
-        ExtractInstall != null ? "extract"
+        ExtractInstall != null || CopyGameFiles != null ? "extract"
         : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
         : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
@@ -351,7 +351,7 @@ public sealed record SessionSpec
     /// a drift, not a decision, the same omission as <see cref="ModeName"/>'s, and it means a
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
-        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || ExtractInstall != null
+        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || ExtractInstall != null || CopyGameFiles != null
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
         || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
@@ -1092,6 +1092,10 @@ public sealed record SessionSpec
     /// the install check refuses; null when the flag was absent.</summary>
     public string? ExtractInstall { get; private set; }
 
+    /// <summary><c>--copy-game-files=&lt;source&gt;</c> verbatim: copy that source's game files
+    /// into the data root (<c>Extraction/GameFileCopy.cs</c>) and quit. Null without the flag.</summary>
+    public string? CopyGameFiles { get; private set; }
+
     /// <summary><c>--extract-force</c>: redo every output however new.</summary>
     public bool ExtractForce { get; private set; }
 
@@ -1714,6 +1718,7 @@ public sealed record SessionSpec
             else if (arg == "--synthetic-data") { s.SyntheticData = true; }
             else if (arg == "--extract") { s.ExtractInstall = ""; }
             else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
+            else if (arg.StartsWith("--copy-game-files=")) { s.CopyGameFiles = arg["--copy-game-files=".Length..]; }
             else if (arg == "--extract-force") { s.ExtractForce = true; }
             else if (arg == "--extract-unzip") { s.ExtractUnzip = true; }
             else if (arg == "--extract-allow-missing") { s.ExtractAllowMissing = true; }

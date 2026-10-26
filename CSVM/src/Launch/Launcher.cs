@@ -413,6 +413,13 @@ public partial class Launcher : Node3D
             return;
         }
 
+        // --copy-game-files: the source's game files into the data root's install folder, then quit.
+        if (_spec.CopyGameFiles is { } copySource)
+        {
+            GetTree().Quit(Extraction.GameFileCopy.RunToLog(copySource, dataRoot) ? 0 : 1);
+            return;
+        }
+
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
         // never returns, so the capture loop never counts down. Reject the combo here, before
         // any session builds, rather than let it hang as an orphan holding the log handle.

@@ -38,6 +38,9 @@ public sealed class RofFiles
     /// <summary>The install path of the patch archive.</summary>
     public const string PatchPath = "GOSDATA/ASSETS/crimptch.rof";
 
+    /// <summary>The install folder the cinemas sit loose in.</summary>
+    public const string InstallCinemaFolder = "GOSDATA/ASSETS/GRAPHICS/MPG";
+
     /// <summary>The ten movies a complete install has, lower-case. They are not archive members:
     /// <c>crimson.rof</c> carries <see cref="CinemaFolder"/> empty and the files sit loose in the
     /// install's <c>GOSDATA/ASSETS/GRAPHICS/MPG</c>.</summary>
@@ -52,6 +55,10 @@ public sealed class RofFiles
 
     private static readonly ConcurrentDictionary<string, RofFiles> Bound = new(StringComparer.OrdinalIgnoreCase);
 
+    // langui.dll first: the first row for an id wins everywhere downstream, the order the original
+    // loads the two in.
+    private static readonly string[] StringDlls = { "langui", "language" };
+
     private readonly Func<Dictionary<string, Member>> _files;
 
     // Built once, on the first lookup, unless live: then on every lookup.
@@ -60,6 +67,11 @@ public sealed class RofFiles
         var once = new Lazy<Dictionary<string, Member>>(build);
         _files = live ? build : () => once.Value;
     }
+
+    /// <summary>Every install path <see cref="Open"/> reads: both archives, the two string DLLs and
+    /// the cinemas, as an install spells them. <see cref="GameFileCopy"/> copies these.</summary>
+    public static IEnumerable<string> GamePaths =>
+        new[] { ArchivePath, PatchPath }.Concat(StringDlls.Select(DllPath)).Concat(Cinemas.Select(m => InstallCinemaFolder + "/" + m));
 
     /// <summary>Every path the view holds, in no particular order.</summary>
     public IEnumerable<string> Files => _files().Keys;
@@ -167,7 +179,7 @@ public sealed class RofFiles
         AddArchive(game, PatchPath, PatchFolder + "/", files);
         foreach (string movie in Cinemas)
         {
-            string source = "GOSDATA/ASSETS/GRAPHICS/MPG/" + movie;
+            string source = InstallCinemaFolder + "/" + movie;
             if (game.Exists(source))
             {
                 files[Cinema(movie)] = new Member(() => game.ReadAllBytes(source), count => HeadOf(game, source, count));
@@ -176,9 +188,8 @@ public sealed class RofFiles
 
         // Both derived files are made once, on first read, as the extraction wrote them.
         var view = new RofFiles(() => files);
-        string[] dlls = { "langui", "language" };
-        var rows = new Lazy<List<UiStringRow>>(() => Rows(game, dlls, view));
-        if (dlls.Any(dll => game.Exists($"GOSDATA/ASSETS/BINARIES/{dll}.dll")))
+        var rows = new Lazy<List<UiStringRow>>(() => Rows(game, view));
+        if (StringDlls.Any(dll => game.Exists(DllPath(dll))))
         {
             var strings = new Lazy<byte[]?>(() => rows.Value.Count > 0 ? UiStringTable.ToJson(rows.Value) : null);
             files[RofTree.Canonical(UiStringsFile)] = new Member(() => strings.Value);
@@ -227,17 +238,18 @@ public sealed class RofFiles
         }
     }
 
-    // langui.dll first: the first row for an id wins everywhere downstream, the order the original
-    // loads the two in. RESOURCE.H ships inside the base archive.
-    private static List<UiStringRow> Rows(IGameFileSource game, string[] dlls, RofFiles view)
+    private static string DllPath(string dll) => $"GOSDATA/ASSETS/BINARIES/{dll}.dll";
+
+    // In StringDlls' order. RESOURCE.H ships inside the base archive.
+    private static List<UiStringRow> Rows(IGameFileSource game, RofFiles view)
     {
         var symbols = view.Text("ASSETS/SCRIPTS/RESOURCE.H", Encoding.Latin1) is { } header
             ? UiStringTable.ParseSymbols(header)
             : new Dictionary<int, string>();
         var rows = new List<UiStringRow>();
-        foreach (string dll in dlls)
+        foreach (string dll in StringDlls)
         {
-            string path = $"GOSDATA/ASSETS/BINARIES/{dll}.dll";
+            string path = DllPath(dll);
             if (!game.Exists(path))
             {
                 continue;
