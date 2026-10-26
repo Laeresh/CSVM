@@ -971,6 +971,12 @@ public sealed class TestContext
     public GameZ Planes =>
         Data.Planes ?? throw new SuiteSkippedException($"{GameData.PlanesPath} not found: {Game?.Location ?? "no game install"}");
 
+    /// <summary>The sound archive out of the run's game data, or SKIP the way
+    /// <see cref="RequireData(SoundZbd, FormattableString)"/> does. Shared by every suite; a
+    /// <see cref="SoundArchive"/> over it leaves it open when disposed.</summary>
+    public SoundZbd Sounds =>
+        Data.Sounds ?? throw new SuiteSkippedException($"{GameData.SoundsPath} not found: {Game?.Location ?? "no game install"}");
+
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
@@ -1061,6 +1067,16 @@ public sealed class TestContext
     public void RequireData(GameZ? gamez, FormattableString what)
     {
         if (gamez == null)
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>Ends the suite as SKIP when the game data holds no sound archive: no install, or an
+    /// install without <c>soundsh.zbd</c>.</summary>
+    public void RequireData(SoundZbd? sounds, FormattableString what)
+    {
+        if (sounds == null)
         {
             throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
         }
@@ -1388,7 +1404,7 @@ public sealed class TestContext
             Host.AddChild(stage);
             // The sound archive is this scope's, the texture archive the returned world's.
             var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, () => gamez, texturesPath,
-                SoundsPath, ZrdrPath, Mute);
+                Data.Sounds, ZrdrPath, Mute);
             textures = archives.Textures;
             using var sounds = archives.Sounds;
             var ambience = Ambience;

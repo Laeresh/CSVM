@@ -49,8 +49,9 @@ public sealed class CampaignBriefing
 
     /// <summary>Loads the briefing for story position <paramref name="seq"/> under
     /// <paramref name="dataRoot"/>, labelled from <paramref name="messages"/>. Null when the sequence
-    /// carries no such entry or cannot be read. Everything is read once here, never per repaint.</summary>
-    public static CampaignBriefing? Load(string dataRoot, Messages messages, int seq)
+    /// carries no such entry or cannot be read. The narration's cue points come from
+    /// <paramref name="sounds"/>. Everything is read once here, never per repaint.</summary>
+    public static CampaignBriefing? Load(string dataRoot, Messages messages, SoundZbd? sounds, int seq)
     {
         try
         {
@@ -70,7 +71,7 @@ public sealed class CampaignBriefing
             }
 
             var briefing = new CampaignBriefing(entry) { Messages = messages };
-            briefing.Read(dataRoot, shared);
+            briefing.Read(dataRoot, shared, sounds);
             return briefing;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException
@@ -88,7 +89,7 @@ public sealed class CampaignBriefing
 
     // The state, the note and the narration's cue points, each degrading on its own: a mission with
     // a state but no cue chunk still reveals, just with every marker released at once.
-    private void Read(string root, string shared)
+    private void Read(string root, string shared, SoundZbd? sounds)
     {
         try
         {
@@ -103,7 +104,7 @@ public sealed class CampaignBriefing
                 NarrationWav = SoundDefs.Load(shared).TryGetValue(state.Sound, out var def)
                     ? def.WavName
                     : string.Empty;
-                Reveal = new BriefingReveal(state.Steps, Markers(root));
+                Reveal = new BriefingReveal(state.Steps, Markers(sounds));
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException
@@ -115,10 +116,8 @@ public sealed class CampaignBriefing
 
     // The narration's own cue points, which is where every WaitForMarker time comes from. No file
     // and no cue chunk means no markers, which BriefingReveal degrades on rather than inventing.
-    private IReadOnlyList<double> Markers(string root) =>
-        NarrationWav.Length == 0
-            ? Array.Empty<double>()
-            : WavCues.ReadFrom(
-                SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "soundsh.zip")),
-                NarrationWav);
+    private IReadOnlyList<double> Markers(SoundZbd? sounds) =>
+        NarrationWav.Length > 0 && sounds?.ReadWavBytes(NarrationWav) is { } wav
+            ? WavCues.Read(wav)
+            : Array.Empty<double>();
 }

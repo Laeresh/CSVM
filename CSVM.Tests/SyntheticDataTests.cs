@@ -55,6 +55,8 @@ public class SyntheticDataTests
         Assert.False(File.Exists(Path.Combine(root, "extracted", "messages.json")));
         Assert.NotNull(paths.Data.Planes?.FindByName(SyntheticPlane.Plane));
         Assert.False(Directory.Exists(Path.Combine(root, "extracted", "planes")));
+        Assert.NotNull(paths.Data.Sounds?.ReadWavBytes(SyntheticSounds.Wavs[0].Name));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "soundsh")));
         Assert.Null(paths.Data.LoadChapter("C1", "M01").Gamez);
     }
 

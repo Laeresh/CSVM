@@ -229,7 +229,7 @@ public sealed class CampaignFeature : IMenuFeature
             if (_briefingSeq != MissionSeq)
             {
                 _briefingSeq = MissionSeq;
-                _briefing = DataRoot is { } root && MissionSeq >= 0 ? CampaignBriefing.Load(root, Data.Messages, MissionSeq) : null;
+                _briefing = DataRoot is { } root && MissionSeq >= 0 ? CampaignBriefing.Load(root, Data.Messages, Data.Sounds, MissionSeq) : null;
             }
 
             return _briefing;

@@ -22,6 +22,9 @@ public sealed class GameData
     /// <summary>The install path of the aircraft archive.</summary>
     public const string PlanesPath = "ZBD/planes.zbd";
 
+    /// <summary>The install path of the sound archive the engine plays, the high-quality one.</summary>
+    public const string SoundsPath = "ZBD/soundsh.zbd";
+
     /// <summary>No install: no boot scripts, an empty message table, bare chapters.</summary>
     public static readonly GameData Empty = new();
 
@@ -38,6 +41,11 @@ public sealed class GameData
     /// of the launch, so read-only by the contract <see cref="DecodeCache"/> states.</summary>
     public GameZ? Planes { get; init; }
 
+    /// <summary>The WAVs of <c>soundsh.zbd</c>, null without it. Opened once per launch and never
+    /// closed; each session wraps it in its own <see cref="SoundArchive"/>, whose dispose leaves it
+    /// open.</summary>
+    public SoundZbd? Sounds { get; init; }
+
     /// <summary>Builds the per-chapter part for a chapter and mission folder (<c>C1</c>,
     /// <c>M01</c>). Each factory sets its own.</summary>
     public Func<string, string, ChapterData> LoadChapter { get; init; } = ChapterData.Bare;
@@ -51,6 +59,7 @@ public sealed class GameData
         Messages = Read(game, Messages.GameFile, () => Messages.Load(game), new Messages()),
         Rimage = Read(game, RimagePath, () => TextureSet.Load(game, RimagePath), TextureSet.Empty),
         Planes = Read(game, PlanesPath, () => GameZZbd.Load(game, PlanesPath), null),
+        Sounds = Read(game, SoundsPath, () => SoundZbd.Load(game, SoundsPath), null),
         LoadChapter = Chapters(game),
     };
 

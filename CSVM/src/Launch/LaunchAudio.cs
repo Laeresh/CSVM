@@ -102,7 +102,8 @@ internal sealed class LaunchAudio(Node host)
         _rimage = paths.Data.Rimage;
         try
         {
-            _archive = new SoundArchive(paths.SoundsPath);
+            _archive = new SoundArchive(paths.Data.Sounds
+                ?? throw new System.IO.FileNotFoundException($"{GameData.SoundsPath} is not in the game data"));
             _music = new MusicPlayer(SoundDefs.Load(paths.ZrdrPath), SoundDefs.LoadGroups(paths.ZrdrPath))
             {
                 Loader = (def, looped) => _archive.Find(def.WavName, looped, warn: false),
@@ -190,7 +191,7 @@ internal sealed class LaunchAudio(Node host)
     public void PlayBoot(System.Action then) =>
         UI.Screens.BootCard.Play(host, _dataRoot, _rimage, _messages, PlayCinema, then);
 
-    /// <summary>Closes the score's archive on an ordinary quit.</summary>
+    /// <summary>Drops the score's archive on an ordinary quit; the game data's own stays open.</summary>
     public void Exit()
     {
         _archive?.Dispose();

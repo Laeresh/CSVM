@@ -2517,7 +2517,7 @@ internal static class AiSuites
     internal static void VoiceRuntime(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -2540,7 +2540,7 @@ internal static class AiSuites
             ? voice.ClipsFor(stranger, "TA-SucShk").FirstOrDefault() ?? "none"
             : "snd_id26_TA-SucShk-A";
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         try
@@ -2588,7 +2588,7 @@ internal static class AiSuites
 
             // The cost of prewarm-everything, measured on a fresh archive so nothing is cached:
             // the number the roster-subset strategy is justified against.
-            using var fresh = new SoundArchive(ctx.SoundsPath);
+            using var fresh = new SoundArchive(ctx.Sounds);
             long bytes = 0;
             int ok = 0, absent = 0;
             sw.Restart();
@@ -2665,7 +2665,7 @@ internal static class AiSuites
         // The WA-Turret leg builds the carrier's gunner off the turret table.
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         ctx.RequirePlane(TurretCarrier);
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -2688,7 +2688,7 @@ internal static class AiSuites
             return;
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         Session.Roster.AiVoiceRuntime? runtime = null;
@@ -3361,7 +3361,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -3369,7 +3369,7 @@ internal static class AiSuites
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         ProjectilePool? pool = null;
         FlightController? a = null, b = null;
         try
@@ -3539,7 +3539,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -3552,7 +3552,7 @@ internal static class AiSuites
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         ProjectilePool? pool = null;
         FlightController? a = null, b = null;
         try
@@ -3718,7 +3718,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -3726,7 +3726,7 @@ internal static class AiSuites
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         ProjectilePool? pool = null;
         FlightController? ai = null;
         // Put back on the way out: the harness camera is shared with every other suite, and this

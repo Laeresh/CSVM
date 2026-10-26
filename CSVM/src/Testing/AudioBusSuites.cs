@@ -65,7 +65,7 @@ internal static class AudioBusSuites
     internal static void AudioBusPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -81,7 +81,7 @@ internal static class AudioBusSuites
         string? gunLoop = weapons.All
             .Select(w => w.LoopedSoundName)
             .FirstOrDefault(n => !string.IsNullOrEmpty(n));
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var textures = new TextureArchive(texturesPath);
 
         MusicPlayer? music = null;

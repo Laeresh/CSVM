@@ -36,7 +36,7 @@ public static class SyntheticData
     {
         new("plane", SyntheticPlane.WritePlane),
         new("armament", SyntheticPlane.WriteArmament),
-        new("sounds", SyntheticSounds.WriteArchive),
+        new("sounds", SyntheticSounds.WriteDefinitions),
         new("voice", SyntheticSounds.WriteVoice),
         new("mission", SyntheticMission.WriteMission),
         new("campaign", SyntheticMission.WriteCampaign),

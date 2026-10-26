@@ -13,6 +13,10 @@ namespace CSVM.Tests;
 /// fills in as the narration reaches its cue points, and the three buttons' routes.</summary>
 public class CampaignBriefingPageTests
 {
+    // The narration's cue points come from the install's sound archive, opened once for the class.
+    private static readonly System.Lazy<SoundZbd?> InstallSounds =
+        new(() => SoundZbd.Load(GameFilesData.Source, Spec.GameData.SoundsPath));
+
     [Fact]
     public void TheScreenOpensOnItsThreeButtons()
     {
@@ -120,10 +124,11 @@ public class CampaignBriefingPageTests
     /// <summary>The reveal runs off the narration's own cue points: nothing until the first
     /// marker, then the note fills in a line at a time, and REPLAY BRIEFING empties it again.
     /// ⚠ The screen's row count never moves: the note is written, not listed.</summary>
-    [ExtractedDataFact]
-    public void TheNoteFillsInAsTheNarrationReachesItsMarkersAndReplayEmptiesIt()
+    [GameFilesTheory(AlsoExtracted = true)]
+    [InlineData(0)]
+    public void TheNoteFillsInAsTheNarrationReachesItsMarkersAndReplayEmptiesIt(int seq)
     {
-        var page = Briefing(NewFlow(TestData.DataRoot, 0));
+        var page = Briefing(NewFlow(TestData.DataRoot, seq));
 
         Assert.Equal(0, page.Reveal?.BlockedOnMarker);
         Assert.Equal(3, page.RowCount);
@@ -210,7 +215,12 @@ public class CampaignBriefingPageTests
     {
         var dir = Path.Combine(TestData.TempDir(), "Profiles");
         Directory.CreateDirectory(dir);
-        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: new Spec.GameData { Messages = MessagesLegacy.Data(dataRoot).Messages, Rimage = TexturesLegacy.Rimage(dataRoot) });
+        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: new Spec.GameData
+        {
+            Messages = MessagesLegacy.Data(dataRoot).Messages,
+            Rimage = TexturesLegacy.Rimage(dataRoot),
+            Sounds = dataRoot == null ? null : InstallSounds.Value,
+        });
         flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
         flow.SetMission(seq);
         return flow;

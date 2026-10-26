@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `interp.zbd`
 12. ☑ `strings.dll` messages
-13. ◐ Sound archives
+13. ☑ Sound archives
 14. ◐ Reader archives (`zrdr.zbd`)
 15. ☑ Texture archives
 
@@ -551,9 +551,52 @@ already reads PE string tables (`PeStringTable.cs`).
 field reads 1252 and is ignored. The Windows-1252 decode in the Rust crate belongs to the
 `RT_MESSAGETABLE` games, not to Crimson Skies.
 
-## B13 ◐ Sound archives
+## B13 ☑ Sound archives
 
-**Reader landed, engine switch pending.** `SoundZbd.Load(IGameFileSource?, path)` and
+**Landed.** By default no engine path reads an extracted sound archive. `GameData.Sounds` holds
+`soundsh.zbd` (`SoundZbd.Load(game, GameData.SoundsPath)`, loaded in `GameData.Load` through the
+log-and-treat-as-absent `Read`), opened once per launch and closed by nothing. `SoundArchive` gained
+a `SoundZbd` constructor beside its path one; it keeps its decode and `(wav, looped)` cache per
+instance, and its `Dispose` leaves the shared archive open, so each session, suite and the score
+wrap the one archive in their own `SoundArchive`. `SessionArchives.OpenFor` takes the `SoundZbd?`
+in place of `soundsPath` (`GameSession` hands `state.Data.Sounds`, the harness `Data.Sounds`);
+`LaunchAudio` wraps `paths.Data.Sounds` and logs "no channel" without it, as a missing zip did;
+`CampaignBriefing.Load(root, messages, sounds, seq)` reads the narration's cue points with
+`WavCues.Read` over `SoundZbd.ReadWavBytes` (`CampaignFeature` passes `Data.Sounds`). The 25 sound
+suites read `ctx.Sounds` (SKIP without one) and `ctx.RequireData(ctx.Data.Sounds, …)`, a new
+`SoundZbd?` overload. The synthetic WAVs are built in memory: `SyntheticSounds.Wavs` holds the
+manifest's 94 rows as literals, and `Zbd()` encodes them, packs them into the `ZbdArchive`
+container and opens them with `SoundZbd.Read`, handed out as `SyntheticGameData.Sounds`.
+`fixtures/synthetic/soundsh/manifest.json` is deleted; the `sounds` family stays, writing only
+`zrdr/sounds.json` (the zrdr switch is B14's), and the manifest-against-`SETS` check the tree build
+made is now `SyntheticSoundsTests.TheArchiveHoldsExactlyTheWavsTheDefinitionsName`.
+`SoundArchive`'s zip and directory parsing stays in the engine as the modding path (Decision 18),
+so the model diff keeps comparing the zip with `SoundZbd` in place; step 3 below is superseded.
+
+Shared state: `ZbdArchive.ReadEntry` reads under a lock, so concurrent `ReadWavBytes` calls are
+safe; the per-instance `SoundArchive` cache is not, as before, and every caller found reads on the
+main thread. No caller disposes `GameData.Sounds` (`SoundArchive.Dispose` leaves it,
+`SoundArchiveTests.DisposingAnArchiveOverTheSharedSoundsLeavesThemOpen` pins that), and no suite
+writes it: it is read-only bytes. The re-resolve after the extraction screen opens a second
+`SoundZbd` and drops the first unclosed, one handle until the finalizer runs.
+
+`SoundsOutliveBuild` keeps a reason. Closing a zbd-backed archive after the build frees nothing,
+but the flag also decides whether `WorldSounds.Loader` stays live after the build: a game session
+nulls it, so a world sound the prewarm missed stays silent rather than decoding mid-flight, and
+`voice-runtime` asserts that silence. Dropping the flag would change what a session plays; that is
+a behaviour decision, not a lifetime one, and is left open.
+
+Not switched: `GameSession.MenuSounds()` (the start count's two cues) and `MenuAudioService`'s cue
+folder read the ROF tree's `ASSETS/SOUNDS`, not `soundsh`; they belong to the ROF items.
+
+Unused now, for E43: `BasePaths.SoundsPath` (still filled by `Resolve` and the suites' own
+`BasePaths`), `TestContext.SoundsPath`, `BuildState.SoundsPath` (still set by `GameSession` and
+`ProbeRunner`), `--sounds=` (`SessionSpec.Sounds`), `PreferUnzipped` and `--zip-assets` for sounds,
+`WavCues.ReadFrom` (units only), and the `sounds` `ZbdExtraction` mode.
+
+**Verified.** <pending orchestrator run>
+
+**Reader (kept from the reader landing).** `SoundZbd.Load(IGameFileSource?, path)` and
 `SoundZbd.Read(stream, name)` (`CSVM/src/Mech3/SoundZbd.cs`) open `soundsh.zbd` or `soundsl.zbd`
 through A1's `ZbdArchive` and list its `SoundFile`s in table order (the entry and its collision
 rename; `Key` is today's zip entry name). `ReadWavBytes(name)` reads one WAV on demand, so the
@@ -590,7 +633,8 @@ reads `soundsh` only.
 to 2 ms; reading all 2,521 WAVs 41 to 46 ms, about 0.02 ms each, the slowest single read 14 to
 16 ms. `soundsl` opens in 1.2 to 2 ms and reads in 19 to 31 ms.
 
-**Remaining switch work (after A3).**
+**Switch work as planned** (steps 1 and 2 landed above; step 3 is superseded, Decision 18 keeps
+the zip and directory parsing in the engine).
 
 1. **The game-data slot.** `soundsh.zbd` is a root archive, so the slot is chapter-independent:
    `GameData.Sounds`, a `SoundZbd` from `SoundZbd.Load(game, "ZBD/soundsh.zbd")`, opened once per
@@ -616,8 +660,6 @@ to 2 ms; reading all 2,521 WAVs 41 to 46 ms, about 0.02 ms each, the slowest sin
    or is replaced by a unit over `SoundZbd`. Unused afterwards, for E43: `BasePaths.SoundsPath`,
    `TestContext.SoundsPath`, `BuildState.SoundsPath`, `--sounds=` (`SessionSpec.Sounds`),
    `PreferUnzipped` for sounds, `--zip-assets` for sounds, and the `sounds` `ZbdExtraction` mode.
-
-**Verified.** <pending orchestrator run>
 
 **Original approach (kept for reference).**
 

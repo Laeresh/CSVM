@@ -207,12 +207,12 @@ internal static class SpawnPropsSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(ctx.Chapter));
-            using var sounds = new SoundArchive(ctx.SoundsPath);
+            using var sounds = new SoundArchive(ctx.Sounds);
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);

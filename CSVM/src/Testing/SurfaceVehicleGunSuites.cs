@@ -249,7 +249,7 @@ internal static class SurfaceVehicleGunSuites
     internal static void SurfaceGunVoices(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, VoiceChapter);
@@ -279,7 +279,7 @@ internal static class SurfaceVehicleGunSuites
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Voices"), null);
         var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var ears = new List<Vector3> { Vector3.Zero };
         var rigs = new List<FlightController?>();
         ProjectilePool? pool = null;

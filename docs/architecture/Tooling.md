@@ -128,11 +128,12 @@ blocks are flat, so each is one DC term, and an uncompressed top-down 24-bit TGA
 checker shaded from the name. PNGs stay with `Extraction/PngWriter.cs`.
 
 ## src/Tooling/SyntheticSounds.cs
-The synthetic tree's `sounds` family: `zrdr/sounds.json`, the fixture `SETS` and `SOUND_GROUPS`
-copied as they stand, and `soundsh/`, the unpacked sibling of `soundsh.zip`, holding one generated
-mono MS ADPCM WAV at 22050 Hz per entry of `fixtures/synthetic/soundsh/manifest.json` (a length and
-a tone, or seeded noise). The build throws when the manifest and the `SETS` WAV names differ, so a
-sound is added by a definition and a manifest entry together. Every definition is `snd_probe_*` except the music cues `MusicPlayer` looks up, the propeller start the spawn suite reads, and the voice sets, named `snd_id<N>_*` as `CombatVoice` builds them for the ids `PilotVoices` seats.
+The synthetic run's sounds. The tree's `sounds` family writes `zrdr/sounds.json`, the fixture
+`SETS` and `SOUND_GROUPS` copied as they stand. `Zbd()` builds the WAVs in memory for
+`SyntheticGameData`'s `Sounds`: one generated mono MS ADPCM WAV at 22050 Hz per `Wavs` row (a
+length and a tone, or seeded noise), packed into the `ZbdArchive` container and opened with
+`SoundZbd.Read`, the install's reader. `SyntheticSoundsTests` fails when the rows and the `SETS` WAV
+names differ, so a sound is added by a definition and a row together. Every definition is `snd_probe_*` except the music cues `MusicPlayer` looks up, the propeller start the spawn suite reads, and the voice sets, named `snd_id<N>_*` as `CombatVoice` builds them for the ids `PilotVoices` seats.
 The `voice` family copies `zrdr/voice.json`, the accent table dealing those ids. Shapes:
 [../formats/sounds.md](../formats/sounds.md), [../formats/combat-voice.md](../formats/combat-voice.md).
 

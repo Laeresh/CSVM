@@ -1456,7 +1456,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -1488,7 +1488,7 @@ internal static class CombatSuites
             return;
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         ProjectilePool? pool = null;
         FlightController? target = null;
         FlightController? wing = null;
@@ -2420,7 +2420,7 @@ internal static class CombatSuites
     internal static void EngineDamagePhases(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -2430,7 +2430,7 @@ internal static class CombatSuites
         if (stats.DamagedEngineSound == null)
             return;
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var audio = new FlightAudio();
         audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
         ctx.Host.AddChild(audio);
@@ -2522,7 +2522,7 @@ internal static class CombatSuites
     internal static void EngineCockpitPitch(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -2534,7 +2534,7 @@ internal static class CombatSuites
             return;
 
         bool previous = FlightAudio.CockpitLoopPitched;
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var audio = new FlightAudio();
         audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
         ctx.Host.AddChild(audio);
@@ -2601,7 +2601,7 @@ internal static class CombatSuites
     internal static void EngineVoiceDuckSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
@@ -2618,7 +2618,7 @@ internal static class CombatSuites
                 $"player.zrd authors voiceover_volume_limiter={limit:0.000}, over the compiled 0.5");
         }
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         AudioStreamWav? Stream(string name) =>
             soundDefs.TryGetValue(name, out var d) ? archive.Find(d.WavName, d.Looped) : null;
         // A mission's own VO waits 45 s for the channel and a combat bark 0.5 s (docs/formats/sounds.md).

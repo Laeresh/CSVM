@@ -276,7 +276,7 @@ internal static class CampaignLoopSuites
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, profile, store);
         var music = new MusicPlayer(SoundDefs.Load(ctx.ZrdrPath), SoundDefs.LoadGroups(ctx.ZrdrPath));
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         music.Loader = (def, looped) => archive.Find(def.WavName, looped, warn: false);
         ctx.Host.AddChild(music);
         director.Music = music;

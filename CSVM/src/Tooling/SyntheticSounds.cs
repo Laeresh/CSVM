@@ -1,18 +1,21 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
+using System.Text;
+using CSVM.Mech3;
 
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The synthetic tree's sound archive. Its definitions are the hand-authored
-/// <c>fixtures/synthetic/zrdr/sounds.json</c>, copied as it stands. Its WAVs sit in
-/// <c>soundsh/</c>, the unpacked form of <c>soundsh.zip</c>. Each is generated MS ADPCM, one per
-/// entry of <c>fixtures/synthetic/soundsh/manifest.json</c>, which gives a length and a tone or
-/// noise. The manifest must name exactly the WAVs the <c>SETS</c> block names, so the two cannot
-/// drift. Shapes: <c>docs/formats/sounds.md</c>.
+/// The synthetic run's sounds. Its definitions are the hand-authored
+/// <c>fixtures/synthetic/zrdr/sounds.json</c>, copied into the tree as it stands. Its WAVs are
+/// generated MS ADPCM, one per <see cref="Wavs"/> entry, built in memory. They are packed into the
+/// container of <c>docs/formats/zbd-archive.md</c> and opened with <see cref="SoundZbd.Read"/>,
+/// the install's reader.
+/// <c>SyntheticSoundsTests</c> holds the list to the names the definitions give. Shapes:
+/// <c>docs/formats/sounds.md</c>.
 /// </summary>
 public static class SyntheticSounds
 {
@@ -20,47 +23,149 @@ public static class SyntheticSounds
     /// shipped archive holds.</summary>
     public const int Rate = 22050;
 
-    // Where the two records sit under the fixtures root, and where they land under extracted/.
     private const string SoundsFixture = "synthetic/zrdr/sounds.json";
-    private const string ManifestFixture = "synthetic/" + ArchiveFolder + "/manifest.json";
-    private const string ArchiveFolder = "soundsh";
     private const string VoiceFixture = "synthetic/zrdr/voice.json";
+
+    // The archive table's entry size and name field, docs/formats/zbd-archive.md.
+    private const int EntrySize = 148;
+    private const int NameSize = 64;
 
     // The peak level of a generated signal, as a share of full scale. It reads plainly in a capture
     // and stays far enough under the clip that the ADPCM step never saturates.
     private const double Level = 0.3;
 
-    /// <summary>Writes <c>zrdr/sounds.json</c> and the WAV archive under <paramref name="tree"/>.
-    /// Throws when a WAV the definitions name has no manifest entry, or the other way round.</summary>
-    public static void WriteArchive(SyntheticTree tree)
+    /// <summary>Every WAV of the archive: its name, its length in seconds and its tone in Hz, 0 for
+    /// noise. Exactly the names the <c>SETS</c> block of the synthetic definitions gives.</summary>
+    public static IReadOnlyList<(string Name, double Seconds, double Hz)> Wavs { get; } = new (string, double, double)[]
     {
-        string sounds = tree.CopyFixture(SoundsFixture, "zrdr/sounds.json");
-        var entries = Entries(tree.Fixture(ManifestFixture));
-        // Through the loader a session uses, so the names checked are the ones a run resolves.
-        var named = new HashSet<string>(
-            Mech3.SoundDefs.Load(Path.GetDirectoryName(sounds)!).Values.Select(d => d.WavName),
-            StringComparer.OrdinalIgnoreCase);
-        var listed = new HashSet<string>(entries.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
-        var unlisted = named.Where(n => !listed.Contains(n)).ToList();
-        var unused = listed.Where(n => !named.Contains(n)).ToList();
-        if (unlisted.Count > 0 || unused.Count > 0)
-        {
-            throw new InvalidDataException(
-                $"{ManifestFixture} and {SoundsFixture} disagree: no manifest entry for [{string.Join(", ", unlisted)}], no definition for [{string.Join(", ", unused)}]");
-        }
+        ("probe_engine.wav", 1.0, 110),
+        ("probe_briefing.wav", 3.0, 196),
+        ("probe_fighter_engine.wav", 1.0, 146),
+        ("probe_brand_engine.wav", 1.0, 128),
+        ("probe_avenger_engine.wav", 1.0, 92),
+        ("probe_hawk_engine.wav", 1.0, 138),
+        ("probe_gyro_engine.wav", 1.0, 172),
+        ("probe_fury_engine.wav", 1.0, 120),
+        ("probe_peace_engine.wav", 1.0, 104),
+        ("probe_warhawk_engine.wav", 1.0, 86),
+        ("probe_kestrel_engine.wav", 1.0, 98),
+        ("probe_engine_cp.wav", 1.0, 82),
+        ("probe_engine_damaged.wav", 1.0, 0),
+        ("probe_rattle.wav", 0.5, 0),
+        ("probe_propstart.wav", 1.2, 64),
+        ("probe_gunloop.wav", 0.5, 330),
+        ("probe_emptyclip.wav", 0.1, 1200),
+        ("probe_fire.wav", 0.2, 0),
+        ("probe_launch.wav", 0.6, 0),
+        ("probe_hit.wav", 0.2, 0),
+        ("probe_boom.wav", 1.0, 0),
+        ("probe_pass1.wav", 0.3, 880),
+        ("probe_pass2.wav", 0.3, 990),
+        ("probe_ricochet1.wav", 0.3, 1500),
+        ("probe_ricochet2.wav", 0.3, 1700),
+        ("probe_windowhit1.wav", 0.25, 0),
+        ("probe_windowhit2.wav", 0.25, 0),
+        ("probe_radio_line.wav", 3.5, 440),
+        ("probe_radio_bark.wav", 1.0, 520),
+        ("music_splash_probe.wav", 3.0, 262),
+        ("music_prebattle_probe1.wav", 3.0, 294),
+        ("music_prebattle_probe2.wav", 3.0, 330),
+        ("music_battle_probe1.wav", 3.0, 196),
+        ("music_battle_probe2.wav", 3.0, 220),
+        ("music_primaryobj_probe1.wav", 2.0, 392),
+        ("music_primaryobj_probe2.wav", 2.0, 440),
+        ("music_secondaryobj_probe1.wav", 2.0, 494),
+        ("music_secondaryobj_probe2.wav", 2.0, 523),
+        ("music_tertiaryobj_probe1.wav", 2.0, 587),
+        ("music_tertiaryobj_probe2.wav", 2.0, 659),
+        ("music_battlesuccess_probe.wav", 2.0, 349),
+        ("music_missionsuccess_probe.wav", 2.0, 698),
+        ("probe_vo2_WA-Turret-A.wav", 0.6, 300),
+        ("probe_vo2_WA-HighDmg-A.wav", 0.6, 310),
+        ("probe_vo2_WA-Attack-A.wav", 0.6, 320),
+        ("probe_vo2_PR-DngrZn-A.wav", 0.6, 330),
+        ("probe_vo2_PR-EnemyDwn-A.wav", 0.6, 340),
+        ("probe_vo2_DI-LowDmg-A.wav", 0.6, 350),
+        ("probe_vo2_DI-MedDmg-A.wav", 0.6, 360),
+        ("probe_vo2_DI-HighDmg-A.wav", 0.6, 370),
+        ("probe_vo2_DA-Bail-A.wav", 0.6, 380),
+        ("probe_vo2_DA-NoBail-A.wav", 0.6, 390),
+        ("probe_vo2_DE-Bail-A.wav", 0.6, 400),
+        ("probe_vo2_DE-NoBail-A.wav", 0.6, 410),
+        ("probe_vo2_GL-AllyDwn-A.wav", 0.6, 420),
+        ("probe_vo2_GL-EnemyDwn-A.wav", 0.6, 430),
+        ("probe_vo2_GL-PlyrDwn-A.wav", 0.6, 440),
+        ("probe_vo2_TA-FailTail-A.wav", 0.6, 450),
+        ("probe_vo2_TA-FailShk-A.wav", 0.6, 460),
+        ("probe_vo2_TA-SucShk-A.wav", 0.6, 470),
+        ("probe_vo2_DS-Ally-A.wav", 0.6, 480),
+        ("probe_vo2_DI-LowDmg-B.wav", 0.6, 490),
+        ("probe_vo2_WA-Enemy-12L.wav", 0.6, 500),
+        ("probe_vo2_WA-Enemy-12.wav", 0.6, 510),
+        ("probe_vo2_WA-Enemy-12H.wav", 0.6, 520),
+        ("probe_vo2_WA-Enemy-3L.wav", 0.6, 530),
+        ("probe_vo2_WA-Enemy-3.wav", 0.6, 540),
+        ("probe_vo2_WA-Enemy-3H.wav", 0.6, 550),
+        ("probe_vo2_WA-Enemy-6L.wav", 0.6, 560),
+        ("probe_vo2_WA-Enemy-6.wav", 0.6, 570),
+        ("probe_vo2_WA-Enemy-6H.wav", 0.6, 580),
+        ("probe_vo2_WA-Enemy-9L.wav", 0.6, 590),
+        ("probe_vo2_WA-Enemy-9.wav", 0.6, 600),
+        ("probe_vo2_WA-Enemy-9H.wav", 0.6, 610),
+        ("probe_vo26_WA-Turret-A.wav", 0.6, 180),
+        ("probe_vo26_WA-HighDmg-A.wav", 0.6, 190),
+        ("probe_vo26_WA-Attack-A.wav", 0.6, 200),
+        ("probe_vo26_PR-DngrZn-A.wav", 0.6, 210),
+        ("probe_vo26_PR-EnemyDwn-A.wav", 0.6, 220),
+        ("probe_vo26_DI-LowDmg-A.wav", 0.6, 230),
+        ("probe_vo26_DI-MedDmg-A.wav", 0.6, 240),
+        ("probe_vo26_DI-HighDmg-A.wav", 0.6, 250),
+        ("probe_vo26_DA-Bail-A.wav", 0.6, 260),
+        ("probe_vo26_DA-NoBail-A.wav", 0.6, 270),
+        ("probe_vo26_DE-Bail-A.wav", 0.6, 280),
+        ("probe_vo26_DE-NoBail-A.wav", 0.6, 290),
+        ("probe_vo26_GL-AllyDwn-A.wav", 0.6, 300),
+        ("probe_vo26_GL-EnemyDwn-A.wav", 0.6, 310),
+        ("probe_vo26_GL-PlyrDwn-A.wav", 0.6, 320),
+        ("probe_vo26_TA-FailTail-A.wav", 0.6, 330),
+        ("probe_vo26_TA-FailShk-A.wav", 0.6, 340),
+        ("probe_vo26_TA-SucShk-A.wav", 0.6, 350),
+        ("probe_vo26_DS-Ally-A.wav", 0.6, 360),
+        ("probe_vo26_DI-LowDmg-B.wav", 0.6, 370),
+    };
 
-        foreach (var (name, seconds, hz) in entries)
-        {
-            tree.WriteBytes($"{ArchiveFolder}/{name}", WavWriter.MsAdpcm(Signal(name, seconds, hz), Rate));
-        }
-    }
+    /// <summary>Writes <c>zrdr/sounds.json</c> under <paramref name="tree"/>.</summary>
+    public static void WriteDefinitions(SyntheticTree tree) => tree.CopyFixture(SoundsFixture, "zrdr/sounds.json");
 
     /// <summary>Writes <c>zrdr/voice.json</c>, the accent table whose pools name the pilot VO ids
     /// the <c>snd_id&lt;N&gt;_*</c> clip sets of <c>sounds.json</c> carry. Shape:
     /// <c>docs/formats/combat-voice.md</c>.</summary>
     public static void WriteVoice(SyntheticTree tree) => tree.CopyFixture(VoiceFixture, "zrdr/voice.json");
 
-    /// <summary>The samples for one manifest entry: a tone at <paramref name="hz"/> with its octave
+    /// <summary>The archive of every <see cref="Wavs"/> entry, built afresh in memory.</summary>
+    public static SoundZbd Zbd()
+    {
+        var payloads = Wavs.Select(w => WavWriter.MsAdpcm(Signal(w.Name, w.Seconds, w.Hz), Rate)).ToList();
+        int body = payloads.Sum(p => p.Length);
+        var bytes = new byte[body + (Wavs.Count * EntrySize) + 8];
+        int at = 0;
+        int entry = body;
+        for (int i = 0; i < Wavs.Count; i++)
+        {
+            payloads[i].CopyTo(bytes, at);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(entry), (uint)at);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(entry + 4), (uint)payloads[i].Length);
+            Encoding.ASCII.GetBytes(Wavs[i].Name).CopyTo(bytes.AsSpan(entry + 8, NameSize));
+            at += payloads[i].Length;
+            entry += EntrySize;
+        }
+
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(entry), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(entry + 4), (uint)Wavs.Count);
+        return SoundZbd.Read(new MemoryStream(bytes, writable: false), "synthetic soundsh.zbd");
+    }
+
+    /// <summary>The samples for one entry: a tone at <paramref name="hz"/> with its octave
     /// at a quarter weight, or seeded white noise when <paramref name="hz"/> is 0. The noise is
     /// seeded by the name, so a rebuild writes the same bytes.</summary>
     public static short[] Signal(string name, double seconds, double hz)
@@ -91,21 +196,5 @@ public static class SyntheticSounds
         }
 
         return samples;
-    }
-
-    // Every manifest entry's WAV name, length and tone. A missing field is an error in the record,
-    // since a guessed length would be read as the authored one.
-    private static List<(string Name, double Seconds, double Hz)> Entries(string manifestPath)
-    {
-        using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
-        var entries = new List<(string, double, double)>();
-        foreach (var wav in doc.RootElement.GetProperty("wavs").EnumerateArray())
-        {
-            string name = wav.GetProperty("name").GetString()
-                ?? throw new InvalidDataException($"{manifestPath}: a wavs entry has a null name");
-            entries.Add((name, wav.GetProperty("seconds").GetDouble(), wav.GetProperty("hz").GetDouble()));
-        }
-
-        return entries;
     }
 }

@@ -1636,7 +1636,7 @@ internal static class DestroyChoreographySuites
             var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-            using var sounds = new SoundArchive(ctx.SoundsPath);
+            using var sounds = new SoundArchive(ctx.Sounds);
             FlightController? ai = null;
             try
             {

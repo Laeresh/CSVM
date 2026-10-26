@@ -58,7 +58,7 @@ internal static class StuntCaptureSuites
             $"the camera sting '{StingDef}' is a real sounds.json definition");
         if (defs.TryGetValue(StingDef, out var def))
         {
-            using var archive = new SoundArchive(ctx.SoundsPath);
+            using var archive = new SoundArchive(ctx.Sounds);
             ctx.Check(archive.Find(def.WavName, looped: false, warn: false) != null,
                 $"…and its '{def.WavName}' decodes out of the sound archive");
         }

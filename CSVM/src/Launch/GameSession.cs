@@ -1369,7 +1369,7 @@ public partial class GameSession : Node3D
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            gamez, state.Chapter.Textures, state.SoundsPath, state.ZrdrPath, state.Mute);
+            gamez, state.Chapter.Textures, state.Data.Sounds, state.ZrdrPath, state.Mute);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;

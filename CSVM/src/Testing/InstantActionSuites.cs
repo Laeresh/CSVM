@@ -317,7 +317,7 @@ internal static class InstantActionSuites
     internal static void InstantActionVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
 
@@ -378,7 +378,7 @@ internal static class InstantActionSuites
             $"the mission roster alone prewarms none of them ({rosterOnly.Count} names)");
         var joined = CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, defs, groups, aceAccents);
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;

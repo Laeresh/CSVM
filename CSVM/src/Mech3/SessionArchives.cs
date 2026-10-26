@@ -55,7 +55,7 @@ public sealed class SessionArchives
     /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
     /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
     public static SessionArchives OpenFor(ArchiveIntent intent, Func<GameZ?> gamez, TextureSet texturesSet,
-        string soundsPath, string zrdrPath, bool mute)
+        SoundZbd? soundsZbd, string zrdrPath, bool mute)
     {
         long mark = StartupProfile.Mark();
         var world = gamez() ?? throw new FileNotFoundException("the game data holds no world for this build");
@@ -65,9 +65,9 @@ public sealed class SessionArchives
         var textures = new TextureArchive(texturesSet);
         StartupProfile.Record("textures", mark);
 
-        bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
+        bool haveSounds = !mute && soundsZbd != null;
         mark = StartupProfile.Mark();
-        var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+        var sounds = haveSounds ? new SoundArchive(soundsZbd!) : null;
         StartupProfile.Record("sounds", mark);
 
         mark = StartupProfile.Mark();
@@ -76,7 +76,7 @@ public sealed class SessionArchives
         StartupProfile.Record("zrdr", mark);
 
         if (!mute && !haveSounds)
-            Log.Warn("sound", $"sound archive not found, flying silent: {soundsPath}");
+            Log.Warn("sound", $"sound archive not in the game data, flying silent: soundsh.zbd");
 
         return new SessionArchives
         {

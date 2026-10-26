@@ -754,7 +754,7 @@ internal static class CampaignRosterSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
         ctx.RequireData(missionZrdr, $"{VoiceChapter}/{VoiceMission} zrdr");
         TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
@@ -783,7 +783,7 @@ internal static class CampaignRosterSuites
         var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
@@ -894,7 +894,7 @@ internal static class CampaignRosterSuites
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
         TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
@@ -924,7 +924,7 @@ internal static class CampaignRosterSuites
         var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;

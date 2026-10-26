@@ -179,7 +179,7 @@ internal static class AirframeSwapSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -188,7 +188,7 @@ internal static class AirframeSwapSuites
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var ears = new List<Vector3> { Vector3.Zero };
         var voices = new SwapVoices(TurretDefs.Load(ctx.ZrdrPath), archive,
             SoundDefs.Load(ctx.ZrdrPath), () => ears);

@@ -60,7 +60,7 @@ internal static class TurretVoiceSuites
     internal static void TurretGunVoices(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
@@ -82,7 +82,7 @@ internal static class TurretVoiceSuites
 
         var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var ears = new List<Vector3> { Vector3.Zero };
         ProjectilePool? pool = null;
         TurretEmplacementRuntime? emplacements = null;

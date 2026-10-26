@@ -847,8 +847,9 @@ Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot
 Godot cannot load the game's WAV format (see docs/formats/sounds.md).
 
 ## src/Mech3/WavCues.cs
-The RIFF `cue ` chunk of a WAV as times in seconds, read from a sound extraction (zip or directory)
-or from bytes already in hand. The briefing narration is the one consumer: a reveal state's
+The RIFF `cue ` chunk of a WAV as times in seconds, read from bytes already in hand or from a
+sound extraction (zip or directory). The briefing narration is the one consumer, reading its bytes
+out of `GameData.Sounds`: a reveal state's
 `WaitForMarker n` blocks on cue point `n`, and the durations around it are authored constants, so
 these times are the only clock the script does not carry itself. Times come back ascending, which
 is what `n` indexes. A file with no cue chunk, a non-WAV or a truncated one yields an empty list
@@ -861,18 +862,19 @@ source or the file) or `Read(stream, name)` opens the table through `Extraction/
 into `Sounds`, one `SoundFile` per entry in table order (the entry and its collision rename,
 `Key` being today's zip entry name). `ReadWavBytes(name)` reads one WAV on demand: the key, case
 ignored, the first in table order for the one case-only pair. The object owns the archive's
-stream, and `Dispose` ends it. Nothing in the engine calls it yet; the switch hands it to
-`SoundArchive` in place of the zip. Lookup rule: [../formats/sounds.md](../formats/sounds.md#the-sound-archives).
+stream, and `Dispose` ends it; reads lock the stream, so any thread may read. The launch opens
+`soundsh.zbd` once as `GameData.Sounds` (`Spec/GameData.cs`) and never closes it; every session,
+the score and the briefing read that one. Lookup rule: [../formats/sounds.md](../formats/sounds.md#the-sound-archives).
 
 ## src/Mech3/SoundArchive.cs
-WAV lookup over a soundsh/soundsl extraction (zip or directory), decoded through `WavFile` into
-cached `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked, and
-caches per `(wav, looped)` because the play site's flag wins over the definition's. A read that
-fails returns null rather than throwing, since callers run inside the session step. `Dispose`
-releases the OS handle without ending the archive's usable life: the entry map is built once and
-kept, so a later read reopens the zip for its one entry. Directory-backed and zip-backed archives
-therefore fail differently, which is what `--zip-assets` (docs/cli.md) exists to expose on a
-developer tree. Read `WorldSounds.cs` for the prewarm that fills the cache.
+WAV lookup over the launch's `SoundZbd`, or over a soundsh/soundsl extraction (zip or directory,
+the modding path, which nothing opens by default), decoded through `WavFile` into cached
+`AudioStreamWav`s; `Find(name, looped)` marks a forward loop when asked and caches per
+`(wav, looped)`, the play site's flag winning over the definition's. A failed read returns null,
+since callers run inside the session step. `Dispose` leaves a shared `SoundZbd` open, so each
+session wraps it in its own archive and cache. Over a zip it releases the handle, and a later read
+reopens the zip for its one entry, so zip and directory archives fail differently: `--zip-assets`
+(docs/cli.md) exposes that. Read `WorldSounds.cs` for the prewarm that fills the cache.
 
 ## src/Mech3/MusicPlayer.cs
 The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D
@@ -967,14 +969,14 @@ binds; `StageFlown` puts the one flown airframe in the node table and parks its 
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
-`OpenFor(ArchiveIntent, gamez, textures, soundsPath, zrdrPath, mute)` opens the five
-archives one chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns
-the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair the intent implies:
-`Session` and `Lab` set the texture flag, only `Lab` the sound flag, `Suite` neither, though the
-harness's `TestWorld` owns its texture archive until the world is destroyed. One seam for
-`GameSession`, the anim lab and the harness, so none hand-sets those flags. `StartupProfile` calls
-are unconditional, a no-op with no session under measurement, so the harness drives the same code
-blind. `gamez` is a function read inside the `gamez` phase, so a chapter's first decode is timed.
+`OpenFor(ArchiveIntent, gamez, textures, soundsZbd, zrdrPath, mute)` opens the five archives one
+chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns the
+`WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair the intent implies, so none of
+`GameSession`, the anim lab and the harness hand-sets them: `Session` and `Lab` set the texture flag,
+only `Lab` the sound flag, `Suite` neither (the harness's `TestWorld` owns its texture archive). The
+sound archive wraps the game data's `SoundZbd`, so closing it frees nothing; the sound flag still
+decides whether `WorldSounds` decodes names the prewarm missed. `StartupProfile` calls are
+unconditional, and `gamez` is read inside the `gamez` phase, so a chapter's first decode is timed.
 
 ## src/Mech3/DecodeCache.cs
 The decoded inputs a world build can reuse: `Gamez(chapter, load)`, keyed by chapter since one store
