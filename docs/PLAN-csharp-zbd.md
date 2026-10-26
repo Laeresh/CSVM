@@ -184,7 +184,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, ROF and disc sources
 
 31. ☐ ROF half read in place
-32. ☐ ISO9660 reader
+32. ☑ ISO9660 reader (the original disc's image is still to be read: `CSVM_TEST_ISO`)
 33. ☐ LZX CAB decoder and the `rtextureN` long names
 34. ☐ Optional copy into the data root
 
@@ -996,7 +996,44 @@ in-memory CABs.>
 
 **⚠ Traps.** <TODO: none known.>
 
-## D32 ☐ ISO9660 reader
+## D32 ☑ ISO9660 reader
+
+**Landed.** `CSVM/src/Extraction/IsoImage.cs` reads an ISO 9660 image in place as an
+`IGameFileSource` ([formats/disc-image.md](formats/disc-image.md)). `Read` walks the primary
+volume once into a path-to-extent table rooted at the disc's `GAME` folder (the image root when
+there is none): 8.3 names with the `;1` version and a trailing period dropped, matched without
+regard to case, `.`/`..` segments matching nothing. `Open` hands out a seekable window onto the
+image over a fresh handle per call, so no file is loaded whole and readers never share a position.
+A malformed image (no primary descriptor, a bad block size, a short or overrunning record, an
+extent past the end, a multi-extent file) throws `InvalidDataException`; a directory loop is cut by
+a visited set. `GameFileSource.Open` takes a path ending `.iso` as an image and holds it to the
+install rule (files below `ZBD` and `GOSDATA/ASSETS`), answering null for an image that does not
+read, so `Locate` and `CSVM_INSTALL_ROOT` accept an `.iso` unchanged. `InstallLocator.Check`
+already classed an `.iso` as a `Disc` and is untouched. The chapter `.CAB` files come out as plain
+files.
+
+**How D33 plugs in.** D33 wraps a source rather than changing this one: a cabinet source over an
+inner `IGameFileSource` (the `IsoImage`, or the disc's `GAME` folder as an `InstallFolderSource`)
+answers `ZBD/<chapter>/...` from that chapter's cabinet, unpacked in memory on first use, and
+delegates every other path. It finds the cabinets by path through the inner source
+(`ZBD/C1.CAB`); `IsoImage.Files` lists every file if a walk is wanted. Only
+`GameFileSource.Open` changes: it returns the wrapper for an `.iso` and for a disc folder (a
+`Check` of `Disc`), and the two `Assert.IsType<IsoImage>` in `IsoImageTests.cs` become checks on
+the wrapper. Neither `IGameFileSource` nor any caller changes.
+
+**The only gap is the real disc.** No image of the original disc is on this machine. The data
+test `IsoImageDataTests` runs when `CSVM_TEST_ISO` names an `.iso` and skips otherwise: it checks
+that the root archives are present, that `ZBD` holds a `.CAB`, and that every non-cabinet file the
+image and the install both hold matches the install's bytes (SHA-256). The image and the install
+must be the same release for the byte comparison. As a stand-in, a 300 MB image written by
+Windows' IMAPI2 (ISO 9660 only) of the install's root archives, both `.rof` files and
+`strings.dll` laid out as `GAME/` passed it: 9 files compared, all identical. That image came from
+`IMAPI2FS.MsftFileSystemImage` with `FileSystemsToCreate = 1` and `Root.AddTree` over the staged
+folder.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** An `.iso` file is a game-file source.
 

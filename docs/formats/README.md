@@ -53,6 +53,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 - [zrdr.md](zrdr.md), reader archives and their family index.
 - [zbd-archive.md](zbd-archive.md), the named-entry container `zrdr.zbd` and the sound archives
   share.
+- [disc-image.md](disc-image.md), the game disc as an ISO 9660 image read in place: what the disc
+  holds, the directory records, and the name rules.
 - [texture-archive.md](texture-archive.md), the `texture`, `rtextureN` and `rimage` archives:
   layout, pixel decode, alpha class and the rename rule.
 - [gamez-zbd.md](gamez-zbd.md), the `gamez.zbd` and `planes.zbd` layout: textures, materials,

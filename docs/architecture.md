@@ -962,6 +962,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/InstallLocator.cs`, the case-insensitive install lookup: the segment walk, the picked-folder check with its mis-pick messages, and the per-platform candidate list.
 - `src/Extraction/RememberedInstall.cs`, the last-used install folder, kept in `user://options.json` to pre-fill the next picker.
 - `src/Extraction/GameFileSource.cs`, the one seam loaders read the original's files through: a game-relative path opened case-insensitively from an install folder, and the session's install located in order.
+- `src/Extraction/IsoImage.cs`, the game disc's `.iso` read in place as a game-file source: the primary volume walked once, 8.3 names without versions, each file a window onto the image.
 - `src/Extraction/ZbdArchive.cs`, the named-entry `.zbd` container of `zrdr.zbd` and the sound archives: the table read and checked, each payload read on demand, and the collision rename of a repeat.
 - `src/Extraction/RofExtraction.cs`, the non-ZBD half of an extraction: both UI archives, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, from resolved paths.
 - `src/Extraction/RofTree.cs`, the one upper case the rof tree is written in and the name mapping every writer and reader of it shares.

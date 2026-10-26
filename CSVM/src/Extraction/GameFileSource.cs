@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 
 namespace CSVM.Extraction;
@@ -35,9 +36,17 @@ public static class GameFileSource
     public const string DataRootFolder = "CrimsonSkiesGame";
 
     /// <summary>A source over <paramref name="root"/>, or null when it is not an install
-    /// (<see cref="InstallLocator.IsInstall"/>).</summary>
-    public static IGameFileSource? Open(string root) =>
-        Directory.Exists(root) && InstallLocator.IsInstall(root) ? new InstallFolderSource(Path.GetFullPath(root)) : null;
+    /// (<see cref="InstallLocator.IsInstall"/>). A root ending <c>.iso</c> is an
+    /// <see cref="IsoImage"/> held to the same rule, and null when it does not read.</summary>
+    public static IGameFileSource? Open(string root)
+    {
+        if (root.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) && File.Exists(root))
+        {
+            return OpenImage(root);
+        }
+
+        return Directory.Exists(root) && InstallLocator.IsInstall(root) ? new InstallFolderSource(Path.GetFullPath(root)) : null;
+    }
 
     /// <summary>The first install found, or null when there is none. <paramref name="installOverride"/>
     /// is the <see cref="InstallVariable"/> value, <paramref name="dataRoot"/> the session's data
@@ -73,6 +82,28 @@ public static class GameFileSource
         using var copy = new MemoryStream();
         stream.CopyTo(copy);
         return copy.ToArray();
+    }
+
+    // An image that does not read is passed over like a folder that is not an install.
+    private static IsoImage? OpenImage(string image)
+    {
+        try
+        {
+            var iso = IsoImage.Read(image);
+            return iso.HasFolder("ZBD") && iso.HasFolder("GOSDATA/ASSETS") ? iso : null;
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 }
 

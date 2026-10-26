@@ -33,9 +33,17 @@ field; the value is fully qualified, and the store drops one that is not.
 stream, or null) take a game-relative path such as `ZBD/C1/zrdr.zbd`, matched without regard to
 case, and `ReadAllBytes` throws naming `Location`. `InstallFolderSource` reads an install folder or
 mounted drive through `InstallLocator.ResolveFile`. `GameFileSource.Open` alone turns a path into a
-source, so the `.iso` and cabinet kinds land there. `Locate` takes the `CSVM_INSTALL_ROOT` override,
-then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then `InstallLocator.Candidates`.
-Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install with it.
+source: a path ending `.iso` is an `IsoImage`, the cabinet kind lands there too. `Locate` takes the
+`CSVM_INSTALL_ROOT` override, then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then
+`InstallLocator.Candidates`. Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install.
+
+## src/Extraction/IsoImage.cs
+The disc's `.iso` read in place ([../formats/disc-image.md](../formats/disc-image.md)), rooted at
+its `GAME` folder. `Read` walks the primary volume once into a path-to-extent table: 8.3 names
+without the `;1` version, case-insensitive, `..` matching nothing. A malformed image throws
+`InvalidDataException`, which `GameFileSource.Open` turns into null. `Open` returns a seekable
+window over a fresh handle per call, so readers never share a position. The chapter `.CAB` files
+are plain files here; the cabinet layer wraps this source. Coverage: `CSVM.Tests/IsoImageTests.cs`.
 
 ## src/Extraction/ZbdArchive.cs
 `Open(source, path)` or `Read(stream, name)` reads the table at the end of a `zrdr.zbd`,
