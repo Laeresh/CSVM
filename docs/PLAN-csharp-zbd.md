@@ -187,6 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☑ ISO9660 reader (the original disc's image is still to be read: `CSVM_TEST_ISO`)
 33. ☐ LZX CAB decoder and the `rtextureN` long names
 34. ☐ Optional copy into the data root
+35. ☐ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
 
 ### Wave E, cutover
 
@@ -1031,6 +1032,16 @@ Windows' IMAPI2 (ISO 9660 only) of the install's root archives, both `.rof` file
 `IMAPI2FS.MsftFileSystemImage` with `FileSystemsToCreate = 1` and `Root.AddTree` over the staged
 folder.
 
+**The user's disc is the German release, with SafeDisc** (`SECDRV.SYS`, `DRVMGT.DLL`, `CLCD*`;
+`00000407` locale files), which is why AnyBurn and ImgBurn fail to image it. Its 112 files copy
+cleanly, and `Z:\CSVM\tmp\CrimsonSkies-DE.iso` (612 MB) is an IMAPI2 image of that copy: not the
+pressed disc's bytes, but its files and layout. `IsoImage` opens it and finds the install layout
+under `GAME`; the byte comparison then fails on the localised files (`CRIMSON.EXE`,
+`STRINGS.DLL`, `ZBD/SOUNDSH.ZBD`, ...), so the data test takes the parse-and-count form (D33):
+every root archive parses with its reader, and the count of files byte-identical to the English
+install is reported, not required. E45's golden run uses an ISO built from the English install,
+since the goldens are English.
+
 **Verified.** <pending orchestrator run>
 
 **Original approach (kept for reference).**
@@ -1087,6 +1098,28 @@ picker).>
 
 **⚠ Traps.** A partial copy must not be found as a valid install; write to a temporary name and
 rename at the end.
+
+## D35 ☐ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
+
+**Goal.** A raw CD image is a game-file source like an `.iso`: a `.cue` with its `.bin`/`.img`, or
+a CloneCD `.img` with its `.ccd`, read in place.
+
+**Evidence (confidence: lead-only).** The user asked for it. A raw image stores 2352-byte sectors;
+the `.cue` names the image file and the data track's mode (`MODE1/2352`: user data 16 bytes into
+each sector, `MODE2/2352` form 1: 24; `MODE1/2048` is an ISO). CloneCD images of SafeDisc discs
+are common because SafeDisc defeats a plain 2048-byte read.
+
+**Approach.** A sector-translating stream under D32's `IsoImage`, chosen in
+`GameFileSource.Open` by extension; the ISO reader stays unchanged. <TODO: whether the data track
+is always track 1 on the game's disc; `.ccd` fields the reader needs.>
+
+**Model recommendation.** medium.
+
+**Verify.** Units over a raw image built in code from an ISO (both modes, a `.cue` and a `.ccd`);
+the real-disc check when a raw image of the disc exists.
+
+**⚠ Traps.** A `.cue` may name its file in another case or with a path; resolve it beside the
+`.cue`, case-insensitively.
 
 # Wave E, cutover
 
