@@ -57,6 +57,12 @@ internal sealed class FlightRosterPolicy
     /// (<see cref="CSVM.Flight.Camera.SeatLook.AutoHeadTurn"/>), null where never set, which
     /// leaves the <c>headLook.autohead</c> config key deciding.</summary>
     public bool? AutoHeadTurn { get; init; }
+
+    /// <summary>The leading aim assist (<see cref="FlightController.LeadingAimAssist"/>), off by default.</summary>
+    public bool LeadingAimAssist { get; init; }
+
+    /// <summary>The lead marker (<see cref="FlightController.LeadMarker"/>), off by default.</summary>
+    public bool LeadMarker { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
@@ -123,6 +129,8 @@ internal sealed class FlightRosterPolicy
         Difficulty = spec.Difficulty,
         NearestAfterKill = spec.NearestAfterKill,
         AutoHeadTurn = spec.AutoHeadTurn,
+        LeadingAimAssist = spec.LeadingAimAssist,
+        LeadMarker = spec.LeadMarker,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,

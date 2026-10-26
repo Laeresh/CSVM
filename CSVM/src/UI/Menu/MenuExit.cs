@@ -61,7 +61,9 @@ public sealed record OptionsApplyExit(
     Utils.WordValues Words,
     bool? VrMode,
     string? VrRenderScale,
-    string? VrVignette) : MenuExit;
+    string? VrVignette,
+    bool? LeadingAimAssist = null,
+    bool? LeadMarker = null) : MenuExit;
 
 /// <summary>Dogfight's match rules as a screen set them. The kill target ends a match early and the
 /// match clock runs in MINUTES, a 0 on either disabling that limit. The lives are the deaths a pilot

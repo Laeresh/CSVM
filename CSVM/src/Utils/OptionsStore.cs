@@ -170,6 +170,14 @@ public sealed class OptionsDef
     /// key deciding: the row exposes the existing key rather than replacing its default.</summary>
     public bool? AutoHeadTurn { get; set; }
 
+    /// <summary>Whether each gun round leaves along its own shot's intercept
+    /// (<c>FlightController.LeadingAimAssist</c>). Null is never set, which reads as off.</summary>
+    public bool? LeadingAimAssist { get; set; }
+
+    /// <summary>Whether the targeting HUD marks the tracked hostile's intercept point
+    /// (<c>TargetHud</c>'s lead marker). Null is never set, which reads as off.</summary>
+    public bool? LeadMarker { get; set; }
+
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
     /// screen with that index is plugged in can only be answered by a caller holding an engine,
@@ -358,6 +366,8 @@ public sealed class OptionsStore
             WriteFlag(w, "rumble", def.Rumble);
             Write(w, "defaultView", def.DefaultView);
             WriteFlag(w, "autoHeadTurn", def.AutoHeadTurn);
+            WriteFlag(w, "leadingAimAssist", def.LeadingAimAssist);
+            WriteFlag(w, "leadMarker", def.LeadMarker);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -438,6 +448,8 @@ public sealed class OptionsStore
                 Rumble = ReadFlag(root, "rumble"),
                 DefaultView = Read(root, "defaultView", ValidDefaultViews),
                 AutoHeadTurn = ReadFlag(root, "autoHeadTurn"),
+                LeadingAimAssist = ReadFlag(root, "leadingAimAssist"),
+                LeadMarker = ReadFlag(root, "leadMarker"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
