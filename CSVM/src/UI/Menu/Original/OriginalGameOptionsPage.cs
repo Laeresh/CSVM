@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.UI.Boards;
 
 namespace CSVM.UI.Menu.Original;
@@ -9,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It stages its five settings in
+/// the three it is painted with, its plaques moving down with it. It stages its seven settings in
 /// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
@@ -39,6 +40,15 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The page's controller-rumble checkbox.</summary>
     public const string RumbleKey = "RUMBLE";
 
+    /// <summary>The page's leading aim assist checkbox, a remake-only row.</summary>
+    public const string LeadingAimAssistKey = "LEADINGASSIST";
+
+    /// <summary>The page's lead marker checkbox, a remake-only row.</summary>
+    public const string LeadMarkerKey = "LEADMARKER";
+
+    /// <summary>The window the option rows scroll through, its arrows keyed under it.</summary>
+    public const string WindowKey = "GO_WINDOW";
+
     // The one dropdown the Game Options section authors, whose box, window and scroll art every
     // option row of that page takes. The page authors a single D row, and the rows stand at its
     // column.
@@ -67,6 +77,16 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     // raised row panels at the authored pitch over one grey description window, and the section
     // stands three rows on it. A page carrying more grows the plate by whole bands of its own art.
     private const int AuthoredRows = 3;
+
+    // How many option rows the plate shows at once: one row to each band the grown plate has, so
+    // no two rows share a frame. The rest scroll through that window as the VIDEO page's rows do.
+    private const int WindowRows = 4;
+
+    // The scroll column's gap from the descriptions, and the arrow's size where the art cannot be
+    // measured, the VIDEO page's own numbers.
+    private const float BarGap = 2f;
+    private const float BarWidth = 16f;
+    private const float BarArrowHeight = 12f;
 
     // The band a repeat takes, in the plate art's own pixels. Y 116 to 178 is one whole row panel,
     // both seams inside the dark gaps the art leaves between panels. Those gaps are 112 to 119 and
@@ -132,7 +152,20 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Radio, SwitchWords,
             c => c.RumbleOn ? 1 : 0,
             (c, i) => c.Rumble = i == 1),
+        new(LeadingAimAssistKey, "Leading Aim",
+            _ => "Fire each round on the lead, not the original's lagging gun line.",
+            OriginalRowKind.Radio, SwitchWords,
+            c => c.LeadingAimAssistOn ? 1 : 0,
+            (c, i) => c.LeadingAimAssist = i == 1),
+        new(LeadMarkerKey, "Lead Marker",
+            _ => "Mark where to aim to hit the tracked enemy.",
+            OriginalRowKind.Radio, SwitchWords,
+            c => c.LeadMarkerOn ? 1 : 0,
+            (c, i) => c.LeadMarker = i == 1),
     };
+
+    // The furthest the window scrolls, which puts the last option on its bottom row.
+    private static readonly int LastTop = Math.Max(0, Options.Length - WindowRows);
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
@@ -143,6 +176,8 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     private string? _open;
     private int _listTop;
+    // The first option row the window shows.
+    private int _top;
 
     internal OriginalGameOptionsPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form, OptionsChoices choices)
     {
@@ -154,6 +189,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The page's open option list's key, or null when none is open.</summary>
     public string? OpenOption => _open;
+
+    /// <summary>The first option row the window shows, 0 with Difficulty on top.</summary>
+    public int Top => _top;
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Hangar.Difficulty"/>) the page would
     /// apply.</summary>
@@ -176,11 +214,20 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// saved and no row has been touched, which leaves the config key deciding.</summary>
     public bool? AutoHeadTurnChoice => _choices.AutoHeadTurn;
 
+    /// <summary>The leading aim assist the page would apply, null while never set.</summary>
+    public bool? LeadingAimAssistChoice => _choices.LeadingAimAssist;
+
+    /// <summary>The lead marker the page would apply, null while never set.</summary>
+    public bool? LeadMarkerChoice => _choices.LeadMarker;
+
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.GameOptions;
 
     string IOriginalOptionsPage.AcceptKey => AcceptKey;
 
     string IOriginalOptionsPage.CancelKey => CancelKey;
+
+    // The options the window shows now, top to bottom.
+    private IReadOnlyList<GameOption> Shown => Options.Skip(_top).Take(WindowRows).ToArray();
 
     /// <summary>Opens the page on the saved options with its first row focused. The hub's GAME
     /// OPTIONS door and the screenshot aid both go through it. The page is a form, not a list. It
@@ -189,8 +236,18 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     {
         _open = null;
         _listTop = 0;
+        _top = 0;
         _host.Open(OriginalScreen.GameOptions);
         _host.FocusedRow = -1;
+    }
+
+    /// <summary>Opens the page with one named row focused rather than its first, the screenshot
+    /// aid's way onto a row under the window. That row scrolls into view.</summary>
+    public void OpenOn(string key)
+    {
+        Open();
+        _top = Math.Clamp(IndexOf(key) - WindowRows + 1, 0, LastTop);
+        _host.FocusKey(key);
     }
 
     // The rows. An open list's items stand alone while one is open. Otherwise the option controls
@@ -222,12 +279,22 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     }
 
     // The page's lists for the pointer: an open option list alone, and only once it outruns the
-    // authored window.
+    // authored window. Otherwise the option rows' window, which the wheel and a walk off its end scroll.
     void IOriginalOptionsPage.Lists(List<OriginalList> lists)
     {
-        if (OpenDrop() is { } drop && _chrome.DropListWindow(drop, _listTop) is { } window)
+        if (OpenDrop() is { } drop)
         {
-            lists.Add(new OriginalList(drop.Key, window, top => _listTop = _chrome.ScrollDropList(drop, top)));
+            if (_chrome.DropListWindow(drop, _listTop) is { } window)
+            {
+                lists.Add(new OriginalList(drop.Key, window, top => _listTop = _chrome.ScrollDropList(drop, top)));
+            }
+
+            return;
+        }
+
+        if (_chrome.Layout.Screen(Section) is { } screen)
+        {
+            lists.Add(new OriginalList(WindowKey, RowWindow(screen, ReadShape(screen)), line => _top = Math.Clamp(line, 0, LastTop)));
         }
     }
 
@@ -248,9 +315,16 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     bool IOriginalOptionsPage.CloseDropdown() => CloseDropdown();
 
-    // What a press does. A list item picks and closes, a dropdown opens its list, a checkbox flips.
+    // What a press does. A list item picks and closes, a dropdown opens its list, a checkbox flips,
+    // and the window's own arrows scroll it a row.
     MenuExit? IOriginalOptionsPage.Activate(OriginalRow row)
     {
+        if (row.Key.StartsWith(WindowKey + ":", StringComparison.Ordinal))
+        {
+            _top = Math.Clamp(_top + (row.Key.EndsWith(OriginalDropLists.UpSuffix, StringComparison.Ordinal) ? -1 : 1), 0, LastTop);
+            return null;
+        }
+
         int colon = row.Key.IndexOf(':');
         if (colon > 0 && OptionFor(row.Key[..colon]) is { } picked)
         {
@@ -317,12 +391,16 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         var shape = ReadShape(screen);
         ComposePlate(screen, shape.ExtraRows, layers.Backdrop);
         _chrome.ComposePageTitle(screen, "GO_T_TITLE", "GAME OPTIONS", layers.Lines);
-        for (int i = 0; i < Options.Length; i++)
+        var bar = Bar(screen, shape);
+        // A window that scrolls keeps its descriptions short of the bar, as the VIDEO page's do.
+        float descWidth = bar.Window.Scrolls ? Math.Min(shape.DescWidth, bar.Window.ThumbX - BarGap - shape.DescX) : shape.DescWidth;
+        var shown = Shown;
+        for (int i = 0; i < shown.Count; i++)
         {
-            var option = Options[i];
+            var option = shown[i];
             layers.Lines.Add(new BoardLine(option.Title, shape.TitleX, shape.TitleYFor(i, option.Kind),
                 shape.TitleWidthFor(option.Kind), OriginalOptionsChrome.TitleFont, BoardInk.Row));
-            layers.Lines.Add(new BoardLine(option.Description(this), shape.DescX, shape.DescY(i), shape.DescWidth,
+            layers.Lines.Add(new BoardLine(option.Description(this), shape.DescX, shape.DescY(i), descWidth,
                 OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
@@ -341,6 +419,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         }
 
         _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(_choices) == 1, layers);
+        if (bar.Window.Scrolls && bar.Thumb != null)
+        {
+            layers.Pictures.Add(new BoardPicture(bar.Thumb, bar.Window.ThumbX, bar.Window.ThumbY, Height: bar.Window.ThumbHeight));
+        }
+
         if (OpenDrop() is { } drop && rows.Count > 0)
         {
             layers.Overlays.Add(_chrome.ComposeOptionList(drop, _listTop, rows, focus));
@@ -367,28 +450,28 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     // bottom band then keeps one row, its description clear of the plaques under it. A pair's upper
     // row stands at its band's own top, inset above the authored line. The lower one stands a
     // checkbox below it, the only way two boxes fit a band drawn for one.
-    private static float[]? BandedLines(float firstY, float pitch, float inset, float checkHeight, int bands)
+    private static float[]? BandedLines(IReadOnlyList<GameOption> shown, float firstY, float pitch, float inset, float checkHeight, int bands)
     {
         int drops = 0;
-        foreach (var option in Options)
+        foreach (var option in shown)
         {
             drops += option.Kind == OriginalRowKind.Dropdown ? 1 : 0;
         }
 
         int spare = bands - drops;
-        if (spare < 1 || Options.Length - drops > 2 * spare)
+        if (spare < 1 || shown.Count - drops > 2 * spare)
         {
             return null;
         }
 
-        var lines = new float[Options.Length];
-        int pairs = Math.Max(0, Options.Length - drops - spare);
+        var lines = new float[shown.Count];
+        int pairs = Math.Max(0, shown.Count - drops - spare);
         int band = -1;
         int held = 0;
         int allow = 0;
-        for (int i = 0; i < Options.Length; i++)
+        for (int i = 0; i < shown.Count; i++)
         {
-            bool drop = Options[i].Kind == OriginalRowKind.Dropdown;
+            bool drop = shown[i].Kind == OriginalRowKind.Dropdown;
             if (drop || held >= allow)
             {
                 band++;
@@ -421,9 +504,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     // The rows one under another at a single pitch, the placement a page falls back to when its rows
     // outrun the plate's bands.
-    private static float[] TightLines(float firstY, float pitch)
+    private static float[] TightLines(int count, float firstY, float pitch)
     {
-        var lines = new float[Options.Length];
+        var lines = new float[count];
         for (int i = 0; i < lines.Length; i++)
         {
             lines[i] = firstY + (i * pitch);
@@ -458,16 +541,16 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     // rows as the canvas holds bands. Past that the rows tighten into the space between the first
     // line and the moved button. Here below is how far a row reaches under its own line, plaqueDy
     // how far the growth took the button down.
-    private static float FitPitch(float authored, float firstY, float below, MenuLayoutWidget? accept, float plaqueDy)
+    private static float FitPitch(int count, float authored, float firstY, float below, MenuLayoutWidget? accept, float plaqueDy)
     {
-        if (accept == null || Options.Length < 2)
+        if (accept == null || count < 2)
         {
             return authored;
         }
 
         // Floored to a whole point: the authored pitches are integers and a fractional one would put
         // every row below the first on a half pixel.
-        float fit = MathF.Floor((accept.Int("Y") + plaqueDy - firstY - below) / (Options.Length - 1));
+        float fit = MathF.Floor((accept.Int("Y") + plaqueDy - firstY - below) / (count - 1));
         return fit > 0f && fit < authored ? fit : authored;
     }
 
@@ -514,29 +597,74 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         }
 
         return OriginalOptionsChrome.DropList(key, screen.Widget(DropKey), open.Words,
-            ReadShape(screen).DropBoxFor(IndexOf(key)));
+            ReadShape(screen).DropBoxFor(IndexOf(key) - _top));
     }
 
+    // Every option keeps its index in walk order. One outside the window stands at the window's
+    // nearer end, unseen, unhit and never a stop, as the VIDEO page's scrolled-out rows do.
     private void BuildControls(MenuLayoutScreen screen, GameOptionsShape shape, List<OriginalRow> rows)
     {
         for (int i = 0; i < Options.Length; i++)
         {
             var option = Options[i];
+            int line = i - _top;
+            bool visible = line >= 0 && line < shape.Lines.Count;
+            line = Math.Clamp(line, 0, shape.Lines.Count - 1);
             if (option.Kind == OriginalRowKind.Dropdown)
             {
-                var box = shape.DropBoxFor(i);
+                var box = shape.DropBoxFor(line);
                 rows.Add(new OriginalRow(option.Key, option.Words[option.Read(_choices)], OriginalRowKind.Dropdown,
-                    box.X, box.Y, box.Width, box.Height, true, 0, shape.Arrow));
+                    box.X, box.Y, box.Width, box.Height, true, 0, shape.Arrow, visible));
                 continue;
             }
 
             var size = _chrome.StripSize(shape.Box, OriginalOptionsChrome.FallbackCheckSize, OriginalOptionsChrome.FallbackCheckSize);
             rows.Add(new OriginalRow(option.Key, string.Empty, OriginalRowKind.Radio,
-                shape.TitleX + shape.CheckDx, shape.RowY(i) + shape.CheckDy, size.Width, size.Height, true, 0, shape.Box));
+                shape.TitleX + shape.CheckDx, shape.RowY(line) + shape.CheckDy, size.Width, size.Height, true, 0, shape.Box,
+                visible));
         }
 
         _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey, shape.PlaqueDy);
+        var bar = Bar(screen, shape);
+        if (!bar.Window.Scrolls)
+        {
+            return;
+        }
+
+        var window = bar.Window;
+        rows.Add(new OriginalRow(WindowKey + ":" + OriginalDropLists.UpSuffix, string.Empty, OriginalRowKind.Button,
+            window.ThumbX, window.Y, bar.UpSize.Width, bar.UpSize.Height, _top > 0, 0, bar.Up));
+        rows.Add(new OriginalRow(WindowKey + ":" + OriginalDropLists.DownSuffix, string.Empty, OriginalRowKind.Button,
+            window.ThumbX, window.TrackTop + window.TrackHeight, bar.DownSize.Width, bar.DownSize.Height,
+            _top < LastTop, 0, bar.Down));
     }
+
+    // The option rows' window and its scroll column, built as the VIDEO page builds its own. The
+    // dropdown's arrows stand at its two ends and its thumb on the track between, right-aligned on
+    // the description column's edge. The window spans the shown rows from the first line to the last reach.
+    private GameOptionsBar Bar(MenuLayoutScreen screen, GameOptionsShape shape)
+    {
+        var art = screen.Widget(DropKey)?.Art ?? Array.Empty<string>();
+        var up = OriginalOptionsChrome.StripArt(art, 1);
+        var down = OriginalOptionsChrome.StripArt(art, 2);
+        var thumb = OriginalOptionsChrome.StripArt(art, 0, 1);
+        var upSize = _chrome.StripSize(up, BarWidth, BarArrowHeight);
+        var downSize = _chrome.StripSize(down, BarWidth, BarArrowHeight);
+        var thumbSize = _chrome.StripSize(thumb, upSize.Width, BarArrowHeight);
+        float top = shape.Lines.Min();
+        float bottom = shape.Lines.Max() + Math.Max(shape.DropDy + shape.ItemHeight, shape.CheckDy + shape.CheckHeight);
+        float x = shape.DescX + shape.DescWidth - upSize.Width;
+        float trackTop = top + upSize.Height;
+        float trackHeight = bottom - top - upSize.Height - downSize.Height;
+        int shown = Math.Min(Options.Length, WindowRows);
+        float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, shown, Options.Length, thumbSize.Height);
+        var window = new ListWindow(shape.TitleX, top, x + upSize.Width - shape.TitleX, bottom - top,
+            x, ListWindow.ThumbYFor(trackTop, trackHeight, thumbHeight, _top, LastTop), thumbSize.Width, thumbHeight,
+            trackTop, trackHeight, Options.Length, shown, _top);
+        return new GameOptionsBar(window, up, upSize, down, downSize, thumb);
+    }
+
+    private ListWindow RowWindow(MenuLayoutScreen screen, GameOptionsShape shape) => Bar(screen, shape).Window;
 
     // The page's row shape off the section's own widgets, each number falling back to the authored
     // one when the row is not there. It is the title column, the first row's line and the pitch
@@ -565,10 +693,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         float plaqueDy = extraRows * PlateBandHeight;
         var accept = screen.Widget(AcceptKey);
         pitch = pitch > 0f ? pitch : Pitch;
-        var lines = BandedLines(firstY, pitch, BandInset(screen, firstY), checkHeight, AuthoredRows + extraRows);
+        var shown = Shown;
+        var lines = BandedLines(shown, firstY, pitch, BandInset(screen, firstY), checkHeight, AuthoredRows + extraRows);
         if (lines == null || !LinesClearThePlaques(lines, below, accept, plaqueDy))
         {
-            lines = TightLines(firstY, FitPitch(pitch, firstY, below, accept, plaqueDy));
+            lines = TightLines(shown.Count, firstY, FitPitch(shown.Count, pitch, firstY, below, accept, plaqueDy));
         }
 
         return new GameOptionsShape(
@@ -632,7 +761,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     // sight. The rows past the cap tighten instead (FitPitch).
     private int ExtraRows(MenuLayoutScreen screen)
     {
-        int wanted = Math.Max(0, Options.Length - AuthoredRows);
+        int wanted = Math.Max(0, Math.Min(Options.Length, WindowRows) - AuthoredRows);
         if (wanted == 0 || screen.Widget("GO_BACKGROUND") is not { Art.Count: > 0 } plate
             || _host.Measure(plate.Art[0]) is not { } size)
         {
@@ -647,6 +776,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     // One option of the page. It carries its title and its description, read off the page since a
     // row can say something about its saved state. The control it takes, the words of the store
     // field it shows, and how that field is read and written follow.
+    // The option rows' window as the pointer reads it, with its two arrows' art and sizes and the thumb.
+    private sealed record GameOptionsBar(
+        ListWindow Window, BoardArt? Up, (float Width, float Height) UpSize,
+        BoardArt? Down, (float Width, float Height) DownSize, BoardArt? Thumb);
+
     private sealed record GameOption(
         string Key, string Title, Func<OriginalGameOptionsPage, string> Description, OriginalRowKind Kind,
         IReadOnlyList<string> Words,

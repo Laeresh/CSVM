@@ -367,21 +367,20 @@ public static class AimAssist
         return axis.Rotated(perp, rng.Randf() * inaccuracy).Normalized();
     }
 
-    /// <summary>One round's launch direction, in world space (<c>FUN_004b6530</c>'s whole step
-    /// order): scan for a target and store the winner as the slot's new plane-local
-    /// <see cref="GunAimSlot.Target"/>, then fire along the slot's plane-local
-    /// <see cref="GunAimSlot.Smoothed"/> rotated back to world, scattered.
-    /// ⚠ This frame's scan result is not what goes out; the smoothed value from previous frames is.
-    /// Firing the scan result directly would remove the lag and read as an aimbot.</summary>
+    /// <summary>One round's world launch direction, <c>FUN_004b6530</c>'s step order. The scan's
+    /// winner becomes the slot's <see cref="GunAimSlot.Target"/>, and the round leaves along the
+    /// slot's <see cref="GunAimSlot.Smoothed"/>, scattered. With <paramref name="leading"/> set it
+    /// leaves along this scan's answer, a remake-only option (docs/org/aim-assist.md "The leading option").
+    /// ⚠ Off, never fire the scan result: the smoothed value from previous frames is the original's.</summary>
     public static Vector3 FireDirection(ref GunAimSlot slot, in AimScan scan,
         AimCandidateSet candidates, Basis planeBasis, double now, float inaccuracy,
-        RandomNumberGenerator rng, out AimScanResult found)
+        RandomNumberGenerator rng, out AimScanResult found, bool leading = false)
     {
         Vector3 world = Scan(scan, candidates, out found) ? found.Direction : scan.Forward;
         var toLocal = planeBasis.Orthonormalized().Transposed(); // inverse of a rotation basis
         slot.Target = (toLocal * world).Normalized();
         slot.LastUpdate = now;
-        Vector3 fired = (planeBasis.Orthonormalized() * slot.Smoothed).Normalized();
+        Vector3 fired = leading ? world.Normalized() : (planeBasis.Orthonormalized() * slot.Smoothed).Normalized();
         return Scatter(fired, inaccuracy, rng);
     }
 

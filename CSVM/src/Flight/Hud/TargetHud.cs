@@ -103,6 +103,16 @@ public sealed partial class TargetHud : Control
     private const float RefDiscRimWidth = 2f;  // remake-only rule, like the shaft: the original's is a 1 px circle
     private const int DiscSegments = 48;
 
+    // The lead marker's own pixels, remake-only like the marker itself: the circle, its rim, and the
+    // dotted line's dash and width.
+    private const float RefLeadRadius = 9f;
+    private const float RefLeadRim = 2f;
+    private const float RefLeadDash = 5f;
+    private const float RefLeadLine = 1.5f;
+    private const float LeadFillAlpha = 0.25f;
+    private const float LeadRimAlpha = 0.85f;
+    private const float LeadLineAlpha = 0.5f;
+
     // The selected target's marker: the original's own absolute pixel constants (0x00607a0c /
     // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor). They are read at the 1440p
     // reference and scaled by HudMetrics like every other CSVM HUD element. The original never
@@ -118,6 +128,12 @@ public sealed partial class TargetHud : Control
     private const float RefLabelAbove = 30f;   // flipped, the block starts box top − 30
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
+
+    // The lead marker's own colour, a neutral grey so it never reads as a target's marker.
+    private static readonly Color LeadGray = new(0.78f, 0.78f, 0.78f);
+
+    // Its dark edge, drawn around the grey rim and under the dotted line.
+    private static readonly Color LeadEdge = new(0.12f, 0.12f, 0.12f);
 
     // The label's size, the chrome type scale's marker rung in the 1440p reference. The decoded
     // 15-pixel pitch below is what bounds it: a larger rung runs the three lines into each other.
@@ -404,6 +420,24 @@ public sealed partial class TargetHud : Control
         return reach <= range;
     }
 
+    /// <summary>The lead marker's world point: where the target and a round fired along this shot's
+    /// intercept meet. The round's own world path carries the shooter's velocity, as the pipper's ray
+    /// does, so the pipper laid on this point fires along the intercept. Null with no intercept or past
+    /// <paramref name="range"/>, measured as <see cref="GunReaches"/> measures it. Remake-only
+    /// (docs/org/aim-assist.md "The lead marker").</summary>
+    public static Vector3? LeadPoint(Vector3 muzzle, Vector3 shooterVel, float speed, float range,
+        Vector3 targetPos, Vector3 targetVel)
+    {
+        if (!AimAssist.TryIntercept(muzzle, speed, targetPos, targetVel - shooterVel,
+                out var dir, out float t)
+            || (dir * speed + shooterVel).Length() * t > range)
+        {
+            return null;
+        }
+
+        return targetPos + (targetVel * t);
+    }
+
     /// <summary>The marker's label lines, top to bottom, the original's three text elements
     /// (<c>FUN_004579e0</c>): the category line, the name, and <paramref name="bearing"/> (null on
     /// screen, since the clock line is the off-screen case only).
@@ -478,6 +512,22 @@ public sealed partial class TargetHud : Control
         UpdateBrackets();
         StepSpyglass();
         QueueRedraw();
+    }
+
+    /// <summary>The tracked hostile's lead point at this frame's drawn poses, or null where the marker
+    /// is off or has nothing to mark. It is solved on the simulation poses and moved by the target's
+    /// draw offset, so it holds still against the drawn target. Read by the suite.</summary>
+    public (Vector3 Lead, Vector3 Target)? LeadMark()
+    {
+        if (Own is not { LeadMarker: true } own || !GodotObject.IsInstanceValid(_hostile)
+            || _hostile is not { InPlay: true } hostile || !hostile.IsInsideTree()
+            || own.LeadPointFor(hostile.WorldPosition, hostile.WorldVelocity) is not { } lead)
+        {
+            return null;
+        }
+
+        var at = TargetPool.TryRenderPosition(hostile, out var render) ? render : hostile.GlobalPosition;
+        return (lead + (at - hostile.WorldPosition), at);
     }
 
     /// <summary>Re-answers the bracket gate for this frame's selection: the selected gun's reach
@@ -612,6 +662,11 @@ public sealed partial class TargetHud : Control
             {
                 DrawOpponent(font, mark.At, mark.Color, mark.Tag, s, markerFont, mark.Stagger);
             }
+        }
+
+        if (LeadMark() is { } lead)
+        {
+            DrawLead(lead.Lead, lead.Target, s);
         }
     }
 
@@ -887,6 +942,46 @@ public sealed partial class TargetHud : Control
         _labelLines.Clear();
         EdgeLines(mark, EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos), _labelLines);
         DrawLabelBlock(this, font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc), _labelLines, color, s, fontSize);
+    }
+
+    // The lead marker: a circle with a faint fill on the intercept, and a dotted line from its rim to
+    // the target. Drawn only while the intercept is in view, since an edge arrow already points there.
+    private void DrawLead(Vector3 lead, Vector3 target, float s)
+    {
+        if (_camera.IsPositionBehind(lead))
+        {
+            return;
+        }
+
+        var center = _camera.UnprojectPosition(lead);
+        if (!new Rect2(Vector2.Zero, Size).HasPoint(center))
+        {
+            return;
+        }
+
+        var color = LeadGray;
+        float radius = RefLeadRadius * s;
+        float rim = Mathf.Max(1f, RefLeadRim * s);
+        DrawCircle(center, radius, new Color(color, LeadFillAlpha));
+        // The dark edge outside the grey rim is what lifts the marker off a fog-grey sky.
+        DrawArc(center, radius + rim, 0f, Mathf.Tau, DiscSegments, new Color(LeadEdge, LeadRimAlpha), rim, antialiased: true);
+        DrawArc(center, radius, 0f, Mathf.Tau, DiscSegments, new Color(color, LeadRimAlpha), rim, antialiased: true);
+        if (_camera.IsPositionBehind(target))
+        {
+            return;
+        }
+
+        var toTarget = _camera.UnprojectPosition(target) - center;
+        if (toTarget.Length() <= radius)
+        {
+            return;
+        }
+
+        var from = center + (toTarget.Normalized() * (radius + rim));
+        float line = Mathf.Max(1f, RefLeadLine * s);
+        float dash = Mathf.Max(1f, RefLeadDash * s);
+        DrawDashedLine(from, center + toTarget, new Color(LeadEdge, LeadLineAlpha), line + (2f * rim), dash, antialiased: true);
+        DrawDashedLine(from, center + toTarget, new Color(color, LeadLineAlpha), line, dash, antialiased: true);
     }
 
     // The picture itself: the viewport's texture masked to a circle of that radius at that centre,

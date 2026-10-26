@@ -42,6 +42,8 @@ internal static class DisplaySettingsSuites
         ("Rumble", false, false),
         ("DefaultView", "cockpit", false),
         ("AutoHeadTurn", true, false),
+        ("LeadingAimAssist", true, false),
+        ("LeadMarker", true, false),
         ("RocketCraters", true, false),
         ("CockpitEnginePitch", false, false),
         ("FlightTextBlock", true, false),
