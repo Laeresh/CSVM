@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
@@ -33,6 +34,13 @@ public static class VegetationModels
 
     /// <summary>The sample points per triangle edge <see cref="SurfaceMean"/> reads, 21 a triangle.</summary>
     public const int SurfaceSamples = 6;
+
+    /// <summary>The share of a tree's height, from its top, both of the grade's means read. The crown stands in it on
+    /// every species, and the trunk and C3's sand patch at a palm card's foot fall below it.</summary>
+    public const float CrownShare = 0.5f;
+
+    /// <summary>How far one channel's gain may stray from the luminance ratio, so the grade keeps the model's hue.</summary>
+    public const float MaxChroma = 0.1f;
 
     // The grade's bounds: a model whose colours are that far off the card is a bad file, not a grade.
     private const float MinGrade = 0.25f, MaxGrade = 4f;
@@ -90,22 +98,41 @@ public static class VegetationModels
         return material;
     }
 
-    /// <summary>The per-channel gain putting the model's mean linear colour on the card's, held to 0.25-4, and one
-    /// where either is unknown. The card draws unlit, so its texture's mean is the colour the model must meet.</summary>
+    /// <summary>The gain putting the model's mean linear colour on the card's. It is the luminance ratio, each
+    /// channel at most <see cref="MaxChroma"/> off it, all held to 0.25-4. The model keeps its own hue and
+    /// meets the card in brightness. One where either mean is unknown. The card draws unlit, so its texture's
+    /// mean is the colour the model must meet.</summary>
     public static Vector3 Grade(Vector3? card, Vector3? model)
     {
         if (card is not { } c || model is not { } m)
             return Vector3.One;
-        static float Ratio(float a, float b) => b > 1e-6f ? Math.Clamp(a / b, MinGrade, MaxGrade) : 1f;
-        return new Vector3(Ratio(c.X, m.X), Ratio(c.Y, m.Y), Ratio(c.Z, m.Z));
+        float s = Math.Clamp(Luma(c) / Math.Max(Luma(m), 1e-6f), MinGrade, MaxGrade);
+        float Channel(float a, float b) => b > 1e-6f ? Math.Clamp(s * Math.Clamp(a / b / s, 1f - MaxChroma, 1f + MaxChroma), MinGrade, MaxGrade) : s;
+        return new Vector3(Channel(c.X, m.X), Channel(c.Y, m.Y), Channel(c.Z, m.Z));
     }
 
-    /// <summary>The mean linear colour of an RGBA8 image's solid texels (alpha at least half), null with none.</summary>
-    public static Vector3? MeanLinear(byte[] rgba)
+    /// <summary>The mean linear colour of an RGBA8 image's solid texels (alpha at least half) in the top
+    /// <paramref name="crownShare"/> of the rows they span, null with none. Row 0 is the card's top.</summary>
+    public static Vector3? MeanLinear(byte[] rgba, int width, int height, float crownShare = 1f)
     {
+        int top = -1, bottom = -1;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (rgba[(((y * width) + x) * 4) + 3] < 128)
+                    continue;
+                top = top < 0 ? y : top;
+                bottom = y;
+                break;
+            }
+        }
+        if (top < 0)
+            return null;
+        int last = top + (int)MathF.Ceiling((bottom - top + 1) * crownShare) - 1;
         var sum = Vector3.Zero;
         long n = 0;
-        for (int i = 0; i + 3 < rgba.Length; i += 4)
+        for (int i = top * width * 4; i < (last + 1) * width * 4; i += 4)
         {
             if (rgba[i + 3] < 128)
                 continue;
@@ -118,17 +145,23 @@ public static class VegetationModels
 
     /// <summary>The mean linear colour of a mesh's solid surface: each triangle's texels on a fixed grid of
     /// <see cref="SurfaceSamples"/> points, weighted by its world area. A texture's unused texels count nothing,
-    /// so an atlas region the mesh barely uses moves it little. Null with no solid sample.</summary>
-    public static Vector3? SurfaceMean(byte[] rgba, int width, int height, Vector3[] positions, Vector2[] uvs, int[] indices)
+    /// so an atlas region the mesh barely uses moves it little. Only triangles centred in the top
+    /// <paramref name="crownShare"/> of the mesh's height count. Null with no solid sample.</summary>
+    public static Vector3? SurfaceMean(byte[] rgba, int width, int height, Vector3[] positions, Vector2[] uvs, int[] indices,
+        float crownShare = 1f)
     {
         const int n = SurfaceSamples;
-        if (uvs.Length < positions.Length || rgba.Length < width * height * 4)
+        if (uvs.Length < positions.Length || rgba.Length < width * height * 4 || positions.Length == 0)
             return null;
+        float minY = positions.Min(p => p.Y), maxY = positions.Max(p => p.Y);
+        float floor = maxY - ((maxY - minY) * crownShare) - 1e-4f;
         var sum = Vector3.Zero;
         double weight = 0;
         for (int t = 0; t + 2 < indices.Length; t += 3)
         {
             Vector3 a = positions[indices[t]], b = positions[indices[t + 1]], c = positions[indices[t + 2]];
+            if ((a.Y + b.Y + c.Y) / 3f < floor)
+                continue;
             Vector2 ua = uvs[indices[t]], ub = uvs[indices[t + 1]], uc = uvs[indices[t + 2]];
             float share = 0.5f * (b - a).Cross(c - a).Length() / (n * (n + 1) / 2);
             for (int i = 0; i < n; i++)
@@ -148,6 +181,9 @@ public static class VegetationModels
 
         return weight > 0 ? sum / (float)weight : null;
     }
+
+    // Rec. 709 luminance of a linear colour.
+    private static float Luma(Vector3 v) => (0.2126f * v.X) + (0.7152f * v.Y) + (0.0722f * v.Z);
 
     private static float Wrap(float v) => v - MathF.Floor(v);
 
@@ -178,9 +214,10 @@ public static class VegetationModels
         var mesh = importer.GetMesh();
         var arrays = mesh.SurfaceGetArrays(0);
         card?.Convert(Image.Format.Rgba8);
-        var grade = Grade(card != null ? MeanLinear(card.GetData()) : null, SurfaceMean(image.GetData(), image.GetWidth(), image.GetHeight(),
-            arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(), arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), arrays[(int)Mesh.ArrayType.Index].AsInt32Array()));
-        Log.Info("world", $"vegetation model {source}: {mesh.GetFaces().Length / 3} triangles, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}, band {NearM:0}-{FarM:0} m");
+        var grade = Grade(card != null ? MeanLinear(card.GetData(), card.GetWidth(), card.GetHeight(), CrownShare) : null,
+            SurfaceMean(image.GetData(), image.GetWidth(), image.GetHeight(), arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(),
+                arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), arrays[(int)Mesh.ArrayType.Index].AsInt32Array(), CrownShare));
+        Log.Info("world", $"vegetation model {source}: {mesh.GetFaces().Length / 3} triangles, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}");
         return new Model(mesh, TextureUpload.Create(image), grade, source);
     }
 

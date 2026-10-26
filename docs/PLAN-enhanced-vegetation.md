@@ -1592,15 +1592,23 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   card's phase, leaning about its base, so the swap does not jump and no still tree stands among
   swaying cards.
 - *Lighting.* Unlit like the card (D31's trap: a lit model meets an unlit card only at one sun). A grade
-  per channel puts the model's mean linear colour on the card texture's: `SurfaceMean` weights the
-  model's texels by the world area its triangles cover, since an atlas mean counts patches the mesh
-  barely uses (for `firtree1` the plain atlas mean reads 14 to 31 % darker per channel, which left the
-  model that much lighter). On top of the grade the model takes the card's own sun-side gain by screen half (`SunLine`, `RichFragmentLines`, against half the
-  card's width), so the gain lands as on the card from every view. A gain read off the model's
-  normals (option C in the montage) brightens it seen with the sun behind and darkens it against the
-  sun, where the card does neither. The grade is computed at load, so a pack's model or a retuned D31
-  file meets its card with no number to tune; `firtree1` grades to (0.27, 0.26, 0.71).
-- *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
+  meets the card in brightness and keeps the model's own hue: the ratio of the card texture's mean
+  luminance to the model's, each colour channel allowed at most 10 % off it (`MaxChroma`), held to
+  0.25-4. Both means read the top half of the tree (`CrownShare`), the crown on every species, so the
+  trunk and C3's sand patch at a palm card's foot drop out; the model's texels are weighted by the
+  world area its triangles cover, since an atlas mean counts patches the mesh barely uses. A grade per
+  channel was tried first and broke the palms: their card and model means measured different mixes
+  (sand patch, trunk, the card's dark fringe), and blue gains up to 3.7 turned `palmtree2` yellow with
+  a lilac trunk and `palmtree1` grey-white. On top of the grade the model takes the card's own
+  sun-side gain by screen half (`SunLine`, `RichFragmentLines`, against half the card's width), so the
+  gain lands as on the card from every view. A gain read off the model's normals (option C in the
+  montage) brightens it seen with the sun behind and darkens it against the sun, where the card does
+  neither. The grade is computed at load, so a pack's model or a retuned file meets its card's
+  brightness with no number to tune; its hue is the file's, so a model's colours are tuned to its card
+  in its generator. Grades: C1 `firtree1` (0.271, 0.261, 0.295); C2 `palmtree1` (0.509, 0.553, 0.611),
+  `palmtree2` (0.53, 0.499, 0.567), `palmtree3` (0.649, 0.745, 0.793); C3 `palmtree1` (0.326, 0.33,
+  0.375), `palmtree2` (0.526, 0.502, 0.569), `palmtree3` (0.693, 0.79, 0.847). `firtree1` keeps its
+  warmer yellow-green, where the per-channel grade had pulled it to the card's blue-green.- *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
   ground where the cards cast none, and casting re-renders the models into each Ultra cascade.
 - *The draw.* `ClutterInstances` cuts the Rich variant again into `CellM` (256 m) cells, one MultiMesh
   of the model mesh each, ranged at the word's far edge plus the cell's radius. Godot's own range and frustum cull
@@ -1628,7 +1636,7 @@ out, which became the 3D Vegetation setting above (Off, Near, Far).
 text the Rich card shares and a look iterated against captures.
 
 **Verify.** Units: `VegetationModelsTests` (the card mean is linear over solid texels; the model mean
-reads only the texels its triangles cover, weighted by area; the grade, its clamp and its fallback) and
+reads only the texels its triangles cover, weighted by area; both read only the crown's top half; the grade meets the card's luminance, keeps the model's hue within the chroma clamp, and falls back to one) and
 `HdModelsTests.AVegetationModelIsReadUnderItsChapterKeyAlone`, `VegetationModelsSettingTests` (the
 ladder, `near` on every machine, the flag and the file keep a known word, each word's band) and the
 options tests (`OptionsChoicesTests`, `OriginalOptionsTests`: the row is dead under Original and walks
