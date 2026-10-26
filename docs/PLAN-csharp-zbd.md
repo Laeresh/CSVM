@@ -24,10 +24,13 @@ original developer accepted.
 - The game runs from an install folder, a mounted drive or an `.iso` file, read in place.
 - An optional copy lays out the files the engine reads as an install tree under the data root,
   found afterwards by the same locator.
-- Every loader builds its model from the game bytes behind one game-file source; the JSON/zip
-  loaders, the v0.6.1 shape support and `extracted/` are gone.
+- Every loader builds its model from the game bytes behind one game-file source; the v0.6.1
+  shape support and the extract step are gone, and unzbd's output is read only from an opt-in
+  modding folder (Decisions 18-21).
 - A dev-only headless `--dump` writes CSVM-shaped JSON/PNG/WAV into `.scratch` for analysis
   scripts and agents.
+- An opt-in modding folder of unzbd output (which a modder runs; CSVM no longer ships it)
+  overrides the game files archive by archive.
 - An upgrading player is sent to a source picker when no source is found, and is offered once to
   delete the old `extracted/`.
 - Releases bundle no `unzbd`, no `LICENSE-unzbd`, and no Rust build; mech3ax is credited by one
@@ -59,6 +62,11 @@ tables is work this plan does not do.
 | 15 | CAB decompression from an ISO | **In memory, per session.** A disk cache only if a measured launch cost is too high. |
 | 16 | The local `tools/mech3ax` checkout | **Stays local and git-ignored** as the read-only reference for decision 3. Nothing from it is pushed or mirrored. |
 | 17 | What feeds the CI engine suites, which run on `--synthetic-data` with no game files | **The synthetic tool builds the loader models in memory** and hands them to the session through a game-data seam (A3); no synthetic files, JSON or binary. A synthetic run has no game-file source. |
+| 18 | Does the engine still read unzbd's output? (amends 5) | **Yes, as the modding path.** CSVM stops distributing unzbd, but keeps its own readers of unzbd's output, so a modder can run unzbd, edit the files and load them. The model diffs stay as permanent guards that both paths build the same models. |
+| 19 | Which wins when both are there | **An opt-in modding folder, per archive.** Off by default; named in Options or by a flag. Where it holds an archive's output (`C1/gamez.zip`), that replaces the game file; everything else comes from the game files. A data root's old `extracted/` is not read unless named. |
+| 20 | Which unzbd output shapes | **The fork's shape only**, what v0.4.0's bundled `unzbd.exe` writes; the v0.6.1 shape support goes. |
+| 21 | Does CSVM run unzbd | **No.** A modder runs their own unzbd; CSVM documents the folder layout it reads. E43 deletes the extraction runner. The modding folder covers unzbd's archives (and `messages.json`/`interp.json`), not the `rof/` part CSVM's own extractor wrote: the ROF half reads in place, and HD packs mod its art. |
+| 22 | An upgrading player's `extracted/` (amends 8) | **One prompt: keep or delete.** Kept, it is not read unless chosen as the modding folder, and the prompt says how. |
 
 ## ⚠ Read this before implementing anything
 
@@ -196,6 +204,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 43. ☐ Delete the extraction pipeline
 44. ☐ Packaging, licences, credit and docs
 45. ☐ Final ISO-only run
+46. ☐ The modding folder: unzbd's output read per archive, opt-in
 
 ## Dependency and parallelism notes
 
@@ -751,7 +760,7 @@ Unused now, for E43: `SessionPaths.ChapterTextures`, `PreferUnzipped` for textur
 art's), `ZbdPlan.AlwaysUnzipped` and `ExtractionFlow`'s always-unpacked `rimage` rule, and the
 `textures` `ZbdExtraction` mode. No `BasePaths` field was texture-specific.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `36a7e4496` (battery 3), PASS: units 7,652 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. Every texture the goldens draw now comes from the game files.
 
 **Reader (kept from the reader landing).** `TextureZbd.Read(byte[])` and
 `TextureZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/TextureZbd.cs`) decode a texture
@@ -1073,7 +1082,7 @@ every root archive parses with its reader, and the count of files byte-identical
 install is reported, not required. E45's golden run uses an ISO built from the English install,
 since the goldens are English.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `36a7e4496` (battery 3), PASS: units 7,652 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. The real-disc tests ran by hand with their variables set (below, D35).
 
 **Original approach (kept for reference).**
 
@@ -1120,7 +1129,7 @@ No existing C# LZX code was drawn on. The one found, MonoGame's
 MS-PL at the user's choice; its LGPL-2.1 option would be compatible with CSVM's GPLv3, but the
 decoder is written from Microsoft's published cabinet and LZX specifications instead.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `36a7e4496` (battery 3), PASS: units 7,652 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. By hand with `CSVM_TEST_ISO`/`CSVM_TEST_DISC` set: 18 passed, 0 skipped; the German disc folder gives 182 of 184 archives byte-identical to the English install.
 
 **Original approach (kept for reference).**
 
@@ -1194,7 +1203,7 @@ between 807 and 10,018, in the gap between `00000001.TMP` (sector 40) and the fi
 SafeDisc's bad sectors, inside no file. Reading and comparing all 112 files (559 MB from the image
 plus the same from the copy) takes about 0.22 s with both in the file cache.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `36a7e4496` (battery 3), PASS: units 7,652 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. By hand on the merged tree with the variables at `tmp/CRIMSON.cue` and the German copy: 63 passed, 0 skipped; through raw sectors, ISO9660 and the cabinets, 184 of 184 archives of the English pressing match the English install.
 
 **Original approach (kept for reference).**
 
@@ -1224,7 +1233,8 @@ the real-disc check when a raw image of the disc exists.
 ## E41 ☐ Source picker and upgrade cleanup
 
 **Goal.** With no source found, the game opens a picker (folder, drive or `.iso`) in place of the
-Extract screen; once a source works, it offers once to delete an old `extracted/`.
+Extract screen; once a source works, it asks once whether to keep or delete an old `extracted/`
+(Decision 22), and says how to choose a kept one as the modding folder.
 
 **Evidence (confidence: lead-only).** Decision 8. `ExtractionStamp.Standing` sends the player to
 the Extract screen today.
@@ -1273,7 +1283,7 @@ enumerating member, and the dump is their only outside reader. A rename fails th
 lookup throws at type initialisation). An internal accessor on each model would replace it once
 `Mech3/` is free to edit.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `36a7e4496` (battery 3), PASS: units 7,652 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. The dump is not part of the battery; its unit and install tests are.
 
 **Original approach (kept for reference).**
 
@@ -1298,12 +1308,14 @@ scripts and agents.
 
 **Evidence (confidence: lead-only).** Data survey, Sources and `unzbd` modes.
 
-**Approach.** Delete, then fix callers. <TODO: the full caller list.>
+**Approach.** Delete, then fix callers. Under Decisions 18 and 21 only the code that runs unzbd
+goes; CSVM's readers of unzbd's output stay as the modding path (E46), minus the v0.6.1 shapes
+(Decision 20). <TODO: the full caller list.>
 
 **Model recommendation.** medium.
 
-**Verify.** Build, complete battery, and a grep for `unzbd` outside history-only docs returns
-nothing in code.
+**Verify.** Build, complete battery, and a grep for `UnzbdTool`/`unzbd cs` in code returns
+nothing; the modding-path diffs still pass.
 
 **⚠ Traps.** `ExtractionStampTests` guards the schema in three places; it goes with the stamp.
 
@@ -1341,4 +1353,34 @@ the ISO.
 **Verify.** Complete `RunTests.ps1` with every golden unchanged; 8-chapter `--freecam` regression.
 
 **⚠ Traps.** The suites must not find an old `extracted/` through `CSVM_DATA_ROOT`; check the
-environment before trusting a green run.
+environment before trusting a green run. The goldens are English: run from an English image
+(the user's raw dump `Z:\CSVM\tmp\CRIMSON.cue` is the English pressing, D35), never the German
+disc. The user's disc data stays out of every commit and release.
+
+## E46 ☐ The modding folder: unzbd's output read per archive, opt-in
+
+**Goal.** With a modding folder named (Options, or a flag), each archive whose unzbd output the
+folder holds loads from there, and every other archive from the game files; with none named,
+nothing reads unzbd output.
+
+**Evidence (confidence: lead-only).** Decisions 18-22. The readers exist: B11, A3 and B15 moved
+interp's, messages' and textures' JSON/zip readers to `CSVM.Tests/Oracle/*Legacy.cs`; C22, B13,
+C21 and B14 keep theirs in the engine until their switch.
+
+**Approach.** Move the three oracles back into the engine. In `GameData.Load` and its chapter
+loader, pick per archive: the modding folder's file when present (the path layout today's
+`extracted/` uses), else the game files. The flag and Options row, with `--det` and synthetic
+runs ignoring a saved folder. Drop the v0.6.1 shape paths. A modder-facing page in `docs/` naming
+the files read and the unzbd version that writes them (v0.4.0's bundled one). The model diffs
+become the guard for the modding path. <TODO: the flag's spelling and the Options row's place;
+whether a folder from one release over game files of another warns.>
+
+**Model recommendation.** high, it touches every format's load path.
+
+**Verify.** A suite or unit that loads one chapter with a modding folder holding only that
+chapter's gamez output (an edited copy) and sees the edit, the rest from the game files; with
+none named, an `extracted/` beside the data root is not read; the complete battery green.
+
+**⚠ Traps.** E41's prompt must not adopt the old `extracted/` (Decision 22). A modding folder of
+the wrong release over the game files can mismatch names between archives; say so in the
+modder page rather than guarding every pair.
