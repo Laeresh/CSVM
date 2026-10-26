@@ -240,7 +240,7 @@ textures and the anim archives are formats of their own, so B11, B15, C21 and C2
 case, and `player.zrd` twice in the root `zrdr.zbd`; today's zips hold a repeat as `stem-N.ext`, a
 rule B13 and B14 must reproduce wherever a loader keys by name.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `485f7fcf6` (battery 2), PASS: units 7,612 passed, 0 failed, 3 skipped; engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. The data theories ran with the install found: all 184 manifest files open, all 64 container archives tile and match today's zips by entry name.
 
 **Original approach (kept for reference).**
 
@@ -276,7 +276,7 @@ one difference per test into real model types (`GameZ`, `AnimDefinition`, `SiScr
 and pins the reported path; `ModelDiffDataTests` builds five real models from `extracted/` twice
 and finds no difference, then flips one bit in C1's world and finds exactly that path.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `485f7fcf6` (battery 2), PASS: units 7,612 passed, 0 failed, 3 skipped; engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. The harness reports a planted single-field difference at its path in every unit test, and each format's model diff in Waves B and C runs through it.
 
 **The rules.**
 
@@ -410,7 +410,7 @@ stay JSON only until their own format switches. The unit fixtures (`fixtures/*.j
 5. **Oracle.** The JSON parse moves to `CSVM.Tests/Oracle/<Format>Legacy.cs`, which the model diff
    and the JSON-literal units read.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `485f7fcf6` (battery 2), PASS: units 7,612 passed, 0 failed, 3 skipped; engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. The CI tier's synthetic suites ran on in-memory messages with no game source; battery 2's first run on `8c3943d4a` failed one unit, an upward Spec-to-Tooling reference, fixed in `485f7fcf6`.
 
 **Original approach (kept for reference).**
 
@@ -466,7 +466,7 @@ world build loads it from the new `TestContext.Game`, and the five suites that b
 diff. Unused now, for E43: `BasePaths.InterpPath`, `TestContext.InterpPath`, `--interp=`
 (`SessionSpec.Interp`) and the `interp` `ZbdExtraction` mode.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `485f7fcf6` (battery 2), PASS: units 7,612 passed, 0 failed, 3 skipped; engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. Every interp consumer reads `interp.zbd`; the goldens, which draw C5's mip bias, clutter and lens flares, are unchanged.
 
 **Premise correction.** `TextureArchive.MipBias` is one of **four** readers of the interp data,
 each parsing `interp.json` on its own; `MissionSetup`, the clutter registry and the lens flare
@@ -522,7 +522,7 @@ part is the string-table block (49) and the `.data` key table (80).
    parameters), and four sites build `extracted/messages.json` from the data root alone
    (`BootSequence`, `CampaignBriefing`, `CampaignFlightCheckPage`, `BotSeats`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `485f7fcf6` (battery 2), PASS: units 7,612 passed, 0 failed, 3 skipped; engine 614 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. Every message the engine shows comes from `strings.dll`; the menu, HUD and campaign goldens are unchanged.
 
 **Original approach (kept for reference).**
 
