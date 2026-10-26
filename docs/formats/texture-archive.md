@@ -72,7 +72,9 @@ Texture record: the 16-byte header of [org/textures.md](../org/textures.md#the-1
   decodes as opaque RGB while its class still reads `Simple`.
 - **Names.** A name already taken earlier in the same archive (compared with case) is renamed
   `stem-N.suffix`, split at the last period, or `name-N` without one, with the smallest `N` from 1
-  not yet taken; a rename is itself taken. The record keeps the stored name beside its rename.
+  not yet taken; a rename is itself taken. That is the collision rule of
+  [zbd-archive.md](zbd-archive.md#reader-rules-and-edge-cases). The record keeps the stored name
+  beside its rename.
 
 ## Reader rules and edge cases
 

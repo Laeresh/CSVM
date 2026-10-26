@@ -858,6 +858,15 @@ is what `n` indexes. A file with no cue chunk, a non-WAV or a truncated one yiel
 rather than a failure. Kept apart from `SoundArchive.cs`, which decodes to a Godot stream, so a
 menu page needing only timings stays engine-free. Decode: docs/formats/briefing.md.
 
+## src/Mech3/SoundZbd.cs
+The reader for `soundsh.zbd` and `soundsl.zbd`, engine-free: `Load(game, path)` (null without a
+source or the file) or `Read(stream, name)` opens the table through `Extraction/ZbdArchive.cs`
+into `Sounds`, one `SoundFile` per entry in table order (the entry and its collision rename,
+`Key` being today's zip entry name). `ReadWavBytes(name)` reads one WAV on demand: the key, case
+ignored, the first in table order for the one case-only pair. The object owns the archive's
+stream, and `Dispose` ends it. Nothing in the engine calls it yet; the switch hands it to
+`SoundArchive` in place of the zip. Lookup rule: [../formats/sounds.md](../formats/sounds.md#the-sound-archives).
+
 ## src/Mech3/SoundArchive.cs
 WAV lookup over a soundsh/soundsl extraction (zip or directory), decoded through `WavFile` into
 cached `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked, and

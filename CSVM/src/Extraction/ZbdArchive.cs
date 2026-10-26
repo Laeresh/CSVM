@@ -105,6 +105,30 @@ public sealed class ZbdArchive : IDisposable
         return new ZbdArchive(stream, entries);
     }
 
+    /// <summary>Today's extraction's collision rule, which every loader keying a repeated name
+    /// reproduces. The first <paramref name="name"/> keeps it (null). A repeat becomes
+    /// <c>stem-N.ext</c> (split at the last period) or <c>name-N</c>. N is the smallest from 1 not
+    /// in <paramref name="seen"/>. Case-sensitive, so <paramref name="seen"/> must compare
+    /// ordinally; the name or rename handed out is added to it. Rule:
+    /// docs/formats/zbd-archive.md.</summary>
+    public static string? Rename(HashSet<string> seen, string name)
+    {
+        if (seen.Add(name))
+        {
+            return null;
+        }
+
+        int dot = name.LastIndexOf('.');
+        for (int n = 1; ; n++)
+        {
+            string candidate = dot < 0 ? $"{name}-{n}" : $"{name[..dot]}-{n}.{name[(dot + 1)..]}";
+            if (seen.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
     /// <summary>The payload of <paramref name="entry"/>, one of <see cref="Entries"/>.</summary>
     public byte[] ReadEntry(ZbdEntry entry)
     {

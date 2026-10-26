@@ -133,6 +133,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/EmptyStage.cs`, the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
+- `src/Mech3/SoundZbd.cs`, the engine-free reader for `soundsh`/`soundsl.zbd`: each WAV keyed by today's zip name, read on demand.
 - `src/Mech3/SoundArchive.cs`, WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
@@ -960,7 +961,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/InstallLocator.cs`, the case-insensitive install lookup: the segment walk, the picked-folder check with its mis-pick messages, and the per-platform candidate list.
 - `src/Extraction/RememberedInstall.cs`, the last-used install folder, kept in `user://options.json` to pre-fill the next picker.
 - `src/Extraction/GameFileSource.cs`, the one seam loaders read the original's files through: a game-relative path opened case-insensitively from an install folder, and the session's install located in order.
-- `src/Extraction/ZbdArchive.cs`, the named-entry `.zbd` container of `zrdr.zbd` and the sound archives: the table read and checked, each payload read on demand.
+- `src/Extraction/ZbdArchive.cs`, the named-entry `.zbd` container of `zrdr.zbd` and the sound archives: the table read and checked, each payload read on demand, and the collision rename of a repeat.
 - `src/Extraction/RofExtraction.cs`, the non-ZBD half of an extraction: both UI archives, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, from resolved paths.
 - `src/Extraction/RofTree.cs`, the one upper case the rof tree is written in and the name mapping every writer and reader of it shares.
 - `src/Extraction/RofArchive.cs`, the `.rof` UI archive read from memory: the directory tree walked without inflating, each member inflated on demand.

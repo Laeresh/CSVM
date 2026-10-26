@@ -54,25 +54,9 @@ public static class AnimZbd
         return AnimArchive.FromDecoded(label, defs, scripts);
     }
 
-    /// <summary>The extraction's file-name rule for a repeated name: <c>stem-N.ext</c> with the
-    /// first free N from 1. The extension is the text after the last period.</summary>
-    internal static string Rename(HashSet<string> seen, string name)
-    {
-        if (seen.Add(name))
-        {
-            return name;
-        }
-
-        int dot = name.LastIndexOf('.');
-        for (int n = 1; ; n++)
-        {
-            string candidate = dot < 0 ? $"{name}-{n}" : $"{name[..dot]}-{n}{name[dot..]}";
-            if (seen.Add(candidate))
-            {
-                return candidate;
-            }
-        }
-    }
+    /// <summary>The file name a definition or script is keyed by: its own, or a repeat's
+    /// <see cref="ZbdArchive.Rename"/>.</summary>
+    internal static string Rename(HashSet<string> seen, string name) => ZbdArchive.Rename(seen, name) ?? name;
 
     /// <summary>A script's name in the archive's pool: its source path without the
     /// <c>.zan</c> and leading <c>..\</c>, backslashes as hyphens, then the object name.</summary>

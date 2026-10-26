@@ -74,7 +74,6 @@ public static class TextureZbd
             palettes[p] = Widen565(data.AsSpan((int)tableEnd + (p * GlobalPaletteSize), GlobalPaletteSize));
         }
 
-        // Case-sensitive, and a rename is itself taken, as the extraction's collision rule has it.
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var textures = new List<TextureImage>(count);
         int pos = (int)palettesEnd;
@@ -85,7 +84,7 @@ public static class TextureZbd
             Expect(I32(data, entry + 32) == pos, $"start of {name}", entry + 32);
             int palette = I32(data, entry + 36);
             Expect(palette == -1 || (palette >= 0 && palette < paletteCount), $"global palette of {name}", entry + 36);
-            textures.Add(ReadTexture(data, ref pos, name, Rename(seen, name), palette < 0 ? null : palettes[palette]));
+            textures.Add(ReadTexture(data, ref pos, name, ZbdArchive.Rename(seen, name), palette < 0 ? null : palettes[palette]));
         }
 
         Expect(pos == data.Length, "end of file", pos);
@@ -170,26 +169,6 @@ public static class TextureZbd
         }
 
         return new TextureImage(name, rename, width, height, alpha, renderFlags, hasAlphaChannel, pixels);
-    }
-
-    // The first occurrence keeps its name; a repeat becomes `stem-N.suffix` (split at the last
-    // period) or `name-N`, with the smallest N not yet taken.
-    private static string? Rename(HashSet<string> seen, string name)
-    {
-        if (seen.Add(name))
-        {
-            return null;
-        }
-
-        int dot = name.LastIndexOf('.');
-        for (int n = 1; ; n++)
-        {
-            string candidate = dot < 0 ? $"{name}-{n}" : $"{name[..dot]}-{n}.{name[(dot + 1)..]}";
-            if (seen.Add(candidate))
-            {
-                return candidate;
-            }
-        }
     }
 
     private static string Name(ReadOnlySpan<byte> raw, int offset)

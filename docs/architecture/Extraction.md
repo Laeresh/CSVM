@@ -43,7 +43,9 @@ Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install with it.
 `Entries`, in table order under their stored names, repeats kept. The format has no checksum, so a
 wrong version or a table whose payloads do not tile from 0 throws `InvalidDataException`.
 `ReadEntry` reads one payload under a lock, so a 128 MB sound archive is never held whole. The
-archive owns its stream. Coverage: `CSVM.Tests/ZbdArchiveTests.cs`.
+archive owns its stream. `Rename(seen, name)` is today's extraction's collision rule, the one
+place it lives: the sound, reader and texture readers key a repeated name through it. Coverage:
+`CSVM.Tests/ZbdArchiveTests.cs`.
 
 ## src/Extraction/RofExtraction.cs
 `Run` takes a `RofExtractionRequest` of already-resolved absolute paths (both `.rof` archives, the

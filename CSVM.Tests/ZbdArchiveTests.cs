@@ -132,12 +132,12 @@ public class ZbdArchiveTests
         var stored = zip.Entries.Where(e => e.FullName != "manifest.json").ToDictionary(e => e.FullName);
         using var archive = ZbdArchive.Open(GameFilesData.Source!, "ZBD/" + path);
         bool reader = Path.GetFileName(path) == "zrdr.zbd";
-        var seen = new HashSet<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         int renamed = 0;
 
         foreach (var entry in archive.Entries)
         {
-            string name = Rename(entry.Name, seen);
+            string name = ZbdArchive.Rename(seen, entry.Name) ?? entry.Name;
             renamed += name == entry.Name ? 0 : 1;
             Assert.True(stored.Remove(reader ? name + ".json" : name, out var zipped), $"{path}: no zip entry for {name}");
             if (!reader)
@@ -152,24 +152,6 @@ public class ZbdArchiveTests
 
     private static bool IsEntryArchive(string path) =>
         Path.GetFileName(path) is "zrdr.zbd" or "soundsh.zbd" or "soundsl.zbd";
-
-    private static string Rename(string name, HashSet<string> seen)
-    {
-        if (seen.Add(name))
-        {
-            return name;
-        }
-
-        int dot = name.LastIndexOf('.');
-        for (int index = 1; ; index++)
-        {
-            string candidate = dot < 0 ? $"{name}-{index}" : $"{name[..dot]}-{index}{name[dot..]}";
-            if (seen.Add(candidate))
-            {
-                return candidate;
-            }
-        }
-    }
 
     // The layout of docs/formats/zbd-archive.md, with the comment and filetime fields filled the
     // way the original's archives fill them.

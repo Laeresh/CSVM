@@ -51,8 +51,14 @@ All values are little-endian. Nothing after the name is read by CSVM.
 - **Names repeat.** `soundsh.zbd` and `soundsl.zbd` each hold 44 entries whose name an earlier
   entry already has, plus one pair differing only by case; the root `zrdr.zbd` holds `player.zrd`
   twice.
-  The reader keeps every entry in table order under its stored name. A lookup by name has to pick
-  one of them; today's extraction wrote a repeat as `stem-N.ext`, counting from 1.
+  The reader keeps every entry in table order under its stored name. A loader that keys by name
+  applies the collision rule below.
+- **The collision rule** (`ZbdArchive.Rename`), today's extraction's, which the sound, reader and
+  texture loaders share: the first occurrence of a name keeps it; a later one becomes
+  `stem-N.ext`, split at the last period, or `name-N` without one, with the smallest `N` from 1 not
+  yet taken. Names compare with case, so a case-only pair is not renamed, and a rename is itself
+  taken. The texture archives are not this container but name their repeats the same way
+  ([texture-archive.md](texture-archive.md)).
 - **Case.** Names are matched as stored. The archive's own path in an install is matched without
   regard to case (`InstallLocator.ResolveFile`).
 - **Size.** `soundsh.zbd` is about 128 MB, so the reader keeps the file open and reads one payload

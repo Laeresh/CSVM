@@ -172,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `interp.zbd`
 12. ☑ `strings.dll` messages
-13. ☐ Sound archives
+13. ◐ Sound archives
 14. ◐ Reader archives (`zrdr.zbd`)
 15. ◐ Texture archives
 
@@ -541,7 +541,75 @@ already reads PE string tables (`PeStringTable.cs`).
 field reads 1252 and is ignored. The Windows-1252 decode in the Rust crate belongs to the
 `RT_MESSAGETABLE` games, not to Crimson Skies.
 
-## B13 ☐ Sound archives
+## B13 ◐ Sound archives
+
+**Reader landed, engine switch pending.** `SoundZbd.Load(IGameFileSource?, path)` and
+`SoundZbd.Read(stream, name)` (`CSVM/src/Mech3/SoundZbd.cs`) open `soundsh.zbd` or `soundsl.zbd`
+through A1's `ZbdArchive` and list its `SoundFile`s in table order (the entry and its collision
+rename; `Key` is today's zip entry name). `ReadWavBytes(name)` reads one WAV on demand, so the
+128 MB archive is never held whole; `ReadWavBytes(SoundFile)` reads a listed one. The object owns
+the archive's stream. No edit to `SoundArchive.cs` or any engine file. The archive and lookup rule
+are in [formats/sounds.md](formats/sounds.md#the-sound-archives). `CSVM.Tests/SoundZbdTests.cs`
+holds four CI-safe cases (the archive count, the rename and first-occurrence lookup, the case-only
+pair, no source) and the model diff over both archives against today's zips (a `Dictionary` of
+zip name to bytes on each side): `soundsh` 2,521 sounds, 127,977,676 leaf values, `soundsl`
+2,520 sounds, 62,207,362 leaf values, clean. The same theory asks `SoundArchive.ReadWavBytes`
+over the zip and the reader for every zip name, in its own spelling and upper-cased (5,042 and
+5,040 lookups), and gets the same bytes. A byte flipped in the middle of one `soundsl` payload is
+found as `Dictionary["VO_id38_GL-AllyDwn-C.wav"][7079]: expected 0, actual 255`.
+
+**One home for the rename rule.** The three copies (`TextureZbd`, `ZrdrZbd`'s internal `Rename`,
+`ZbdArchiveTests`) agreed exactly: an ordinal set, a split at the last period, `name-N` without
+one, `N` counting from 1, and a rename itself taken. The test copy returned the name instead of
+null for a first occurrence and wrote the suffix as `name[dot..]`, which is the same string. The
+rule is now `ZbdArchive.Rename(seen, name)` (`CSVM/src/Extraction/ZbdArchive.cs`), and all three
+call it; [formats/zbd-archive.md](formats/zbd-archive.md#reader-rules-and-edge-cases) states it,
+and the texture and zrdr pages point there. `TextureZbdTests`, `ZrdrZbdTests` and `ZbdArchiveTests`
+pass unchanged. This closes B14's remaining step 4.
+
+**How a sound is looked up (decided).** By `Key`, case ignored, the first in table order winning
+when two keys differ only by case. Each archive's 44 repeats are byte-identical copies of their
+first occurrence, so the bare name loses nothing. The one case-only pair,
+`VO_c4-RM-m3_Blacke_9.wav` and `VO_c4-RM-m3_blacke_9.wav`, holds the same 16,462 bytes (zip CRC32
+`119681842`) in both archives. Today's `SoundArchive` map, case-ignoring and filled in zip order,
+answers the later of the pair, so the two rules differ in which entry they pick and not in the
+bytes. `soundsl.zbd` lacks `chaingun.wav`, the one name `soundsh.zbd` has beyond it; the engine
+reads `soundsh` only.
+
+**Read cost** (Debug build, archive in the OS file cache): opening `soundsh.zbd` (table only) 0.9
+to 2 ms; reading all 2,521 WAVs 41 to 46 ms, about 0.02 ms each, the slowest single read 14 to
+16 ms. `soundsl` opens in 1.2 to 2 ms and reads in 19 to 31 ms.
+
+**Remaining switch work (after A3).**
+
+1. **The game-data slot.** `soundsh.zbd` is a root archive, so the slot is chapter-independent:
+   `GameData.Sounds`, a `SoundZbd` from `SoundZbd.Load(game, "ZBD/soundsh.zbd")`, opened once per
+   launch and owned by the game data. `SoundArchive` takes it in place of the path and keeps its
+   decode and `(wav, looped)` cache; its `Dispose` then leaves the shared archive open, so the
+   reopen-after-close path and the `SoundsOutliveBuild` distinction for sounds lose their reason
+   (`SessionArchives.SoundsOutliveBuild`, `WorldSession` line 446). The consumers are
+   `SessionArchives.OpenFor` (`soundsPath`), `LaunchAudio` (`paths.SoundsPath`), the directory
+   archive `GameSession` opens near line 2761, `CampaignBriefing`'s `WavCues.ReadFrom` (to the
+   bytes form `WavCues` already has), and about 20 suites calling `new SoundArchive(ctx.SoundsPath)`
+   after `ctx.RequireData(ctx.SoundsPath, …)`, which then read `TestContext.Data` and skip on a
+   missing archive. `BuildState.SoundsPath`, `ProbeRunner` and the net suites' `SoundsPath:`
+   arguments carry the path today.
+2. **The synthetic builder**, per the A3 recipe. `Tooling/SyntheticSounds.cs` writes one generated
+   MS ADPCM WAV per entry of `fixtures/synthetic/soundsh/manifest.json` into `extracted/soundsh/`.
+   It becomes a builder of the same WAVs in memory, packed into the container of
+   `docs/formats/zbd-archive.md` on a `MemoryStream` and opened with `SoundZbd.Read`, so the engine
+   keeps one sound reader. The manifest's lengths and tones become C# literals, the fixture and its
+   `SyntheticFamily` entry go, and `SyntheticSoundsTests` pins the in-memory set.
+3. **The legacy move.** `SoundArchive`'s zip and directory branches (`_zipPath`, `_dir`,
+   `_entryPaths`, the reopen and `ReportReopen`) go to `CSVM.Tests/Oracle/SoundArchiveLegacy.cs`
+   as the zip map the theory compares against; `SoundArchiveTests`' reopen contract goes with them
+   or is replaced by a unit over `SoundZbd`. Unused afterwards, for E43: `BasePaths.SoundsPath`,
+   `TestContext.SoundsPath`, `BuildState.SoundsPath`, `--sounds=` (`SessionSpec.Sounds`),
+   `PreferUnzipped` for sounds, `--zip-assets` for sounds, and the `sounds` `ZbdExtraction` mode.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `SoundArchive` reads `soundsh.zbd`/`soundsl.zbd` directly.
 
@@ -627,8 +695,7 @@ cost under 50 ms.
    the reader. Unused afterwards, for E43: `BasePaths.ZrdrPath`, `SessionPaths.ChapterZrdr`,
    `SessionPaths.MissionZrdr`, `PreferUnzipped` for zrdr, `--zrdr=` and the `reader`
    `ZbdExtraction` mode.
-4. **One rename rule.** The collision rule now exists in `TextureZbd`, `ZrdrZbd` (internal, for
-   B13 to share) and `ZbdArchiveTests`; it belongs with `ZbdArchive`, where B13 needs it too.
+4. ~~One rename rule.~~ Done in B13: `ZbdArchive.Rename` is the one home, and every reader calls it.
 
 **Verified.** <pending orchestrator run>
 

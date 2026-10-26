@@ -1,8 +1,8 @@
 # Sound readers and WAV format
 
 Part of the [format documentation](README.md). This page covers shared sound definitions, player
-volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, `WavFile.cs`, and
-`FlightAudio.cs`.
+volume and pitch curves, the sound archives, and the WAV container. The readers are `SoundDefs.cs`,
+`SoundZbd.cs`, `WavFile.cs`, and `FlightAudio.cs`.
 
 ## Contents
 
@@ -10,6 +10,7 @@ volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, 
 - [Sound groups](#sound-groups)
 - [The music channel](#the-music-channel)
 - [Player curves](#player-curves)
+- [The sound archives](#the-sound-archives)
 - [WAV format](#wav-format)
 ## Sound sets
 
@@ -331,6 +332,25 @@ slot's own **manoeuvre and attitude** terms, decoded in
 [vehicle.md](vehicle.md#the-engine-slots-pitch-and-gain-are-not-throttle-alone). ⚠ Not a
 speed-driven term, which this page said before the expression was read: the quantity is angular
 velocity, and airspeed reaches the engine slot nowhere.
+
+## The sound archives
+
+`soundsh.zbd` and `soundsl.zbd` are [zbd-archive.md](zbd-archive.md) containers of whole `.wav`
+files, stored raw. `CSVM/src/Mech3/SoundZbd.cs` reads one in place: it opens the table and reads
+each WAV on demand.
+
+- **Contents.** `soundsh.zbd` holds 2,521 entries; `soundsl.zbd` holds the same names except
+  `chaingun.wav`, 2,520 entries. The engine reads `soundsh` only.
+- **Repeats.** Each archive has 44 entries whose name an earlier entry already has. Each is keyed by
+  the [collision rule](zbd-archive.md#reader-rules-and-edge-cases) (`stem-N.wav`), today's zip entry
+  name. In both archives every repeat holds the same bytes as its first occurrence, which a name
+  the game asks for finds.
+- **Lookup.** A sound is found by its key, case ignored, and when two keys differ only by case the
+  first in table order wins. The one such pair, `VO_c4-RM-m3_Blacke_9.wav` and
+  `VO_c4-RM-m3_blacke_9.wav`, holds the same 16,462 bytes in both archives (zip CRC32 `119681842`),
+  so either answer is the same sound. Today's zip lookup (`SoundArchive`, a case-ignoring map
+  filled in zip order) answers the later one of the pair. Every other name finds the same entry
+  both ways.
 
 ## WAV format
 

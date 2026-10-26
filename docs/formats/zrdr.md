@@ -51,7 +51,7 @@ or today's zip spellings `vehicle.json` and `vehicle.zrd.json`, which all mean `
 match ignores case; no archive holds two names differing only by case.
 
 - **A repeat is renamed** `stem-N.ext`, the smallest `N` from 1 not yet taken, matched with case
-  (the extraction's rule, the one [texture-archive.md](texture-archive.md) gives). The 62 archives
+  (the collision rule of [zbd-archive.md](zbd-archive.md#reader-rules-and-edge-cases)). The 62 archives
   hold 1,293 readers and one repeat: the root's second `player.zrd`, looked up as `player-1.zrd`
   (`player-1.json`). The two are different files. The first holds the player-plane globals
   (`ai_skill_parameters`, the sound curves) that `player.json` has always meant; the second holds

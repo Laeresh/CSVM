@@ -43,7 +43,7 @@ public static class ZrdrZbd
         var files = new List<ZrdrFile>(archive.Entries.Count);
         foreach (var entry in archive.Entries)
         {
-            files.Add(new ZrdrFile(entry.Name, Rename(seen, entry.Name), ReadReader(archive.ReadEntry(entry), entry.Name)));
+            files.Add(new ZrdrFile(entry.Name, ZbdArchive.Rename(seen, entry.Name), ReadReader(archive.ReadEntry(entry), entry.Name)));
         }
 
         return files;
@@ -84,26 +84,6 @@ public static class ZrdrZbd
         }
 
         return null;
-    }
-
-    // The extraction's collision rule, case-sensitive. A repeat becomes `stem-N.suffix` (split at the
-    // last period) or `name-N`, with the smallest N not yet taken.
-    internal static string? Rename(HashSet<string> seen, string name)
-    {
-        if (seen.Add(name))
-        {
-            return null;
-        }
-
-        int dot = name.LastIndexOf('.');
-        for (int n = 1; ; n++)
-        {
-            string candidate = dot < 0 ? $"{name}-{n}" : $"{name[..dot]}-{n}.{name[(dot + 1)..]}";
-            if (seen.Add(candidate))
-            {
-                return candidate;
-            }
-        }
     }
 
     // A count of 1 is an empty list, read as null as the JSON detour wrote it.
