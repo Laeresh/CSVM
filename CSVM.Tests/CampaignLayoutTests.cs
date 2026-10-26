@@ -57,12 +57,8 @@ public class CampaignLayoutTests
         string foreign = TestData.TempDir();
         try
         {
-            string brokenPath = MenuLayout.PathUnder(broken);
-            Directory.CreateDirectory(Path.GetDirectoryName(brokenPath)!);
-            File.WriteAllText(brokenPath, "{ \"screens\": [ not json");
-            string foreignPath = MenuLayout.PathUnder(foreign);
-            Directory.CreateDirectory(Path.GetDirectoryName(foreignPath)!);
-            File.WriteAllText(foreignPath, "{ \"schema\": 1, \"planes\": [] }");
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(TestRof.Folder(broken)).FullName, "menu_layout.json"), "{ \"screens\": [ not json");
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(TestRof.Folder(foreign)).FullName, "menu_layout.json"), "{ \"schema\": 1, \"planes\": [] }");
 
             var malformed = CampaignLayout.For(broken);
             var other = CampaignLayout.For(foreign);

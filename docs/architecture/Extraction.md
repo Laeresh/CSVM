@@ -1,7 +1,7 @@
 # Extraction
 
-The in-engine extraction: finding the player's Crimson Skies install, decoding its UI archives,
-running the bundled unzbd over its ZBD archives, and stamping the tree. No type here touches the
+The in-engine extraction: finding the player's Crimson Skies install, reading its UI archives in
+place, running the bundled unzbd over its ZBD archives, and stamping the tree. No type here touches the
 engine except `RememberedInstall` through `OptionsStore.UserOptions`, which is what lets a plain
 unit test run every decoder, and lets the same code run on any platform the engine exports to.
 
@@ -90,36 +90,32 @@ archive owns its stream. `Rename(seen, name)` is today's extraction's collision 
 place it lives: the sound, reader and texture readers key a repeated name through it. Coverage:
 `CSVM.Tests/ZbdArchiveTests.cs`.
 
-## src/Extraction/RofExtraction.cs
-`Run` takes a `RofExtractionRequest` of already-resolved absolute paths (both `.rof` archives, the
-install's `MPG` folder, `langui.dll`, `language.dll`, the output root, a force flag) and a log
-callback. It unpacks `crimson.rof` into the output root and `crimptch.rof` into `_crimptch/`,
-skipping an archive whose `ASSETS` folder is already newer unless forced. Then it copies the
-cinemas, writes `ui_strings.json` (langui rows first) and runs `MenuLayoutDecoder`. Members land
-at `RofTree.Member`; one whose path leads outside its folder is refused and listed. A null or absent
-input is logged and skipped. The result carries each archive's counts and the movie count the stamp records. Finding the install and writing the stamp
-belong to the caller.
+## src/Extraction/RofFiles.cs
+The UI half read in place, under the paths `extracted/rof/` had: `crimson.rof`'s members, a PNG
+pair per `.BM` (encoded on read), `crimptch.rof`'s under `_crimptch/`, the ten cinemas from the
+install, and `ui_strings.json` and `menu_layout.json`, each made once on first read. `Open(game)`
+reads and walks the archive on the first lookup (about 40-80 ms); `Exists`, `Read`, `Head` and
+`Text` take a path in any case, and a file that does not read is logged and null. A launch `Bind`s
+its view to its data root (`Launch/Launcher.cs`; the synthetic shell binds its own), which `For`
+answers. `Of` and `Live` hold files in memory or follow a test's folder. Coverage: `CSVM.Tests/RofFilesTests.cs`.
 
 ## src/Extraction/RofTree.cs
-The one case the rof tree is written in, upper, and the mapping every reader puts a game-data name
-through: `Canonical` for a relative path, `Member` under a rof root, `Under` under a data root,
-`Root` for `extracted/rof`. The writers (`RofExtraction`, `MovieCopy`, `BmTexture`) and the readers
-(`OriginalAvailability`, `OriginalAssetManifest`, `SessionPaths.Cinema`, `ComposedBoardView`, the
-campaign and hangar pages) agree through it, so a case-sensitive disk finds each file with no scan.
-Coverage: `CSVM.Tests/RofExtractionTests.cs` and `OriginalManifestTests.cs`.
+The one case every `RofFiles` path is held in, upper, and the mapping a reader puts a game-data
+name through (`Canonical`). The archive stores its members upper case; the layout, the scripts and
+the install spell the same files in any case.
 
 ## src/Extraction/RofArchive.cs
 `Walk` lists a `.rof` held in memory as `RofEntry` values, a directory before its contents, paths
 joined with `/`, without inflating anything. `ReadMember` inflates one entry to its declared size
-and throws when the payload falls short. An implausible node, a directory looping back to an ancestor or an
+and throws when the payload falls short; `ReadHead` inflates no further than a prefix. An implausible node, a directory looping back to an ancestor or an
 unknown entry kind throws `InvalidDataException` rather than reading garbage. Read `BmTexture.cs` next.
 
 ## src/Extraction/BmTexture.cs
 `TryDecode` splits a `.BM` into its shading plane and its three paint-slot masks packed as RGB,
 or answers null when the bytes are shorter than the planes the header declares. Rows stay in
-stored order. `WritePngsBeside` writes `<stem>.PNG` and `<stem>_MASK.PNG` through `PngWriter`.
-The runtime paint code reads the `.BM` itself (`Mech3/PatternLibrary.cs`), so these PNGs are for
-inspection.
+stored order. `RofFiles` encodes the two as `<stem>.PNG` and `<stem>_MASK.PNG` through
+`PngWriter`. The runtime paint code reads the `.BM` itself (`Mech3/PatternLibrary.cs`), so these
+PNGs are for inspection.
 
 ## src/Extraction/PngWriter.cs
 `EncodeRgb` and `EncodeRgba` (for `Tooling/DumpGameFiles.cs`'s textures) write 8-bit RGB or RGBA
@@ -142,17 +138,9 @@ RVA map, so the original's DLLs read the same on every platform. A file that is 
 first-row-wins text map `MenuLayoutDecoder` joins widget strings against. The runtime reader is
 `Mech3/UiStrings.cs`.
 
-## src/Extraction/MovieCopy.cs
-`Run` copies every `.mpg` in the install's folder byte for byte under its upper-case name
-(`RofTree`), skipping a target already at the source's length unless forced and replacing a
-read-only leftover. Each copy lands as `<name>.part` and is renamed over the target, so a killed
-copy leaves only a `.part`, which the next run sweeps.
-`MovieCopyResult` counts copied and current files and names each of the ten `Expected` movies the
-folder lacked, for the report and the stamp.
-
 ## src/Extraction/MenuLayoutDecoder.cs
-`Run` reads an extracted rof tree and writes `menu_layout.json`; `ReadTree`, `Decode` and `ToJson`
-are the pure steps a test drives on fixtures. The format and every field order are in
+`ReadTree` gathers the decode's inputs from a `RofFiles` view, and `Decode` and `ToJson` are the
+pure steps a test drives on fixtures; `RofFiles` runs all three for its `menu_layout.json`. The format and every field order are in
 [../formats/menu-layout.md](../formats/menu-layout.md); `UI/Menu/MenuLayout.cs` reads the output
 at runtime.
 
@@ -206,17 +194,16 @@ archives write thousands of lines; cancelling kills the process tree. `Identify`
 
 ## src/Extraction/ExtractionStampWriter.cs
 Writes `extracted/VERSION.json`: `schema` (always `ExtractionStamp.Schema`), `assets` (`script`,
-`date` UTC, `unzbdVersion`, `unzbdSha256`, optional `unzbdCommit`) from `WriteAssets`, and `rof`
-(`script`, `date`, `movies`) from `WriteRof`. `Merge` keeps every other field, reads an existing file
+`date` UTC, `unzbdVersion`, `unzbdSha256`, optional `unzbdCommit`) from `WriteAssets`. `WriteRof`
+(`rof`: `script`, `date`, `movies`) has no caller since the UI half is read in place. `Merge` keeps every other field, reads an existing file
 as text so a BOM from the retired PowerShell extractors parses, rewrites an unreadable one, and writes UTF-8
 without a BOM. `script` is `CSVM`.
 
 ## src/Extraction/ExtractionRun.cs
 The whole extraction as one call, shared by `--extract` and the extraction screen. `Run` checks the
-install with `InstallLocator.Check` and refuses a non-install before writing; then the ZBD half, then
-the `.rof` half into `extracted/rof`, and the `.rof` stamp. A ZBD failure (including a missing
-unzbd) stops the run before the `.rof` half; a missing `crimson.rof` fails; a missing patch, missing
-movies or no string rows only warn. `ExtractionProgress` carries a phase, a fraction (ZBD 0 to 0.85)
+install with `InstallLocator.Check` and refuses a non-install before writing; then the ZBD half.
+The `.rof` half is read in place (`RofFiles.cs`) and never written. A ZBD failure (including a
+missing unzbd) fails the run. `ExtractionProgress` carries a phase, a fraction (ZBD 0 to 0.85)
 and console lines; cancel throws. `RunToConsole` prints header, lines and `Summary`, answering 0 or 1.
 Blocks its thread. Read `ZbdExtraction.cs` next.
 
@@ -238,7 +225,7 @@ with a warning, never an exception. Engine-free; read
 
 ## src/Extraction/HdTextures.cs
 The HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a `--det` run reads none unless `--hd=` names one), over `PackIndex.cs`. A path left with a folder replaces
-that texture of that archive (`ForWorld` by the `TextureSet.Archive` name, `ForRimage` for the menu art) or that file under `extracted/` (`ForExtracted`, the rof art), matched without case or
+that texture of that archive (`ForWorld` by the `TextureSet.Archive` name, `ForRimage` for the menu art) or that UI archive file under `rof/` (`ForRof`, by its `RofFiles` path), matched without case or
 extension, and a bare name replaces that world texture in every archive. `C3/rtexture12/cliff01.png` therefore beats `cliff01.png` in C3 alone,
 the way a pack carries a chapter's own version of a name chapters share. A pack file carrying the
 original's own extension beats one that does not (`PackIndex.ReadPath`), so a pack can ship both

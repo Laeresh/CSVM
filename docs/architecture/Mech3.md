@@ -207,8 +207,8 @@ shipped patterns); `Random` draws a plausible livery when none is given. Read `P
 next. Authored side: [../formats/paint.md](../formats/paint.md); decode: [../org/paint.md](../org/paint.md).
 
 ## src/Mech3/PatternLibrary.cs
-Decodes the original's `.BM` paint patterns from `extracted/rof/ASSETS/GRAPHICS/<PATTERN>/`, which
-the extraction produces. `PatternsFor(prefix)` lists the patterns shipping skins for one
+Decodes the original's `.BM` paint patterns from the UI archive's `ASSETS/GRAPHICS/<PATTERN>/`
+(`Extraction/RofFiles.cs`), its folders in name order. `PatternsFor(prefix)` lists the patterns shipping skins for one
 aircraft, a pattern being per plane; `Skin()` caches per (pattern, skin) so several aircraft in one
 session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 
@@ -478,7 +478,7 @@ object. `Of` builds a table from pairs, for `Tooling/SyntheticMessages.cs` and t
 template's `%1`…`%9` placeholders (the HUD strings' format).
 
 ## src/Mech3/UiStrings.cs
-The original's UI string table by id, read from `extracted/rof/ui_strings.json`. Only the `langui`
+The original's UI string table by id, read from `ui_strings.json` (`Extraction/RofFiles.cs`). Only the `langui`
 rows are kept, since ids repeat across the file's two merged tables and every menu range this
 remake reads sits in that one. `FormatMessage` positional placeholders (`%1!d!`) convert to
 composite format rather than going to printf, and a leading `[FONTID]` tag is stripped as a
@@ -488,7 +488,7 @@ test off engine; `Empty` is the fallback that lets a menu draw on a missing extr
 rows: [../formats/strings.md](../formats/strings.md).
 
 ## src/Mech3/TgaImage.cs
-The engine-free TGA decoder behind the hangar's art under `extracted/rof/ASSETS/GRAPHICS`, and the
+The engine-free TGA decoder behind the hangar's art under the UI archive's `ASSETS/GRAPHICS`, and the
 decoded-image type the whole menu art seam is written against: types 2 and 10 (RLE) truecolour at
 24 or 32 bits, both row orders, to top-down RGBA8. Anything else, or a malformed or absent file,
 decodes as null rather than throwing, because menu art is optional by design and a bad file must

@@ -137,7 +137,7 @@ internal sealed class LaunchAudio(Node host)
     {
         if (UI.Screens.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
         {
-            Log.Warn("ui", $"cinema {name} not played; looked under {Extraction.SessionPaths.CinemaFolder(_dataRoot)}");
+            Log.Warn("ui", $"cinema {name} not played; the game files hold no readable {Extraction.RofFiles.Cinema(name)}");
             then();
             return;
         }

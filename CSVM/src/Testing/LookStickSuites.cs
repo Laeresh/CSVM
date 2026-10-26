@@ -589,7 +589,7 @@ internal static class LookStickSuites
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
             new FlightWorldBindings
             {

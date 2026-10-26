@@ -185,7 +185,7 @@ internal static class DisplayScoresSuites
 
             var spec = SessionSpec.Parse(new[] { "--no-pads" });
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
                 SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
                 new FlightWorldBindings

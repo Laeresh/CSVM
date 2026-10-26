@@ -109,7 +109,7 @@ internal static class AudioBusSuites
             // With previews on, so the two preview players are built and swept like every other
             // site; the launcher turns them off in exactly the runs this suite is one of.
             menu = new MenuAudioService(null, name => Stream(archive, defs, name),
-                Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS", "SOUNDS"), previews: true)
+                CSVM.Extraction.RofFiles.For(ctx.DataRoot), previews: true)
             {
                 Name = "GuardMenuAudio",
             };
@@ -285,8 +285,7 @@ internal static class AudioBusSuites
 
             int fired = menu.MixPreviewStarts - starts;
             report.AppendLine($"preview clips started over twenty-one Effects changes: {fired}");
-            string clip = Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS", "SOUNDS", "SFX_LOOP.WAV");
-            if (File.Exists(clip))
+            if (CSVM.Extraction.RofFiles.For(ctx.DataRoot).Exists("ASSETS/SOUNDS/SFX_LOOP.WAV"))
             {
                 ctx.Check(fired == 1,
                     $"a level moved twenty-one times over sounds one preview clip, neither none nor one per change (started={fired})");
@@ -294,7 +293,7 @@ internal static class AudioBusSuites
             else
             {
                 ctx.Check(fired == 0, $"a preview with no clip on disk sounds nothing (started={fired})");
-                ctx.Note($"no SFX_LOOP.WAV under the extracted rof tree, so this run could only see the silent half");
+                ctx.Note($"no SFX_LOOP.WAV in the game files' UI archive, so this run could only see the silent half");
             }
 
             ctx.Check(Math.Abs(AudioServer.GetBusVolumeDb(0) - developer) <= DbSlack,

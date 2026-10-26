@@ -158,7 +158,7 @@ internal static class MouseFlightSuites
     internal static void FlightMouseSchemeLive(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(UI.Menu.MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         ctx.RequirePlane("player_bhawk");
         var layout = UI.Menu.Original.OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");

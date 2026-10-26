@@ -150,7 +150,7 @@ internal static class AiWaveLaunchHitchSuites
             var field = humans;
             var positions = new List<Vector3>(rigCount);
             var built = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 factory, ctx.Host, resources,
                 new FlightWorldBindings
                 {

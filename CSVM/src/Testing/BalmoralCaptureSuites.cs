@@ -151,15 +151,12 @@ internal static class BalmoralCaptureSuites
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
-        string rof = Path.Combine(ctx.DataRoot, "extracted", "rof");
-        ctx.RequireData(rof, $"extracted UI archive (paint patterns)");
-
         var report = new StringBuilder();
         report.AppendLine($"seq {MissionSeq} -> {chapter}/{folder}");
-        var liveries = new LiveryResolver(SessionSpec.Parse(Array.Empty<string>()), rof);
+        var liveries = new LiveryResolver(SessionSpec.Parse(Array.Empty<string>()), ctx.DataRoot);
         if (liveries.Patterns.IsEmpty)
         {
-            throw new SuiteSkippedException("the extracted UI archive ships no paint patterns");
+            throw new SuiteSkippedException("the game files' UI archive ships no paint patterns");
         }
 
         var stand = StandInPlan(ctx, chapter, missionZrdr);

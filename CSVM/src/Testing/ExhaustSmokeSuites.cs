@@ -118,7 +118,7 @@ internal static class ExhaustSmokeSuites
             ctx.Host.AddChild(pool);
             var spec = SessionSpec.Parse(Array.Empty<string>());
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 null, ctx.Host,
                 SuiteConstants.AircraftResources(ctx, planesGamez, textures),
                 new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },

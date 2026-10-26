@@ -146,7 +146,7 @@ internal static class RacePresenceSuites
 
         var spec = SessionSpec.Parse(new[] { "--hold=0,0,0,1" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             SuiteConstants.AircraftResources(ctx, planesGamez, textures,
                 ctx.Data.Messages, _ => new CamParams()),

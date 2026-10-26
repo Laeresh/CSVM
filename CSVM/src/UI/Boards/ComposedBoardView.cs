@@ -269,6 +269,23 @@ public sealed partial class ComposedBoardView : Control
         return note with { Size = MinNoteFont };
     }
 
+    /// <summary>A picture's bytes decoded by the loader <c>Image.LoadFromFile</c> picks for the
+    /// extension of <paramref name="path"/>, or null when none takes them.</summary>
+    public static Image? DecodeArt(byte[] bytes, string path)
+    {
+        var image = new Image();
+        var read = Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".png" => image.LoadPngFromBuffer(bytes),
+            ".jpg" or ".jpeg" => image.LoadJpgFromBuffer(bytes),
+            ".tga" => image.LoadTgaFromBuffer(bytes),
+            ".bmp" => image.LoadBmpFromBuffer(bytes),
+            ".webp" => image.LoadWebpFromBuffer(bytes),
+            _ => Error.FileUnrecognized,
+        };
+        return read == Error.Ok && !image.IsEmpty() ? image : null;
+    }
+
     /// <summary>Advances every movie this view has opened by that many seconds, answering whether
     /// any of them put a new picture in its texture. ⚠ On a deterministic run, hand it a step that
     /// does not come from the wall clock. Otherwise the picture a capture lands on is a property
@@ -1124,8 +1141,8 @@ public sealed partial class ComposedBoardView : Control
         string path = art.Library switch
         {
             BoardArtLibrary.Loose => art.Name,
-            BoardArtLibrary.Movie => SessionPaths.Cinema(_dataRoot, art.Name),
-            _ => Extraction.RofTree.Under(_dataRoot, "ASSETS/GRAPHICS/" + art.Name),
+            BoardArtLibrary.Movie => RofFiles.Cinema(art.Name),
+            _ => RofTree.Canonical("ASSETS/GRAPHICS/" + art.Name),
         };
         if (_textures.TryGetValue(path, out var cached))
         {
@@ -1133,22 +1150,26 @@ public sealed partial class ComposedBoardView : Control
         }
 
         Texture2D? texture = null;
+        var rof = RofFiles.For(_dataRoot);
+        byte[]? bytes = art.Library == BoardArtLibrary.Movie ? null
+            : art.Library == BoardArtLibrary.Loose ? (File.Exists(path) ? File.ReadAllBytes(path) : null)
+            : rof.Read(path);
         if (art.Library == BoardArtLibrary.Movie)
         {
             // The surface rewrites this one texture in place for the life of the view. The cache
             // above needs no invalidation, and the picture animates with nothing else done to it.
-            var movie = MovieSurface.Open(path, EndlessPlays);
+            var movie = MovieSurface.Open(rof, path, EndlessPlays);
             _movies[path] = movie;
             texture = movie?.Texture;
         }
-        else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
+        else if (bytes != null && DecodeArt(bytes, path) is { } image)
         {
             // ⚠ Each file by its own gAMA, never the original's on its replacement. The pack's PNGs
             // carry none, and the original's normalisation turned their raw samples pale.
-            byte[]? hdBytes = art.Library == BoardArtLibrary.Loose ? null : HdTextures.Current.ForExtracted(path);
+            byte[]? hdBytes = art.Library == BoardArtLibrary.Loose ? null : HdTextures.Current.ForRof(path);
             var hd = HdArt.Decode(hdBytes);
             uint? gamma = hd != null ? PngImage.ReadGamma(hdBytes!)
-                : Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase) ? PngImage.TryReadGamma(path) : null;
+                : Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase) ? PngImage.ReadGamma(bytes) : null;
             if (gamma is { } g && g != PngImage.UiGamma)
             {
                 NormalizeGamma(hd ?? image, g);

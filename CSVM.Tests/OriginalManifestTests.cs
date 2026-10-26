@@ -12,10 +12,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The Original asset manifest: what a hand-authored layout classifies as required and optional,
-/// and what one check over a scratch tree answers when the tree is complete, missing a required
-/// file, carrying a required file that does not read, missing an optional file, stamped behind
-/// what Original reads, and repaired again. The install case reads the real decoded layout and
-/// its own tree.
+/// and what one check over a scratch tree answers. The tree is complete, then missing a required
+/// file, carrying one that does not read, missing an optional one, and repaired again. The install
+/// case reads the real decoded layout and its own files.
 /// </summary>
 public class OriginalManifestTests : IDisposable
 {
@@ -72,7 +71,7 @@ public class OriginalManifestTests : IDisposable
     public OriginalManifestTests(ITestOutputHelper output)
     {
         _output = output;
-        _root = Path.Combine(Path.GetTempPath(), "csvm-original-manifest-" + Guid.NewGuid().ToString("N"));
+        _root = TestData.TempDir();
     }
 
     public void Dispose()
@@ -187,23 +186,16 @@ public class OriginalManifestTests : IDisposable
         Assert.Contains("mouseclick.wav", degraded);
     }
 
+    /// <summary>The UI half is read in place, so an old extraction's stamp beside it says nothing
+    /// about what Original reads.</summary>
     [Fact]
-    public void ATreeStampedBehindWhatOriginalReadsIsARequiredFailureNamingTheReExtraction()
+    public void AnExtractionStampOfAnyAgeLeavesOriginalAvailable()
     {
         Populate();
-        Stamp(0);
+        string extracted = Path.Combine(_root, "extracted");
+        File.WriteAllText(Path.Combine(extracted, "VERSION.json"), "{ \"schema\": 0 }");
 
-        Assert.Null(OriginalAvailability.Load(_root, out var reason, out _));
-        Assert.Contains("stamped schema=0", reason);
-        Assert.Contains("re-extract from the Extract screen", reason);
-
-        Stamp(OriginalAssetManifest.StampSchema);
-        Assert.NotNull(OriginalAvailability.Load(_root, out reason, out _));
-        Assert.Null(reason);
-
-        // No stamp at all is not a failure: extractions that predate the stamp still draw.
-        File.Delete(Path.Combine(_root, "extracted", "VERSION.json"));
-        Assert.NotNull(OriginalAvailability.Load(_root, out reason, out _));
+        Assert.NotNull(OriginalAvailability.Load(_root, out var reason, out _));
         Assert.Null(reason);
     }
 
@@ -223,29 +215,27 @@ public class OriginalManifestTests : IDisposable
         Assert.Null(reason);
     }
 
-    /// <summary>A tree the extraction wrote, read by names the layout and the scripts spell in
-    /// their own case. Each resolved path is matched against the names on disk exactly, as a
-    /// case-sensitive filesystem would, since a Windows <c>File.Exists</c> cannot tell.</summary>
+    /// <summary>An install's UI files, read by names the layout and the scripts spell in their
+    /// own case. Each resolved path is matched against the view's own names exactly, as a
+    /// case-sensitive lookup would.</summary>
     [Fact]
-    public void TheDatasOwnSpellingResolvesToTheNameTheExtractionWrote()
+    public void TheDatasOwnSpellingResolvesToTheNameTheViewHolds()
     {
         var member = new byte[] { 1 };
         string install = TestData.TempDir();
-        string archive = Path.Combine(install, "crimson.rof");
-        File.WriteAllBytes(archive, ExtractionFixtures.Rof(new RofDir().Dir("ASSETS", new RofDir()
+        string assets = Directory.CreateDirectory(Path.Combine(install, "GOSDATA", "ASSETS")).FullName;
+        File.WriteAllBytes(Path.Combine(assets, "crimson.rof"), ExtractionFixtures.Rof(new RofDir().Dir("ASSETS", new RofDir()
             .Dir("GRAPHICS", new RofDir()
                 .File("AP_BACKGROUND.PNG", member)
                 .File("MP_B_RADIO.PNG", member)
                 .Dir("MPG", new RofDir())))));
-        string movies = Directory.CreateDirectory(Path.Combine(install, "MPG")).FullName;
+        string movies = Directory.CreateDirectory(Path.Combine(assets, "GRAPHICS", "MPG")).FullName;
         File.WriteAllBytes(Path.Combine(movies, "crimflag.mpg"), new byte[] { 1 });
-        RofExtraction.Run(new RofExtractionRequest(archive, null, movies, null, null, RofTree.Root(_root)));
-        var onDisk = new HashSet<string>(
-            Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories), StringComparer.Ordinal);
+        var onDisk = new HashSet<string>(RofFiles.Open(new InstallFolderSource(install)).Files, StringComparer.Ordinal);
 
-        Assert.Contains(OriginalAvailability.ArtPath(_root, "AP_BackGround.png"), onDisk);
-        Assert.Contains(OriginalAvailability.ArtPath(_root, "CrimFlag.MPG"), onDisk);
-        Assert.Contains(SessionPaths.Cinema(_root, "CrimFlag"), onDisk);
+        Assert.Contains(OriginalAvailability.RelativeArtPath("AP_BackGround.png"), onDisk);
+        Assert.Contains(OriginalAvailability.RelativeArtPath("CrimFlag.MPG"), onDisk);
+        Assert.Contains(RofFiles.Cinema("CrimFlag"), onDisk);
         var manifest = OriginalAssetManifest.Derive(MenuLayout.Parse("""
             {
               "schema": 1,
@@ -253,17 +243,17 @@ public class OriginalManifestTests : IDisposable
               "externalAssets": [ { "path": "assets/graphics/mp_b_radio.png", "kind": "file", "script": "GLOBALS" } ]
             }
             """));
-        Assert.Contains(manifest.Find("AP_BackGround.png")!.PathUnder(_root), onDisk);
-        Assert.Contains(manifest.Find("mp_b_radio.png")!.PathUnder(_root), onDisk);
+        Assert.Contains(manifest.Find("AP_BackGround.png")!.RelativePath, onDisk);
+        Assert.Contains(manifest.Find("mp_b_radio.png")!.RelativePath, onDisk);
     }
 
-    /// <summary>The install's own layout: the classification the inventory records, and a tree
-    /// whose every required file is on disk and reads.</summary>
-    [ExtractedDataFact]
+    /// <summary>The install's own layout: the classification the inventory records, and game files
+    /// whose every required file is there and reads.</summary>
+    [GameFilesFact]
     public void TheInstallsLayoutClassifiesItsFilesAndPassesItsOwnCheck()
     {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var why);
+        string dataRoot = TestRof.InstallRoot;
+        var layout = MenuLayout.TryLoad(dataRoot, out var why);
         Assert.True(layout != null, why ?? "the install's decoded layout reads");
         var manifest = OriginalAssetManifest.Derive(layout!);
 
@@ -307,22 +297,21 @@ public class OriginalManifestTests : IDisposable
         return host;
     }
 
-    // The file the check reads, in the extraction's case. A case-sensitive disk would otherwise
-    // miss it and touch a differently spelled neighbour.
-    private string Graphics(string name) => OriginalAvailability.ArtPath(_root, name);
+    // The file the check reads, in the view's case. A case-sensitive disk would otherwise miss it
+    // and touch a differently spelled neighbour.
+    private string Graphics(string name) => Path.Combine(TestRof.Folder(_root), OriginalAvailability.RelativeArtPath(name));
 
-    // The scratch tree: the layout artifact, a stamp Original reads, and every file the fixture
-    // names, the .png ones as headers and the rest as a byte.
+    // The scratch tree: the layout artifact and every file the fixture names, the .png ones as
+    // headers and the rest as a byte.
     private void Populate()
     {
-        string rof = Path.Combine(_root, "extracted", "rof");
+        string rof = TestRof.Folder(_root);
         Directory.CreateDirectory(rof);
         File.WriteAllText(Path.Combine(rof, "menu_layout.json"), LayoutJson);
-        Stamp(OriginalAssetManifest.StampSchema);
         var manifest = OriginalAssetManifest.Derive(MenuLayout.Parse(LayoutJson));
         foreach (var asset in manifest.Assets)
         {
-            string path = asset.PathUnder(_root);
+            string path = Path.Combine(rof, asset.RelativePath);
             if (asset.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
             {
                 Png(path);
@@ -333,12 +322,5 @@ public class OriginalManifestTests : IDisposable
                 File.WriteAllBytes(path, new byte[] { 1 });
             }
         }
-    }
-
-    private void Stamp(int schema)
-    {
-        string extracted = Path.Combine(_root, "extracted");
-        Directory.CreateDirectory(extracted);
-        File.WriteAllText(Path.Combine(extracted, "VERSION.json"), $"{{ \"schema\": {schema} }}");
     }
 }

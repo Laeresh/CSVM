@@ -87,7 +87,7 @@ internal static class AiSuites
             var pauseState = new PauseState();
             System.Action<List<AimCandidate>> targetSource = _ => { };
             var humanRoster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
                 new FlightWorldBindings
                 {
@@ -143,7 +143,7 @@ internal static class AiSuites
 
             bool failAiCommit = true;
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 null, ctx.Host, resources,
                 new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },
                 new HumanRosterBindings(), aiAssemblyFault: () =>
@@ -233,7 +233,7 @@ internal static class AiSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -3391,7 +3391,7 @@ internal static class AiSuites
             }
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -3562,7 +3562,7 @@ internal static class AiSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -3739,7 +3739,7 @@ internal static class AiSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -4104,7 +4104,7 @@ internal static class AiSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(new[] { "--stage=empty" });
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,

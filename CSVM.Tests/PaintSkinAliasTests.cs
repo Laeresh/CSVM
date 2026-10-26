@@ -1,4 +1,4 @@
-using System.IO;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using Xunit;
 
@@ -39,14 +39,10 @@ public class PaintSkinAliasTests
         Assert.Equal("dev_fusalagetop", PlanePainter.SkinNameFor("dev_fusalagetop"));
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheAliasResolvesInBothPatternsTheDevastatorCarries()
     {
         var library = Library();
-        if (library == null)
-        {
-            return;
-        }
 
         foreach (string pattern in new[] { "FORTUNE", "CCCP" })
         {
@@ -58,29 +54,15 @@ public class PaintSkinAliasTests
     }
 
     // Another airframe's lookup goes through the same call and must be untouched by the alias.
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void AnotherAircraftStillResolvesLiterally()
     {
         var library = Library();
-        if (library == null)
-        {
-            return;
-        }
 
         Assert.NotNull(library.Skin("FORTUNE", PlanePainter.SkinNameFor("blo_wing")));
         Assert.NotNull(library.Skin("FORTUNE", PlanePainter.SkinNameFor("fur_fusalage1")));
     }
 
-    // Null rather than an empty library when the UI archive has not been extracted, so a partial
-    // extraction reads as "not checked" at the call site instead of as a pass.
-    private static PatternLibrary? Library()
-    {
-        string rof = Path.Combine(TestData.ExtractedRoot!, "rof");
-        if (!Directory.Exists(Path.Combine(rof, "ASSETS", "GRAPHICS", "CCCP")))
-        {
-            return null;
-        }
-        var library = PatternLibrary.Load(rof);
-        return library.IsEmpty ? null : library;
-    }
+    // The install's own patterns, read in place.
+    private static PatternLibrary Library() => PatternLibrary.Load(RofFiles.Open(GameFilesData.Source));
 }

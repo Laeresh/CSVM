@@ -89,7 +89,7 @@ internal static class StuntRaceSuites
         var pause = new PauseState();
         var spec = SessionSpec.Parse(new[] { "--no-pads" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
@@ -383,7 +383,7 @@ internal static class StuntRaceSuites
         var race = new StuntRace(WindowSeconds, zones.TotalCount);
         var spec = SessionSpec.Parse(new[] { "--no-pads" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
@@ -564,8 +564,8 @@ internal static class StuntRaceSuites
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
-        ctx.RequireData(RofTree.Under(ctx.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt), $"the lobby's scores page art");
-        ctx.RequireData(Path.Combine(ctx.DataRoot, "extracted", "rof", "ui_strings.json"), $"ui_strings.json");
+        MenuSuiteHost.RequireRof(ctx, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt, $"the lobby's scores page art");
+        MenuSuiteHost.RequireRof(ctx, RofFiles.UiStringsFile, $"ui_strings.json");
         string[] zoneNames = { "Pier", "Bridge", "Tower" };
         var built = new List<Node>();
 
@@ -782,7 +782,7 @@ internal static class StuntRaceSuites
         var pause = new PauseState();
         var spec = SessionSpec.Parse(new[] { "--no-pads" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings

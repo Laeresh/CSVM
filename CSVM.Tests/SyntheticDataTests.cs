@@ -17,8 +17,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The synthetic data root <c>--synthetic-data</c> writes, built from the fixtures the engine reads.
 /// Its stamp passes the boot check as a current tree and marks it synthetic. Its chapter textures
-/// are built in memory, as its message table is. The
-/// Original shell's files pass its availability check, each picture at its recorded size. Decoding
+/// are built in memory, as its message table and its Original shell's files are. The shell's files
+/// pass its availability check, each picture at its recorded size. Decoding
 /// pixels needs Godot, so the in-engine run covers that half.
 /// </summary>
 public class SyntheticDataTests
@@ -113,6 +113,7 @@ public class SyntheticDataTests
         Assert.NotNull(layout.Screen(OriginalAvailability.MainMenuSection));
         Assert.Equal("Agreed", layout.Screen("MessageBox")!.Widget("MB_B_CENTER")!.Text);
         Assert.True(UiStrings.TryLoad(root)!.Has(10123));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "rof")));
     }
 
     [Fact]
@@ -123,7 +124,7 @@ public class SyntheticDataTests
         foreach (var entry in doc.RootElement.GetProperty("art").EnumerateArray())
         {
             string name = entry.GetProperty("name").GetString()!;
-            byte[] bytes = File.ReadAllBytes(OriginalAvailability.ArtPath(root, name));
+            byte[] bytes = RofFiles.For(root).Read(OriginalAvailability.RelativeArtPath(name))!;
             var size = Path.GetExtension(name).ToLowerInvariant() switch
             {
                 ".png" => (BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16)), BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20))),

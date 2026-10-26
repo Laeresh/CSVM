@@ -110,10 +110,10 @@ public static class ScrapbookComposition
 
     /// <summary>The mission slot's spread, in item order (not draw order): the raw rows, with no
     /// objective gate or capture check applied. Empty when <paramref name="dataRoot"/> is null, the
-    /// extraction lacks the file, or the spread has no item 1.</summary>
+    /// game files lack the file, or the spread has no item 1.</summary>
     public static IReadOnlyList<ScrapbookScrap> Items(string? dataRoot, int mission, int spread)
     {
-        var rows = dataRoot == null ? null : Load(Extraction.RofTree.Under(dataRoot, "ASSETS/SCRAPBOOK.CSV"));
+        var rows = dataRoot == null ? null : Load(dataRoot, "ASSETS/SCRAPBOOK.CSV");
         if (rows == null)
         {
             return Array.Empty<ScrapbookScrap>();
@@ -222,17 +222,17 @@ public static class ScrapbookComposition
             return null;
         }
 
-        var symbols = LoadSymbols(Extraction.RofTree.Under(dataRoot, "ASSETS/SCRIPTS/RESRC1.H"));
+        var symbols = LoadSymbols(dataRoot, "ASSETS/SCRIPTS/RESRC1.H");
         return symbols != null && symbols.TryGetValue(symbol, out int id) ? id : null;
     }
 
     /// <summary>One zoom family's three text boxes, or null when the letter carries none (no such
-    /// family, or the extraction lacks <c>LAYOUT.CSV</c>). Cached per file path, misses
+    /// family, or the game files lack <c>LAYOUT.CSV</c>). Cached per data root, misses
     /// included.</summary>
     public static ScrapbookZoomFamily? ZoomFamily(string? dataRoot, char letter)
     {
         var families = dataRoot == null ? null
-            : LoadZoomFamilies(Extraction.RofTree.Under(dataRoot, "ASSETS/LAYOUT.CSV"));
+            : LoadZoomFamilies(dataRoot, "ASSETS/LAYOUT.CSV");
         return families != null && families.TryGetValue(letter, out var family) ? family : null;
     }
 
@@ -248,11 +248,31 @@ public static class ScrapbookComposition
         return pictures;
     }
 
+    // A UI archive file's lines as File.ReadAllLines splits them, or null when the game files bound
+    // to the root lack it.
+    private static List<string>? Lines(string dataRoot, string relative)
+    {
+        if (Extraction.RofFiles.For(dataRoot).Text(relative) is not { } text)
+        {
+            return null;
+        }
+
+        var lines = new List<string>();
+        using var reader = new System.IO.StringReader(text);
+        for (string? line = reader.ReadLine(); line != null; line = reader.ReadLine())
+        {
+            lines.Add(line);
+        }
+
+        return lines;
+    }
+
     // RESRC1.H's own `#define <symbol> <decimal>` lines, symbol -> id. The authoring tool's
     // _APS_NEXT_* bookkeeping parses as one too and is kept: no scrap row names it, so filtering it
     // out would buy nothing. Cached per file path, misses included.
-    private static Dictionary<string, int>? LoadSymbols(string path)
+    private static Dictionary<string, int>? LoadSymbols(string dataRoot, string relative)
     {
+        string path = dataRoot + "|" + relative;
         lock (Gate)
         {
             if (Symbols.TryGetValue(path, out var cached))
@@ -261,10 +281,10 @@ public static class ScrapbookComposition
             }
 
             Dictionary<string, int>? symbols = null;
-            if (File.Exists(path))
+            if (Lines(dataRoot, relative) is { } lines)
             {
                 symbols = new Dictionary<string, int>(StringComparer.Ordinal);
-                foreach (var line in File.ReadAllLines(path))
+                foreach (var line in lines)
                 {
                     var fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
                     if (fields.Length >= 3 && fields[0] == "#define"
@@ -375,8 +395,9 @@ public static class ScrapbookComposition
     // skipped, everything else split on the key's '=' then the value's ',' -- quote-aware, since
     // the one quoted field (the clickable region, unread here) sits before the Zoom/ZoomX/ZoomY/
     // TitleResID/TextResID columns and would misalign every naive split past it.
-    private static Dictionary<string, string[]>? Load(string path)
+    private static Dictionary<string, string[]>? Load(string dataRoot, string relative)
     {
+        string path = dataRoot + "|" + relative;
         lock (Gate)
         {
             if (Files.TryGetValue(path, out var cached))
@@ -385,10 +406,10 @@ public static class ScrapbookComposition
             }
 
             Dictionary<string, string[]>? rows = null;
-            if (File.Exists(path))
+            if (Lines(dataRoot, relative) is { } lines)
             {
                 rows = new Dictionary<string, string[]>(StringComparer.Ordinal);
-                foreach (var line in File.ReadAllLines(path))
+                foreach (var line in lines)
                 {
                     string trimmed = line.Trim();
                     if (trimmed.Length == 0 || trimmed[0] == ';' || trimmed[0] == '[')
@@ -443,8 +464,9 @@ public static class ScrapbookComposition
     // Height,Colour,FontIndex`. X, Y, Width and Height are read. Two families' colour fields are
     // typo'd and would not parse. The colour is therefore read per row by the page that draws it
     // rather than here (docs/formats/campaign-screens.md, "Resolving a row to a file").
-    private static Dictionary<char, ScrapbookZoomFamily>? LoadZoomFamilies(string path)
+    private static Dictionary<char, ScrapbookZoomFamily>? LoadZoomFamilies(string dataRoot, string relative)
     {
+        string path = dataRoot + "|" + relative;
         lock (Gate)
         {
             if (ZoomFamilies.TryGetValue(path, out var cached))
@@ -453,12 +475,12 @@ public static class ScrapbookComposition
             }
 
             Dictionary<char, ScrapbookZoomFamily>? families = null;
-            if (File.Exists(path))
+            if (Lines(dataRoot, relative) is { } lines)
             {
                 var titles = new Dictionary<char, (float X, float Y, float W, float H)>();
                 var captions = new Dictionary<char, (float X, float Y, float W, float H)>();
                 var texts = new Dictionary<char, (float X, float Y, float W, float H)>();
-                foreach (var line in File.ReadAllLines(path))
+                foreach (var line in lines)
                 {
                     string trimmed = line.Trim();
                     int eq = trimmed.IndexOf('=');

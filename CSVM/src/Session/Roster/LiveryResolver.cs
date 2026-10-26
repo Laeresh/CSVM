@@ -20,21 +20,22 @@ public sealed class LiveryResolver
     public const string DefaultPattern = "player_fortune";
 
     private readonly SessionSpec _spec;
-    private readonly string _rofPath;
+    private readonly string _dataRoot;
     private readonly Dictionary<string, PaintScheme?> _defSchemes = new(StringComparer.OrdinalIgnoreCase);
     private List<PaintScheme>? _paintCatalog;
     private PatternLibrary? _patternLibrary;
 
-    public LiveryResolver(SessionSpec spec, string rofPath)
+    /// <summary>A resolver over the game files bound to <paramref name="dataRoot"/>.</summary>
+    public LiveryResolver(SessionSpec spec, string dataRoot)
     {
         _spec = spec;
-        _rofPath = rofPath;
+        _dataRoot = dataRoot;
     }
 
     /// <summary>The original's per-pattern paint region masks, scanned once per session from
-    /// the extracted UI archive. Empty (and a one-line note) when the extraction holds no UI archive,
-    /// and aircraft then build unpainted rather than failing.</summary>
-    public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
+    /// the UI archive. Empty (and a one-line note) when the game files hold none, and aircraft
+    /// then build unpainted rather than failing.</summary>
+    public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(Extraction.RofFiles.For(_dataRoot));
 
     /// <summary>True when the launch asked for a livery by hand (<c>--paint=</c>,
     /// <c>--paint-color=</c>, <c>--paint-decal=</c>). An AI aircraft's own militia scheme yields to

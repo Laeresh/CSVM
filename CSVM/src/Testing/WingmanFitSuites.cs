@@ -57,7 +57,7 @@ internal static class WingmanFitSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var stock = StockLoadouts.Load();
             var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
             var inputs = new AircraftAssemblyResources

@@ -34,11 +34,11 @@ backmost layer, which is why it is a tenth the size of the others and the only o
 
 They sit loose in the install under `GOSDATA\ASSETS\GRAPHICS\MPG\`, outside the `.rof` archive that
 holds the rest of the front end's art. The archive carries an `ASSETS/GRAPHICS/MPG` directory entry
-with nothing behind it, so the extraction copies the ten files in verbatim and every runtime
-lookup resolves under `extracted/rof/ASSETS/GRAPHICS/MPG/`, one directory deeper than every bitmap
-the same layout rows name. A tree extracted before that copy step existed is refused by the
-extraction stamp's schema rather than opened on a screen with nothing running behind it
-([menu-layout.md](menu-layout.md) has the rule each bump obeys).
+with nothing behind it. CSVM's view of the UI half (`RofFiles`) holds the ten files from the
+install under `ASSETS/GRAPHICS/MPG/`, one directory deeper than every bitmap the same layout rows
+name, and every runtime lookup resolves there. The decoder takes a whole file's bytes
+(`MpegMovie.FromBytes`), so a movie needs no seekable stream: one inside a disc's cabinet plays
+the same way.
 
 ## Container and codecs
 
@@ -180,9 +180,9 @@ plays whatever its `CF_MOVIE` row names.
 
 Four of the ten files are named in a case the on-disk names do not have, so a case-sensitive lookup
 fails on `msopen1.mpg`, `chap0.mpg`, `crimflag.mpg` and `final.mpg`. `zipper.mpg` is spelled to
-match, and the script-built chapter names are lower case throughout. The extraction therefore copies
+match, and the script-built chapter names are lower case throughout. `RofFiles` therefore holds
 every movie under its upper-case name and the runtime upper-cases every name it resolves
-(`RofTree`), which holds on a case-sensitive disk.
+(`RofTree`), so the lookup never depends on the disk's case.
 
 The executable does hold a `char[9]` array at `0x0061e68c` naming `chap1.mpg` through `chap6.mpg`
 back to back with no terminator between entries, **and nothing reads it**. Its only reference is a

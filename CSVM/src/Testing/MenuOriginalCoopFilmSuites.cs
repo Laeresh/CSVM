@@ -34,7 +34,7 @@ internal static class MenuOriginalCoopFilmSuites
         + "rather than missing it")]
     internal static void TheCoopFilms(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -122,7 +122,7 @@ internal static class MenuOriginalCoopFilmSuites
     internal static void TheSoloFilms(TestContext ctx)
     {
         const string Solo = "menu-original-campaign-film";
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)

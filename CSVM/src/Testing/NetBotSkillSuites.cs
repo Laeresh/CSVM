@@ -176,7 +176,7 @@ internal static class NetBotSkillSuites
         string chapterZrdr, string missionZrdr, IReadOnlyList<NetSeat> roster, List<PlayerRig> rigs,
         VersusMatch match) =>
         new(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             new AircraftAssemblyResources
             {

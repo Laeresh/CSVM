@@ -190,7 +190,7 @@ internal static class InstantActionNetSeatSuites
             Messages = ctx.Data.Messages,
             SpawnList = spawnList,
             SpawnBase = 0,
-            LiveryResolver = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            LiveryResolver = new LiveryResolver(spec, ctx.DataRoot),
             NetTrailers = trailers,
             Spawn = spawn =>
             {

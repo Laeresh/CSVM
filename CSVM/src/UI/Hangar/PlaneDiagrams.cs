@@ -19,7 +19,7 @@ namespace CSVM.UI.Hangar;
 /// </summary>
 public static class PlaneDiagrams
 {
-    /// <summary>The plan-view sheet's file name under <c>extracted/rof/ASSETS/GRAPHICS</c>.</summary>
+    /// <summary>The plan-view sheet's file name under the UI archive's <c>ASSETS/GRAPHICS</c>.</summary>
     public const string Top = "OL_PLANEDIAGRAMSTOP.PNG";
 
     /// <summary>The head-on sheet's file name, same directory.</summary>
@@ -33,7 +33,7 @@ public static class PlaneDiagrams
     /// shape is not this layout, so it draws nothing rather than a mis-sliced picture.</summary>
     public static TgaImage? Frame(string root, string file, int airframe)
     {
-        var sheet = Sheet(Extraction.RofTree.Under(root, "ASSETS/GRAPHICS/" + file));
+        var sheet = Sheet(root, "ASSETS/GRAPHICS/" + file);
         int count = HangarEconomy.Airframes.Length;
         if (sheet == null || count <= 0 || sheet.Height % count != 0)
         {
@@ -47,12 +47,13 @@ public static class PlaneDiagrams
         return TgaImage.FromRgba(sheet.Width, height, rgba);
     }
 
-    private static TgaImage? Sheet(string path)
+    private static TgaImage? Sheet(string root, string path)
     {
-        if (!Sheets.TryGetValue(path, out var sheet))
+        string key = root + "|" + path;
+        if (!Sheets.TryGetValue(key, out var sheet))
         {
-            sheet = ArtImage.TryLoad(path);
-            Sheets[path] = sheet;
+            sheet = ArtImage.TryDecode(Extraction.RofFiles.For(root).Read(path), path);
+            Sheets[key] = sheet;
         }
 
         return sheet;

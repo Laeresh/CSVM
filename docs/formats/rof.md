@@ -226,18 +226,18 @@ RGBA and BGRA are indistinguishable on it.
 - **Mipmaps are absent.** 10 bytes/pixel is exactly the four planes with nothing left over, so
   these are base-level only.
 
-## Extraction
+## Reading in place
 
-The extraction (`RofExtraction`) unpacks both archives into `extracted\rof\`, writing every member
-at its archive path in upper case, and additionally decodes each `.BM` to `<NAME>.PNG` (shading
-map) and `<NAME>_MASK.PNG` (R/G/B = slots 1/2/3). It also emits the string table, see
-[strings.md](strings.md), and the decoded menu layout `menu_layout.json`, see
-[menu-layout.md](menu-layout.md). Run `.\Extract.ps1`; `-Force` re-runs an up-to-date
-extraction.
+Nothing extracts the archives. `RofFiles` (`CSVM/src/Extraction/RofFiles.cs`) reads
+`GOSDATA/ASSETS/crimson.rof` from the game files on first use and answers every member at its
+archive path in upper case, `crimptch.rof`'s under `_crimptch/`. Each `.BM` also answers as
+`<NAME>.PNG` (shading map) and `<NAME>_MASK.PNG` (R/G/B = slots 1/2/3), encoded on read. The view
+also holds the string table, see [strings.md](strings.md), and the decoded menu layout
+`menu_layout.json`, see [menu-layout.md](menu-layout.md), each built once on first read.
 
-The steps live in `CSVM/src/Extraction/`: `RofArchive.cs` reads the container, `BmTexture.cs`
-and `PngWriter.cs` write the two PNGs, and `RofExtraction.cs` runs the whole non-ZBD half. The
-managed PNG writer stores no `sRGB`, `gAMA` or `pHYs` chunk.
+`RofArchive.cs` reads the container, and `BmTexture.cs` and `PngWriter.cs` make the two PNGs. The
+managed PNG writer stores no `sRGB`, `gAMA` or `pHYs` chunk. The PNGs match an older extraction's
+pixel for pixel but not byte for byte, since that one used another compressor.
 
 ## Evidence & limits
 

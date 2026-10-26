@@ -140,7 +140,7 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -467,7 +467,7 @@ internal static class InstantActionSuites
                     Messages = ctx.Data.Messages,
                     SpawnList = SpawnPoints.LoadIa(missionZrdr, def.MissionType),
                     SpawnBase = 0,
-                    LiveryResolver = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                    LiveryResolver = new LiveryResolver(spec, ctx.DataRoot),
                     NetTrailers = new NetTrailerTargets(null, null),
                     Spawn = spawn =>
                     {
@@ -612,7 +612,7 @@ internal static class InstantActionSuites
             pool = live;
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -901,7 +901,7 @@ internal static class InstantActionSuites
             pool = live;
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -1414,7 +1414,7 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,

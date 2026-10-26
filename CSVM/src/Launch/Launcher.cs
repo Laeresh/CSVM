@@ -502,6 +502,7 @@ public partial class Launcher : Node3D
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
         _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, Tooling.SyntheticGameData.Build);
+        BindRofFiles();
         _probeRunner = new Tooling.ProbeRunner(_paths);
         // --dump: the game files' models into a folder for analysis scripts, then quit.
         if (_spec.DumpPath is { } dumpFolder)
@@ -1580,8 +1581,19 @@ public partial class Launcher : Node3D
         }
 
         _paths = BasePaths.Resolve(_paths.RepoRoot, _paths.DataRoot, _spec, Tooling.SyntheticGameData.Build);
+        BindRofFiles();
         _audio.Build(_paths, _masterSeed);
         EnterMenu();
+    }
+
+    // The UI archive's view, read in place from the session's game files and bound to its data
+    // root. A synthetic tree bound its own while it was built, and has no game files to read.
+    private void BindRofFiles()
+    {
+        if (!_spec.SyntheticData)
+        {
+            Extraction.RofFiles.Bind(_paths.DataRoot, Extraction.RofFiles.Open(_paths.Game));
+        }
     }
 
     // The screen's screenshot doors, through --menu= like the menu's own: extract-picker[:<folder>]

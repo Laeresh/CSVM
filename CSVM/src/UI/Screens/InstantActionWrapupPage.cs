@@ -58,8 +58,8 @@ public static class InstantActionWrapupPage
     public const float ExtraSpacing = 2f;
 
     // The shipped titles, langui 1133-1137. Literal text for the reason IaWrapupBoard's own copies
-    // are. The file ui_strings.json is a build-time extraction artifact, not one of the archives a
-    // session opens. Five lines do not earn a reader of their own here.
+    // are. The table ui_strings.json comes from the UI archive, not one of the archives a session
+    // opens. Five lines do not earn a reader of their own here.
     private const string TitleText = "Instant Action";
     private const string TimeTitle = "Time to Complete Mission";
     private const string DestroyedTitle = "Enemies Shot Down";

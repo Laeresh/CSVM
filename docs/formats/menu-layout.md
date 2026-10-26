@@ -6,8 +6,8 @@ and, for a button, the screen it navigates to. It is the composition half of a s
 script of the same name is the behaviour half ([rof.md](rof.md), and
 [campaign-screens.md](campaign-screens.md) for the campaign flow's scripts).
 
-The extraction decodes it and writes `extracted/rof/menu_layout.json`. Runtime
-reads that file and never parses `LAYOUT.CSV` itself. The decoder is
+`RofFiles` decodes it into `menu_layout.json` once, on first read, from the game files. Runtime
+reads that document and never parses `LAYOUT.CSV` itself. The decoder is
 `CSVM/src/Extraction/MenuLayoutDecoder.cs`, compiled by the engine and exercised by `CSVM.Tests`;
 the runtime reader is `CSVM/src/UI/Menu/MenuLayout.cs`, whose entry in `docs/architecture.md` says
 what it exposes.
@@ -252,7 +252,7 @@ base one. Nothing in the extracted tree states that, so the decode does: `menu_l
 
 ### The emitted artifact
 
-`extracted/rof/menu_layout.json`, artifact schema 1 (the extraction stamp's schema is a separate
+`menu_layout.json` in `RofFiles`, artifact schema 1 (the extraction stamp's schema is a separate
 integer, see below), about 430 KB. Top-level keys:
 
 | Key | Holds |

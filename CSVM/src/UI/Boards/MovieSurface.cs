@@ -38,13 +38,15 @@ public sealed class MovieSurface
     /// <summary>How many pictures have reached the texture, across every pass.</summary>
     public int FramesShown => _playback.FramesShown;
 
-    /// <summary>Opens a movie file, or returns null when it cannot be read or is not a movie,
-    /// because a screen missing its background still has everything else on it.</summary>
-    public static MovieSurface? Open(string path, int loops)
+    /// <summary>Opens the movie <paramref name="path"/> names in <paramref name="rof"/>, or null when
+    /// it is absent or is not a movie. A screen missing its background still has the rest.</summary>
+    public static MovieSurface? Open(Extraction.RofFiles rof, string path, int loops)
     {
         try
         {
-            return new MovieSurface(MpegMovie.FromFile(path), loops);
+            return rof.Read(path) is { } bytes
+                ? new MovieSurface(MpegMovie.FromBytes(bytes), loops)
+                : throw new FileNotFoundException("not in the game files", path);
         }
         catch (Exception e)
             when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException)

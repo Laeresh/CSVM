@@ -574,7 +574,7 @@ public partial class GameSession : Node3D
         AddChild(_worldRoot);
         // Built fresh per session: a launchscreen relaunch replaces _spec wholesale (FromMenu),
         // so these must not be cached across a rebuild.
-        _liveryResolver = new LiveryResolver(_spec, _paths.RofPath);
+        _liveryResolver = new LiveryResolver(_spec, _paths.DataRoot);
         _spawnPicker = new SpawnPicker(_spec);
         _ambience = new Effects.EffectAmbience();
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
@@ -2752,12 +2752,14 @@ public partial class GameSession : Node3D
         _labs!.BuildOverlays(state, _plane, _rigs, _edgeExtender);
     }
 
-    // The rof tree's menu sound folder, the shipped UI sounds a start count beeps with, or null where
-    // this install's extraction carries none.
+    // The UI archive's menu sound folder, the shipped UI sounds a start count beeps with, or null
+    // where the game files carry none.
     private SoundArchive? MenuSounds()
     {
-        string dir = RofTree.Member(_paths.RofPath, "ASSETS/SOUNDS");
-        return Directory.Exists(dir) ? new SoundArchive(dir) : null;
+        var rof = RofFiles.For(_paths.DataRoot);
+        return rof.Files.Any(f => f.StartsWith("ASSETS/SOUNDS/", StringComparison.Ordinal))
+            ? new SoundArchive(name => rof.Read("ASSETS/SOUNDS/" + name))
+            : null;
     }
 
     // The production ground sampler StartGrid probes its slots with: the world height under a point,

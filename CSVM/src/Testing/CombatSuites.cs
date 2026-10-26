@@ -2067,7 +2067,7 @@ internal static class CombatSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -2147,7 +2147,7 @@ internal static class CombatSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             // The one cache the real session holds: every aircraft below is built from THIS object.
             var shared = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             var inputs = new AircraftAssemblyResources

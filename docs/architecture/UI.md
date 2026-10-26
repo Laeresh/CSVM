@@ -1067,8 +1067,7 @@ VIDEO pages, which read and write the values and the `*At` and `At` positions fr
 readers handed in, so it tests engine-free (`CSVM.Tests/OptionsChoicesTests.cs`).
 
 ## src/UI/Menu/MenuLayout.cs
-The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout the extraction
-emits, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with
+The runtime reader of `menu_layout.json`, the decoded menu layout `Extraction/RofFiles.cs` makes, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with
 null and a reason, never an empty layout; `Parse` builds the typed model of screens, widgets, the
 file-wide macros, the `ScriptToExe` navigation edges, the script-named external assets and the
 missing art. A `MenuLayoutWidget` keeps every field's resolved string beside the raw macro token
@@ -1493,17 +1492,15 @@ as null once and is logged once, under the host's own name, so the presentation 
 follows the screen that is standing rather than being shared across a teardown.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
-The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
-a tree stamped below `OriginalAssetManifest.StampSchema` (`ExtractionStamp.Behind`), reads the
-layout through `MenuLayout`, requires a `[MainMenu]` section in it, and then checks the manifest
+The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` reads the
+layout through `MenuLayout` from the game files bound to the data root (no extraction stamp gates it), requires a `[MainMenu]` section in it, and then checks the manifest
 derived from that layout. Returns the loaded layout when Original can run, else null and the one
 reason, which the host appends to its fallback reason; `degraded` is the optional half, for the
-caller to log once. `ArtPath` and `RelativeArtPath` are where a layout art name resolves, in
-`RofTree`'s upper case, the presentation's size read going through the first; `IsMovie` puts the movies one directory deeper,
+caller to log once. `RelativeArtPath` is where a layout art name sits in `RofFiles`, in `RofTree`'s upper case; `IsMovie` puts the movies one directory deeper,
 under `MPG`, where the executable resolves them. Coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
 ## src/UI/Menu/Original/SyntheticShell.cs
-The `--synthetic-data` tree's Original shell, `extracted/rof/`: `fixtures/menu-layout-original/LAYOUT.CSV`
+The `--synthetic-data` tree's Original shell, held in memory and bound to the tree's data root: `fixtures/menu-layout-original/LAYOUT.CSV`
 decoded by `Extraction/MenuLayoutDecoder.cs` into `menu_layout.json`, the invented string rows of
 `fixtures/synthetic/rof/ui_strings.json` (a layout symbol's row, or a row the code reads by id), and
 one generated picture per `fixtures/synthetic/rof/art.json` entry at that size. A file the asset

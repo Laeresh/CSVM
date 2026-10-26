@@ -485,7 +485,7 @@ internal static class CampaignDockingSuites
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             null!, ctx.Host, resources,
             new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
             new HumanRosterBindings());

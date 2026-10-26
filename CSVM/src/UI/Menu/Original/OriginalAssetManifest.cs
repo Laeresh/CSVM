@@ -17,16 +17,12 @@ public enum OriginalAssetNeed
 }
 
 /// <summary>
-/// One file the manifest classifies: the name the layout or a script writes, where it sits under
-/// the extraction tree, the need it falls under, and the section and row that named it. The
-/// section and row are what makes a failure actionable, so they travel with the entry.
+/// One file the manifest classifies: the name the layout or a script writes, its
+/// <see cref="RofFiles"/> path, its need, and the section and row that named it. The section and
+/// row are what makes a failure actionable, so they travel with the entry.
 /// </summary>
 public sealed record OriginalAsset(
-    string Name, string RelativePath, OriginalAssetNeed Need, string Section, string Row, string Note)
-{
-    /// <summary>Where the file sits under a data root, in the case the extraction writes it.</summary>
-    public string PathUnder(string dataRoot) => RofTree.Under(dataRoot, RelativePath);
-}
+    string Name, string RelativePath, OriginalAssetNeed Need, string Section, string Row, string Note);
 
 /// <summary>One entry the check refused, and what is wrong with it.</summary>
 public sealed record OriginalAssetFault(OriginalAsset Asset, string Trouble)
@@ -112,11 +108,6 @@ public sealed class OriginalAssetManifest
     /// composed-section table, the rows Original does not draw or draws optionally, the
     /// script-named files, or what <see cref="Check"/> accepts as a readable file.</summary>
     public const int Schema = 11;
-
-    /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
-    /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
-    /// before that decode is refused with the re-extract instruction rather than read as empty.</summary>
-    public const int StampSchema = CSVM.Extraction.ExtractionStamp.Schema;
 
     /// <summary>The layout sections Original composes screens from. Every other section's art is
     /// optional, since nothing Original draws reads it.</summary>
@@ -263,23 +254,23 @@ public sealed class OriginalAssetManifest
     public OriginalAsset? Find(string name) =>
         _index.TryGetValue(name, out int at) ? _assets[at] : null;
 
-    /// <summary>Checks every entry against a data root: existence and a cheap structural read for
-    /// the required ones, existence alone for the optional ones.</summary>
+    /// <summary>Checks every entry against the game files bound to a data root. A required one
+    /// must exist and pass a cheap structural read; an optional one need only exist.</summary>
     public OriginalAssetReport Check(string dataRoot)
     {
+        var rof = RofFiles.For(dataRoot);
         var required = new List<OriginalAssetFault>();
         var optional = new List<OriginalAssetFault>();
         foreach (var asset in _assets)
         {
-            string path = asset.PathUnder(dataRoot);
             if (asset.Need == OriginalAssetNeed.Required)
             {
-                if (Trouble(path, asset.Name) is { } trouble)
+                if (Trouble(rof, asset.RelativePath, asset.Name) is { } trouble)
                 {
                     required.Add(new OriginalAssetFault(asset, trouble));
                 }
             }
-            else if (!File.Exists(path))
+            else if (!rof.Exists(asset.RelativePath))
             {
                 optional.Add(new OriginalAssetFault(asset, "not there"));
             }
@@ -291,17 +282,16 @@ public sealed class OriginalAssetManifest
     // Existence, then a PNG's own signature and IHDR size; any other extension only has to carry
     // bytes. ⚠ Do not decode the image here: this runs over every required file before entry, and
     // a whole-bitmap load per file is a start-up pass no player would wait through.
-    private static string? Trouble(string path, string name)
+    private static string? Trouble(RofFiles rof, string path, string name)
     {
         try
         {
-            if (!File.Exists(path))
+            if (rof.Head(path, 24) is not { } header)
             {
                 return "not there";
             }
 
-            using var stream = File.OpenRead(path);
-            if (stream.Length == 0)
+            if (header.Length == 0)
             {
                 return "empty";
             }
@@ -311,15 +301,7 @@ public sealed class OriginalAssetManifest
                 return null;
             }
 
-            var header = new byte[24];
-            int read = 0;
-            int got;
-            while (read < header.Length && (got = stream.Read(header, read, header.Length - read)) > 0)
-            {
-                read += got;
-            }
-
-            if (read < header.Length)
+            if (header.Length < 24)
             {
                 return "shorter than a PNG header";
             }
@@ -333,7 +315,7 @@ public sealed class OriginalAssetManifest
             int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
             return width > 0 && height > 0 ? null : "a PNG header with no size";
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or InvalidDataException)
         {
             return $"unreadable: {e.GetType().Name}";
         }

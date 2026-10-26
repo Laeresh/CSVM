@@ -71,22 +71,6 @@ public static class SessionPaths
     public static string ChapterZrdr(string dataRoot, string chapter) =>
         PreferUnzipped(Extraction.ZbdTree.Under(dataRoot, chapter + "/zrdr.zip"));
 
-    /// <summary>Where the ten <c>.mpg</c> cinemas the extraction copies across sit. It is one
-    /// directory deeper than the bitmaps the same layout rows name, which is the base the original
-    /// resolves every movie name under (<c>docs/formats/cinemas.md</c>).</summary>
-    public static string CinemaFolder(string dataRoot) =>
-        Extraction.RofTree.Under(dataRoot, "ASSETS/GRAPHICS/MPG");
-
-    /// <summary>The cinema file a name means, with <c>.mpg</c> supplied when the name carries no
-    /// extension. ⚠ Every caller that names a cinema resolves through here. Four of the ten are
-    /// named in the data in a case the install's files do not have. The extraction writes each in
-    /// <see cref="Extraction.RofTree"/>'s case.</summary>
-    public static string Cinema(string dataRoot, string name)
-    {
-        string want = Path.GetExtension(name).Length == 0 ? name + ".mpg" : name;
-        return Extraction.RofTree.Member(CinemaFolder(dataRoot), want);
-    }
-
     /// <summary>The mission's zrdr scope (<c>extracted/&lt;chapter&gt;/&lt;mission&gt;/zrdr.zip</c>)
     ///, spawn points, danger zones, weather, objectives, and the mission's own anim defs.
     /// ⚠ The chapter and mission may come in either case, and the campaign sequence names

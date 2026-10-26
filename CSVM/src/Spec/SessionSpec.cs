@@ -289,9 +289,9 @@ public sealed record SessionSpec
 
     /// <summary><c>--movie=</c>: play that one cinema and quit, with no world and no menu behind
     /// it. Null when the flag is absent. The name is resolved without regard to case
-    /// (<see cref="SessionPaths.Cinema"/>) and needs no <c>.mpg</c>. ⚠ It does not imply the
-    /// determinism bundle, unlike the other flags that end a run by themselves: the clock a cinema
-    /// runs on is the audio device's, so a fixed-step sim clock would say nothing about it.</summary>
+    /// (<see cref="Extraction.RofFiles.Cinema"/>) and needs no <c>.mpg</c>. ⚠ It does not imply the
+    /// determinism bundle, unlike the other flags that end a run by themselves. A cinema runs on
+    /// the audio device's clock, so a fixed-step sim clock would say nothing about it.</summary>
     public string? MovieName { get; private set; }
 
     /// <summary><c>--presentation=</c>: the menu presentation for this run, never persisted.

@@ -158,8 +158,7 @@ public class BootSequenceTests
     public void TheCardsArtAndStringsComeOutOfTheExtraction()
     {
         string root = TestData.DataRoot!;
-        Assert.True(File.Exists(Path.Combine(
-            root, "extracted", "rof", "ASSETS", "GRAPHICS", BootSequence.CardArt)));
+        Assert.True(Extraction.RofFiles.For(root).Exists("ASSETS/GRAPHICS/" + BootSequence.CardArt));
 
         var lines = BootSequence.Card(MessagesLegacy.Load(Path.Combine(root, "extracted", "messages.json")));
         string first = lines.Lines[1].Text;

@@ -51,7 +51,7 @@ internal static class PlaneWobbleSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = SuiteConstants.AircraftResources(ctx, planesGamez, textures);
             // worldEffects null!: never dereferenced here, as in FlightTelemetrySuites, because
             // CrashProgram/WorldScene stay null and the spawner's crash-runtime block is skipped.

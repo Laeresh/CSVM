@@ -22,18 +22,14 @@ public enum ExtractionPhase
 }
 
 /// <summary>The whole extraction, the one entry point the Extract button and <c>--extract</c>
-/// share. It checks the install and runs the ZBD half (<see cref="ZbdExtraction"/>). Then it runs
-/// the <c>.rof</c> half (<see cref="RofExtraction"/>) over inputs <see cref="InstallLocator"/>
-/// finds, and stamps that half. A ZBD failure stops the run before the
-/// <c>.rof</c> half. It runs on the calling thread, which must not be the engine's main thread.
+/// share. It checks the install and runs the ZBD half (<see cref="ZbdExtraction"/>). The
+/// <c>.rof</c> half is read in place (<see cref="RofFiles"/>), so nothing here writes it. It runs
+/// on the calling thread, which must not be the engine's main thread.
 /// Engine-free; the order and the failure rules are in <c>docs/architecture/Extraction.md</c>.</summary>
 public static class ExtractionRun
 {
     /// <summary>The extraction root's folder name under the data root.</summary>
     public const string ExtractedFolder = "extracted";
-
-    /// <summary>The <c>.rof</c> half's folder name under the extraction root.</summary>
-    public const string RofFolder = "rof";
 
     // Where the ZBD half ends on the progress bar. It is most of the wall time, one unzbd process
     // per archive, against a .rof half that only inflates and copies.
@@ -53,19 +49,6 @@ public static class ExtractionRun
         exported
             ? UnzbdTool.DefaultPath(root)
             : Path.Combine(root, "tools", "mech3ax", "target", "release", UnzbdTool.FileName(OperatingSystem.IsWindows()));
-
-    /// <summary>The <c>.rof</c> half's inputs in <paramref name="installRoot"/>, each found without
-    /// regard to case and null where the install lacks it, writing into
-    /// <paramref name="rofOutput"/>.</summary>
-    public static RofExtractionRequest RofRequest(string installRoot, string rofOutput, bool force) =>
-        new(
-            InstallLocator.ResolveFile(installRoot, "GOSDATA/ASSETS/crimson.rof"),
-            InstallLocator.ResolveFile(installRoot, "GOSDATA/ASSETS/crimptch.rof"),
-            InstallLocator.ResolveDirectory(installRoot, "GOSDATA/ASSETS/GRAPHICS/MPG"),
-            InstallLocator.ResolveFile(installRoot, "GOSDATA/ASSETS/BINARIES/langui.dll"),
-            InstallLocator.ResolveFile(installRoot, "GOSDATA/ASSETS/BINARIES/language.dll"),
-            rofOutput,
-            force);
 
     /// <summary>The lines that open a run's console output, naming what is read and written.</summary>
     public static IEnumerable<string> Header(ExtractionRequest request)
@@ -123,8 +106,6 @@ public static class ExtractionRun
                 return result;
             }
 
-            cancel.ThrowIfCancellationRequested();
-            RunRof(install, request, result, progress, cancel);
             Report(progress, ExtractionPhase.Done, 1.0, Array.Empty<string>(), null);
             return result;
         }
@@ -257,76 +238,7 @@ public static class ExtractionRun
 
         result.Failures.AddRange(zbd.Failures.Select(f => "unzbd failed on " + f));
         result.Warnings.AddRange(zbd.Unknowns.Select(u => "no unzbd mode for " + u + ", skipped"));
-        if (!result.Succeeded)
-        {
-            result.Failures.Add("the menus and interface files were not extracted, since the game archives failed");
-            return false;
-        }
-
-        return true;
-    }
-
-    // Only a missing crimson.rof fails this half: without it there is no menu and no paint. The
-    // patch archive, the cinemas and the string tables are reported as warnings instead.
-    private static void RunRof(string install, ExtractionRequest request, ExtractionResult result, Action<ExtractionProgress>? progress, CancellationToken cancel)
-    {
-        var rofRequest = RofRequest(install, request.RofDir, request.Force);
-        Report(progress, ExtractionPhase.Rof, ZbdShare, new[] { string.Empty, "Menus and interface files:" }, null);
-        if (rofRequest.BaseArchive == null)
-        {
-            result.Failures.Add($"no GOSDATA/ASSETS/crimson.rof in {install}; the install is incomplete");
-            return;
-        }
-
-        // RofExtraction takes no token, so the log callback is where a cancel lands between steps.
-        void Relay(string line)
-        {
-            cancel.ThrowIfCancellationRequested();
-            Report(progress, ExtractionPhase.Rof, ZbdShare, new[] { "  " + line }, null);
-        }
-
-        RofExtractionResult rof;
-        try
-        {
-            rof = RofExtraction.Run(rofRequest, Relay);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            result.Failures.Add("UI resource extraction stopped: " + e.Message);
-            return;
-        }
-
-        result.Rof = rof;
-        result.Warnings.AddRange(RofWarnings(rofRequest, rof));
-        cancel.ThrowIfCancellationRequested();
-        result.RofStamp = ExtractionStampWriter.WriteRof(request.ExtractedDir, rof.Movies.Present, DateTime.UtcNow);
-    }
-
-    private static IEnumerable<string> RofWarnings(RofExtractionRequest request, RofExtractionResult rof)
-    {
-        if (request.PatchArchive == null)
-        {
-            yield return "no GOSDATA/ASSETS/crimptch.rof, so the patch overlay is absent";
-        }
-
-        foreach (var archive in rof.Archives)
-        {
-            if (archive.Refused.Count > 0)
-            {
-                yield return archive.Name + ": " + Count(archive.Refused.Count) + " member(s) not written, their names lead outside the output folder: "
-                    + string.Join(", ", archive.Refused);
-            }
-        }
-
-        if (rof.Movies.Missing.Count > 0)
-        {
-            yield return Count(rof.Movies.Missing.Count) + " cinema(s) missing, which will not play: " + string.Join(", ", rof.Movies.Missing);
-        }
-
-        if (rof.StringRows == 0)
-        {
-            yield return "no UI string table was read, so the menus will show no text";
-        }
+        return result.Succeeded;
     }
 
     private static void Report(Action<ExtractionProgress>? progress, ExtractionPhase phase, double fraction, IReadOnlyList<string> lines, ZbdProgress? zbd) =>
@@ -344,9 +256,6 @@ public sealed record ExtractionRequest(string InstallFolder, string DataRoot, st
 {
     /// <summary>Gets the extraction root, <c>&lt;data root&gt;/extracted</c>.</summary>
     public string ExtractedDir => Path.Combine(DataRoot, ExtractionRun.ExtractedFolder);
-
-    /// <summary>Gets where the <c>.rof</c> half writes, <c>extracted/rof</c>.</summary>
-    public string RofDir => Path.Combine(ExtractedDir, ExtractionRun.RofFolder);
 }
 
 /// <summary>One progress report. <see cref="Fraction"/> runs from 0 to 1 over the whole
@@ -355,8 +264,8 @@ public sealed record ExtractionRequest(string InstallFolder, string DataRoot, st
 public sealed record ExtractionProgress(ExtractionPhase Phase, double Fraction, IReadOnlyList<string> Lines, ZbdProgress? Zbd);
 
 /// <summary>What one extraction did. <see cref="Failures"/> holds every reason the run is a failure,
-/// and a run with none <see cref="Succeeded"/>. The two halves' own results are null for a half
-/// that never ran.</summary>
+/// and a run with none <see cref="Succeeded"/>. The ZBD half's own result is null when it never
+/// ran.</summary>
 public sealed class ExtractionResult
 {
     /// <summary>Gets the verdict on the install folder, checked before anything runs.</summary>
@@ -364,12 +273,6 @@ public sealed class ExtractionResult
 
     /// <summary>Gets the ZBD half's result, or null when the install check failed.</summary>
     public ZbdExtractionResult? Zbd { get; internal set; }
-
-    /// <summary>Gets the <c>.rof</c> half's result, or null when it did not run to the end.</summary>
-    public RofExtractionResult? Rof { get; internal set; }
-
-    /// <summary>Gets the stamp the <c>.rof</c> half wrote, or null.</summary>
-    public string? RofStamp { get; internal set; }
 
     /// <summary>Gets why the run failed, one entry per reason; empty on success.</summary>
     public List<string> Failures { get; } = new();
@@ -392,31 +295,6 @@ public sealed class ExtractionResult
             foreach (string line in Zbd.Summary(unzip))
             {
                 yield return line;
-            }
-        }
-
-        if (Rof != null)
-        {
-            int files = Rof.Archives.Sum(a => a.Files);
-            int images = Rof.Archives.Sum(a => a.DecodedTextures);
-            int upToDate = Rof.Archives.Count(a => a.Outcome == RofArchiveOutcome.UpToDate);
-            yield return "Menus and interface files:";
-            yield return "  files extracted: " + Number(files);
-            if (images > 0)
-            {
-                yield return "  .BM decoded:     " + Number(images) + " (each -> .PNG + _MASK.PNG)";
-            }
-
-            yield return "  movies copied:   " + Number(Rof.Movies.Present) + " of " + Number(MovieCopy.Expected.Count) + " (verbatim, no conversion)";
-            yield return "  string rows:     " + Number(Rof.StringRows);
-            if (upToDate > 0)
-            {
-                yield return "  up to date:      " + Number(upToDate) + " archive(s); pass --extract-force to redo";
-            }
-
-            if (RofStamp != null)
-            {
-                yield return $"  stamped:         {RofStamp} (schema {Number(ExtractionStamp.Schema)})";
             }
         }
 

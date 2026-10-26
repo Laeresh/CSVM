@@ -282,7 +282,7 @@ internal sealed class SessionBoards
     // That is an install missing the table or the borrowed lobby art.
     private UiStrings? OriginalRaceStrings()
     {
-        if (!File.Exists(Extraction.RofTree.Under(_in.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt)))
+        if (!Extraction.RofFiles.For(_in.DataRoot).Exists("ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt))
         {
             return null;
         }

@@ -18,6 +18,7 @@ public sealed class SoundArchive : IDisposable
 {
     private readonly string? _zipPath;
     private readonly string? _dir;
+    private readonly Func<string, byte[]?>? _read;
 
     // Name -> in-zip path, built once and kept across Dispose: it is what lets a post-Dispose read
     // find its entry in a transient archive without reopening to rebuild the map first.
@@ -42,6 +43,10 @@ public sealed class SoundArchive : IDisposable
                     _entryPaths[entry.Name] = entry.FullName;
         }
     }
+
+    /// <summary>An archive whose WAV bytes by name come from <paramref name="read"/>, null for an
+    /// absent one: the UI archive's menu sounds.</summary>
+    public SoundArchive(Func<string, byte[]?> read) => _read = read;
 
     /// <summary>Loads a WAV by file name (e.g. "bloodhawk.wav"); null if missing/undecodable.
     /// <paramref name="looped"/> marks the whole stream as a forward loop. <paramref name="warn"/>
@@ -120,6 +125,18 @@ public sealed class SoundArchive : IDisposable
 
     private byte[]? ReadBytes(string wavName)
     {
+        if (_read != null)
+        {
+            try
+            {
+                return _read(wavName);
+            }
+            catch (Exception e) when (e is IOException or InvalidDataException)
+            {
+                Log.Warn("sound", $"sound read failed name={wavName} error={e.GetType().Name}: {e.Message}");
+                return null;
+            }
+        }
         if (_dir != null)
         {
             var path = Path.Combine(_dir, wavName);

@@ -93,7 +93,7 @@ internal static class DisplaySettingsSuites
         ctx.Check(!unknown.Enabled && unknown.Source == fallback.Source,
             $"a word the vocabulary does not know reads as never set rather than as a choice ({Describe(unknown)})");
 
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -174,7 +174,7 @@ internal static class DisplaySettingsSuites
             AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingChoices[(int)method], null, enhanced: false);
         }
 
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -244,7 +244,7 @@ internal static class DisplaySettingsSuites
         ctx.Check(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Windowed,
             $"and this scripted run's own window is still project.godot's windowed one ({DisplayServer.WindowGetMode()})");
 
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -343,7 +343,7 @@ internal static class DisplaySettingsSuites
         ctx.Check(fits && here.Words.Contains(here.Fallback) && here.Fallback == OptionsStore.FormatResolution(screen.X, screen.Y),
             $"this screen's list fits inside the {screen.X}x{screen.Y} the engine reports and falls back to it ({string.Join(" ", here.Words)})");
 
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -419,7 +419,7 @@ internal static class DisplaySettingsSuites
         ctx.Check(DisplayServer.WindowGetCurrentScreen() == standing,
             $"and applying the screen it already stands on logs the line without moving it (screen {standing})");
 
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)

@@ -866,7 +866,7 @@ internal static class DestroyChoreographySuites
                 pool = live;
                 ctx.Host.AddChild(live);
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
-                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                var liveries = new LiveryResolver(spec, ctx.DataRoot);
                 var factory = new Session.World.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
                 var inputs = new AircraftAssemblyResources
                 {
@@ -2101,7 +2101,7 @@ internal static class DestroyChoreographySuites
                 pool = live;
                 ctx.Host.AddChild(live);
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
-                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                var liveries = new LiveryResolver(spec, ctx.DataRoot);
                 var factory = new Session.World.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
                 var inputs = new AircraftAssemblyResources
                 {

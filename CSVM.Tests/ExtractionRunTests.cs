@@ -12,26 +12,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The whole extraction as <c>--extract</c> and the Extract button run it. The install
-/// check comes first, then the ZBD half, the <c>.rof</c> half over case-blind inputs, the stamp and
-/// the exit code. The runs use a batch file standing in for unzbd, so they
+/// check comes first, then the ZBD half, the stamp and the exit code; the <c>.rof</c> half is read
+/// in place, never extracted. The runs use a batch file standing in for unzbd, so they
 /// are Windows-only here; the flags' parsing is at the end.</summary>
 public class ExtractionRunTests
 {
-    [Fact]
-    public void TheRofInputsAreFoundWhateverTheirCase()
-    {
-        string install = OddlySpelledInstall(TestData.TempDir(), withPatch: false);
-
-        var request = ExtractionRun.RofRequest(install, Path.Combine(install, "out"), force: true);
-
-        Assert.Equal(Path.Combine(install, "gosdata", "Assets", "CRIMSON.ROF"), request.BaseArchive);
-        Assert.Null(request.PatchArchive);
-        Assert.Equal(Path.Combine(install, "gosdata", "Assets", "Graphics", "mpg"), request.MovieFolder);
-        Assert.Equal(Path.Combine(install, "gosdata", "Assets", "binaries", "LANGUI.DLL"), request.LanguiDll);
-        Assert.Equal(Path.Combine(install, "gosdata", "Assets", "binaries", "Language.Dll"), request.LanguageDll);
-        Assert.True(request.Force);
-    }
-
     [Fact]
     public void TheDefaultToolIsTheReleasesOrTheForkBuild()
     {
@@ -80,7 +65,7 @@ public class ExtractionRunTests
     }
 
     [Fact]
-    public void AMissingToolFailsTheRunAndLeavesTheRofHalfUndone()
+    public void AMissingToolFailsTheRun()
     {
         string root = TestData.TempDir();
         string install = OddlySpelledInstall(root, withPatch: true);
@@ -90,12 +75,11 @@ public class ExtractionRunTests
 
         Assert.False(result.Succeeded);
         Assert.StartsWith("unzbd not found", result.Failures[0], StringComparison.Ordinal);
-        Assert.Null(result.Rof);
-        Assert.False(Directory.Exists(request.RofDir));
+        Assert.False(Directory.Exists(Path.Combine(request.ExtractedDir, "rof")));
     }
 
     [Fact]
-    public void AWholeRunExtractsBothHalvesStampsBothAndExitsZero()
+    public void AWholeRunExtractsTheZbdHalfStampsItAndWritesNoRofTree()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -111,31 +95,28 @@ public class ExtractionRunTests
 
         Assert.True(result.Succeeded, string.Join("; ", result.Failures));
         Assert.Equal(2, result.Zbd!.Extracted);
-        Assert.Equal(RofArchiveOutcome.Extracted, result.Rof!.Archives[0].Outcome);
         Assert.True(File.Exists(Path.Combine(request.ExtractedDir, "C1", "zrdr.zip")));
-        Assert.True(File.Exists(Path.Combine(request.RofDir, "ASSETS", "SCRIPTS", "RESOURCE.H")));
-        Assert.True(File.Exists(Path.Combine(request.RofDir, "ASSETS", "GRAPHICS", "MPG", "Chap0.MPG")));
+        Assert.False(Directory.Exists(Path.Combine(request.ExtractedDir, "rof")));
         using (var stamp = JsonDocument.Parse(File.ReadAllText(Path.Combine(request.ExtractedDir, "VERSION.json"))))
         {
             Assert.Equal(ExtractionStamp.Schema, stamp.RootElement.GetProperty("schema").GetInt32());
             Assert.Equal("unzbd fake", stamp.RootElement.GetProperty("assets").GetProperty("unzbdVersion").GetString());
-            Assert.Equal(1, stamp.RootElement.GetProperty("rof").GetProperty("movies").GetInt32());
+            Assert.False(stamp.RootElement.TryGetProperty("rof", out _));
         }
 
-        Assert.Contains(result.Warnings, w => w.Contains("cinema(s) missing", StringComparison.Ordinal));
         Assert.Equal(ExtractionPhase.Done, phases[^1].Phase);
         Assert.Equal(1.0, phases[^1].Fraction);
         Assert.True(phases.Select(p => p.Fraction).SequenceEqual(phases.Select(p => p.Fraction).OrderBy(f => f)));
-        Assert.Contains(phases, p => p.Phase == ExtractionPhase.Rof && p.Lines.Any(l => l.Contains("crimson.rof", StringComparison.Ordinal)));
+        Assert.DoesNotContain(phases, p => p.Phase == ExtractionPhase.Rof);
 
         var lines = new List<string>();
         Assert.Equal(0, ExtractionRun.RunToConsole(request, lines.Add, _ => { }));
         Assert.Equal("Done.", lines[^1]);
-        Assert.Contains(lines, l => l.Contains("up to date:      2 archive(s)", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.Contains("up to date: 2", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void AFailedArchiveStopsTheRunBeforeTheRofHalf()
+    public void AFailedArchiveStopsTheRunUnstamped()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -151,28 +132,7 @@ public class ExtractionRunTests
 
         Assert.False(result.Succeeded);
         Assert.Contains(result.Failures, f => f.StartsWith("unzbd failed on " + Path.Combine("C2", "gamez.zbd"), StringComparison.Ordinal));
-        Assert.Null(result.Rof);
         Assert.False(File.Exists(Path.Combine(request.ExtractedDir, "VERSION.json")));
-    }
-
-    [Fact]
-    public void AnInstallWithoutTheBaseArchiveFailsAndIsNotStampedForTheRofHalf()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        string root = TestData.TempDir();
-        string install = OddlySpelledInstall(root, withPatch: true);
-        File.Delete(Path.Combine(install, "gosdata", "Assets", "CRIMSON.ROF"));
-        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root), AllowMissing: true);
-
-        var result = ExtractionRun.Run(request);
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("crimson.rof", result.Failures[0], StringComparison.Ordinal);
-        Assert.Null(result.RofStamp);
     }
 
     [Fact]

@@ -735,8 +735,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     }
 
     // One airframe's blueprint TGA, the hangar's own plane preview path
-    // (extracted/rof/ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA, HangarAirframePage), reused rather
-    // than authoring new silhouette art. Decoded once and kept, including a miss.
+    // (ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA, HangarAirframePage), reused rather than authoring
+    // new silhouette art. Decoded once and kept, including a miss.
     private HangarArt? SilhouetteFor(int airframe)
     {
         if (_silhouettes.TryGetValue(airframe, out var art))
@@ -747,8 +747,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         art = null;
         if (Flow.DataRoot is { } root)
         {
-            string path = Extraction.RofTree.Under(root, $"ASSETS/GRAPHICS/PX_{airframe}_BLUEPRINT.TGA");
-            if (TgaImage.TryLoad(path) is { } image)
+            if (Extraction.RofFiles.For(root).Read($"ASSETS/GRAPHICS/PX_{airframe}_BLUEPRINT.TGA") is { } bytes
+                && TgaImage.Decode(bytes) is { } image)
             {
                 art = new HangarArt(image, AirframeTitle(airframe));
             }

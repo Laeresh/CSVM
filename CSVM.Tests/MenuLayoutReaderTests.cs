@@ -97,56 +97,36 @@ public class MenuLayoutReaderTests
     [Fact]
     public void AMissingFileIsNullWithAReasonNeverAnEmptyLayout()
     {
-        string empty = Path.Combine(Path.GetTempPath(), "csvm-menu-layout-empty-" + Path.GetRandomFileName());
-        Directory.CreateDirectory(empty);
-        try
-        {
-            var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(empty), out var reason);
+        var layout = MenuLayout.TryLoad(TestData.TempDir(), out var reason);
 
-            Assert.Null(layout);
-            Assert.NotNull(reason);
-            Assert.Contains("menu_layout.json", reason);
-        }
-        finally
-        {
-            Directory.Delete(empty, recursive: true);
-        }
+        Assert.Null(layout);
+        Assert.NotNull(reason);
+        Assert.Contains("menu_layout.json", reason);
     }
 
     [Fact]
     public void MalformedOrForeignJsonIsRefusedWithAReason()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "csvm-menu-layout-bad-" + Path.GetRandomFileName());
-        Directory.CreateDirectory(dir);
-        try
-        {
-            string path = Path.Combine(dir, "menu_layout.json");
-            File.WriteAllText(path, "{ not json");
-            Assert.Null(MenuLayout.TryLoad(path, out var reason));
-            Assert.Contains("unreadable", reason);
+        string root = TestData.TempDir();
+        string path = Path.Combine(Directory.CreateDirectory(TestRof.Folder(root)).FullName, "menu_layout.json");
+        File.WriteAllText(path, "{ not json");
+        Assert.Null(MenuLayout.TryLoad(root, out var reason));
+        Assert.Contains("unreadable", reason);
 
-            File.WriteAllText(path, "{\"schema\": 1}");
-            Assert.Null(MenuLayout.TryLoad(path, out reason));
-            Assert.Contains("unreadable", reason);
-            Assert.Throws<InvalidDataException>(() => MenuLayout.Parse("[]"));
-            Assert.ThrowsAny<JsonException>(() => MenuLayout.Parse("nope"));
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        File.WriteAllText(path, "{\"schema\": 1}");
+        Assert.Null(MenuLayout.TryLoad(root, out reason));
+        Assert.Contains("unreadable", reason);
+        Assert.Throws<InvalidDataException>(() => MenuLayout.Parse("[]"));
+        Assert.ThrowsAny<JsonException>(() => MenuLayout.Parse("nope"));
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheInstallsOwnArtifactReadsToItsCensus()
     {
-        string path = MenuLayout.PathUnder(TestData.DataRoot!);
-        if (!File.Exists(path))
-        {
-            return;
-        }
+        string root = TestData.TempDir();
+        RofFiles.Bind(root, RofFiles.Open(GameFilesData.Source));
 
-        var layout = MenuLayout.TryLoad(path, out var reason);
+        var layout = MenuLayout.TryLoad(root, out var reason);
 
         Assert.Null(reason);
         Assert.NotNull(layout);

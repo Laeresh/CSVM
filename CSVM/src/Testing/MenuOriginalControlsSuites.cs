@@ -36,7 +36,7 @@ internal static class MenuOriginalControlsSuites
         + "screen")]
     internal static void MenuOriginalControls(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -105,7 +105,7 @@ internal static class MenuOriginalControlsSuites
     internal static void MenuOriginalControlsSeats(TestContext ctx)
     {
         const string Suite = "menu-original-controls-seats";
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)

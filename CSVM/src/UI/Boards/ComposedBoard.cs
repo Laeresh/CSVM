@@ -11,7 +11,7 @@ public enum BoardArtLibrary
     /// <summary>Mission art, <c>extracted/rimage/&lt;name&gt;.png</c>, named without its extension.</summary>
     Rimage,
 
-    /// <summary>Screen chrome, <c>extracted/rof/ASSETS/GRAPHICS/&lt;name&gt;</c>, named with it.</summary>
+    /// <summary>Screen chrome, the UI archive's <c>ASSETS/GRAPHICS/&lt;name&gt;</c>, named with it.</summary>
     Ui,
 
     /// <summary>A file outside the extraction, <see cref="BoardArt.Name"/> being its whole path: a
@@ -19,7 +19,7 @@ public enum BoardArtLibrary
     /// draws that no asset library holds.</summary>
     Loose,
 
-    /// <summary>A movie, <c>extracted/rof/ASSETS/GRAPHICS/MPG/&lt;name&gt;</c>, named with its
+    /// <summary>A movie, the install's <c>ASSETS/GRAPHICS/MPG/&lt;name&gt;</c>, named with its
     /// extension: the picture playing now rather than a bitmap. The renderer plays it endlessly,
     /// which is what every <c>movie</c> row on a screen it composes authors.</summary>
     Movie,

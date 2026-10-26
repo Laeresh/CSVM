@@ -3,26 +3,20 @@ using CSVM.Extraction;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// Original's availability answer, made before entry. The extraction tree is not older than the
-/// manifest reads, and the decoded layout file loads with a top level in it. Every file
-/// <see cref="OriginalAssetManifest"/> classes required is on disk and reads. A failure is one
-/// reason, the one the launcher's extraction screen names. What is optional and absent comes back
-/// beside it, for the presentation to draw without.
+/// Original's availability answer, made before entry. The decoded layout loads with a top level in
+/// it, and every file <see cref="OriginalAssetManifest"/> classes required is in the game files and
+/// reads. A failure is one reason, the one the launcher's extraction screen names. What is optional
+/// and absent comes back beside it, for the presentation to draw without.
 /// </summary>
 public static class OriginalAvailability
 {
     /// <summary>The main-menu section's name in the layout.</summary>
     public const string MainMenuSection = "MainMenu";
 
-    /// <summary>Where a layout art name resolves under a data root. A movie sits one directory
-    /// deeper, which is the base <c>FUN_004a7c70</c> resolves every movie name under and where the
-    /// extraction copies the files (<c>docs/formats/cinemas.md</c>).</summary>
-    public static string ArtPath(string dataRoot, string name) =>
-        RofTree.Under(dataRoot, RelativeArtPath(name));
-
-    /// <summary>The same place relative to the <c>rof</c> extraction, as the asset manifest records
-    /// it. It is in the case the extraction writes (<see cref="RofTree.Canonical"/>), whatever the
-    /// layout's spelling.</summary>
+    /// <summary>Where a layout art name sits in <see cref="RofFiles"/>, as the asset manifest
+    /// records it, in <see cref="RofTree.Canonical"/>'s case whatever the layout's spelling. A movie
+    /// sits one directory deeper, the base <c>FUN_004a7c70</c> resolves every movie name under
+    /// (<c>docs/formats/cinemas.md</c>).</summary>
     public static string RelativeArtPath(string name) =>
         RofTree.Canonical(IsMovie(name) ? "ASSETS/GRAPHICS/MPG/" + name : "ASSETS/GRAPHICS/" + name);
 
@@ -40,12 +34,7 @@ public static class OriginalAvailability
     public static MenuLayout? Load(string dataRoot, out string? reason, out string? degraded)
     {
         degraded = null;
-        if (ExtractionStamp.Behind(dataRoot, OriginalAssetManifest.StampSchema, out reason))
-        {
-            return null;
-        }
-
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out reason);
+        var layout = MenuLayout.TryLoad(dataRoot, out reason);
         if (layout == null)
         {
             return null;

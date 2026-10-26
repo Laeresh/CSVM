@@ -101,6 +101,7 @@ public static class TestData
     {
         var dir = Path.Combine(TempRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        TestRof.BindFolder(dir);
         return dir;
     }
 

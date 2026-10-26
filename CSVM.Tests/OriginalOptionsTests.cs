@@ -1425,7 +1425,7 @@ public class OriginalOptionsTests
         GameOptionRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         GameOptionRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1437,7 +1437,7 @@ public class OriginalOptionsTests
         AudioRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheAudioRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         AudioRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1449,7 +1449,7 @@ public class OriginalOptionsTests
         VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheVideoRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         VideoRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1461,7 +1461,7 @@ public class OriginalOptionsTests
         VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure, headset: true);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheVideoRowsUnderAHeadsetClearEachOtherAndTheirWordsOverTheInstall()
     {
         VideoRowsAreClearOfEachOther(InstallLayout(out var measure), measure, headset: true);
@@ -1473,7 +1473,7 @@ public class OriginalOptionsTests
         ControlsRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheControlsRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1624,10 +1624,10 @@ public class OriginalOptionsTests
     // as well as the fixture. The authored rectangles there are the original's, not this repo's.
     private static MenuLayout InstallLayout(out Func<string, (int Width, int Height)?> measure)
     {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
+        string dataRoot = TestRof.InstallRoot;
+        var layout = MenuLayout.TryLoad(dataRoot, out var reason);
         Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        measure = art => OriginalCoverageTests.PngSize(OriginalAvailability.ArtPath(dataRoot, art));
+        measure = art => OriginalCoverageTests.PngSize(dataRoot, art);
         return layout!;
     }
 

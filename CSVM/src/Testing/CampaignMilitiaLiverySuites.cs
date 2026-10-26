@@ -43,15 +43,13 @@ internal static class CampaignMilitiaLiverySuites
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
-        string rof = Path.Combine(ctx.DataRoot, "extracted", "rof");
         ctx.RequireData(texturesPath, $"C1 textures");
-        ctx.RequireData(rof, $"extracted UI archive (paint patterns)");
 
         var spec = SessionSpec.Parse(Array.Empty<string>());
-        var liveries = new LiveryResolver(spec, rof);
+        var liveries = new LiveryResolver(spec, ctx.DataRoot);
         if (liveries.Patterns.IsEmpty)
         {
-            throw new SuiteSkippedException("the extracted UI archive ships no paint patterns");
+            throw new SuiteSkippedException("the game files' UI archive ships no paint patterns");
         }
 
         var defs = VehicleDefs.Load(ctx.ZrdrPath);

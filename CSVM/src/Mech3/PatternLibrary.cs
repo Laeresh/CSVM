@@ -33,18 +33,9 @@ public sealed class PaintBitmap
     /// against the game's own textures of the same name, see rof.md); payload is
     /// width*height*10 bytes of planes. Null on anything malformed: paint is cosmetic and
     /// must never take a build down.</summary>
-    public static PaintBitmap? Load(string path)
+    public static PaintBitmap? Load(byte[]? d)
     {
-        byte[] d;
-        try
-        {
-            d = File.ReadAllBytes(path);
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        if (d.Length < 4)
+        if (d == null || d.Length < 4)
             return null;
         int h = d[0] | (d[1] << 8);
         int w = d[2] | (d[3] << 8);
@@ -81,16 +72,16 @@ public sealed class PaintBitmap
 }
 
 /// <summary>
-/// The original's paint patterns, read from the extracted UI resource archive
-/// (<c>extracted/rof/ASSETS/GRAPHICS/&lt;PATTERN&gt;/</c>, produced by the extraction's <c>.rof</c> half).
+/// The original's paint patterns, read from the UI resource archive
+/// (<c>ASSETS/GRAPHICS/&lt;PATTERN&gt;/</c> in <see cref="Extraction.RofFiles"/>).
 ///
 /// A pattern is a folder of `.BM` skins, and **it is per aircraft**: `FORTUNE` covers all
 /// eleven, every other pattern covers one to three. So the paint UI offers a different pattern
 /// list per plane. The Fury has four (Fortune Hunters, Black Swan, Hughes, Studio Security), the
 /// Balmoral two. <see cref="PatternsFor"/> is that list.
 ///
-/// Absent extraction is not an error: the library comes back empty, aircraft build unpainted,
-/// and a single line says how to produce it.
+/// An absent archive is not an error: the library comes back empty, aircraft build unpainted,
+/// and a single line says so.
 /// </summary>
 public sealed class PatternLibrary
 {
@@ -101,7 +92,7 @@ public sealed class PatternLibrary
         "MPG", "SCRAPBOOK",
     };
 
-    // pattern -> (skin base name -> .BM path), both case-insensitive.
+    // pattern -> (skin base name -> .BM path in the archive), both case-insensitive.
     private readonly Dictionary<string, Dictionary<string, string>> _patterns =
         new(StringComparer.OrdinalIgnoreCase);
     // pattern -> the aircraft skin prefixes it covers ("blo", "fur", …)
@@ -109,40 +100,45 @@ public sealed class PatternLibrary
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Pattern, string Skin), PaintBitmap?> _cache = new();
     private readonly List<string> _order = new();
+    private readonly Extraction.RofFiles _rof;
+
+    private PatternLibrary(Extraction.RofFiles rof) => _rof = rof;
 
     /// <summary>A library with no patterns, what an unpainted build uses, and the fallback
-    /// when the rof extraction is absent.</summary>
-    public static PatternLibrary Empty { get; } = new();
+    /// when the game files hold none.</summary>
+    public static PatternLibrary Empty { get; } = new(Extraction.RofFiles.Empty);
 
     /// <summary>Every pattern folder found, in scan order.</summary>
     public IReadOnlyList<string> Patterns => _order;
 
     public bool IsEmpty => _order.Count == 0;
 
-    /// <summary>Scans an extracted `rof` tree. <paramref name="rofRoot"/> is the extraction
-    /// root (the folder holding ASSETS). Never throws.</summary>
-    public static PatternLibrary Load(string rofRoot)
+    /// <summary>Scans the UI archive's <c>ASSETS/GRAPHICS</c> folders, in name order as the
+    /// extracted folders enumerated. Never throws.</summary>
+    public static PatternLibrary Load(Extraction.RofFiles rof)
     {
-        var lib = new PatternLibrary();
-        var graphics = Path.Combine(rofRoot, "ASSETS", "GRAPHICS");
-        if (!Directory.Exists(graphics))
+        var lib = new PatternLibrary(rof);
+        const string Graphics = "ASSETS/GRAPHICS/";
+        var folders = new SortedDictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+        foreach (string file in rof.Files)
         {
-            Log.Info("world", $"[paint] no pattern library at {graphics}, extract the game data again on the Extract screen to enable the original's paint patterns; aircraft build unpainted");
+            int slash = file.StartsWith(Graphics, StringComparison.Ordinal) ? file.IndexOf('/', Graphics.Length) : -1;
+            if (slash < 0 || file.IndexOf('/', slash + 1) >= 0
+                || !file.EndsWith(".BM", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string name = file[Graphics.Length..slash];
+            if (!folders.TryGetValue(name, out var skins))
+                folders[name] = skins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            skins[Path.GetFileNameWithoutExtension(file)] = file;
+        }
+        if (folders.Count == 0)
+        {
+            Log.Info("world", $"[paint] the game files hold no paint patterns (ASSETS/GRAPHICS/<pattern>/*.BM in crimson.rof); aircraft build unpainted");
             return lib;
         }
-        foreach (var dir in Directory.EnumerateDirectories(graphics))
+        foreach (var (name, skins) in folders)
         {
-            var name = Path.GetFileName(dir);
             if (NotPatterns.Contains(name))
-                continue;
-            Dictionary<string, string>? skins = null;
-            foreach (var bm in Directory.EnumerateFiles(dir, "*.BM"))
-            {
-                skins ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                var skin = Path.GetFileNameWithoutExtension(bm);
-                skins[skin] = bm;
-            }
-            if (skins == null)
                 continue;
             lib._patterns[name] = skins;
             lib._order.Add(name);
@@ -182,7 +178,7 @@ public sealed class PatternLibrary
             return cached;
         PaintBitmap? bm = null;
         if (_patterns.TryGetValue(pattern, out var skins) && skins.TryGetValue(skinName, out var path))
-            bm = PaintBitmap.Load(path);
+            bm = PaintBitmap.Load(_rof.Read(path));
         _cache[key] = bm;
         return bm;
     }

@@ -121,7 +121,7 @@ placement.
 
 | Item | Rule |
 |---|---|
-| Painted surfaces | A material named after a texture with the airframe's own skin prefix (`blo_` on the Bloodhawk) that the chosen pattern ships a `.BM` for (`extracted/rof/ASSETS/GRAPHICS/<PATTERN>/`). Another airframe's skin texture keeps its shipped image. |
+| Painted surfaces | A material named after a texture with the airframe's own skin prefix (`blo_` on the Bloodhawk) that the chosen pattern ships a `.BM` for (`ASSETS/GRAPHICS/<PATTERN>/` in `crimson.rof`). Another airframe's skin texture keeps its shipped image. |
 | Decals | A material named `<prefix>_noselogo`, `_taillogo` or `_winglogo` takes the chosen decal. The decal fills the texture's whole UV square, so map each decal surface's UVs as the original placeholder polygons do, and put it on the node whose original carries that decal (or lift it off the skin), since only there does it take the decal's draw priority. |
 | Fixed paint | A surface under any other name keeps its own texture or colour under every livery. A model that is not UV-compatible is a fixed-paint model. An export embeds each skin as it was painted when exported, so a renamed exported material keeps that livery's colours. |
 | Where it applies | Everywhere the airframe is built: the flown aircraft, the viewer's livery lab, AI aircraft, a network seat (which sends its livery as pattern, swatch and decal indices, painted on each machine over that machine's pack), the damage panels and the wreck pieces. The hangar's paint screen previews the original's flat `PX_ICON` art and never shows a model. |

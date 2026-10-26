@@ -42,6 +42,20 @@ internal static class MenuSuiteHost
         host.Features.Add(netDoor ?? NetDoor());
     }
 
+    /// <summary>Ends the suite as SKIP when the run's game files carry no decoded menu layout. That
+    /// is no install, or a synthetic tree without the Original shell.</summary>
+    internal static void RequireLayout(TestContext ctx) => RequireRof(ctx, RofFiles.MenuLayoutFile, $"decoded menu layout");
+
+    /// <summary>Ends the suite as SKIP when the run's game files lack the UI archive file
+    /// <paramref name="relative"/>, the way <c>RequireData</c> does for a missing file.</summary>
+    internal static void RequireRof(TestContext ctx, string relative, FormattableString what)
+    {
+        if (!RofFiles.For(ctx.DataRoot).Exists(relative))
+        {
+            throw new SuiteSkippedException($"{CSVM.Utils.Log.Format(what)} not found: no {relative} in the game files for {ctx.DataRoot}");
+        }
+    }
+
     /// <summary>The multiplayer door as a suite gets it: the real ENet carrier, bound to the
     /// loopback address, and no port mapping at all. ⚠ Neither the wildcard bind nor the UPnP
     /// search belongs in a run: one raises a firewall dialog, the other reaches the router.

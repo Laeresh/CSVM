@@ -97,7 +97,7 @@ internal static class HudKillLineSuites
             // worldEffects null!: never dereferenced with no CrashProgram/WorldScene, so the
             // spawner's crash-runtime block is skipped.
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 null!, ctx.Host, inputs,
                 new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
                 new HumanRosterBindings());

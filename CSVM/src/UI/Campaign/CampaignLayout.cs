@@ -93,7 +93,7 @@ public sealed class CampaignLayout
                 return known;
             }
 
-            var decoded = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out string? reason);
+            var decoded = MenuLayout.TryLoad(dataRoot, out string? reason);
             if (decoded == null)
             {
                 Log.Warn("ui", $"campaign boards draw their hardcoded chrome: {reason}");

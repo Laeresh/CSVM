@@ -191,7 +191,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, ROF and disc sources
 
-31. ☐ ROF half read in place
+31. ☑ ROF half read in place
 32. ☑ ISO9660 reader (the original disc's image is still to be read: `CSVM_TEST_ISO`)
 33. ☑ LZX CAB decoder and the `rtextureN` long names
 34. ☐ Optional copy into the data root
@@ -1062,7 +1062,52 @@ tables, decision 14 is wrong; record it in this item, do not quietly port the ta
 
 # Wave D, ROF and disc sources
 
-## D31 ☐ ROF half read in place
+## D31 ☑ ROF half read in place
+
+**Landed.** Nothing writes or reads `extracted/rof/`. `CSVM/src/Extraction/RofFiles.cs` is the UI
+half read in place: `RofFiles.Open(BasePaths.Game)` reads `GOSDATA/ASSETS/crimson.rof` and walks it
+on the first lookup, and answers every file the old tree held under the same path in `RofTree`'s
+upper case. That is each member, `crimptch.rof`'s under `_crimptch/`, a `<NAME>.PNG` and
+`<NAME>_MASK.PNG` per `.BM` encoded on read, the ten cinemas from the install's
+`GOSDATA/ASSETS/GRAPHICS/MPG`, and `ui_strings.json` and `menu_layout.json`, built once on first
+read by `UiStringTable` and `MenuLayoutDecoder` exactly as the extraction built them. `Exists`,
+`Read`, `Head` (a prefix, inflating no further) and `Text` (`File.ReadAllText`'s decode) take a
+path in any case; a file that does not read is logged and null. The launcher binds the view to its
+data root after `BasePaths.Resolve` (`Launcher.BindRofFiles`, both resolve sites), and every
+consumer that held only a data root reads `RofFiles.For(dataRoot)` with its signature unchanged:
+`UiStrings.TryLoad`, `MenuLayout.TryLoad(dataRoot, ...)` (`PathUnder` deleted), `OriginalAvailability`,
+`OriginalAssetManifest.Check` (header reads through `Head`), `OriginalArtSizes`, `ScrapbookComposition`,
+`ComposedBoardView` (`DecodeArt` picks Godot's loader by extension, as `Image.LoadFromFile` did),
+`MovieSurface`, `CinemaScreen`, `PlaneDiagrams`, the cabin, flight-check and scrapbook-zoom pages
+(EXPORT TO DESKTOP writes the bytes, `ScrapbookExport.ToDesktop(Func<byte[]>, name)`),
+`SessionBoards`, `LiveryResolver(spec, dataRoot)` and `PatternLibrary.Load(RofFiles)`, the menu cues
+(`MenuAudioService` takes the view) and the start-count beeps (`SoundArchive(Func<string, byte[]?>)`).
+HD packs keep their `rof/ASSETS/...` keys: `HdTextures.ForRof(path)` replaces `ForExtracted`.
+`OriginalAvailability` no longer checks the extraction stamp (`OriginalAssetManifest.StampSchema`
+deleted). `ExtractionRun` has no `.rof` half (`RofExtraction.cs`, `MovieCopy.cs`, `RofRequest`,
+`RofDir` and the result's `Rof`/`RofStamp` deleted); `RofTree` keeps `Canonical` only.
+
+The synthetic shell (`SyntheticShell.WriteShell`) builds its `RofFiles` in memory and binds it to
+the tree's data root, so the tree carries no `extracted/rof/`. Its two fixtures stay JSON, read by
+the shell's own parser: they are not an extracted format any engine reader still parses. The units
+bind the install's view to `TestData.DataRoot` once (`CSVM.Tests/TestRof.cs`) and a live view of
+`<root>/extracted/rof` to every `TestData.TempDir()` (`RofFiles.Live`), so a unit lays its files out
+in the old layout and the engine reads them; `TestRof.InstallRoot` is a root of its own over the
+install.
+
+**Whether the cinema decoder needs a seekable stream (the TODO).** It needs no stream at all:
+`MpegSystemStream.Demux` takes the whole file's bytes (`MpegMovie.FromFile` was
+`FromBytes(File.ReadAllBytes)`), so a cinema is `IGameFileSource.ReadAllBytes` into `FromBytes`,
+the same for a file in a disc cabinet. Each play reads its 1-19 MB file once; nothing caches them.
+
+**Launch cost** (Release, this machine, cold view): the archive read and walk 39-76 ms (the engine
+log's `rof: 1227 files ... in 38-54 ms`), `ui_strings.json` 4-27 ms, `menu_layout.json` 18-32 ms,
+and Original's availability check over them 18-24 ms, about 100-160 ms on a menu launch. The view
+holds `crimson.rof` (60 MB) for the process. A `.BM` PNG costs about 1 ms on read.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `crimson.rof`/`crimptch.rof`, `.BM` textures, `langui.dll`/`language.dll`, the menu
 layout and the cinemas are read from the game-file source; `extracted/rof/` is no longer written.
@@ -1071,14 +1116,17 @@ layout and the cinemas are read from the game-file source; `extracted/rof/` is n
 `MpegSystemStream.cs` decodes from a stream.
 
 **Approach.** Point the existing decoders' consumers at the source; drop the PNG/JSON writes and
-`MovieCopy`. <TODO: whether the cinema decoder needs a seekable stream, which matters for D33's
-in-memory CABs.>
+`MovieCopy`. The cinema decoder takes whole bytes and needs no seekable stream (above).
 
 **Model recommendation.** medium.
 
 **Verify.** Menus, UI strings and all 10 cinemas unchanged in the complete battery's goldens.
 
-**⚠ Traps.** <TODO: none known.>
+**⚠ Traps.** The view is reached through the data root, not `GameData` (the fence of this wave
+kept `Spec/GameData.cs` out of reach); a `GameData.Rof` slot is the natural home once it is free,
+and `RofFiles.For` would then go. The `.BM` PNGs an older extraction wrote match the view's pixel for
+pixel but not byte for byte (another PNG compressor); the two JSON files match by value, not bytes
+(the PowerShell extractor's whitespace, escaping and BOM).
 
 ## D32 ☑ ISO9660 reader
 

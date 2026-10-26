@@ -148,7 +148,7 @@ internal static class AiAirframePoolSuites
             pool = live;
             ctx.Host.AddChild(live);
             var built = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
                 SuiteConstants.AircraftResources(ctx, planesGamez, textures,
                     ctx.Data.Messages),

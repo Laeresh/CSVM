@@ -324,7 +324,7 @@ internal static class NetSeatSuites
     private static FlightRoster NewRoster(TestContext ctx, SessionSpec spec, Field field,
         IReadOnlyList<NetSeat> roster, List<PlayerRig> rigs, VersusMatch match, int[][]? padAssignment) =>
         new(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             new AircraftAssemblyResources
             {

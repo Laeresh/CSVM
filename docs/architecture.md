@@ -549,7 +549,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/MenuChapters.cs`, the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
 - `src/UI/Menu/DisplaySettingRows.cs`, the monitor, size, mode and V-Sync as rows, shared by both Options screens: a label per store word, the forgiving reads, the wrap.
 - `src/UI/Menu/OptionsChoices.cs`, the Options settings the Original pages stage before the apply: the rules that couple them, and the exit.
-- `src/UI/Menu/MenuLayout.cs`, the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
+- `src/UI/Menu/MenuLayout.cs`, the runtime reader of `menu_layout.json` from `Extraction/RofFiles.cs`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs`, the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
 - `src/UI/Menu/PlayerSetupFeature.cs`, the shared player setup: seats claimed by source identity, the roster, the two-stage pick, a local Dogfight's bot rows, the gate.
 - `src/UI/Menu/HangarFeature.cs`, the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
@@ -970,14 +970,13 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/RawCdImage.cs`, a raw CD image (`.cue`/`.bin`/`.img`, CloneCD `.ccd`/`.img`) read in place: its first data track's sectors translated to the 2,048-byte volume `IsoImage` reads.
 - `src/Extraction/CueSheet.cs`, the `.cue` sheet read for its first track: the image file found beside it without regard to case, the track's mode and extent in that file.
 - `src/Extraction/ZbdArchive.cs`, the named-entry `.zbd` container of `zrdr.zbd` and the sound archives: the table read and checked, each payload read on demand, and the collision rename of a repeat.
-- `src/Extraction/RofExtraction.cs`, the non-ZBD half of an extraction: both UI archives, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, from resolved paths.
-- `src/Extraction/RofTree.cs`, the one upper case the rof tree is written in and the name mapping every writer and reader of it shares.
+- `src/Extraction/RofFiles.cs`, the UI half read in place: both archives' members, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, bound to the launch's data root.
+- `src/Extraction/RofTree.cs`, the one upper case every `RofFiles` path is held in and the name mapping its readers share.
 - `src/Extraction/RofArchive.cs`, the `.rof` UI archive read from memory: the directory tree walked without inflating, each member inflated on demand.
 - `src/Extraction/BmTexture.cs`, one paint-shop `.BM` split into its shading map and its three paint-region masks as RGB.
 - `src/Extraction/PngWriter.cs`, a managed 8-bit RGB and RGBA PNG encoder, so no image library or engine type is needed to write the `.BM` PNGs and `--dump`'s textures.
 - `src/Extraction/PeStringTable.cs`, the Win32 `STRINGTABLE` resources read out of a PE file's bytes, with no Win32 call.
 - `src/Extraction/UiStringTable.cs`, the `ui_strings.json` rows: string-table text joined to its `RESOURCE.H` symbol and split from its `[FONTID]` tag.
-- `src/Extraction/MovieCopy.cs`, the install's `.mpg` cinemas copied verbatim under upper-case names, skipping a copy already at the source's length unless forced.
 - `src/Extraction/MenuLayoutDecoder.cs`, `LAYOUT.CSV`, `SCRAPBOOK.CSV`, `RESOURCE.H` and the GUI scripts decoded into `menu_layout.json`.
 - `src/Extraction/ZbdExtraction.cs`, the ZBD half of extraction: every archive through unzbd, then `messages.json`, the optional unzip and the stamp, off the main thread.
 - `src/Extraction/ZbdPlan.cs`, the ZBD half's pure rules: the archive-name mode map, output naming, the up-to-date and unzip rules, and the stderr notes.
@@ -985,11 +984,11 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/ZbdTree.cs`, the one case the ZBD half writes (folders upper, file names lower) and the chapter and mission path mapping its writer and readers share.
 - `src/Extraction/ZbdProgress.cs`, the ZBD runner's options, per-step progress report with its console lines, and result totals with the closing summary.
 - `src/Extraction/UnzbdTool.cs`, the bundled unzbd as a child process: its platform file name and release path, one run with both streams drained, and its identity for the stamp.
-- `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, `.rof` half, stamps) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
+- `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, stamp) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
 - `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
 - `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
 - `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
-- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, `extracted/` rof paths, a chapter's own entry beating the bare name.
+- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, the UI archive's `rof/` paths, a chapter's own entry beating the bare name.
 - `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
 - `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
