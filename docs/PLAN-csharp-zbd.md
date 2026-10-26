@@ -58,6 +58,7 @@ tables is work this plan does not do.
 | 14 | Per-chapter image-pointer tables (~4,000 lines in `gamez/src/gamez/cs/data`) | **Not ported**, on the reading that they serve only the byte-identical repack. The gamez model diff tests that reading. |
 | 15 | CAB decompression from an ISO | **In memory, per session.** A disk cache only if a measured launch cost is too high. |
 | 16 | The local `tools/mech3ax` checkout | **Stays local and git-ignored** as the read-only reference for decision 3. Nothing from it is pushed or mirrored. |
+| 17 | What feeds the CI engine suites, which run on `--synthetic-data` with no game files | **The synthetic tool builds the loader models in memory** and hands them to the session through a game-data seam (A3); no synthetic files, JSON or binary. A synthetic run has no game-file source. |
 
 ## ⚠ Read this before implementing anything
 
@@ -165,6 +166,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Game-file source and the ZBD archive reader
 2. ☑ Model-diff oracle harness
+3. ☐ Session game-data seam and in-memory synthetic models
 
 ### Wave B, small formats
 
@@ -196,8 +198,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ## Dependency and parallelism notes
 
-A1 and A2 block everything. The Wave B items are independent of each other once A lands, but each
-edits `SessionArchives.cs`/`SessionPaths.cs` when it switches its loader, so run at most two in
+A1 and A2 block everything. A3 blocks every engine switch from B12 on; a format item's reader and
+its model diff can run beside A3, and its switch (game-data slot, synthetic builder) follows A3.
+The Wave B items are independent of each other once A lands, but each edits
+`SessionArchives.cs`/`SessionPaths.cs` when it switches its loader, so run at most two in
 parallel and give each its own loader file plus a serialized merge of the shared two. B15 before C22
 (gamez references textures by name). C21 and C22 are independent but both large; run them in
 parallel only with separate file ownership (`CompiledAnim.cs` + anim readers vs `GameZ.cs` + node
@@ -354,6 +358,40 @@ over every archive of a mode. Reflective, as above; NaN and `delta_raw` as above
 **Verify.** Seed a deliberate one-field difference and see the harness report it with its path.
 
 **⚠ Traps.** An unchanged result is not evidence until the harness has been seen to fail.
+
+## A3 ☐ Session game-data seam and in-memory synthetic models
+
+**Goal.** A session receives its loaded models (interp scripts, messages, and the slots later
+items fill: root and chapter readers, sounds, planes, textures, gamez, anim) through one game-data
+value, built either from the game-file source or by the synthetic tool in memory; no engine path
+below the launcher takes an extracted file path for a format that has switched.
+
+**Evidence (confidence: direction-sound).** Decision 17. B11 already passes a loaded model
+(`InterpScripts`) through `BuildState`/`WorldSession.Options` instead of a path. B12 found the
+messages path threaded through about 85 engine files (`BuildState`, `TestContext`,
+`SessionBoards`, `InstantActionDirector` inputs, screens and seats), and four sites that build
+`extracted/messages.json` from the data root alone (`BootSequence`, `CampaignBriefing`,
+`CampaignFlightCheckPage`, `BotSeats`). `Tooling/SyntheticData.cs` and its siblings write an
+`extracted/`-shaped tree from fixtures (`planes/`, `zrdr/` records, `messages.json`, sounds,
+textures, one mission), which the CI engine suites read.
+
+**Approach.** A game-data type beside `BasePaths` with a chapter-independent part (loaded once per
+launch) and a per-chapter part (loaded per session), a factory from `BasePaths.Game`, and a
+synthetic factory in `Tooling/`. Fold B11's `Interp` into it, then switch messages (B12's switch)
+as the first full migration: one `Messages` object in place of the path, the four data-root sites
+included, and the synthetic tool building its invented messages in memory instead of writing
+`messages.json`. Later B and C items add their slot and their synthetic builder the same way.
+<TODO: whether the synthetic fixtures under `CSVM.Tests/fixtures/` stay as JSON read by the
+legacy oracles into models, or become code.>
+
+**Model recommendation.** high, it reshapes how every session gets its data.
+
+**Verify.** Complete battery on synthetic data (the CI engine tier) and on the real install, both
+green; the B12 model diff clean; a grep shows no engine use of `MessagesPath` left.
+
+**⚠ Traps.** A synthetic run has no game source (`BasePaths.Resolve`), so nothing in it may fall
+back to a real install. The messages switch touches many files: merge it alone, not beside another
+Wave B switch.
 
 # Wave B, small formats
 
