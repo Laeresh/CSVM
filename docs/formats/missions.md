@@ -168,6 +168,21 @@ a plain JSON object, not a nested list:
   "entries": [ { "key": "MSG_OBJ_DZ", "id": 461, "value": "Danger Zone" }, … ] }
 ```
 
+**In the install** the table is `strings.dll` at the root, a resource DLL whose two halves join on
+the id:
+
+- **Values**: an `RT_STRING` table in the standard layout ([strings.md](strings.md#resource-format)),
+  1,023 strings, language 1033. The text is **UTF-16LE**, so no code page applies; the resource
+  data entries' code page field reads 1252, a compiler tag the reader ignores. The one non-ASCII
+  character in the shipped table is `MSG_COPYRIGHT1`'s `©`.
+- **Keys**: a table in the `.data` section, 48 bytes in, after the C runtime's initializer slots.
+  It is 1,023 pairs of a `u32` pointer to the key's NUL-terminated ASCII name (a loaded address,
+  image base `0x10000000` included) and a `u32` string id. The pairs run from the highest name
+  address down, and the names follow the table directly, so the table ends where the lowest
+  pointer points.
+
+Every string has exactly one key. The reader is `Messages.FromStringsDll`.
+
 Look up by `key`. Relevant stunt values: `MSG_OBJ_DZ` = "Danger Zone", `MSG_OBJ_FLYTHROUGH` =
 "Fly Through", `MSG_OBJ_FLYOVER` = "Fly Over", `MSG_OBJ_TRAINTUNNEL_M` = "Train Tunnel Mid",
 `MSG_BRF_IASF_OBJ2` = "Fly through all the Danger Zones to win!" (the stunt intro line).

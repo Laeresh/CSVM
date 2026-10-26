@@ -169,7 +169,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, small formats
 
 11. ☑ `interp.zbd`
-12. ☐ `strings.dll` messages
+12. ◐ `strings.dll` messages
 13. ☐ Sound archives
 14. ☐ Reader archives (`zrdr.zbd`)
 15. ☐ Texture archives
@@ -400,7 +400,39 @@ and the diff compares names and lines only. A run without an install now reads n
 before it read `extracted/interp.json`: mission setup, clutter, flares and the C5 mip bias then
 fall back to their "nothing authored" behaviour, as they did without an extraction.
 
-## B12 ☐ `strings.dll` messages
+## B12 ◐ `strings.dll` messages
+
+**Reader landed, engine switch held.** `Messages.Load(IGameFileSource?)` and
+`Messages.FromStringsDll(byte[])` (`CSVM/src/Mech3/Messages.cs`) build the existing model from
+`strings.dll`; `PeStringTable.Section` (`CSVM/src/Extraction/PeStringTable.cs`) gives the `.data`
+bytes and load address the key table's pointers need, and `Read` is unchanged in behaviour.
+`CSVM.Tests/MessagesDllTests.cs` holds CI-safe units on a DLL built in code, the model diff
+against `messages.json` (1,023 keys, 1,024 leaves, clean) and a one-character corruption reported
+under `MSG_GAME_NAME_VER`. The layout is in
+[formats/missions.md](formats/missions.md#message-table).
+
+**Premise correction.** `PeStringTable` alone cannot build the model: the `MSG_*` keys are not in
+the resources. They are a table of name-pointer and id pairs in the DLL's `.data` section, joined
+to the `STRINGTABLE` by id. The Rust crate's 1,244 lines are mostly generality CSVM does not need:
+PE header structures (384), a resource-directory walk with assertions for two layouts (373), the
+`RT_MESSAGETABLE` decoder the MechWarrior 3 family uses (77), and glue (213); the Crimson Skies
+part is the string-table block (49) and the `.data` key table (80).
+
+**Why the switch is held.** Two gaps the plan does not cover:
+
+1. The synthetic tree (`Tooling/SyntheticPlane.cs`) writes an invented `extracted/messages.json`
+   that the CI engine suites read through `ctx.MessagesPath`. Read from the install only, a
+   synthetic run gets an empty table in CI, and on a machine with an install `GameFileSource.Locate`
+   can hand it the real `strings.dll`, so its labels depend on the machine. Every Wave B and C
+   format the synthetic tree writes (zrdr, planes) meets the same question.
+2. The table is threaded as a path through about 220 references in 85 engine files
+   (`BuildState`, `TestContext`, `SessionBoards`, `InstantActionDirector` inputs, screen and seat
+   parameters), and four sites build `extracted/messages.json` from the data root alone
+   (`BootSequence`, `CampaignBriefing`, `CampaignFlightCheckPage`, `BotSeats`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `Messages` reads `strings.dll` directly.
 
@@ -413,7 +445,9 @@ already reads PE string tables (`PeStringTable.cs`).
 
 **Verify.** A2 diff clean; complete battery.
 
-**⚠ Traps.** <TODO: text encoding of the string resources; check against `docs/formats/`.>
+**⚠ Traps.** The text is UTF-16LE, so no code page applies; the resource entries' code page
+field reads 1252 and is ignored. The Windows-1252 decode in the Rust crate belongs to the
+`RT_MESSAGETABLE` games, not to Crimson Skies.
 
 ## B13 ☐ Sound archives
 

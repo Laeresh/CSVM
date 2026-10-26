@@ -475,7 +475,9 @@ The game's localized string table: plain `System.Text.Json` over the extracted `
 (NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
 `Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format). `Parse`
 takes the JSON itself, so a unit with no file on disk reads the same rows; it is internal, since
-every shipped caller holds a path.
+every shipped caller holds a path. `Load(IGameFileSource?)` builds the same model from the install's
+`strings.dll` (`FromStringsDll`: the `.data` key table joined to the `STRINGTABLE` by id through
+`Extraction/PeStringTable.cs`), empty without a source; no engine caller uses it yet.
 
 ## src/Mech3/UiStrings.cs
 The original's UI string table by id, read from `extracted/rof/ui_strings.json`. Only the `langui`

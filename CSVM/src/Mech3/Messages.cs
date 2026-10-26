@@ -1,8 +1,10 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using CSVM.Extraction;
 
 namespace CSVM.Mech3;
 
@@ -16,6 +18,12 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class Messages
 {
+    /// <summary>The table's file at the install root.</summary>
+    public const string GameFile = "strings.dll";
+
+    // The key table follows 48 bytes of C runtime initializer slots at the head of .data.
+    private const int KeyTableOffset = 48;
+
     private readonly Dictionary<string, string> _byKey = new(StringComparer.OrdinalIgnoreCase);
 
     public int Count => _byKey.Count;
@@ -25,6 +33,12 @@ public sealed class Messages
     /// are cosmetic and a mission must still load without them.</summary>
     public static Messages Load(string path) =>
         File.Exists(path) ? Read(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
+
+    /// <summary>Loads the table from the install's <c>strings.dll</c>. No source or no file gives
+    /// an empty table, as a missing JSON file does; a malformed DLL throws
+    /// <see cref="InvalidDataException"/>.</summary>
+    public static Messages Load(IGameFileSource? game) =>
+        game != null && game.Exists(GameFile) ? FromStringsDll(game.ReadAllBytes(GameFile)) : new Messages();
 
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
@@ -86,6 +100,45 @@ public sealed class Messages
     /// Internal rather than public because every shipped caller holds a path, and only the unit
     /// project builds a table out of a literal.</summary>
     internal static Messages Parse(string json) => Read(JsonDocument.Parse(json));
+
+    /// <summary>The table out of a <c>strings.dll</c>'s bytes. The values are its
+    /// <c>STRINGTABLE</c>; the keys are a table of name-pointer and id pairs in its <c>.data</c>
+    /// section. Layout: docs/formats/missions.md#message-table.</summary>
+    internal static Messages FromStringsDll(byte[] pe)
+    {
+        var text = PeStringTable.Read(pe);
+        var (data, address) = PeStringTable.Section(pe, ".data")
+            ?? throw new InvalidDataException("strings.dll has no .data section");
+        var msgs = new Messages();
+
+        // The pairs run up to the first name, which the last pair points at.
+        int end = data.Length;
+        int used = 0;
+        for (int o = KeyTableOffset; o + 8 <= end; o += 8)
+        {
+            long name = (long)BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(o)) - address;
+            int id = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(o + 4));
+            int nul = name >= o + 8 && name < data.Length ? Array.IndexOf(data, (byte)0, (int)name) : -1;
+            if (nul < 0)
+            {
+                throw new InvalidDataException("strings.dll key " + id + " points outside its .data section");
+            }
+
+            string key = Encoding.ASCII.GetString(data, (int)name, nul - (int)name);
+            msgs._byKey[key] = text.TryGetValue(id, out var value) ? value
+                : throw new InvalidDataException("strings.dll key " + key + " has no string " + id);
+            end = Math.Min(end, (int)name);
+            used++;
+        }
+
+        // Every string is named by a key, so a shortfall means the key table was misread.
+        if (used != text.Count)
+        {
+            throw new InvalidDataException("strings.dll names " + used + " of its " + text.Count + " strings");
+        }
+
+        return msgs;
+    }
 
     // The one reader both entry points share. Takes the document over so a malformed file leaks
     // nothing on the way back out.

@@ -87,7 +87,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Zeppelins.cs`, the mission `zeppelins.zrd.json` reader: each instance's motion, net, damage zones and cannons.
 - `src/Mech3/InstantAction.cs`, `InstantActionDef` and its three producers: a chapter's file, `--ia=`, and the launchscreen wizard.
 - `src/Mech3/AiSkills.cs`, `player.json`'s `ai_skill_parameters` endpoint pairs by rating, plus the aiv roster block accessors.
-- `src/Mech3/Messages.cs`, the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
+- `src/Mech3/Messages.cs`, the game's localized string table: the key→value map behind every `MSG_*` key, from `messages.json` or `strings.dll`.
 - `src/Mech3/UiStrings.cs`, the original's UI string table by id: `langui` rows, with its placeholders converted for composite format.
 - `src/Mech3/TgaImage.cs`, the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.

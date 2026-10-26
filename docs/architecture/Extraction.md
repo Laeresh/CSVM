@@ -86,6 +86,8 @@ inspection.
 `Read` walks a PE file's resource directory (type, block id, language) to each `STRINGTABLE`
 block and returns every used slot by id, ascending. Pure byte parsing over the section table's
 RVA map, so the original's DLLs read the same on every platform. A file that is not a PE throws.
+`Section` returns one named section's bytes and its load address (image base included), which
+`Mech3/Messages.cs` needs to follow the pointers in `strings.dll`'s key table.
 
 ## src/Extraction/UiStringTable.cs
 `ParseSymbols` reads `RESOURCE.H`'s `#define IDS_...` lines (first definition of an id wins),
