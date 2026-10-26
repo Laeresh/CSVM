@@ -69,22 +69,23 @@ public sealed class AnimProgram
     public int ScriptPoolCount { get; private set; }
 
     /// <summary>Loads one mission's animation program from the three zrdr scopes (shared,
-    /// chapter, mission) and the <c>cam_anim</c> and <c>mis_anim</c> extractions. Any of them
-    /// may be missing: a tree without the anim archives gets reader-only behaviour.</summary>
+    /// chapter, mission) and the chapter's <c>cam_anim</c> and the mission's <c>mis_anim</c>
+    /// archive. Any of them may be missing: a mission without the anim archives gets reader-only
+    /// behaviour. The archives' defs become this program's, so a caller hands each archive to the
+    /// one mission it belongs to (see <see cref="Add"/>).</summary>
     public static AnimProgram Load(string sharedZrdr, string chapterZrdr, string missionZrdr,
-        string chapterAnimPath, string missionAnimPath)
+        AnimArchive? chapterAnim, AnimArchive? missionAnim)
     {
         var program = new AnimProgram();
 
         // Compiled first, so it wins every collision.
         var missionManifest = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool haveMissionManifest = false;
-        foreach (var (path, label) in new[] { (chapterAnimPath, "cam_anim"), (missionAnimPath, "mis_anim") })
+        foreach (var (loaded, isMission) in new[] { (chapterAnim, false), (missionAnim, true) })
         {
-            if (AnimArchive.Load(path, label) is not { } archive)
+            if (loaded is not { } archive)
                 continue;
             program.ScriptPoolCount += archive.ScriptCount;
-            bool isMission = label == "mis_anim";
             if (isMission)
                 haveMissionManifest = true;
             foreach (var def in archive.Defs)

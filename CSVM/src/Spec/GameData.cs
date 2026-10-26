@@ -65,18 +65,23 @@ public sealed class GameData
 
     // The chapter loader of an install. The last chapter's textures and world are held, so the
     // sessions and suites that rebuild one chapter decode each archive once. The world decodes on
-    // its first read: a texture-only caller and the empty stage never pay for it.
+    // its first read: a texture-only caller and the empty stage never pay for it. ⚠ Both anim
+    // archives are held for the last mission only. AnimProgram.Load writes a reader def's
+    // PERSIST_LOG onto its compiled twin. A chapter archive shared across missions would carry one
+    // mission's flags into the next.
     private static Func<string, string, ChapterData> Chapters(IGameFileSource? game)
     {
         var gate = new object();
-        string? heldChapter = null;
+        string? heldChapter = null, heldMission = null;
         var held = TextureSet.Empty;
         Lazy<GameZ?>? heldGamez = null;
+        Lazy<AnimArchive?>? heldChapterAnim = null, heldMissionAnim = null;
         return (chapter, mission) =>
         {
             lock (gate)
             {
-                if (heldGamez == null || !string.Equals(heldChapter, chapter, StringComparison.OrdinalIgnoreCase))
+                bool newChapter = heldGamez == null || !string.Equals(heldChapter, chapter, StringComparison.OrdinalIgnoreCase);
+                if (newChapter)
                 {
                     held = Read(game, $"ZBD/{chapter}", () => TextureSet.ForChapter(game, chapter), TextureSet.Empty);
                     string gamezPath = $"ZBD/{chapter}/gamez.zbd";
@@ -84,10 +89,29 @@ public sealed class GameData
                     heldChapter = chapter;
                 }
 
-                return new ChapterData { Chapter = chapter, Mission = mission, Textures = held, GamezSource = heldGamez };
+                if (newChapter || !string.Equals(heldMission, mission, StringComparison.OrdinalIgnoreCase))
+                {
+                    heldChapterAnim = Anim(game, $"ZBD/{chapter}/cam_anim.zbd", "cam_anim");
+                    heldMissionAnim = Anim(game, $"ZBD/{chapter}/{mission}/mis_anim.zbd", "mis_anim");
+                    heldMission = mission;
+                }
+
+                return new ChapterData
+                {
+                    Chapter = chapter,
+                    Mission = mission,
+                    Textures = held,
+                    GamezSource = heldGamez,
+                    ChapterAnimSource = heldChapterAnim,
+                    MissionAnimSource = heldMissionAnim,
+                };
             }
         };
     }
+
+    // The label is the one AnimProgram.Load and the anim log lines know the archive by.
+    private static Lazy<AnimArchive?> Anim(IGameFileSource? game, string path, string label) =>
+        new(() => Read(game, path, () => AnimZbd.Load(game, path, label), null));
 
     private static T Read<T>(IGameFileSource? game, string path, Func<T> load, T absent)
     {
@@ -123,6 +147,20 @@ public sealed class ChapterData
 
     /// <summary>The decode behind <see cref="Gamez"/>, one per chapter a loader holds; null for no world.</summary>
     public Lazy<GameZ?>? GamezSource { get; init; }
+
+    /// <summary>The chapter's compiled anims, <c>cam_anim.zbd</c>, decoded on first read; null
+    /// without one. Shared like <see cref="Gamez"/>, so read-only.</summary>
+    public AnimArchive? ChapterAnim => ChapterAnimSource?.Value;
+
+    /// <summary>The decode behind <see cref="ChapterAnim"/>, held for the last mission a loader read.</summary>
+    public Lazy<AnimArchive?>? ChapterAnimSource { get; init; }
+
+    /// <summary>The mission's compiled anims, <c>mis_anim.zbd</c>, decoded on first read; null for
+    /// a mission without one. Shared like <see cref="Gamez"/>, so read-only.</summary>
+    public AnimArchive? MissionAnim => MissionAnimSource?.Value;
+
+    /// <summary>The decode behind <see cref="MissionAnim"/>, held for the last mission a loader read.</summary>
+    public Lazy<AnimArchive?>? MissionAnimSource { get; init; }
 
     /// <summary>A chapter part with no models loaded.</summary>
     public static ChapterData Bare(string chapter, string mission) => new() { Chapter = chapter, Mission = mission };

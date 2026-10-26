@@ -145,7 +145,8 @@ public class EffectCatalogueTests
             {
                 var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, "IA1");
                 return AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
-                    SessionPaths.MissionZrdr(dataRoot, chapter, "IA1"), chapterAnim, missionAnim);
+                    SessionPaths.MissionZrdr(dataRoot, chapter, "IA1"),
+                    AnimArchive.Load(chapterAnim, "cam_anim"), AnimArchive.Load(missionAnim, "mis_anim"));
             }))
             .ToArray();
         Task.WaitAll(programs);

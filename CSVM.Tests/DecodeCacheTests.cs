@@ -1,5 +1,3 @@
-using System.IO;
-using CSVM;
 using CSVM.Mech3;
 using Xunit;
 
@@ -17,10 +15,9 @@ public class DecodeCacheTests
     public void RepeatingOneAnimKeyReturnsTheSameProgramAndCountsAHit()
     {
         var cache = new DecodeCache();
-        var key = Key("/nowhere", "C1", "IA1");
 
-        var first = Anim(cache, key);
-        var second = Anim(cache, key);
+        var first = Anim(cache, "C1", "IA1");
+        var second = Anim(cache, "c1", "ia1");
 
         Assert.Same(first, second);
         Assert.Equal(1, cache.Misses);
@@ -28,15 +25,15 @@ public class DecodeCacheTests
     }
 
     [Theory]
-    [InlineData("/elsewhere", "C1", "IA1")]   // a different data root
-    [InlineData("/nowhere", "C3", "IA1")]     // a different chapter
-    [InlineData("/nowhere", "C1", "M04")]     // a different mission
-    public void ChangingAnyPartOfTheAnimKeyMisses(string root, string chapter, string mission)
+    [InlineData("C3", "IA1")]     // a different chapter
+    [InlineData("C1", "M04")]     // a different mission
+    [InlineData("C1I", "A1")]     // the same letters split elsewhere
+    public void ChangingAnyPartOfTheAnimKeyMisses(string chapter, string mission)
     {
         var cache = new DecodeCache();
-        var baseline = Anim(cache, Key("/nowhere", "C1", "IA1"));
+        var baseline = Anim(cache, "C1", "IA1");
 
-        var other = Anim(cache, Key(root, chapter, mission));
+        var other = Anim(cache, chapter, mission);
 
         Assert.NotSame(baseline, other);
         Assert.Equal(2, cache.Misses);
@@ -58,18 +55,7 @@ public class DecodeCacheTests
         Assert.Equal(1, cache.Hits);
     }
 
-    // AnimProgram.Load tolerates every one of its five paths being absent (a user who has not
-    // re-extracted gets reader-only behaviour), so the key can be exercised on names alone, no
-    // install, and no decode cost, which is what lets this cover data root as well as chapter.
-    private static string[] Key(string root, string chapter, string mission) => new[]
-    {
-        Path.Combine(root, "zrdr.zip"),
-        Path.Combine(root, chapter, "zrdr.zip"),
-        Path.Combine(root, chapter, mission, "zrdr.zip"),
-        Path.Combine(root, chapter, "cam_anim.zip"),
-        Path.Combine(root, chapter, mission, "mis_anim.zip"),
-    };
-
-    private static AnimProgram Anim(DecodeCache cache, string[] k) =>
-        cache.Anim(k[0], k[1], k[2], k[3], k[4]);
+    // An empty program per miss: the key alone is under test, so no install and no decode.
+    private static AnimProgram Anim(DecodeCache cache, string chapter, string mission) =>
+        cache.Anim(chapter, mission, () => AnimProgram.FromDefinitions(System.Array.Empty<AnimDefinition>()));
 }

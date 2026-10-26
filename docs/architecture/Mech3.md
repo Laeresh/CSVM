@@ -552,7 +552,7 @@ picks the flare set by each original's plane-frame x, a rig flare stamped with t
 `PlayerNotice`, set by the launcher's menu entry, makes `Build` report it and build without the rig. Rigs come from `HdModels.RigFor`.
 
 ## src/Mech3/CompiledAnim.cs
-Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,
+Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir), the modding path beside `AnimZbd.cs`: typed definitions,
 events, and the SI-script pool, where `Script(index)` parses lazily in `metadata.json` order. The
 `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately off `Sequences`
 so bootstrap and the sequence-walking derivations never see it and only
@@ -570,8 +570,8 @@ Unit normalization happens HERE so handlers see one convention: reader rotations
 tokens (to numbers). See [../formats/anim-definitions.md](../formats/anim-definitions.md).
 
 ## src/Mech3/AnimProgram.cs
-Merges the compiled and reader front-ends for one mission plus `StartAnims`; `ScriptFor` resolves
-an event slot to its archive SI script. Two gates run first, both only with a compiled mission
+Merges the compiled and reader front-ends for one mission plus `StartAnims` (`Load`: zrdr scopes as
+paths, the two compiled archives as models); `ScriptFor` resolves an event slot to its archive SI script. Two gates run first, both only with a compiled mission
 manifest present so a reader-only extraction is untouched: the mission-scope gate against that
 manifest, and the shared-scope FILE gate (`ListedSharedFiles`, reported as `SharedFilesSkipped`).
 Whatever survives is deduplicated on the (`NAME`, `ANIMATION_NAME`) pair in `Add`, compiled winning
@@ -669,8 +669,8 @@ decodes a whole file into the same `AnimArchive` model `AnimArchive.Load` builds
 extraction, every SI script decoded up front, and `Load(game, path, label)` returns null without a
 source or without the file. It rebuilds each definition and script as the property tree the
 model's `Parse` members take, so the model is the same by construction; `AnimArchive.FromDecoded`
-is the one entry it adds to the model. Nothing in the engine calls it yet. `Read` refuses a file
-whose records do not tile it. Layout and rules:
+is the one entry it adds to the model. `Spec/GameData.cs`'s chapter loader calls it for a session's
+two archives. `Read` refuses a file whose records do not tile it. Layout and rules:
 [../formats/anim-definitions/compiled-archives.md](../formats/anim-definitions/compiled-archives.md).
 
 ## src/Mech3/AnimZbdEvents.cs
@@ -940,8 +940,8 @@ Decode: docs/formats/campaign-sequence.md.
 Builds one chapter world and binds its `AnimProgram`, the world+anim half of a session build:
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights, and stops before
 the per-view steps the caller drives. `Options` is the whole seam, and everything above Mech3 comes
-in through it: the chapter zrdr path, the shared `DecodeCache`, the emitter factory a suite
-substitutes and the archive factory that builds the real one, the clutter debug switches, the
+in through it: the chapter zrdr path, the two compiled anim archives, the shared `DecodeCache`, the
+emitter factory a suite substitutes and the archive factory that builds the real one, the clutter debug switches, the
 sound-group prewarm names, the callback and trigger hosts, and `CutsceneNames` (the session's
 camera, bars and intro names), whose presence gates `camera1`, the letterbox bars, the composition
 frames and the `AircraftStage`. It stands up the staged props a definition reparents onto placed content, and `ResolveLibraryRoot` is the lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
@@ -979,13 +979,13 @@ decides whether `WorldSounds` decodes names the prewarm missed. `StartupProfile`
 unconditional, and `gamez` is read inside the `gamez` phase, so a chapter's first decode is timed.
 
 ## src/Mech3/DecodeCache.cs
-The decoded inputs a world build can reuse: `Gamez(chapter, load)`, keyed by chapter since one store
-serves one launch's game data, and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`,
-keyed by the paths, which carry data root, chapter and mission; collision, mute, the
-emitter factory and the prewarm list all act after the decode, on objects this never holds. It owns
-nothing disposable and nothing Godot. **Everything handed back is shared and read-only by
-contract**, which is why `AnimProgram`'s three collections are `IReadOnlyList`; `GameZ` has no such
-enforcement, so its one in-place writer (`EffectCycles.Apply`) has to stay idempotent, which it is.
+The decoded inputs a world build can reuse: `Gamez(chapter, load)`, keyed by chapter since one store serves one launch's game
+data, and `Anim(chapter, mission, load)`, keyed by the pair for the same reason; collision, mute, the emitter factory and the
+prewarm list all act after the decode, on objects this never holds. It owns nothing disposable and nothing Godot. **Everything
+handed back is shared and read-only by contract**, which is why `AnimProgram`'s three collections are `IReadOnlyList`; `GameZ` has
+no such enforcement, so its one in-place writer (`EffectCycles.Apply`) has to stay idempotent, which it is. The anim archives' one
+writer, `AnimProgram.Load` ORing a reader def's `PersistLog` onto its compiled twin, is idempotent for one mission's inputs only,
+so `Spec/GameData.cs` holds an archive per mission; a suite that edits an anim model builds its own (`SyntheticEffects.Anims`).
 Callers are serial by construction. An instance lives as long as its holder.
 
 ## src/Mech3/EmptyStage.cs

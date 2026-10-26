@@ -20,9 +20,8 @@ public class SyntheticEffectsTests
     public void EveryCompiledDefinitionAnchorsOnATemplateRoot()
     {
         var gamez = SyntheticEffects.Gamez();
-        var archive = AnimArchive.Load(SyntheticEffects.AnimUnder(Built()), SyntheticEffects.Folder);
+        var archive = SyntheticEffects.Anims();
 
-        Assert.NotNull(archive);
         Assert.Contains(archive.Defs, d => d.AnimName == "he_ground_effect");
         var children = gamez.Nodes.SelectMany(n => n.Children).ToHashSet();
         foreach (var def in archive.Defs.Where(d => d.Name != "player"))
@@ -57,22 +56,8 @@ public class SyntheticEffectsTests
     }
 
     [Fact]
-    public void AnArchiveEntryNamingNoFileFailsTheBuild()
-    {
-        string fixtures = TestData.TempDir();
-        string folder = Path.Combine(fixtures, "synthetic", SyntheticEffects.Folder);
-        Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "cam_anim.json"), "{ \"defs\": [ { \"def\": {} } ] }");
-        string zrdr = Path.Combine(fixtures, "synthetic", "zrdr");
-        Directory.CreateDirectory(zrdr);
-        foreach (string name in new[] { "probe_world.json", "flame_ball.json", "pufftrails.json" })
-        {
-            File.Copy(TestData.Fixture("synthetic", "zrdr", name), Path.Combine(zrdr, name));
-        }
-
-        var tree = new SyntheticTree(fixtures, Path.Combine(TestData.TempDir(), "root"));
-        Assert.ThrowsAny<Exception>(() => SyntheticEffects.Write(tree));
-    }
+    public void EachCallBuildsAFreshArchive() =>
+        Assert.NotSame(SyntheticEffects.Anims().Defs[0], SyntheticEffects.Anims().Defs[0]);
 
     private static string Built()
     {

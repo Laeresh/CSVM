@@ -408,8 +408,7 @@ internal static class ZeppelinSuites
 
         // What the model ships for doors: the compiled mis_anim carries both OnCall defs,
         // each moving the hull's door_left/door_right nodes (this is the visual F20 wires).
-        var (_, missionAnim) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
-        var archive = AnimArchive.Load(missionAnim, "mis_anim");
+        var archive = ctx.Data.LoadChapter("C1", "IA1").MissionAnim;
         ctx.Check(archive != null, $"C1/IA1's compiled mis_anim archive loads");
         if (archive == null)
             return;

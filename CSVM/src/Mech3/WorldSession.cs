@@ -220,13 +220,9 @@ public sealed class WorldSession
         // compiled cam_anim/mis_anim archives with the three zrdr scopes.
         mark = StartupProfile.Mark();
         var chapterZrdrPath = o.ChapterZrdrPath;
-        var (chapterAnimPath, missionAnimPath) =
-            AnimProgram.ArchivePaths(o.DataRoot, o.Chapter, o.Mission);
-        var animProgram = o.Decode == null
-            ? AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
-                chapterAnimPath, missionAnimPath)
-            : o.Decode.Anim(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
-                chapterAnimPath, missionAnimPath);
+        AnimProgram LoadAnim() => AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
+            o.ChapterAnim(), o.MissionAnim());
+        var animProgram = o.Decode == null ? LoadAnim() : o.Decode.Anim(o.Chapter, o.Mission, LoadAnim);
         StartupProfile.Record("anim", mark);
         LoadProgress.Report(LoadStep.AnimProgram);
         s.Program = animProgram;
@@ -681,6 +677,14 @@ public sealed class WorldSession
         /// and the chapter animation layer are read from. The caller resolves it, since the data
         /// root's layout is the session's to know.</summary>
         public required string ChapterZrdrPath { get; init; }
+
+        /// <summary>The chapter's compiled anim archive, null for none. Read inside the <c>anim</c>
+        /// startup phase, and not at all when <see cref="Decode"/> already holds the program.</summary>
+        public required Func<AnimArchive?> ChapterAnim { get; init; }
+
+        /// <summary>The mission's compiled anim archive, null for none; read as
+        /// <see cref="ChapterAnim"/> is.</summary>
+        public required Func<AnimArchive?> MissionAnim { get; init; }
 
         /// <summary>Where this build takes its <see cref="AnimProgram"/> from, when the caller has
         /// one. Null (the default) loads it fresh, so a session that

@@ -1529,6 +1529,8 @@ public partial class GameSession : Node3D
                 Interp = state.Data.Interp,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
+                ChapterAnim = () => state.Chapter.ChapterAnim,
+                MissionAnim = () => state.Chapter.MissionAnim,
                 Decode = _decode,
                 EffectsParent = _worldRoot!,
                 // The one instance the weather rig publishes to and the player's own effects read.

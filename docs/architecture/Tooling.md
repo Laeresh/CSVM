@@ -149,11 +149,13 @@ mission address enters the tree, so a suite gated on one still skips. Shapes are
 
 ## src/Tooling/SyntheticEffects.cs
 The synthetic tree's `effects` family. `Gamez` builds the template gamez in memory, one node per
-template root and child with a box per meshed node. Under `extracted/probe_effects/` it writes
-`cam_anim/`, the compiled archive shape (`metadata.json` and one file per definition) split out of
-`cam_anim.json`. It copies the reader destructibles, `flame_ball.json` and `pufftrails.json` into
-`zrdr/`. No session loader reads either; `Testing/EffectStageSuiteHelper.cs` does, under the switch.
-Names the engine or a suite looks up are kept over invented content.
+template root and child with a box per meshed node. `Anims` builds the compiled archive in memory (label `probe_effects`,
+`AnimArchive.FromDecoded`, a fresh one per call): 25 OnCall definitions as the property trees `AnimDefinition.Parse` reads, no SI
+scripts. They cover the HE burst, a gun hit, the seeker's flare, the sonic rings, the panel tears' flakes, the water crash's
+`wait_for_completion` call, a two-sequence building death, a call in a first-person `If`/`Else`, the propeller and autogyro spins
+and the torpedo's folded `reset_state`. The family copies the reader destructibles, `flame_ball.json` and `pufftrails.json` into
+`zrdr/`. No session loader reads any of it; `Testing/EffectStageSuiteHelper.cs` does, under the switch. Names the engine or a
+suite looks up are kept over invented content.
 
 ## src/Tooling/WavWriter.cs
 Encodes mono 16-bit samples as a RIFF/WAVE file, plain PCM or MS ADPCM (the seven standard

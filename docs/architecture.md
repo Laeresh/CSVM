@@ -129,7 +129,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/SubtreeBounds.cs`, a built subtree's world-space extent from its own meshes, skipping a tool's overlay drawings.
 - `src/Mech3/AircraftStage.cs`, stages the aircraft-archive subtrees a cutscene animates into a chapter world's node table, at that chapter's pointer base.
 - `src/Mech3/SessionArchives.cs`, opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, per `ArchiveIntent`.
-- `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by chapter or source paths, so one chapter built many times is decoded once.
+- `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by chapter or by chapter and mission, so one chapter built many times is decoded once.
 - `src/Mech3/EmptyStage.cs`, the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
@@ -735,7 +735,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
 - `src/Tooling/SyntheticSounds.cs`, the synthetic run's sounds: the fixture `sounds.json` plus an in-memory `SoundZbd` of one generated ADPCM WAV per row, and the `voice.json` accent table.
 - `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
-- `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez in memory, a compiled anim archive, reader destructibles and two puffer readers.
+- `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez and a compiled anim archive in memory, reader destructibles and two puffer readers.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
 - `src/Tooling/DumpGameFiles.cs`, `--dump`: the game files read through the C# readers, their models written as JSON, PNG and WAV for analysis scripts; never read back.
 

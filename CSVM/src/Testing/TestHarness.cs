@@ -1390,6 +1390,7 @@ public sealed class TestContext
         var texturesPath = ChapterTextures(chapter);
         RequireData(gamez, $"chapter {chapter} gamez");
         RequireData(texturesPath, $"chapter {chapter} textures");
+        var anims = Data.LoadChapter(chapter, mission);
 
         var buildWatch = System.Diagnostics.Stopwatch.StartNew();
         // A private StartupProfile the shared build code's own Mark/Record calls still reach --
@@ -1421,6 +1422,8 @@ public sealed class TestContext
                     Interp = Data.Interp,
                     MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
                     ChapterZrdrPath = SessionPaths.ChapterZrdr(DataRoot, chapter),
+                    ChapterAnim = () => anims.ChapterAnim,
+                    MissionAnim = () => anims.MissionAnim,
                     EffectsParent = stage,
                     PlayerPosition = () => Camera.GlobalPosition,
                     Collision = collision,

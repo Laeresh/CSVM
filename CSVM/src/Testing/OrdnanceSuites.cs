@@ -1622,9 +1622,8 @@ internal static class OrdnanceSuites
             };
             // The authored states the real factory reads, off the compiled chapter archive the
             // session's own program is built from (docs/architecture.md, SmokeScreens.cs).
-            var (chapterAnim, _) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
             var authored = new SmokeScreenEmitters(
-                AnimArchive.Load(chapterAnim, "cam_anim")?.Defs, textures, ctx.Host);
+                ctx.Data.LoadChapter("C1", "IA1").ChapterAnim?.Defs, textures, ctx.Host);
             // The synthetic tree carries no chapter anim archive, so the authored cloud is the install's alone.
             if (!ctx.SyntheticData)
             {

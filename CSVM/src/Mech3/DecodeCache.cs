@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// A store of decoded world inputs, keyed by chapter or by the paths they were decoded from. A
+/// A store of decoded world inputs, keyed by chapter, or by chapter and mission. A
 /// process that builds one chapter many times pays each decode once. Opt-in and instance scoped:
 /// a caller holding no instance decodes afresh, so a game session retains no chapter it left.
 /// ⚠ Every object handed back here is SHARED, and read-only by contract. <see cref="GameZ"/> and
@@ -14,8 +14,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class DecodeCache
 {
-    // Illegal in a Windows path, so no five real paths can spell another combination's key. A
-    // space would not hold, since the paths here routinely contain one.
+    // Illegal in a game folder name, so no chapter and mission pair can spell another's key.
     private const char KeySeparator = '|';
 
     private readonly Dictionary<string, GameZ?> _gamez = new(StringComparer.OrdinalIgnoreCase);
@@ -32,17 +31,11 @@ public sealed class DecodeCache
     /// no build option changes what is decoded.</summary>
     public GameZ? Gamez(string chapter, Func<GameZ?> load) => Get(_gamez, chapter, _ => load());
 
-    /// <summary>The merged animation program for one chapter+mission. All five paths are in the
-    /// key because all five are inputs to the merge, and between them they carry the data root,
-    /// the chapter and the mission.</summary>
-    public AnimProgram Anim(string sharedZrdr, string chapterZrdr, string missionZrdr,
-        string chapterAnim, string missionAnim)
-    {
-        string key = string.Join(KeySeparator, sharedZrdr, chapterZrdr, missionZrdr,
-            chapterAnim, missionAnim);
-        return Get(_anim, key, _ => AnimProgram.Load(sharedZrdr, chapterZrdr, missionZrdr,
-            chapterAnim, missionAnim));
-    }
+    /// <summary>The merged animation program of <paramref name="chapter"/> and
+    /// <paramref name="mission"/>, from <paramref name="load"/> on a miss. The pair is the whole key,
+    /// as the chapter is for <see cref="Gamez"/>.</summary>
+    public AnimProgram Anim(string chapter, string mission, Func<AnimProgram> load) =>
+        Get(_anim, string.Join(KeySeparator, chapter, mission), _ => load());
 
     private T Get<T>(Dictionary<string, T> store, string key, Func<string, T> load)
     {

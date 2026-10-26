@@ -187,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, large formats
 
-21. ◐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+21. ☑ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
 22. ☑ GameZ and `planes.zbd`
 
 ### Wave D, ROF and disc sources
@@ -892,7 +892,38 @@ alpha class and rename rules; model diff on pixels and names; delete the PNG/zip
 
 # Wave C, large formats
 
-## C21 ◐ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+## C21 ☑ Anim archives (`cam_anim.zbd`, `mis_anim.zbd`)
+
+**Landed.** By default no engine path reads an extracted anim archive. `ChapterData` carries
+`ChapterAnim` (`ZBD/<chapter>/cam_anim.zbd`) and `MissionAnim` (`ZBD/<chapter>/<mission>/mis_anim.zbd`,
+null for a mission without one, as `C1/M01`), each a `Lazy` decode through `AnimZbd.Load` under the
+labels `cam_anim` and `mis_anim`, read as absent on a decode failure as the other slots are.
+⚠ The install's chapter loader holds the two archives for the **last mission** only, not with the
+chapter's textures and world: `AnimProgram.Add` ORs a reader def's `PERSIST_LOG` onto its compiled
+twin, so a chapter archive shared across missions would carry one mission's flags into another
+whose listings gate that reader file off. A rebuild of one mission shares its pair, which is
+idempotent; a second mission of the chapter decodes a fresh pair (C1 `cam_anim` about 40 ms).
+`AnimProgram.Load` takes the two archives as models in place of the two paths and decides the
+mission scope by parameter position. `WorldSession.Options` gained `required Func<AnimArchive?>`
+`ChapterAnim` and `MissionAnim`, read inside the `anim` startup phase and not at all on a cache
+hit; `GameSession` and `TestContext.BuildWorld` fill them from their `ChapterData`.
+`DecodeCache.Anim(chapter, mission, load)` keys by the pair, as `Gamez` keys by chapter.
+`OrdnanceSuites`' smoke screen and `ZeppelinSuites`' launch doors read
+`ctx.Data.LoadChapter("C1", "IA1")`. The synthetic archive is `SyntheticEffects.Anims()`, 25
+definitions built in memory as property trees through `AnimDefinition.Parse` and
+`AnimArchive.FromDecoded`, a fresh archive per call; `ModelDiff` found it equal to the fixture it
+replaces (1,261 leaves) before `fixtures/synthetic/probe_effects/cam_anim.json` was deleted.
+`AnimArchive.Load`, `ReadAll`, `ReadEntry` and `JsonConvert` stay in the engine as the modding path
+(Decision 18), so the model diff keeps comparing extraction and reader in place; the
+`EffectPools`/`EffectCatalogue` units still build their programs from the extraction through it.
+Unused now, for E43: `AnimProgram.ArchivePaths` with its unpacked-folder preference (no engine
+caller, read only by `SessionPathsTests` and the two extraction units), `WorldSession.Options.DataRoot`
+(read only by that call; still set by both callers), and the `anim` mode of `ZbdPlan`'s
+extraction. No `BasePaths` field, `SessionPaths` member or `--` flag carried an anim path.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Reader landed, engine switch pending.** `AnimZbd.Read(byte[], label)` and
 `AnimZbd.Load(IGameFileSource?, path, label)` (`CSVM/src/Mech3/AnimZbd.cs`) decode a chapter's
@@ -952,11 +983,7 @@ archive, under 100 ms.
 3. **The legacy path moves**: `AnimArchive.Load`, `ReadAll`, `ReadEntry` and `JsonConvert` go to
    `CSVM.Tests/Oracle/AnimLegacy.cs`; the `Parse(AnimData)` members stay, since the reader builds
    through them. Unused afterwards, for E43: the `anim` `ZbdExtraction` mode and the anim paths
-   in `SessionPaths`.
-
-**Verified.** <pending orchestrator run>
-
-**Original approach (kept for reference).**
+   in `SessionPaths`. (Superseded by Decision 18: the JSON path stays in the engine.)
 
 **Goal.** `CompiledAnim` builds `AnimDefinition`s from the 61 anim archives directly.
 

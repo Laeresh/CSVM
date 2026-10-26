@@ -167,7 +167,8 @@ public class EffectPoolsTests
         string shared = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
         var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, mission);
         var program = AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
-            SessionPaths.MissionZrdr(dataRoot, chapter, mission), chapterAnim, missionAnim);
+            SessionPaths.MissionZrdr(dataRoot, chapter, mission),
+            AnimArchive.Load(chapterAnim, "cam_anim"), AnimArchive.Load(missionAnim, "mis_anim"));
         return WorldEffectsFactory.EffectStageRootNames(program,
             GameZ.Load(SessionPaths.ChapterGamez(dataRoot, chapter)));
     }

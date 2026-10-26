@@ -41,9 +41,7 @@ internal static class EffectStageSuiteHelper
         }
 
         var gamez = SyntheticEffects.Gamez();
-        var defs = new List<AnimDefinition>(
-            AnimArchive.Load(SyntheticEffects.AnimUnder(ctx.DataRoot), SyntheticEffects.Folder)?.Defs
-            ?? new List<AnimDefinition>());
+        var defs = new List<AnimDefinition>(SyntheticEffects.Anims().Defs);
         defs.AddRange(AnimDefs.LoadArchive(ctx.ZrdrPath));
         using var textures = new TextureArchive(ctx.ChapterTextures(SyntheticTextures.Chapter));
         body(new AnimSource(AnimProgram.FromDefinitions(defs),

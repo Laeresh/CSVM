@@ -34,6 +34,27 @@ public class AnimZbdTests
         Assert.Equal(61, ZbdManifest.Expected.Count(IsAnim));
     }
 
+    /// <summary>The install's chapter loader. A repeat of one mission shares its two archives. A
+    /// second mission decodes its own pair, since the program writes onto the defs it is handed,
+    /// but keeps the chapter's world. A mission folder without an archive reads null.</summary>
+    [GameFilesFact]
+    public void TheChapterLoaderHoldsTheLastMissionsArchivesUnderTheirLabels()
+    {
+        var load = CSVM.Spec.GameData.Load(GameFilesData.Source).LoadChapter;
+
+        var m02 = load("C1", "M02");
+        var again = load("c1", "m02");
+        var m04 = load("C1", "M04");
+
+        Assert.Same(m02.ChapterAnim, again.ChapterAnim);
+        Assert.Same(m02.MissionAnim, again.MissionAnim);
+        Assert.NotSame(m02.ChapterAnim, m04.ChapterAnim);
+        Assert.Same(m02.GamezSource, m04.GamezSource);
+        Assert.Equal(("cam_anim", "mis_anim"), (m04.ChapterAnim!.Label, m04.MissionAnim!.Label));
+        Assert.Equal(m02.ChapterAnim!.Defs.Count, m04.ChapterAnim.Defs.Count);
+        Assert.Null(load("C1", "M01").MissionAnim);
+    }
+
     [Fact]
     public void ARepeatedNameTakesTheFirstFreeNumberBeforeItsExtension()
     {
