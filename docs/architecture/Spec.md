@@ -114,10 +114,8 @@ The eight chapter-independent paths a launch reads, as one value: the repo root,
 
 ## src/Spec/GameData.cs
 The models a launch reads from the original's files, one value handed down in place of extracted
-paths. The chapter-independent part (`Interp`, `Messages`) loads once in `BasePaths.Resolve`:
-`GameData.Load(game)` from the install, or `Tooling/SyntheticGameData.cs` in memory under
-`--synthetic-data`, whose run has no source. `LoadChapter` builds the per-chapter part,
-`ChapterData`, once per session into `Launch/BuildState.cs`; it names its scope until a per-chapter
-format adds a slot. Sessions read it through `LauncherContext.Paths.Data` and `BuildState.Data`, the
-probes and `TestContext.Data` through the same `BasePaths`, and the Original menu through
-`OriginalPresentation` to `IOriginalScreenHost.Data` and `CampaignFeature.Data`.
+paths. The chapter-independent part (`Interp`, `Messages`, the `Rimage` HUD and menu art) loads once in `BasePaths.Resolve`:
+`GameData.Load(game)` from the install, or `Tooling/SyntheticGameData.cs` in memory under `--synthetic-data`, whose run has no source. `LoadChapter` builds the per-chapter part,
+`ChapterData`, once per session into `Launch/BuildState.cs`: the chapter's `Textures` (its top `rtextureN` tier). The install's loader holds the last chapter's textures, so a rebuilt session or a
+suite decodes a chapter once; suites reach them through `TestContext.ChapterTextures`. Sessions read it through `LauncherContext.Paths.Data` and `BuildState.Data`, the
+probes and `TestContext.Data` through the same `BasePaths`, and the Original menu through `OriginalPresentation` to `IOriginalScreenHost.Data` and `CampaignFeature.Data`.

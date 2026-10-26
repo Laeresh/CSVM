@@ -42,7 +42,7 @@ internal static class CampaignMilitiaLiverySuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         string rof = Path.Combine(ctx.DataRoot, "extracted", "rof");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(rof, $"extracted UI archive (paint patterns)");

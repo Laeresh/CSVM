@@ -17,14 +17,12 @@ query needs. It also answers what the JSON cannot: `WorldTransformOf`, `IsMarker
 Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.md](../formats/world-structure.md); teams: [../org/targeting.md](../org/targeting.md). Read `SceneBuilder.cs` next.
 
 ## src/Mech3/TextureArchive.cs
-Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. It absorbs the
-stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
-doubled period) and classifies each texture's alpha twice, for two unrelated readers:
-`LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the extractor's
-manifest, the one reader that sees the `Simple` textures. That manifest also supplies
-`RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
+Texture lookup over one decoded archive, a `TextureSet` of `TextureZbd` records, building each image with `ImageOf` (RGB8 or RGBA8, the format the PNG decode gave) the first time it is asked for. It absorbs the
+stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing doubled period) and classifies each texture's alpha twice, for two unrelated readers:
+`LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the texture
+header, the one reader that sees the `Simple` textures. The header also supplies the raw `RenderFlags` word, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
 `Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
-bias for `Launcher`. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+bias for `Launcher`. HD replacements are looked up by the set's `Archive` name (`c1/rtexture15`) and the texture's, never a path. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
@@ -507,7 +505,8 @@ the metadata half the runtime board renderer needs while retaining Godot's nativ
 ## src/Mech3/HdArt.cs
 The engine half of `Extraction/HdTextures.cs`. `Decode` reads a replacement and blackens every
 texel under alpha 0, where the pack leaves its green-screen key for filtering to bleed onto the
-edges. `Texture` uploads 2D art with `SetSizeOverride` at the original's size. Godot measures a
+edges. `Texture` uploads 2D art with `SetSizeOverride` at the original's size, and `Rimage` does it for one
+`rimage` record with its replacement (`HdTextures.ForRimage`). Godot measures a
 2D draw's source rect against that size, so every rect table, frame strip, crop and hitbox laid out
 in the original's pixels holds. `TextureArchive` does the same for world textures, which keep the
 original's alpha class and skip its authored mips. Loaders that read pixels themselves
@@ -640,11 +639,9 @@ and bodies do not tile it. Layout: [../formats/interp.md](../formats/interp.md).
 
 ## src/Mech3/TextureZbd.cs
 The reader for the texture archives `texture.zbd`, `rtextureN.zbd` and `rimage.zbd`, engine-free:
-`Read` decodes a whole file into `TextureImage`s in file order (name, collision rename, size, the
-header's alpha class and render-flags word, and the pixels as RGB8 or RGBA8, the layout today's
-extracted PNG has). `Load(game, path)` returns null without a source or without the file. Nothing
-in the engine calls it yet: `TextureArchive` still reads the extraction's PNGs and manifest, and the
-switch hands it these records instead. `Read` refuses a file whose textures do not tile it.
+`Read` decodes a whole file into `TextureImage`s in file order (name, collision rename, size, the header's alpha class and render-flags word, and the pixels as RGB8 or RGBA8, the layout the extracted PNG had).
+`Load(game, path)` returns null without a source or without the file, and `Read` refuses a file whose textures do not tile it. `TextureSet` holds one archive's records by `Key` without case, with the `Archive` name an HD pack files them under;
+`TextureSet.ForChapter` picks a chapter's highest `rtextureN` tier, else `texture.zbd`, the set `Spec/GameData.cs` loads per chapter beside `rimage`, and `Rgba` expands a record for the menus' engine-free art.
 Layout, pixel decode and the alpha class: [../formats/texture-archive.md](../formats/texture-archive.md).
 
 ## src/Mech3/GameZZbd.cs

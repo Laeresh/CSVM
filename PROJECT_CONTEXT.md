@@ -240,7 +240,7 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 **Active plans:** [`docs/PLAN-enhanced-vegetation.md`](docs/PLAN-enhanced-vegetation.md), Wave A
 not started. Next: A1, A2. [`docs/PLAN-csharp-zbd.md`](docs/PLAN-csharp-zbd.md), Wave B in
-progress. Next: B13, B14, B15, C21, C22.
+progress. Next: C22, B13, C21, B14, D33, D35.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

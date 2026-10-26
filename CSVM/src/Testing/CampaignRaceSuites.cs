@@ -64,7 +64,7 @@ internal static class CampaignRaceSuites
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter));

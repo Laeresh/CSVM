@@ -59,7 +59,7 @@ internal static class CutsceneAiParkSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -106,7 +106,7 @@ internal static class CutsceneAiParkSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, IaChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(IaChapter);
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, IaChapter, IaMission),
             $"{IaChapter}/{IaMission} zrdr");
         ctx.RequireData(texturesPath, $"{IaChapter} textures");

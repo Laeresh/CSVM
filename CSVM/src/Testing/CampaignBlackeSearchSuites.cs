@@ -114,7 +114,7 @@ internal static class CampaignBlackeSearchSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -152,7 +152,7 @@ internal static class CampaignBlackeSearchSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -203,7 +203,7 @@ internal static class CampaignBlackeSearchSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -237,7 +237,7 @@ internal static class CampaignBlackeSearchSuites
     internal static void CutsceneHandoffSpeed(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(ctx.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         Node3D? marker = null;
@@ -303,7 +303,7 @@ internal static class CampaignBlackeSearchSuites
             return;
         }
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var cutscene = new CutsceneController();
@@ -443,7 +443,7 @@ internal static class CampaignBlackeSearchSuites
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, AiSkills skills,
         IReadOnlyList<WarpPoint> points, string missionZrdr, string chapterZrdr,
-        string texturesPath, StringBuilder report)
+        TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -557,7 +557,7 @@ internal static class CampaignBlackeSearchSuites
     private static void DriveWarp(TestContext ctx, TestWorld world, ObjectiveScript script,
         CampaignMission mission, IReadOnlyList<(string Name, List<object?> Fields)> blocks,
         AiSkills skills, IReadOnlyList<WarpPoint> points, int hostPick, int guestSeed,
-        string missionZrdr, string chapterZrdr, string texturesPath, StringBuilder report)
+        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

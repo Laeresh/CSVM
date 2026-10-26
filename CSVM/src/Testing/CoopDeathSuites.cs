@@ -47,7 +47,7 @@ internal static class CoopDeathSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -76,7 +76,7 @@ internal static class CoopDeathSuites
     }
 
     private static void Drive(TestContext ctx, TestWorld world, ObjectiveScript script,
-        CampaignMission mission, string texturesPath, StringBuilder report)
+        CampaignMission mission, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

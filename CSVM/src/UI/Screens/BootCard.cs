@@ -22,6 +22,7 @@ public sealed partial class BootCard : Node
 {
     private readonly ComposedBoard _card;
     private readonly string _dataRoot;
+    private readonly Mech3.TextureSet _rimage;
     private readonly StickSkip _stick = StickSkip.Live();
     private ulong _heldOnFrame;
 
@@ -30,19 +31,20 @@ public sealed partial class BootCard : Node
     private Action? _then;
     private double _left;
 
-    private BootCard(string dataRoot, Mech3.Messages messages)
+    private BootCard(string dataRoot, Mech3.TextureSet rimage, Mech3.Messages messages)
     {
         Name = "boot_card";
         _dataRoot = dataRoot;
+        _rimage = rimage;
         _card = BootSequence.Card(messages);
     }
 
     /// <summary>Runs the whole boot sequence on <paramref name="host"/>: this node puts up the
     /// stills, <paramref name="film"/> plays the three movies, and <paramref name="then"/> runs
     /// after the last of them, by which point nothing of the sequence is left on screen.</summary>
-    public static void Play(Node host, string dataRoot, Mech3.Messages messages, CinemaPlay film, Action then)
+    public static void Play(Node host, string dataRoot, Mech3.TextureSet rimage, Mech3.Messages messages, CinemaPlay film, Action then)
     {
-        var card = new BootCard(dataRoot, messages);
+        var card = new BootCard(dataRoot, rimage, messages);
         host.AddChild(card);
         new BootSequence(film, card.Hold, card.Drop).Run(() =>
         {
@@ -96,7 +98,7 @@ public sealed partial class BootCard : Node
         // black, not what an empty viewport clears to. The theater's dark room stands in for it.
         var black = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = !GetViewport().UseXR };
         black.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _view = ComposedBoardView.Build(_dataRoot);
+        _view = ComposedBoardView.Build(_dataRoot, _rimage);
 
         // The launchscreen's own layer, because the card is the screen standing in front of the
         // launchscreen; a film at HudLayers.Cinema then covers both of these.

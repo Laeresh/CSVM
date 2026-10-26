@@ -100,7 +100,7 @@ internal static class CampaignPandoraLossSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var report = new StringBuilder();

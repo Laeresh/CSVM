@@ -39,7 +39,7 @@ internal static class TurretVesselSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BoatChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BoatChapter);
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
         ctx.RequireData(texturesPath, $"{BoatChapter} textures");

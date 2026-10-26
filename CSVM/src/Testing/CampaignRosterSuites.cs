@@ -146,7 +146,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RosterChapter, RosterMission);
         ctx.RequireData(missionZrdr, $"{RosterChapter}/{RosterMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, RosterChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(RosterChapter);
         ctx.RequireData(texturesPath, $"{RosterChapter} textures");
 
         CampaignMission? found = null;
@@ -287,7 +287,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
         ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BomberChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BomberChapter);
         ctx.RequireData(texturesPath, $"{BomberChapter} textures");
 
         CampaignMission? found = null;
@@ -433,7 +433,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
         ctx.RequireData(texturesPath, $"{BiasChapter} textures");
 
         var plan = CampaignRosterPlan.Build(
@@ -661,7 +661,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
         ctx.RequireData(texturesPath, $"{BiasChapter} textures");
 
         var plans = CampaignRosterPlan.Build(
@@ -757,7 +757,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
         ctx.RequireData(missionZrdr, $"{VoiceChapter}/{VoiceMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
         CampaignMission? found = null;
@@ -897,7 +897,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
         ctx.RequireData(texturesPath, $"{BiasChapter} textures");
 
         CampaignMission? found = null;
@@ -1163,7 +1163,7 @@ internal static class CampaignRosterSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
         ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BomberChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BomberChapter);
         ctx.RequireData(texturesPath, $"{BomberChapter} textures");
 
         CampaignMission? found = null;

@@ -82,7 +82,7 @@ internal static class GeneratorLaunchCountSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -124,7 +124,7 @@ internal static class GeneratorLaunchCountSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -276,7 +276,7 @@ internal static class GeneratorLaunchCountSuites
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         EnemyGeneratorDef def, IReadOnlyDictionary<string, RosterSpawnPlan> templates,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, AiSkills skills,
-        IReadOnlyList<AiNet> nets, string missionZrdr, string chapterZrdr, string texturesPath,
+        IReadOnlyList<AiNet> nets, string missionZrdr, string chapterZrdr, TextureSet texturesPath,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
@@ -452,7 +452,7 @@ internal static class GeneratorLaunchCountSuites
     private static void DriveZone(TestContext ctx, TestWorld world, CampaignDirector director,
         EnemyGeneratorDef def, IReadOnlyDictionary<string, RosterSpawnPlan> templates,
         AiSkills skills, IReadOnlyList<AiNet> nets, AiNet run, string missionZrdr,
-        string texturesPath, StringBuilder report)
+        TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

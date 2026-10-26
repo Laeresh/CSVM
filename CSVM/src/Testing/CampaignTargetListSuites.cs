@@ -124,7 +124,7 @@ internal static class CampaignTargetListSuites
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, flown.Chapter);
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, flown.Chapter, flown.Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, flown.Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(flown.Chapter);
         ctx.RequireData(chapterZrdr, $"{flown.Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{flown.Chapter} textures");
 

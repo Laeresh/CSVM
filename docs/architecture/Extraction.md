@@ -202,14 +202,12 @@ with a warning, never an exception. Engine-free; read
 `HdTextures.cs` and `HdModels.cs` next. Coverage: `CSVM.Tests/PackIndexTests.cs`.
 
 ## src/Extraction/HdTextures.cs
-The HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a `--det` run
-reads none unless `--hd=` names one), over `PackIndex.cs`. A path left with a folder replaces
-that file under `extracted/`, matched without case or extension, and a bare name replaces that world
-texture in every archive. `C3/rtexture12/cliff01.png` therefore beats `cliff01.png` in C3 alone,
+The HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a `--det` run reads none unless `--hd=` names one), over `PackIndex.cs`. A path left with a folder replaces
+that texture of that archive (`ForWorld` by the `TextureSet.Archive` name, `ForRimage` for the menu art) or that file under `extracted/` (`ForExtracted`, the rof art), matched without case or
+extension, and a bare name replaces that world texture in every archive. `C3/rtexture12/cliff01.png` therefore beats `cliff01.png` in C3 alone,
 the way a pack carries a chapter's own version of a name chapters share. A pack file carrying the
 original's own extension beats one that does not (`PackIndex.ReadPath`), so a pack can ship both
-`SB_03_01_BASE.png` (the scrapbook page) and `SB_03_01_BASE.jpg` (its zoom). Engine-free; `Mech3/HdArt.cs`
-decodes and sizes what it returns. Coverage: `CSVM.Tests/HdTexturesTests.cs`.
+`SB_03_01_BASE.png` (the scrapbook page) and `SB_03_01_BASE.jpg` (its zoom). Engine-free; `Mech3/HdArt.cs` decodes and sizes what it returns. Coverage: `CSVM.Tests/HdTexturesTests.cs`.
 
 ## src/Extraction/HdModels.cs
 The HD model packs in `<dataRoot>/HDModels` (`models.hd`, `--hd-models=`, off with

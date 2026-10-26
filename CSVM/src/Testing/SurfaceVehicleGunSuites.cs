@@ -85,7 +85,7 @@ internal static class SurfaceVehicleGunSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BoatChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BoatChapter);
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
         ctx.RequireData(texturesPath, $"{BoatChapter} textures");
@@ -253,7 +253,7 @@ internal static class SurfaceVehicleGunSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, VoiceChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(missionZrdr, $"{VoiceChapter}/{VoiceMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{VoiceChapter} zrdr");
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");

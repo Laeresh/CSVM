@@ -884,7 +884,7 @@ internal static class WorldFidelitySuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, RunChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(RunChapter);
         ctx.RequireData(texturesPath, $"{RunChapter} textures");
         ctx.WithWorld(RunChapter, collision, RunMission, world =>
         {

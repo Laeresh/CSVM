@@ -162,7 +162,7 @@ internal static class ZeppelinIdentitySuites
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "MP3");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(missionZrdr, $"C1/MP3 zrdr");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
         ctx.RequireData(texturesPath, $"C1 textures");

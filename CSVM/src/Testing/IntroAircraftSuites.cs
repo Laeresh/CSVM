@@ -68,7 +68,7 @@ internal static class IntroAircraftSuites
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
 
         var report = new StringBuilder();
@@ -105,7 +105,7 @@ internal static class IntroAircraftSuites
 
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         try
@@ -275,7 +275,7 @@ internal static class IntroAircraftSuites
 
     private static FlightController BuildRig(TestContext ctx, TestWorld world, ProjectilePool pool)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
             var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures).Build(PlaneNode);

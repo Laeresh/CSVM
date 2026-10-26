@@ -191,7 +191,7 @@ internal static class FogViewSuites
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, SunChapter, SunMission);
         ctx.RequireData(zrdr, $"{SunChapter}/{SunMission} mission zrdr");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, SunChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(SunChapter);
         ctx.RequireData(texturesPath, $"{SunChapter} textures");
         var weatherState = WeatherState.Load(zrdr);
         ctx.Check(weatherState is { HasCloudBand: true }, $"{SunChapter}/{SunMission} carries a weather.json with a cloud band");

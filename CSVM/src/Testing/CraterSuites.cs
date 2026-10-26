@@ -69,7 +69,7 @@ internal static class CraterSuites
     internal static void ScorchDecals(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (OrdnanceSuites.PickFireballRocket(ctx, weapons) is not { } he)
@@ -383,7 +383,7 @@ internal static class CraterSuites
         }
 
         ctx.Check(!SceneBuilder.CanModify(spot.Body), $"the spot's node carries no can_modify stamp ({spot.Body.GetParent()?.Name})");
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var plays = new List<(string Name, Vector3 At)>();
         var scorches = new List<(string? Effect, bool Carved)>();
         int asked = 0;
@@ -453,7 +453,7 @@ internal static class CraterSuites
         ctx.Same(0, flagged, $"no collider of the built C1 world carries the can_modify stamp");
 
         var mesh = ((Node3D)WorldCollision.OwnerOf(spot.Body)).GetNodeOrNull<MeshInstance3D>("mesh");
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var liveField = new CraterField(world.Session.Root);
         var plays = new List<(string Name, Vector3 At)>();
         int asked = 0;

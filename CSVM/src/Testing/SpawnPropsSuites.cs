@@ -211,7 +211,7 @@ internal static class SpawnPropsSuites
         EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(ctx.Chapter));
             using var sounds = new SoundArchive(ctx.SoundsPath);
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
             var pool = new ProjectilePool(textures, null, null);

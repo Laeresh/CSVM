@@ -470,7 +470,7 @@ internal static class DestroyChoreographySuites
     {
         ctx.WithPrivateWorld("C1", collision: false, world =>
         {
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 // The scalar C1's ZONE1 authors, the one a flown session writes to the global. Named
@@ -858,7 +858,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: true, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             ProjectilePool? pool = null;
             try
             {
@@ -931,7 +931,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 // Every airframe, not ctx.PlaneName: part of the verdict IS the branch between
@@ -966,7 +966,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 foreach (var planeName in new[] { "player_bhawk", "player_autogyro" })
@@ -1000,7 +1000,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 foreach (var model in new[] { "player_bhawk", "player_pfighter" })
@@ -1175,7 +1175,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 var controller = new Node3D { Name = "controller_replica" };
@@ -1237,7 +1237,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             FlightController? player = null;
             try
             {
@@ -1357,7 +1357,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var built = new List<FlightController>();
             try
             {
@@ -1634,7 +1634,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
             using var sounds = new SoundArchive(ctx.SoundsPath);
             FlightController? ai = null;
@@ -1801,7 +1801,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             FlightController? ai = null;
             try
             {
@@ -1941,7 +1941,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var controller = new Node3D { Name = "controller_replica" };
             var fake = new CountingEmitterFactory();
             var runtime = AnimRuntime.ForCrashRig(
@@ -2091,7 +2091,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             ProjectilePool? pool = null;
             FlightController? pumped = null;
             FlightController? forced = null;
@@ -2206,7 +2206,7 @@ internal static class DestroyChoreographySuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             var factory = new Session.World.WorldEffectsFactory(
                 SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);

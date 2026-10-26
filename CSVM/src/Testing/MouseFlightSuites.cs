@@ -178,7 +178,7 @@ internal static class MouseFlightSuites
         var two = Rig(ctx, stats, "LiveSchemeSeat2", human: true);
         two.PlayerIndex = 1;
         var controls = new UI.Menu.ControlsFeature((player, profile) => BindingStore.UserBindings().Save(player, profile));
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, controls, _ => { });
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, controls, _ => { });
         try
         {
             ctx.Check(leaf != null, $"the leaf builds over the install's decoded layout");

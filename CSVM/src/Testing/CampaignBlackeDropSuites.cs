@@ -75,7 +75,7 @@ internal static class CampaignBlackeDropSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         var report = new StringBuilder();
         ctx.CutsceneRoots = true;
         try
@@ -139,7 +139,7 @@ internal static class CampaignBlackeDropSuites
         var savedHost = rt.CallbackHost;
         var savedStarted = rt.OnInstanceStarted;
         var savedPositions = rt.PlayerPositions;
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var cutscene = new CutsceneController();

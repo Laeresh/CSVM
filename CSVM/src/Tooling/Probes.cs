@@ -237,7 +237,7 @@ public static class Probes
     // ---- loadouts ----------------------------------------------------------------------------
 
     public static LoadoutResult Loadouts(string zrdrPath, Messages messages, string planesGamezPath,
-        string dataRoot, string filter, string? loadoutOverride, bool forRig = false)
+        TextureSet c1Textures, string filter, string? loadoutOverride, bool forRig = false)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new LoadoutResult();
@@ -251,7 +251,7 @@ public static class Probes
             weapons = WeaponDefs.Load(zrdrPath, messages);
             planesGamez = GameZ.Load(planesGamezPath);
             // Any texture archive resolves the (meshless) markers; the C1 set is the viewer default.
-            textures = new TextureArchive(SessionPaths.ChapterTextures(dataRoot, "C1"));
+            textures = new TextureArchive(c1Textures);
         }
         catch (Exception e)
         {
@@ -355,7 +355,7 @@ public static class Probes
     /// siblings, mean luminance and the share of pixels above 128 per level. Built through
     /// <see cref="TextureArchive.BuildMipped"/> under whatever <c>--mips=</c> policy is set, so
     /// <c>installed == authored</c> checks the policy took effect, not that files merely exist.</summary>
-    public static MipResult MipChains(string texturesPath, string chapter, string filter,
+    public static MipResult MipChains(TextureSet texturesPath, string chapter, string filter,
         InterpScripts? interp = null)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;

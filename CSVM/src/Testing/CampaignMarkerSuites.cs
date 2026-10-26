@@ -113,7 +113,7 @@ internal static class CampaignMarkerSuites
         string folder = mission.MissionFolder.ToUpperInvariant();
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
@@ -154,7 +154,7 @@ internal static class CampaignMarkerSuites
         string folder = mission.MissionFolder.ToUpperInvariant();
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var shipped = ObjectiveScript.Load(missionZrdr);
         ctx.Check(AuthorsPath(shipped), $"{chapter}/{folder} authors ADD_OBJECTIVE_TARGET [[{PathParent}, {PathChild}]]");
@@ -206,7 +206,7 @@ internal static class CampaignMarkerSuites
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var missionOnly = MissionTargets.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
@@ -265,7 +265,7 @@ internal static class CampaignMarkerSuites
         string folder = mission.MissionFolder.ToUpperInvariant();
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var shipped = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));

@@ -51,7 +51,10 @@ internal static class LoadProgressSuites
     internal static void LoadScreenMoves(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage", "prog_red.png"), $"progress strip");
+        if (ctx.Data.Rimage.Find("prog_red") == null)
+        {
+            throw new SuiteSkippedException("the progress strip prog_red is not in rimage");
+        }
         ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var report = new StringBuilder();
 
@@ -94,7 +97,7 @@ internal static class LoadProgressSuites
     {
         string family = campaign ? "chart sheet" : "blackboard";
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.Data.Messages, campaign, "FREE FLIGHT", null, sheet);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.ZrdrPath, ctx.Data.Messages, campaign, "FREE FLIGHT", null, sheet);
         ctx.Host.AddChild(board);
         try
         {
@@ -203,7 +206,7 @@ internal static class LoadProgressSuites
         var held = LoadProgress.Current;
         LoadProgress.Current = null;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null, sheet);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null, sheet);
         ctx.Check(LoadProgress.Current == null, $"no board up, so a build reports to nobody");
         ctx.Host.AddChild(board);
         try
@@ -243,7 +246,7 @@ internal static class LoadProgressSuites
         var held = LoadProgress.Current;
         LoadProgress.Current = null;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.Data.Messages, campaign: false, "FREE FLIGHT", null);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.ZrdrPath, ctx.Data.Messages, campaign: false, "FREE FLIGHT", null);
         ctx.Host.AddChild(board);
         try
         {
@@ -344,7 +347,7 @@ internal static class LoadProgressSuites
         var held = LoadProgress.Current;
         LoadProgress.Current = null;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null, sheet);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null, sheet);
         ctx.Host.AddChild(board);
         try
         {

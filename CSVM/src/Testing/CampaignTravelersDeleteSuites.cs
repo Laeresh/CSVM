@@ -235,7 +235,7 @@ internal static class CampaignTravelersDeleteSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         CampaignMission? found = null;
         foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
@@ -265,7 +265,7 @@ internal static class CampaignTravelersDeleteSuites
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var director = CampaignDirector.Create(run.Script, run.Campaign,
             CampaignProfileDef.NewProfile("Zachary"), null, run.Zrdr);
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, run.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(run.Chapter));
         var rigs = new List<FlightController>();
         ProjectilePool? pool = null;
         try

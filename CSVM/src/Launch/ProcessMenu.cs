@@ -79,7 +79,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         var controls = Host != null && Host.Features.TryGet<ControlsFeature>(out var feature)
             ? feature
             : null;
-        return UI.Screens.PausePreferences.Build(paths().DataRoot, _originalLayout, controls, persist, _audio);
+        return UI.Screens.PausePreferences.Build(paths().DataRoot, paths().Data.Rimage, _originalLayout, controls, persist, _audio);
     }
 
     // The menu host: the presentation, the shared features, the audio service and the launcher's

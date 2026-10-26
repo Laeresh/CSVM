@@ -54,7 +54,7 @@ public sealed class SessionArchives
     /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
     /// see <see cref="ArchiveIntent"/>. Never normalise the two to match. A non-null
     /// <paramref name="decode"/> shares the <see cref="Gamez"/> alone (<see cref="DecodeCache"/>).</summary>
-    public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, string texturesPath,
+    public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, TextureSet texturesSet,
         string soundsPath, string zrdrPath, bool mute, DecodeCache? decode = null)
     {
         long mark = StartupProfile.Mark();
@@ -62,7 +62,7 @@ public sealed class SessionArchives
         StartupProfile.Record("gamez", mark);
 
         mark = StartupProfile.Mark();
-        var textures = new TextureArchive(texturesPath);
+        var textures = new TextureArchive(texturesSet);
         StartupProfile.Record("textures", mark);
 
         bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));

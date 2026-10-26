@@ -62,7 +62,7 @@ internal static class TurretVoiceSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
         // Every distance below is the cue's own authored one. This suite reads at 1, not at the

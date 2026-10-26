@@ -94,7 +94,7 @@ internal static class HdModelSwapSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -164,7 +164,7 @@ internal static class HdModelSwapSuites
     internal static void CockpitInteriorSwap(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         using var textures = new TextureArchive(texturesPath);
@@ -259,7 +259,7 @@ internal static class HdModelSwapSuites
     internal static void CockpitInteriorStereo(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
         var gamez = GameZ.Load(ctx.PlanesGamezPath);
         using var textures = new TextureArchive(texturesPath);

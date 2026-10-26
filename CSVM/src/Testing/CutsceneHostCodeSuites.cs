@@ -49,7 +49,7 @@ internal static class CutsceneHostCodeSuites
         + "definition this host does not answer for is declined and leaves them flying")]
     internal static void CutsceneClearOrdnance(TestContext ctx)
     {
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, DropChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(DropChapter);
         ctx.RequireData(texturesPath, $"{DropChapter} textures");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -75,7 +75,7 @@ internal static class CutsceneHostCodeSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, HookChapter, HookMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, HookChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, HookChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(HookChapter);
         ctx.RequireData(missionZrdr, $"{HookChapter}/{HookMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{HookChapter} zrdr");
         ctx.RequireData(texturesPath, $"{HookChapter} textures");
@@ -92,7 +92,7 @@ internal static class CutsceneHostCodeSuites
         ctx.Note($"{HookChapter}/{HookMission}: the docking film's own code takes '{Wingman}' out of the world");
     }
 
-    private static void DriveClear(TestContext ctx, TestWorld world, string texturesPath, WeaponDef gun)
+    private static void DriveClear(TestContext ctx, TestWorld world, TextureSet texturesPath, WeaponDef gun)
     {
         // The authored shape first: the code belongs to this one definition, beside the swap.
         var raisers = RaisersOf(world.Runtime, ClearOrdnanceCode);
@@ -161,7 +161,7 @@ internal static class CutsceneHostCodeSuites
     }
 
     private static void DriveRemoval(TestContext ctx, TestWorld world, CampaignDirector director,
-        string missionZrdr, string chapterZrdr, string texturesPath, StringBuilder report)
+        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var raisers = RaisersOf(world.Runtime, RemoveWingmanCode);
         ctx.Check(raisers.Contains(HookAnim),

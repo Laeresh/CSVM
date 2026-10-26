@@ -174,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ `strings.dll` messages
 13. ◐ Sound archives
 14. ◐ Reader archives (`zrdr.zbd`)
-15. ◐ Texture archives
+15. ☑ Texture archives
 
 ### Wave C, large formats
 
@@ -718,9 +718,42 @@ the diff compares bitwise. Entry names are `.zrd`, renamed `.json`/`.zrd.json` i
 The root `zrdr.zbd` holds `player.zrd` twice; today's zip keeps the repeat as `stem-N.ext` (A1's
 finding).
 
-## B15 ◐ Texture archives
+## B15 ☑ Texture archives
 
-**Reader landed, engine switch pending.** `TextureZbd.Read(byte[])` and
+**Landed.** The engine reads no extracted texture PNG, zip or `manifest.json`. `TextureSet`
+(`Mech3/TextureZbd.cs`) holds one archive's `TextureImage` records by `Key` without case, with its
+`Archive` name (`c1/rtexture15`, `rimage`, the install path below `ZBD/` without the extension);
+`TextureSet.ForChapter` picks the highest `rtextureN` tier, else `texture.zbd`, as
+`SessionPaths.ChapterTextures` did. `GameData.Rimage` holds `rimage.zbd`, loaded in `GameData.Load`,
+and `ChapterData.Textures` the chapter tier; the install's chapter loader holds the last chapter's
+set, so suites and rebuilt sessions decode a chapter once. `TextureArchive(TextureSet)` keys its
+records by `Key` and its alpha classes and render flags by `Name`, builds every image (base and the
+authored `_1`/`_2` levels) with `TextureArchive.ImageOf`, `Image.CreateFromData` in RGBA8 or RGB8 as
+the record carries it, and returns the raw render-flags word; `Lookup` replaces `ReadPngBytes` and
+keeps the after-`Dispose` refusal. HD packs key by archive name and texture name:
+`HdTextures.ForWorld(archive, name)`, and `ForRimage(name)` for the menu art (`rimage/<name>.png`
+first). The rimage readers take the set: `HudFont.Load`, `ImpactReticle.LoadTexture`,
+`ObjectivesHud.LoadMark` (through `HdArt.Rimage`), `CampaignBriefingPage` (`Rimage.Rgba` from
+`CampaignFeature.Data`), and `ComposedBoardView.Build(dataRoot, rimage)`, whose six boards
+(`LoadBoard`, `BootCard`, `PausePreferences`, `OriginalPauseBoard`, `OriginalRaceBoard` through
+`SessionBoards.Inputs.Rimage`, `OriginalPresentation` through its `Data`) are handed it. Sessions
+open the chapter set through `SessionArchives.OpenFor(..., BuildState.Chapter.Textures, ...)`
+(`BuildState.TexturesPath` deleted); the probes take a set (`Probes.Loadouts`, `MipChains`); the
+suites read `TestContext.ChapterTextures(chapter)` and `ctx.Data.Rimage`, and skip through a
+`RequireData(TextureSet, ...)` overload on an empty set. `Tooling/SyntheticTextures.cs` builds the
+C1 set in memory (`Entries`, the checker pixels), handed out by `SyntheticGameData`'s chapter loader;
+the `chapter-textures` family and `fixtures/synthetic/C1/texture/manifest.json` are deleted. The
+legacy read is `CSVM.Tests/Oracle/TexturesLegacy.cs` (`Load(zipOrFolder)`, and `Rimage(dataRoot)` for
+units that hand a screen an extracted data root), which the model diff's expected side reads.
+
+Unused now, for E43: `SessionPaths.ChapterTextures`, `PreferUnzipped` for textures,
+`SessionSpec.Textures` (`--textures=`), `HdTextures.ForExtracted` for `rimage` paths (still the rof
+art's), `ZbdPlan.AlwaysUnzipped` and `ExtractionFlow`'s always-unpacked `rimage` rule, and the
+`textures` `ZbdExtraction` mode. No `BasePaths` field was texture-specific.
+
+**Verified.** <pending orchestrator run>
+
+**Reader (kept from the reader landing).** `TextureZbd.Read(byte[])` and
 `TextureZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/TextureZbd.cs`) decode a texture
 archive into `TextureImage` records in file order: the stored name, the collision rename (null for
 a first occurrence; `Key` is the name a lookup uses, today's PNG base name), width, height,
@@ -761,7 +794,9 @@ why 22 `texture.zbd` textures read `Simple` with an opaque PNG.
   32 to 56 ms for a chapter's top tier, 27 to 49 ms for a `texture.zbd`, 142 ms for `rimage.zbd` (37.9 MB,
   16.0 M pixels). A session needs one chapter tier plus `rimage`, about 200 ms.
 
-**Remaining switch work (after A3).**
+**Original approach (kept for reference).**
+
+**Switch plan (after A3).**
 
 1. **The game-data slot.** The chapter part of A3's game-data value carries the chapter's top
    `rtextureN` tier (what `SessionPaths.ChapterTextures` picks today: the highest `N` present,
@@ -784,10 +819,6 @@ why 22 `texture.zbd` textures read `Simple` with an opaque PNG.
    go to `CSVM.Tests/Oracle/TexturesLegacy.cs`, and the theory compares that against the reader.
    Unused afterwards, for E43: `SessionPaths.ChapterTextures`, `PreferUnzipped` for textures, the
    `textures` `ZbdExtraction` mode.
-
-**Verified.** <pending orchestrator run>
-
-**Original approach (kept for reference).**
 
 **Goal.** `TextureArchive` decodes `texture.zbd`, `rtextureN.zbd` and `rimage.zbd` into images
 directly, with the same names and alpha classes.

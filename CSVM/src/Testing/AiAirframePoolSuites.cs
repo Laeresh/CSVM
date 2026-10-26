@@ -117,7 +117,7 @@ internal static class AiAirframePoolSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -130,7 +130,7 @@ internal static class AiAirframePoolSuites
     // One roster, two launches off one block: the first claims, the second misses. Everything the
     // comparison needs is read off the two controllers, so nothing here models the assembly.
     private static void Compare(TestContext ctx, TestWorld world, IReadOnlyList<EnemyGeneratorDef> defs,
-        string missionZrdr, string chapterZrdr, string texturesPath)
+        string missionZrdr, string chapterZrdr, TextureSet texturesPath)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

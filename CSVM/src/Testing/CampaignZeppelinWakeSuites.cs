@@ -51,7 +51,7 @@ internal static class CampaignZeppelinWakeSuites
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var report = new StringBuilder();
         CheckAuthoredTeams(ctx, report);

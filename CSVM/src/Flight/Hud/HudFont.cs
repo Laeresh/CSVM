@@ -1,19 +1,19 @@
-using System.IO;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
 
-/// <summary>The game's own HUD bitmap font, rebuilt from <c>extracted/rimage/5pointhud.png</c> (+
-/// the brighter <c>5pointhudbrite.png</c> highlight variant): a proportional 5-px font covering
+/// <summary>The game's own HUD bitmap font, rebuilt from the <c>rimage</c> art <c>5pointhud</c>
+/// and its brighter <c>5pointhudbrite</c> highlight variant. It is a proportional 5-px font over
 /// printable ASCII <c>0x20</c>–<c>0x7e</c> (layout/colours: docs/formats/hud.md). Pure font
 /// resource, not a Node: <see cref="Draw"/> renders onto any caller's <see cref="CanvasItem"/>,
 /// sized via <see cref="HudMetrics"/>. The drawing control MUST set a Nearest texture filter.
 /// </summary>
 public sealed class HudFont
 {
-    private const string NormalFile = "5pointhud.png";
-    private const string BrightFile = "5pointhudbrite.png";
+    private const string NormalFile = "5pointhud";
+    private const string BrightFile = "5pointhudbrite";
     private const int FirstCode = 0x21;         // '!', the first ink glyph (space 0x20 is blank)
     private const int LastCode = 0x7e;          // '~'
     private const int CodeCount = LastCode - FirstCode + 1; // 94
@@ -37,24 +37,24 @@ public sealed class HudFont
     /// <summary>Glyph cell height in atlas pixels (the inked row span, 5 for this atlas).</summary>
     public int PixelHeight { get; }
 
-    /// <summary>Loads the font from an extracted <c>rimage</c> directory. Null (with one log line)
-    /// when the normal atlas is absent, HUD text is cosmetic and must never take a build down. The
-    /// highlight atlas falls back to the normal one if missing.</summary>
-    public static HudFont? Load(string rimageDir)
+    /// <summary>Loads the font from the <c>rimage</c> art. Null (with one log line) when the normal
+    /// atlas is absent, HUD text is cosmetic and must never take a build down. The highlight atlas
+    /// falls back to the normal one if missing.</summary>
+    public static HudFont? Load(TextureSet rimage)
     {
         var glyphs = new (int X, int W)[CodeCount];
-        var normal = LoadAtlas(Path.Combine(rimageDir, NormalFile), glyphs,
+        var normal = LoadAtlas(rimage.Find(NormalFile), glyphs,
             out int runCount, out int top, out int height);
         if (normal == null)
         {
-            Log.Info("flight", $"[hudfont] no {NormalFile} in {rimageDir}, HUD text font off (extract the game data again on the Extract screen)");
+            Log.Info("flight", $"[hudfont] no {NormalFile} in rimage, HUD text font off (no game install found, or it lacks rimage.zbd)");
             return null;
         }
         if (runCount != CodeCount)
         {
             Log.Warn("flight", $"hudfont: {NormalFile}: found {runCount} glyphs, expected {CodeCount} ({FirstCode:X2}..{LastCode:X2}), the ASCII mapping may be off");
         }
-        var bright = LoadAtlas(Path.Combine(rimageDir, BrightFile), null, out _, out _, out _) ?? normal;
+        var bright = LoadAtlas(rimage.Find(BrightFile), null, out _, out _, out _) ?? normal;
         return new HudFont(normal, bright, glyphs, top, height);
     }
 
@@ -101,25 +101,20 @@ public sealed class HudFont
         }
     }
 
-    // Loads one atlas: keys the black background to transparent, and (when
-    // `glyphs` is given) segments the ink into per-code source rects by walking
-    // columns, each maximal run of inked columns is the next glyph, assigned to codes from
-    // FirstCode upward. Returns null if the file is missing or unreadable.
-    private static Texture2D? LoadAtlas(string path, (int X, int W)[]? glyphs,
+    // Loads one atlas and keys its black background to transparent. Given `glyphs`, it also
+    // segments the ink into per-code source rects by walking columns. Each maximal run of inked
+    // columns is the next glyph, assigned to codes from FirstCode upward. Null if the art is missing.
+    private static Texture2D? LoadAtlas(TextureImage? art, (int X, int W)[]? glyphs,
         out int runCount, out int top, out int height)
     {
         runCount = 0;
         top = 0;
         height = 0;
-        if (!File.Exists(path))
+        if (art == null)
         {
             return null;
         }
-        var img = Image.LoadFromFile(path);
-        if (img == null)
-        {
-            return null;
-        }
+        var img = TextureArchive.ImageOf(art);
         img.Convert(Image.Format.Rgba8);
         int w = img.GetWidth(), h = img.GetHeight();
 

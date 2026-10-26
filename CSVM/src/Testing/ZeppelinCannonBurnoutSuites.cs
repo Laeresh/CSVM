@@ -114,7 +114,7 @@ internal static class ZeppelinCannonBurnoutSuites
                 }
 
                 float hullY = hull.GlobalPosition.Y;
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                textures = new TextureArchive(ctx.ChapterTextures("C1"));
                 pool = new ProjectilePool(textures, null, null) { DamageSink = runtime.DamageAt };
                 ctx.Host.AddChild(pool);
 

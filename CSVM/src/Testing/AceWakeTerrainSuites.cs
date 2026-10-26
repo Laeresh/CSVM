@@ -48,7 +48,7 @@ internal static class AceWakeTerrainSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -84,7 +84,7 @@ internal static class AceWakeTerrainSuites
         ctx.Note($"{Chapter}/{Mission}: the ace is authored under the terrain sheet and flies out of it, the surface over it being solid from above alone");
     }
 
-    private static void Drive(TestContext ctx, GameZ planesGamez, string texturesPath, string plane,
+    private static void Drive(TestContext ctx, GameZ planesGamez, TextureSet texturesPath, string plane,
         (Vector3 Pos, float YawDeg) ace, (Vector3 Pos, float YawDeg) player, float wakeRangeM,
         StringBuilder report)
     {

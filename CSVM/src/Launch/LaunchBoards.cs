@@ -61,7 +61,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         string? briefing = briefingKey
             ?? (campaign || missionType != null ? null : LaunchBriefing(teamedLobby));
         var board = UI.Screens.LoadBoard.Build(
-            paths.DataRoot, paths.ZrdrPath, paths.Data.Messages, campaign, subject, missionType, sheet, briefing);
+            paths.DataRoot, paths.Data.Rimage, paths.ZrdrPath, paths.Data.Messages, campaign, subject, missionType, sheet, briefing);
         if (briefing != null)
         {
             Log.Info("ui", $"load screen: {spec.Chapter} Dogfight reads {briefing}");
@@ -74,7 +74,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     /// <paramref name="subject"/>.</summary>
     public UI.Screens.LoadBoard SwitchScreen(string subject)
     {
-        var board = UI.Screens.LoadBoard.Build(paths.DataRoot, paths.ZrdrPath, paths.Data.Messages, false, subject, null);
+        var board = UI.Screens.LoadBoard.Build(paths.DataRoot, paths.Data.Rimage, paths.ZrdrPath, paths.Data.Messages, false, subject, null);
         board.CaptureDir = spec.DebugLoad ?? string.Empty;
         return board;
     }
@@ -243,7 +243,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     {
         var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, paths.DataRoot, sheet, readout);
+            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, paths.DataRoot, paths.Data.Rimage, sheet, readout);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
         layer.AddChild(board);
         parent.AddChild(layer);

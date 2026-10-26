@@ -87,7 +87,7 @@ internal static class NetPositionalStartSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
@@ -128,7 +128,7 @@ internal static class NetPositionalStartSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, SwapChapter), $"{SwapChapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(SwapChapter), $"{SwapChapter} textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, SwapChapter), $"{SwapChapter} gamez");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, SwapChapter, SwapStage), $"{SwapChapter}/{SwapStage} zrdr");
         AirframeSwapCode? found = null;
@@ -498,7 +498,7 @@ internal static class NetPositionalStartSuites
         public static End Open(TestContext ctx, string name, TestWorld world, string chapter, Capture capture,
             IReadOnlyList<NetSeat> netSeats, int local)
         {
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(chapter));
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);
             var pane = new SubViewport();

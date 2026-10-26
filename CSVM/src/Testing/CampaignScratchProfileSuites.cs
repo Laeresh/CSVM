@@ -40,7 +40,7 @@ internal static class CampaignScratchProfileSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).FirstOrDefault(m =>
@@ -125,7 +125,7 @@ internal static class CampaignScratchProfileSuites
     // The production death path, driven as campaign-player-death drives it. One step lets the
     // director subscribe, then a forced crash and steps until the lost ending is recorded.
     private static void Crash(TestContext ctx, TestWorld world, CampaignDirector director,
-        string texturesPath, StringBuilder report)
+        TextureSet texturesPath, StringBuilder report)
     {
         using var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

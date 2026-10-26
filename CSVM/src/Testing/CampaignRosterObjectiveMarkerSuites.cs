@@ -67,7 +67,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -117,7 +117,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, CabbieChapter, CabbieMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, CabbieChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, CabbieChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(CabbieChapter);
         ctx.RequireData(missionZrdr, $"{CabbieChapter}/{CabbieMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{CabbieChapter} zrdr");
         ctx.RequireData(texturesPath, $"{CabbieChapter} textures");
@@ -173,7 +173,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RelabelChapter, RelabelMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, RelabelChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, RelabelChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(RelabelChapter);
         ctx.RequireData(missionZrdr, $"{RelabelChapter}/{RelabelMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{RelabelChapter} zrdr");
         ctx.RequireData(texturesPath, $"{RelabelChapter} textures");
@@ -239,7 +239,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        string missionZrdr, string chapterZrdr, string texturesPath,
+        string missionZrdr, string chapterZrdr, TextureSet texturesPath,
         MissionTargets targets, Messages messages, StringBuilder report,
         string block, string pilotName, string? typeLabel, string category, int wakeObjective)
     {
@@ -348,7 +348,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
     private static void DriveRelabel(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        string missionZrdr, string chapterZrdr, string texturesPath,
+        string missionZrdr, string chapterZrdr, TextureSet texturesPath,
         MissionTargets targets, Messages messages, ObjectiveScript script, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);

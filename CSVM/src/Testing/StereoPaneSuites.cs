@@ -71,7 +71,7 @@ internal static class StereoPaneSuites
         "the world flare's quads, built from C3's own flare for one pane and for four, are drawn by their own pane's camera alone: never by another pane, never by any pane's spyglass picture flat or Enhanced, with or without a headset, and never by the Danger Zone photograph, each of which would place a flare for its own view")]
     internal static void WorldFlareLayers(TestContext ctx)
     {
-        string texturesPath = Extraction.SessionPaths.ChapterTextures(ctx.DataRoot, "C3");
+        var texturesPath = ctx.ChapterTextures("C3");
         ctx.RequireData(texturesPath, $"C3 textures");
         ctx.RequireInterp();
         var root = new Node3D { Name = "world-flare-layers" };

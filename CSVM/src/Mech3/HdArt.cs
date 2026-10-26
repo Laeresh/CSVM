@@ -45,14 +45,12 @@ public static class HdArt
         return image;
     }
 
-    /// <summary>The HD picture replacing the file at <paramref name="path"/>, or null.</summary>
-    public static Image? Replacement(string path) => Decode(HdTextures.Current.ForExtracted(path));
-
-    /// <summary>The texture for <paramref name="original"/>, the file at <paramref name="path"/>, from
-    /// its replacement where one exists. Hands both images over as
-    /// <see cref="TextureUpload.Create(Image, bool)"/> does.</summary>
-    public static ImageTexture Texture(string path, Image original) =>
-        Texture(Replacement(path), original);
+    /// <summary>The texture of the <c>rimage</c> art <paramref name="name"/>, from its replacement
+    /// where one exists, or null when <paramref name="rimage"/> lacks the art.</summary>
+    public static ImageTexture? Rimage(TextureSet rimage, string name) =>
+        rimage.Find(name) is { } art
+            ? Texture(Decode(HdTextures.Current.ForRimage(name)), TextureArchive.ImageOf(art))
+            : null;
 
     /// <summary>The texture for <paramref name="original"/>, drawn from <paramref name="hd"/> when it
     /// is not null.</summary>

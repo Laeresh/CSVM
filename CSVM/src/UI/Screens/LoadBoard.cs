@@ -24,6 +24,7 @@ public sealed partial class LoadBoard : Control
     private LoadMotion _motion = LoadScreens.MotionFor(false, null);
     private BoardPalette _palette = BoardPalette.Paper;
     private string _dataRoot = string.Empty;
+    private Mech3.TextureSet _rimage = Mech3.TextureSet.Empty;
     private ComposedBoardView? _view;
     private LoadProgress? _progress;
     private int _shots;
@@ -39,12 +40,13 @@ public sealed partial class LoadBoard : Control
     /// is the campaign screen's whole content, null where the extraction could not answer for it.
     /// The briefing is a Dogfight's multiplayer dialog key.</summary>
     public static LoadBoard Build(
-        string dataRoot, string zrdrPath, Messages messages, bool campaign, string subject,
+        string dataRoot, Mech3.TextureSet rimage, string zrdrPath, Messages messages, bool campaign, string subject,
         string? missionType, LoadSheet? sheet = null, string? briefing = null)
     {
         var board = new LoadBoard
         {
             _dataRoot = dataRoot,
+            _rimage = rimage,
             _board = LoadScreens.For(
                 campaign, subject, missionType, zrdrPath, messages, sheet, pumped: true,
                 briefing: briefing),
@@ -63,7 +65,7 @@ public sealed partial class LoadBoard : Control
     /// the cycle's first frame, since the composition leaves the still one to it.</summary>
     public override void _Ready()
     {
-        var view = ComposedBoardView.Build(_dataRoot);
+        var view = ComposedBoardView.Build(_dataRoot, _rimage);
         AddChild(view);
         _view = view;
         view.Show(_board, _palette, string.Empty, string.Empty);

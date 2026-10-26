@@ -68,7 +68,7 @@ internal static class NetHumanFieldSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string scriptZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, ScriptMission);
         string stageZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, StageMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, Chapter), $"{Chapter} gamez");
         ctx.RequireData(scriptZrdr, $"{Chapter}/{ScriptMission} zrdr");
         ctx.RequireData(stageZrdr, $"{Chapter}/{StageMission} zrdr");

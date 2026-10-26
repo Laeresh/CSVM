@@ -143,7 +143,7 @@ internal static class AirframeSwapSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
@@ -184,7 +184,7 @@ internal static class AirframeSwapSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
@@ -255,7 +255,7 @@ internal static class AirframeSwapSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm07Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
@@ -296,7 +296,7 @@ internal static class AirframeSwapSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm19Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
@@ -996,7 +996,7 @@ internal static class AirframeSwapSuites
     private static void WithStagedHangar(TestContext ctx, TestWorld world, string chapter,
         Action<HangarStaged> leg)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();
@@ -1135,7 +1135,7 @@ internal static class AirframeSwapSuites
         AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg,
         SwapVoices? voices = null)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();
@@ -1543,7 +1543,7 @@ internal static class AirframeSwapSuites
     private static void WithWarhawkRig(TestContext ctx, TestWorld world, string chapter,
         Action<FlightRoster, PlayerRig, FlightController, CutsceneController> leg)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();

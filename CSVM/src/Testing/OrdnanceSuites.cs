@@ -63,7 +63,7 @@ internal static class OrdnanceSuites
     internal static void BlastCurveCoverCap(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
@@ -229,7 +229,7 @@ internal static class OrdnanceSuites
     internal static void LaunchVelocityDecay(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
@@ -343,7 +343,7 @@ internal static class OrdnanceSuites
     internal static void MotorAcceleration(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_04", w => w.Acceleration is > 0f && !ProjectilePool.CarriesLockOn(w)) is not { } incendiary
@@ -460,7 +460,7 @@ internal static class OrdnanceSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_24", w => w.HighExplosive && ProjectilePool.CarriesLockOn(w)
@@ -687,7 +687,7 @@ internal static class OrdnanceSuites
     internal static void ShootableFlyout(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireMessages();
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
@@ -969,7 +969,7 @@ internal static class OrdnanceSuites
     internal static void FlyoutRackPose(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireMessages();
         // Every check reads a body built off C1's FLYOUT models, so the world gates the whole suite.
@@ -1186,7 +1186,7 @@ internal static class OrdnanceSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_11", w => w.BeeperSeeker) is not { } seeker
@@ -1527,7 +1527,7 @@ internal static class OrdnanceSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -1752,7 +1752,7 @@ internal static class OrdnanceSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -2042,7 +2042,7 @@ internal static class OrdnanceSuites
     internal static void ImpactOrientation(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_06", w => w.ImpactFor(SurfaceRegistry.Default) is { Animation: null, SurfaceAnimation: not null }) is not { } he
@@ -2195,7 +2195,7 @@ internal static class OrdnanceSuites
     internal static void BurstLightEnvelope(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickFireballRocket(ctx, weapons) is not { } he || DefaultBurst(he) is not { } heFx)
@@ -2343,7 +2343,7 @@ internal static class OrdnanceSuites
     internal static void HeatShimmerBurst(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickFireballRocket(ctx, weapons) is not { } he || DefaultBurst(he) is not { } heFx)
@@ -2599,7 +2599,7 @@ internal static class OrdnanceSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_10", w => w.BeeperTime != null) is not { } beeper
@@ -2832,9 +2832,9 @@ internal static class OrdnanceSuites
     internal static void ImpactBuildingSurface(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, FilmLotChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(FilmLotChapter);
         ctx.RequireData(texturesPath, $"{FilmLotChapter} textures");
-        string airportTextures = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        var airportTextures = ctx.ChapterTextures("C1");
         ctx.RequireData(airportTextures, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (!weapons.TryGet("wep_00", out var gun) || !weapons.TryGet("wep_02", out var fifty))
@@ -2899,7 +2899,7 @@ internal static class OrdnanceSuites
 
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (PickWeapon(ctx, weapons, "wep_13", w => w.SmokeScreenTime != null) is not { } smoker
@@ -3665,7 +3665,7 @@ internal static class OrdnanceSuites
 
     // One ring mesh's state at a sampled instant of a sonic play (the effect-pool-reset suite):
     // which staged root it sits under, whether it draws, its scale and its per-instance opacity.
-    private static void Strafe(TestContext ctx, TestWorld world, WeaponDef gun, string texturesPath)
+    private static void Strafe(TestContext ctx, TestWorld world, WeaponDef gun, TextureSet texturesPath)
     {
         var bodies = world.Session.Root.FindChildren("*", "StaticBody3D", recursive: true, owned: false)
             .OfType<StaticBody3D>().ToList();
@@ -3746,7 +3746,7 @@ internal static class OrdnanceSuites
     // C1's two building kinds, each struck from above by one 30 cal round. One is the zeppelin
     // hangar (`hangar_left`/`hangar_right`/`mainhangar_roof`, soil default), the other an airport
     // building whose collider carries buildings(11).
-    private static void StrafeAirport(TestContext ctx, TestWorld world, WeaponDef gun, string texturesPath)
+    private static void StrafeAirport(TestContext ctx, TestWorld world, WeaponDef gun, TextureSet texturesPath)
     {
         var bodies = world.Session.Root.FindChildren("*", "StaticBody3D", recursive: true, owned: false)
             .OfType<StaticBody3D>().ToList();
@@ -3782,7 +3782,7 @@ internal static class OrdnanceSuites
     // one surface class. The original reads the soil off the struck polygon's own material. The
     // aphagar03 faces play the default gunhit, and the soil-11 faces of the same shed play nothing.
     private static void StrafeShedWalls(TestContext ctx, TestWorld world, List<StaticBody3D> bodies,
-        WeaponDef gun, string texturesPath, AnimProgram sub)
+        WeaponDef gun, TextureSet texturesPath, AnimProgram sub)
     {
         var gamez = world.Gamez;
         var a03 = Enumerable.Range(0, gamez.Materials.Count)
@@ -3830,7 +3830,7 @@ internal static class OrdnanceSuites
     // pool until the round strikes (DamageSink reports it), then reads what the hit produced that
     // step.
     private static (List<string> Plays, int Sprites, Vector3 Point)? FireDownOnto(TestContext ctx, TestWorld world,
-        List<StaticBody3D> candidates, WeaponDef gun, string texturesPath, AnimProgram sub)
+        List<StaticBody3D> candidates, WeaponDef gun, TextureSet texturesPath, AnimProgram sub)
     {
         var space = ctx.Host.GetWorld3D().DirectSpaceState;
         Vector3? found = null;
@@ -3857,7 +3857,7 @@ internal static class OrdnanceSuites
     // Fires one round along `dir` from `standoff` short of `point`. Steps the pool until the round
     // strikes (DamageSink reports it) and returns what the hit produced that step.
     private static (List<string> Plays, int Sprites, Vector3 Point)? FireAlong(TestContext ctx, TestWorld world,
-        Vector3 point, Vector3 dir, float standoff, WeaponDef gun, string texturesPath, AnimProgram sub)
+        Vector3 point, Vector3 dir, float standoff, WeaponDef gun, TextureSet texturesPath, AnimProgram sub)
     {
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? live = null;

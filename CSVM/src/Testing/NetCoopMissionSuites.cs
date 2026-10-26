@@ -846,7 +846,7 @@ internal static class NetCoopMissionSuites
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C1", StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals("M04", StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no C1/M04");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"), $"C1 textures");
+        ctx.RequireData(ctx.ChapterTextures("C1"), $"C1 textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"), $"C1 gamez");
         return mission;
     }
@@ -939,7 +939,7 @@ internal static class NetCoopMissionSuites
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C5", StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals("M01", StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no C5/M01");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"), $"C5 textures");
+        ctx.RequireData(ctx.ChapterTextures("C5"), $"C5 textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C5"), $"C5 gamez");
         return mission;
     }
@@ -1011,7 +1011,7 @@ internal static class NetCoopMissionSuites
             .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0 && m.Value.Wingman)
             ?? throw new SuiteSkippedException($"cm_sequence carries no wingman mission with a chapter");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
         return mission;
     }
@@ -1028,7 +1028,7 @@ internal static class NetCoopMissionSuites
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no {chapter}/{folder}");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
         return mission;
     }
@@ -1908,7 +1908,7 @@ internal static class NetCoopMissionSuites
             .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0)
             ?? throw new SuiteSkippedException($"cm_sequence carries no mission with a chapter");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
         return mission;
     }

@@ -323,10 +323,7 @@ internal static class MultiplayerBoardSuites
         {
             if (!_art.TryGetValue(name, out var image))
             {
-                string path = Path.Combine(ctx.DataRoot, "extracted", "rimage", name.ToLowerInvariant() + ".png");
-                image = File.Exists(path) && Image.LoadFromFile(path) is { } loaded && !loaded.IsEmpty()
-                    ? loaded
-                    : null;
+                image = ctx.Data.Rimage.Find(name) is { } record ? TextureArchive.ImageOf(record) : null;
                 _art[name] = image;
             }
 

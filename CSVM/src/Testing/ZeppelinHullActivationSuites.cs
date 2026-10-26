@@ -37,7 +37,7 @@ internal static class ZeppelinHullActivationSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         ZeppelinDef? def = null;
         foreach (var d in Zeppelins.Load(missionZrdr))

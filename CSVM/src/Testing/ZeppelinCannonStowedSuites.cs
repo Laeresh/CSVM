@@ -110,7 +110,7 @@ internal static class ZeppelinCannonStowedSuites
             TextureArchive? textures = null;
             try
             {
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C2B"));
+                textures = new TextureArchive(ctx.ChapterTextures("C2B"));
                 rounds = new ProjectilePool(textures, null, null) { DamageSink = runtime.DamageAt };
                 ctx.Host.AddChild(rounds);
 

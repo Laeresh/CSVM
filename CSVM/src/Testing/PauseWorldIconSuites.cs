@@ -75,7 +75,7 @@ internal static class PauseWorldIconSuites
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var sheet = SheetOf(ctx, mission);
         var report = new StringBuilder();

@@ -90,7 +90,7 @@ Texture record: the 16-byte header of [org/textures.md](../org/textures.md#the-1
 ## Evidence and limits
 
 `CSVM.Tests/TextureZbdTests.cs` decodes all 49 archives of `ZbdManifest.Expected` from the install
-and compares every texture with today's extraction: the manifest's name, rename, alpha class,
+and compares every texture with today's extraction, read through `CSVM.Tests/Oracle/TexturesLegacy.cs`: the manifest's name, rename, alpha class,
 size and render-flags word, and every PNG pixel, with its colour type deciding RGB or RGBA. The
 census behind the rules above covers all 37,004 textures of the English install:
 

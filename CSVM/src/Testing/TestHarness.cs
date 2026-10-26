@@ -1038,6 +1038,19 @@ public sealed class TestContext
         }
     }
 
+    /// <summary>Ends the suite as SKIP when a texture archive the suite needs holds nothing: no
+    /// install, or a chapter the synthetic data does not carry.</summary>
+    public void RequireData(TextureSet textures, FormattableString what)
+    {
+        if (textures.Count == 0)
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>The chapter's texture archive out of the run's game data, empty where it has none.</summary>
+    public TextureSet ChapterTextures(string chapter) => Data.LoadChapter(chapter, Mission).Textures;
+
     /// <summary>The install's boot scripts, or SKIP the way <see cref="RequireData"/> does when
     /// the run has no install or the install no <c>interp.zbd</c>.</summary>
     public InterpScripts RequireInterp() =>
@@ -1331,7 +1344,7 @@ public sealed class TestContext
     private TestWorld BuildWorld(string chapter, bool collision, string mission)
     {
         string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
-        string texturesPath = SessionPaths.ChapterTextures(DataRoot, chapter);
+        var texturesPath = ChapterTextures(chapter);
         RequireData(gamezPath, $"chapter {chapter} gamez");
         RequireData(texturesPath, $"chapter {chapter} textures");
 

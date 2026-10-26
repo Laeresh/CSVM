@@ -67,7 +67,7 @@ internal static class AudioBusSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var report = new StringBuilder();
@@ -336,7 +336,7 @@ internal static class AudioBusSuites
         OptionsApplyExit? applied = null;
         // The audio half of LiveSettings.Persist, which is what the launcher hands the leaf. The
         // options file it also writes is the pause-preferences suite's subject, not this one's.
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, exit =>
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, null, exit =>
         {
             applied = exit;
             AudioMix.Apply(exit.AudioMaster, exit.AudioMusic, exit.AudioEffects, exit.AudioVoice);

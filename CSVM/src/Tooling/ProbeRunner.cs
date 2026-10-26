@@ -332,7 +332,7 @@ public sealed class ProbeRunner
     public bool DumpLoadout(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Loadouts(_paths.ZrdrPath, _paths.Data.Messages, _paths.PlanesGamezPath, _paths.DataRoot,
+        var r = Probes.Loadouts(_paths.ZrdrPath, _paths.Data.Messages, _paths.PlanesGamezPath, _paths.Data.LoadChapter("C1", spec.Mission).Textures,
             spec.DumpLoadoutFilter, spec.LoadoutOverride, forRig: spec.WeaponLab);
         if (r.Error != null)
         {
@@ -352,7 +352,7 @@ public sealed class ProbeRunner
     public bool DumpMips(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.MipChains(SessionPaths.ChapterTextures(_paths.DataRoot, spec.Chapter),
+        var r = Probes.MipChains(_paths.Data.LoadChapter(spec.Chapter, spec.Mission).Textures,
             spec.Chapter, spec.DumpMipsFilter, _paths.Data.Interp);
         if (r.Error != null)
         {

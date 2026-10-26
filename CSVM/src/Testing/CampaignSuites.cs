@@ -561,7 +561,7 @@ internal static class CampaignSuites
                 $"{mission.ChapterFolder}/{mission.MissionFolder} authors no INSTANTWIN objective");
         }
 
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, mission.ChapterFolder);
+        TextureSet texturesPath = ctx.ChapterTextures(mission.ChapterFolder);
         ctx.RequireData(texturesPath, $"{mission.ChapterFolder} textures");
 
         var textures = new TextureArchive(texturesPath);
@@ -707,7 +707,7 @@ internal static class CampaignSuites
             return;
         }
 
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, mission.ChapterFolder);
+        TextureSet texturesPath = ctx.ChapterTextures(mission.ChapterFolder);
         ctx.RequireData(texturesPath, $"{CashChapter} textures");
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -1284,7 +1284,7 @@ internal static class CampaignSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, IntroChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(IntroChapter);
         ctx.RequireData(texturesPath, $"{IntroChapter} textures");
 
         var textures = new TextureArchive(texturesPath);

@@ -103,6 +103,7 @@ public sealed partial class ComposedBoardView : Control
 
     private ComposedBoard? _board;
     private string _dataRoot = string.Empty;
+    private TextureSet _rimage = TextureSet.Empty;
     private string _detail = string.Empty;
     private string _footer = string.Empty;
     private BoardPalette _palette = BoardPalette.Paper;
@@ -115,12 +116,14 @@ public sealed partial class ComposedBoardView : Control
     /// layer holds over that board.</summary>
     public IReadOnlyList<BoardPicture> Moving => _moving;
 
-    /// <summary>Builds the view over the extraction root its art loads from.</summary>
-    public static ComposedBoardView Build(string dataRoot)
+    /// <summary>Builds the view over the extraction root its rof art and movies load from, and the
+    /// <c>rimage</c> art its mission pictures are.</summary>
+    public static ComposedBoardView Build(string dataRoot, TextureSet rimage)
     {
         var view = new ComposedBoardView
         {
             _dataRoot = dataRoot,
+            _rimage = rimage,
             MouseFilter = MouseFilterEnum.Ignore,
             TextureFilter = TextureFilterEnum.Nearest,
         };
@@ -1113,10 +1116,13 @@ public sealed partial class ComposedBoardView : Control
             return Held(art.Pixels);
         }
 
+        if (art.Library == BoardArtLibrary.Rimage)
+        {
+            return Rimage(art.Name);
+        }
+
         string path = art.Library switch
         {
-            BoardArtLibrary.Rimage =>
-                Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png"),
             BoardArtLibrary.Loose => art.Name,
             BoardArtLibrary.Movie => SessionPaths.Cinema(_dataRoot, art.Name),
             _ => Extraction.RofTree.Under(_dataRoot, "ASSETS/GRAPHICS/" + art.Name),
@@ -1151,6 +1157,33 @@ public sealed partial class ComposedBoardView : Control
         }
 
         _textures[path] = texture;
+        return texture;
+    }
+
+    // One rimage picture, cached like a file, a miss included. The original carries no gAMA, so
+    // only a replacement's own is normalised.
+    private Texture2D? Rimage(string name)
+    {
+        string key = "rimage/" + name.ToLowerInvariant();
+        if (_textures.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        Texture2D? texture = null;
+        if (_rimage.Find(name) is { } art)
+        {
+            byte[]? hdBytes = HdTextures.Current.ForRimage(name);
+            var hd = HdArt.Decode(hdBytes);
+            if (hd != null && PngImage.ReadGamma(hdBytes!) is { } g && g != PngImage.UiGamma)
+            {
+                NormalizeGamma(hd, g);
+            }
+
+            texture = HdArt.Texture(hd, TextureArchive.ImageOf(art));
+        }
+
+        _textures[key] = texture;
         return texture;
     }
 

@@ -8,9 +8,10 @@ namespace CSVM.Extraction;
 /// <summary>
 /// Higher-resolution replacements for the extracted art, read through a <see cref="PackIndex"/>
 /// from the HD folder (<c>textures.hd</c>, <c>--hd=</c>, default <c>HD</c>).
-/// Each pack's own top folder is dropped. A path left with a folder replaces that file under
-/// <c>extracted/</c>, matched without case, its own extension first: <c>rimage/c1m1.png</c>,
-/// <c>C3/rtexture12/cliff01.png</c>. A bare name replaces that world texture in every archive.
+/// Each pack's own top folder is dropped. A path left with a folder replaces that archive's texture
+/// or that file under <c>extracted/</c>, matched without case, its own extension first. Examples are
+/// <c>rimage/c1m1.png</c> and <c>C3/rtexture12/cliff01.png</c>. A bare name replaces that world
+/// texture in every archive.
 /// Engine-free; the callers decode and size what this returns.
 /// </summary>
 public sealed class HdTextures : IDisposable
@@ -47,12 +48,13 @@ public sealed class HdTextures : IDisposable
         return hd;
     }
 
-    /// <summary>The replacement for one texture of the archive at <paramref name="archivePath"/>
-    /// (its folder or <c>.zip</c>), by its archive name, or null. The archive's own entry beats the
-    /// bare name, which is how a pack carries a chapter's own version of a shared name.
+    /// <summary>The replacement for one texture of the archive <paramref name="archive"/>
+    /// (<c>c3/rtexture12</c>, see <c>Mech3.TextureSet.Archive</c>), by its archive name, or null.
+    /// The archive's own entry beats the bare name, which is how a pack carries a chapter's own
+    /// version of a shared name.
     /// ⚠ Never gate a bare name on its resemblance to the original. The thumbnail distances of
     /// correct redraws and of another chapter's same-named texture overlap at every size.</summary>
-    public byte[]? ForWorld(string archivePath, string archiveBaseName)
+    public byte[]? ForWorld(string archive, string archiveBaseName)
     {
         if (_index.Count == 0)
         {
@@ -60,7 +62,20 @@ public sealed class HdTextures : IDisposable
         }
 
         string name = archiveBaseName.ToLowerInvariant();
-        return (Relative(archivePath) is { } archive ? _index.Read(PackIndex.KeyOf(archive) + "/" + name) : null) ?? _index.Read(name);
+        return (archive.Length > 0 ? _index.Read(archive.ToLowerInvariant() + "/" + name) : null) ?? _index.Read(name);
+    }
+
+    /// <summary>The replacement for the <c>rimage</c> art <paramref name="name"/>, or null. A pack
+    /// file named <c>.png</c>, the extension the art was extracted under, beats one without.</summary>
+    public byte[]? ForRimage(string name)
+    {
+        if (_index.Count == 0)
+        {
+            return null;
+        }
+
+        string key = "rimage/" + name.ToLowerInvariant();
+        return _index.ReadPath(key + ".png") ?? _index.Read(key);
     }
 
     /// <summary>The replacement for the file at <paramref name="originalPath"/> under

@@ -688,7 +688,6 @@ public partial class GameSession : Node3D
             Mute = _spec.Mute,
             DebugCollision = _spec.DebugCollision,
         };
-        state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_paths.DataRoot, _spec.Chapter);
         // --zep= grafts one chapter node onto the empty stage, so it needs that chapter's gamez
         // where the bare stage needs only planes.zbd. Chapter is already the flag's own by here.
         state.GamezPath = _spec.Gamez
@@ -1370,7 +1369,7 @@ public partial class GameSession : Node3D
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute, _decode);
+            state.GamezPath, state.Chapter.Textures, state.SoundsPath, state.ZrdrPath, state.Mute, _decode);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;
@@ -1896,6 +1895,7 @@ public partial class GameSession : Node3D
             LockCandidates = LockCandidateAircraft,
             ZrdrPath = _paths.ZrdrPath,
             Messages = _paths.Data.Messages,
+            Rimage = _paths.Data.Rimage,
             DataRoot = _paths.DataRoot,
         });
         var boards = _boards;
@@ -2027,13 +2027,12 @@ public partial class GameSession : Node3D
         VersusMatch? versus = _dogfight?.Match;
         // The original's HUD bitmap font, loaded once and shared across panes. Null when the rimage
         // atlas is absent, and its consumers are then simply not built.
-        HudFont? hudFont = HudFont.Load(Path.Combine(_paths.DataRoot, "extracted", "rimage"));
+        HudFont? hudFont = HudFont.Load(_paths.Data.Rimage);
 
         // The gun aiming reticle's pipper: the game's own impact_point.png, loaded once
         // and shared across panes (it carries its own alpha, no colour-keying). Null (no file)
         // simply omits the reticle.
-        Texture2D? reticleTex = ImpactReticle.LoadTexture(
-            Path.Combine(_paths.DataRoot, "extracted", "rimage"), "impact_point.png");
+        Texture2D? reticleTex = ImpactReticle.LoadTexture(_paths.Data.Rimage, "impact_point");
 
         // ⚠ No --det bypass on this arm, unlike the race arm below: a story mission has one
         // PLAYER_INIT, so the plain walk stacks the whole field on it

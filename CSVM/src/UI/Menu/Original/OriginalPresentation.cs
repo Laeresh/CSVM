@@ -459,7 +459,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_layer == null)
         {
             _layer = new CanvasLayer { Name = "original_menu", Layer = HudLayers.Board };
-            _view = ComposedBoardView.Build(_dataRoot);
+            _view = ComposedBoardView.Build(_dataRoot, Data.Rimage);
             _layer.AddChild(_view);
             // The shell polls its own pointer, so the viewer over the page takes no click.
             _shotViewer = ShotViewer.Build(clickCloses: false);

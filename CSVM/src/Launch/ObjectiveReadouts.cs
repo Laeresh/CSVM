@@ -48,8 +48,7 @@ internal static class ObjectiveReadouts
             // One readout and one fade per rig, under that rig's own HudParent, so every pane
             // draws its own copy as every other per-rig HUD does. The completion
             // mark's art is loaded once and shared across them, as the HUD font is.
-            var objectiveMark = ObjectivesHud.LoadMark(
-                Path.Combine(state.DataRoot, "extracted", "rimage"));
+            var objectiveMark = ObjectivesHud.LoadMark(state.Data.Rimage);
             foreach (var rig in rigs)
             {
                 // ⚠ Not beside the Original pause sheet: that screen's own parchment already

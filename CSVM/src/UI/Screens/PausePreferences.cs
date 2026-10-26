@@ -31,6 +31,7 @@ public sealed partial class PausePreferences : Control
     private IMenuAudio? _audio;
     private Action<OptionsApplyExit>? _applied;
     private string _dataRoot = string.Empty;
+    private Mech3.TextureSet _rimage = Mech3.TextureSet.Empty;
     private BoardPalette _palette = BoardPalette.Chalk;
     private ComposedBoardView? _view;
     private PointerSeat? _seat;
@@ -69,6 +70,7 @@ public sealed partial class PausePreferences : Control
     /// <paramref name="audio"/> sounds its cues.</summary>
     public static PausePreferences? Build(
         string dataRoot,
+        Mech3.TextureSet rimage,
         MenuLayout? layout,
         ControlsFeature? controls,
         Action<OptionsApplyExit> applied,
@@ -84,6 +86,7 @@ public sealed partial class PausePreferences : Control
         var leaf = new PausePreferences
         {
             _dataRoot = dataRoot,
+            _rimage = rimage,
             _audio = audio,
             _applied = applied,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -114,7 +117,7 @@ public sealed partial class PausePreferences : Control
     {
         // The view sizes itself off the viewport, so it cannot draw before it is in the tree; the
         // first open is what composes anything.
-        _view = ComposedBoardView.Build(_dataRoot);
+        _view = ComposedBoardView.Build(_dataRoot, _rimage);
         AddChild(_view);
     }
 

@@ -97,7 +97,7 @@ internal static class ZeppelinFuseSuites
             if (!clear)
                 return;
 
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
             ProjectilePool? pool = null;
             try
             {

@@ -30,6 +30,7 @@ public sealed partial class OriginalRaceBoard : Control
     private PauseState _state = null!;
     private Func<int, MenuInput> _inputFor = null!;
     private string _dataRoot = "";
+    private Mech3.TextureSet _rimage = Mech3.TextureSet.Empty;
     private UiStrings _strings = UiStrings.Empty;
     private ComposedBoardView? _view;
     private RaceResultsSheet? _sheet;
@@ -88,7 +89,7 @@ public sealed partial class OriginalRaceBoard : Control
     /// above the panes. <paramref name="zoneNames"/> names the course's zones in course order.
     /// <paramref name="exitLabel"/> is the exit row's words.</summary>
     public static OriginalRaceBoard Build(StuntRace race, IReadOnlyList<string> zoneNames, string context,
-        string exitLabel, PauseState state, Func<int, MenuInput> inputFor, string dataRoot, UiStrings strings)
+        string exitLabel, PauseState state, Func<int, MenuInput> inputFor, string dataRoot, Mech3.TextureSet rimage, UiStrings strings)
     {
         ArgumentNullException.ThrowIfNull(race);
         var board = new OriginalRaceBoard
@@ -100,6 +101,7 @@ public sealed partial class OriginalRaceBoard : Control
             _state = state,
             _inputFor = inputFor,
             _dataRoot = dataRoot,
+            _rimage = rimage,
             _strings = strings,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
@@ -115,7 +117,7 @@ public sealed partial class OriginalRaceBoard : Control
     /// <inheritdoc/>
     public override void _Ready()
     {
-        _view = ComposedBoardView.Build(_dataRoot);
+        _view = ComposedBoardView.Build(_dataRoot, _rimage);
         AddChild(_view);
         if (_sheet != null && Visible)
         {

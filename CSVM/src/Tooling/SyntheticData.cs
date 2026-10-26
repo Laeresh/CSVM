@@ -34,7 +34,6 @@ public static class SyntheticData
     /// Original shell's family reads UI types, so it joins in <c>SyntheticShell.TreeFamilies</c>.</summary>
     public static readonly IReadOnlyList<SyntheticFamily> Families = new SyntheticFamily[]
     {
-        new("chapter-textures", SyntheticTextures.WriteChapter),
         new("plane", SyntheticPlane.WritePlane),
         new("armament", SyntheticPlane.WriteArmament),
         new("sounds", SyntheticSounds.WriteArchive),

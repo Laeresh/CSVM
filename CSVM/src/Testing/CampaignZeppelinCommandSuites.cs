@@ -65,7 +65,7 @@ internal static class CampaignZeppelinCommandSuites
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, NetChapter);
         ctx.RequireData(missionZrdr, $"{NetChapter}/{NetMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{NetChapter} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, NetChapter),
+        ctx.RequireData(ctx.ChapterTextures(NetChapter),
             $"{NetChapter} textures");
 
         var mission = Find(ctx, NetChapter, NetMission);
@@ -107,7 +107,7 @@ internal static class CampaignZeppelinCommandSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, TeamChapter, TeamMission);
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, TeamChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, TeamChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(TeamChapter);
         ctx.RequireData(missionZrdr, $"{TeamChapter}/{TeamMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{TeamChapter} zrdr");
         ctx.RequireData(texturesPath, $"{TeamChapter} textures");
@@ -245,7 +245,7 @@ internal static class CampaignZeppelinCommandSuites
     }
 
     private static void DriveTeam(TestContext ctx, TestWorld world, CampaignDirector director,
-        IReadOnlyList<ZeppelinDef> defs, IReadOnlyList<AiNet> nets, string texturesPath,
+        IReadOnlyList<ZeppelinDef> defs, IReadOnlyList<AiNet> nets, TextureSet texturesPath,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);

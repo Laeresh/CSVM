@@ -841,8 +841,8 @@ pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a m
 (`XrHudPanel.cs`) for a HUD drawn on it, else the root window.
 
 ## src/Flight/Hud/HudFont.cs
-The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
-`5pointhudbrite.png` highlight variant: a proportional five-pixel font covering printable ASCII.
+The game's own HUD bitmap font, rebuilt from the `rimage` records `5pointhud` and the brighter
+`5pointhudbrite` highlight variant (`GameData.Rimage`): a proportional five-pixel font covering printable ASCII.
 `Load` returns null with one log line where the atlas is absent, and `Draw`/`Measure` render onto
 any caller's canvas at a scale `HudMetrics` supplies. Layout and colours:
 [../formats/hud.md](../formats/hud.md); `HudFontTest` is the overlay that proves the renderer.

@@ -1795,7 +1795,7 @@ internal static class PufferSuites
         + "shipped archive, and each blend's fog comes from the sky rather than from the material")]
     internal static void PufferBlendFlag(TestContext ctx)
     {
-        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        TextureSet texturePath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
         using var textures = new TextureArchive(texturePath);
@@ -1864,7 +1864,7 @@ internal static class PufferSuites
         + "have selected the fireball by blend")]
     internal static void PufferFireGlow(TestContext ctx)
     {
-        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        TextureSet texturePath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
         ctx.RequireTexture(textures, "fire_f01");
@@ -1913,7 +1913,7 @@ internal static class PufferSuites
         + "additive variant is never graded whichever columns it draws")]
     internal static void PufferSmokeSun(TestContext ctx)
     {
-        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        TextureSet texturePath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
         ctx.RequireTexture(textures, "smoke101");

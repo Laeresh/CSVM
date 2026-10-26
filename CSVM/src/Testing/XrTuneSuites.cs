@@ -34,7 +34,7 @@ internal static class XrTuneSuites
     internal static void XrCockpitTune(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         if (XRServer.PrimaryInterface != null)
         {

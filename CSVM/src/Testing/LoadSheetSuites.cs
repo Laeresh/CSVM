@@ -127,12 +127,12 @@ internal static class LoadSheetSuites
         ctx.Check(waits > 0, $"the sequence does author waits, so the settle is doing work ({waits})");
     }
 
-    // Every bitmap the composition names, against the extraction's own rimage folder. A name the
-    // extraction does not carry draws nothing and logs nothing, so it is invisible without this.
+    // Every bitmap the composition names, against the rimage archive. A name the
+    // archive does not carry draws nothing and logs nothing, so it is invisible without this.
     private static void CheckArtExists(
         TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, StringBuilder report)
     {
-        string rimage = Path.Combine(ctx.DataRoot, "extracted", "rimage");
+        var rimage = ctx.Data.Rimage;
         var missing = new List<string>();
         int named = 0;
         foreach (var (mission, sheet) in sheets)
@@ -140,7 +140,7 @@ internal static class LoadSheetSuites
             foreach (string name in ArtNames(Compose(sheet)))
             {
                 named++;
-                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                if (rimage.Find(name) == null)
                 {
                     missing.Add($"{mission.MissionFolder}:{name}");
                 }
@@ -393,7 +393,7 @@ internal static class LoadSheetSuites
 
         var mission = sheets[0].Mission;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null,
+            ctx.DataRoot, ctx.Data.Rimage, ctx.ZrdrPath, ctx.Data.Messages, campaign: true, string.Empty, null,
             sheets[0].Sheet);
         ctx.Host.AddChild(board);
         try

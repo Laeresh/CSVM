@@ -82,7 +82,7 @@ internal static class CampaignLoopSuites
         string missionFolder = mission.MissionFolder.ToUpperInvariant();
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, missionFolder);
         ctx.RequireData(missionZrdr, $"{chapter}/{missionFolder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var report = new StringBuilder();
         string dir = ProfileDir();
@@ -310,7 +310,7 @@ internal static class CampaignLoopSuites
             return;
         }
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         FlightController? rig = null;
         ctx.Host.AddChild(pool);
@@ -416,7 +416,7 @@ internal static class CampaignLoopSuites
         TestContext ctx, TestWorld world, string planeNode, Vector3 target, ProjectilePool pool,
         LoadoutChoice fit, StockLoadouts stock, StringBuilder report)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
             var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);

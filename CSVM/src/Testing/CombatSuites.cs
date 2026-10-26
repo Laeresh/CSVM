@@ -31,7 +31,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
-        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.Data.Messages, ctx.PlanesGamezPath, ctx.DataRoot,
+        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.Data.Messages, ctx.PlanesGamezPath, ctx.ChapterTextures("C1"),
             "", ctx.LoadoutOverride);
         ctx.Check(r.Error == null, $"loadout inputs load error={r.Error ?? "-"}");
         if (r.Error != null)
@@ -52,7 +52,7 @@ internal static class CombatSuites
         // A partial stock fit takes the FILL ORDER's prefix (1,5,2,6,3,7,4,8), not
         // pylon1..pylonN, Hardpoint.Index must be the true pylon number so the weapon gauge's
         // belt lights land at the original's physical positions, gaps included.
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
@@ -208,7 +208,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -624,7 +624,7 @@ internal static class CombatSuites
     internal static void AimAssistOrdnancePriority(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         // Data-driven, not hardcoded ids: the fuse test IS the list membership rule, so the fixture
@@ -802,7 +802,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
@@ -892,7 +892,7 @@ internal static class CombatSuites
     internal static void TrailWorldAnchor(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
         var textures = new TextureArchive(texturesPath);
@@ -955,7 +955,7 @@ internal static class CombatSuites
     internal static void MuzzleFlashRidesMuzzle(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun);
@@ -1038,7 +1038,7 @@ internal static class CombatSuites
     internal static void MuzzleFlashCockpitHidden(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun);
@@ -1081,7 +1081,7 @@ internal static class CombatSuites
     internal static void MuzzleLightFirstPersonPointTerm(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var gun = WeaponDefs.Load(ctx.ZrdrPath, null).All.FirstOrDefault(w => w.IsGun);
         var textures = new TextureArchive(texturesPath);
@@ -1457,7 +1457,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -1710,7 +1710,7 @@ internal static class CombatSuites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 // An AI rig must NOT take these names. Its airframe carries no cockpit1 interior, so
@@ -1834,7 +1834,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -2053,7 +2053,7 @@ internal static class CombatSuites
         // --- the spawn half: through the real spawner, the glue that can silently drop either the
         // damage ledger or the loadout.
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -2133,7 +2133,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -2232,7 +2232,7 @@ internal static class CombatSuites
     internal static void BlastNeighborShape(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (OrdnanceSuites.PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
@@ -2798,7 +2798,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -3365,7 +3365,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

@@ -304,9 +304,8 @@ render_flags: u16     // was: stretch
 The existing enum values map as: `None` = 0, `Vertical` = 1, `Horizontal` = 2, `Both` = 3,
 `Unk4` = additive alone, `Unk7` = additive plus both stretch bits, `Unk8` = bit 3 alone. C1's
 `sky1` (`Horizontal`) carries the raw word 2 and `tracer1` (`Vertical`) 1
-([formats/texture-archive.md](../formats/texture-archive.md)). ⚠ `TextureArchive.RenderFlagsOf`
-reads `Horizontal` as 1 and `Vertical` as 2; nothing consumes bits 0 and 1, so no behaviour rests
-on the swap.
+([formats/texture-archive.md](../formats/texture-archive.md)). `TextureArchive.RenderFlags` returns the
+raw word; nothing consumes bits 0 and 1.
 
 Nothing else in the header needs renaming; `flags`, `width`, `height`, `palette_count` and `zero08`
 all match the engine's use.
@@ -405,9 +404,9 @@ keeps the top four bits of its alpha on every mip level, expanded by nibble repl
 and painted skins), so a fringe below 16/255 draws nothing. Enhanced graphics keeps 8-bit alpha.
 Colour stays at 8 bits in both modes.
 
-`TextureArchive.RenderFlags` carries the word off each archive's own extraction manifest (the
-`stretch` field) and `IsAdditive` tests bit 2; a name the archive cannot resolve, and a PNG-only
-tree with no manifest, read as 0 and therefore alpha-mix, which is the engine's own fallback.
+`TextureArchive.RenderFlags` carries the word off each texture's own header and `IsAdditive` tests
+bit 2; a name the archive cannot resolve reads as 0 and therefore alpha-mixes, which is the
+engine's own fallback.
 `Puffer.Create` asks it once per atlas column, so the verdict is per particle and per flipbook
 frame; `MultiMeshEmitterRenderer` draws a column set that spans both blends as two MultiMeshes and
 routes each particle by the column it is showing. Godot's `blend_add` is `SRC_ALPHA, ONE`, which is

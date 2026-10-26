@@ -55,7 +55,7 @@ internal static class GunVoiceReachSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ReachChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(ReachChapter);
         ctx.RequireData(texturesPath, $"{ReachChapter} textures");
 
         // The whole point of this suite: the reach a player flies with, not the decoded radii.

@@ -15,7 +15,7 @@ internal sealed class BuildState
     public Spec.GameData Data = Spec.GameData.Empty;
     public Spec.ChapterData Chapter = null!;
     public bool Mute, DebugCollision;
-    public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
+    public string GamezPath = "", MissionZrdrPath = "";
 
     public GameZ Gamez = null!;
     public TextureArchive Textures = null!;

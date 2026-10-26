@@ -154,7 +154,7 @@ internal sealed class SessionBoards
         if (OriginalRaceStrings() is { } strings)
         {
             var board = OriginalRaceBoard.Build(race, zoneNames, context, exitLabel, _in.PauseState,
-                InputFor, _in.DataRoot, strings);
+                InputFor, _in.DataRoot, _in.Rimage, strings);
             board.Restart = restart;
             board.RestartWithheld = restartWithheld;
             board.Exit = _in.Exit;
@@ -321,7 +321,7 @@ internal sealed class SessionBoards
         var pauseState = _in.PauseState;
         var runtime = sheetInputs.World;
         return OriginalPauseBoard.Build(
-            pauseState, InputFor, _in.DataRoot, sheet,
+            pauseState, InputFor, _in.DataRoot, _in.Rimage, sheet,
             () => PauseReadoutFor(sheet, campaign, objectives, pauseState, runtime));
     }
 
@@ -346,7 +346,7 @@ internal sealed class SessionBoards
 
         Log.Info("ui", $"pause: {spec.Chapter} Dogfight draws {sheet.State.Key}");
         return OriginalPauseBoard.Build(
-            _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
+            _in.PauseState, InputFor, _in.DataRoot, _in.Rimage, sheet, () => PauseReadout.Empty);
     }
 
     // A mode of ours, or a sortie whose own dialog did not read: the bare blackboard headed as the
@@ -362,7 +362,7 @@ internal sealed class SessionBoards
 
         Log.Info("ui", $"pause: {_in.Spec.Chapter} {heading} draws the bare blackboard");
         return OriginalPauseBoard.Build(
-            _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
+            _in.PauseState, InputFor, _in.DataRoot, _in.Rimage, sheet, () => PauseReadout.Empty);
     }
 
     // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for its chapter and mission
@@ -387,7 +387,7 @@ internal sealed class SessionBoards
 
         Log.Info("ui", $"pause: {spec.Chapter} {ia.Def.MissionType} draws {sheet.State.Key}");
         return OriginalPauseBoard.Build(
-            _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
+            _in.PauseState, InputFor, _in.DataRoot, _in.Rimage, sheet, () => PauseReadout.Empty);
     }
 
     // The parchment's own row order, which is the briefing's: every keyed IDENTITY by priority.
@@ -624,6 +624,8 @@ internal sealed class SessionBoards
         public Func<IReadOnlyList<Node3D>> LockCandidates = null!;
         public string ZrdrPath = "", DataRoot = "";
         public Messages Messages = new();
+        // The rimage art the Original pause and race sheets draw.
+        public TextureSet Rimage = TextureSet.Empty;
     }
 
     /// <summary>What decides which Original sheet a pause draws. It is the campaign mission's, a

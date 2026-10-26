@@ -47,7 +47,7 @@ internal static class ScrapbookFitSuites
         ctx.RequireData(Path.Combine(assets, "SCRAPBOOK.CSV"), $"the shipped scrapbook table");
         ctx.RequireData(Path.Combine(assets, "LAYOUT.CSV"), $"the shipped widget layout");
         var probe = new Control();
-        var view = ComposedBoardView.Build(ctx.DataRoot);
+        var view = ComposedBoardView.Build(ctx.DataRoot, ctx.Data.Rimage);
         ctx.Host.AddChild(probe);
         try
         {

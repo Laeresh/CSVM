@@ -95,7 +95,7 @@ internal static class LookStickSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
@@ -135,7 +135,7 @@ internal static class LookStickSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
@@ -344,7 +344,7 @@ internal static class LookStickSuites
 
     // One flight: build a single human in the named view with the stick pinned, settle, read the
     // swing, then centre the stick and settle again to read what release leaves behind.
-    private static Swing? Fly(TestContext ctx, string texturesPath, string chapterZrdr,
+    private static Swing? Fly(TestContext ctx, TextureSet texturesPath, string chapterZrdr,
         PilotViewMode mode, StringBuilder report)
     {
         Swing? result = null;
@@ -373,7 +373,7 @@ internal static class LookStickSuites
 
     // Builds one human in the named view with the stick pinned at `look`, hands it to the sortie
     // unsettled and tears everything down after. False when no aircraft was built.
-    private static bool WithFlight(TestContext ctx, string texturesPath, string chapterZrdr,
+    private static bool WithFlight(TestContext ctx, TextureSet texturesPath, string chapterZrdr,
         PilotViewMode mode, string look, Action<GameClock, FlightController> sortie)
     {
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

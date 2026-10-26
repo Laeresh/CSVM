@@ -203,7 +203,7 @@ internal static class TargetingSuites
         // --- the attacker queue, wired through a real hit ------------------------------------
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -764,7 +764,7 @@ internal static class TargetingSuites
             // their roots, so the built world has no live emplacement; the five aagun sites go on
             // by the .gw's own switch reversed, and off again in the finally (shared world cache).
             ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-            string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+            TextureSet texturesPath = ctx.ChapterTextures("C1");
             ctx.RequireData(texturesPath, $"C1 textures");
             ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
             var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -921,7 +921,7 @@ internal static class TargetingSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         // --- the pure selection, over a constructed candidate set (no tree, no pool) ---
@@ -1277,7 +1277,7 @@ internal static class TargetingSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         // --- the placement rules, pure over a 1440p pane at scale 1 ------------------------------
@@ -1452,7 +1452,7 @@ internal static class TargetingSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

@@ -40,7 +40,7 @@ internal static class TurretStructureSuites
         CheckRegistryRule(ctx);
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ShipChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(ShipChapter);
         ctx.RequireData(texturesPath, $"{ShipChapter} textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);

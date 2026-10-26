@@ -16,6 +16,9 @@ namespace CSVM.Spec;
 /// </summary>
 public sealed class GameData
 {
+    /// <summary>The install path of the HUD and menu art archive.</summary>
+    public const string RimagePath = "ZBD/rimage.zbd";
+
     /// <summary>No install: no boot scripts, an empty message table, bare chapters.</summary>
     public static readonly GameData Empty = new();
 
@@ -24,6 +27,9 @@ public sealed class GameData
 
     /// <summary>The message table of <c>strings.dll</c>, empty without it.</summary>
     public Messages Messages { get; init; } = new();
+
+    /// <summary>The HUD and menu art of <c>rimage.zbd</c>, empty without it.</summary>
+    public TextureSet Rimage { get; init; } = TextureSet.Empty;
 
     /// <summary>Builds the per-chapter part for a chapter and mission folder (<c>C1</c>,
     /// <c>M01</c>). Each factory sets its own.</summary>
@@ -36,7 +42,31 @@ public sealed class GameData
     {
         Interp = Read(game, InterpScripts.GamePath, () => InterpScripts.Load(game), null),
         Messages = Read(game, Messages.GameFile, () => Messages.Load(game), new Messages()),
+        Rimage = Read(game, RimagePath, () => TextureSet.Load(game, RimagePath), TextureSet.Empty),
+        LoadChapter = Chapters(game),
     };
+
+    // The chapter loader of an install. The last chapter's textures are held, so the sessions and
+    // suites that rebuild one chapter decode its archive once.
+    private static Func<string, string, ChapterData> Chapters(IGameFileSource? game)
+    {
+        var gate = new object();
+        string? heldChapter = null;
+        var held = TextureSet.Empty;
+        return (chapter, mission) =>
+        {
+            lock (gate)
+            {
+                if (!string.Equals(heldChapter, chapter, StringComparison.OrdinalIgnoreCase))
+                {
+                    held = Read(game, $"ZBD/{chapter}", () => TextureSet.ForChapter(game, chapter), TextureSet.Empty);
+                    heldChapter = chapter;
+                }
+
+                return new ChapterData { Chapter = chapter, Mission = mission, Textures = held };
+            }
+        };
+    }
 
     private static T Read<T>(IGameFileSource? game, string path, Func<T> load, T absent)
     {
@@ -53,8 +83,7 @@ public sealed class GameData
 }
 
 /// <summary>The models one session's chapter and mission read, built by
-/// <see cref="GameData.LoadChapter"/>. It names its scope only until a per-chapter format adds
-/// its slot.</summary>
+/// <see cref="GameData.LoadChapter"/>.</summary>
 public sealed class ChapterData
 {
     /// <summary>The chapter folder, <c>C1</c>.</summary>
@@ -62,6 +91,10 @@ public sealed class ChapterData
 
     /// <summary>The mission folder, <c>M01</c>.</summary>
     public required string Mission { get; init; }
+
+    /// <summary>The chapter's texture archive (<see cref="TextureSet.ForChapter"/>), the plane
+    /// skins and world textures; empty without one.</summary>
+    public TextureSet Textures { get; init; } = TextureSet.Empty;
 
     /// <summary>A chapter part with no models loaded.</summary>
     public static ChapterData Bare(string chapter, string mission) => new() { Chapter = chapter, Mission = mission };

@@ -143,7 +143,7 @@ internal static class PausePreferencesSuites
         var selection = one.Targeting;
         OptionsApplyExit? applied = null;
         // LiveSettings.Persist's own write of the two fields, so the page reopens on what it saved.
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, a =>
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, null, a =>
         {
             applied = a;
             var store = OptionsStore.UserOptions();
@@ -230,11 +230,11 @@ internal static class PausePreferencesSuites
         var reader = new MenuInput { Keyboard = false, Pads = Array.Empty<int>() };
         var pause = new PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => reader, ctx.DataRoot, sheet,
+            pause, _ => reader, ctx.DataRoot, ctx.Data.Rimage, sheet,
             () => new PauseReadout(
                 Array.Empty<PauseObjective>(), string.Empty, Array.Empty<PauseWorldIcon>()));
         OptionsApplyExit? applied = null;
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, a => applied = a);
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, null, a => applied = a);
         ctx.Check(leaf != null, $"the leaf builds over the install's decoded layout");
         if (leaf == null)
         {

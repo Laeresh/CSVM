@@ -43,7 +43,7 @@ internal static class CutsceneOwnershipSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Folder}");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Folder);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var report = new StringBuilder();

@@ -66,7 +66,7 @@ internal static class CoopDropoffSuites
         string folder = mission.MissionFolder.ToUpperInvariant();
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {MissionSeq} -> {chapter}/{folder}");
@@ -221,7 +221,7 @@ internal static class CoopDropoffSuites
     private static void WithTwoHumans(TestContext ctx, TestWorld world,
         Action<IReadOnlyList<PlayerRig>, CutsceneController> leg)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var cutscene = new CutsceneController();

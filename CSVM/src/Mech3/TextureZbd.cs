@@ -228,3 +228,107 @@ public static class TextureZbd
         }
     }
 }
+
+/// <summary>One texture archive's records, looked up by <see cref="TextureImage.Key"/> without
+/// regard to case. <see cref="Archive"/> names the archive for an HD pack. It is the install path
+/// below <c>ZBD/</c>, lower case, without the extension: <c>c1/rtexture15</c>, <c>rimage</c>.
+/// Engine-free; <see cref="TextureArchive"/> builds the images.</summary>
+public sealed class TextureSet
+{
+    /// <summary>No archive.</summary>
+    public static readonly TextureSet Empty = new(string.Empty, Array.Empty<TextureImage>());
+
+    // The highest rtextureN a chapter is probed for; the install ships 9 to 15.
+    private const int TopTier = 32;
+
+    private readonly Dictionary<string, TextureImage> _byKey = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The records <paramref name="images"/> of the archive <paramref name="archive"/>.</summary>
+    public TextureSet(string archive, IReadOnlyList<TextureImage> images)
+    {
+        Archive = archive;
+        Images = images;
+        foreach (var image in images)
+        {
+            _byKey.TryAdd(image.Key, image);
+        }
+    }
+
+    /// <summary>The archive's HD pack name, empty for <see cref="Empty"/>.</summary>
+    public string Archive { get; }
+
+    /// <summary>The records in file order.</summary>
+    public IReadOnlyList<TextureImage> Images { get; }
+
+    /// <summary>How many textures the archive holds.</summary>
+    public int Count => Images.Count;
+
+    /// <summary>The archive at <paramref name="path"/> (<c>ZBD/rimage.zbd</c>), empty without a
+    /// source or without the file.</summary>
+    public static TextureSet Load(IGameFileSource? game, string path) =>
+        TextureZbd.Load(game, path) is { } images ? new TextureSet(ArchiveOf(path), images) : Empty;
+
+    /// <summary>The chapter's texture archive: its highest <c>rtextureN</c> tier, the set the
+    /// original renders, else its <c>texture.zbd</c>. Empty without either.</summary>
+    public static TextureSet ForChapter(IGameFileSource? game, string chapter)
+    {
+        if (game == null)
+        {
+            return Empty;
+        }
+
+        for (int n = TopTier; n > 0; n--)
+        {
+            string tier = $"ZBD/{chapter}/rtexture{n}.zbd";
+            if (game.Exists(tier))
+            {
+                return Load(game, tier);
+            }
+        }
+
+        return Load(game, $"ZBD/{chapter}/texture.zbd");
+    }
+
+    /// <summary>The record looked up by <paramref name="key"/>, or null.</summary>
+    public TextureImage? Find(string key) => _byKey.TryGetValue(key, out var image) ? image : null;
+
+    /// <summary>The record as fresh top-down RGBA8, the layout a PNG decode hands the menus, or
+    /// null when the archive lacks it. An RGB record takes an opaque alpha.</summary>
+    public TgaImage? Rgba(string key)
+    {
+        if (Find(key) is not { } image)
+        {
+            return null;
+        }
+
+        if (image.HasAlphaChannel)
+        {
+            return TgaImage.FromRgba(image.Width, image.Height, (byte[])image.Pixels.Clone());
+        }
+
+        var rgba = new byte[image.Width * image.Height * 4];
+        for (int i = 0, o = 0; o < rgba.Length; i += 3, o += 4)
+        {
+            rgba[o] = image.Pixels[i];
+            rgba[o + 1] = image.Pixels[i + 1];
+            rgba[o + 2] = image.Pixels[i + 2];
+            rgba[o + 3] = 255;
+        }
+
+        return TgaImage.FromRgba(image.Width, image.Height, rgba);
+    }
+
+    /// <inheritdoc/>
+    public override string ToString() => Archive;
+
+    private static string ArchiveOf(string path)
+    {
+        string unix = path.Replace('\\', '/');
+        if (unix.StartsWith("ZBD/", StringComparison.OrdinalIgnoreCase))
+        {
+            unix = unix[4..];
+        }
+
+        return Path.ChangeExtension(unix, null).ToLowerInvariant();
+    }
+}

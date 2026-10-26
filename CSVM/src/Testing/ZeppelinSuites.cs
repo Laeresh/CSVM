@@ -347,7 +347,7 @@ internal static class ZeppelinSuites
         ctx.RequireData(chapterZrdr, $"C3 zrdr");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03");
         ctx.RequireData(missionZrdr, $"C3/M03 zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"), $"C3 textures");
+        ctx.RequireData(ctx.ChapterTextures("C3"), $"C3 textures");
 
         ZeppelinDef? def = null;
         foreach (var d in Zeppelins.Load(missionZrdr))
@@ -383,7 +383,7 @@ internal static class ZeppelinSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
@@ -683,7 +683,7 @@ internal static class ZeppelinSuites
 
                 // A live pool with the gate wired, damage routed exactly as flight wires it.
                 int gateRefusals = 0;
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                textures = new TextureArchive(ctx.ChapterTextures("C1"));
                 pool = new ProjectilePool(textures, null, null)
                 {
                     DamageSink = runtime.DamageAt,
@@ -881,7 +881,7 @@ internal static class ZeppelinSuites
             var started = new List<string>();
             try
             {
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                textures = new TextureArchive(ctx.ChapterTextures("C1"));
                 var live = new ProjectilePool(textures, null, null);
                 pool = live;
                 ctx.Host.AddChild(live);
@@ -1109,7 +1109,7 @@ internal static class ZeppelinSuites
         ZeppelinRuntime? zeps = null;
         try
         {
-            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"));
+            textures = new TextureArchive(ctx.ChapterTextures("C5"));
             var live = new ProjectilePool(textures, null, null);
             pool = live;
             ctx.Host.AddChild(live);
@@ -1240,7 +1240,7 @@ internal static class ZeppelinSuites
         var started = new List<string>();
         try
         {
-            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"));
+            textures = new TextureArchive(ctx.ChapterTextures("C3"));
             var live = new ProjectilePool(textures, null, null);
             pool = live;
             ctx.Host.AddChild(live);

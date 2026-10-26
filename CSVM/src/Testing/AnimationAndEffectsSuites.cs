@@ -106,7 +106,7 @@ internal static class AnimationAndEffectsSuites
     internal static void CrashStageRootTripwire(TestContext ctx, TestWorld world)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(world.Chapter);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var textures = new TextureArchive(texturesPath);
         try

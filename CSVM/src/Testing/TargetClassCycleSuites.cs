@@ -64,7 +64,7 @@ internal static class TargetClassCycleSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");

@@ -16,8 +16,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The synthetic data root <c>--synthetic-data</c> writes, built from the fixtures the engine reads.
-/// Its stamp passes the boot check as a current tree and marks it synthetic. Its chapter texture
-/// archive opens through the path every session resolves, with one PNG per manifest entry. The
+/// Its stamp passes the boot check as a current tree and marks it synthetic. Its chapter textures
+/// are built in memory, as its message table is. The
 /// Original shell's files pass its availability check, each picture at its recorded size. Decoding
 /// pixels needs Godot, so the in-engine run covers that half.
 /// </summary>
@@ -68,29 +68,33 @@ public class SyntheticDataTests
         Assert.False(SyntheticData.Marks(TestData.TempDir()));
     }
 
+    /// <summary>The synthetic chapter textures are built in memory, one record per entry at its
+    /// size, for C1 alone; the tree carries no texture folder.</summary>
     [Fact]
-    public void TheChapterTextureArchiveOpensWithOnePngPerManifestEntry()
+    public void TheChapterTexturesAreBuiltInMemoryOneRecordPerEntry()
     {
         string root = Built();
+        var data = SyntheticGameData.Build();
         var lines = new List<string>();
         using (CSVM.Utils.Log.PushConsoleSink(lines.Add))
         {
-            using var archive = new TextureArchive(SessionPaths.ChapterTextures(root, SyntheticTextures.Chapter));
-            var entries = ManifestEntries();
-            Assert.NotEmpty(entries);
-            Assert.Equal(entries.Count, archive.ManifestTextureCount);
-            foreach (var (name, width, height) in entries)
+            using var archive = new TextureArchive(data.LoadChapter(SyntheticTextures.Chapter, "M01").Textures);
+            Assert.NotEmpty(SyntheticTextures.Entries);
+            Assert.Equal(SyntheticTextures.Entries.Count, archive.ManifestTextureCount);
+            foreach (var (name, width, height) in SyntheticTextures.Entries)
             {
-                byte[]? png = archive.ReadPngBytes(name);
-                Assert.NotNull(png);
-                Assert.Equal(width, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
-                Assert.Equal(height, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
+                var texture = archive.Lookup(name);
+                Assert.NotNull(texture);
+                Assert.Equal((width, height), (texture!.Width, texture.Height));
+                Assert.Equal(width * height * 3, texture.Pixels.Length);
             }
 
             Assert.Empty(archive.MissingTextures);
         }
 
         Assert.Empty(lines);
+        Assert.Equal(0, data.LoadChapter("C2", "M01").Textures.Count);
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "C1", "texture")));
     }
 
     [Fact]
@@ -150,7 +154,7 @@ public class SyntheticDataTests
     public void ARebuildReplacesWhatAnEarlierRunLeft()
     {
         string root = Built();
-        string stray = Path.Combine(root, "extracted", "C1", "texture", "probe_stray.png");
+        string stray = Path.Combine(root, "extracted", "C1", "probe_stray.png");
         File.WriteAllBytes(stray, Array.Empty<byte>());
 
         SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);
@@ -199,17 +203,5 @@ public class SyntheticDataTests
         }
 
         return (BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 7)), BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 5)));
-    }
-
-    private static List<(string Name, int Width, int Height)> ManifestEntries()
-    {
-        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.Fixture("synthetic", "C1", "texture", "manifest.json")));
-        var entries = new List<(string, int, int)>();
-        foreach (var info in doc.RootElement.GetProperty("texture_infos").EnumerateArray())
-        {
-            entries.Add((info.GetProperty("name").GetString()!, info.GetProperty("width").GetInt32(), info.GetProperty("height").GetInt32()));
-        }
-
-        return entries;
     }
 }

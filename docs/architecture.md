@@ -36,7 +36,7 @@ Everything that turns the player's install into a live scene: the mech3ax extrac
 GameZ→Godot builders, and the animation runtime that drives the world.
 
 - `src/Mech3/GameZ.cs`, GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
-- `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
+- `src/Mech3/TextureArchive.cs`, texture lookup over one decoded archive: resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/HdModelMeshes.cs`, a model pack's replacement mesh for a gamez node, imported once per pack key with its winding reversed back.
 - `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
@@ -103,7 +103,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldLights.cs`, packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs`, parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/InterpScripts.cs`, the engine boot scripts read from `interp.zbd` in the game files, looked up by script name.
-- `src/Mech3/TextureZbd.cs`, the engine-free reader for `texture`/`rtextureN`/`rimage.zbd`: each texture's name, alpha class, flags and pixels.
+- `src/Mech3/TextureZbd.cs`, the engine-free reader for `texture`/`rtextureN`/`rimage.zbd`: each texture's name, alpha class, flags and pixels, and `TextureSet`, one archive's records by name.
 - `src/Mech3/GameZZbd.cs`, the engine-free reader for `gamez.zbd`/`planes.zbd` into the `GameZ` model.
 - `src/Mech3/ZrdrZbd.cs`, the engine-free reader for `zrdr.zbd` into each reader file's list, with the lookup by name.
 - `src/Mech3/AnimZbd.cs`, the engine-free reader for `cam_anim.zbd`/`mis_anim.zbd` into the `AnimArchive` model.
@@ -303,7 +303,7 @@ rows).
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
 - `src/Flight/Hud/CanopyHoleCue.cs`, the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
 - `src/Flight/Hud/HudMetrics.cs`, the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
-- `src/Flight/Hud/HudFont.cs`, the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
+- `src/Flight/Hud/HudFont.cs`, the game's own 5px HUD bitmap font, auto-segmented from the `rimage` records `5pointhud*`; `--hud-font-test` proves it.
 - `src/Flight/Hud/HudFontTest.cs`, the `--hud-font-test` overlay: a known string in both variants, with a rule marking the width `Measure` reports.
 - `src/Flight/Hud/ImpactReticle.cs`, the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/Hud/EdgeMarker.cs`, the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
@@ -727,7 +727,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
 - `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
-- `src/Tooling/SyntheticTextures.cs`, the synthetic tree's C1 texture archive: the fixture manifest plus one generated PNG per entry.
+- `src/Tooling/SyntheticTextures.cs`, the synthetic run's C1 texture archive, built in memory: one checker record per entry.
 - `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket and shakes.
 - `src/Tooling/SyntheticGameData.cs`, the game data a `--synthetic-data` run reads, every model built in memory with no game-file source.
 - `src/Tooling/SyntheticMessages.cs`, the synthetic run's invented message table, built in code.
@@ -983,7 +983,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
 - `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
 - `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
-- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: `extracted/` paths and world texture names, a chapter's own entry beating the bare name.
+- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, `extracted/` rof paths, a chapter's own entry beating the bare name.
 - `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
 - `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
@@ -1054,7 +1054,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 - `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
-- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table) and its per-session chapter part, handed down in place of paths.
+- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art) and its per-session chapter part (the chapter's textures), handed down in place of paths.
 
 ### `CSVM.Tests/`, the unit tests
 

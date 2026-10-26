@@ -55,7 +55,7 @@ internal static class ClutterCardDepthSuites
         + "and mid-fade, asserted on changed pixel counts against each pose's own occluder frame")]
     internal static void CardDepth(TestContext ctx)
     {
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
         ctx.RequireData(gamezPath, $"{Chapter} gamez");

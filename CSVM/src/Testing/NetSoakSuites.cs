@@ -335,7 +335,7 @@ internal static class NetSoakSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         // Both limits off, so no number of kills or minutes ends the match mid-matrix and holds
         // every world at the wrap-up board.
         return SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx)).Concat(new[]

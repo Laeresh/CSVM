@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Tests.Oracle;
 using Xunit;
 using Xunit.Abstractions;
 using AlphaClass = CSVM.Mech3.TextureArchive.AlphaClass;
@@ -16,8 +15,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="TextureZbd.Read"/> over hand-encoded archives (CI-safe), and over every texture
-/// archive of the install against today's extraction. The oracle is each texture's manifest fields
-/// and its PNG's pixels, decoded here without the engine. Layout: docs/formats/texture-archive.md.
+/// archive of the install against today's extraction. The oracle, <see cref="Oracle.TexturesLegacy"/>,
+/// reads each texture's manifest fields and its PNG's pixels without the engine. Layout: docs/formats/texture-archive.md.
 /// </summary>
 public class TextureZbdTests
 {
@@ -161,70 +160,9 @@ public class TextureZbdTests
         Path.GetFileName(path) is "texture.zbd" or "rimage.zbd"
         || (Path.GetFileName(path).StartsWith("rtexture", StringComparison.Ordinal) && path.EndsWith(".zbd", StringComparison.Ordinal));
 
-    // Today's model: the manifest's per-texture fields in file order, each PNG's pixels decoded
-    // engine-free in the layout its colour type gives.
-    private static List<TextureImage> FromExtraction(string path)
-    {
-        string zipPath = Path.Combine(TestData.ExtractedRoot!, Path.ChangeExtension(ZbdTree.Canonical(path), ".zip"));
-        using var zip = ZipFile.OpenRead(zipPath);
-        using var manifest = JsonDocument.Parse(Read(zip, "manifest.json"));
-        var textures = new List<TextureImage>();
-        foreach (var info in manifest.RootElement.GetProperty("texture_infos").EnumerateArray())
-        {
-            string name = info.GetProperty("name").GetString()!;
-            string? rename = info.TryGetProperty("rename", out var r) ? r.GetString() : null;
-            var png = Read(zip, (rename ?? name) + ".png");
-            Assert.Null(PngImage.ReadGamma(png));
-            var image = PngImage.Decode(png) ?? throw new InvalidDataException($"{path}: {name}.png would not decode");
-            bool alphaChannel = png[25] == 6; // IHDR colour type: 6 RGBA, 2 RGB
-            var pixels = alphaChannel ? image.Rgba : DropAlpha(image.Rgba);
-            Assert.Equal((info.GetProperty("width").GetInt32(), info.GetProperty("height").GetInt32()), (image.Width, image.Height));
-            textures.Add(new TextureImage(
-                name,
-                rename,
-                image.Width,
-                image.Height,
-                Enum.Parse<AlphaClass>(info.GetProperty("alpha").GetString()!),
-                Stretch(info.GetProperty("stretch").GetString()!),
-                alphaChannel,
-                pixels));
-        }
-
-        return textures;
-    }
-
-    // The extraction's spelling of the render-flags word. ⚠ Vertical is 1 and Horizontal 2.
-    private static int Stretch(string spelling) => spelling switch
-    {
-        "None" => 0,
-        "Vertical" => 1,
-        "Horizontal" => 2,
-        "Both" => 3,
-        _ when spelling.StartsWith("Unk", StringComparison.Ordinal) => int.Parse(spelling[3..]),
-        _ => throw new InvalidDataException($"stretch {spelling}"),
-    };
-
-    private static byte[] DropAlpha(byte[] rgba)
-    {
-        var rgb = new byte[rgba.Length / 4 * 3];
-        for (int i = 0, o = 0; i < rgba.Length; i += 4)
-        {
-            rgb[o++] = rgba[i];
-            rgb[o++] = rgba[i + 1];
-            rgb[o++] = rgba[i + 2];
-        }
-
-        return rgb;
-    }
-
-    private static byte[] Read(ZipArchive zip, string name)
-    {
-        var entry = zip.GetEntry(name) ?? throw new FileNotFoundException(name);
-        using var stream = entry.Open();
-        using var copy = new MemoryStream();
-        stream.CopyTo(copy);
-        return copy.ToArray();
-    }
+    // Today's model, the extraction's zip read the way the engine used to read it.
+    private static List<TextureImage> FromExtraction(string path) =>
+        TexturesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, Path.ChangeExtension(ZbdTree.Canonical(path), ".zip")));
 
     private static Spec Rgb565(string name, int flags, int renderFlags, params int[] texels) =>
         new(name, flags, renderFlags, texels.Length, texels.SelectMany(c => new[] { (byte)c, (byte)(c >> 8) }).ToArray(), 0, null, null, -1);

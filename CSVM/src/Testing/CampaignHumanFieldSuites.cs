@@ -51,7 +51,7 @@ internal static class CampaignHumanFieldSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -115,7 +115,7 @@ internal static class CampaignHumanFieldSuites
     }
 
     private static void Drive(TestContext ctx, TestWorld world, ObjectiveScript script,
-        CampaignMission mission, string missionZrdr, string texturesPath, Vector3 where,
+        CampaignMission mission, string missionZrdr, TextureSet texturesPath, Vector3 where,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);

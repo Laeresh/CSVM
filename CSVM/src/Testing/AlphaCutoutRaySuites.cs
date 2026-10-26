@@ -213,7 +213,7 @@ internal static class AlphaCutoutRaySuites
 
         // The pool is here only to run its own cover predicate; it is never added to the tree and
         // fires nothing, so the archive is the cheapest one that satisfies its constructor.
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var pool = new ProjectilePool(textures, null, null);
         try
         {

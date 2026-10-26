@@ -53,7 +53,7 @@ internal static class NetEnetSessionSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         var spec = SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx))
             .Concat(new[] { "--players=1", "--mute" }).ToArray());
         var airframes = NetCombatSuites.AirframesFor(spec);

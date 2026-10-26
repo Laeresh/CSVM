@@ -94,7 +94,7 @@ internal static class WingWalkCameraSuites
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
@@ -213,7 +213,7 @@ internal static class WingWalkCameraSuites
         ctx.Check(plan.Position.Length() > OpeningRangeM * 10f,
             $"and authored far enough from the world origin that a shot parked there is not mistaken for a framed one");
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();

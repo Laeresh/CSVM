@@ -271,12 +271,12 @@ internal static class PauseSheetSuites
             return default;
         }
 
-        string path = Path.Combine(
-            ctx.DataRoot, "extracted", "rimage", list.Background.ToLowerInvariant() + ".png");
-        if (!File.Exists(path) || Godot.Image.LoadFromFile(path) is not { } art || art.IsEmpty())
+        if (ctx.Data.Rimage.Find(list.Background) is not { } record)
         {
             return default;
         }
+
+        var art = TextureArchive.ImageOf(record);
 
         var solid = Solid(art);
         return new Godot.Rect2(
@@ -414,12 +414,12 @@ internal static class PauseSheetSuites
         return true;
     }
 
-    // Every bitmap the blackboard names, against the extraction's own rimage folder. A name the
-    // extraction does not carry draws nothing and logs nothing, so it is invisible without this.
+    // Every bitmap the blackboard names, against the rimage archive. A name the
+    // archive does not carry draws nothing and logs nothing, so it is invisible without this.
     private static void CheckBlackboardArt(
         TestContext ctx, List<(string Key, PauseSheet Sheet)> sheets, StringBuilder report)
     {
-        string rimage = Path.Combine(ctx.DataRoot, "extracted", "rimage");
+        var rimage = ctx.Data.Rimage;
         var missing = new List<string>();
         int named = 0;
         foreach (var (key, sheet) in sheets)
@@ -428,7 +428,7 @@ internal static class PauseSheetSuites
             foreach (string name in ArtNames(board))
             {
                 named++;
-                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                if (rimage.Find(name) == null)
                 {
                     missing.Add($"{key}:{name}");
                 }
@@ -437,7 +437,7 @@ internal static class PauseSheetSuites
             foreach (string name in Cursors(sheet))
             {
                 named++;
-                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                if (rimage.Find(name) == null)
                 {
                     missing.Add($"{key}:{name}");
                 }
@@ -618,6 +618,7 @@ internal static class PauseSheetSuites
             pause,
             _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
             ctx.DataRoot,
+            ctx.Data.Rimage,
             sheet,
             () => PauseReadout.Empty);
         ctx.Host.AddChild(board);
@@ -777,12 +778,12 @@ internal static class PauseSheetSuites
         ctx.Check(waits > 0, $"the sequence does author waits, so the settle is doing work ({waits})");
     }
 
-    // Every bitmap the composition names, against the extraction's own rimage folder. A name the
-    // extraction does not carry draws nothing and logs nothing, so it is invisible without this.
+    // Every bitmap the composition names, against the rimage archive. A name the
+    // archive does not carry draws nothing and logs nothing, so it is invisible without this.
     private static void CheckArtExists(
         TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)
     {
-        string rimage = Path.Combine(ctx.DataRoot, "extracted", "rimage");
+        var rimage = ctx.Data.Rimage;
         var missing = new List<string>();
         int named = 0;
         foreach (var (mission, sheet) in sheets)
@@ -791,18 +792,18 @@ internal static class PauseSheetSuites
             foreach (string name in ArtNames(board))
             {
                 named++;
-                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                if (rimage.Find(name) == null)
                 {
                     missing.Add($"{mission.MissionFolder}:{name}");
                 }
             }
 
             // The dialog's own pointer is drawn only under a live pointer, so it reaches no
-            // composition here; both its bitmaps still have to be in the extraction.
+            // composition here. Both its bitmaps still have to be in the archive.
             foreach (string name in Cursors(sheet))
             {
                 named++;
-                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                if (rimage.Find(name) == null)
                 {
                     missing.Add($"{mission.MissionFolder}:{name}");
                 }
@@ -828,6 +829,7 @@ internal static class PauseSheetSuites
             pause,
             _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
             ctx.DataRoot,
+            ctx.Data.Rimage,
             entry.Sheet,
             () => Readout(ctx, entry.Mission, entry.Sheet, 0));
         ctx.Host.AddChild(board);

@@ -86,10 +86,9 @@ internal static class CampaignHudSuites
             // path only runs while the board is up, and this suite wants that path exercised.
             var pause = new CSVM.Flight.Modes.PauseState();
             pause.TryToggle(0);
-            var mark = ObjectivesHud.LoadMark(
-                System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage"));
+            var mark = ObjectivesHud.LoadMark(ctx.Data.Rimage);
             ctx.Check(mark != null,
-                $"the completion mark's own art is extracted ({ObjectivesHud.MarkFile})");
+                $"the completion mark's own art is in rimage ({ObjectivesHud.MarkFile})");
             var hud = ObjectivesHud.Build(director, messages, pause, mark);
             ctx.Host.AddChild(hud);
             // A second rig's own instance over the same director proves that "one per rig"

@@ -174,7 +174,7 @@ internal static class WingmanSuites
 
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -218,7 +218,7 @@ internal static class WingmanSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         EngageGates(ctx);
@@ -247,7 +247,7 @@ internal static class WingmanSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, LostLeaderChapter);
         ctx.RequireData(chapterZrdr, $"{LostLeaderChapter} chapter zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, LostLeaderChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(LostLeaderChapter);
         ctx.RequireData(texturesPath, $"{LostLeaderChapter} textures");
 
         if (AiNets.ById(AiNets.Load(chapterZrdr), LostLeaderNetId) is not { } leadersNet)

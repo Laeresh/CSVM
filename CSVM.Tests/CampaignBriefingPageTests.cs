@@ -210,7 +210,7 @@ public class CampaignBriefingPageTests
     {
         var dir = Path.Combine(TestData.TempDir(), "Profiles");
         Directory.CreateDirectory(dir);
-        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: MessagesLegacy.Data(dataRoot));
+        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: new Spec.GameData { Messages = MessagesLegacy.Data(dataRoot).Messages, Rimage = TexturesLegacy.Rimage(dataRoot) });
         flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
         flow.SetMission(seq);
         return flow;
