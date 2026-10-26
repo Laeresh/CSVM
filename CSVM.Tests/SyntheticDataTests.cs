@@ -47,7 +47,7 @@ public class SyntheticDataTests
     public void ASyntheticLaunchBuildsItsGameDataInMemoryWithNoSource()
     {
         string root = Built();
-        var paths = Spec.BasePaths.Resolve(TestData.RepoRoot, root, Spec.SessionSpec.Parse(new[] { "--synthetic-data" }));
+        var paths = Spec.BasePaths.Resolve(TestData.RepoRoot, root, Spec.SessionSpec.Parse(new[] { "--synthetic-data" }), Tooling.SyntheticGameData.Build);
 
         Assert.Null(paths.Game);
         Assert.Equal("Probe Gun", paths.Data.Messages.Get("MSG_PROBE_GUN"));

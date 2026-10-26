@@ -28,12 +28,11 @@ public sealed record BasePaths(
     public GameData Data { get; init; } = GameData.Empty;
 
     /// <summary>The paths under <paramref name="dataRoot"/>, the game-file source by
-    /// <see cref="GameFileSource.Locate"/>'s order, and the game data read through it. A spec
-    /// override is used verbatim, and an archive the spec does not name prefers its unpacked
-    /// sibling folder.
-    /// ⚠ Do not call it before <see cref="SessionPaths.ForceZipped"/> is settled; that preference
-    /// reads it.</summary>
-    public static BasePaths Resolve(string repoRoot, string dataRoot, SessionSpec spec)
+    /// <see cref="GameFileSource.Locate"/>'s order, and the game data read through it. A synthetic
+    /// run's data comes from <paramref name="synthetic"/>, a family above this one. A spec
+    /// override is used verbatim; an unnamed archive prefers its unpacked sibling folder.
+    /// ⚠ Do not call it before <see cref="SessionPaths.ForceZipped"/> is settled.</summary>
+    public static BasePaths Resolve(string repoRoot, string dataRoot, SessionSpec spec, System.Func<GameData> synthetic)
     {
         // A deterministic run ignores saved options, the remembered install among them. A
         // synthetic run reads no install at all, or its result would depend on the machine.
@@ -53,7 +52,7 @@ public sealed record BasePaths(
             spec.Rof ?? Path.Combine(dataRoot, "extracted", "rof"))
         {
             Game = game,
-            Data = spec.SyntheticData ? Tooling.SyntheticGameData.Build() : GameData.Load(game),
+            Data = spec.SyntheticData ? synthetic() : GameData.Load(game),
         };
     }
 }

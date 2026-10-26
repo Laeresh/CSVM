@@ -501,7 +501,7 @@ public partial class Launcher : Node3D
         }
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
-        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec);
+        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, Tooling.SyntheticGameData.Build);
         _probeRunner = new Tooling.ProbeRunner(_paths);
 
         // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
@@ -1572,7 +1572,7 @@ public partial class Launcher : Node3D
             _extractionScreen = null;
         }
 
-        _paths = BasePaths.Resolve(_paths.RepoRoot, _paths.DataRoot, _spec);
+        _paths = BasePaths.Resolve(_paths.RepoRoot, _paths.DataRoot, _spec, Tooling.SyntheticGameData.Build);
         _audio.Build(_paths, _masterSeed);
         EnterMenu();
     }
