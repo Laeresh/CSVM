@@ -152,3 +152,12 @@ Encodes mono 16-bit samples as a RIFF/WAVE file, plain PCM or MS ADPCM (the seve
 coefficient pairs, 256-byte blocks, a `fact` chunk with the true length), the layout
 `Mech3/WavFile.cs` decodes. Each ADPCM block is encoded under every coefficient pair and the closest
 kept. Engine-free, so `CSVM.Tests/SyntheticSoundsTests.cs` round-trips it through the reader.
+
+## src/Tooling/DumpGameFiles.cs
+`--dump`: `strings.dll` and every `ZbdManifest` archive (one chapter's with `--chapter=`) through
+the readers, each where `extracted/` kept it: `messages.json`, `interp.json`, `zrdr/<key>.json` (the
+root list as `Zrdr` reads it), `<C>/gamez/{nodes,meshes,materials,textures}.json`, `cam_anim/`
+and `mis_anim/` as `definitions.json` plus `scripts.json` in pool order, a texture archive as
+`<key>.png` plus `manifest.json`, a sound archive as `<key>` WAVs. JSON is the models' own field
+names; a Godot vector, colour or quaternion is an array, a `Transform3D` twelve floats (basis
+columns, then origin), NaN the string `"NaN"`. ⚠ The engine never reads a dump; nothing falls back onto one.

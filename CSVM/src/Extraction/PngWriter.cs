@@ -7,10 +7,10 @@ using System.Text;
 namespace CSVM.Extraction;
 
 /// <summary>
-/// Encodes 24-bit RGB pixels as a PNG, managed and dependency-free. <c>System.Drawing</c> is
+/// Encodes 8-bit RGB or RGBA pixels as a PNG, managed and dependency-free. <c>System.Drawing</c> is
 /// Windows-only and Godot's image type needs a running engine, which a unit test lacks. Every row
-/// is stored unfiltered and the whole image deflated once. That suffices for the few hundred small
-/// textures the extraction writes.
+/// is stored unfiltered and the whole image deflated once. That suffices for the extraction's
+/// textures and <c>--dump</c>'s, which no player reads.
 /// </summary>
 public static class PngWriter
 {
@@ -20,46 +20,11 @@ public static class PngWriter
 
     /// <summary>A whole PNG file for <paramref name="rgb"/>, three bytes per pixel, rows top to
     /// bottom with no padding between them.</summary>
-    public static byte[] EncodeRgb(int width, int height, ReadOnlySpan<byte> rgb)
-    {
-        if (width <= 0 || height <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(width), "a PNG needs at least one pixel");
-        }
+    public static byte[] EncodeRgb(int width, int height, ReadOnlySpan<byte> rgb) => Encode(width, height, rgb, 3, 2);
 
-        int stride = width * 3;
-        if (rgb.Length != stride * height)
-        {
-            throw new ArgumentException("pixel buffer is not width * height * 3 bytes", nameof(rgb));
-        }
-
-        using var file = new MemoryStream();
-        file.Write(Signature);
-
-        Span<byte> header = stackalloc byte[13];
-        BinaryPrimitives.WriteInt32BigEndian(header, width);
-        BinaryPrimitives.WriteInt32BigEndian(header[4..], height);
-        header[8] = 8; // bits per channel
-        header[9] = 2; // colour type 2: RGB, no alpha
-        WriteChunk(file, "IHDR", header);
-
-        using (var raw = new MemoryStream())
-        {
-            using (var z = new ZLibStream(raw, CompressionLevel.Optimal, leaveOpen: true))
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    z.WriteByte(0); // filter type 0: the row as it stands
-                    z.Write(rgb.Slice(y * stride, stride));
-                }
-            }
-
-            WriteChunk(file, "IDAT", raw.GetBuffer().AsSpan(0, (int)raw.Length));
-        }
-
-        WriteChunk(file, "IEND", ReadOnlySpan<byte>.Empty);
-        return file.ToArray();
-    }
+    /// <summary>A whole PNG file for <paramref name="rgba"/>, four bytes per pixel with straight
+    /// alpha, rows top to bottom with no padding between them.</summary>
+    public static byte[] EncodeRgba(int width, int height, ReadOnlySpan<byte> rgba) => Encode(width, height, rgba, 4, 6);
 
     /// <summary>Writes <see cref="EncodeRgb"/>'s output to <paramref name="path"/>, replacing
     /// any file there.</summary>
@@ -78,6 +43,47 @@ public static class PngWriter
         }
 
         return ~c;
+    }
+
+    private static byte[] Encode(int width, int height, ReadOnlySpan<byte> pixels, int channels, byte colourType)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), "a PNG needs at least one pixel");
+        }
+
+        int stride = width * channels;
+        if (pixels.Length != stride * height)
+        {
+            throw new ArgumentException($"pixel buffer is not width * height * {channels} bytes", nameof(pixels));
+        }
+
+        using var file = new MemoryStream();
+        file.Write(Signature);
+
+        Span<byte> header = stackalloc byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(header, width);
+        BinaryPrimitives.WriteInt32BigEndian(header[4..], height);
+        header[8] = 8; // bits per channel
+        header[9] = colourType; // 2 RGB, 6 RGBA
+        WriteChunk(file, "IHDR", header);
+
+        using (var raw = new MemoryStream())
+        {
+            using (var z = new ZLibStream(raw, CompressionLevel.Optimal, leaveOpen: true))
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    z.WriteByte(0); // filter type 0: the row as it stands
+                    z.Write(pixels.Slice(y * stride, stride));
+                }
+            }
+
+            WriteChunk(file, "IDAT", raw.GetBuffer().AsSpan(0, (int)raw.Length));
+        }
+
+        WriteChunk(file, "IEND", ReadOnlySpan<byte>.Empty);
+        return file.ToArray();
     }
 
     private static void WriteChunk(Stream file, string type, ReadOnlySpan<byte> data)

@@ -25,6 +25,9 @@ public sealed class Messages
 
     public int Count => _byKey.Count;
 
+    /// <summary>Every key and its text, for a tool that lists the table.</summary>
+    public IReadOnlyDictionary<string, string> Entries => _byKey;
+
     /// <summary>Loads the table from the install's <c>strings.dll</c>. No source or no file gives
     /// an empty table, whose lookups fall back to the raw key. Display strings are cosmetic, and a
     /// mission must still load without them. A malformed DLL throws

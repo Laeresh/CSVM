@@ -337,7 +337,7 @@ public sealed record SessionSpec
         ExtractInstall != null ? "extract"
         : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -353,7 +353,7 @@ public sealed record SessionSpec
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || ExtractInstall != null
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
-        || DumpSticks || DamageTest || EffectsTest || WeaponTest;
+        || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
     public bool WorldMode { get; private set; }
@@ -847,6 +847,11 @@ public sealed record SessionSpec
     public bool DumpConfig { get; private set; }
     public bool DumpMips { get; private set; }
     public string DumpMipsFilter { get; private set; } = "";
+
+    /// <summary><c>--dump[=folder]</c>: where <c>Tooling/DumpGameFiles.cs</c> writes the game
+    /// files' models, relative to the run tree. Empty for its default folder, null without the
+    /// flag.</summary>
+    public string? DumpPath { get; private set; }
 
     /// <summary><c>--dump-ai</c>: a pure-data report over the five AI data families (patrol
     /// nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators), no world, no
@@ -1748,6 +1753,8 @@ public sealed record SessionSpec
             {
                 s.WordFlags[wordSetting] = flagWord ?? s.WordFlags[wordSetting];
             }
+            else if (arg == "--dump") { s.DumpPath = ""; }
+            else if (arg.StartsWith("--dump=")) { s.DumpPath = arg["--dump=".Length..]; }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }

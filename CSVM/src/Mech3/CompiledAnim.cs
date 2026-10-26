@@ -681,6 +681,9 @@ public sealed class AnimData
 
     public AnimData(Dictionary<string, object?> props) => _props = props;
 
+    /// <summary>The whole bag, for a tool that writes it out.</summary>
+    public IReadOnlyDictionary<string, object?> Props => _props;
+
     public static float? AsNum(object? v) => v switch
     {
         float f => f,

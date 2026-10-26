@@ -191,7 +191,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E, cutover
 
 41. ☐ Source picker and upgrade cleanup
-42. ☐ Dev-only `--dump`
+42. ☑ Dev-only `--dump`
 43. ☐ Delete the extraction pipeline
 44. ☐ Packaging, licences, credit and docs
 45. ☐ Final ISO-only run
@@ -1072,7 +1072,42 @@ validation. <TODO: where "offered once" is remembered.>
 **⚠ Traps.** The delete offer touches 1.6 GB of player data; it deletes only `extracted/`, after
 confirmation, and never follows reparse points (CLAUDE.md's junction warning).
 
-## E42 ☐ Dev-only `--dump`
+## E42 ☑ Dev-only `--dump`
+
+**Landed.** `--dump[=folder]` (`SessionSpec.DumpPath`; the default folder is `.scratch/dump/`
+under the run tree, a relative folder resolves against it) reads `strings.dll` and every
+`ZbdManifest.Expected` archive through `BasePaths.Game` with the C# readers and writes the
+models, then quits. `--chapter=<C>` is the chapter filter: the root archives plus that chapter's
+and its missions'. The writer is `CSVM/src/Tooling/DumpGameFiles.cs`, engine-free (`Run`, `Write`,
+`Files`); the launcher only parses the flag and calls `Run`, right after `BasePaths.Resolve`. Each archive lands where
+`extracted/` kept it, so a script's path change is a root change: `messages.json` (key to text),
+`interp.json`, `zrdr/<key>.json` and `<C>/<M>/zrdr/<key>.json` (the root list as `Zrdr` reads it),
+`<C>/gamez/` and `planes/` as `nodes`, `meshes`, `materials` and `textures.json`, `cam_anim/` and
+`mis_anim/` as `definitions.json` plus `scripts.json` in pool order, a texture archive as
+`<key>.png` plus `manifest.json`, a sound archive as its WAVs. The JSON uses the models' own field
+names; Godot vectors, colours and quaternions are arrays, a `Transform3D` twelve floats, NaN the
+string `"NaN"`. `PngWriter.EncodeRgba` writes the textures with an alpha channel. Without a source the flag logs "no game files" and
+exits 1; a chapter no archive names is refused. Shape: `docs/architecture/Tooling.md`, flag:
+`docs/cli.md`. `CSVM.Tests/DumpGameFilesTests.cs` holds four CI-safe units (the file list and the
+chapter filter, the no-source and unknown-chapter refusals, the JSON of a vector, a transform, NaN,
+an event bag, a definition's dropped archive back reference and the message table) and one install
+test: a small set (messages, interp, root zrdr, `soundsl`, C1B gamez, `cam_anim`, M03 `mis_anim`
+and zrdr, `rtexture2`) dumped to a temp folder and read back against the readers, counts, names,
+the PNG pixels of an RGB and an RGBA texture, and every WAV.
+
+**A dump of C1B through the engine** (`RunProbe.ps1 -EngineArgs '--headless' --dump --chapter=C1B`,
+exit 0) writes 9,628 files, 280 MB. `analysis/ai-ordnance-census/census.py`, copied to scratch
+with its default path changed to `.scratch/dump/zrdr/vehicle.zrd.json`, prints the same 40 lines
+as the original over `extracted/zrdr/vehicle.zrd.json`.
+
+**Two private fields are read by reflection**: `Messages._byKey` and `AnimData._props` have no
+enumerating member, and the dump is their only outside reader. A rename fails the units (the
+lookup throws at type initialisation). An internal accessor on each model would replace it once
+`Mech3/` is free to edit.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A headless flag writes the loader models as JSON/PNG/WAV into `.scratch` for analysis
 scripts and agents.

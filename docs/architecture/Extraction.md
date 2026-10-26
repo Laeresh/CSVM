@@ -79,7 +79,8 @@ The runtime paint code reads the `.BM` itself (`Mech3/PatternLibrary.cs`), so th
 inspection.
 
 ## src/Extraction/PngWriter.cs
-`EncodeRgb` writes 8-bit RGB as a PNG: signature, `IHDR`, one deflated `IDAT` of unfiltered rows,
+`EncodeRgb` and `EncodeRgba` (for `Tooling/DumpGameFiles.cs`'s textures) write 8-bit RGB or RGBA
+as a PNG: signature, `IHDR`, one deflated `IDAT` of unfiltered rows,
 `IEND`, each chunk with its CRC. `Crc32` is public so a test can check a chunk. It replaces
 `System.Drawing`, which is Windows-only, and Godot's `Image`, which needs a running engine.
 `Mech3/PngImage.cs` is the decoder the tests read its output back with.

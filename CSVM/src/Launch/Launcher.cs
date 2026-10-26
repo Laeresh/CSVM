@@ -503,6 +503,13 @@ public partial class Launcher : Node3D
         // gamez/texture/mission paths resolve per session in StartSession.
         _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, Tooling.SyntheticGameData.Build);
         _probeRunner = new Tooling.ProbeRunner(_paths);
+        // --dump: the game files' models into a folder for analysis scripts, then quit.
+        if (_spec.DumpPath is { } dumpFolder)
+        {
+            string dumpDir = Path.GetFullPath(Path.Combine(repoRoot, dumpFolder.Length > 0 ? dumpFolder : Tooling.DumpGameFiles.DefaultFolder));
+            GetTree().Quit(Tooling.DumpGameFiles.Run(_paths.Game, dumpDir, _spec.ChapterGiven ? _spec.Chapter : null) ? 0 : 1);
+            return;
+        }
 
         // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
         // no-op until --fly's weather.json overrides them.
