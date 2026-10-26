@@ -619,6 +619,154 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("vegetation-models",
+        "the near 3D models in a C1 Enhanced flight at rich: firtree1 alone takes the model shipped beside its clump tile and "
+        + "its Rich card material the band, every other listed card none; the model cells stand outside the clutter root with "
+        + "no collider, ranged inside the band's far edge, and draw exactly the card's Rich stamps; the model keeps the dither "
+        + "cells the card gives up; a crater and an activation hide collapse a stamp's model with its card and a show restores "
+        + "it; a live move to original and a live switch to Original draw none, and back draws the same; the map edge copies "
+        + "them under rich alone; a live move to Off draws none and zeroes the card band, a move to Far ranges the same cells out to "
+        + "400 m with the far band and back to Near restores them; a session at original draws none; a model pack's file under "
+        + "the chapter key replaces the shipped one")]
+    internal static void VegetationModelsNear(TestContext ctx)
+    {
+        RequireData(ctx, "C1");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = Utils.VegetationModelsSetting.Word;
+        string shipped = $"{Mech3.CanopyClumps.ShippedRoot}/C1/firtree1.glb.bin";
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            var live = Open(ctx, true, 1, "C1");
+            try
+            {
+                if (!live.Built || live.Session.Clutter is not { ExportedKinds: { } kinds, ModelRoot: { } models } clutter
+                    || ClutterRoot(live.Session) is not { } root)
+                {
+                    ctx.Check(false, $"the rich C1 session builds its clutter with a model root");
+                    return;
+                }
+                var withModel = kinds.Where(k => k.Near != null).ToList();
+                ctx.Check(withModel.Count > 0 && withModel.All(k => k.Model.Equals("firtree1.flt", StringComparison.OrdinalIgnoreCase) && k.Rich != null),
+                    $"firtree1 alone takes a model ({string.Join(", ", withModel.Select(k => $"{k.Model}{(k.Added ? " added" : "")}"))})");
+                string bands = string.Join(", ", kinds.Where(k => k.Rich?.Material is ShaderMaterial)
+                    .Select(k => $"{k.Model}={((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2()}").Distinct());
+                ctx.Check(kinds.Where(k => k.Rich?.Material is ShaderMaterial).All(k => ((ShaderMaterial)k.Rich!.Material!)
+                        .GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2() == (k.Near != null ? Mech3.VegetationModels.Band : Vector2.Zero)),
+                    $"the firtree1 cards' Rich material carries the band and every other card none, so it draws as before ({bands})");
+                ctx.Check(!Under(models, "clutter") && models.IsInsideTree() && !HasCollider(models),
+                    $"the models stand outside the clutter root, in the tree, with no collider");
+
+                var drawn = ModelCells(models);
+                float reach = Mech3.VegetationModels.FarM + Mech3.VegetationModels.CellM;
+                ctx.Check(drawn.Count > 0 && drawn.All(m => m.VisibilityRangeEnd > Mech3.VegetationModels.FarM && m.VisibilityRangeEnd < reach),
+                    $"{drawn.Count} model cells, each ranged past the band's far edge and short of {reach:0} m");
+                var cards = withModel.SelectMany(k => k.Rich!.Placements).Select(Key).OrderBy(p => p).ToList();
+                ctx.Check(ModelStamps(models).SequenceEqual(cards),
+                    $"the models draw exactly the cards' Rich stamps ({cards.Count})");
+
+                var material = (ShaderMaterial)drawn[0].MaterialOverride;
+                string code = material.Shader.Code;
+                string card = ((ShaderMaterial)withModel[0].Rich!.Material!).Shader.Code;
+                ctx.Check(code.Contains("v_card = v_far * " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
+                        && code.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_card)", StringComparison.Ordinal)
+                        && card.Contains("v_alpha *= " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal),
+                    $"the card fades by the band's share and the model discards exactly the dither cells the card keeps");
+
+                var export = withModel[0];
+                var stamps = export.Instances!;
+                int victim = Enumerable.Range(0, export.Rich!.Placements.Count).First(i => export.Rich.Placements[i].Basis.Determinant() != 0f);
+                var at = root.GlobalTransform * export.Rich.Placements[victim].Origin;
+                int zeroBefore = ZeroModels(models);
+                int killed = Mech3.ClutterCull.Destroy(root, Mech3.CraterShape.At(at, radius: 0.01f));
+                int zeroCratered = ZeroModels(models);
+                ctx.Check(killed >= 1 && zeroCratered == zeroBefore + killed && stamps.Moved(victim),
+                    $"a crater collapses its stamps' models with their cards ({killed} killed, {zeroBefore} to {zeroCratered} collapsed models)");
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(ModelCells(models).Count == 0, $"a live move to original draws no model");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                ctx.Check(ModelCells(models).Count == drawn.Count && ZeroModels(models) == zeroCratered,
+                    $"a move back draws the same cells with the crater kept ({ModelCells(models).Count}, {ZeroModels(models)} collapsed)");
+                stamps.Restore(victim);
+                int zeroShown = ZeroModels(models);
+                stamps.SetInstanceTransform(victim, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), export.Rich.Placements[victim].Origin));
+                ctx.Check(zeroShown == zeroCratered - 1 && ZeroModels(models) == zeroCratered,
+                    $"a show restores the stamp's model and a hide collapses it again ({zeroShown}, {ZeroModels(models)})");
+                stamps.Restore(victim);
+
+                live.Session.EdgeExtender!.Update(live.Session.EdgeExtender.BeyondCorner);
+                int edge = EdgeModels(live);
+                Switch(live, enhanced: false);
+                int edgeOriginal = EdgeModels(live);
+                ctx.Check(ModelCells(models).Count == 0 && edge > 0 && edgeOriginal == 0,
+                    $"the map edge copies the models under rich ({edge} nodes) and a live switch to Original draws none, there ({edgeOriginal}) or on the map");
+                Switch(live, enhanced: true);
+                ctx.Check(ModelCells(models).Count == drawn.Count && ModelStamps(models).SequenceEqual(cards) && EdgeModels(live) == edge,
+                    $"and back in Enhanced the same cells and edge copies draw again");
+                Models(live, Utils.VegetationModelsSetting.Off);
+                ctx.Check(ModelCells(models).Count == 0 && EdgeModels(live) == 0 && CardBands(withModel).All(b => b == Vector2.Zero),
+                    $"a live move to Off draws no model, on the map or past its edge, and every card's band is zero, so it draws as before");
+                Models(live, Utils.VegetationModelsSetting.Far);
+                var far = ModelCells(models);
+                float farReach = Mech3.VegetationModels.FarFarM + Mech3.VegetationModels.CellM;
+                ctx.Check(far.Count == drawn.Count && far.All(m => m.VisibilityRangeEnd > Mech3.VegetationModels.FarFarM && m.VisibilityRangeEnd < farReach)
+                        && CardBands(withModel).All(b => b == new Vector2(Mech3.VegetationModels.FarNearM, Mech3.VegetationModels.FarFarM)) && EdgeModels(live) == edge,
+                    $"a live move to Far draws the same cells ranged out past {Mech3.VegetationModels.FarFarM:0} m, with the far band on the cards");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                ctx.Check(ModelCells(models).All(m => m.VisibilityRangeEnd < reach) && CardBands(withModel).All(b => b == Mech3.VegetationModels.Band)
+                        && ModelStamps(models).SequenceEqual(cards),
+                    $"and a move back to Near draws the first cells at the near band");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
+            var original = Open(ctx, true, 1, "C1");
+            try
+            {
+                ctx.Check(original.Built && original.Session.Clutter?.ModelRoot is { } r && ModelCells(r).Count == 0,
+                    $"a session built at original draws no model");
+            }
+            finally
+            {
+                original.Close();
+            }
+
+            // A model pack's file under the chapter key: the shipped bytes, so the import is known good.
+            string pack = System.IO.Path.Combine(ctx.ScratchDir, "vegetation-model-pack");
+            string packed = System.IO.Path.Combine(pack, "HDModels", "test", "C1", "firtree1.glb");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(packed)!);
+            var saved = HdModels.Current;
+            try
+            {
+                System.IO.File.WriteAllBytes(packed, Godot.FileAccess.GetFileAsBytes(shipped));
+                using (var good = HdModels.Open(pack, "HDModels"))
+                {
+                    HdModels.Current = good;
+                    var model = Mech3.VegetationModels.For("C1", "firtree1", null);
+                    ctx.Check(model?.Source.EndsWith(packed, StringComparison.Ordinal) == true,
+                        $"a pack's C1/firtree1.glb replaces the shipped model ({model?.Source ?? "none"})");
+                    ctx.Check(Mech3.VegetationModels.For("C1", "bush1", null) == null && Mech3.VegetationModels.For("C4", "firtree1", null) == null,
+                        $"a species or chapter with no model reads none");
+                }
+            }
+            finally
+            {
+                HdModels.Current = saved;
+            }
+        }
+        finally
+        {
+            Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
         + "stands one ocean and every sea-level base sheet material carries the hide, which reads "
@@ -2040,6 +2188,67 @@ internal static class GraphicsSwitchSuites
                 count++;
         });
         return count;
+    }
+
+    // The near models' drawn cells under the model root, standing in the tree.
+    private static List<MultiMeshInstance3D> ModelCells(Node root)
+    {
+        var cells = new List<MultiMeshInstance3D>();
+        Walk(root, node =>
+        {
+            if (node is MultiMeshInstance3D m && m.IsInsideTree() && !m.IsQueuedForDeletion())
+                cells.Add(m);
+        });
+        return cells;
+    }
+
+    // Every stamp the model cells draw in world space, by Key, sorted.
+    private static List<string> ModelStamps(Node root) => ModelCells(root)
+        .SelectMany(m => Enumerable.Range(0, m.Multimesh.InstanceCount).Select(i => m.Multimesh.GetInstanceTransform(i))
+            .Select(xf => Key(new Transform3D(xf.Basis, m.Position + xf.Origin))))
+        .OrderBy(k => k, StringComparer.Ordinal).ToList();
+
+    // The model stamps collapsed to a zero basis: dropped by the mask, hidden or cratered.
+    private static int ZeroModels(Node root) => ModelCells(root)
+        .Sum(m => Enumerable.Range(0, m.Multimesh.InstanceCount).Count(i => m.Multimesh.GetInstanceTransform(i).Basis.Determinant() == 0f));
+
+    // Where a stamp stands, to the centimetre. A hidden stamp keeps its place.
+    private static string Key(Transform3D xf) => string.Create(CultureInfo.InvariantCulture,
+        $"{Mathf.RoundToInt(xf.Origin.X * 100f)},{Mathf.RoundToInt(xf.Origin.Y * 100f)},{Mathf.RoundToInt(xf.Origin.Z * 100f)}");
+
+    // The map edge's near model copies standing shown in the tree.
+    private static int EdgeModels(Rig rig)
+    {
+        int count = 0;
+        if (rig.Session.EdgeExtender is { } edge)
+        {
+            Walk(edge, node =>
+            {
+                if (node is MultiMeshInstance3D { Visible: true } && node.Name.ToString().EndsWith("_model", StringComparison.Ordinal) && node.IsInsideTree() && !node.IsQueuedForDeletion())
+                    count++;
+            });
+        }
+        return count;
+    }
+
+    // A 3D Vegetation apply as the Options accept makes it, then the steps a reading waits for.
+    private static void Models(Rig rig, string word)
+    {
+        VegetationModelsSetting.Resolve(word, null, null);
+        EnhancedLook.ApplyVegetationModels(rig.Session);
+        Step(rig);
+    }
+
+    // The band each modelled card's Rich material carries.
+    private static IEnumerable<Vector2> CardBands(IEnumerable<Mech3.ClutterBuilder.KindExport> kinds) =>
+        kinds.Select(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2());
+
+    // Whether any collider stands under a node.
+    private static bool HasCollider(Node root)
+    {
+        bool found = false;
+        Walk(root, node => found |= node is CollisionObject3D or CollisionShape3D);
+        return found;
     }
 
     // Whether every listed card's Rich material carries the handover band: on, off, or mixed.

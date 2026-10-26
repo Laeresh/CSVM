@@ -130,6 +130,14 @@ public sealed class HdModels : IDisposable
         return IsClumpKey(key) && _index.Read(key) is { } bytes ? (bytes, _index.Origin(key)!) : null;
     }
 
+    /// <summary>The vegetation card model under the chapter key <paramref name="key"/> (<c>C1/firtree1</c>, matched
+    /// without case) with the label a message names it by, or null. A bare or another chapter's key never answers.</summary>
+    public (HdModel Model, string Source)? Vegetation(string key)
+    {
+        key = key.Replace('\\', '/').ToLowerInvariant();
+        return Read(key) is { } model ? (model, _index.Origin(key)!) : null;
+    }
+
     public void Dispose() => _index.Dispose();
 
     /// <summary>Whether a key names a clump tile file. Such a key keeps its extension, as a rig's does.</summary>

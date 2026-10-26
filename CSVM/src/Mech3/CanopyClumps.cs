@@ -289,6 +289,35 @@ public static class CanopyClumps
     public static Vector2 Band(bool painted) =>
         painted ? new Vector2(PaintedNearM, PaintedFarM) : new Vector2(HandoverNearM, HandoverFarM);
 
+    // Gives every clear texel the mean colour of the solid ones. A filter, a resize or a mip level then
+    // blends tree colour into an edge. The clear texels' black would darken the clumps far off. A near
+    // model's texture takes it too (VegetationModels).
+    internal static void Bleed(Image image)
+    {
+        byte[] px = image.GetData();
+        long r = 0, g = 0, b = 0, n = 0;
+        for (int i = 0; i < px.Length; i += 4)
+        {
+            if (px[i + 3] < 128)
+                continue;
+            r += px[i];
+            g += px[i + 1];
+            b += px[i + 2];
+            n++;
+        }
+        if (n == 0)
+            return;
+        for (int i = 0; i < px.Length; i += 4)
+        {
+            if (px[i + 3] != 0)
+                continue;
+            px[i] = (byte)(r / n);
+            px[i + 1] = (byte)(g / n);
+            px[i + 2] = (byte)(b / n);
+        }
+        image.SetData(image.GetWidth(), image.GetHeight(), false, Image.Format.Rgba8, px);
+    }
+
     // Crown cards cut from the painted canopy's own textures, CrownShapes silhouettes each. The volume then
     // wears the colour and grain the ground shows from above. Equal weights; the spread is the listed kinds' mean.
     // A tile replaces a texture's crowns under its name (C3/forest1).
@@ -468,34 +497,6 @@ public static class CanopyClumps
 
     // Which of its species' tiles a slot shows: the slots of that species before it.
     private static int Rank(IReadOnlyList<int> slots, int slot) => slots.Take(slot).Count(s => s == slots[slot]);
-
-    // Gives every clear texel the mean colour of the solid ones. A filter, a resize or a mip level then
-    // blends tree colour into an edge. The clear texels' black would darken the clumps far off.
-    private static void Bleed(Image image)
-    {
-        byte[] px = image.GetData();
-        long r = 0, g = 0, b = 0, n = 0;
-        for (int i = 0; i < px.Length; i += 4)
-        {
-            if (px[i + 3] < 128)
-                continue;
-            r += px[i];
-            g += px[i + 1];
-            b += px[i + 2];
-            n++;
-        }
-        if (n == 0)
-            return;
-        for (int i = 0; i < px.Length; i += 4)
-        {
-            if (px[i + 3] != 0)
-                continue;
-            px[i] = (byte)(r / n);
-            px[i + 1] = (byte)(g / n);
-            px[i + 2] = (byte)(b / n);
-        }
-        image.SetData(image.GetWidth(), image.GetHeight(), false, Image.Format.Rgba8, px);
-    }
 
     // A uniform draw in [0, 1) hashed from the seed, a cell (or a negative tile id) and a draw index.
     // A hash, so a cell's draws do not depend on how many any other cell took.

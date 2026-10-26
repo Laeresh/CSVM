@@ -810,8 +810,8 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   call it. A module named `veg_*.py` is a helper, not a species, and is never passed to `-Species`.
 - The output is `CSVM/data/vegetation_models/<chapter>/<species>.glb.bin`, committed beside its
   generator: GLB bytes under the `.bin` extension, so Godot imports nothing, no `.import` file
-  exists, and the export's `data/*.bin` filter packs it. Nothing in the game reads one yet; the
-  near draw is to load it at run time with `GltfDocument.AppendFromBuffer`. A rerun writes it byte
+  exists, and the export's `data/*.bin` filter packs it. `Mech3/VegetationModels.cs` loads it at run
+  time with `GltfDocument.AppendFromBuffer` and draws it on its card's stamps near the camera. A rerun writes it byte
   for byte the same under the same Blender build; the exporter writes its own version into the
   file (`Khronos glTF Blender I/O v5.2.<n>`), so a Blender update changes those bytes alone. Keep
   the committed file when nothing else moved. A generator writes one file per chapter in its

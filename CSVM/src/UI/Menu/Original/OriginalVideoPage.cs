@@ -52,6 +52,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's vegetation-quality dropdown, under View Distance in the scrolled window.</summary>
     public const string VegetationQualityKey = "VEGETATIONQUALITY";
 
+    /// <summary>The page's 3D vegetation dropdown, under Vegetation in the scrolled window.</summary>
+    public const string VegetationModelsKey = "VEGETATIONMODELS";
+
     /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
     public const string WaterQualityKey = "WATERQUALITY";
 
@@ -143,6 +146,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality"),
         Word(ViewDistanceKey, CSVM.Utils.ViewDistance.Lookup, "View Distance"),
         Word(VegetationQualityKey, CSVM.Utils.VegetationQualitySetting.Lookup, "Vegetation"),
+        Word(VegetationModelsKey, CSVM.Utils.VegetationModelsSetting.Lookup, "3D Vegetation"),
         new(VrModeKey, "VR Mode", null,
             _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,

@@ -214,6 +214,15 @@ public static class EnhancedLook
         FollowClutterFade(session);
         ApplyWaterQuality(session);
         ApplyVegetationQuality(session);
+        ApplyVegetationModels(session);
+    }
+
+    /// <summary>The resolved <see cref="VegetationModelsSetting"/> word on the running world. The clutter is
+    /// drawn again with no rebuild: its near models on or off, their cells ranged at the word's band.</summary>
+    public static void ApplyVegetationModels(GameSession? session)
+    {
+        session?.FollowClutterFade();
+        Log.Info("world", $"vegetation models: {VegetationModelsSetting.Word} (applied live, band {Mech3.VegetationModels.Band.X:0}-{Mech3.VegetationModels.Band.Y:0} m)");
     }
 
     /// <summary>The resolved <see cref="VegetationQualitySetting"/> word on the running world: the

@@ -727,43 +727,57 @@ public sealed partial class MapEdgeExtender : Node3D
                     PhysicsServer3D.BodyAddShape(bodyRid, shapeRid, xf);
             }
             var rich = _rich ? kind.Rich : null;
-            var mm = new MultiMesh
-            {
-                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                UseColors = rich?.Colors != null,
-                UseCustomData = true,   // before InstanceCount, or the fade has no slot
-                Mesh = kind.Mesh,
-                InstanceCount = placements.Count,
-            };
-            for (int i = 0; i < placements.Count; i++)
-            {
-                mm.SetInstanceTransform(i, placements[i].Xf);
-                if (rich?.Colors is { } colors)
-                    mm.SetInstanceColor(i, colors[placements[i].Source]);
-                mm.SetInstanceCustomData(i, placements[i].Fade);
-                var copy = new ClutterCopy(mm, i, kindIndex, placements[i].Source, placements[i].Xf,
-                    bodyRid, firstSlot < 0 ? -1 : firstSlot + i);
-                copies.Add(copy);
-                if (_activation != null && _activation.IsHidden(kindIndex, copy.Source))
-                    Show(copy, false);
-            }
-            var mmi = new MultiMeshInstance3D
-            {
-                Multimesh = mm,
-                MaterialOverride = rich?.Material ?? kind.Material,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                // The billboard shader swings verts outside the AABB, and a scale_range draw can
-                // make a card up to 3× its authored width, ClutterBuilder measured the margin
-                // these placements need, so the extension uses that rather than the raw width.
-                ExtraCullMargin = kind.CullMargin,
-                Name = $"clutter_{kindIndex}",
-            };
+            var mmi = Copies(kind.Mesh, rich?.Material ?? kind.Material, $"clutter_{kindIndex}", bodyRid, firstSlot);
             if (kind.Solid)
                 mmi.SetInstanceShaderParameter("node_bias", kind.NodeBias);
             var draw = EdgeDraw.Of(mmi, kindIndex, kind.Mesh.GetAabb(), placements);
             draw.ApplyRange();
             draws.Add(draw);
             cell.AddChild(mmi);
+            // The card's near model over the same copies, each following its source stamp as the card does.
+            if (rich != null && kind.Near is { } near)
+            {
+                // ponytail: one node per edge cell; cut it into model cells if D37's edge views read it.
+                var model = Copies(near.Mesh, near.Material, $"clutter_{kindIndex}_model", default, -1);
+                var modelDraw = EdgeDraw.Of(model, kindIndex, near.Mesh.GetAabb(), placements) with { Near = true };
+                modelDraw.ApplyRange();
+                draws.Add(modelDraw);
+                cell.AddChild(model);
+            }
+
+            MultiMeshInstance3D Copies(Mesh mesh, Material? material, string name, Rid body, int slot)
+            {
+                var mm = new MultiMesh
+                {
+                    TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                    UseColors = rich?.Colors != null,
+                    UseCustomData = true,   // before InstanceCount, or the fade has no slot
+                    Mesh = mesh,
+                    InstanceCount = placements.Count,
+                };
+                for (int i = 0; i < placements.Count; i++)
+                {
+                    mm.SetInstanceTransform(i, placements[i].Xf);
+                    if (rich?.Colors is { } colors)
+                        mm.SetInstanceColor(i, colors[placements[i].Source]);
+                    mm.SetInstanceCustomData(i, placements[i].Fade);
+                    var copy = new ClutterCopy(mm, i, kindIndex, placements[i].Source, placements[i].Xf,
+                        body, slot < 0 ? -1 : slot + i);
+                    copies.Add(copy);
+                    if (_activation != null && _activation.IsHidden(kindIndex, copy.Source))
+                        Show(copy, false);
+                }
+                return new MultiMeshInstance3D
+                {
+                    Multimesh = mm,
+                    MaterialOverride = material,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    // The billboard shader swings verts outside the AABB, and a scale_range draw can make
+                    // a card up to 3× its authored width. The extension takes the margin ClutterBuilder measured.
+                    ExtraCullMargin = kind.CullMargin,
+                    Name = name,
+                };
+            }
         }
         return copies;
     }
@@ -1104,7 +1118,9 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // One copied kind's node in a cell, with its stamps' farthest fade and the radius of their
     // bounds. Under Enhanced the node stops drawing past that fade, as a map clutter cell does.
-    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, int Kind, float Far2, float Radius, bool NeverFades)
+    // A near model's node (Near) stops past the word's band instead, in plain metres, and hides under Off.
+    // It copies a whole edge cell's stamps in one node, which the map cuts into VegetationModels.CellM cells.
+    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, int Kind, float Far2, float Radius, bool NeverFades, bool Near = false)
     {
         public static EdgeDraw Of(MultiMeshInstance3D node, int kind, Aabb meshBox,
             List<(Transform3D Xf, Color Fade, int Source)> placements)
@@ -1123,8 +1139,13 @@ public sealed partial class MapEdgeExtender : Node3D
             return new EdgeDraw(node, kind, far2, radius, neverFades);
         }
 
-        public void ApplyRange() => Node.VisibilityRangeEnd = ClutterInstances.RangeEnd(
-            GraphicsMode.Enhanced, NeverFades, Far2, Radius, EffectsLevel.RegisteredScaleSq);
+        public void ApplyRange()
+        {
+            if (Near)
+                Node.Visible = VegetationModels.On;
+            Node.VisibilityRangeEnd = Near ? VegetationModels.Band.Y + Radius
+                : ClutterInstances.RangeEnd(GraphicsMode.Enhanced, NeverFades, Far2, Radius, EffectsLevel.RegisteredScaleSq);
+        }
     }
 
     // A census row. A class rather than a tuple because it is serialized straight to JSON, and the

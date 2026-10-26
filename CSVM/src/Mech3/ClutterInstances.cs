@@ -47,6 +47,12 @@ public sealed class ClutterInstances
     // Whether the authored stamps, and so _moved, are the Rich variant's.
     private bool _rich;
 
+    // The near model over the Rich variant, and its cells, drawn exactly while the Rich variant is. Every
+    // write to a stamp reaches them too, so a model follows its card's hide, crater and show.
+    private Near? _near;
+    private Prototype? _nearProto;
+    private Layout? _nearCells;
+
     private ClutterInstances(Prototype? proto, Layout drawn, int count)
     {
         _proto = proto;
@@ -72,15 +78,16 @@ public sealed class ClutterInstances
     /// <summary>Puts <paramref name="whole"/> under <paramref name="root"/> as the standing mode
     /// draws it. The faithful path keeps it whole, and Enhanced cuts it into cells at
     /// <see cref="EffectsLevel.RegisteredScaleSq"/>. The MultiMesh holds the authored
-    /// <paramref name="placements"/>, and <paramref name="rich"/> is their Rich variant.</summary>
+    /// <paramref name="placements"/>, <paramref name="rich"/> is their Rich variant, and
+    /// <paramref name="near"/> the model drawn over it near the camera.</summary>
     public static ClutterInstances Draw(Node3D root, MultiMeshInstance3D whole,
-        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades, Stamps? rich = null)
+        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades, Stamps? rich = null, Near? near = null)
     {
         var proto = new Prototype(root, whole.Name, whole.Multimesh!.Mesh, whole.MaterialOverride,
             whole.CastShadow, whole.ExtraCullMargin, whole.GetInstanceShaderParameter("node_bias"),
             placements, fades);
         var single = Layout.Single(whole.Multimesh!, whole.MaterialOverride);
-        var drawn = new ClutterInstances(proto, single, placements.Count) { _whole = single, _richVariant = rich };
+        var drawn = new ClutterInstances(proto, single, placements.Count) { _whole = single, _richVariant = rich, _near = near };
         drawn.Own(single);
         if (GraphicsMode.Enhanced)
         {
@@ -88,6 +95,7 @@ public sealed class ClutterInstances
             var cells = drawn.CellsAt(EffectsLevel.RegisteredScaleSq, nodes: true);
             whole.Free();
             drawn.Show(cells, -1);
+            drawn.FollowNear();
         }
         else
         {
@@ -140,11 +148,14 @@ public sealed class ClutterInstances
         {
             if (want.IsCut)
                 want.Range(EffectsLevel.RegisteredScaleSq);
-            return;
         }
-        // The new node takes the old one's place among the root's children. Draw order between
-        // kinds that overlap follows it, so a recut kind draws where a fresh build puts it.
-        Show(want, _drawn.Node.GetIndex());
+        else
+        {
+            // The new node takes the old one's place among the root's children. Draw order between
+            // kinds that overlap follows it, so a recut kind draws where a fresh build puts it.
+            Show(want, _drawn.Node.GetIndex());
+        }
+        FollowNear();
     }
 
     /// <summary>Replaces the Rich variant, null for none, after the vegetation entry changed. Its
@@ -159,6 +170,8 @@ public sealed class ClutterInstances
         if (_richCells != null && !ReferenceEquals(_richCells, _drawn))
             _richCells.Release();
         _richCells = null;
+        _nearCells?.Release();
+        _nearCells = null;
     }
 
     /// <summary>Placement <paramref name="i"/>'s authored transform in the variant drawn, the one a
@@ -184,6 +197,8 @@ public sealed class ClutterInstances
     {
         _moved.Remove(i);
         _drawn.Write(i, Authored(i));
+        if (_nearCells?.Node != null)
+            _nearCells.Write(i, Authored(i));
     }
 
     /// <summary>Writes placement <paramref name="i"/>'s transform, given in the clutter root's
@@ -198,6 +213,8 @@ public sealed class ClutterInstances
                 _moved[i] = placed;
         }
         _drawn.Write(i, placed);
+        if (_nearCells?.Node != null)
+            _nearCells.Write(i, placed);
     }
 
     // Placement i in the frame of the drawn MultiMesh that holds it, exactly as its buffer holds it.
@@ -267,6 +284,33 @@ public sealed class ClutterInstances
             old.Detach();
         if (old.IsCut && !ReferenceEquals(old, _cells) && !ReferenceEquals(old, _richCells))
             old.Release();
+    }
+
+    // Draws the near model's cells exactly while the Rich variant is drawn and the word asks for models,
+    // brought up to the moved stamps. They are cut once and ranged again at the word's far edge.
+    private void FollowNear()
+    {
+        if (_near == null || _proto == null)
+            return;
+        if (!_rich || !VegetationModels.On)
+        {
+            _nearCells?.Detach();
+            return;
+        }
+        _nearProto ??= _proto with
+        {
+            Root = _near.Root,
+            Name = _proto.Name + "_model",
+            Mesh = _near.Mesh,
+            Material = _near.Material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            NodeBias = default
+        };
+        _nearCells ??= Layout.Cut(_nearProto, _richVariant! with { Material = _near.Material }, VegetationModels.CellM);
+        _nearCells.RangeTo(VegetationModels.Band.Y);
+        _nearCells.CatchUp(_moved, AuthoredList);
+        if (_nearCells.Node == null)
+            _near.Root.AddChild(_nearCells.Attach(_nearProto));
     }
 
     // Has a crater cull read and write this layout's stamps through here.
@@ -410,6 +454,17 @@ public sealed class ClutterInstances
             {
                 Ranges[c] = RangeEnd(true, NeverFades[c] || fadeScaleSq <= 0f, Far2[c], Radius[c], fadeScaleSq);
                 if (Node != null && Node.GetChild(c) is MultiMeshInstance3D cell)
+                    cell.VisibilityRangeEnd = Ranges[c];
+            }
+        }
+
+        // Each cell's visibility range at a plain distance in metres past its bounds, on its node too.
+        public void RangeTo(float metres)
+        {
+            for (int c = 0; c < Meshes.Length; c++)
+            {
+                Ranges[c] = metres + Radius[c];
+                if (Node?.GetChild(c) is MultiMeshInstance3D cell)
                     cell.VisibilityRangeEnd = Ranges[c];
             }
         }
@@ -570,6 +625,10 @@ public sealed class ClutterInstances
     /// <summary>One way of placing a kind's stamps, index-aligned with the authored ones. It holds
     /// their transforms, their instance colours (null for none) and the material that draws them.</summary>
     public sealed record Stamps(IReadOnlyList<Transform3D> Placements, IReadOnlyList<Color>? Colors, Material? Material);
+
+    /// <summary>A kind's near model (<see cref="VegetationModels"/>): the mesh and material drawing it on the Rich
+    /// stamps. Its cells stand under the given node, never inside the clutter root.</summary>
+    public sealed record Near(Node3D Root, Mesh Mesh, Material Material);
 
     // Everything the builder's whole node carried, and the authored stamps it held.
     private sealed record Prototype(Node3D? Root, StringName Name, Mesh Mesh, Material? Material,

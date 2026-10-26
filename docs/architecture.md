@@ -67,7 +67,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/MapEdgeExtender.cs`, rolling window of repeated border tiles and clutter continuing the world past the map edge, one per session.
 - `src/Mech3/Clutter.cs`, stamps the boot-script clutter templates onto matching-textured terrain at the polygon's own UV lattice.
 - `src/Mech3/ClutterActivation.cs`, draws each clutter stamp only while the world node it was stamped from is visible.
-- `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell.
+- `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell, and under Rich its near model's cells.
 - `src/Mech3/ClutterTemplates.cs`, the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
 - `src/Mech3/VegetationSidecar.cs`, the shipped per-chapter vegetation list in `CSVM/data/vegetation.json`: the Rich variation per listed model and the sets the texture picks stamp, read with warnings, one chapter's entry written by the vegetation lab.
 - `src/Mech3/VegetationMask.cs`, a chapter's vegetation brush mask over the world area, raw bytes beside the sidecar: sampled per listed stamp, painted by the lab's brush, and the density rule that keeps or drops a stamp under Rich.
@@ -75,6 +75,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/CanopyMask.cs`, where forest mass is drawn under Rich: a 32 m grid of canopy density, ground and tree-top height, baked from the Rich card stamps or from ground picked as painted canopy.
 - `src/Mech3/CanopyClumps.cs`, forest mass under Rich on C1 and C3: cards of a few trees composed at load from the listed card textures, placed per canopy-mask cell at the cards' trees per area, taking over from the cards past 1000 to 1600 m and past the map edge; on C3, crowns cut from the painted jungle's own texture rising out of it past 700 to 1300 m. A species with a clump tile rendered from its model fills its share of the atlas with it.
 - `src/Mech3/ClumpTile.cs`, a species' clump tiles and their sidecar, read from a model pack before the ones shipped beside the vegetation model, else none.
+- `src/Mech3/VegetationModels.cs`, a listed card species' 3D look-alike under Rich, drawn on the card's own stamps near the camera and dithered over to the card across the 3D Vegetation word's band, in the card's unlit shading graded to its colour; read from a model pack before the shipped GLB.
 - `src/Mech3/VegetationVariation.cs`, one listed stamp's Rich variation: a texture-space jitter clamped into its triangle, a card mirror for the yaw, an instance-colour tint, on its own fixed stream.
 - `src/Mech3/VegetationScatter.cs`, the remake's added stamps on a picked texture under Rich: a set's fixed scatter laid once per texture repeat on the triangle's own UV lattice, its count from the set's density a hectare, kept or dropped by the brush mask.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
@@ -681,6 +682,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
 - `src/Utils/WaterQualitySetting.cs`, the Enhanced sea's water quality (flat, waves): the flag/saved/config `WordSetting` lookup over waves (flat on Linux or an integrated GPU), which the session's wave ocean follows live.
 - `src/Utils/VegetationQualitySetting.cs`, the Enhanced vegetation's quality (original, rich): the flag/saved/config `WordSetting` lookup over rich (original on Linux or an integrated GPU), and `RichOn`, what the clutter reads, recut live.
+- `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
 - `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.

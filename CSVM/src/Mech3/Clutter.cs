@@ -34,15 +34,26 @@ public sealed class ClutterBuilder
     public static readonly StringName CollisionCellMeta = "csvm_clutter_cell";
 
     // The Rich card's declarations: the sim clock its sway reads and its sun-side varyings. The handover
-    // band to the canopy clumps (CanopyClumps.Handover) is zero while none stand.
+    // band to the canopy clumps (CanopyClumps.Handover) is zero while none stand. The near models' band
+    // (VegetationModels) is zero on a card with no model.
     // The Rich lines are emitted into the Rich variant alone, so the Original card's text never changes.
     internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_side;\nvarying flat float v_sun;\n"
-        + "uniform vec2 " + CanopyClumps.HandoverParam + ";";
+        + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";";
 
     // How far into the handover band the planted point is, 0 inside it and 1 past it. It is the clumps'
     // alpha and the share the card fades by.
     internal const string HandoverShare = "clamp((distance(origin, CAMERA_POSITION_WORLD) - " + CanopyClumps.HandoverParam
         + ".x) / max(" + CanopyClumps.HandoverParam + ".y - " + CanopyClumps.HandoverParam + ".x, 1.0), 0.0, 1.0)";
+
+    // How far into the near models' band the planted point is: 0 inside it, where the model alone draws.
+    internal const string ModelShare = "clamp((distance(origin, CAMERA_POSITION_WORLD) - " + VegetationModels.BandParam
+        + ".x) / max(" + VegetationModels.BandParam + ".y - " + VegetationModels.BandParam + ".x, 1.0), 0.0, 1.0)";
+
+    // The breeze's lean at a planted point, which the card and its near model share so the swap does not jump.
+    internal const string LeanLines = "    vec2 breeze = vec2(0.9397, 0.3420);\n"
+        + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
+        + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
+        + "    float lean = 0.012 + gust * (0.024 + 0.020 * flutter);\n";
 
     // How much the card's half facing the sun's bearing gains, before its side; the clumps share it.
     internal const string SunLine =
@@ -59,10 +70,11 @@ public sealed class ClutterBuilder
         + "        v_alpha *= 1.0 - " + HandoverShare + ";\n"
         + "        keep *= step(0.004, v_alpha);\n"
         + "    }\n"
-        + "    vec2 breeze = vec2(0.9397, 0.3420);\n"
-        + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
-        + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
-        + "    float lean = 0.012 + gust * (0.024 + 0.020 * flutter);\n"
+        + "    if (" + VegetationModels.BandParam + ".y > 0.0) {\n"
+        + "        v_alpha *= " + ModelShare + ";\n"
+        + "        keep *= step(0.004, v_alpha);\n"
+        + "    }\n"
+        + LeanLines
         + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
@@ -123,6 +135,10 @@ public sealed class ClutterBuilder
     // The armed fog volumes a stamp is tested against for its fade vector's w (FogVolumeRow).
     private readonly IReadOnlyList<FogVolumeBox> _fogVolumes;
 
+    // The chapter whose near models the listed cards take (VegetationModels), null for none; each species read once.
+    private readonly string? _modelChapter;
+    private readonly Dictionary<string, VegetationModels.Model?> _models = new(StringComparer.OrdinalIgnoreCase);
+
     // Every kind this Build will export, INCLUDING the substitution-only kinds minted in
     // ResolveProperties, models no template scatters directly, which exist solely as the target
     // of somebody else's roll (43 of C5's 78 blocks). They carry no CellPlacements, so they are
@@ -164,15 +180,18 @@ public sealed class ClutterBuilder
     private int _addedFrom;
     private string _worldName = "world1";
 
+    // The added stamps' near models stand under a node of their own, which a lab edit rebuilds.
+    private Node3D? _addedModels;
+
     /// <param name="scene">The world's SceneBuilder for the 3D decorations; null leaves only sprites.</param>
     /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for
     /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
     /// at its authored model and size, never fading, rather than throwing.</param>
-    /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param>
+    /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param> <param name="modelChapter">The chapter folder the near models are read under; null draws none.</param>
     /// <param name="vegetation">The chapter's vegetation entry; its listed kinds get a Rich variant that <paramref name="mask"/> thins.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
         ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null,
-        VegetationEntry? vegetation = null, VegetationMask? mask = null)
+        VegetationEntry? vegetation = null, VegetationMask? mask = null, string? modelChapter = null)
     {
         _gamez = gamez;
         _textures = textures;
@@ -181,6 +200,7 @@ public sealed class ClutterBuilder
         _fogVolumes = fogVolumes ?? Array.Empty<FogVolumeBox>();
         _vegetation = vegetation;
         _mask = mask;
+        _modelChapter = modelChapter;
     }
 
     /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
@@ -250,6 +270,10 @@ public sealed class ClutterBuilder
 
     /// <summary>Shape attachments made by the last Build, one per collidable 3D decoration.</summary>
     public int SolidCollisionInstances { get; private set; }
+
+    /// <summary>The node the near models stand under, beside the clutter root and never inside it. A crater or a
+    /// census walking the clutter then reads each stamp once. Null without a model chapter; the caller parents it.</summary>
+    public Node3D? ModelRoot { get; private set; }
 
 
     /// <summary>A stamp's fade-vector w: one more than the index of the first fog volume holding
@@ -508,6 +532,7 @@ public sealed class ClutterBuilder
         BakeRich();
 
         var root = new Node3D { Name = "clutter" };
+        ModelRoot = _modelChapter != null ? new Node3D { Name = "vegetation_models" } : null;
         var parts = new List<string>();
         var exported = new List<KindExport>();
         var exportedMesh = new List<int>();   // parallel: each export's decoration MeshIndex
@@ -530,10 +555,12 @@ public sealed class ClutterBuilder
             var mesh = (ArrayMesh)mmi.Multimesh!.Mesh;
             var material = mmi.MaterialOverride;
             var rich = RichVariantOf(kind);
-            var drawn = ClutterInstances.Draw(root, mmi, kind.Instances, kind.Fades, rich);
+            var near = NearOf(kind, rich, ModelRoot);
+            var drawn = ClutterInstances.Draw(root, mmi, kind.Instances, kind.Fades, rich, near);
             exported.Add(new KindExport
             {
                 Rich = rich,
+                Near = near,
                 Model = kind.Model,
                 Texture = kind.Label,
                 Mesh = mesh,
@@ -674,7 +701,15 @@ public sealed class ClutterBuilder
     public void Recut()
     {
         foreach (var kind in ExportedKinds ?? System.Array.Empty<KindExport>())
+        {
+            // The word's band on the card and its model, zero for Off so the card draws at every distance.
+            if (kind.Near != null)
+            {
+                (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+                (kind.Near.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+            }
             kind.Instances?.Recut();
+        }
         // The added stamps have no Original to draw, so Original and Faithful draw none of them.
         if (_addedRoot != null)
             _addedRoot.Visible = VegetationQualitySetting.RichOn;
@@ -1179,6 +1214,23 @@ public sealed class ClutterBuilder
         return null;
     }
 
+    // The kind's near model under `parent`, null for a card with no Rich variant or no model. Its card's Rich
+    // material then hands over to it across the band VegetationModels sets.
+    private ClutterInstances.Near? NearOf(Kind kind, ClutterInstances.Stamps? rich, Node3D? parent)
+    {
+        // ponytail: a kind first listed by a lab edit takes no model until the next load.
+        if (_modelChapter == null || parent == null || rich?.Material is not ShaderMaterial card)
+            return null;
+        string species = Extraction.HdModels.NodeKey(kind.Model);
+        if (!_models.TryGetValue(species, out var model))
+            _models[species] = model = VegetationModels.For(_modelChapter, species, _textures.FindImage(kind.Label));
+        if (model == null)
+            return null;
+        card.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+        kind.ModelMaterial ??= VegetationModels.Material(model, kind.Lit, kind.Fogged, kind.Width);
+        return new ClutterInstances.Near(parent, model.Mesh, kind.ModelMaterial);
+    }
+
     // The lab's edits: the Rich variant baked again and handed to each kind's drawn instances, then recut.
     private void Rebake(VegetationEntry entry, VegetationMask? mask)
     {
@@ -1205,12 +1257,12 @@ public sealed class ClutterBuilder
     // They stand under one node that Recut shows while Rich is on. A lab edit drops and rebuilds them.
     private void BuildAdded()
     {
-        if (_addedRoot != null)
+        foreach (var old in new[] { _addedRoot, _addedModels })
         {
-            _addedRoot.GetParent()?.RemoveChild(_addedRoot);
-            _addedRoot.QueueFree();
-            _addedRoot = null;
+            old?.GetParent()?.RemoveChild(old);
+            old?.QueueFree();
         }
+        _addedRoot = _addedModels = null;
         if (_exports == null || _root == null)
             return;
         _exports.RemoveRange(_addedFrom, _exports.Count - _addedFrom);
@@ -1221,6 +1273,11 @@ public sealed class ClutterBuilder
 
         _addedRoot = new Node3D { Name = "clutter_added", Visible = VegetationQualitySetting.RichOn };
         _root.AddChild(_addedRoot);
+        if (ModelRoot != null)
+        {
+            _addedModels = new Node3D { Name = "added" };
+            ModelRoot.AddChild(_addedModels);
+        }
         // The census counts the original's kinds; an added kind shares its card's verdict anyway.
         int blend = BlendCardKinds, scissor = ScissorCardKinds;
         foreach (var (kind, mass) in added)
@@ -1228,9 +1285,11 @@ public sealed class ClutterBuilder
             if (BuildKindInstance(kind) is not { } mmi)
                 continue;
             var rich = RichVariantOf(kind);
+            var near = NearOf(kind, rich, _addedModels);
             _exports.Add(new KindExport
             {
                 Rich = rich,
+                Near = near,
                 Model = kind.Model,
                 Texture = kind.Label,
                 Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
@@ -1242,7 +1301,7 @@ public sealed class ClutterBuilder
                 Placements = kind.Instances,
                 Fades = kind.Fades,
                 Owners = kind.Owners,
-                Instances = ClutterInstances.Draw(_addedRoot, mmi, kind.Instances, kind.Fades, rich),
+                Instances = ClutterInstances.Draw(_addedRoot, mmi, kind.Instances, kind.Fades, rich, near),
                 Added = true,
                 Mass = mass,
             });
@@ -1866,6 +1925,9 @@ public sealed class ClutterBuilder
         // map edge's copies take it while VegetationQualitySetting.RichOn.
         public ClutterInstances.Stamps? Rich;
 
+        // The near model drawn over the Rich stamps, null for a card with none. The map edge copies it too.
+        public ClutterInstances.Near? Near;
+
         // Stamps the remake added on a picked texture (C21), drawn under Rich alone. Their Placements
         // are the unvaried points, which nothing draws.
         public bool Added;
@@ -2180,6 +2242,9 @@ public sealed class ClutterBuilder
         // The Rich card material, made on first use (a card kind only).
         public Func<Material>? MakeRichMaterial;
         public Material? RichMaterial;
+
+        // The near model's material, made with the kind's first model.
+        public Material? ModelMaterial;
 
         // The offset from the model's node down to its drawn mesh, which a stamp the remake adds carries.
         public Vector3 Lift;

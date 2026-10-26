@@ -78,6 +78,30 @@ public class HdModelsTests
         Assert.Equal("c1/tower", hd.KeyFor("tower", chapter: "C1"));
     }
 
+    /// <summary>A vegetation model is read under its chapter key alone, without case. A bare file or another
+    /// chapter's never answers for it, and a clump tile's files are not models.</summary>
+    [Fact]
+    public void AVegetationModelIsReadUnderItsChapterKeyAlone()
+    {
+        var root = TestData.TempDir();
+        Zip(Path.Combine(root, "HDModels", "pack.zip"),
+            ("pack/C1/firtree1.glb", "c1 fir"),
+            ("pack/C4/firtree2.glb", "c4 fir"),
+            ("pack/bush1.glb", "bare bush"),
+            ("pack/C1/bush2.clump.png", "png"));
+
+        using var hd = HdModels.Open(root, "HDModels");
+
+        var fir = hd.Vegetation("C1/FirTree1")!.Value;
+        Assert.Equal("c1 fir", Text(fir.Model.Bytes));
+        Assert.True(fir.Model.IsGlb);
+        Assert.EndsWith("pack/C1/firtree1.glb", fir.Source);
+        Assert.Null(hd.Vegetation("C4/firtree1"));
+        Assert.Null(hd.Vegetation("C1/firtree2"));
+        Assert.Null(hd.Vegetation("C1/bush1"));
+        Assert.Null(hd.Vegetation("C1/bush2"));
+    }
+
     [Fact]
     public void ATrailingFltIsDroppedFromTheNodeAndTheFileName()
     {

@@ -996,11 +996,12 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
         // The shadow row is the dropdown window's foot. Down scrolls View Distance onto it, then
-        // Vegetation and VR Mode, a stop where it is live. The install draws the two checkboxes under
-        // the window, Enhanced Graphics at the column's foot, and Down from it wraps out of the column.
+        // both Vegetation rows and VR Mode, a stop where it is live. The install draws the two checkboxes
+        // under the window, Enhanced Graphics at the column's foot, and Down from it wraps out of the column.
         var expected = new List<string>
         {
             OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey, OriginalVideoPage.VegetationQualityKey,
+            OriginalVideoPage.VegetationModelsKey,
         };
         if (System.OperatingSystem.IsWindows())
         {
@@ -1015,8 +1016,8 @@ internal static class MenuOriginalSuites
             walk.Add(shell.FocusedKey);
         }
 
-        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 3,
-            $"Down walks the shadow row, scrolls View Distance, Vegetation and then VR Mode into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
+        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 4,
+            $"Down walks the shadow row, scrolls View Distance, both Vegetation rows and then VR Mode into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit

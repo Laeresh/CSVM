@@ -187,11 +187,14 @@ public sealed class WorldSession
             var entry = listsVegetation ? vegetation.For(o.Chapter) : null;
             var mask = entry != null && gamez.FindByName("world1") is { HasArea: true } area
                 ? VegetationMask.Load(entry.Mask, area.AreaLeft, area.AreaTop, area.AreaRight, area.AreaBottom) : null;
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes, entry, mask);
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes, entry, mask,
+                entry != null ? o.Chapter : null);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);
                 clutterRoot = clutter;
+                if (clutterBuilder.ModelRoot is { } models)
+                    root.AddChild(models);
                 // Before the bootstrap: a mission script switching an island off takes its trees.
                 clutterBuilder.FollowActivation(root);
                 // Shared shapes: N distinct shapes / T distinct triangles,

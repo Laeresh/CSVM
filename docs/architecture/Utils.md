@@ -377,6 +377,14 @@ A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/Game
 (`FollowVegetationQuality`); a mode switch recuts them too. Nothing reads `RichOn` yet beyond that hook. The VIDEO page shows it as
 the Vegetation dropdown under View Distance.
 
+## src/Utils/VegetationModelsSetting.cs
+How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (150 to 250 m, the default) or
+`far` (250 to 400 m); `VegetationModels.BandFor` holds the bands. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
+the saved `vegetationModels` word, the `graphics.vegetationModels` key, then `near` on every machine and under `--det`, the Steam Deck
+included until a measurement there sets its own fallback. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
+clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
+shows it as the 3D Vegetation dropdown under Vegetation.
+
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports

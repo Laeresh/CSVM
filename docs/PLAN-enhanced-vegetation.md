@@ -1555,13 +1555,113 @@ models fill the 0 to 700 m band inside B15's crown clumps (B15's ruling).
 docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_dither_keep`,
 `Clutter.cs:850`).
 
-**Approach.** <TODO>
+**Approach (as built).** `Mech3/VegetationModels.cs` reads and shades a species' model;
+`ClutterInstances` draws it over the card's own Rich stamps; [`formats/model-packs.md`](formats/model-packs.md),
+"Vegetation models", is the pack reference.
 
-**Model recommendation.** <TODO>
+- *Gating.* Rich only (Decision 3). A kind's model cells draw exactly while its Rich variant does, so
+  Faithful, Enhanced Original and a live move or switch away from Rich draw none, and a move back draws
+  the same cells. The 3D Vegetation word at `off` draws none either, the A/B for captures and
+  `measure.ps1 -Modes nomodels`.
+- *Source.* `<chapter>/<card>.glb` from a model pack (`HdModels.Vegetation`, a chapter key only), else
+  D31's shipped `vegetation_models/<chapter>/<card>.glb.bin`, imported at load with
+  `GltfDocument.AppendFromBuffer`: the first mesh, its first surface's base-colour texture, the clear
+  texels bled to the solid mean before the mips (black clear texels darkened the model with distance).
+  A file that fails to import passes to the next source. A species with no model gets no `Near`, its
+  card's band stays zero and the card draws as before; today that is every species but C1's `firtree1`
+  (its scrub-set twin on the grassland included).
+- *Band.* A registered word setting, 3D Vegetation (`Utils/VegetationModelsSetting.cs`, the VIDEO
+  page's row under Vegetation, `--vegetation-models=off|near|far`, saved as `vegetationModels`): `near`,
+  the default on every machine and under `--det` (the Deck and Linux included until D36 measures them),
+  is 150 to 250 m; `far` is 250 to 400 m; `off` draws no model. Plain metres, so no View Distance moves
+  the cost. Near sits inside C1's card fades (500 m at the nearest, at the highest View Distance) and
+  the clump handover (1000 m), and short of a 300 m view's nearest stamp: the 300 m capture is
+  pixel-identical with and without models. Far reaches a 300 m view and covers about 2.5 times Near's
+  area. A live change recuts with no rebuild: the cards and models take the word's band, the model cells
+  its range, and `off` drops the cells and hides the edge copies. The words follow the existing
+  settings' plain ladder (Shadow Quality's `off`, View Distance's `far`).
+- *Handover.* The card's Rich material fades it by the band's share (`ModelShare` in
+  `RichVertexLines`, on `VegetationModels.BandParam`, zero on a card with no model), and the model
+  keeps exactly the 4x4 dither cells the card gives up (`csky_clutter_dither_keep` of the card's far
+  fade, less the cells the card keeps), so a stamp never draws both or neither; the card's own far fade
+  bounds both, so at a low View Distance they fade out together.
+- *Per stamp.* The model stands on the card's Rich transform: its origin (jitter included), its mirror
+  (the basis' X sign) and its instance colour (tint and brightness). It draws no `scale_range`, as the
+  card draws none (A3's trap), so the swap does not change size. A card has no yaw, so the model turns
+  by a hash of its planted point. It sways: the card's breeze lines (`ClutterBuilder.LeanLines`) at the
+  card's phase, leaning about its base, so the swap does not jump and no still tree stands among
+  swaying cards.
+- *Lighting.* Unlit like the card (D31's trap: a lit model meets an unlit card only at one sun). A grade
+  per channel puts the model's mean linear colour on the card texture's: `SurfaceMean` weights the
+  model's texels by the world area its triangles cover, since an atlas mean counts patches the mesh
+  barely uses (for `firtree1` the plain atlas mean reads 14 to 31 % darker per channel, which left the
+  model that much lighter). On top of the grade the model takes the card's own sun-side gain by screen half (`SunLine`, `RichFragmentLines`, against half the
+  card's width), so the gain lands as on the card from every view. A gain read off the model's
+  normals (option C in the montage) brightens it seen with the sun behind and darkens it against the
+  sun, where the card does neither. The grade is computed at load, so a pack's model or a retuned D31
+  file meets its card with no number to tune; `firtree1` grades to (0.27, 0.26, 0.71).
+- *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
+  ground where the cards cast none, and casting re-renders the models into each Ultra cascade.
+- *The draw.* `ClutterInstances` cuts the Rich variant again into `CellM` (256 m) cells, one MultiMesh
+  of the model mesh each, ranged at the word's far edge plus the cell's radius. Godot's own range and frustum cull
+  pick the cells per camera, so splitscreen panes and the XR stereo pair need no per-frame CPU work;
+  inside a reached cell a stamp outside the band collapses in the vertex stage. The cells are cut once
+  at the first Rich draw and kept, and stand under `vegetation_models` beside the clutter root, so the
+  crater walk and the suites' censuses read each stamp once. Not solid: no collider exists.
+- *Following the card.* Every stamp write reaches the model cells, so an activation hide, a crater and
+  a show move the model with its card, through live switches both ways. A lab re-bake re-cuts them; an
+  added kind's models stand under a child rebuilt with the added kinds. Past the map edge each Rich
+  card copy gains a model copy, one node per edge cell and kind. A kind first listed by a lab edit takes
+  no model until the next load.
+- *C3.* Its beach palms take models by file alone once D33 ships them. The painted-canopy fill inside
+  700 m needs more than a file: no card stands there, so it needs a model-only stamp source over the
+  painted cells (B15's clump placement at a crown rate, or a set picked on the canopy textures whose
+  member draws no card), a band of its own (models alone to 700 m, dithered out where B15's crowns rise),
+  and a crown model light enough for about 9,000 crowns inside 700 m. That is D33's work with its
+  species.
 
-**Verify.** <TODO>
+**Ruling (yours, from the montages).** Brightness A: graded to the card with the card's sun-side gain.
+No shadows. The model sways with the card. The band: 150 to 250 m by default, with an option to push it
+out, which became the 3D Vegetation setting above (Off, Near, Far).
+
+**Model recommendation.** Opus: the item crosses the clutter's drawn layouts, the map edge, the shader
+text the Rich card shares and a look iterated against captures.
+
+**Verify.** Units: `VegetationModelsTests` (the card mean is linear over solid texels; the model mean
+reads only the texels its triangles cover, weighted by area; the grade, its clamp and its fallback) and
+`HdModelsTests.AVegetationModelIsReadUnderItsChapterKeyAlone`, `VegetationModelsSettingTests` (the
+ladder, `near` on every machine, the flag and the file keep a known word, each word's band) and the
+options tests (`OptionsChoicesTests`, `OriginalOptionsTests`: the row is dead under Original and walks
+between Vegetation and VR Mode). Engine: `vegetation-models` (C1 Enhanced
+at rich: firtree1 alone takes the shipped model and its card the band, every other card none; the cells
+stand outside the clutter root with no collider, ranged inside the band, drawing exactly the card's
+Rich stamps; the shader keeps the cells the card gives up; a crater, a hide and a show reach the model;
+a live move to original and a switch to Original draw none and back the same, the map edge copies them
+under rich alone; a live move to `off` draws none with every card band zero, one to `far` ranges the same
+cells past 400 m with the far band, and back to `near` restores them; a session at original draws none; a pack's
+`C1/firtree1.glb` replaces the shipped file), with `clutter-rich-variation`, `graphics-vegetation-quality`,
+`canopy-clumps`, `vegetation-added-stamps`, `vegetation-lab`, `clutter-activation`, `clutter-cells`,
+`graphics-live-switch`, `crater-carve`, `display-det-guard` (the new saved word is dropped under
+`--det`) and the VIDEO page's menu suite passing. Look: `.scratch/d32/` (montages of the low
+view among firs, the handover band, three band radii and the 300 m view; the brightness and gain
+options), judged by you. Budget: a first A/B, three launches a case at 5120x1440 with another
+worktree's battery running (so `gpu_ms` reads about four times C24's and its ranges overlap): at
+`measure.ps1`'s C1 view `rich` against `nomodels` reads 505 against 497 draws and 511,689 against
+461,289 primitives, `gpu_ms` 25.7 against 26.5 and `render_cpu_ms` 0.85 against 0.81; at the low view
+among firs (`--pos=-9230,206,-6235 --lookat=-9330,196,-6335`) 405 against 395 draws and 548,823
+against 466,223 primitives, with `gpu_ms` inside its noise. D37 measures it on an idle machine with
+`measure.ps1 -Modes rich,nomodels`. Goldens: rendered at their manifest args with the models on and
+off, `c1-lake-enhanced` moves 344 pixels by at most 2 levels, `c1-cockpit-xr-sim-enhanced` 12 and
+`c1-rocket-hit-enhanced` 5 at that bound, and `c1-cloud-deck-enhanced` and `c1-cockpit-enhanced`
+none; D37 re-pins.
 
 **⚠ Traps.** Not solid (Decision 15): give the 3D draw no collider.
+- Never parent the model cells under the clutter root: the crater walk would collapse a model as a
+  card of its own and every census would count each stamp twice.
+- Never light the model with the scene's lights or by its normals alone: the card is unlit and gains by
+  screen half, and the handover shows wherever the two disagree.
+- Bleed the model texture's clear texels before its mips, or the model darkens as it recedes into the
+  band.
 
 ## D33 ☐ Look-alike models for every listed card species
 
