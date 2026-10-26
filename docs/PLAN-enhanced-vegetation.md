@@ -1108,13 +1108,13 @@ reference; `Mech3/ClumpTile.cs` reads a tile and `CanopyClumps.Build` places it.
   A tile stands centred on its slot's floor, which grows to the tallest tile. On C1 `firtree1` takes
   two slots of six; the other four compose from `dougfirtree1`, `firtree2`, `bush1` and `bush2`.
 - *The render.* D31's pipeline gains `veg_blender.clump_render` ([`tooling.md`](tooling.md),
-  "Vegetation models"): tiles of the generator's `CLUMP_TREES` (3, 2 and 4 for `firtree1`) laid out
+  "Vegetation models"): tiles of the generator's `clump_trees` (3, 2 and 4 for `firtree1`) laid out
   as `Layout` lays out a composed tile (24 m wide at 10 px a metre, strata across the width, 0.85 to
   1.1 of the card, back trees up to 16 m deeper and 8 m higher), each tree turned at random. EEVEE,
   orthographic from the side at four times the size, averaged down and cut at alpha 0.5, lit by the
   sky and a sun above the camera so neither side is lit; a second pass emits each tree's offset from
   its trunk for the side map. Cycles shaded the crown's bent normals about eight times darker, so it
-  is not used. `CLUMP_GRADE` (linear, per channel) puts the tiles' mean on the card's (sRGB 21.9,
+  is not used. The generator's `clump_grade` (linear, per channel) puts the tiles' mean on the card's (sRGB 21.9,
   30.1, 16.4 against the card's 21.8, 30.1, 16.3): the cards draw to 1 km and hand over to the clumps
   past it, and the unscaled render was 2.5 times lighter. The PNGs come from the script's own encoder;
   two reruns wrote all three files byte for byte the same. The card's pixels never reach a tile.
@@ -1719,6 +1719,61 @@ shared builder is `veg_palm.py`, beside `veg_blender.py`.
 | `palmtree2` | C2, C3 | 5.65 × 6.41 × 9.90 | 546 | 84,420 |
 | `palmtree3` | C2, C3 | 6.23 × 6.85 × 9.78 | 1,234 | 122,120 |
 
+*C1's firs and bushes (as built).* `firtree2`, `dougfirtree1`, `bush1` and `bush2`, and `firtree1` on
+C4. Two more shared builders: `veg_fir.py`, `firtree1`'s builder with its numbers moved into a spec
+(a key a fir leaves out takes `firtree1`'s value; `firtree1`'s C1 files rebuild byte for byte), and
+`veg_bush.py`.
+- *Per chapter.* C1B's `dougfirtree1`, `bush1` and `bush2` are C1's cards (same texture, same size),
+  so each generator writes the same bytes to `C1/` and `C1B/`. C4's `firtree1`, `firtree2` and
+  `dougfirtree1` show the same trees as C1's at other proportions: `firtree1` 10.0 × 13.2 m against
+  10.0 × 17.8, `firtree2` 15.1 × 13.2 against 10.7 × 20.9, `dougfirtree1` 10.0 × 17.2 against
+  10.0 × 22.5. Each takes a C4 `CARDS` entry, which builds the crown to that card's width and
+  height from the same silhouette fractions, so the model's outline is the card's. A uniformly
+  scaled C1 model would stand narrower than the card (`firtree1` 7.4 m against 10 m). C4's
+  `spruce` and C2's brushes wait for their own pass.
+- *`firtree2`.* A dense olive cone on a dark trunk bare to 0.11 of the height, its widest skirt to
+  0.36, then a straight taper to a rounded top. Its 190 clumps droop at 0.6 of `firtree1`'s, so the
+  skirt hangs near the card's level edge, and are lit nearly evenly across, so the crown reads as
+  one fuzzy mass rather than in layers; more highlight specks and a yellower palette than
+  `firtree1`, off the card's body (sRGB 30, 34, 19) and top tenth (68, 75, 44).
+- *`dougfirtree1`.* A stout trunk bare to 0.26 of the height, green with moss as the card's is (it
+  takes the needle patch, not bark), then 90 clumps gathered into eight whorls (`tiers`), longer
+  and flatter than `firtree1`'s, so each tier reads as a broad plate with the trunk between tiers.
+  Strong shade across a clump with its top lit in yellow-green; a thin core above 0.45 only.
+  `firtree1`'s palette: the cards' colours are within a few levels. The card's grass tuft at the
+  base is left to the ground.
+- *The bushes.* A few stems, and leaf clusters scattered through the card's silhouette, their
+  outer edges on it: each cluster two crossed quads, one facing out and one standing across, on
+  one of three leaf cells (lit, plain, shaded) chosen by its depth and height. The normals point
+  out from the bush's centre, so it shades as one volume. Leaf colours come off each card's darkest
+  tenth, body and lightest tenth. `bush1` (vase-shaped, dense, low contrast) takes 150 small
+  clusters, those above 0.8 of its height spread over the whole top and facing up (`cap`), so the
+  top is wide and flat, and a dark leaf core so it does not read see-through; `bush2` (small, blue-green, open) draws its leaves in rosettes
+  with holes between them and has no core. A top cluster sits low enough that its leaves end at
+  the card's height.
+- *Clump tiles.* The firs write tiles as `firtree1` does, (3, 2) trees, with a `clump_grade` per
+  chapter that puts each tile's mean within 0.3 sRGB levels of its card's solid mean (C1 `firtree2`
+  30.9, 34.9, 19.9; `dougfirtree1` 20.8, 28.7, 16.0 on every chapter). The bushes are not forest
+  and write none. By `analysis/bl-305-clutter-uv/_raw_output.txt`'s C1 census (`firtree1` 4,145,
+  `firtree2` 2,580, `dougfirtree1` 2,267, bushes 311 of 9,303 stamps) each new fir carries about a
+  quarter of the forest stamps, well over the twelfth B16's `Slots` needs. A C1 Rich build logs
+  `firtree1`, `dougfirtree1` and `firtree2` in two slots each of six and no composed slot, so the
+  bushes no longer reach the clumps. A clump carries 2.5 trees against 3.17, and C1 stands 15,055
+  clumps against 11,857 at the same trees per area. At B14's 300, 600 and 700 m poses 3.2 to 4.0 %
+  of the frame moves by more than 2 levels, all on the far hills, the moved pixels' mean sRGB 2.6
+  to 3.8 levels darker (`.scratch/d33/clumps-montage.png`). C1B and C4 build no clumps by default (`DefaultOn` names C1 and C3), so
+  their tiles are read only under `--canopy-clumps=on`.
+
+| Model | Chapters | Card (w × h, m) | Model size (w × d × h, m) | Triangles | GLB bytes | Clump tile |
+|---|---|---|---|---|---|---|
+| `firtree1` | C4 | 10.03 × 13.19 | 8.05 × 7.75 × 12.86 | 1,400 | 139,432 | yes |
+| `firtree2` | C1 | 10.72 × 20.88 | 10.21 × 10.14 × 20.36 | 1,600 | 151,440 | yes |
+| `firtree2` | C4 | 15.14 × 13.19 | 14.39 × 14.25 × 12.86 | 1,600 | 150,512 | yes |
+| `dougfirtree1` | C1, C1B | 10.03 × 22.47 | 6.97 × 7.30 × 21.91 | 776 | 101,672 | yes |
+| `dougfirtree1` | C4 | 10.03 × 17.15 | 6.97 × 7.30 × 16.73 | 776 | 101,800 | yes |
+| `bush1` | C1, C1B | 5.58 × 5.06 | 5.32 × 5.24 × 4.97 | 682 | 107,488 | no |
+| `bush2` | C1, C1B | 3.69 × 3.35 | 3.73 × 3.81 × 3.32 | 192 | 59,440 | no |
+
 **Ruling (yours, from the renders).** The palms: `palmtree1` takes a darker crown body with
 stronger yellow highlights, closer to the card's punch (the lit-frond strip above). `palmtree2` stays
 symmetric: stamps turn at random, so a lopsided crown would show its lean from every side.
@@ -1735,6 +1790,16 @@ the model's height. A second run writes the same bytes, and `C2/` and `C3/` hold
 Rerunning `firtree1` after a change to `veg_blender.py` changes nothing but the exporter's version
 string. The look is yours: each model's `_side` and `_above` renders beside its card per chapter,
 and the contact sheet of all six.
+For C1's firs and bushes: the same per model and chapter of the table above; a rerun of all eleven
+writes every model and tile byte for byte the same; `C1/` and `C1B/` hold identical
+`dougfirtree1`, `bush1` and `bush2` files; `firtree1`'s C1 model and tiles rebuild through
+`veg_fir.py` unchanged but for the exporter's version string, and the palms unchanged. Look:
+`.scratch/d33/c1-sheet.png` (every new model and chapter beside its card, and `firtree1` on C1 for
+reference), the clump strips in `.scratch/vegetation/<C>_<model>_clump.png`, and
+`.scratch/d33/clumps-montage.png` (C1 Rich with `firtree1`'s tile alone against all three fir
+tiles, at B14's 300, 600 and 700 m poses). Engine: `canopy-clumps` (every tile a C1 flight takes is
+its own species' shipped file, `firtree1`'s among them; a pack's `firtree1` tile replaces only
+that one) and `canopy-mask`; units `ClumpTile` and `CanopyClumps`.
 
 **⚠ Traps.** Match the card's silhouette and colour, or the handover in D32 shows.
 - The first node named after a card can be a placed copy without a model (C3's `palmtree2`);
@@ -1742,6 +1807,12 @@ and the contact sheet of all six.
 - The palm cards carry a yellow patch of ground cover at their base. Leave it out of the model: it
   is the patch C21's ruling wants gone near the camera, and the ground supplies what is under the
   trunk.
+- Shipping a tile for another C1 forest species changes B16's slot split and the far hills, so the
+  Enhanced C1 goldens that show them move. `canopy-clumps` checks that every tile a C1 flight takes
+  is its own species' shipped file with `firtree1`'s among them, and that a pack's `firtree1` tile
+  replaces only that species'.
+- A tile's grade is per chapter: C4's `firtree1` card is darker than C1's, so one grade would
+  lighten C4's far forest.
 
 ## D34 ☐ Ground cover prototype: new-art grass and crop cards
 

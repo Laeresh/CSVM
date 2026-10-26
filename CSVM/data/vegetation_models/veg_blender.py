@@ -201,7 +201,8 @@ def compare_render(model_obj, card, out_dir, stem, atlas, views=(("side", 4.0), 
 
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
     cam.data.type = "ORTHO"
-    cam.data.ortho_scale = 2 * gap + max(w, model_obj.dimensions.x) + 4
+    # Wide enough for both, and tall enough for the taller (the frame is 1.4 times wider than high).
+    cam.data.ortho_scale = max(2 * gap + max(w, model_obj.dimensions.x) + 4, 1.4 * (max(h, model_obj.dimensions.z) + 3))
     scene.collection.objects.link(cam)
     scene.camera = cam
 

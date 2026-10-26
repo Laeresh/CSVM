@@ -488,8 +488,9 @@ internal static class GraphicsSwitchSuites
         "the canopy clumps stand by default in a C1 Enhanced flight at rich: they stand over the canopy mask, the listed "
         + "cards' Rich material carries the handover band, and the map edge's cells copy them; a live move to original drops "
         + "the clumps, their edge copies and the band, and a move back builds the same chunks; a live switch to Original drops "
-        + "them and back builds them; a lab re-bake builds new ones; the C1 clumps take the firtree1 tile shipped beside its model, "
-        + "compose from the cards without it, and take a model pack's tile under the same key with its own tree count; "
+        + "them and back builds them; a lab re-bake builds new ones; the C1 clumps take the tiles shipped beside their models, "
+        + "firtree1's among them, compose from the cards without them, and take a model pack's firtree1 tile under the same key "
+        + "with its own tree count while the other species keep theirs; "
         + "a rich C3 flight builds them over its painted canopy alone, "
         + "fading in over their own band while the beach palms keep every distance; --canopy-clumps=off, or a session at original, builds none")]
     internal static void CanopyClumpsFollowRich(TestContext ctx)
@@ -498,6 +499,10 @@ internal static class GraphicsSwitchSuites
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word;
         float shippedTrees = 0f;
+
+        // A tile line reads "<species> in <n> slots from <source>": shipped means its own species' file beside the model.
+        static bool ShippedTile(string tile) =>
+            tile.EndsWith($"{Mech3.CanopyClumps.ShippedRoot}/C1/{tile[..tile.IndexOf(' ', StringComparison.Ordinal)]}.clump.png.bin", StringComparison.Ordinal);
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
@@ -511,9 +516,8 @@ internal static class GraphicsSwitchSuites
                     $"the cards hand over ({Handover(live)}), the grassland and hedge cards keep every distance ({Handover(live, forest: false)}), and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
                 var shipped = live.Session.CanopyClumpField!;
                 shippedTrees = shipped.TreesPerClump;
-                ctx.Check(shipped.Tiles is [var tile] && tile.StartsWith("firtree1 ", StringComparison.Ordinal)
-                    && tile.EndsWith($"{Mech3.CanopyClumps.ShippedRoot}/C1/firtree1.clump.png.bin", StringComparison.Ordinal),
-                    $"the clumps take the firtree1 tile shipped beside its model ({string.Join("; ", shipped.Tiles)})");
+                ctx.Check(shipped.Tiles.Any(t => t.StartsWith("firtree1 ", StringComparison.Ordinal)) && shipped.Tiles.All(ShippedTile),
+                    $"the clumps take the firtree1 tile, and every tile is the one shipped beside its own species' model ({string.Join("; ", shipped.Tiles)})");
                 var clutter = live.Session.Clutter!;
                 var composed = Mech3.CanopyClumps.Build(clutter.Canopy()!, clutter.ExportedKinds!, clutter.Vegetation!, live.Session.SessionTextures!, _ => null)!;
                 static byte[] Atlas(Node3D root) => ((ShaderMaterial)((MultiMeshInstance3D)root.GetChild(0)).MaterialOverride)
@@ -559,8 +563,9 @@ internal static class GraphicsSwitchSuites
                 {
                     var field = withPack.Session.CanopyClumpField;
                     string seen = field == null ? "no clumps" : $"{string.Join("; ", field.Tiles)} at {field.TreesPerClump:0.##} trees against {shippedTrees:0.##}";
-                    ctx.Check(field is { Tiles: [var tile] } && tile.EndsWith(packed, StringComparison.Ordinal) && field.TreesPerClump > shippedTrees,
-                        $"a model pack's tile under the same key replaces the shipped one and its tree count sets the rate ({seen})");
+                    ctx.Check(field != null && field.Tiles.Count(t => t.StartsWith("firtree1 ", StringComparison.Ordinal) && t.EndsWith(packed, StringComparison.Ordinal)) == 1
+                        && field.Tiles.All(t => t.StartsWith("firtree1 ", StringComparison.Ordinal) || ShippedTile(t)) && field.TreesPerClump > shippedTrees,
+                        $"a model pack's tile under the same key replaces the shipped one, the other species keep theirs, and its tree count sets the rate ({seen})");
                 }
                 finally
                 {
