@@ -106,9 +106,9 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 The zrdr "reader" files are the engine's config/script lists; mech3ax extracts each to a
 JSON file of nested arrays. Conventions that recur across every reader family:
 
-- **All numbers arrive as floats.** mech3ax emits every scalar through a single-precision
-  path, so integer-looking values (`PARTICLES 100`) parse as `100.0`, read as float,
-  cast as needed.
+- **All numbers arrive as floats.** The file tags integers (`i32`) and floats (`f32`)
+  apart ([zrdr.md](zrdr.md#binary-encoding)), but CSVM's model reads both as `float`, so
+  integer-looking values (`PARTICLES 100`) read as `100f`, cast as needed.
 - **Alternating key/list dicts.** The dominant shape is a flat list alternating
   `"KEY", [values…]`, a dictionary by convention, not by JSON structure. Caveat:
   **duplicate keys can be meaningful** (multiple `SEQUENCE_DEFINITION`s per animation

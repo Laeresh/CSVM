@@ -656,6 +656,16 @@ models, not the file's sparse slot. Nothing in the engine calls it yet; the swit
 to the session in place of the zip path. `Read` refuses a file whose regions do not meet where its
 header says. Layout and the matrix-or-rotation rule: [../formats/gamez-zbd.md](../formats/gamez-zbd.md).
 
+## src/Mech3/ZrdrZbd.cs
+The reader for the root, chapter and mission `zrdr.zbd`, engine-free: `Read` opens the container
+through `Extraction/ZbdArchive.cs` and decodes every entry into a `ZrdrFile` in table order (stored
+name, collision rename, and the root list in the shape `Zrdr.LoadFile` returns, every number a
+`float` with its stored bits). `Load(game, path)` returns null without a source or without the
+file. `Find` is the lookup a consumer's name goes through: the stored name or a repeat's rename,
+or today's zip spelling, case ignored, the first `player.zrd` for `player.json`. Nothing in the
+engine calls it yet; the switch hands the files to the session in place of the zip path.
+Value encoding and lookup rule: [../formats/zrdr.md](../formats/zrdr.md#binary-encoding).
+
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
 resolver rather than out of the gamez: the roster names `pp1`, the chapter carries the transform-only

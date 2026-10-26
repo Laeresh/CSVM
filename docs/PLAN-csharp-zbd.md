@@ -173,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `interp.zbd`
 12. ☑ `strings.dll` messages
 13. ☐ Sound archives
-14. ☐ Reader archives (`zrdr.zbd`)
+14. ◐ Reader archives (`zrdr.zbd`)
 15. ◐ Texture archives
 
 ### Wave C, large formats
@@ -559,7 +559,80 @@ the zip path.
 (`VO_c4-RM-m3_Blacke_9.wav`). Today's zips store a repeat as `stem-N.ext`, counting from 1;
 reproduce that wherever a loader looks a sound up by name (A1's finding).
 
-## B14 ☐ Reader archives (`zrdr.zbd`)
+## B14 ◐ Reader archives (`zrdr.zbd`)
+
+**Reader landed, engine switch pending.** `ZrdrZbd.Read(byte[])` and
+`ZrdrZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/ZrdrZbd.cs`) decode a root, chapter or
+mission `zrdr.zbd` through A1's `ZbdArchive` into `ZrdrFile` records in table order: the stored
+name, the collision rename (`Key` is the name a lookup uses, today's zip entry name without
+`.json`), and the root list in exactly the shape `Zrdr.LoadFile` returns (strings, `float`s,
+nested lists, `null` for an empty nested list, an empty root for an empty reader). `ReadReader`
+decodes one payload; `Find(files, name)` is the lookup rule. No edit to `Zrdr.cs` or any engine
+file. The value encoding is new in [formats/zrdr.md](formats/zrdr.md#binary-encoding), and the
+README's everything-is-float bullet is corrected (the file tags `i32` and `f32` apart; the model
+reads both as `float`). `CSVM.Tests/ZrdrZbdTests.cs` holds 13 CI-safe cases (value decode with
+`-0` and a subnormal, an empty reader, eight refusals, the rename and lookup rule over an archive
+built in code, no source) and the model diff over all 62 archives against today's zips
+(`Zrdr.LoadFileOrEmpty` per zip entry, a `Dictionary` keyed by zip name): 1,293 readers, 576,469
+leaf values, every float bit equal. A one-bit flip of a stored float in the root archive is found
+as `Dictionary["camparam.zrd.json"][1][1][0]: expected 13 (0x41500000), actual 13.000001
+(0x41500001)`.
+
+**The f32 trap does not bite.** The JSON detour widened each `f32` to `f64` and `Zrdr.Convert`
+narrowed it back with `GetSingle`; for every shipped float that returns the stored bits, so the
+direct reader's raw bits match today's model with no special case. Integers (tag `1`) reach the
+model as `(float)value`, which equals `GetSingle` on the integer's JSON text.
+
+**How consumers look entries up (decided).** By `Key`, ignoring case, with today's spellings
+accepted: `vehicle.json`, `vehicle.zrd.json` and `vehicle.zrd` all find `vehicle.zrd`, and the
+root's repeat is `player-1.zrd` (`player-1.json`, as `InspectionLabs` and `EffectCatalogueTests`
+name it). The bare name finds the first occurrence, as the zip lookup does today. The two
+`player.zrd` are different files: the first holds the player-plane globals every `player.json`
+consumer reads, the second the plane's damage `ANIMATION_DEFINITIONS`, which `AnimDefs` reaches by
+content scan. It is the only repeat in the 62 archives, and no archive holds two names differing
+only by case. Five readers are empty (root `dlgMessage`, `mp_dialog`; C1C and C2B `templates`;
+C2B/MP1 `targets`).
+
+**A2's figure explained.** The shared archive compares 304,617 leaves here against A2's 304,837:
+A2 read the unzipped folder through `LoadFilesNamed`, which takes `manifest.json` as a reader (221
+null values plus its count, 222 leaves) and skips the two empty readers (one count leaf each).
+
+**Decode cost** (Debug build, one thread, from bytes in memory): root `zrdr.zbd` (3.99 MB, 221
+readers) 28 to 43 ms; a chapter 0.1 to 1.7 ms (C2 1.65); a mission 0.06 to 1.1 ms (C1/M02 0.7,
+C5/M02 0.4), apart from a single 3.7 ms reading of C4/M03. A session's three archives
+cost under 50 ms.
+
+**Remaining switch work (after A3).**
+
+1. **The game-data slots.** `GameData` carries the root files (`ZBD/zrdr.zbd`), `ChapterData` the
+   chapter's (`ZBD/<chapter>/zrdr.zbd`) and the mission's (`ZBD/<chapter>/<mission>/zrdr.zbd`).
+   A lookup type over `IReadOnlyList<ZrdrFile>` replaces the path in the four `Zrdr` entry points
+   with the same contracts: `LoadFile` through `Find`, throwing on an absent entry and on an empty
+   root; `LoadFileOrEmpty` returning the empty root; `HasFile` as `Find != null`;
+   `LoadMatchingFiles` as a walk for a string containing the filter (today a substring sniff of the
+   raw JSON); `LoadFilesNamed` with the predicate seeing `Key + ".json"`, today's names. Both
+   enumerations skip empty readers, as today. The path is threaded far: `ZrdrPath` alone has 1,548
+   references in 217 engine files (most in `Testing/` suites), beside `SessionPaths.ChapterZrdr` and
+   `MissionZrdr` and the mission-path fields (`MissionZrdrPath`, `chapterZrdrPath`), so the switch
+   merges alone, as A3's did.
+2. **The synthetic builder**, per the A3 recipe: `Tooling/Synthetic{Plane,Effects,Mission,Sounds}.cs`
+   copy reader records from `fixtures/synthetic/` today (`vehicle`, `engines`, `player`,
+   `maneuvers`, `weapons`, `shakes`, `ai`, `probe_world`, `flame_ball`, `pufftrails`,
+   `cm_sequence`, `Briefing`, the mission scope's records, each IA chapter's `ia`, `sounds`,
+   `voice`). A `Tooling/SyntheticZrdr.cs` builds them as `ZrdrFile` lists in code for the three
+   scopes, and the fixtures and their `SyntheticFamily` entries go.
+3. **The legacy move**: `Zrdr`'s zip/folder reading (`ReadEntry`, `CandidateNames`, `Convert`, and
+   the four path entry points) goes to `CSVM.Tests/Oracle/ZrdrLegacy.cs`, dropping the v0.6.1 zips
+   that store `vehicle.json` as an entry name; `ZrdrDict` stays in the engine. The theory then compares that against
+   the reader. Unused afterwards, for E43: `BasePaths.ZrdrPath`, `SessionPaths.ChapterZrdr`,
+   `SessionPaths.MissionZrdr`, `PreferUnzipped` for zrdr, `--zrdr=` and the `reader`
+   `ZbdExtraction` mode.
+4. **One rename rule.** The collision rule now exists in `TextureZbd`, `ZrdrZbd` (internal, for
+   B13 to share) and `ZbdArchiveTests`; it belongs with `ZbdArchive`, where B13 needs it too.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `Zrdr` builds its dictionaries from `zrdr.zbd` directly, for root, chapter and mission.
 

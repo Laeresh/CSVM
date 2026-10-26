@@ -496,7 +496,7 @@ public static class GameZZbd
         _ => throw new InvalidDataException($"gamez: bad node class {kind} at offset {offset}"),
     };
 
-    private static string? TextureAt(GameZ gz, int index, int offset)
+    private static string TextureAt(GameZ gz, int index, int offset)
     {
         Expect(index >= 0 && index < gz.TextureNames.Count, "texture index", offset);
         return gz.TextureNames[index];
