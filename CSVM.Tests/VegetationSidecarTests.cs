@@ -198,6 +198,28 @@ public sealed class VegetationSidecarTests
         Assert.All(new[] { "forest1.tif", "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
     }
 
+    /// <summary>C1B's bare rock tops take sparse bushes, not forest. C4's grass-to-rock transitions take a forest
+    /// treeline of its templates' three firs, thinner than the templated forest. C2 picks nothing.</summary>
+    [Fact]
+    public void TheShippedFilePicksC1BsRockTopsAndC4sTransitions()
+    {
+        var sidecar = VegetationSidecar.Parse(File.ReadAllText(ShippedPath));
+        foreach (string texture in new[] { "rocktop.tif", "rocktop128.tif" })
+        {
+            var set = VegetationScatter.Stamped(sidecar.For("C1B"), texture)!;
+            Assert.Equal(new[] { "bush1.flt", "bush2.flt" }, set.Models);
+            Assert.Equal((3f, false), (set.Density, set.Mass));
+        }
+        foreach (string texture in new[] { "cliff01-trans1.tif", "cliff01-trans3.tif" })
+        {
+            var set = VegetationScatter.Stamped(sidecar.For("C4"), texture)!;
+            Assert.Equal(new[] { "spruce.flt", "dougfirtree1.flt", "firtree1.flt" }, set.Models);
+            Assert.Equal((3f, true), (set.Density, set.Mass));
+        }
+        Assert.Null(VegetationScatter.Stamped(sidecar.For("C4"), "terpat01.tif"));
+        Assert.Empty(sidecar.For("C2").Picks);
+    }
+
     /// <summary>Save writes the chapter's entry with only nonzero values, in a fixed order. Every other key
     /// stays where it was, and the file reads back as the entry it wrote.</summary>
     [Fact]

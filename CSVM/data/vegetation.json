@@ -46,6 +46,19 @@
         "tint": 0.1,
         "brightness": 0.2
       }
+    },
+    "sets": {
+      "bushes": {
+        "kinds": [
+          "bush1.flt",
+          "bush2.flt"
+        ],
+        "density": 3
+      }
+    },
+    "picks": {
+      "rocktop.tif": "bushes",
+      "rocktop128.tif": "bushes"
     }
   },
   "C2": {
@@ -151,6 +164,21 @@
         "tint": 0.1,
         "brightness": 0.2
       }
+    },
+    "sets": {
+      "treeline": {
+        "kinds": [
+          "spruce.flt",
+          "dougfirtree1.flt",
+          "firtree1.flt"
+        ],
+        "density": 3,
+        "mass": true
+      }
+    },
+    "picks": {
+      "cliff01-trans1.tif": "treeline",
+      "cliff01-trans3.tif": "treeline"
     }
   }
 }

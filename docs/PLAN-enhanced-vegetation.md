@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Remake-added stamps on picked textures, in texture space, under the mask
 22. ☐ C1's grassland and fields: sparse original cards, hedgerows by mask
-23. ☐ C1B, C2 and C4 tuned in the lab
+23. ☑ C1B, C2 and C4 tuned in the lab
 24. ☐ Wave C budget and goldens
 
 ### Wave D, near
@@ -1313,17 +1313,51 @@ two shots run Faithful, where the added node is hidden, and no other chapter shi
 
 **⚠ Traps.** Grassland must stay grassland: the sparseness is the brief.
 
-## C23 ☐ C1B, C2 and C4 tuned in the lab
+## C23 ☑ C1B, C2 and C4 tuned in the lab
 
 **Goal.** Each of C1B, C2 and C4 has a sidecar entry tuned by you in the lab.
 
-**Evidence (confidence: lead-only).** Decision 14; the survey table above.
+**Evidence (confidence: measured areas and stamp counts, lead-only look).** Decision 14; the survey
+table above. The templates' own stand densities, from the template layouts and the C4 build's stamp
+counts: C1B's `rockclut` 31 stamps a 256 m period on `vegrocktop` (25 `dougfirtree1`, 6 bushes); C2's
+`terpat01` 3.5 `spruce` a hectare, `terpat04` 4.3 (brush with the odd palm); C4's `terpat01` about 6.5
+a hectare (71k stamps over 109.7 km², spruce 23 : dougfir 10 : firtree1 10 a period), `terpat01-128`
+and `river5` about 19.
 
-**Approach.** <TODO>
+**Approach (as built).** Sidecar values only, no mask and no code. Each chapter's undressed ground was
+walked by texture (`analysis/veg-ground-survey/survey.py`'s census, located per texture) and looked at
+under Rich at the A7 view and over the ground itself.
 
-**Model recommendation.** <TODO>
+- *C1B.* Set `bushes` (`bush1.flt`, `bush2.flt`) at 3 a hectare, not forest, picked by `rocktop.tif`
+  and `rocktop128.tif`, the bare grey-green domes around the `vegrocktop` fir stands. It adds 348
+  kept stamps (747 candidates). A fir among the members scatters single trees over the domes, which
+  read as random rather than as the stands the original paints; a denser bush scatter reads as specks
+  on cliff faces. The night lighting keeps either subtle.
+- *C2.* No change. Its undressed vegetation-bearing ground is the football and baseball fields, which
+  are mown turf and take nothing. `terpatwrd1` (0.23 km² of scrub) carries a road strip inside its
+  texture, so an added stamp would stand on the road. `beach1`, `dunes` and `cliff01` are bare by
+  nature, and the suburbs, lots and parked cars are solid decorations, never listed or picked. The one
+  alternative, brush (`brush1`-`brush4`) at 4 a hectare on the `terpat01` hills under their spruce,
+  adds 20,737 kept stamps that read only near the ground.
+- *C4.* Set `treeline` (`spruce.flt`, `dougfirtree1.flt`, `firtree1.flt`, the three cards its templates
+  place) at 3 a hectare, forest, picked by `cliff01-trans1.tif` and `cliff01-trans3.tif`, the grass to
+  rock transitions where `terpat01`'s firs stop at a hard edge. It adds 2,439 kept stamps (4,943
+  candidates), thinner than the forest beside it so the trees thin out toward the rock. Forest so the
+  stamps join the canopy mask and the clumps if C4's clumps are ever turned on; while `DefaultOn` names
+  C1 alone the flag changes no frame.
 
-**Verify.** <TODO>
+**Model recommendation.** A mid-tier model: the work is a texture census, sidecar values and captures,
+with the look judged by you.
+
+**Verify.** Units: `VegetationSidecarTests.TheShippedFilePicksC1BsRockTopsAndC4sTransitions` (C1B's
+rock tops to its bushes at 3, not forest; C4's two transitions to its three firs at 3, forest;
+`terpat01` unpicked; C2 picks nothing) and the shipped file's round trip; the `Vegetation` unit filter
+passes. Engine: `vegetation-added-stamps`, `vegetation-lab` and `canopy-clumps` pass as before (no
+engine suite builds C1B, C2 or C4 vegetation). The `clutter added stamps:` log line on a C1B and a C4
+Enhanced Rich `--freecam` build gives the counts above. Look: `.scratch/c23/montage-C1B.png`,
+`montage-C2.png` and `montage-C4.png`, Rich before against after with the alternatives beside it at
+the A7 view and over the changed ground, judged by you. Goldens: `c1b-ocean-enhanced` frames C1B's
+rock tops and should move (902 pixels at its pose); every other C1B, C2 and C4 shot runs Faithful.
 
 **⚠ Traps.** C2's suburbs and parked cars are solid decorations: never list them.
 
