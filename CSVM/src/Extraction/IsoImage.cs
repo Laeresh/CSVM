@@ -34,11 +34,13 @@ public sealed class IsoImage : IGameFileSource
     private const string GameFolder = "GAME/";
 
     private readonly Dictionary<string, Extent> _files;
+    private readonly Func<Stream> _open;
 
-    private IsoImage(string image, Dictionary<string, Extent> files)
+    private IsoImage(string image, Dictionary<string, Extent> files, Func<Stream> open)
     {
         Location = image;
         _files = files;
+        _open = open;
     }
 
     /// <summary>The image file.</summary>
@@ -53,15 +55,7 @@ public sealed class IsoImage : IGameFileSource
     public static IsoImage Read(string image)
     {
         string full = Path.GetFullPath(image);
-        using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var files = Walk(stream, full);
-        if (files.Keys.Any(path => path.StartsWith(GameFolder, StringComparison.OrdinalIgnoreCase)))
-        {
-            files = files.Where(f => f.Key.StartsWith(GameFolder, StringComparison.OrdinalIgnoreCase))
-                .ToDictionary(f => f.Key.Substring(GameFolder.Length), f => f.Value, StringComparer.OrdinalIgnoreCase);
-        }
-
-        return new IsoImage(full, files);
+        return Read(full, () => new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read));
     }
 
     /// <inheritdoc/>
@@ -69,9 +63,28 @@ public sealed class IsoImage : IGameFileSource
 
     /// <inheritdoc/>
     public Stream? Open(string path) =>
-        _files.TryGetValue(Normalize(path), out var extent)
-            ? new ExtentStream(new FileStream(Location, FileMode.Open, FileAccess.Read, FileShare.Read), extent)
-            : null;
+        _files.TryGetValue(Normalize(path), out var extent) ? new ExtentStream(_open(), extent) : null;
+
+    /// <summary>The image whose 2,048-byte sectors <paramref name="open"/> hands out as a fresh
+    /// seekable stream per call, named <paramref name="location"/>. A raw CD image's data track
+    /// comes in this way. <paramref name="atGame"/> false roots it at the image root even when a
+    /// <c>GAME</c> folder exists.</summary>
+    internal static IsoImage Read(string location, Func<Stream> open, bool atGame = true)
+    {
+        Dictionary<string, Extent> files;
+        using (var stream = open())
+        {
+            files = Walk(stream, location);
+        }
+
+        if (atGame && files.Keys.Any(path => path.StartsWith(GameFolder, StringComparison.OrdinalIgnoreCase)))
+        {
+            files = files.Where(f => f.Key.StartsWith(GameFolder, StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(f => f.Key.Substring(GameFolder.Length), f => f.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return new IsoImage(location, files, open);
+    }
 
     /// <summary>Whether some file lies below the folder <paramref name="path"/>, the image's
     /// counterpart of a folder lookup.</summary>
@@ -213,11 +226,11 @@ public sealed class IsoImage : IGameFileSource
     // A read-only window onto one file's bytes in the image, owning its own handle.
     private sealed class ExtentStream : Stream
     {
-        private readonly FileStream _image;
+        private readonly Stream _image;
         private readonly long _start;
         private long _position;
 
-        public ExtentStream(FileStream image, Extent extent)
+        public ExtentStream(Stream image, Extent extent)
         {
             _image = image;
             _start = extent.Offset;

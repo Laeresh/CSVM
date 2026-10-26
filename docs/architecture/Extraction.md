@@ -33,8 +33,8 @@ field; the value is fully qualified, and the store drops one that is not.
 stream, or null) take a game-relative path such as `ZBD/C1/zrdr.zbd`, matched without regard to
 case, and `ReadAllBytes` throws naming `Location`. `InstallFolderSource` reads an install folder or
 mounted drive through `InstallLocator.ResolveFile`. `GameFileSource.Open` alone turns a path into a
-source: an `.iso` is an `IsoImage` and a disc folder (`Check` gives `Disc`) its `GAME` folder,
-each wrapped in a `CabinetSource`. `Locate` takes the
+source: an `.iso` or a raw CD image (`RawCdImage.Descriptor`) is an `IsoImage` and a disc folder
+(`Check` gives `Disc`) its `GAME` folder, each wrapped in a `CabinetSource`. `Locate` takes the
 `CSVM_INSTALL_ROOT` override, then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then
 `InstallLocator.Candidates`. Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install.
 
@@ -64,6 +64,21 @@ The LZX decompressor, written from Microsoft's published specification: verbatim
 and uncompressed blocks, 32,768-byte frames, and the E8 call translation run over the finished
 output. Internal; `Cabinet.Unpack` is its one caller. A malformed stream throws
 `InvalidDataException`.
+
+## src/Extraction/RawCdImage.cs
+A raw CD image read as an `IsoImage` ([../formats/disc-image.md](../formats/disc-image.md#raw-cd-images)).
+`Descriptor` answers the sheet a path stands for: a `.cue` or `.ccd`, or the same-named one beside
+a `.bin`/`.img`. `Read` takes the first track from `CueSheet` or the CloneCD sheet, refusing audio
+first, and hands `IsoImage` a sector stream that skips each 2,352-byte sector's header and error
+correction (16 or 24 bytes in). Each opened file gets its own stream and handle. The image file
+is found beside the sheet without regard to case (`Beside`). Coverage:
+`CSVM.Tests/RawCdImageTests.cs`.
+
+## src/Extraction/CueSheet.cs
+The `.cue` sheet's data track for `RawCdImage`: `FILE`, `TRACK` and `INDEX` read in any case,
+every other command skipped. The first track must be data in a `BINARY` file; it starts at its
+`INDEX 01` and ends at the next track's first index in the same file. A per-track dump reads its
+first file. A malformed line throws `InvalidDataException` naming the sheet and line.
 
 ## src/Extraction/ZbdArchive.cs
 `Open(source, path)` or `Read(stream, name)` reads the table at the end of a `zrdr.zbd`,

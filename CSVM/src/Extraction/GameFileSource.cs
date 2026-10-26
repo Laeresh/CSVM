@@ -37,14 +37,20 @@ public static class GameFileSource
 
     /// <summary>A source over <paramref name="root"/>, or null when it is not an install
     /// (<see cref="InstallLocator.IsInstall"/>). A root ending <c>.iso</c> is an
-    /// <see cref="IsoImage"/> held to the same rule, and null when it does not read. An image or a
-    /// disc folder (<see cref="InstallCheckKind.Disc"/>) is wrapped in a <see cref="CabinetSource"/>,
-    /// rooted at the disc's <c>GAME</c> folder when it has one.</summary>
+    /// <see cref="IsoImage"/> held to the same rule, and null when it does not read. A raw CD image
+    /// (<see cref="RawCdImage.Descriptor"/>) is read the same way. An image or a disc folder
+    /// (<see cref="InstallCheckKind.Disc"/>) is wrapped in a <see cref="CabinetSource"/>, rooted at
+    /// the disc's <c>GAME</c> folder when it has one.</summary>
     public static IGameFileSource? Open(string root)
     {
         if (root.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) && File.Exists(root))
         {
             return OpenImage(root) is { } iso ? new CabinetSource(iso) : null;
+        }
+
+        if (RawCdImage.Descriptor(root) != null)
+        {
+            return OpenRawImage(root) is { } raw ? new CabinetSource(raw) : null;
         }
 
         if (!Directory.Exists(root))
@@ -114,6 +120,20 @@ public static class GameFileSource
             return null;
         }
         catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    // A raw CD image's data track, held to the same rule as an .iso and passed over the same way.
+    private static IsoImage? OpenRawImage(string image)
+    {
+        try
+        {
+            var iso = RawCdImage.Read(image);
+            return iso.HasFolder("ZBD") && iso.HasFolder("GOSDATA/ASSETS") ? iso : null;
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             return null;
         }

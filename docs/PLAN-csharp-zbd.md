@@ -187,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☑ ISO9660 reader (the original disc's image is still to be read: `CSVM_TEST_ISO`)
 33. ☑ LZX CAB decoder and the `rtextureN` long names
 34. ☐ Optional copy into the data root
-35. ☐ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
+35. ☑ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
 
 ### Wave E, cutover
 
@@ -1160,7 +1160,43 @@ picker).>
 **⚠ Traps.** A partial copy must not be found as a valid install; write to a temporary name and
 rename at the end.
 
-## D35 ☐ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
+## D35 ☑ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
+
+**Landed.** `CSVM/src/Extraction/RawCdImage.cs` reads a raw CD image in place as an `IsoImage`
+([formats/disc-image.md](formats/disc-image.md#raw-cd-images)). `Descriptor` answers the sheet a
+path stands for (a `.cue` or `.ccd`, or the same-named one beside a `.bin`/`.img`); `Read` takes
+the first track from `CueSheet.cs` or the CloneCD sheet and hands `IsoImage` a private sector
+stream that returns each sector's 2,048 bytes of user data (`MODE1/2352` at 16, `MODE2/2352`
+form 1 at 24, `MODE2/2336` at 8, `MODE1/2048` as is), up to 32 sectors per file read. `IsoImage`
+gained one internal seam, `Read(location, open, atGame)`, a stream factory in place of the file
+path, and its walk is unchanged; `atGame: false` roots at the disc root for the data test.
+`GameFileSource.Open` has a separate branch after the `.iso` one: a path `RawCdImage.Descriptor`
+accepts goes to `OpenRawImage`, which holds it to the same install rule and answers null for an
+image that does not read. The sheet's `FILE` is found beside it without regard to case, by its
+relative path and then its bare name. A per-track dump (one `FILE` per track) is read, since its
+first file is the whole data track. A sheet whose first track is audio is refused, data after it
+or not: a CD-Extra's volume addresses sectors from the disc's start in a later session, which
+neither sheet gives reliably, and the game's disc is one data track. The CloneCD fields read are
+`[Disc] DataTracksScrambled` and each `[TRACK n]`'s `MODE` and `INDEX 0`/`INDEX 1`.
+`InstallLocator.Check` still classes only `.iso` as a `Disc`; a picker that offers raw images
+(E41) calls `RawCdImage.Read` for the refusal message.
+
+**The user's raw image is not the German disc.** `Z:\CSVM\tmp\CRIMSON.cue` (one `MODE1/2352`
+track, 294,625 sectors, volume `C_SKIES`) reads cleanly, 112 files, 45 below `GAME`, install rule
+held. It is the English-language release: `00000409` locale files, `PDF/US.PDF`, `USOEM.PDF` and
+Danish, Norwegian, Finnish and Swedish manuals, `AR405ENG.EXE`. The file copy
+`Z:\CSVM\tmp\CSDisc` and the disc in drive `D:` are the German release (`00000407`, `MANUAL.PDF`,
+`AR405DEU.EXE`). Against that copy 65 of 112 files are identical (the root archives except the
+two sound archives among them), 11 image files are absent from it, and 36 differ. Against the
+English install, 32 of the 35 non-cabinet `GAME` files are byte-identical; `CRIMSON.EXE`,
+`CRIMSON.ICD` and `EBUEULA.DLL` differ. The image's 579 sectors with a bad EDC are single sectors
+between 807 and 10,018, in the gap between `00000001.TMP` (sector 40) and the first file (10,040):
+SafeDisc's bad sectors, inside no file. Reading and comparing all 112 files (559 MB from the image
+plus the same from the copy) takes about 0.22 s with both in the file cache.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A raw CD image is a game-file source like an `.iso`: a `.cue` with its `.bin`/`.img`, or
 a CloneCD `.img` with its `.ccd`, read in place.
@@ -1171,8 +1207,9 @@ each sector, `MODE2/2352` form 1: 24; `MODE1/2048` is an ISO). CloneCD images of
 are common because SafeDisc defeats a plain 2048-byte read.
 
 **Approach.** A sector-translating stream under D32's `IsoImage`, chosen in
-`GameFileSource.Open` by extension; the ISO reader stays unchanged. <TODO: whether the data track
-is always track 1 on the game's disc; `.ccd` fields the reader needs.>
+`GameFileSource.Open` by extension; the ISO reader stays unchanged. The game's disc is one
+`MODE1/2352` data track, track 1. The `.ccd` fields read are `[Disc] DataTracksScrambled` and each
+`[TRACK n]`'s `MODE`, `INDEX 0` and `INDEX 1`.
 
 **Model recommendation.** medium.
 

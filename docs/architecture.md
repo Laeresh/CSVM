@@ -963,9 +963,11 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/RememberedInstall.cs`, the last-used install folder, kept in `user://options.json` to pre-fill the next picker.
 - `src/Extraction/GameFileSource.cs`, the one seam loaders read the original's files through: a game-relative path opened case-insensitively from an install folder, and the session's install located in order.
 - `src/Extraction/IsoImage.cs`, the game disc's `.iso` read in place as a game-file source: the primary volume walked once, 8.3 names without versions, each file a window onto the image.
-- `src/Extraction/CabinetSource.cs`, the cabinet layer over a disc or `.iso`: each chapter's paths answered from its `.CAB`, unpacked in memory on first use, the `rtextureN` names restored.
+- `src/Extraction/CabinetSource.cs`, the cabinet layer over a disc, `.iso` or raw image: each chapter's paths answered from its `.CAB`, unpacked in memory on first use, the `rtextureN` names restored.
 - `src/Extraction/Cabinet.cs`, a Microsoft cabinet's tables and one folder's unpacked output, stored or LZX.
 - `src/Extraction/LzxDecoder.cs`, the LZX decompressor behind `Cabinet`, with the E8 call translation.
+- `src/Extraction/RawCdImage.cs`, a raw CD image (`.cue`/`.bin`/`.img`, CloneCD `.ccd`/`.img`) read in place: its first data track's sectors translated to the 2,048-byte volume `IsoImage` reads.
+- `src/Extraction/CueSheet.cs`, the `.cue` sheet read for its first track: the image file found beside it without regard to case, the track's mode and extent in that file.
 - `src/Extraction/ZbdArchive.cs`, the named-entry `.zbd` container of `zrdr.zbd` and the sound archives: the table read and checked, each payload read on demand, and the collision rename of a repeat.
 - `src/Extraction/RofExtraction.cs`, the non-ZBD half of an extraction: both UI archives, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, from resolved paths.
 - `src/Extraction/RofTree.cs`, the one upper case the rof tree is written in and the name mapping every writer and reader of it shares.

@@ -117,7 +117,7 @@ public class IsoImageTests
         Assert.False(iso.Exists("ZBD/ZRDR.ZBD"));
     }
 
-    private static (string Path, byte[] Data)[] DiscLayout() => new[]
+    internal static (string Path, byte[] Data)[] DiscLayout() => new[]
     {
         ("README.TXT;1", Encoding.ASCII.GetBytes("readme")),
         ("GAME/STRINGS.DLL;1", Encoding.ASCII.GetBytes("strings")),
@@ -129,49 +129,10 @@ public class IsoImageTests
         ("GAME/GOSDATA/ASSETS/CRIMSON.ROF;1", Encoding.ASCII.GetBytes("rof")),
     };
 
-    private static byte[] Read(Stream stream, int count)
-    {
-        var buffer = new byte[count];
-        int read = stream.Read(buffer, 0, count);
-        return buffer.Take(read).ToArray();
-    }
-
-    private static string WriteImage(params (string Path, byte[] Data)[] files) => WriteBytes(Build(files));
-
-    private static string WriteBytes(byte[] image)
-    {
-        string path = Path.Combine(TestData.TempDir(), "disc.iso");
-        File.WriteAllBytes(path, image);
-        return path;
-    }
-
-    private static byte[] Patched(byte[] image, int at, uint value)
-    {
-        var copy = (byte[])image.Clone();
-        BinaryPrimitives.WriteUInt32LittleEndian(copy.AsSpan(at), value);
-        return copy;
-    }
-
-    private static uint ReadLba(byte[] image, int record) => BinaryPrimitives.ReadUInt32LittleEndian(image.AsSpan(record + 2));
-
-    // The byte offset in the image of the record named name in the directory at sector lba.
-    private static int RecordAt(byte[] image, uint lba, string name)
-    {
-        for (int at = (int)lba * Sector; image[at] != 0; at += image[at])
-        {
-            if (Encoding.ASCII.GetString(image, at + 33, image[at + 32]) == name)
-            {
-                return at;
-            }
-        }
-
-        throw new InvalidOperationException($"no record '{name}' in sector {lba}");
-    }
-
     // A minimal ISO 9660 image. The primary descriptor sits at sector 16 and the terminator at 17.
     // One sector per directory follows from 18, root first, then each file's data. Paths hold
     // the stored names, version suffix included.
-    private static byte[] Build((string Path, byte[] Data)[] files)
+    internal static byte[] Build((string Path, byte[] Data)[] files)
     {
         var dirs = new SortedSet<string>(StringComparer.Ordinal) { string.Empty };
         foreach (var (path, _) in files)
@@ -224,6 +185,45 @@ public class IsoImageTests
         }
 
         return image;
+    }
+
+    private static byte[] Read(Stream stream, int count)
+    {
+        var buffer = new byte[count];
+        int read = stream.Read(buffer, 0, count);
+        return buffer.Take(read).ToArray();
+    }
+
+    private static string WriteImage(params (string Path, byte[] Data)[] files) => WriteBytes(Build(files));
+
+    private static string WriteBytes(byte[] image)
+    {
+        string path = Path.Combine(TestData.TempDir(), "disc.iso");
+        File.WriteAllBytes(path, image);
+        return path;
+    }
+
+    private static byte[] Patched(byte[] image, int at, uint value)
+    {
+        var copy = (byte[])image.Clone();
+        BinaryPrimitives.WriteUInt32LittleEndian(copy.AsSpan(at), value);
+        return copy;
+    }
+
+    private static uint ReadLba(byte[] image, int record) => BinaryPrimitives.ReadUInt32LittleEndian(image.AsSpan(record + 2));
+
+    // The byte offset in the image of the record named name in the directory at sector lba.
+    private static int RecordAt(byte[] image, uint lba, string name)
+    {
+        for (int at = (int)lba * Sector; image[at] != 0; at += image[at])
+        {
+            if (Encoding.ASCII.GetString(image, at + 33, image[at + 32]) == name)
+            {
+                return at;
+            }
+        }
+
+        throw new InvalidOperationException($"no record '{name}' in sector {lba}");
     }
 
     private static byte[] Record(byte[] name, uint lba, uint size, bool directory)
