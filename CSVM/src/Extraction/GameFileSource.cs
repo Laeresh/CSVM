@@ -37,15 +37,28 @@ public static class GameFileSource
 
     /// <summary>A source over <paramref name="root"/>, or null when it is not an install
     /// (<see cref="InstallLocator.IsInstall"/>). A root ending <c>.iso</c> is an
-    /// <see cref="IsoImage"/> held to the same rule, and null when it does not read.</summary>
+    /// <see cref="IsoImage"/> held to the same rule, and null when it does not read. An image or a
+    /// disc folder (<see cref="InstallCheckKind.Disc"/>) is wrapped in a <see cref="CabinetSource"/>,
+    /// rooted at the disc's <c>GAME</c> folder when it has one.</summary>
     public static IGameFileSource? Open(string root)
     {
         if (root.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) && File.Exists(root))
         {
-            return OpenImage(root);
+            return OpenImage(root) is { } iso ? new CabinetSource(iso) : null;
         }
 
-        return Directory.Exists(root) && InstallLocator.IsInstall(root) ? new InstallFolderSource(Path.GetFullPath(root)) : null;
+        if (!Directory.Exists(root))
+        {
+            return null;
+        }
+
+        if (InstallLocator.Check(root).Kind == InstallCheckKind.Disc)
+        {
+            string game = InstallLocator.ResolveDirectory(root, "GAME") is { } folder && InstallLocator.IsInstall(folder) ? folder : root;
+            return InstallLocator.IsInstall(game) ? new CabinetSource(new InstallFolderSource(Path.GetFullPath(game))) : null;
+        }
+
+        return InstallLocator.IsInstall(root) ? new InstallFolderSource(Path.GetFullPath(root)) : null;
     }
 
     /// <summary>The first install found, or null when there is none. <paramref name="installOverride"/>

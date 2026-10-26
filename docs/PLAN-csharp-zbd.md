@@ -185,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☐ ROF half read in place
 32. ☑ ISO9660 reader (the original disc's image is still to be read: `CSVM_TEST_ISO`)
-33. ☐ LZX CAB decoder and the `rtextureN` long names
+33. ☑ LZX CAB decoder and the `rtextureN` long names
 34. ☐ Optional copy into the data root
 35. ☐ Raw CD images: `.cue`/`.bin`/`.img` and CloneCD `.img`/`.ccd`
 
@@ -1091,7 +1091,38 @@ copy.
 
 **⚠ Traps.** Names are 8.3 on the disc; the long `rtextureN` names come from D33's table.
 
-## D33 ☐ LZX CAB decoder and the `rtextureN` long names
+## D33 ☑ LZX CAB decoder and the `rtextureN` long names
+
+**Landed.** `CSVM/src/Extraction/Cabinet.cs` reads a Microsoft cabinet's tables and unpacks one
+folder, stored or LZX, through `LzxDecoder.cs`, CSVM's own LZX decompressor
+([formats/cabinet.md](formats/cabinet.md)). `CabinetSource.cs` wraps an inner source per D32's
+contract: a path below `ZBD/<chapter>/` is answered from `ZBD/<chapter>.CAB` when the inner
+source holds one, every other path by the inner source. The cabinet's file table is read on the
+first lookup into a chapter (so `Exists` never decompresses); the folder unpacks into one array
+on the first `Open`, each file a read-only `MemoryStream` over its range; only the chapter
+opened last keeps its unpacked bytes (the orchestrator's change: all eight hold 396 MB, and a
+switch back costs one 140-250 ms Release unpack at a load screen). The 8.3 tier aliases (`RTEXTU~1.ZBD`, `RT60AC~1.ZBD`) are paired in cabinet order with the
+chapter's `rtextureN` names from `ZbdManifest`, sorted ordinally. `GameFileSource.Open` returns
+the wrapper for an `.iso` and for a disc folder (`InstallLocator.Check` gives `Disc`), rooted at
+its `GAME` folder when it has one. `IsoImageDataTests` takes the parse-and-count form, over an
+image (`CSVM_TEST_ISO`) and over a disc folder (`CSVM_TEST_DISC`).
+
+All eight German cabinets hold one LZX folder each (2^21-byte window, E8 translation on), so
+MSZIP and Quantum are refused rather than implemented. Through the wrapper, over
+`Z:\CSVM\tmp\CrimsonSkies-DE.iso` and over `Z:\CSVM\tmp\CSDisc`, all 184 `ZbdManifest` archives
+parse with their readers, and 182 are byte-identical to the English install: every one of the
+176 chapter archives, renamed tiers included. Only the localised `soundsh.zbd` and `soundsl.zbd`
+differ. A chapter unpacks in 140 to 250 ms in Release (up to 460 ms cold) and 430 to 1,080 ms in
+Debug, and holds 40 to 57 MB; all eight hold 396 MB. Decision 15 stands: no disk cache.
+
+No existing C# LZX code was drawn on. The one found, MonoGame's
+`MonoGame.Framework/Content/LzxDecoder.cs`, is a port of libmspack's `lzxd.c` under LGPL-2.1 or
+MS-PL at the user's choice; its LGPL-2.1 option would be compatible with CSVM's GPLv3, but the
+decoder is written from Microsoft's published cabinet and LZX specifications instead.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Chapter `.CAB` files on a disc or ISO unpack in memory per session, and their files
 appear under the names an install uses.
@@ -1099,9 +1130,8 @@ appear under the names an install uses.
 **Evidence (confidence: lead-only).** CABs are LZX (`cab` crate, `crates/unzbd/Cargo.toml`); the
 long-name table is per chapter (`disc.rs:177-203`); no native .NET LZX decoder.
 
-**Approach.** Own CAB + LZX decoder in C#. In-memory per session (decision 15). <TODO: whether a
-compatible-licence C# LZX implementation exists to draw on; measure decompression time per
-chapter.>
+**Approach.** Own CAB + LZX decoder in C#. In-memory per session (decision 15). The licence check
+and the per-chapter timing are in **Landed** above.
 
 **Model recommendation.** high, a codec with no runtime fallback.
 

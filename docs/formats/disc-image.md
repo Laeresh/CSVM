@@ -1,8 +1,9 @@
 # Game disc image (ISO 9660)
 
 The Crimson Skies disc, as an `.iso` file, is a game-file source read in place. CSVM reads it with
-`CSVM/src/Extraction/IsoImage.cs`, which `GameFileSource.Open` picks for a path ending `.iso`. The
-disc ships each chapter folder as an LZX cabinet; a cabinet's contents are not part of this page.
+`CSVM/src/Extraction/IsoImage.cs`, which `GameFileSource.Open` picks for a path ending `.iso` and
+wraps in the cabinet layer. The disc ships each chapter folder as an LZX cabinet, described in
+[cabinet.md](cabinet.md).
 
 ## Contents
 
@@ -52,7 +53,8 @@ little-endian halves only.
 
 - **Names.** Only the primary volume's names are read; a Joliet or Rock Ridge name is not. A name
   loses its `;1` version and then a trailing period (`NOEXT.;1` is `NOEXT`). The 8.3 names are
-  enough for the plain files above; the cabinets' long `rtextureN` names are the cabinet layer's.
+  enough for the plain files above; the cabinets' long `rtextureN` names are restored by the
+  cabinet layer ([cabinet.md](cabinet.md#what-the-discs-cabinets-hold)).
 - **Case.** Paths split on either slash and match without regard to case, as an install folder's
   do, because the disc spells names in upper case and the engine in lower.
 - **Records 0 and 1** (the directory itself and its parent) are skipped, as are associated files.
@@ -73,12 +75,12 @@ little-endian halves only.
 
 ## Where the cabinet layer plugs in
 
-The cabinet decoder wraps a source rather than changing this one. A cabinet source over an inner
-source (this image, or the disc's `GAME` folder as an `InstallFolderSource`) answers
-`ZBD/<chapter>/...` from the chapter's unpacked cabinet and every other path from the inner
-source. `GameFileSource.Open` then returns that wrapper for an `.iso` and for a disc folder, so
-callers and `IGameFileSource` stay as they are. The cabinets are found by path through the inner
-source (`ZBD/C1.CAB`); `IsoImage.Files` lists every file for a walk that needs one.
+`CabinetSource` wraps a source rather than changing this one. Over an inner source (this image, or
+the disc's `GAME` folder as an `InstallFolderSource`) it answers `ZBD/<chapter>/...` from the
+chapter's unpacked cabinet and every other path from the inner source. `GameFileSource.Open`
+returns that wrapper for an `.iso` and for a disc folder, so callers and `IGameFileSource` stay as
+they are. The cabinets are found by path through the inner source (`ZBD/C1.CAB`);
+`IsoImage.Files` lists every file for a walk that needs one.
 
 ## Evidence and limits
 
@@ -87,7 +89,8 @@ versioned name, a mixed-case name without a version, a name ending in a period, 
 file spanning three sectors. It covers lookups, `Exists`, seeking reads, a missing file, `..`
 segments, the install rule, a directory loop and five malformed images. An image written by
 Windows' IMAPI2 (ISO 9660 only) of the root archives, both `.rof` files and `strings.dll` read back
-byte-identical to the install. No image of the original disc has been read yet; set
-`CSVM_TEST_ISO` to one for the data test, which checks the root archives are present, that `ZBD`
-holds a `.CAB`, and that every non-cabinet file both hold matches the install's bytes. The image
-and the install must be the same release for that comparison.
+byte-identical to the install. An IMAPI2 image of a file copy of the German disc (not the pressed
+disc's sectors, which SafeDisc keeps from imaging tools) opens rooted at `GAME`. Through the
+cabinet layer every ZBD archive in it parses, and all but the two localised sound archives match
+the English install's bytes. `IsoImageDataTests` runs that check when `CSVM_TEST_ISO` names an
+image or `CSVM_TEST_DISC` a disc folder ([cabinet.md](cabinet.md#evidence-and-limits)).

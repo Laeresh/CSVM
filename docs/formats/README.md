@@ -55,6 +55,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
   share.
 - [disc-image.md](disc-image.md), the game disc as an ISO 9660 image read in place: what the disc
   holds, the directory records, and the name rules.
+  - [cabinet.md](cabinet.md), the chapter cabinets on the disc: the CAB tables, LZX, and the
+    long `rtextureN` names restored from their 8.3 aliases.
 - [texture-archive.md](texture-archive.md), the `texture`, `rtextureN` and `rimage` archives:
   layout, pixel decode, alpha class and the rename rule.
 - [gamez-zbd.md](gamez-zbd.md), the `gamez.zbd` and `planes.zbd` layout: textures, materials,

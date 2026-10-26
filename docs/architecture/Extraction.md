@@ -33,7 +33,8 @@ field; the value is fully qualified, and the store drops one that is not.
 stream, or null) take a game-relative path such as `ZBD/C1/zrdr.zbd`, matched without regard to
 case, and `ReadAllBytes` throws naming `Location`. `InstallFolderSource` reads an install folder or
 mounted drive through `InstallLocator.ResolveFile`. `GameFileSource.Open` alone turns a path into a
-source: a path ending `.iso` is an `IsoImage`, the cabinet kind lands there too. `Locate` takes the
+source: an `.iso` is an `IsoImage` and a disc folder (`Check` gives `Disc`) its `GAME` folder,
+each wrapped in a `CabinetSource`. `Locate` takes the
 `CSVM_INSTALL_ROOT` override, then `<dataRoot>/CrimsonSkiesGame`, then the remembered install, then
 `InstallLocator.Candidates`. Engine-free; `CSVM.Tests/GameFilesData.cs` locates the tests' install.
 
@@ -44,6 +45,25 @@ without the `;1` version, case-insensitive, `..` matching nothing. A malformed i
 `InvalidDataException`, which `GameFileSource.Open` turns into null. `Open` returns a seekable
 window over a fresh handle per call, so readers never share a position. The chapter `.CAB` files
 are plain files here; the cabinet layer wraps this source. Coverage: `CSVM.Tests/IsoImageTests.cs`.
+
+## src/Extraction/CabinetSource.cs
+The cabinet layer over a disc's source ([../formats/cabinet.md](../formats/cabinet.md)): a path
+below `ZBD/<chapter>/` is answered from `ZBD/<chapter>.CAB` when the inner source holds one, every
+other path by `Inner`. The file table is read on the first lookup into a chapter, its folder
+unpacked into memory on the first `Open`, and only the chapter opened last keeps them (`UnpackedBytes`). The 8.3
+`RTEXTU~n` aliases get their `rtextureN` names, paired with `ZbdManifest`'s tiers sorted
+ordinally. Coverage: `CSVM.Tests/CabinetTests.cs`, and `IsoImageDataTests` over a real disc.
+
+## src/Extraction/Cabinet.cs
+A Microsoft cabinet's header, folder and file tables (`Read`), and one folder's whole output
+(`Unpack`). Stored and LZX folders unpack; MSZIP, Quantum, cabinet sets and continued files throw
+`InvalidDataException`. Read `LzxDecoder.cs` next.
+
+## src/Extraction/LzxDecoder.cs
+The LZX decompressor, written from Microsoft's published specification: verbatim, aligned-offset
+and uncompressed blocks, 32,768-byte frames, and the E8 call translation run over the finished
+output. Internal; `Cabinet.Unpack` is its one caller. A malformed stream throws
+`InvalidDataException`.
 
 ## src/Extraction/ZbdArchive.cs
 `Open(source, path)` or `Read(stream, name)` reads the table at the end of a `zrdr.zbd`,

@@ -1,11 +1,13 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using CSVM.Extraction;
+using CSVM.Mech3;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -75,7 +77,7 @@ public class IsoImageTests
     public void GameFileSourceOpensAnIsoHeldToTheInstallRule()
     {
         var disc = GameFileSource.Open(WriteImage(DiscLayout()));
-        Assert.IsType<IsoImage>(disc);
+        Assert.IsType<IsoImage>(Assert.IsType<CabinetSource>(disc).Inner);
         Assert.True(disc!.Exists("ZBD/C1.CAB"));
 
         // An image of an install has no GAME folder and is rooted at the image root.
@@ -237,12 +239,18 @@ public class IsoImageTests
     }
 }
 
-/// <summary>Reads the real disc image the <see cref="Variable"/> environment variable names, and
-/// skips without one.</summary>
+/// <summary>Reads a real disc through its cabinets: the image <see cref="Variable"/> names, or the
+/// copied disc folder <see cref="FolderVariable"/> names, each skipped without one. Every ZBD
+/// archive must open and parse with its reader. How many are byte-identical to the located install
+/// is reported, not required, since the German disc's localised archives differ from the English
+/// install's. Each chapter's unpack time and size are reported too.</summary>
 public class IsoImageDataTests
 {
     /// <summary>The environment variable naming a Crimson Skies <c>.iso</c> for the real-image check.</summary>
     public const string Variable = "CSVM_TEST_ISO";
+
+    /// <summary>The environment variable naming a copy of the disc, a folder holding <c>GAME</c>.</summary>
+    public const string FolderVariable = "CSVM_TEST_DISC";
 
     private readonly ITestOutputHelper _output;
 
@@ -251,51 +259,91 @@ public class IsoImageDataTests
         _output = output;
     }
 
-    [RealIsoFact]
-    public void TheRealImageHoldsTheRootArchivesAndMatchesTheInstall()
+    [RealDiscFact(Variable)]
+    public void TheRealImageParsesThroughItsCabinets() => ParsesAndCounts(Environment.GetEnvironmentVariable(Variable)!);
+
+    [RealDiscFact(FolderVariable)]
+    public void TheRealDiscFolderParsesThroughItsCabinets() => ParsesAndCounts(Environment.GetEnvironmentVariable(FolderVariable)!);
+
+    private static void Parse(string archive, byte[] data)
     {
-        var iso = Assert.IsType<IsoImage>(GameFileSource.Open(Environment.GetEnvironmentVariable(Variable)!));
-        foreach (string root in ZbdManifest.Expected.Where(path => !path.Contains('/')))
+        switch (Path.GetFileNameWithoutExtension(archive).ToLowerInvariant())
         {
-            Assert.True(iso.Exists("ZBD/" + root), $"ZBD/{root} is not in the image");
-        }
+            case "interp":
+                Assert.NotEmpty(InterpScripts.Read(data).Scripts);
+                break;
+            case "gamez":
+            case "planes":
+                Assert.NotEmpty(GameZZbd.Read(data).Nodes);
+                break;
+            case "cam_anim":
+            case "mis_anim":
+                AnimZbd.Read(data, archive);
+                break;
+            case "zrdr":
+                Assert.NotEmpty(ZrdrZbd.Read(data));
+                break;
+            case "soundsh":
+            case "soundsl":
+                using (var sounds = SoundZbd.Read(new MemoryStream(data), archive))
+                {
+                    Assert.NotEmpty(sounds.Sounds);
+                }
 
-        Assert.Contains(iso.Files, f => f.StartsWith("ZBD/", StringComparison.OrdinalIgnoreCase) && f.EndsWith(".CAB", StringComparison.OrdinalIgnoreCase));
-        _output.WriteLine($"{iso.Files.Count} files in the image");
-        if (GameFilesData.Source is not { } install)
+                break;
+            default:
+                Assert.NotEmpty(TextureZbd.Read(data));
+                break;
+        }
+    }
+
+    private void ParsesAndCounts(string disc)
+    {
+        var source = Assert.IsType<CabinetSource>(GameFileSource.Open(disc));
+        foreach (string chapter in ZbdManifest.Expected.Where(p => p.Contains('/')).Select(p => p[..p.IndexOf('/')]).Distinct())
         {
-            _output.WriteLine(GameFilesData.NoSourceReason + ", so no byte comparison");
-            return;
-        }
+            var clock = Stopwatch.StartNew();
+            source.Open($"ZBD/{chapter}/zrdr.zbd")!.Dispose();
+            _output.WriteLine(FormattableString.Invariant($"{chapter}: unpacked {source.UnpackedBytes / 1048576.0:F1} MB in {clock.ElapsedMilliseconds} ms"));
 
+            // Only the chapter opened last stays unpacked; one chapter is under 60 MB.
+            Assert.InRange(source.UnpackedBytes, 1, 64L << 20);
+        }
+        var install = GameFilesData.Source;
         var differ = new List<string>();
         int compared = 0;
-        foreach (string file in iso.Files.Where(f => !f.EndsWith(".CAB", StringComparison.OrdinalIgnoreCase) && install.Exists(f)))
+        foreach (string archive in ZbdManifest.Expected)
         {
-            using var fromIso = iso.Open(file)!;
-            using var fromInstall = install.Open(file)!;
-            if (!SHA256.HashData(fromIso).AsSpan().SequenceEqual(SHA256.HashData(fromInstall)))
+            byte[] data = source.ReadAllBytes("ZBD/" + archive);
+            Parse(archive, data);
+            if (install != null && install.Exists("ZBD/" + archive))
             {
-                differ.Add(file);
+                compared++;
+                if (!SHA256.HashData(data).AsSpan().SequenceEqual(SHA256.HashData(install.ReadAllBytes("ZBD/" + archive))))
+                {
+                    differ.Add(archive);
+                }
             }
-
-            compared++;
         }
 
-        _output.WriteLine($"{compared} files compared with the install at {install.Location}");
-        Assert.True(compared > 0);
-        Assert.Empty(differ);
+        _output.WriteLine($"{ZbdManifest.Expected.Count} archives parsed from {source.Location}");
+        _output.WriteLine(install == null
+            ? GameFilesData.NoSourceReason + ", so no byte comparison"
+            : $"{compared - differ.Count} of {compared} byte-identical to the install at {install.Location}; differing: {string.Join(", ", differ)}");
     }
 }
 
-/// <summary>A fact that runs only when <see cref="IsoImageDataTests.Variable"/> names an existing file.</summary>
-public sealed class RealIsoFactAttribute : FactAttribute
+/// <summary>A fact that runs only when the environment variable it names holds an existing file
+/// or folder.</summary>
+public sealed class RealDiscFactAttribute : FactAttribute
 {
-    public RealIsoFactAttribute()
+    public RealDiscFactAttribute(string variable)
     {
-        if (!File.Exists(Environment.GetEnvironmentVariable(IsoImageDataTests.Variable)))
+        string? path = Environment.GetEnvironmentVariable(variable);
+        if (!File.Exists(path) && !Directory.Exists(path))
         {
-            Skip = $"no disc image: set {IsoImageDataTests.Variable} to a Crimson Skies .iso";
+            Skip = $"no disc: set {variable} to a Crimson Skies .iso or a copy of the disc";
         }
     }
 }
+
