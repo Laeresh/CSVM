@@ -507,8 +507,8 @@ internal static class GraphicsSwitchSuites
                 var built = Clumps(live);
                 ctx.Check(live.Built && built.Count > 0 && built.Node != null && built.Node.IsInsideTree(),
                     $"a rich C1 flight builds its clumps by default ({built.Text})");
-                ctx.Check(Handover(live) == "on" && EdgeClumps(live) > 0,
-                    $"the cards hand over ({Handover(live)}) and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
+                ctx.Check(Handover(live) == "on" && EdgeClumps(live) > 0 && Handover(live, forest: false) == "off",
+                    $"the cards hand over ({Handover(live)}), the grassland and hedge cards keep every distance ({Handover(live, forest: false)}), and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
                 var shipped = live.Session.CanopyClumpField!;
                 shippedTrees = shipped.TreesPerClump;
                 ctx.Check(shipped.Tiles is [var tile] && tile.StartsWith("firtree1 ", StringComparison.Ordinal)
@@ -966,9 +966,9 @@ internal static class GraphicsSwitchSuites
 
     [Suite("vegetation-lab",
         "the vegetation lab stands in an Enhanced --freecam C1 session at vegetation quality rich and nowhere in a --fly "
-        + "one, opened on the session's entry and a neutral mask: a tint edit of one kind re-bakes that kind's Rich colours "
+        + "one, opened on the session's entry and the shipped mask, which drops no original stamp: a tint edit of one kind re-bakes that kind's Rich colours "
         + "alone and the drawn stamps follow, a seed edit rerolls every listed kind, and a pick names the texture under a "
-        + "stamp, adds stamps of the kind there and moves no other, which a revert drops; a Clear stroke zero-scales the listed Rich stamps inside its radius and no other, which "
+        + "stamp, adds stamps of the kind there and moves no original one, which a revert drops; a Clear stroke zero-scales the listed Rich stamps inside its radius and no other, which "
         + "draw nothing under rich and draw again after a live move to original, and a stamp it dropped stays hidden "
         + "through the activation's hide and show and through a crater, across a live move both ways; a cleared map hides "
         + "every copy past its edge; a Neutral stroke and a revert each draw the first build's stamps exactly; through the "
@@ -995,13 +995,21 @@ internal static class GraphicsSwitchSuites
                 }
                 var lab = labs[0];
                 var shipped = Mech3.VegetationSidecar.Load().For(VegetationChapter);
-                ctx.Check(!lab.IsOpen && EntryText(lab.Saved) == EntryText(shipped) && ReferenceEquals(lab.Mask, mask) && mask.IsNeutral(),
-                    $"the lab starts closed on the shipped {VegetationChapter} entry and the clutter's own mask, neutral");
+                byte[] shippedMask = Godot.FileAccess.GetFileAsBytes($"res://data/{shipped.Mask}");
+                bool IsShipped(Mech3.VegetationMask m) => shipped.Mask.Length == 0 ? m.IsNeutral() : m.ToBytes().SequenceEqual(shippedMask);
+                ctx.Check(!lab.IsOpen && EntryText(lab.Saved) == EntryText(shipped) && ReferenceEquals(lab.Mask, mask) && IsShipped(mask),
+                    $"the lab starts closed on the shipped {VegetationChapter} entry and the clutter's own mask, the shipped one");
                 lab.Toggle();
                 var opening = RichOf(kinds);
                 var originals = kinds.Select(k => k.Placements.ToArray()).ToList();
                 var openingDraw = DrawnStamps(freecam);
-                int edited = Enumerable.Range(0, kinds.Count).Where(k => opening[k] != null).MaxBy(k => opening[k]!.Value.Xf.Length);
+                int originalKinds = kinds.Count(k => !k.Added), openingCandidates = freecam.Session.Clutter!.AddedCandidates;
+                int openingKept = freecam.Session.Clutter.AddedKept;
+                int originalsDropped = Enumerable.Range(0, originalKinds).Sum(k => opening[k]?.Xf.Count(x => x.Basis.Determinant() == 0f) ?? 0);
+                ctx.Check(originalsDropped == 0, $"the shipped mask drops no original stamp ({originalsDropped} dropped)");
+                // A model no shipped set names, so a tint edit re-bakes one kind alone.
+                int edited = Enumerable.Range(0, originalKinds).Where(k => opening[k] != null && !kinds.Any(a => a.Added && a.Model == kinds[k].Model))
+                    .MaxBy(k => opening[k]!.Value.Xf.Length);
                 string model = kinds[edited].Model;
 
                 var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -1024,24 +1032,38 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(SameRich(RichOf(kinds), opening) && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
                     $"a revert draws the first build's Rich stamps exactly");
 
-                int first = Array.FindIndex(opening[edited]!.Value.Xf, xf => xf.Basis.Determinant() != 0f);
+                // Two texels inside and outside the stroke, where the bilinear sample is wholly cleared or wholly neutral.
+                const float Radius = 300f;
+                float texel = (mask.MaxX - mask.MinX) / mask.Side;
+                // The stroke stands where the shipped mask is neutral, so a Neutral stroke over it gives the shipped mask back.
+                bool NeutralAround(Vector3 p)
+                {
+                    float reach = Radius + (2f * texel);
+                    for (float dz = -reach; dz <= reach; dz += texel / 2f)
+                    {
+                        for (float dx = -reach; dx <= reach; dx += texel / 2f)
+                        {
+                            if (mask.At(p.X + dx, p.Z + dz) != 1f)
+                                return false;
+                        }
+                    }
+                    return true;
+                }
+                int first = Array.FindIndex(opening[edited]!.Value.Xf, xf => xf.Basis.Determinant() != 0f && NeutralAround(xf.Origin));
                 var at = opening[edited]!.Value.Xf[first].Origin;
                 watch.Restart();
                 string? texture = lab.Pick(at, new[] { model });
                 long pickMs = watch.ElapsedMilliseconds;
                 Step(freecam);
-                int pickedAdded = freecam.Session.Clutter!.AddedKept;
+                int pickedAdded = freecam.Session.Clutter!.AddedKept - openingKept;
                 ctx.Check(texture != null && lab.Edited.SetFor(texture)?.Models.Contains(model) == true && pickedAdded > 0
-                        && SameRich(RichOf(kinds).Take(opening.Count).ToList(), opening),
-                    $"a pick under a {model} stamp gives {texture ?? "nothing"} that kind, adds {pickedAdded} stamps of it and moves no other (pick and re-bake {pickMs} ms)");
+                        && SameRich(RichOf(kinds).Take(originalKinds).ToList(), opening.Take(originalKinds).ToList()),
+                    $"a pick under a {model} stamp gives {texture ?? "nothing"} that kind, adds {pickedAdded} stamps of it and moves no original one (pick and re-bake {pickMs} ms)");
                 lab.RevertToSaved();
                 Step(freecam);
-                ctx.Check(kinds.Count == opening.Count && freecam.Session.Clutter.AddedCandidates == 0,
-                    $"a revert drops the added stamps ({kinds.Count} kinds against {opening.Count})");
+                ctx.Check(kinds.Count == opening.Count && freecam.Session.Clutter.AddedCandidates == openingCandidates && SameRich(RichOf(kinds), opening),
+                    $"a revert drops the pick's added stamps ({kinds.Count} kinds against {opening.Count}, {freecam.Session.Clutter.AddedCandidates} candidates against {openingCandidates})");
 
-                // Two texels inside and outside the stroke, where the bilinear sample is wholly cleared or wholly neutral.
-                const float Radius = 300f;
-                float texel = (mask.MaxX - mask.MinX) / mask.Side;
                 lab.Paint(at, Mech3.VegetationBrush.Clear, Radius, 1f);
                 watch.Restart();
                 lab.ApplyMask();
@@ -1085,7 +1107,7 @@ internal static class GraphicsSwitchSuites
                 lab.Paint(at, Mech3.VegetationBrush.Neutral, Radius, 1f);
                 lab.ApplyMask();
                 Step(freecam);
-                ctx.Check(mask.IsNeutral() && SameRich(RichOf(kinds), opening) && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
+                ctx.Check(IsShipped(mask) && SameRich(RichOf(kinds), opening) && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
                     $"a Neutral stroke over it draws the first build's Rich stamps exactly");
 
                 var centre = new Vector3((mask.MinX + mask.MaxX) / 2f, 0f, (mask.MinZ + mask.MaxZ) / 2f);
@@ -1099,9 +1121,9 @@ internal static class GraphicsSwitchSuites
                     $"a cleared map hides every copy past its edge, each inheriting its source's drop ({hiddenCopies} of {copies} hidden)");
                 lab.RevertToSaved();
                 Step(freecam);
-                ctx.Check(lab.Mask is { } reverted && reverted.IsNeutral() && SameRich(RichOf(kinds), opening)
+                ctx.Check(lab.Mask is { } reverted && IsShipped(reverted) && SameRich(RichOf(kinds), opening)
                         && DrawnStamps(freecam).Stamps.SequenceEqual(openingDraw.Stamps),
-                    $"a revert after a stroke draws the first build's Rich stamps exactly, its mask neutral again");
+                    $"a revert after a stroke draws the first build's Rich stamps exactly, its mask the shipped one again");
 
                 ScreenStroke(ctx, freecam, lab, kinds, opening, at, Radius, 2f * texel, report);
                 CraterThroughDrop(ctx, freecam, lab, kinds, at, Radius, Radius - (2f * texel), report);
@@ -2021,9 +2043,10 @@ internal static class GraphicsSwitchSuites
     }
 
     // Whether every listed card's Rich material carries the handover band: on, off, or mixed.
-    private static string Handover(Rig rig)
+    // The band on the cards the clumps take over: the original's and a forest set's. Another set's keep every distance.
+    private static string Handover(Rig rig, bool forest = true)
     {
-        var bands = rig.Session.Clutter?.ExportedKinds?.Where(k => k.Rich?.Material is ShaderMaterial)
+        var bands = rig.Session.Clutter?.ExportedKinds?.Where(k => k.Rich?.Material is ShaderMaterial && (!k.Added || k.Mass) == forest)
             .Select(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2())
             .Distinct().ToList() ?? new();
         return bands.Count != 1 ? $"mixed ({bands.Count})"

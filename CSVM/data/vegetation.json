@@ -1,6 +1,7 @@
 {
   "_about": "The Enhanced Rich vegetation per chapter (src/Mech3/VegetationSidecar.cs, docs/architecture/Mech3.md). 'kinds' lists the decoration models that are vegetation, by the model name templates.zrd uses; every model not listed keeps the original's stamp. A kind's values are per-stamp spreads, each 0 when absent: jitter_uv (texture repeats per UV axis, 0..0.5), yaw_deg (0..180; a card shows no turn, so a stamp mirrors its card with probability yaw_deg/180), tint (per colour channel, 0..0.5), brightness (0..0.5). 'seed' salts the variation's fixed stream; 'mask' is the brush mask beside this file; 'sets' name lists of listed kinds and 'picks' give a ground texture a set, whose kinds Rich adds there once per texture repeat (src/Mech3/VegetationScatter.cs); a set written as an object {\"kinds\": [...], \"density\": n, \"mass\": true} takes n stamps a hectare at a neutral mask (a bare list takes 7.85, the original's palm stand on C3's cliff1_sandtrans) and with mass counts as forest for the canopy clumps; a pick to the empty set 'canopy' marks painted forest, which takes no card and feeds the canopy mask (src/Mech3/CanopyMask.cs). Under the Original setting nothing reads this file. The vegetation lab writes one chapter's entry here when run from the source tree.",
   "C1": {
+    "mask": "vegetation/C1.bin",
     "kinds": {
       "firtree1.flt": {
         "yaw_deg": 90,
@@ -27,6 +28,32 @@
         "tint": 0.1,
         "brightness": 0.2
       }
+    },
+    "sets": {
+      "scrub": {
+        "kinds": [
+          "bush1.flt",
+          "bush2.flt",
+          "bush1.flt",
+          "bush2.flt",
+          "firtree1.flt"
+        ],
+        "density": 2
+      },
+      "hedge": {
+        "kinds": [
+          "bush1.flt",
+          "bush2.flt"
+        ],
+        "density": 64
+      }
+    },
+    "picks": {
+      "terpat03.tif": "scrub",
+      "terpat03b.tif": "scrub",
+      "grass1.tif": "scrub",
+      "crop04.tif": "hedge",
+      "crop05.tif": "hedge"
     }
   },
   "C1B": {

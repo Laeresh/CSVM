@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, density
 
 21. ☑ Remake-added stamps on picked textures, in texture space, under the mask
-22. ☐ C1's grassland and fields: sparse original cards, hedgerows by mask
+22. ☑ C1's grassland and fields: sparse original cards, hedgerows by mask
 23. ☑ C1B, C2 and C4 tuned in the lab
 24. ☐ Wave C budget and goldens
 
@@ -1298,20 +1298,74 @@ two shots run Faithful, where the added node is hidden, and no other chapter shi
 - Keep the strict edge test and the quarter-metre dedup (`Clutter.cs:604`) on added stamps too.
 - C5 already draws about 139k sprites; density must not reach unlisted chapters' cities.
 
-## C22 ☐ C1's grassland and fields: sparse original cards, hedgerows by mask
+## C22 ☑ C1's grassland and fields: sparse original cards, hedgerows by mask
 
 **Goal.** C1's `terpat03`/`terpat03b`/`grass1` carry scattered bush1/bush2 and the odd fir, and its
 `crop04`/`crop05` fields stay sparse, with hedgerows painted in by mask where wanted.
 
 **Evidence (confidence: measured areas, lead-only look).** The survey table above; Decision 13.
 
-**Approach.** Lab work over C21. <TODO>
+**Approach (as built).** Two sets and a mask in C1's sidecar entry, no code. The density a set carries is the
+one knob a lab slider tunes later, so each ground that wants its own density takes its own set.
 
-**Model recommendation.** <TODO>
+- *Grassland.* `terpat03`, `terpat03b` and `grass1` pick `scrub`: bush1 and bush2 named twice each and firtree1 once,
+  at 2 a hectare. A member is read off a uniform draw over the set's list, so naming a kind twice weights it without
+  a weight field. Since every repeat holds the same scatter, the share is that of the first points: at 2 a hectare 486
+  of the 5,000-odd grassland candidates are firs, the odd fir. The original's own bushes along `river1`/`river2` stand about 5.8 a
+  hectare and its firs about 4.3 on `terpat02`, so 2 reads as scattered next to both.
+- *Fields.* `crop04` and `crop05` pick `hedge` (bush1, bush2) at 64 a hectare, and the mask holds it to the field
+  edges: 255 on an edge texel (about 128 a hectare, a bush every 6 to 8 m along a 12 m strip), 2 inside (1 a hectare).
+  Hedges are a set of their own, picked on the crop textures and gated by the mask, because one set has one density:
+  the grassland's 2 a hectare doubled by a thickened mask is 4, which draws no line. A field takes the hedge set's high
+  density, and the mask alone decides where it stands.
+- *The mask* (`CSVM/data/vegetation/C1.bin`, written by `analysis/veg-ground-survey/c1_mask.py` from the extracted
+  gamez). Each 12 m texel is classed by the ground under its centre. A crop texel is an edge where it borders other
+  ground, where the world's 256 m grid crosses it (the crop repeats sit on that grid, their painted border along it) or
+  where u = k + 0.5 crosses it (the field line painted down the middle of both crop textures, wherever a repeat is
+  turned). That gives fields of 128 by 256 m lined on every side, the lines on the texture's own field borders. Every
+  other texel is 128.
+- *The landing strips.* No added stamp stands beside a strip or under its approach. Each piece of `tarmac01` (the
+  runway texture, centre line and edge marks) of at least 300 texels is a strip: the generator finds four, the
+  east-west pair north of the hangar apron and the diagonal pair south-west of it, each boxed along its principal axis.
+  A texel inside a box grown by 150 m to each side and 600 m off each end is 0. Six hundred metres is where a 3° glide
+  path stands 31 m up, above the tallest card (dougfirtree1, 22 m); 150 m to each side keeps a plane that drifts off
+  the strip, or circles low over it, clear of an 18 m fir. The clearance leaves 31,865 of the 32,186 kept added stamps.
+- *The original's stamps.* A texel goes below neutral only where it and its eight neighbours are picked ground
+  (`terpat03`, `terpat03b`, `grass1`, `crop04`, `crop05`), so no bilinear sample on `terpat02` or the river thins an
+  original stamp: the firs and river bushes inside a strip's margins stand as in the original (`mask_dropped=0`).
+- *Not forest.* Neither set is `mass`. Marked forest, the grassland's bushes and firs and the hedges would raise fir
+  clumps over the grassland and the fields past 1 to 1.6 km (the clump tile is firtree1) and fade their own cards
+  there, so the fields would turn to forest at a distance.
+- *Count.* `clutter added stamps: sets=scrub,hedge candidates=145922 kept=31865`, beside the original's 37,508
+  stamps on C1.
 
-**Verify.** <TODO>
+**Ruling (yours, from the montage).** The grassland at 2 a hectare with the odd fir, the hedges at 64 a hectare on all
+three kinds of line, and no tree around the landing strips. A sparser (1, 32) and a denser (4, 100) option were shown
+beside it.
+
+**Model recommendation.** A mid-tier model for a retune (a density in the sidecar, the generator's two bytes); Opus
+for the views, the tests and a look that iterates against captures.
+
+**Verify.** Units: `VegetationSidecarTests.TheShippedFilePicksC1sGrasslandToScrubAndItsFieldsToHedges` and
+`TheShippedC1MaskHedgesTheFieldsAndClearsTheStrips` (edges at 255, bare beside and off the east-west strips, neutral
+grassland away from them). Engine: `vegetation-lab` (opened on the shipped mask, which drops no original stamp; the stroke stands where that mask is neutral, a pick moves no original stamp and a revert
+gives the shipped added stamps back), `canopy-mask` (the shipped entry gives the first canopy back with its own added
+candidates), `canopy-clumps` (the scrub and hedge cards keep every distance while the original's hand over), with
+`vegetation-added-stamps`, `graphics-vegetation-quality`, `clutter-rich-variation`, `clutter-activation` and
+`clutter-cells` as before. Look: `.scratch/c22/montage-c22.png` (before against three densities at four views:
+`terpat03` from 45 m, the fields from 45 m, each from 300 m), `.scratch/c22/montage-c22-mass.png` (the forest flag
+at 300 m) and `.scratch/c22/montage-c22-strips.png` (before against after the strip clearance, from 300 m and on the
+western approach to the east-west strips), judged by you. Goldens: `c1-rocket-hit-enhanced` and `c1-cockpit-xr-sim-enhanced` look over the base's `terpat03` and
+are expected to move; `c1-cockpit-enhanced` (the spawn over the base) and `c1-lake-enhanced` (the west grassland past
+the lake) likely; `c1-cloud-deck-enhanced` only where the ground shows under the deck. No Faithful, Original or other
+chapter's shot reads the C1 entry. They are C24's to re-pin.
 
 **⚠ Traps.** Grassland must stay grassland: the sparseness is the brief.
+- The mask reaches the original's stamps (Decision 10): a value below neutral beside forest or river ground thins them.
+  Go below neutral only where every neighbour is picked ground; `vegetation-lab` and `mask_dropped=0` hold it.
+- The generator is the mask's source: regenerate rather than paint, or the next regeneration loses the paint. It must
+  write the shipped file byte for byte.
+- A set's density is per set, not per pick: a lower density on one ground means a set of its own.
 
 ## C23 ☑ C1B, C2 and C4 tuned in the lab
 

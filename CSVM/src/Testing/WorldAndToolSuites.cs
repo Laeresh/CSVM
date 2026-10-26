@@ -1708,6 +1708,7 @@ internal static class WorldAndToolSuites
 
             var first = Bake("C1", c1, out var b1, out var g1, out var w1)!;
             long c1Ms = watch.ElapsedMilliseconds;
+            int shippedCandidates = b1.AddedCandidates;
             int densest = Enumerable.Range(0, first.Density.Count).MaxBy(c => first.Density[c]);
             var sorted = first.Density.Where(d => d > 0f).OrderBy(d => d).ToList();
             var rises = Enumerable.Range(0, first.Density.Count).Where(c => first.Density[c] >= 1f)
@@ -1744,8 +1745,8 @@ internal static class WorldAndToolSuites
             int forestCells = b1.Canopy()!.Density.Count(d => d > 0f);
             ctx.Check(forestCells > sorted.Count, $"the same pick as forest covers {forestCells} cells against {sorted.Count}");
             b1.ApplyVegetation(c1);
-            ctx.Check(b1.Canopy()!.Density.SequenceEqual(first.Density) && b1.AddedCandidates == 0,
-                $"the shipped entry gives the first mask back and adds no stamp");
+            ctx.Check(b1.Canopy()!.Density.SequenceEqual(first.Density) && b1.AddedCandidates == shippedCandidates,
+                $"the shipped entry gives the first mask back and its own {shippedCandidates} added candidates");
 
             watch.Restart();
             var painted = Bake("C3", VegetationSidecar.Load().For("C3"), out var b3, out var g3, out var w3)!;

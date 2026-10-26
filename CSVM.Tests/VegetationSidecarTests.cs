@@ -220,6 +220,32 @@ public sealed class VegetationSidecarTests
         Assert.Empty(sidecar.For("C2").Picks);
     }
 
+    /// <summary>C1 picks its grassland to a sparse scrub of bushes and the odd fir. Its fields take a hedge set,
+    /// which the mask holds to the field edges. Neither is forest, so no clump rises over them.</summary>
+    [Fact]
+    public void TheShippedFilePicksC1sGrasslandToScrubAndItsFieldsToHedges()
+    {
+        var c1 = VegetationSidecar.Parse(File.ReadAllText(ShippedPath)).For("C1");
+        Assert.Equal(VegetationMask.PathFor("C1"), c1.Mask);
+        Assert.All(new[] { "terpat03.tif", "terpat03b.tif", "grass1.tif" }, t => Assert.Equal("scrub", VegetationScatter.Stamped(c1, t)?.Name));
+        Assert.All(new[] { "crop04.tif", "crop05.tif" }, t => Assert.Equal("hedge", VegetationScatter.Stamped(c1, t)?.Name));
+        Assert.All(c1.Sets, s => Assert.False(s.Mass, s.Name));
+        Assert.Null(VegetationScatter.Stamped(c1, "terpat02.tif"));
+    }
+
+    /// <summary>The shipped C1 mask thickens the field edges and clears the grassland beside the east-west strips and
+    /// on their western approach. Grassland away from the airfield stays neutral.</summary>
+    [Fact]
+    public void TheShippedC1MaskHedgesTheFieldsAndClearsTheStrips()
+    {
+        byte[] bytes = File.ReadAllBytes(Path.Combine(TestData.RepoRoot, "CSVM", "data", VegetationMask.PathFor("C1")));
+        var mask = VegetationMask.FromBytes(bytes, -12288f, -12288f, 0f, 0f);
+        Assert.Contains((byte)255, bytes);
+        Assert.Equal(0f, mask.At(-5000f, -4230f));
+        Assert.Equal(0f, mask.At(-6300f, -4230f));
+        Assert.Equal(1f, mask.At(-3700f, -4500f));
+    }
+
     /// <summary>Save writes the chapter's entry with only nonzero values, in a fixed order. Every other key
     /// stays where it was, and the file reads back as the entry it wrote.</summary>
     [Fact]
