@@ -464,6 +464,11 @@ public sealed record SessionSpec
     /// (<see cref="Mech3.GroundCoverShells"/>), Rich only. See <c>docs/cli.md</c>.</summary>
     public bool GroundCoverShells { get; private set; }
 
+    /// <summary><c>--ground-cover-cards</c>: draw the new-art grass and crop cards near the camera on C1's picked
+    /// ground (<see cref="Mech3.GroundCover"/>), a prototype. Rich only; with <see cref="GroundCoverShells"/> too,
+    /// the cards alone draw. See <c>docs/cli.md</c>.</summary>
+    public bool GroundCoverCards { get; private set; }
+
     /// <summary>Resolved. The enhanced passes this run leaves out, one bit per
     /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
     /// See <c>docs/cli.md</c>.</summary>
@@ -1733,6 +1738,7 @@ public sealed record SessionSpec
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg is "--canopy-clumps=on" or "--canopy-clumps=off") { s.CanopyClumps = arg.EndsWith("on", StringComparison.Ordinal); }
             else if (arg == "--ground-cover-shells") { s.GroundCoverShells = true; }
+            else if (arg == "--ground-cover-cards") { s.GroundCoverCards = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg == "--screen-flare") { s.ScreenFlare = true; }

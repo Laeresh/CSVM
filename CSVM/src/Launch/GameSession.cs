@@ -314,6 +314,9 @@ public partial class GameSession : Node3D
 
     // D35's procedural ground cover, standing while Rich is on under --ground-cover-shells.
     private Node3D? _groundCover;
+
+    // D34's ground cover cards, standing while Rich is on under --ground-cover-cards.
+    private Mech3.GroundCover.Field? _groundCoverCards;
     // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
     // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
     private Effects.SeaState _seaSaved = Effects.SeaState.Default;
@@ -422,6 +425,9 @@ public partial class GameSession : Node3D
     internal Mech3.CanopyClumps.Field? CanopyClumpField => _canopyClumps;
 
     internal Node3D? GroundCover => _groundCover;
+
+    /// <summary>The ground cover cards standing, null while none do. Read by the suites.</summary>
+    internal Mech3.GroundCover.Field? GroundCoverCards => _groundCoverCards;
 
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
@@ -1195,12 +1201,13 @@ public partial class GameSession : Node3D
         // One mirrored-tile window serves every pane (the union of the rings around each player),
         // so two players at opposite edges both get continued terrain. A no-op until one of them
         // crosses a cell boundary.
-        if (_edgeExtender != null)
+        if (_edgeExtender != null || _groundCoverCards != null)
         {
             _focusPoints.Clear();
             foreach (var rig in _rigs)
                 _focusPoints.Add(rig.Camera.Position);
-            _edgeExtender.Update(_focusPoints);
+            _edgeExtender?.Update(_focusPoints);
+            _groundCoverCards?.Update(_focusPoints);
         }
 
         // ⚠ Last in the frame, and the ONLY call anywhere: a suite that steps the simulation
@@ -2728,20 +2735,39 @@ public partial class GameSession : Node3D
         _edgeExtender?.SetClumps(_canopyClumps);
     }
 
-    // The ground cover shells follow Rich as the clumps do, and a lab edit builds them again under its mask.
+    // The ground cover follows Rich as the clumps do, and a lab edit builds it again under its mask. D34's cards
+    // draw under --ground-cover-cards, D35's shells under --ground-cover-shells. With both flags the cards alone draw,
+    // with a warning, since two covers over one ground would only stack their costs.
     private void FollowGroundCover(bool rebake)
     {
-        bool wanted = _spec.GroundCoverShells && VegetationQualitySetting.RichOn;
-        if (_groundCover != null && (!wanted || rebake))
+        bool rich = VegetationQualitySetting.RichOn;
+        bool cards = _spec.GroundCoverCards && rich, shells = _spec.GroundCoverShells && !_spec.GroundCoverCards && rich;
+        if (_groundCoverCards != null && (!cards || rebake))
+        {
+            Drop(_groundCoverCards.Root);
+            _groundCoverCards = null;
+        }
+        if (_groundCover != null && (!shells || rebake))
         {
             Drop(_groundCover);
             _groundCover = null;
         }
-        if (!wanted || _groundCover != null || _plane == null || _sessionTextures == null || _clutter?.Mask is not { } mask)
+        if (_plane == null || _sessionTextures == null || _clutter == null)
             return;
-        _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, mask, _sessionTextures, _spec.Chapter ?? "");
-        if (_groundCover != null)
-            _plane.AddChild(_groundCover);
+        if (cards && _groundCoverCards == null)
+        {
+            if (_spec.GroundCoverShells)
+                Log.Warn("world", $"ground cover: --ground-cover-cards and --ground-cover-shells both given; the cards draw and the shells do not");
+            _groundCoverCards = Mech3.GroundCover.Build(_clutter.Gamez, _sessionTextures, _clutter.Mask, _spec.Chapter ?? "");
+            if (_groundCoverCards != null)
+                _plane.AddChild(_groundCoverCards.Root);
+        }
+        if (shells && _groundCover == null && _clutter.Mask is { } mask)
+        {
+            _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, mask, _sessionTextures, _spec.Chapter ?? "");
+            if (_groundCover != null)
+                _plane.AddChild(_groundCover);
+        }
     }
 
     // The chapter's sea from the shipped file, read once per session that can stand an ocean, under

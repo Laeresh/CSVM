@@ -2044,13 +2044,103 @@ shows the scrub view with cards only, that build and the first tussock, and
 
 **Evidence (confidence: measured).** No grass or crop card exists in the install (survey); Decision 6.
 
-**Approach.** <TODO>
+**Approach (as prototyped).** `Mech3/GroundCover.cs` behind `--ground-cover-cards`, off by default with no
+setting word, C1 alone; [`architecture/Mech3.md`](architecture/Mech3.md) has the module.
 
-**Model recommendation.** <TODO>
+- *Gating.* Rich only, as the clumps: `GameSession.FollowGroundCover` builds the cover while
+  `VegetationQualitySetting.RichOn` and drops it on a live move to original or a switch to Original. Without the
+  flag nothing is built, so no golden reads it. A lab mask stroke builds it again under the new mask. One follow
+  drives both prototypes (D35's shells under `--ground-cover-shells`); with both flags the cards alone draw, with a
+  `[world]` warning, since two covers over one ground only stack their costs.
+- *Where.* Crops on `crop04` and `crop05`, grass on `terpat03`, `terpat03b` and `grass1` (`PickOf`), on the
+  unflagged layer the clutter decorates (`VegetationGround.Covered`), on ground flatter than 60°. C22's mask
+  gates it by the texel under the card, unsampled: a bare texel (the landing strips' clearance) grows nothing, and
+  a crop texel over neutral (the hedge lines along the field edges and the painted field line) grows grass, so the
+  hedges stand in a grass margin. Every other textured polygon over the picked ground is an overlay, and no card
+  stands within half a metre of one: the railway across the western meadows and the roads are separate polygons
+  over `terpat03`, and the tufts first grew through the rails.
+- *Placement.* On a lattice in the triangle's own texture space, as C21 places, so the cover moves with the
+  painted ground. Grass: a tuft every 1.1 m, jittered by 0.4 of the spacing, turned and scaled 0.75 to 1.25 by a
+  hash. Crops: loose rows 0.75 m apart on average, a card every 1.3 m along a row on average (`Loose`). Each row
+  shifts across by up to a fifth of its spacing and takes its own phase along it, each card wobbles across and
+  slides a third of a step along, and a card is 1 to 1.5 steps long, so neighbours overlap or leave a gap and no
+  card ends line up from row to row. A 16 m patch keeps 0.6 to 1 of its cards (`PatchKeep`) and grows 0.8 to 1.15
+  times the height, so a field is thicker in places. The first build (straight rows of abutting 1.6 m cards 0.9 m
+  apart) read as a regular grid of stripes from 30 m. *Rows follow the paint.*
+  Each texture is cut into 16 × 16 patches (16 m on C1's 256 m repeat), and a patch's rows run along U or V by
+  which way its brightness changes more (`RowsAlongV`), read from the texture at load. The crop textures' fields
+  are drawn axis-aligned, so two directions cover them. A card stands upright with its foot along the slope.
+- *Colour.* Each card's instance colour is the ground's linear albedo under it: the texture averaged over 2 × 2
+  texels (2 m on the 256 m repeat) times the triangle's baked corner colour, linearised, the product the world
+  shader takes. The shader is lit like the Enhanced ground (D32's cards are unlit, but the Enhanced ground shades
+  under the sun by its normal): the card takes the ground's normal from its custom data, so it shades as the ground
+  beside it at every sun, and fogs as the lit ground does. It receives no shadow (*Cost* below). The art carries no hue,
+  so the cover has the ground's hue exactly and brightness varies only by the art's gain and 8 % a card.
+- *The art (new, drawn in code).* `GrassArt` (128 × 128) is 52 blades fanning from the foot; `CropArt` (256 ×
+  128, wrapping across X so a row's cards join) is upright stalks every 6 texels with three arching leaves each.
+  Both are grey gain maps averaging one over their solid texels, dark at the foot (0.45) and light at the top
+  (1.35), a clear texel holding the mean so the mips do not darken an edge. Seeded `System.Random`, so every run
+  draws the same bytes; no generator file, no shipped image. Sizes: a tuft 0.9 m wide and 0.5 m tall at scale
+  one (three quads crossed at 60°, 6 triangles); a crop card 1.3 to 1.95 m long, either way round, 0.68 to 1.32 m
+  tall, spread 0.6 to 1.4 across and leaning up to a tenth of its height (two quads along the row leaning apart,
+  4 triangles).
+- *Band and draw.* Each cover has its own band, set in one place (`GroundCover.Band`): crops draw fully inside
+  80 m and dither out by 120 m (`csky_clutter_dither_keep`); grass draws fully inside 160 m and dithers out by
+  240 m, twice the first build's, as ruled. Past its band a card collapses in the
+  vertex stage. Three-dimensional distance, so a camera 240 m over a meadow draws none. The picked triangles
+  (1,351 on C1, over 8,342 cells) and the overlays (78,012 triangles) are indexed by 64 m cell at load, in about
+  80 ms. A cell's cards of one cover are placed when a rig's camera comes within that cover's band, nearest first,
+  two a frame once some stand, and freed a cell past it. One MultiMesh a cover a cell, ranged at the band plus a
+  cell. A grass build walks the crop triangles too, for their hedge lines. Sway: the cards' breeze lines
+  (`ClutterBuilder.LeanLines`), three times the card's lean for grass and one and a half for crops. No collider,
+  no shadow cast, no instance uniform.
+- *Counts* (the suite's views, the camera 12 m over the ground): over C1's densest crop field 60 cells, 69 draws,
+  62,025 crop and 37,270 grass cards standing; over the western meadow 60 cells, 58 draws, 161,440 grass cards;
+  at the strip clearance's southern edge 57 cells, 30 draws, 92,805 grass cards, 88,155 lattice points left bare
+  by the mask. The 80 to 120 m grass band of the first build stood 16, 19 and 20 cells and 3,238, 52,930 and
+  32,025 grass cards at the same views; the crop rework added about 47 % crop cards (42,135 then). The cards in a
+  built cell's far corners lie past their band and collapse in the vertex stage.
+- *Cost* (5120x1440, idle, three launches a case, `gpu_ms` against the flag off at three low C1 views: a crop field
+  30 m and 8 m up and a meadow 25 m up). Lit and receiving the sun's shadow, the cover cost 3.6, 5.9 and 5.5 ms.
+  The cost was the shadow lookup on every alpha-tested card fragment: unlit, the cover cost nothing, and lit with
+  `shadows_disabled` 0.3, -0.3 and -0.9 ms in a one-launch probe, where distance thinning, half the cards, no
+  alpha-to-coverage and opaque quads each recovered only part of it. The shader therefore receives no shadow:
+  +0.50, +0.00 and -0.37 ms, three launches each. A view can come in under the flag off because the cards hide
+  ground fragments that were shaded themselves. The four look poses (crop field 30 m and 6 m up, meadow 30 m up and
+  looking out) render pixel-identical to the shadowed build, since no real-time shadow falls on that ground. Distance
+  thinning (full density to 30 m, then a share (30 / d)² of the cards grown to keep their coverage) saved a further
+  0.2 to 0.6 ms but visibly thinned the crops past 30 m, so it is not built.
 
-**Verify.** <TODO>
+**Model recommendation.** Opus: the look iterates against captures and the draw crosses the session's live
+switches; a mid-tier model can retune the constants (spacing, sizes, band) against a ruling.
 
-**⚠ Traps.** <TODO>
+**Verify.** Units: `GroundCoverTests` (C1's crop and meadow textures alone are picked; a bare texel grows nothing
+and a hedge line grows grass; `TexelAt` reads unsampled; the row map reads stripes down and across; grass fills a
+cell at its spacing on the ground, coloured by it, and a second walk places the same tufts; crop cards lie along
+the painted rows, loosely, off any lattice; the mask clears and grasses by texel; a card's foot follows the slope;
+a wall and a far cell grow nothing; the art is the same on every run and averages a gain of one). Engine:
+`ground-cover-cards` (C1 at rich: without the flag nothing builds; with it, around a crop field, a meadow and the
+strip clearance's edge every card stands on picked ground, read back through `VegetationGround.LayersAt`, and none
+on a bare texel; the cover stands outside the clutter root with no collider, no shadow cast and no instance
+uniform; a live move to original and a switch to Original drop it, and back builds it). Look, judged by you beside
+D35: `.scratch/d34/`, the first build, flag off against on at a crop field 30 m and 6 m up, a meadow 30 m up, the
+strip clearance's north edge 30 m up and the first band's far edge 70 m and 150 m up; `.scratch/d34b/`, flag off,
+the first build and the rework at the crop field and meadow views, and the meadow looking out to the 160 to 240 m
+edge; `.scratch/d34c/`, the cost pass, the shadowed build against the unshadowed one at those four poses, and
+`perf-table.txt`, every step's numbers. Budget: the *Cost* bullet; D37 measures Wave D whole. No golden runs the flag.
+
+**⚠ Traps.**
+- New art only: the cards are drawn in code and take the ground's colour at runtime. Never sample the original's
+  textures into the art.
+- Never let the cards receive the sun's shadow: the lookup on their alpha-tested overdraw was 3 to 6 ms of GPU.
+- Never give the shader an instance uniform: a cell is a node, and the cells churn as the camera flies.
+- Keep the cover off overlays: a road or rail is its own polygon over the picked texture, and the cover under it
+  grows through.
+- Read the mask by texel, not bilinear: the crop interiors sit at 2 of 255, so a bilinear sample beside the
+  strip clearance blurs the cut.
+- Never write a float into shader text through C# formatting: the session's culture writes `80,0` and the shader
+  fails to compile, which draws every card as Godot's white default.
+- The picks live in code for the prototype; the production form moves them to the sidecar with the lab's picks.
 
 ## D35 ☐ Ground cover prototype: procedural shells; pick at the controls
 

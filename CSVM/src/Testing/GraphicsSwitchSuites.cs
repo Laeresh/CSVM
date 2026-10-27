@@ -981,6 +981,95 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("ground-cover-cards",
+        "the new-art ground cover prototype on C1 at rich: without --ground-cover-cards nothing builds; with it, the cells "
+        + "around a crop field, a meadow and the strip clearance's edge hold crop and grass cards on picked ground alone "
+        + "(read back through the world's own layers), none on a bare mask texel, under their own root with no collider, "
+        + "no shadow cast or received, no instance uniform; a live move to original and a switch to Original drop it, and "
+        + "back builds it; with --ground-cover-shells as well the cards alone draw")]
+    internal static void GroundCoverCards(TestContext ctx)
+    {
+        RequireData(ctx, "C1");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        var gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"));
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            var off = Open(ctx, true, 1, "C1");
+            try
+            {
+                bool any = false;
+                Walk(off.Session, n => any |= n.Name == "ground_cover");
+                ctx.Check(off.Built && off.Session.GroundCoverCards == null && !any, $"without the flag a rich C1 flight builds no ground cover");
+            }
+            finally
+            {
+                off.Close();
+            }
+
+            var live = Open(ctx, true, 1, "C1", "--ground-cover-cards");
+            try
+            {
+                if (!live.Built || live.Session.GroundCoverCards is not { } field || live.Session.Clutter?.Mask is not { } mask)
+                {
+                    ctx.Check(false, $"the flag builds the cover on a rich C1 flight over the shipped mask");
+                    return;
+                }
+                foreach (var (name, x, z) in new[] { ("crop field", -640f, -4482f), ("meadow", -4890f, -6018f), ("strip edge", -6090f, -4494f) })
+                {
+                    int bareBefore = field.Bare;
+                    field.Update(new[] { new Vector3(x, 140f, z) }, int.MaxValue);
+                    var cards = field.Draws.SelectMany(m => Enumerable.Range(0, m.Multimesh.InstanceCount)
+                        .Select(i => (Cover: (int)m.GetMeta("cover"), At: m.Position + m.Multimesh.GetInstanceTransform(i).Origin))).ToList();
+                    int onBare = cards.Count(c => mask.TexelAt(c.At.X, c.At.Z) == 0);
+                    var sample = cards.Where((_, i) => i % Math.Max(1, cards.Count / 60) == 0).ToList();
+                    var offPick = sample.Where(c => Mech3.VegetationGround.Decorating(Mech3.VegetationGround.LayersAt(gamez, c.At + (Vector3.Up * 0.05f)))
+                        is not { } layer || Mech3.GroundCover.PickOf("C1", layer.Texture) == null).ToList();
+                    ctx.Note($"{name}: {field.Cells} cells, {field.Draws.Count()} draws, crop {cards.Count(c => c.Cover == 0)} and grass {cards.Count(c => c.Cover == 1)} cards, {field.Bare - bareBefore} lattice points bare under the mask");
+                    ctx.Check(cards.Count > 0 && onBare == 0 && offPick.Count == 0,
+                        $"at the {name} every card stands on picked ground ({offPick.Count} of {sample.Count} sampled off it{(offPick.Count > 0 ? $", first at {offPick[0].At}" : "")}) and none on a bare mask texel ({onBare})");
+                }
+                ctx.Check(field.Bare > 0, $"the strip clearance's bare texels grew nothing on {field.Bare} lattice points of picked ground");
+                var (uniforms, _) = InstanceUniformNodes(field.Root);
+                ctx.Check(field.Root.GetParent() != null && !UnderClutter(field.Root) && !HasCollider(field.Root) && uniforms == 0
+                        && field.Draws.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && m.VisibilityRangeEnd > Mech3.GroundCover.Band((Mech3.GroundCover.Cover)(int)m.GetMeta("cover")).Y
+                            && ((ShaderMaterial)m.MaterialOverride).Shader.Code.Contains("shadows_disabled", StringComparison.Ordinal)),
+                    $"the cover stands outside the clutter root with no collider, no shadow cast or received, no instance uniform ({uniforms}), each ranged past its band");
+
+                var root = field.Root;
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(live.Session.GroundCoverCards == null && !root.IsInsideTree(), $"a live move to original drops the cover");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                ctx.Check(live.Session.GroundCoverCards != null, $"a move back to rich builds it again");
+                Switch(live, enhanced: false);
+                ctx.Check(live.Session.GroundCoverCards == null, $"a live switch to Original drops it");
+                Switch(live, enhanced: true);
+                ctx.Check(live.Session.GroundCoverCards != null, $"and a switch back to Enhanced builds it again");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            var both = Open(ctx, true, 1, "C1", "--ground-cover-cards", "--ground-cover-shells");
+            try
+            {
+                ctx.Check(both.Built && both.Session.GroundCoverCards != null && both.Session.GroundCover == null,
+                    $"with --ground-cover-shells as well the cards alone draw");
+            }
+            finally
+            {
+                both.Close();
+            }
+        }
+        finally
+        {
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
         + "stands one ocean and every sea-level base sheet material carries the hide, which reads "

@@ -143,6 +143,17 @@ public sealed class VegetationMask
         return Lerp(top, bottom, fv) / NeutralByte;
     }
 
+    /// <summary>The byte of the texel holding a world position, unsampled: the ground cover's gate, which wants
+    /// the strip clearance's edge where the texels put it. Neutral outside the area.</summary>
+    public byte TexelAt(float x, float z)
+    {
+        if (x < MinX || x > MaxX || z < MinZ || z > MaxZ)
+            return NeutralByte;
+        int i = Math.Clamp((int)((x - MinX) / (MaxX - MinX) * Side), 0, Side - 1);
+        int j = Math.Clamp((int)((z - MinZ) / (MaxZ - MinZ) * Side), 0, Side - 1);
+        return _texels[(j * Side) + i];
+    }
+
     /// <summary>One brush dab at a world position. Thicken and Thin move each texel by
     /// <paramref name="strength"/> (0 to 1) times a falloff from 1 at the centre to 0 at the radius.
     /// Clear and Neutral set every texel inside the radius. Returns whether any texel changed.</summary>

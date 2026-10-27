@@ -14,6 +14,10 @@ public readonly record struct SurfaceTriangle(string Texture, bool Lit, Corner A
 /// <summary>One corner of a <see cref="SurfaceTriangle"/>, in world space.</summary>
 public readonly record struct Corner(Vector3 At, Vector2 Uv, Color Color, Vector3 Normal);
 
+/// <summary>One world triangle in world space with its texture, its corners' UVs and their baked colours.</summary>
+public readonly record struct CoverTriangle(string Texture, Vector3 A, Vector3 B, Vector3 C, Vector2 UvA, Vector2 UvB, Vector2 UvC,
+    Color ColA, Color ColB, Color ColC);
+
 /// <summary>
 /// The ground textures under a world point, what the vegetation lab's texture pick reads. It walks the
 /// world node's tree as the clutter does, skipping the same nodes and every LOD but the nearest.
@@ -108,6 +112,33 @@ public static class VegetationGround
                             poly.VertexColors is { } vc && s < vc.Count ? vc[s] : Colors.White, n);
                     }
                     found.Add(new SurfaceTriangle(tex, mesh.Lighting, corners[0], corners[1], corners[2]));
+                }
+            }
+        });
+        return found;
+    }
+
+    /// <summary>Every unflagged world triangle textured with a texture <paramref name="picked"/> accepts, with its UVs
+    /// and its baked corner colours, for the ground cover (<see cref="GroundCover"/>). The <c>no_clutter</c> gate
+    /// holds as for a stamp, so one coplanar layer grows cover. ⚠ Read UVs and colours by corner position, never by
+    /// vertex id: C1 model 953 lists one vertex at two corners with two UVs.</summary>
+    public static List<CoverTriangle> Covered(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    {
+        var found = new List<CoverTriangle>();
+        WalkWorld(gamez, worldName, (mesh, xf) =>
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.NoClutter || poly.UvCoords is not { } uvs || uvs.Count < poly.VertexIndices.Count
+                    || poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
+                    || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex || !picked(tex))
+                    continue;
+                for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
+                {
+                    var (a, b, c) = Positions(poly, i);
+                    Color Col(int at) => poly.VertexColors is { } cols && at < cols.Count ? cols[at] : Colors.White;
+                    found.Add(new CoverTriangle(tex, xf * mesh.Vertices[poly.VertexIndices[a]], xf * mesh.Vertices[poly.VertexIndices[b]],
+                        xf * mesh.Vertices[poly.VertexIndices[c]], uvs[a], uvs[b], uvs[c], Col(a), Col(b), Col(c)));
                 }
             }
         });
@@ -216,9 +247,13 @@ public static class VegetationGround
     // The clutter's own enumeration: a strip walks consecutive triples, a fan pivots on corner 0.
     private static (int A, int B, int C) Corners(GameZPolygon poly, int i)
     {
-        var ids = poly.VertexIndices;
-        return poly.TriangleStrip ? (ids[i], ids[i + 1], ids[i + 2]) : (ids[0], ids[i + 1], ids[i + 2]);
+        var (a, b, c) = Positions(poly, i);
+        return (poly.VertexIndices[a], poly.VertexIndices[b], poly.VertexIndices[c]);
     }
+
+    // The same triangle's corner positions in the polygon, which its UVs and colours are indexed by.
+    private static (int A, int B, int C) Positions(GameZPolygon poly, int i) =>
+        poly.TriangleStrip ? (i, i + 1, i + 2) : (0, i + 1, i + 2);
 
     // The triangle's height at the point's XZ when its XZ shadow holds the point; null for a wall.
     private static float? HeightIn(Vector3 a, Vector3 b, Vector3 c, Vector3 p)

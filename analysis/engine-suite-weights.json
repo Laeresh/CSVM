@@ -140,6 +140,7 @@
     "canopy-clumps": 9.9,
     "canopy-mask": 2.2,
     "canopy-models": 8.0,
+    "ground-cover-cards": 12.0,
     "carried-pose-called-sequence": 0.73,
     "carried-state-silent": 0.013,
     "carried-turrets": 0.425,
