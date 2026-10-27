@@ -334,7 +334,7 @@ public class DangerZoneRibbonTests
     public void EveryShippedZoneTakesTheDifficultyItsNodeAuthors(
         string chapter, int expectedNodes, int expectedRibbons, string expectedCensus)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var census = new SortedDictionary<int, int>();
         int nodes = 0;
         foreach (var node in gamez.Nodes)

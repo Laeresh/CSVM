@@ -5,10 +5,11 @@
 # mark of the web a browser download leaves (the Zone.Identifier stream), and the driver
 # does what packaging/README.md tells a reader to do, in its order, recording at each
 # step what that reader sees: the download lands in Downloads, Explorer's own extraction
-# unzips it, CSVM.exe is double-clicked before any extraction (the screen that offers to
-# extract), the extraction runs through CSVM.exe --headless --extract (the one step a script
-# cannot take the way a reader does, since the in-game button needs a click), then CSVM.exe is
-# run for the menu and for a flight. Every double-click is done twice: once through the
+# unzips it, CSVM.exe is double-clicked before it can find the game (the screen that asks for
+# the game files), the Copy, then play step runs through CSVM.exe --headless
+# --copy-game-files (the one step a script cannot take the way a reader does, since the
+# picker needs a click), then CSVM.exe is run for the menu and for a flight, reading that copy
+# in place. Every double-click is done twice: once through the
 # shell, which is where SmartScreen and the attachment manager put their dialogs, and
 # once as a plain process, which is what "Run anyway" leads to, so the run records the
 # warning a stranger meets without being stopped by it.
@@ -177,16 +178,15 @@ $steps.unzip = [ordered]@{
 Write-Step ('unzipped {0} files in {1}s by {2}; CSVM.exe mark: {3}' -f
     $steps.unzip.files, $steps.unzip.seconds, $unzipMethod, $steps.unzip.motwOnExe)
 
-# What the README says happens when CSVM.exe is started before the extraction: the screen
-# that offers to extract. Through the shell first, for the warning a stranger meets.
-$steps.exeBeforeExtractShell = Watch-ShellLaunch -Name 'exe-before-extract-shell' -FilePath (Join-Path $App 'CSVM.exe') -WorkingDirectory $App -Seconds 25
+# What the README says happens when CSVM.exe is started where it cannot find the game: the
+# screen that asks for the game files. Through the shell first, for the warning a stranger meets.
+$steps.exeBeforeCopyShell = Watch-ShellLaunch -Name 'exe-before-copy-shell' -FilePath (Join-Path $App 'CSVM.exe') -WorkingDirectory $App -Seconds 25
 $runs = @()
 $runs += Invoke-Run -Name 'no-game-data' -Arguments @() -Seconds 30
 
-# Step 2 of the README: extract. The in-game screen takes a click no script may give
-# (the Extract button, the folder picker), so the driver runs the same pipeline through the
-# exported exe's headless flag, with the mapped install passed directly and the bundled
-# tools\unzbd.exe found beside the exe as a player's run finds it.
+# Step 1's Copy, then play. The picker takes a click no script may give, so the driver runs
+# the same copy through the exported exe's headless flag, with the mapped install passed
+# directly. It lands in CrimsonSkiesGame beside CSVM.exe, where every later launch finds it.
 $install = Get-ChildItem $Root -Directory | Where-Object {
     (Test-Path (Join-Path $_.FullName 'ZBD')) -and (Test-Path (Join-Path $_.FullName 'GOSDATA\ASSETS'))
 } | Select-Object -First 1
@@ -195,48 +195,48 @@ if ($install) {
     $installPath = $install.FullName
     Write-Step ('retail install {0}' -f $installPath)
 } else {
-    Write-Step 'no retail install is mapped; the extraction will refuse the empty path'
+    Write-Step 'no retail install is mapped; the copy will refuse the empty path'
 }
 
-$extractDir = Join-Path $Out 'extract'
-New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-Write-Step 'running CSVM.exe --headless -- --extract=<install>'
+$copyDir = Join-Path $Out 'copy'
+New-Item -ItemType Directory -Path $copyDir -Force | Out-Null
+Write-Step 'running CSVM.exe --headless -- --copy-game-files=<install>'
 $info = New-Object Diagnostics.ProcessStartInfo
 $info.FileName = Join-Path $App 'CSVM.exe'
 # --flag=value keeps the flag outside the quotes, or Godot reads the whole token as one path.
-$info.Arguments = '--headless -- --extract="' + $installPath + '"'
+$info.Arguments = '--headless -- --copy-game-files="' + $installPath + '"'
 $info.WorkingDirectory = $App
 $info.UseShellExecute = $false
 $info.RedirectStandardOutput = $true
 $info.RedirectStandardError = $true
-$extractWatch = [Diagnostics.Stopwatch]::StartNew()
+$copyWatch = [Diagnostics.Stopwatch]::StartNew()
 $proc = [Diagnostics.Process]::Start($info)
 $outTask = $proc.StandardOutput.ReadToEndAsync()
 $errTask = $proc.StandardError.ReadToEndAsync()
 $finished = $proc.WaitForExit(900000)
 if (-not $finished) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
-$extractSeconds = [int]$extractWatch.Elapsed.TotalSeconds
-[IO.File]::WriteAllText((Join-Path $extractDir 'stdout.txt'), $outTask.Result)
-[IO.File]::WriteAllText((Join-Path $extractDir 'stderr.txt'), $errTask.Result)
-$extractedDir = Join-Path $App 'extracted'
-$extractedFiles = @(Get-ChildItem $extractedDir -Recurse -File -ErrorAction SilentlyContinue)
-$extractedBytes = ($extractedFiles | Measure-Object Length -Sum).Sum
-$steps.extract = [ordered]@{
+$copySeconds = [int]$copyWatch.Elapsed.TotalSeconds
+[IO.File]::WriteAllText((Join-Path $copyDir 'stdout.txt'), $outTask.Result)
+[IO.File]::WriteAllText((Join-Path $copyDir 'stderr.txt'), $errTask.Result)
+$copiedDir = Join-Path $App 'CrimsonSkiesGame'
+$copiedFiles = @(Get-ChildItem $copiedDir -Recurse -File -ErrorAction SilentlyContinue)
+$copiedBytes = ($copiedFiles | Measure-Object Length -Sum).Sum
+$steps.copy = [ordered]@{
     command       = $info.Arguments
     finished      = $finished
     exitCode      = $(if ($finished) { $proc.ExitCode } else { $null })
-    seconds       = $extractSeconds
-    files         = $extractedFiles.Count
-    megabytes     = [math]::Round($extractedBytes / 1MB, 1)
-    folder        = $extractedDir
-    stamped       = (Test-Path (Join-Path $extractedDir 'VERSION.json'))
-    stdoutHead    = @((Read-Lines (Join-Path $extractDir 'stdout.txt')) | Select-Object -First 40)
-    stdoutTail    = @((Read-Lines (Join-Path $extractDir 'stdout.txt')) | Select-Object -Last 15)
-    stderrLines   = @(Read-Lines (Join-Path $extractDir 'stderr.txt')).Count
+    seconds       = $copySeconds
+    files         = $copiedFiles.Count
+    megabytes     = [math]::Round($copiedBytes / 1MB, 1)
+    folder        = $copiedDir
+    zbdCopied     = (Test-Path (Join-Path $copiedDir 'ZBD'))
+    stdoutHead    = @((Read-Lines (Join-Path $copyDir 'stdout.txt')) | Select-Object -First 40)
+    stdoutTail    = @((Read-Lines (Join-Path $copyDir 'stdout.txt')) | Select-Object -Last 15)
+    stderrLines   = @(Read-Lines (Join-Path $copyDir 'stderr.txt')).Count
 }
-Write-Step ('--extract exit={0} in {1}s; extracted {2} files, {3} MB, stamped={4}' -f $steps.extract.exitCode, $extractSeconds, $steps.extract.files, $steps.extract.megabytes, $steps.extract.stamped)
+Write-Step ('--copy-game-files exit={0} in {1}s; copied {2} files, {3} MB, ZBD copied={4}' -f $steps.copy.exitCode, $copySeconds, $steps.copy.files, $steps.copy.megabytes, $steps.copy.zbdCopied)
 
-# Step 3 of the README: double-click CSVM.exe. Through the shell for the warning, then as a
+# Step 2 of the README: double-click CSVM.exe. Through the shell for the warning, then as a
 # process for the menu itself, the log location, the version line and the save folder.
 $steps.exeShell = Watch-ShellLaunch -Name 'exe-shell' -FilePath (Join-Path $App 'CSVM.exe') -WorkingDirectory $App -Seconds 25
 $runs += Invoke-Run -Name 'menu' -Arguments @() -Seconds $WatchSeconds
@@ -248,7 +248,7 @@ $steps.saves = [ordered]@{
 }
 Write-Step ('save folder {0} exists={1} files={2}' -f $saveDir, $steps.saves.exists, $steps.saves.files.Count)
 
-# And a flight on the data this machine extracted itself. A flight-mode run does not exit
+# And a flight on the game files this machine copied itself. A flight-mode run does not exit
 # inside the sandbox, so it is watched and then closed; the frame rate is read from the
 # log, not from how it ended. Below the floor this is the run the README says vanishes.
 $runs += Invoke-Run -Name 'flight' -Seconds 75 -Arguments @('--', '--fly', '--chapter=C1', '--plane=player_fury', '--no-vsync')

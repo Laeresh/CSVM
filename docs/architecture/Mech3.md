@@ -859,8 +859,7 @@ Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot
 Godot cannot load the game's WAV format (see docs/formats/sounds.md).
 
 ## src/Mech3/WavCues.cs
-The RIFF `cue ` chunk of a WAV as times in seconds, read from bytes already in hand or from a
-sound extraction (zip or directory). The briefing narration is the one consumer, reading its bytes
+The RIFF `cue ` chunk of a WAV as times in seconds, read from bytes already in hand. The briefing narration is the one consumer, reading its bytes
 out of `GameData.Sounds`: a reveal state's
 `WaitForMarker n` blocks on cue point `n`, and the durations around it are authored constants, so
 these times are the only clock the script does not carry itself. Times come back ascending, which
@@ -885,8 +884,7 @@ the modding path, which nothing opens by default), decoded through `WavFile` int
 `(wav, looped)`, the play site's flag winning over the definition's. A failed read returns null,
 since callers run inside the session step. `Dispose` leaves a shared `SoundZbd` open, so each
 session wraps it in its own archive and cache. Over a zip it releases the handle, and a later read
-reopens the zip for its one entry, so zip and directory archives fail differently: `--zip-assets`
-(docs/cli.md) exposes that. Read `WorldSounds.cs` for the prewarm that fills the cache.
+reopens the zip for its one entry, so zip and directory archives fail differently. Read `WorldSounds.cs` for the prewarm that fills the cache.
 
 ## src/Mech3/MusicPlayer.cs
 The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D

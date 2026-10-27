@@ -148,21 +148,6 @@ public sealed class AnimProgram
         return program;
     }
 
-    /// <summary>The chapter/mission compiled-archive paths for a session. Like every other
-    /// loader, it prefers the unpacked sibling directory <c>--extract-unzip</c> leaves next to
-    /// each zip, since loose JSON needs no decompression per def.</summary>
-    public static (string Chapter, string Mission) ArchivePaths(string repoRoot, string chapter, string mission)
-    {
-        static string Prefer(string zipPath)
-        {
-            var dir = Path.Combine(Path.GetDirectoryName(zipPath) ?? "",
-                Path.GetFileNameWithoutExtension(zipPath));
-            return Directory.Exists(dir) ? dir : zipPath;
-        }
-        return (Prefer(Extraction.ZbdTree.Under(repoRoot, chapter + "/cam_anim.zip")),
-                Prefer(Extraction.ZbdTree.Under(repoRoot, $"{chapter}/{mission}/mis_anim.zip")));
-    }
-
     /// <summary>Definitions an ANIMATION_NAME refers to (startanims entries, CALL_ANIMATION
     /// targets). Several defs can share a name, template anims instantiate per object.</summary>
     public IReadOnlyList<AnimDefinition> ByAnimName(string animName) =>

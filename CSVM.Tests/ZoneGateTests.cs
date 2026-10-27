@@ -142,7 +142,7 @@ public class ZoneGateTests
     public void EveryChapterFvolAndHorizonZoneCensusIsWhatTheDataSays(
         string chapter, int expectedFvolZone, string expectedHorizon)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
 
         Assert.Equal(expectedFvolZone, WorldBuilder.FogVolumeZoneIdOf(gamez));
 
@@ -160,7 +160,7 @@ public class ZoneGateTests
     {
         // ⚠ Pinned separately: an implementation that reads "deck chapter => fvol zone 2" passes
         // every other assertion here. See docs/formats/weather.md's C2B divergence note.
-        var c2b = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C2B"));
+        var c2b = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C2B"));
         int volumes = 0;
         foreach (var n in c2b.Nodes)
         {
@@ -178,7 +178,7 @@ public class ZoneGateTests
 
         // The able-to-fail half: C1 ships the same nine volumes at zone_id 2, and they ARE culled
         // below its deck. Same code, same call, opposite answer, decided by the data alone.
-        var c1 = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1"));
+        var c1 = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C1"));
         Assert.Equal(2, WorldBuilder.FogVolumeZoneIdOf(c1));
         Assert.False(ZoneGate.Draws(WorldBuilder.FogVolumeZoneIdOf(c1), 1));
         Assert.True(ZoneGate.Draws(WorldBuilder.FogVolumeZoneIdOf(c1), 2));
@@ -189,7 +189,7 @@ public class ZoneGateTests
     {
         // C1's flaglite1/flaglite2 are zone_id −1 children of a zone-1 parent, the data's own
         // counter-example to "stamp the subtree"; a subtree-inherited gate would hide them.
-        var c1 = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1"));
+        var c1 = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C1"));
         int found = 0;
         for (int i = 0; i < c1.Nodes.Count; i++)
         {

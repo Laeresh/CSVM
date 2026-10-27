@@ -163,13 +163,13 @@ public class EffectPoolsTests
     {
         const string chapter = "C1";
         const string mission = "IA1";
-        string dataRoot = TestData.DataRoot!;
+        string extracted = TestData.ExtractedRoot!;
         var shared = TestZrdr.Root;
-        var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, mission);
         var program = AnimProgram.Load(shared, TestZrdr.Chapter(chapter),
             TestZrdr.Mission(chapter, mission),
-            AnimArchive.Load(chapterAnim, "cam_anim"), AnimArchive.Load(missionAnim, "mis_anim"));
+            AnimArchive.Load(SessionPaths.ChapterAnim(extracted, chapter), "cam_anim"),
+            AnimArchive.Load(SessionPaths.MissionAnim(extracted, chapter, mission), "mis_anim"));
         return WorldEffectsFactory.EffectStageRootNames(program,
-            GameZ.Load(SessionPaths.ChapterGamez(dataRoot, chapter)));
+            GameZ.Load(SessionPaths.ChapterGamez(extracted, chapter)));
     }
 }

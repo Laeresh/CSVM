@@ -559,7 +559,6 @@ which is why the required count is 94 layout names plus the five the scripts nam
 | Class | Files | Manifest class | Notes |
 |---|---|---|---|
 | `menu_layout.json` (from `LAYOUT.CSV`) | 1 | **required**, ahead of the manifest | absent means no geometry at all, and no manifest to derive; the availability check answers with the missing path |
-| `extracted/VERSION.json` | 1 | **required** when it is behind the stamp schema Original reads | a tree with no stamp still runs; the check is `ExtractionStamp.Behind` |
 | screen backgrounds of the 23 composed sections (`MM_`, `PF_`, `GO_`, `IA_`, `CM_`, `PC_`, `FC_`, `PS_`, `OL_`, `SB_`, `PX_`, `MB_`) | 12 families | **required** | a screen with no backdrop is not a degraded screen |
 | button strips of the composed sections | 122 `B` rows over ~62 PNGs | **required** | four stacked frames, disabled / normal / rollover / depressed; the words are painted in, so the state is entirely which frame draws |
 | shared widget chrome (`GN_`, `FC_B_Scroll*`, `PX_B_Scroll*`, `CM_B_Scroll*`, `IA_B_Scroll*`, the dropdown arrows) | ~12 | **required** | named through `[GLOBALVARS]` macros, so one miss hits many screens |

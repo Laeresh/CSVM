@@ -193,7 +193,7 @@ public class FogVolumeTests
     [MemberData(nameof(ChapterFogVolumes))]
     public void EveryChapterFogVolumeCensusIsWhatTheDataSays(string chapter, string expected)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var spec = FogVolumeSpec.Load(TestZrdr.Chapter(chapter));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
 
@@ -222,7 +222,7 @@ public class FogVolumeTests
     [MemberData(nameof(ChapterFogVolumeShapes))]
     public void HalfTheInstallsFogVolumesAreNotTheirBoundingBox(string chapter, string expected)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
 
         int boxes = 0;
@@ -245,7 +245,7 @@ public class FogVolumeTests
     public void TheMapSpanningSlabIsFoundOnlyForTheFourFlatDeckChapters(
         string chapter, float cardHeight, string expected)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
 
         var (slab, skipReason) = FogVolumeSpec.FindMapSpanningSlab(volumes, cardHeight, 1.5f);
@@ -390,7 +390,7 @@ public class FogVolumeTests
     [MemberData(nameof(ChapterFogVolumeFaces))]
     public void EveryChapterScattersOverTheFacesItsFvolMeshesAuthor(string chapter, string expected)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
 
         int faces = 0, up = 0, down = 0, wall = 0;

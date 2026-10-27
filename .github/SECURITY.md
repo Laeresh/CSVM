@@ -39,12 +39,13 @@ person's project. If you would like to be named in the advisory, say so.
 
 ## In scope
 
-- The file parsers in the engine: the readers for extracted archives, meshes, textures,
-  animation and mission data, reached by pointing a build at a prepared `extracted` folder.
+- The file parsers in the engine: the readers of the game files (ZBD and ROF archives, cabinets,
+  disc images) and of unzbd's output in a modding folder, reached by pointing a build at prepared
+  game files or a prepared modding folder.
 - The per-user state files under `%APPDATA%\Godot\app_userdata\CSVM` (settings, bindings,
   campaign profiles, scores, custom planes), and the optional `config.json`.
-- The extraction (the in-game Extract screen, the `--extract` flag and the repo's
-  `Extract.ps1` that launches it) and how it handles the install path it is given.
+- The game-file source (the source screen's picker and `--copy-game-files`) and how it handles
+  the install, disc or image path it is given.
 - The release zip's contents differing from what the release page's SHA-256 says they are.
 - The multiplayer listener while a player is hosting: what a peer can send a host over the
   match's own messages, and the port mapping the host asks its router for.

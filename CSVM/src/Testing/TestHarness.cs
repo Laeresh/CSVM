@@ -890,10 +890,6 @@ public sealed class TestContext
 
     public required string Chapter { get; init; }
     public required string Mission { get; init; }
-    public required string MessagesPath { get; init; }
-    public required string PlanesGamezPath { get; init; }
-    public required string InterpPath { get; init; }
-    public required string SoundsPath { get; init; }
 
     /// <summary>The run's game-file source, null without an install; a suite that builds its own
     /// <c>BasePaths</c> hands it on.</summary>
@@ -1436,7 +1432,6 @@ public sealed class TestContext
             var session = WorldSession.Build(
                 new WorldSession.Options
                 {
-                    DataRoot = DataRoot,
                     Chapter = chapter,
                     Mission = mission,
                     Zrdr = Zrdr,

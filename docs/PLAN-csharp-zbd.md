@@ -202,7 +202,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ Source picker and upgrade cleanup
 42. ☑ Dev-only `--dump`
-43. ☐ Delete the extraction pipeline
+43. ☑ Delete the extraction pipeline
 44. ☑ Packaging, licences, credit and docs
 45. ☐ Final ISO-only run
 46. ☐ The modding folder: unzbd's output read per archive, opt-in
@@ -1647,7 +1647,63 @@ scripts and agents.
 
 **⚠ Traps.** The engine never reads the dump; nothing may grow a fallback onto it.
 
-## E43 ☐ Delete the extraction pipeline
+## E43 ☑ Delete the extraction pipeline
+
+**Landed.** CSVM runs and packages no unzbd. Deleted: `Extraction/UnzbdTool.cs`,
+`ZbdExtraction.cs`, `ZbdPlan.cs`, `ZbdProgress.cs` (the runner's options, progress and result
+types), `ExtractionRun.cs` (`ExtractionPhase`, `ExtractionProgress`, `ExtractionRequest`,
+`DefaultUnzbd`, `ExtractedFolder`), `ExtractionStamp.cs` and `ExtractionStampWriter.cs`, their
+`.uid` sidecars, `Extract.ps1`, and `CSVM.Tests/ExtractionRunTests.cs`, `ZbdExtractionTests.cs` and
+`ExtractionStampTests.cs` (the manifest test moved to `SessionPathsTests`). The boot warning
+`ExtractionStamp.Check` and `Launcher.StartHeadlessExtraction` are gone, and `SessionSpec` parses no
+`--extract`, `--extract=`, `--extract-force`, `--extract-unzip`, `--extract-allow-missing`,
+`--unzbd=`, `--gamez=`, `--textures=`, `--zrdr=`, `--interp=`, `--sounds=`, `--messages=`, `--rof=`
+or `--zip-assets` (an unknown flag is ignored, as every other one is). `--synthetic-data` stamps its
+tree itself (`SyntheticData.StampFile`), with no schema field.
+
+The unused fields went in the same sweep: `BasePaths` is `(RepoRoot, DataRoot)` plus `Game` and
+`Data`; `TestContext.MessagesPath`/`PlanesGamezPath`/`InterpPath`/`SoundsPath`,
+`BuildState.DataRoot`/`SoundsPath`, `WorldSession.Options.DataRoot`, `SessionPaths.ForceZipped`,
+`AnimProgram.ArchivePaths`, `WavCues.ReadFrom` (its real-data test reads `soundsh.zbd` now),
+`PngWriter.WriteRgb`, `ZbdManifest.Missing` and `XrRelaunch`'s `--extract` arm.
+
+**Kept for E46, the modding path's relative layout.** `ZbdTree` (`Canonical`, `Under`, `Folder`)
+and `SessionPaths` (`PreferUnzipped`, `ChapterTextures`, `ChapterGamez`, `ChapterZrdr`,
+`MissionZrdr`, and `ChapterAnim`/`MissionAnim`, moved from `ArchivePaths`) now take **the folder
+holding unzbd's tree** (a modding folder, or the tests' `TestData.ExtractedRoot`), not a data
+root: nothing appends `extracted/`. ⚠ A caller written against the old signature that passes a
+data root reads `<data root>/C1/gamez.zip` and finds nothing. Every test caller passes
+`TestData.ExtractedRoot`.
+
+**The release checks** read the game files in place. `sandbox/LinuxRelease.ps1`'s `extract`
+stage is a `copy` stage, `CSVM.x86_64 --headless -- --copy-game-files=<install>` into the fresh
+data root, which must exit 0 and leave `<data root>/CrimsonSkiesGame/ZBD`; the engine shards run
+over that root. `sandbox/PublicRelease.ps1` runs `CSVM.exe --headless -- --copy-game-files=` on
+the mapped install (README step 1's Copy, then play) into `CrimsonSkiesGame` beside the exe, then
+the menu and flight launches read it. `sandbox/RendererFloor.ps1` flies when an install is mapped
+as `CrimsonSkiesGame`, not an `extracted/` tree. Docs: `docs/tooling.md`'s first three sections are
+one "The game files, read in place" section (the in-place sources, the texture tiers, the ROF half,
+unzbd's output as the modding path), its Sandbox and Linux sections describe the copy;
+`docs/cli.md` loses the 13 flags (207 index entries, 207 parser flags, 214 bullets);
+`docs/architecture/Extraction.md` and the index lose the seven entries and describe `ZbdTree` and
+`SessionPaths` as the modding layout; `PROJECT_CONTEXT.md`'s `extracted/`, `Extract.ps1` and
+`sandbox/` bullets, `Spec.md`'s `BasePaths`, `Launch.md`, `Mech3.md`, `.github/SECURITY.md` and
+`CONTRIBUTING.md`, `formats/menu-layout.md` (no stamp gates the layout), `formats/missions.md`,
+`org/menu-inventory.md` and INSTR-46.
+
+**The caller list (the TODO).** `Launcher` (the stamp check, `--extract`, `--zip-assets`),
+`XrRelaunch.FlatOnly`, `SessionSpec` (the flags and their notes), `BasePaths.Resolve`, the five
+suites that built a `BasePaths` by hand (`GraphicsSwitchSuites`, `NetCombatSuites`,
+`NetEnetSessionSuites`, `NetSessionSuites`, `NetWorldSuites`), `ProbeRunner`, `TestContext`,
+`GameSession`/`BuildState`, `WorldSession.Options`, `SyntheticData` (the folder name and the stamp
+writer), `ZbdTree` (`ExtractionRun.ExtractedFolder`), and the tests: `SessionPathsTests`,
+`SessionSpecTests`, `SyntheticDataTests`, `WavCuesTests`, `EffectPoolsTests`,
+`EffectCatalogueTests`, `TestZrdr`, and the 15 test files that resolved `SessionPaths` paths from
+`TestData.DataRoot`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `UnzbdTool`, `ZbdExtraction`, `ZbdPlan`, `ExtractionRun`, `ExtractionStamp`,
 `Extract.ps1`, the `--extract*` flags and their tests are gone.
@@ -1656,7 +1712,7 @@ scripts and agents.
 
 **Approach.** Delete, then fix callers. Under Decisions 18 and 21 only the code that runs unzbd
 goes; CSVM's readers of unzbd's output stay as the modding path (E46), minus the v0.6.1 shapes
-(Decision 20). <TODO: the full caller list.>
+(Decision 20). The full caller list is answered in **Landed** above.
 
 **Model recommendation.** medium.
 

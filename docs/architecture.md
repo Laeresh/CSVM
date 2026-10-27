@@ -728,7 +728,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
-- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree (the Original shell's files) into scratch, stamped synthetic.
+- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree (the Original shell's files) into scratch, marked synthetic.
 - `src/Tooling/SyntheticTextures.cs`, the synthetic run's C1 texture archive, built in memory: one checker record per entry.
 - `src/Tooling/SyntheticPlane.cs`, the synthetic run's stand-in aircraft `probe_plane` and nine more: their box-built model in memory.
 - `src/Tooling/SyntheticPlaneRecords.cs`, the stand-in aircraft archive's records as code: every node in flat order and one box per mesh.
@@ -956,10 +956,10 @@ It holds no engine type, so it runs in a plain unit test; formats and evidence a
 - `src/Video/CinemaPlayback.cs`, a cinema playing with its sound: clamped PCM out, the picture clocked by what the device has played, the two streams' start times taken against each other.
 - `src/Video/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, the skip-press set, and the latch that opens the next screen once however many times the film says it stopped.
 
-### `src/Extraction/`, turning the player's install into `extracted/`
+### `src/Extraction/`, the player's game files read in place
 
-The in-engine extraction: finding the player's install, then one module per format plus the run
-that joins them. Only `RememberedInstall` touches the engine, so every decoder runs in a plain unit
+Finding the player's game files (install, disc or image), then one module per container and format,
+the optional copy, and the layout of unzbd's output a modding folder holds. Only `RememberedInstall` touches the engine, so every decoder runs in a plain unit
 test; entries are in [`architecture/Extraction.md`](architecture/Extraction.md), the output layout
 in [`formats/extraction.md`](formats/extraction.md).
 
@@ -982,19 +982,12 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/PeStringTable.cs`, the Win32 `STRINGTABLE` resources read out of a PE file's bytes, with no Win32 call.
 - `src/Extraction/UiStringTable.cs`, the `ui_strings.json` rows: string-table text joined to its `RESOURCE.H` symbol and split from its `[FONTID]` tag.
 - `src/Extraction/MenuLayoutDecoder.cs`, `LAYOUT.CSV`, `SCRAPBOOK.CSV`, `RESOURCE.H` and the GUI scripts decoded into `menu_layout.json`.
-- `src/Extraction/ZbdExtraction.cs`, the ZBD half of extraction: every archive through unzbd, then `messages.json`, the optional unzip and the stamp, off the main thread.
-- `src/Extraction/ZbdPlan.cs`, the ZBD half's pure rules: the archive-name mode map, output naming, the up-to-date and unzip rules, and the stderr notes.
-- `src/Extraction/ZbdManifest.cs`, the 184 ZBD archives a complete install holds, and the ones an install is missing, checked before the ZBD half runs.
-- `src/Extraction/ZbdTree.cs`, the one case the ZBD half writes (folders upper, file names lower) and the chapter and mission path mapping its writer and readers share.
-- `src/Extraction/ZbdProgress.cs`, the ZBD runner's options, per-step progress report with its console lines, and result totals with the closing summary.
-- `src/Extraction/UnzbdTool.cs`, the bundled unzbd as a child process: its platform file name and release path, one run with both streams drained, and its identity for the stamp.
-- `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, stamp) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
-- `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
-- `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
+- `src/Extraction/ZbdManifest.cs`, the 184 ZBD archives a complete install holds, the list the copy and `--dump` walk.
+- `src/Extraction/ZbdTree.cs`, the one case unzbd's output tree takes (folders upper, file names lower) and the chapter and mission path mapping under the folder holding it.
+- `src/Extraction/SessionPaths.cs`, where unzbd's per-chapter and per-mission output sits under a modding folder or the tests' oracle, in `ZbdTree`'s case, unpacked folder or `.zip`.
 - `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
 - `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, the UI archive's `rof/` paths, a chapter's own entry beating the bare name.
 - `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
-- `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
 ### `src/Net/`, the network seam
 
@@ -1062,7 +1055,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
-- `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
+- `src/Spec/BasePaths.cs`, the repo and data roots, the located game-file source and the game data read through it, as one value.
 - `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`, `soundsh.zbd`, the root `zrdr.zbd`) and its per-session chapter part (the chapter's textures, world and reader scopes), handed down in place of paths.
 
 ### `CSVM.Tests/`, the unit tests

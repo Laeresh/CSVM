@@ -160,7 +160,7 @@ the path wins is unobservable there.
 ## Message table
 
 `MSG_*` keys resolve through the game's localized string table. **This is not a zrdr
-reader**, it is a single top-level file (`extracted/messages.json`, default `--messages=`),
+reader**, it is a single top-level file in unzbd's output (`messages.json`, from `strings.dll`),
 a plain JSON object, not a nested list:
 
 ```

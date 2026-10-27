@@ -256,7 +256,7 @@ foreach ($archive in $archives) {
 }
 
 # The pre-release Linux check (docs/tooling.md, "The Linux release check in WSL"), whole: the
-# payload against the manifest, the tarball's own --extract, and the engine suites headless.
+# payload against the manifest, the tarball's own --copy-game-files, and the engine suites headless.
 # Run before the tree re-check below, so that re-check covers its minutes too.
 Write-Host ''
 Write-Host "Checking $TarName in WSL (sandbox\LinuxRelease.ps1)..." -ForegroundColor Cyan

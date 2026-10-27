@@ -9,8 +9,8 @@ namespace CSVM.Extraction;
 /// <summary>
 /// Encodes 8-bit RGB or RGBA pixels as a PNG, managed and dependency-free. <c>System.Drawing</c> is
 /// Windows-only and Godot's image type needs a running engine, which a unit test lacks. Every row
-/// is stored unfiltered and the whole image deflated once. That suffices for the extraction's
-/// textures and <c>--dump</c>'s, which no player reads.
+/// is stored unfiltered and the whole image deflated once. That suffices for the UI archive's
+/// inspection PNGs and <c>--dump</c>'s textures, which no player reads.
 /// </summary>
 public static class PngWriter
 {
@@ -25,11 +25,6 @@ public static class PngWriter
     /// <summary>A whole PNG file for <paramref name="rgba"/>, four bytes per pixel with straight
     /// alpha, rows top to bottom with no padding between them.</summary>
     public static byte[] EncodeRgba(int width, int height, ReadOnlySpan<byte> rgba) => Encode(width, height, rgba, 4, 6);
-
-    /// <summary>Writes <see cref="EncodeRgb"/>'s output to <paramref name="path"/>, replacing
-    /// any file there.</summary>
-    public static void WriteRgb(string path, int width, int height, ReadOnlySpan<byte> rgb) =>
-        File.WriteAllBytes(path, EncodeRgb(width, height, rgb));
 
     /// <summary>The PNG chunk CRC (ISO 3309, as zlib computes it) over <paramref name="data"/>,
     /// continuing from <paramref name="crc"/>. Public so a test can check a chunk it reads back.

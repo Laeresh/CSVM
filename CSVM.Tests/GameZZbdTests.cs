@@ -156,7 +156,7 @@ public class GameZZbdTests
 
     private static GameZ FromExtraction(string path) => GameZ.Load(path == "planes.zbd"
         ? SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "planes.zip"))
-        : SessionPaths.ChapterGamez(TestData.DataRoot!, Path.GetDirectoryName(path)!));
+        : SessionPaths.ChapterGamez(TestData.ExtractedRoot!, Path.GetDirectoryName(path)!));
 
     // A cycled and a coloured material, one live model in slot 1, and three nodes. The parent
     // Object3d's stored matrix does not recompose from its rotation.

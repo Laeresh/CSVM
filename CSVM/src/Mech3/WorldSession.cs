@@ -666,7 +666,6 @@ public sealed class WorldSession
     /// <see cref="Build"/> separately.</summary>
     public sealed class Options
     {
-        public required string DataRoot { get; init; }
         public required string Chapter { get; init; }
         public required string Mission { get; init; }
         public required ZrdrSet Zrdr { get; init; }

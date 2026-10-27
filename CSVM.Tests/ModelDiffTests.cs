@@ -285,7 +285,7 @@ public class ModelDiffDataTests
         switch (model)
         {
             case "gamez C1":
-                return GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1"));
+                return GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C1"));
             case "cam_anim C1":
             case "mis_anim C5/M02":
                 // C5/M02 holds the one script frame whose floats are NaN (carneypkup_cam).

@@ -136,16 +136,16 @@ public class EffectCatalogueTests
     [ExtractedDataFact]
     public void EveryChapterShipsExactlyTheThreeAiCrashDefs()
     {
-        string dataRoot = TestData.DataRoot!;
+        string extracted = TestData.ExtractedRoot!;
         var shared = SharedZrdr;
         var chapters = new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
         var programs = chapters
             .Select(chapter => Task.Run(() =>
             {
-                var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, "IA1");
                 return AnimProgram.Load(shared, TestZrdr.Chapter(chapter),
                     TestZrdr.Mission(chapter, "IA1"),
-                    AnimArchive.Load(chapterAnim, "cam_anim"), AnimArchive.Load(missionAnim, "mis_anim"));
+                    AnimArchive.Load(SessionPaths.ChapterAnim(extracted, chapter), "cam_anim"),
+                    AnimArchive.Load(SessionPaths.MissionAnim(extracted, chapter, "IA1"), "mis_anim"));
             }))
             .ToArray();
         Task.WaitAll(programs);

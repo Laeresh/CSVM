@@ -285,7 +285,7 @@ public class ClutterQuadUvTests
     }
 
     private static GameZ Gamez(string chapter) =>
-        GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
 
     private static ClutterBuilder.GroundQuad QuadOf(string chapter, string template)
     {

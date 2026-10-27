@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-    The pre-release Linux check: the built tarball unpacked in WSL, extracted from the author's
-    install with the exported build's own --extract, then the in-engine suites run headless from
-    that export against that extraction. Any failure fails the check.
+    The pre-release Linux check: the built tarball unpacked in WSL, the author's install copied into
+    a fresh data root with the exported build's own --copy-game-files, then the in-engine suites run
+    headless from that export, reading that copy in place. Any failure fails the check.
 
 .DESCRIPTION
     The Linux sibling of sandbox\PublicRelease.ps1. That driver runs a zip inside Windows Sandbox;
@@ -15,16 +15,17 @@
                    marked -rwxr-xr-x, and LICENSE-thirdparty.txt stamped for the linux-x64
                    runtime pack, naming nothing of Windows', and no top-level text file (one
                    without a NUL byte) carrying a CR
-      extract      ./CSVM.x86_64 --headless -- --extract=<install> into a fresh data root, the
-                   player's defaults (zips only): exit 0 and a stamped VERSION.json
-      engine       (unless -NoSuites) --run-tests over that same zips-only data root, the shape
-                   every player's install reads, in -Shards processes,
+      copy         ./CSVM.x86_64 --headless -- --copy-game-files=<install> into a fresh data root,
+                   the Copy then play step a player's source screen offers: exit 0 and the copy's
+                   ZBD folder at <data root>/CrimsonSkiesGame
+      engine       (unless -NoSuites) --run-tests over that same data root, whose game files every
+                   session reads in place, in -Shards processes,
                    split by the harness's own shard:<i>/<n> term over
                    analysis/engine-suite-weights.json, so the suite list is the registry's and
                    never a copy of it; on the safe render thread (see the shard launch)
 
     A stage that fails does not stop the ones after it that can still run: a tarball whose CSVM.x86_64
-    lost its bit fails the payload stage AND shows what the extraction does with it.
+    lost its bit fails the payload stage AND shows what the copy does with it.
 
     Everything in the distro lives under ~/csvm-linux-check (wiped at the start of each run, left
     behind for inspection), with XDG_DATA_HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME pointed into it,
@@ -44,7 +45,7 @@
     Concurrent engine processes. Default 6, RunTests.ps1's measured default for a full run.
 
 .PARAMETER NoSuites
-    Stop after the payload and extraction stages: the release check proper, without the engine
+    Stop after the payload and copy stages: the release check proper, without the engine
     suites.
 
 .PARAMETER ShardTimeoutSec
@@ -52,7 +53,7 @@
 
 .EXAMPLE
     .\sandbox\LinuxRelease.ps1
-    The tarball ExportRelease.ps1 -Linux just built, extracted and tested in WSL.
+    The tarball ExportRelease.ps1 -Linux just built, unpacked and tested in WSL.
 
 .EXAMPLE
     .\sandbox\LinuxRelease.ps1 -Tarball Z:\somewhere\CSVM-v0.2.0-linux-x64.tar.gz -NoSuites
@@ -205,17 +206,18 @@ for f in "$game"/*; do
 done
 cd "$game" || exit 0
 
-xdg extract
+xdg copy
 start=$(date +%s)
-timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless -- --extract="$install" --data-root="$data" > "$out/extract.log" 2>&1
-echo $? > "$out/extract.exit"
-echo $(( $(date +%s) - start )) > "$out/extract.seconds"
-if [ -f "$data/extracted/VERSION.json" ]; then cp "$data/extracted/VERSION.json" "$out/VERSION.json"; fi
-find "$data/extracted" -type f 2>/dev/null | wc -l > "$out/extract.files"
-du -sm "$data/extracted" 2>/dev/null | cut -f1 > "$out/extract.mb"
+timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless -- --copy-game-files="$install" --data-root="$data" > "$out/copy.log" 2>&1
+echo $? > "$out/copy.exit"
+echo $(( $(date +%s) - start )) > "$out/copy.seconds"
+copied="$data/CrimsonSkiesGame"
+if [ -d "$copied/ZBD" ]; then echo 1 > "$out/copy.zbd"; else echo 0 > "$out/copy.zbd"; fi
+find "$copied" -type f 2>/dev/null | wc -l > "$out/copy.files"
+du -sm "$copied" 2>/dev/null | cut -f1 > "$out/copy.mb"
 
 [ "$suites" = "1" ] || exit 0
-[ "$(cat "$out/extract.exit")" = "0" ] || exit 0
+[ "$(cat "$out/copy.exit")" = "0" ] || exit 0
 
 mkdir -p analysis
 cp "$weights" analysis/engine-suite-weights.json
@@ -370,32 +372,28 @@ foreach ($p in $problems) { Write-Host "  !! $p" -ForegroundColor Red }
 Add-Stage "payload" $(if ($problems.Count -eq 0) { "PASS" } else { "FAIL" }) 0 `
     ("{0} file(s), {1} manifest name(s), {2} top-level text file(s){3}" -f $fileCount, $Expected.Count, $textCount, $(if ($problems.Count) { "; $($problems.Count) problem(s)" } else { "" }))
 
-# --- extract ------------------------------------------------------------------------------------
+# --- copy ---------------------------------------------------------------------------------------
 
-Write-Banner "extract"
-$extractExit = Read-Exit "extract"
-$extractLog = Join-Path $OutDir "extract.log"
-$stamped = Test-Path (Join-Path $OutDir "VERSION.json")
-$extractSeconds = Read-Number "extract.seconds"
-if ($null -eq $extractExit) {
-    Add-Stage "extract" "FAIL" 0 "did not run: the archive did not unpack"
+Write-Banner "copy"
+$copyExit = Read-Exit "copy"
+$copyLog = Join-Path $OutDir "copy.log"
+$copied = (Read-Number "copy.zbd") -eq 1
+if ($null -eq $copyExit) {
+    Add-Stage "copy" "FAIL" 0 "did not run: the archive did not unpack"
 } else {
-    $summary = @()
-    if (Test-Path $extractLog) {
-        $summary = @([IO.File]::ReadAllLines($extractLog) | Where-Object {
-            $_ -match '^\s+(extracted|up to date|skipped|files extracted|movies copied):'
-        } | ForEach-Object { $_.Trim() })
+    if (Test-Path $copyLog) {
+        [IO.File]::ReadAllLines($copyLog) | Where-Object { $_ -match 'game files: copied|is not in' } |
+            ForEach-Object { Write-Host "  $($_.Trim())" -ForegroundColor DarkGray }
     }
-    foreach ($s in $summary) { Write-Host "  $s" -ForegroundColor DarkGray }
-    $ok = ($extractExit -eq 0) -and $stamped
+    $ok = ($copyExit -eq 0) -and $copied
     if (-not $ok) {
-        Write-Host "  !! --extract exited $extractExit, VERSION.json stamped: $stamped; the log's last lines:" -ForegroundColor Red
-        if (Test-Path $extractLog) {
-            [IO.File]::ReadAllLines($extractLog) | Select-Object -Last 12 | ForEach-Object { Write-Host "     $_" -ForegroundColor Red }
+        Write-Host "  !! --copy-game-files exited $copyExit, ZBD copied: $copied; the log's last lines:" -ForegroundColor Red
+        if (Test-Path $copyLog) {
+            [IO.File]::ReadAllLines($copyLog) | Select-Object -Last 12 | ForEach-Object { Write-Host "     $_" -ForegroundColor Red }
         }
     }
-    Add-Stage "extract" $(if ($ok) { "PASS" } else { "FAIL" }) $extractSeconds `
-        ("exit {0}, stamped={1}, {2} files, {3} MB" -f $extractExit, $stamped, (Read-Number "extract.files"), (Read-Number "extract.mb"))
+    Add-Stage "copy" $(if ($ok) { "PASS" } else { "FAIL" }) (Read-Number "copy.seconds") `
+        ("exit {0}, ZBD copied={1}, {2} files, {3} MB" -f $copyExit, $copied, (Read-Number "copy.files"), (Read-Number "copy.mb"))
 }
 
 # --- engine -------------------------------------------------------------------------------------
@@ -403,8 +401,8 @@ if ($null -eq $extractExit) {
 $suiteRows = @()
 if ($NoSuites) {
     $null = $Unchecked.Add("the in-engine suites did not run (-NoSuites)")
-} elseif ($extractExit -ne 0 -or -not $stamped) {
-    Add-Stage "engine" "FAIL" 0 "did not run: the extraction failed"
+} elseif ($copyExit -ne 0 -or -not $copied) {
+    Add-Stage "engine" "FAIL" 0 "did not run: the copy failed"
 } else {
     Write-Banner "engine ($Shards shard(s), headless)"
     $problems = @()
@@ -512,7 +510,7 @@ if ($NoSuites) {
     Add-Stage "engine" $status (Read-Number "engine.seconds") `
         ("{0} passed, {1} failed, {2} headless-only, {3} harness skips of {4}; {5} shard(s)" -f $pass, $fail, $headlessSkip, $harnessSkip, $suiteRows.Count, $Shards)
     if ($harnessSkip -gt 0) {
-        $null = $Unchecked.Add("$harnessSkip in-engine suite(s) SKIPPED by the harness, normally for missing extracted data")
+        $null = $Unchecked.Add("$harnessSkip in-engine suite(s) SKIPPED by the harness, normally for missing game data")
     }
     $null = $Unchecked.Add("$headlessSkip suite(s) that need a renderer or a display did not count (the headless-only list in this script)")
     $null = $Unchecked.Add("the goldens: WSL cannot render, so they stay Windows-only")

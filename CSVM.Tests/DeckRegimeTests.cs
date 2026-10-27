@@ -111,7 +111,7 @@ public class DeckRegimeTests
     {
         // The authored deck-to-slab relationship (docs/formats/fogvol.md), read off the data
         // rather than re-typed as a constant, so a change to either reader fails this.
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
 
         float? deckAltitude = WorldBuilder.CloudDeckAltitudeOf(gamez);
         Assert.Equal(expectedDeckAltitude, deckAltitude);

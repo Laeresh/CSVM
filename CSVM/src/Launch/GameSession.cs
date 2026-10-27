@@ -679,8 +679,6 @@ public partial class GameSession : Node3D
         // takes effect on rebuild, and ride BuildState so no phase method re-derives them.
         var state = new BuildState
         {
-            DataRoot = _paths.DataRoot,
-            SoundsPath = _paths.SoundsPath,
             Data = _paths.Data,
             Chapter = _paths.Data.LoadChapter(_spec.Chapter, _spec.Mission),
             Mute = _spec.Mute,
@@ -1520,7 +1518,6 @@ public partial class GameSession : Node3D
         var session = WorldSession.Build(
             new WorldSession.Options
             {
-                DataRoot = state.DataRoot,
                 Chapter = _spec.Chapter,
                 Mission = _spec.Mission,
                 Zrdr = state.Zrdr,

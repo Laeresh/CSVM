@@ -41,7 +41,7 @@ public readonly struct SiCubic
     }
 }
 
-/// <summary>Reader for the mech3ax fork's compiled-anim extraction (<c>unzbd cs anim</c> on
+/// <summary>Reader for unzbd's compiled-anim output (its <c>anim</c> mode on
 /// <c>cam_anim.zbd</c>/<c>mis_anim.zbd</c> → per-def JSON + per-script <c>*.zan.json</c> +
 /// <c>metadata.json</c>). Accepts a zip or an unpacked directory. Keeps event payloads as a
 /// generic property bag (<see cref="AnimData"/>) rather than one DTO per event kind, so a new
@@ -166,8 +166,8 @@ public sealed class AnimArchive
             var p = Path.Combine(_path, name);
             return File.Exists(p) ? File.ReadAllBytes(p) : null;
         }
-        // Zip: reopened per read. Only the (rare) zipped-tree case pays this, --extract-unzip
-        // produces the loose directories the viewer prefers, and defs are read once.
+        // Zip: reopened per read. Only a zipped tree pays this, an unpacked one reads loose files,
+        // and defs are read once.
         using var zip = ZipFile.OpenRead(_path);
         if (zip.GetEntry(name) is not { } entry)
             return null;

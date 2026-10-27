@@ -436,7 +436,7 @@ public class StuntBotObjectiveTests
 
     private static StuntMission Load(string chapter)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var course = StuntMission.Load(gamez, TestZrdr.Mission(chapter, "IA1"),
             MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.NotNull(course);

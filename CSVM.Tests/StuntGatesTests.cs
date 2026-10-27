@@ -23,7 +23,7 @@ public class StuntGatesTests
 {
     private const string Chapter = "C4";
 
-    private static string GamezPath => SessionPaths.ChapterGamez(TestData.DataRoot!, Chapter);
+    private static string GamezPath => SessionPaths.ChapterGamez(TestData.ExtractedRoot!, Chapter);
 
     private static ZrdrSet MissionPath => TestZrdr.Mission(Chapter, "IA1");
 

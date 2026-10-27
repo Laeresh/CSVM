@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using CSVM.Mech3;
 using Xunit;
 
@@ -34,31 +33,14 @@ public class WavCuesTests
         Assert.Empty(WavCues.Read(Array.Empty<byte>()));
     }
 
-    [Fact]
-    public void AnAbsentArchiveOrFileIsNoMarkers()
+    /// <summary>The real narration: the briefing wav in <c>soundsh.zbd</c> carries its cue chunk,
+    /// and the state that plays it waits on exactly that many markers.</summary>
+    [GameFilesFact]
+    public void TheShippedNarrationCarriesItsCuePoints()
     {
-        Assert.Empty(WavCues.ReadFrom(Path.Combine(TestData.TempDir(), "nothing"), "x.wav"));
-        Assert.Empty(WavCues.ReadFrom(TestData.TempDir(), "absent_briefing.wav"));
-    }
+        using var soundsh = SoundZbd.Load(GameFilesData.Source, Spec.GameData.SoundsPath)!;
 
-    [Fact]
-    public void ItReadsAWavOutOfADirectory()
-    {
-        var dir = TestData.TempDir();
-        File.WriteAllBytes(Path.Combine(dir, "narration.wav"), Wav(rate: 100, offsets: new uint[] { 250 }));
-
-        Assert.Equal(new[] { 2.5d }, WavCues.ReadFrom(dir, "narration.wav"));
-    }
-
-    /// <summary>The real narration: every briefing wav still carries its cue chunk after
-    /// extraction, and the state that plays it waits on exactly that many markers.</summary>
-    [ExtractedDataFact]
-    public void TheExtractedNarrationStillCarriesItsCuePoints()
-    {
-        var soundsh = CSVM.Extraction.SessionPaths.PreferUnzipped(
-            Path.Combine(TestData.ExtractedRoot!, "soundsh.zip"));
-
-        var times = WavCues.ReadFrom(soundsh, "c1-HA-m1_briefing.wav");
+        var times = WavCues.Read(soundsh.ReadWavBytes("c1-HA-m1_briefing.wav")!);
 
         Assert.Equal(8, times.Count);
         for (int i = 1; i < times.Count; i++)

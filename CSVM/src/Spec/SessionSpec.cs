@@ -334,7 +334,7 @@ public sealed record SessionSpec
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
     /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
     public string ModeName =>
-        ExtractInstall != null || CopyGameFiles != null ? "extract"
+        CopyGameFiles != null ? "extract"
         : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
         : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
@@ -351,7 +351,7 @@ public sealed record SessionSpec
     /// a drift, not a decision, the same omission as <see cref="ModeName"/>'s, and it means a
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
-        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || ExtractInstall != null || CopyGameFiles != null
+        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || CopyGameFiles != null
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
         || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
@@ -1096,41 +1096,14 @@ public sealed record SessionSpec
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
 
-    /// <summary><c>--synthetic-data</c>: write an invented extraction tree into the scratch folder
-    /// and read it in place of the data root. Off unless given, and dropped with a note beside
-    /// <c>--extract</c>, which would otherwise write an extraction into that tree. See
+    /// <summary><c>--synthetic-data</c>: write an invented data tree into the scratch folder and
+    /// read it in place of the data root. Off unless given. See
     /// <see cref="Tooling.SyntheticData"/>.</summary>
     public bool SyntheticData { get; private set; }
-
-    /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
-    /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
-    /// the install check refuses; null when the flag was absent.</summary>
-    public string? ExtractInstall { get; private set; }
 
     /// <summary><c>--copy-game-files=&lt;source&gt;</c> verbatim: copy that source's game files
     /// into the data root (<c>Extraction/GameFileCopy.cs</c>) and quit. Null without the flag.</summary>
     public string? CopyGameFiles { get; private set; }
-
-    /// <summary><c>--extract-force</c>: redo every output however new.</summary>
-    public bool ExtractForce { get; private set; }
-
-    /// <summary><c>--extract-unzip</c>: also expand every produced zip into its sibling folder.</summary>
-    public bool ExtractUnzip { get; private set; }
-
-    /// <summary><c>--extract-allow-missing</c>: extract an install that lacks some expected
-    /// archives, warning about each instead of failing.</summary>
-    public bool ExtractAllowMissing { get; private set; }
-
-    /// <summary><c>--unzbd=</c> verbatim: the unzbd an extraction runs instead of the default.</summary>
-    public string? UnzbdPath { get; private set; }
-
-    public string? Gamez { get; private set; }
-    public string? Textures { get; private set; }
-    public string? Zrdr { get; private set; }
-    public string? Sounds { get; private set; }
-    public string? Interp { get; private set; }
-    public string? Messages { get; private set; }
-    public string? Rof { get; private set; }
 
     // ---- Texture drop-in (applied to statics by the caller, not here) --------------------------
 
@@ -1204,12 +1177,6 @@ public sealed record SessionSpec
     public bool DebugMem { get; private set; }
 
     public bool NoFocus { get; private set; }
-
-    /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
-    /// folder exists, so a development machine runs the asset shape an export ships. See
-    /// <see cref="SessionPaths.ForceZipped"/> for why the two shapes fail differently.</summary>
-    public bool ZipAssets { get; private set; }
-
     /// <summary><c>--hd=</c>: the HD texture pack folder, under the data root unless rooted. Empty
     /// reads no pack. Null when absent, which leaves config.json's <c>textures.hd</c>.</summary>
     public string? Hd { get; private set; }
@@ -1379,7 +1346,6 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
             else if (arg.StartsWith("--paint-decal=")) { s.PaintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]); }
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
-            else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
             else if (arg == "--debug-scores") { s.DebugScores = true; }
             else if (arg == "--debug-race-ghost") { s.DebugRaceGhost = true; }
@@ -1733,19 +1699,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
             else if (arg == "--synthetic-data") { s.SyntheticData = true; }
-            else if (arg == "--extract") { s.ExtractInstall = ""; }
-            else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
             else if (arg.StartsWith("--copy-game-files=")) { s.CopyGameFiles = arg["--copy-game-files=".Length..]; }
-            else if (arg == "--extract-force") { s.ExtractForce = true; }
-            else if (arg == "--extract-unzip") { s.ExtractUnzip = true; }
-            else if (arg == "--extract-allow-missing") { s.ExtractAllowMissing = true; }
-            else if (arg.StartsWith("--unzbd=")) { s.UnzbdPath = arg["--unzbd=".Length..]; }
-            else if (arg.StartsWith("--gamez=")) { s.Gamez = arg["--gamez=".Length..]; }
-            else if (arg.StartsWith("--textures=")) { s.Textures = arg["--textures=".Length..]; }
-            else if (arg.StartsWith("--zrdr=")) { s.Zrdr = arg["--zrdr=".Length..]; }
-            else if (arg.StartsWith("--interp=")) { s.Interp = arg["--interp=".Length..]; }
-            else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
-            else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
             else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
@@ -1802,7 +1756,6 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
             else if (arg == "--no-focus") { s.NoFocus = true; }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
-            else if (arg == "--zip-assets") { s.ZipAssets = true; }
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
@@ -1951,24 +1904,6 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", problem));
                 }
             }
-        }
-
-        // The development options mean nothing to a session, so a stray one is named rather than
-        // silently dropped. The unzbd path is not one, since the extraction screen runs that tool.
-        if (s.ExtractInstall == null)
-        {
-            foreach (var (given, name) in new[] { (s.ExtractForce, "--extract-force"), (s.ExtractUnzip, "--extract-unzip"), (s.ExtractAllowMissing, "--extract-allow-missing") })
-            {
-                if (given)
-                {
-                    notes.Add(new Note("core", $"{name} does nothing without --extract=<install>, ignoring it"));
-                }
-            }
-        }
-        else if (s.SyntheticData)
-        {
-            notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
-            s.SyntheticData = false;
         }
 
         if (s.SyntheticData && s.PlaneNames.Count == 0)

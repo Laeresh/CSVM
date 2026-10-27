@@ -22,11 +22,11 @@ public static class TestZrdr
 
     /// <summary>The extraction's scope of <paramref name="chapter"/>.</summary>
     public static ZrdrSet Chapter(string chapter) =>
-        Read.GetOrAdd((chapter, null), _ => ZrdrSet.FromExtracted(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)));
+        Read.GetOrAdd((chapter, null), _ => ZrdrSet.FromExtracted(SessionPaths.ChapterZrdr(TestData.ExtractedRoot!, chapter)));
 
     /// <summary>The extraction's scope of <paramref name="chapter"/>'s <paramref name="mission"/>.</summary>
     public static ZrdrSet Mission(string chapter, string mission) =>
-        Read.GetOrAdd((chapter, mission), _ => ZrdrSet.FromExtracted(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission)));
+        Read.GetOrAdd((chapter, mission), _ => ZrdrSet.FromExtracted(SessionPaths.MissionZrdr(TestData.ExtractedRoot!, chapter, mission)));
 
     /// <summary>The scope of a fixture or temp folder, read afresh, since a test may write to it.</summary>
     public static ZrdrSet Folder(string path) => ZrdrSet.FromExtracted(path);

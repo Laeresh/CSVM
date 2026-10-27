@@ -343,13 +343,9 @@ per-section `V<n>` definitions (`[@FlightCheck@]` gives `GX,553`, `V2,132`, `V3,
 `V4,FC_B_PaperButton.Png`; `[@Campaign@]` gives `Y,547`), and the file's values agree with the
 screenshot measurements to within a pixel, which is a useful cross-check of both.
 
-**The extraction stamp is schema 3, and each bump waited for a reader.** Adding an output does not
-invalidate an existing extraction until a reader requires it. Schema 2 is this artifact: the runtime
-reader (`CSVM/src/UI/Menu/MenuLayout.cs`) requires it, so a tree extracted before the decode is
-reported as stale at boot rather than read as an empty menu. Schema 3 is the ten `.mpg` files: the
-copy step that puts them in the tree shipped first and moved nothing, and the number moved when the
-front end began playing one. The number is `ExtractionStamp.Schema`, which the boot check reads
-and every extraction writes. The layout reader itself treats a missing or
+**No stamp gates the layout.** `RofFiles` decodes `menu_layout.json` from the install's archive on
+first read, so the runtime reader (`CSVM/src/UI/Menu/MenuLayout.cs`) always reads the decode this
+build makes. The layout reader itself treats a missing or
 unreadable file as a reason to fall back, never as a layout with no screens.
 
 **Reader-side notes.** The reader keeps values as strings and types them on demand through

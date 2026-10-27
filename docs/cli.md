@@ -45,7 +45,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--det` · `--no-det` · `--seed` · `--no-pads`
 
 **Livery and paint**
-`--paint` · `--paint-color` · `--paint-decal` · `--paint-seed` · `--rof`
+`--paint` · `--paint-color` · `--paint-decal` · `--paint-seed`
 
 **Weapons, ordnance and damage**
 `--loadout` · `--rocket` · `--gun-select` · `--target` · `--fire` · `--fire-rockets` · `--leading-assist` · `--lead-marker` · `--incoming` · `--ai` · `--ai-attack` · `--ai-damage` · `--canopy-holes` · `--ai-targeting` · `--difficulty` · `--no-assist` · `--no-crash-loss` · `--generators` · `--zeppelins` · `--zep` · `--wake-turrets` · `--wake-generators` · `--craters` · `--infinite-ammo` · `--ammo` · `--weapon-lab` · `--weapon-mount` · `--weapon-fire` · `--weapon-cycle` · `--weapon-click` · `--weapon-target` · `--weapon-surface` · `--weapon-standoff` · `--weapon-camera` · `--weapon-test` · `--damage` · `--damage-hd` · `--destroy` · `--crash`
@@ -68,14 +68,14 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 **Scripted input, fly a fixed stick input, no hands**
 `--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
-**Data paths, override where the extraction is read from**
-`--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--hd` · `--hd-models` · `--no-hd-models` · `--messages`
+**Data paths, where the game files and the packs are read from**
+`--data-root` · `--synthetic-data` · `--hd` · `--hd-models` · `--no-hd-models`
 
 **User data, where the player's own files are kept**
 `--portable`
 
-**Extraction, build `extracted/` or copy the game files from an original install and exit**
-`--extract` · `--extract-force` · `--extract-unzip` · `--extract-allow-missing` · `--unzbd` · `--copy-game-files`
+**Game files, copy them from an original install, disc or image and exit**
+`--copy-game-files`
 
 **Audio**
 `--mute` · `--volume` · `--sound-range-scale`
@@ -100,8 +100,8 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
 section further down; `--perf` carries four further bullets for its other readouts, and
-`--dump-sticks` and `--menu` one more each. The counts reconcile as **220 index entries, 220 parser
-flags and 227 bullet lines**.
+`--dump-sticks` and `--menu` one more each. The counts reconcile as **207 index entries, 207 parser
+flags and 214 bullet lines**.
 
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world for deterministic weather, fog and edge screenshots. It hosts three labs, always built and needing no extra flag: the damage lab on **F19**, the livery lab on **L** and the mesh lab on **M**. All three start hidden, so an unadorned `--viewer` screenshot matches the pre-paint viewer. F19 toggles the damage lab as a whole, slider panel and HUD gauges together; the panel's own checkbox controls the gauges while it is up. **P** halts the simulation and **`.`** advances one frame)
@@ -154,7 +154,6 @@ flags and 227 bullet lines**.
   surgery rather than a per-cell transform, and plain repeat shows no step at the shipped block
   depths)
 - `--plane=` (a comma-separated list gives one plane per splitscreen player, `--plane=player_bhawk,player_fury`, and implies that player count unless `--players=` says otherwise)
-- `--rof=` (no effect: the UI archive holding the paint patterns is read in place from the game files)
 - `--paint=<pattern|random|none>` (aircraft livery: a pattern name, `random`, or `none`. **Patterns are per aircraft**, and naming one the plane lacks logs its actual set and paints decals only; `random` draws from that plane's set. Comma-separated per player like `--plane=`, the last covering the rest. **The default everywhere is `player_fortune`**, the only pattern covering all eleven airframes; `--paint=none` asks for the bare shipped skins. Instant Action's enemies keep their own militia skins rather than the player militia's colours)
 - `--paint-color=R,G,B/R,G,B/R,G,B` (override the scheme's three colours, slot 1 body, 2 dark trim, 3 light trim; integer 0–255, fewer than three repeats the last)
 - `--paint-decal=nose,tail,wing` (override the three decal indices into the chapter archive's 00–49 set: 00–20 squadron logos, 21–49 nose art)
@@ -379,25 +378,13 @@ flags and 227 bullet lines**.
 - `--spawn=N` (force spawn index N in that list; default is a random pick per launch like the original, drawn from the `spawn` stream, and the chosen spawn is logged. **`--det` defaults it to 0**, a pinned *choice* rather than a pinned dice roll: a seeded pick still moves when the mission's spawn list grows, index 0 does not. An explicit `--spawn=N` still wins under `--det`)
 - `--spawn-at=x,y,z` / `--spawn-dir=x,y,z` (**deprecated**, the pre-A5 flight-only spelling of `--pos`/`--direction`; each logs `WARN [core] deprecated flag=… use=…` once per run and otherwise behaves exactly as it did. They still carry their old per-mode meaning, which `--pos` deliberately does not copy: in `--anim-lab` `--spawn-at` moves the parked stage prop as well as the camera, and in `--freecam` it moves the camera through the spawn path, where `--pos` beats it)
 - `--sky-zone=zone1|zone2|zone3` (horizon zone, default `zone2`. It also selects that zone's distance fog and enables fog, whiteout and the map-edge extension in a static view. **The names are per chapter**: C1 to C4 ship `zone1`+`zone2`, **C5 ships `zone1`+`zone3`**, and a zone the chapter does not define falls back to the first its `weather.json` lists. The default is also corrected by the horizon's geometry: where the named zone builds no dome, the one that has renders. **Passing the flag explicitly opts out of that correction**, pins the fog and forces the `zone_id` gate to that zone)
-- `--data-root=` (where `extracted/` lives; default the repo root. Also settable as the **`CSVM_DATA_ROOT`** environment variable, which the flag overrides. It exists so a **git worktree can run the game**: `/extracted/`, `/CrimsonSkiesGame/` and `/tools/` are git-ignored, so a worktree checkout has none of them. Point it at the primary tree and a worktree session renders **byte-identically** to that tree. It affects asset lookup only: `planes.zip`, `zrdr.zip`, `soundsh.zip`, `interp.json`, `messages.json`, `rof/`, and the per-chapter `gamez`/`texture` and mission `zrdr` paths)
+- `--data-root=` (where the `CrimsonSkiesGame/` copy, the HD packs and the logs live; default the repo root. Also settable as the **`CSVM_DATA_ROOT`** environment variable, which the flag overrides. It exists so a **git worktree can run the game**: `/extracted/`, `/CrimsonSkiesGame/` and `/tools/` are git-ignored, so a worktree checkout has none of them. Point it at the primary tree and a worktree session renders **byte-identically** to that tree. It affects asset lookup only: the game-file source's `<data-root>/CrimsonSkiesGame` candidate and the `HD`/`HDModels` pack folders)
 - `--portable` (**keep the player's own files beside the executable**: options, bindings, campaign profiles, custom planes, stunt scores, stick profiles and stunt screenshots go to `userdata/` there instead of Godot's user folder. A `portable.txt` beside the executable does the same without the flag. A repo run uses `.scratch/userdata/`. Godot's own log and shader cache stay in Godot's folder. The `[core] user=` line names the folder in use. `Utils/UserData.cs`)
-- `--synthetic-data` (**read an invented test tree instead of the data root**: writes an `extracted/` of `CSVM.Tests/fixtures/` records and generated files into `.scratch/synthetic-data/<pid>/`, stamped synthetic, and reads it in place of the root named. Logged as `WARN [core] SYNTHETIC DATA`; `test-report.json`'s `syntheticData` reads true. An unwritable tree quits 1. With no `--plane=` it flies the armed stand-in `probe_plane`. Needs a repo checkout, so an export refuses it; dropped beside `--extract`. `Tooling/SyntheticData.cs`)
-- `--gamez=`
-- `--textures=`
-- `--zrdr=` (default extracted/zrdr.zip)
-- `--interp=` (default extracted/interp.json, the boot scripts naming each chapter's clutter templates; every world build stamps them via `ClutterBuilder`, logged as `clutter: N sprites`, solid only in `--fly`)
-- `--sounds=` (default extracted/soundsh.zip)
-- `--zip-assets` (**read the `.zip` archives even where `--extract-unzip` left an unpacked sibling folder**, the asset shape an exported build ships. Process-wide: it flips `SessionPaths.ForceZipped` before the first path resolves, so the chapter gamez, texture and zrdr paths, the sounds archive and the menu pages' own lookups all take it. A path that only ever had the folder still resolves to the folder: the flag narrows the choice rather than adding a requirement. **Use it before shipping a build**, since the two shapes do not fail alike (INSTR-46))
+- `--synthetic-data` (**read an invented test tree instead of the data root**: writes an `extracted/` of `CSVM.Tests/fixtures/` records and generated files into `.scratch/synthetic-data/<pid>/`, marked synthetic, and reads it in place of the root named. Logged as `WARN [core] SYNTHETIC DATA`; `test-report.json`'s `syntheticData` reads true. An unwritable tree quits 1. With no `--plane=` it flies the armed stand-in `probe_plane`. Needs a repo checkout, so an export refuses it. `Tooling/SyntheticData.cs`)
 - `--hd=<folder>` (**the HD texture pack folder**, under the data root unless rooted, default `HD`, also config.json's `textures.hd`; empty reads none. Drop a pack's release zips there unchanged, `Extraction/HdTextures.cs` has the matching rules. A `--det` run, and so every `--screenshot=` and `--run-tests` run, reads no pack unless this flag names one)
 - `--hd-models=<folder>` (**the HD model pack folder**, under the data root unless rooted, default `HDModels`, also config.json's `models.hd`; empty reads none. `.glb` files are read from zips and subfolders, `.gltf` from subfolders only; `Extraction/HdModels.cs` has the key rules. Separate from the `--hd=` folder. A `--det` run reads no model pack unless this flag names one)
 - `--no-hd-models` (**read no model pack**, whatever `--hd-models=` or `models.hd` names, in either argument order)
-- `--messages=` (unused: the string table resolving `MSG_*` keys is read from the install's `strings.dll`)
-- `--extract=<install>` (**extract an original install into `<data-root>/extracted/` and exit**, before any world or menu loads: the ZBD archives through unzbd, then the `.rof` UI resources, both stamped. Prints a summary and exits 0, or 1 on any failure, including a folder that is not an install or lacks any of the 184 archives `ZbdManifest` expects. The install may be the disc, its `GAME` folder or an `.iso` (laid out by `unzbd cs disc`). A ZBD failure stops the run before the `.rof` half. No window opens, even without `--headless`. Does not remember the install for menus. `ExtractionRun`)
-- `--extract-force` (with `--extract`, **re-extract archives the stamp calls up to date**; without it an unchanged archive is skipped. Ignored with a warning when `--extract` is absent)
-- `--extract-unzip` (with `--extract`, **also expand every extracted `.zip` into a sibling folder**, the dev tree's shape. The root `rimage.zip` is expanded either way, since the HUD font, the reticle and the board art read its PNGs loose. Ignored with a warning when `--extract` is absent)
-- `--extract-allow-missing` (with `--extract`, **extract an install missing some expected archives**, each named as a warning instead of failing the run. The in-game Extract screen always fails. Ignored with a warning when `--extract` is absent)
 - `--copy-game-files=<source>` (**copy the game files a session reads into `<data-root>/CrimsonSkiesGame` and exit**, where the install lookup then finds them ahead of the remembered install. The source is an install, a disc folder, an `.iso` or a raw `.cue`/`.ccd` image; a disc's chapter cabinets come out unpacked. The tree is written under `CrimsonSkiesGame.partial` and renamed into place last, so a stopped copy is never found. Refuses, exit 1, when the data root already holds `CrimsonSkiesGame` (a dev tree's is the install itself) or the source does not open. Logs each file. `GameFileCopy`)
-- `--unzbd=<path>` (with `--extract`, **the unzbd executable to run**. Default: next to the executable in an exported build, else `tools/mech3ax/target/release/` under the repo root, which a worktree lacks, so a worktree run passes this flag. A missing tool fails the run before anything is written. The in-game extraction screen runs the same tool, so the flag applies there too and is not warned about without `--extract`)
 - `--mips=authored|generated` (**which mip levels a texture gets**, default `authored`. A chapter ships hand-drawn half- and quarter-resolution siblings (`cblock1_1`, `cblock1_2`) that no gamez material references, the original's own mip chain (`docs/formats/gamez.md`). `authored` installs those siblings as levels 1 and 2 wherever one exists, box-filtering the rest; a texture with no sibling is untouched. `generated` runs `Image.GenerateMipmaps()` all the way down. A sibling whose size disagrees with the level it claims is refused with a warning, never installed. Measure it with `--dump-mips`)
 - `--graphics=original|enhanced` (the opt-in lit-world mode, default `original`. Precedence: **this flag**, then the **saved `graphicsMode` option** (`user://options.json`), then the **`graphics.mode`** config key, then `original`. Under `--det` only the flag survives, so it is the one way to ask for the enhanced path in a scripted or golden capture. It resolves at launch (`GraphicsMode.Resolve`), announced on the `[world] graphics mode:` line; an Options apply or **G** in flight switches it live after that. An unrecognised word at any layer warns and falls back to `original`)
 - `--anti-aliasing=off|fxaa|smaa|taa|fsr2` (the 3D viewports' anti-aliasing method. Precedence: **this flag**, then a headset's VR quality profile (`--xr-quality`), the saved `antiAliasing` option, the `graphics.antiAliasing` config key, then the mode's default (`off` Original, `taa` Enhanced). Survives `--det`, so it is the scripted door on the method. An unknown word is dropped with a note. `Utils/AntiAliasingSetting.cs`)

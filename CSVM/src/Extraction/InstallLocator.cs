@@ -38,8 +38,8 @@ public enum InstallCheckKind
     NoChapters,
 
     /// <summary>The pick is the game disc, its <c>GAME</c> folder, or an <c>.iso</c> image of it:
-    /// <c>ZBD</c> holds the chapters as cabinets (<c>C1.CAB</c>). Extraction first lays an install
-    /// out from it with <c>unzbd cs disc</c>.</summary>
+    /// <c>ZBD</c> holds the chapters as cabinets (<c>C1.CAB</c>). It is read in place
+    /// through <see cref="CabinetSource"/>.</summary>
     Disc,
 }
 

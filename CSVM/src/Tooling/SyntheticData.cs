@@ -22,9 +22,14 @@ namespace CSVM.Tooling;
 /// </summary>
 public static class SyntheticData
 {
-    /// <summary>The stamp field naming the tree synthetic, beside the <c>schema</c> every
-    /// extraction writes. The boot stamp check reads only <c>schema</c>, so the field is inert there.</summary>
+    /// <summary>The stamp field naming the tree synthetic.</summary>
     public const string StampField = "synthetic";
+
+    /// <summary>The stamp's file name inside the tree's <c>extracted/</c> folder.</summary>
+    public const string StampFile = "VERSION.json";
+
+    /// <summary>The folder under the data root the tree is written into.</summary>
+    public const string ExtractedFolder = "extracted";
 
     /// <summary>The folder under the repo's <c>.scratch/</c> that holds one tree per process.</summary>
     public const string ScratchFolder = "synthetic-data";
@@ -55,7 +60,7 @@ public static class SyntheticData
             throw new DirectoryNotFoundException($"no hand-authored records at {fixturesRoot} (a repo checkout carries them, an export does not)");
         }
 
-        string extracted = Path.Combine(dataRoot, ExtractionRun.ExtractedFolder);
+        string extracted = Path.Combine(dataRoot, ExtractedFolder);
         if (Directory.Exists(extracted))
         {
             // ⚠ Never delete a tree this class did not stamp; a real extraction at the root stops the build.
@@ -70,11 +75,9 @@ public static class SyntheticData
         // Stamped first, so a tree a failed build leaves half written is still one a rebuild may replace.
         var tree = new SyntheticTree(fixturesRoot, dataRoot);
         var names = new JsonArray(families.Select(f => (JsonNode?)JsonValue.Create(f.Name)).ToArray());
-        ExtractionStampWriter.Merge(tree.Extracted, StampField, new JsonObject
-        {
-            ["script"] = "CSVM",
-            ["families"] = names,
-        });
+        Directory.CreateDirectory(tree.Extracted);
+        var stamp = new JsonObject { [StampField] = new JsonObject { ["script"] = "CSVM", ["families"] = names } };
+        File.WriteAllText(Path.Combine(tree.Extracted, StampFile), stamp.ToJsonString() + "\n");
         foreach (var family in families)
         {
             family.Write(tree);
@@ -85,7 +88,7 @@ public static class SyntheticData
     /// missing, unreadable or real stamp, so only a tree this class wrote reads true.</summary>
     public static bool Marks(string dataRoot)
     {
-        string path = Path.Combine(dataRoot, ExtractionRun.ExtractedFolder, ExtractionStampWriter.FileName);
+        string path = Path.Combine(dataRoot, ExtractedFolder, StampFile);
         if (!File.Exists(path))
         {
             return false;
@@ -161,7 +164,7 @@ public sealed class SyntheticTree
     {
         FixturesRoot = fixturesRoot;
         DataRoot = dataRoot;
-        Extracted = Path.Combine(dataRoot, ExtractionRun.ExtractedFolder);
+        Extracted = Path.Combine(dataRoot, SyntheticData.ExtractedFolder);
     }
 
     /// <summary>The <c>CSVM.Tests/fixtures/</c> folder the records are read from.</summary>

@@ -16,7 +16,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The synthetic data root <c>--synthetic-data</c> writes, built from the fixtures the engine reads.
-/// Its stamp passes the boot check as a current tree and marks it synthetic. Its chapter textures
+/// Its stamp marks it synthetic. Its chapter textures
 /// are built in memory, as its message table and its Original shell's files are. The shell's files
 /// pass its availability check, each picture at its recorded size. Decoding
 /// pixels needs Godot, so the in-engine run covers that half.
@@ -24,21 +24,9 @@ namespace CSVM.Tests;
 public class SyntheticDataTests
 {
     [Fact]
-    public void TheTreeIsStampedCurrentAndMarkedSynthetic()
+    public void TheTreeIsMarkedSynthetic()
     {
-        string root = Built();
-
-        Assert.Equal(StampStanding.Current, ExtractionStamp.Standing(root, out int? found));
-        Assert.Equal(ExtractionStamp.Schema, found);
-        Assert.True(SyntheticData.Marks(root));
-
-        var lines = new List<string>();
-        using (CSVM.Utils.Log.PushConsoleSink(lines.Add))
-        {
-            ExtractionStamp.Check(root);
-        }
-
-        Assert.Empty(lines);
+        Assert.True(SyntheticData.Marks(Built()));
     }
 
     /// <summary>A synthetic launch resolves no game source and reads the invented message table and
@@ -95,7 +83,7 @@ public class SyntheticDataTests
         Directory.CreateDirectory(Path.Combine(root, "extracted"));
         File.WriteAllText(
             Path.Combine(root, "extracted", "VERSION.json"),
-            $"{{ \"schema\": {ExtractionStamp.Schema}, \"assets\": {{ \"script\": \"CSVM\" }} }}");
+            $"{{ \"schema\": 4, \"assets\": {{ \"script\": \"CSVM\" }} }}");
 
         Assert.False(SyntheticData.Marks(root));
         Assert.False(SyntheticData.Marks(TestData.TempDir()));
@@ -202,7 +190,7 @@ public class SyntheticDataTests
         string root = TestData.TempDir();
         string stamp = Path.Combine(root, "extracted", "VERSION.json");
         Directory.CreateDirectory(Path.GetDirectoryName(stamp)!);
-        File.WriteAllText(stamp, $"{{ \"schema\": {ExtractionStamp.Schema} }}");
+        File.WriteAllText(stamp, "{ \"schema\": 4 }");
 
         Assert.Throws<IOException>(() => SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies));
         Assert.True(File.Exists(stamp));

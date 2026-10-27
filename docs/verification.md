@@ -622,8 +622,8 @@ covers it.
   pass while both logs carried one.
 - **INSTR-45**, **A screenshot proves nothing about audio: read the `sound` log's pairing instead,
   one line per aircraft at build naming what each slot resolved to, then one per cull transition.**
-- **INSTR-46**, **An unpacked developer tree cannot reproduce a zip-only asset bug: verify a
-  release's asset shape with `--zip-assets`.**
+- **INSTR-46**, **An unpacked folder cannot reproduce a zip-only asset bug: check a reader of
+  unzbd's output on the `.zip` itself, not only on its unpacked sibling.**
 - **INSTR-47**, **A body's net world displacement is zero for as long as something is holding it in
   place, so it cannot answer "is this body still travelling"; read the velocity of the frame it is
   solved in.**

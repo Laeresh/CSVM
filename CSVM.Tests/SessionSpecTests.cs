@@ -1077,33 +1077,21 @@ public class SessionSpecTests
         Assert.Empty(s.Warnings);
     }
 
-    /// <summary>Path flags are override VALUES, null when unset, the default arithmetic belongs to
-    /// the caller, which is why nothing here builds a path.</summary>
+    /// <summary>The data root flag is an override VALUE, null when unset. The default arithmetic
+    /// belongs to the caller, which is why nothing here builds a path.</summary>
     [Fact]
-    public void PathFlagsAreOverrideValuesOnly()
+    public void TheDataRootFlagIsAnOverrideValueOnly()
     {
-        var bare = S("--fly");
-        Assert.Null(bare.Gamez);
-        Assert.Null(bare.Textures);
-        Assert.Null(bare.DataRoot);
-
-        var s = S("--gamez=g.zip", "--textures=t.zip", "--data-root=/somewhere");
-        Assert.Equal("g.zip", s.Gamez);
-        Assert.Equal("t.zip", s.Textures);
-        Assert.Equal("/somewhere", s.DataRoot);
+        Assert.Null(S("--fly").DataRoot);
+        Assert.Equal("/somewhere", S("--data-root=/somewhere").DataRoot);
     }
 
-    /// <summary>The synthetic tree is opt-in only, and an extraction never lands in it. Beside
-    /// `--extract` the switch is dropped with a note.</summary>
+    /// <summary>The synthetic tree is opt-in only.</summary>
     [Fact]
-    public void SyntheticDataIsOptInAndNeverAppliesToAnExtraction()
+    public void SyntheticDataIsOptIn()
     {
         Assert.False(S("--run-tests").SyntheticData);
         Assert.True(S("--run-tests", "--synthetic-data").SyntheticData);
-
-        var extract = S("--extract=/install", "--synthetic-data");
-        Assert.False(extract.SyntheticData);
-        Assert.Contains(extract.Warnings, n => n.Message.Contains("--synthetic-data"));
     }
 
     /// <summary>`--ia=` is a path VALUE only, loading the file into an `InstantActionDef` is the

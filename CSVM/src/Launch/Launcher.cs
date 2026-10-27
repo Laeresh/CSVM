@@ -232,8 +232,8 @@ public partial class Launcher : Node3D
         }
         else
         {
-            // Exported build: res:// lives inside the pck, so the root is the exe's own folder,
-            // extracted/ ships beside the exe, and logs/ and .scratch/ output land there too.
+            // Exported build: res:// lives inside the pck, so the root is the exe's own folder. A
+            // CrimsonSkiesGame copy sits beside the exe, and logs/ and .scratch/ output land there too.
             _exported = true;
             repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
         }
@@ -261,7 +261,7 @@ public partial class Launcher : Node3D
 
         // Every base path derives from the data root, so it is settled first. Precedence:
         // --data-root= beats CSVM_DATA_ROOT beats the repo root. The overrides exist because a git
-        // worktree has no extracted/, which is git-ignored, and cannot otherwise build or verify.
+        // worktree has no CrimsonSkiesGame/, which is git-ignored, and cannot otherwise build or verify.
         string dataRoot = repoRoot;
         var dataRootEnv = OS.GetEnvironment("CSVM_DATA_ROOT");
         if (!string.IsNullOrEmpty(dataRootEnv)) dataRoot = Path.GetFullPath(dataRootEnv);
@@ -269,14 +269,6 @@ public partial class Launcher : Node3D
         if (dataRoot != repoRoot)
             Log.Info("core", $"data root: {dataRoot} (repo root {repoRoot})");
         dataRoot = ResolveSyntheticData(repoRoot, dataRoot);
-
-        // The extraction tree's provenance check, at most one warning line, never a block. An
-        // --extract run is about to write that tree, and a missing one has no stamp to read. A
-        // warning about either would only mislead.
-        if (_spec.ExtractInstall == null && UI.Screens.SourceFlow.HasExtracted(dataRoot))
-        {
-            ExtractionStamp.Check(dataRoot);
-        }
 
         // The drop-in writes statics every material built afterwards reads, so it is applied here
         // rather than carried as a session value.
@@ -402,16 +394,9 @@ public partial class Launcher : Node3D
         }
 
         // VR mode at boot, before anything heavy runs: a restart into the headset leaves from here
-        // in the state the --extract branch below runs in.
+        // in the state the --copy-game-files branch below runs in.
         if (StartXrMode())
         {
-            return;
-        }
-
-        // --extract builds no world and no menu: it writes the data root's extracted/ and quits.
-        if (_spec.ExtractInstall is { } extractInstall)
-        {
-            StartHeadlessExtraction(extractInstall, repoRoot, dataRoot);
             return;
         }
 
@@ -490,13 +475,6 @@ public partial class Launcher : Node3D
         bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;
         Flight.Audio.FlightAudio.CockpitLoopPitched = savedCockpitPitch ?? Flight.Audio.FlightAudio.CockpitLoopPitchedDefault;
         Log.Info("sound", $"cockpit engine pitch: pitched={Flight.Audio.FlightAudio.CockpitLoopPitched} via={(savedCockpitPitch.HasValue ? "options.json" : "default")}");
-        // Before the first PreferUnzipped call and process-wide, so every later resolution (the
-        // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
-        SessionPaths.ForceZipped = _spec.ZipAssets;
-        if (_spec.ZipAssets)
-        {
-            Log.Info("core", $"assets: --zip-assets, reading .zip archives, ignoring unpacked folders");
-        }
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.
         if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)
@@ -1088,34 +1066,6 @@ public partial class Launcher : Node3D
         string families = string.Join(",", System.Linq.Enumerable.Select(UI.Menu.Original.SyntheticShell.TreeFamilies, f => f.Name));
         Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {synthetic} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
         return synthetic;
-    }
-
-    // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame
-    // callbacks are switched off until the quit, because _Ready returned before building what they read.
-    private void StartHeadlessExtraction(string install, string repoRoot, string dataRoot)
-    {
-        SetProcess(false);
-        SetPhysicsProcess(false);
-        SetProcessInput(false);
-        SetProcessUnhandledInput(false);
-        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(repoRoot, _exported);
-        var request = new Extraction.ExtractionRequest(install, dataRoot, unzbd, _spec.ExtractForce, _spec.ExtractUnzip, _spec.ExtractAllowMissing);
-        System.Threading.Tasks.Task.Run(() =>
-        {
-            int code;
-            try
-            {
-                code = Extraction.ExtractionRun.RunToConsole(request, Log.Raw, line => Log.Error("core", $"{line}"));
-            }
-            catch (System.Exception e)
-            {
-                // Anything unforeseen still ends the process with a verdict, never a hang.
-                Log.Error("core", $"extraction crashed", e);
-                code = 1;
-            }
-
-            Callable.From(() => GetTree().Quit(code)).CallDeferred();
-        });
     }
 
     /// <summary>Empties the worker pool's low-priority queue before the engine's exit asks every

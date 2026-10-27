@@ -1,91 +1,46 @@
-# Tooling, the extraction pipeline, the launch scripts, and the release scripts
+# Tooling, the game files, the launch scripts, and the release scripts
 
-How game files become `extracted/`, how the game gets launched, and how a release is exported and
-published. For *which* archive types extract and how far each is validated, see
-[extraction](formats/extraction.md); for the engine's own flags, [cli.md](cli.md).
+How the engine reads the game files, how the game gets launched, and how a release is exported and
+published. For which archive each reader covers and how far each is validated, see
+[the reader map](formats/README.md#reader-map); for the engine's own flags, [cli.md](cli.md).
 
-## `extracted/`, the extraction workdir (git-ignored)
+## The game files, read in place
 
-Populated by the engine's extraction (below), mirroring the game's own ZBD folder structure:
-top-level `planes.zip` (unzbd of `planes.zbd`), `zrdr.zip`, `soundsh.zip`/`soundsl.zip`, `interp.json`,
-`rimage.zip`, plus per-chapter `C1/gamez.zip`, `C1/texture.zip`, `C1/rtexture*.zip`, `C1/zrdr.zip`,
-and per-mission `C1/IA1/zrdr.zip`.
-
-The viewer's defaults read `planes.zip`, `C1/gamez.zip`, the chapter's top texture tier (below),
-`zrdr.zip` and `soundsh.zip`, **preferring the unpacked sibling folder when present**
-(`extracted/C1/rtexture15/` over `C1/rtexture15.zip`). Each loader takes a zip or a directory, and
-an explicit `--gamez=`/`--textures=`/`--zrdr=`/`--sounds=` wins.
-
-**Chapter textures load from the top `rtextureN` tier, falling back to `texture.zip`**
-(`SessionPaths.ChapterTextures`), where `N` is a **size budget in MB of video-card texture
-memory**. ⚠ **The tiers are not mere downscales of `texture.zbd`, which a resolution comparison
-misses**: the top tier holds the same file set at the same dimensions, but hundreds of those files
-differ in pixel content, and the tier copies are richer, never worse (see
-[formats/hud.md](formats/hud.md) on the gauge needle). `rimage.zip` is not loaded at all.
-
-The `.rof` UI archives, the cinemas and the string tables are not extracted: `RofFiles`
-(`CSVM/src/Extraction/RofFiles.cs`) reads them in place from the game files, and
-`PatternLibrary` reads the paint patterns out of that view.
-
-## The extraction, in the engine
-
-One implementation, `CSVM/src/Extraction/` ([architecture/Extraction.md](architecture/Extraction.md)),
-reached three ways: the Extract screen a player sees when `extracted/` is missing or stamped under
-another schema, the headless `--extract=<install>` flag ([cli.md](cli.md)), and the repo-root
-wrapper below. No script holds extraction logic.
-
-The install may also be the game disc, its `GAME` folder, or an ISO 9660 image of it. The disc
-ships each chapter folder as an LZX cabinet (`ZBD/C1.CAB`) and the texture tiers inside under 8.3
-aliases. `unzbd cs disc <disc> <folder>` copies `GAME` out, unpacks the cabinets in place and
-restores the `rtextureN` names (cabinet order is long-name order; the top tier per chapter is a
-table in the fork's `disc.rs`). The extraction runs it into `<data root>/.disc-install` and deletes
-that folder afterwards. The cabinets' chapter data is byte-identical to an install's; a localized
+Every format is read from the original's own files through `BasePaths.Game`
+(`CSVM/src/Extraction/GameFileSource.cs`, [architecture/Extraction.md](architecture/Extraction.md)):
+an install folder, the game disc or its `GAME` folder, an ISO 9660 image, or a raw CD image. The
+disc ships each chapter folder as an LZX cabinet (`ZBD/C1.CAB`) with the texture tiers inside
+under 8.3 aliases; `CabinetSource` unpacks a chapter's cabinet in memory on first use and restores
+the `rtextureN` names. The cabinets' chapter data is byte-identical to an install's; a localized
 disc (the German one) differs only in its sounds, `crimson.rof`, the string DLLs and the movies.
+`--copy-game-files=<source>` (and the source screen's Copy, then play) copies the files a session
+reads into `<data root>/CrimsonSkiesGame`, which the locator then finds first.
 
-The ZBD half walks the install's `ZBD` folder and runs `unzbd cs <mode>` on every archive as a
-child process, with the mode for its type, writing to the mirrored relative path under
-`extracted/`, basename kept:
+**Chapter textures load from the top `rtextureN` tier, falling back to `texture.zbd`**
+(`TextureSet.ForChapter`, and `SessionPaths.ChapterTextures` for unzbd's output), where `N` is a
+**size budget in MB of video-card texture memory**. ⚠ **The tiers are not mere downscales of
+`texture.zbd`, which a resolution comparison misses**: the top tier holds the same file set at the
+same dimensions, but hundreds of those files differ in pixel content, and the tier copies are
+richer, never worse (see [formats/hud.md](formats/hud.md) on the gauge needle).
 
-| Source | Mode | Output |
-|---|---|---|
-| `interp.zbd` | `interp` | `.json` |
-| `planes.zbd`, `gamez.zbd` | `gamez` | `.zip` |
-| `soundsh`/`soundsl` | `sounds` | `.zip` |
-| `zrdr.zbd` | `reader` | `.zip` |
-| `rimage`, `texture`, `rtexture*` | `textures` | `.zip` |
-| `cam_anim`, `mis_anim` | `anim` | `.zip` |
-
-An output newer than its source is skipped unless forced. **`messages.json`** comes from a step
-after the walk, since `strings.dll` sits at the install root outside it: `unzbd cs messages`,
-skipped with a note when the DLL is absent, in which case the engine falls back to raw `MSG_*`
-keys.
-
-The extraction has no `.rof` half. The UI archives (`GOSDATA/ASSETS/crimson.rof` plus the
-`crimptch.rof` patch overlay), the loose cinemas and the `langui.dll`/`language.dll` string tables
-are read in place by `RofFiles`. It answers each member at its archive path in upper case, each
+The `.rof` UI archives (`GOSDATA/ASSETS/crimson.rof` plus the `crimptch.rof` patch overlay), the
+loose cinemas and the `langui.dll`/`language.dll` string tables are read in place by `RofFiles`
+(`CSVM/src/Extraction/RofFiles.cs`). It answers each member at its archive path in upper case, each
 `.BM` texture also as `<NAME>.PNG` (the greyscale shading map) and `<NAME>_MASK.PNG` (**the paint
 region masks**, R/G/B = paint slots 1/2/3), `ui_strings.json`, every UI string joined to its
 `RESOURCE.H` symbol, and **`menu_layout.json`**, the decoded `LAYOUT.CSV` screens the runtime reads
-instead of the originals. Formats: [rof](formats/rof.md), [strings](formats/strings.md),
-[menu layout](formats/menu-layout.md).
+instead of the originals. `PatternLibrary` reads the paint patterns out of that view. Formats:
+[rof](formats/rof.md), [strings](formats/strings.md), [menu layout](formats/menu-layout.md).
 
-A failure-free run stamps `extracted/VERSION.json` with the `unzbd --version` line verbatim, the
-exe's SHA-256, the fork HEAD, the date, and `ExtractionStamp.Schema`, the one schema integer, which
-the engine compares at boot and which any reader change that invalidates old extractions bumps.
-
-## `Extract.ps1` (repo root), the developer's wrapper
-
-`.\Extract.ps1 [-Install <path>] [-DataRoot <path>] [-Unzbd <path>] [-Unzip] [-Force] [-NoBuild]`
-builds the solution, runs Godot `--headless` with `--extract=<install> --data-root=<root>
---unzbd=<tool>` plus `--extract-unzip` / `--extract-force`, prints the engine's output, and exits
-with its code. The install defaults to `CrimsonSkiesGame`, the tool to the fork build
-(`tools/mech3ax/target/release/unzbd.exe`), both next to the script, else under
-`CSVM_DATA_ROOT` as a worktree needs. `-Unzbd` pointing at the pinned
-`tools/mech3ax-v0.6.1-.../unzbd.exe` rolls back to the old binary with **no code change**, because
-the loaders read either extraction shape. `-Unzip` expands each `.zip` into a sibling folder, which
-is what makes the viewer read loose files. ⚠ The data root defaults to the script's own folder,
-never `CSVM_DATA_ROOT`, so a worktree run cannot overwrite the primary tree's `extracted/`.
-
+**unzbd's output is the modding path.** CSVM runs no extractor. A tree unzbd wrote (the build
+v0.4.0 bundled), mirroring the game's `ZBD` folders in [ZbdTree](architecture/Extraction.md)'s case
+(`planes.zip`, `zrdr.zip`, `soundsh.zip`, `interp.json`, `messages.json`, per chapter
+`C1/gamez.zip`, `C1/rtexture15.zip`, `C1/zrdr.zip`, `C1/cam_anim.zip`, per mission
+`C1/IA1/zrdr.zip`, `C1/IA1/mis_anim.zip`), is read only from a folder named as the modding folder;
+each loader takes a zip or its unpacked sibling folder, the folder winning
+(`SessionPaths.PreferUnzipped`). A data root's old `extracted/` is not read unless named. The
+model-diff tests read the developer's `extracted/` as their oracle (`CSVM.Tests/ModelDiff.cs`),
+found through `CSVM_DATA_ROOT`. Layout: [formats/extraction.md](formats/extraction.md).
 ## Launch scripts
 
 **`RunGame.ps1`, the play entry point.** `dotnet build`, then Godot with **no user args**, so the
@@ -617,8 +572,8 @@ the run instead of answering the question.
 It stages `.scratch\sandbox\<timestamp>-<vgpu|novgpu>\` with an `input\` folder (the zip plus the
 driver script, mapped read-only) and a writable `output\`, writes the `.wsb`, starts Windows Sandbox
 on it and waits for the driver's `done.txt`. `-NoVGpu` is the below-the-floor machine, `-MemoryMB`
-its memory, `-MapReadOnly` adds host folders the zip does not carry (a retail install, an extraction
-tree), `-Networking` gives the guest a network (off by default; the SmartScreen verdict on an
+its memory, `-MapReadOnly` adds host folders the zip does not carry (a retail install, mapped as
+`CrimsonSkiesGame`), `-Networking` gives the guest a network (off by default; the SmartScreen verdict on an
 unknown download is fetched, so a run that records that prompt needs it), and `-Driver` chooses what
 runs inside, so a later item can supply its own procedure without rebuilding the harness. The drivers
 share `sandbox/SandboxCommon.ps1`, copied in beside the driver and dot-sourced by name: the step log,
@@ -634,8 +589,8 @@ at eight seconds and at the end, copies `logs\` back, and reports the renderer f
 dialog on screen, wrote a log and was still running when the watch ended; when the plain launch does
 not, the driver repeats it with `--rendering-driver d3d12`, with `--rendering-method
 gl_compatibility` and with `--rendering-driver opengl3`, so a fallback that does work becomes a
-documented troubleshooting line rather than a guess. With an extraction tree mapped it also flies a
-chapter with `--no-vsync`, because whether a machine renders a menu says nothing about whether it
+documented troubleshooting line rather than a guess. With an install mapped as `CrimsonSkiesGame`
+it also flies a chapter with `--no-vsync`, because whether a machine renders a menu says nothing about whether it
 can fly.
 
 **`sandbox/PublicRelease.ps1`** is the driver that follows `packaging/README.md` literally on a zip
@@ -643,11 +598,13 @@ carrying the mark of the web, with a retail install mapped in (`-MapReadOnly`). 
 into Downloads as a browser leaves it, unzipped through the shell's own copy engine so the mark
 propagates to the files inside, and then each double-click the README names is done twice: once
 through Explorer, which is where the security prompt appears and is recorded, and once as a plain
-process, which is what "Run anyway" leads to. `CSVM.exe` is started before the extraction for the
-screen that offers to extract, the extraction runs as `CSVM.exe --headless -- --extract=<install>`
-on the mapped install (the in-game button needs a click a script may not give, and both run the
-same pipeline), and the menu and a C1 flight run on the data the machine extracted itself. The summary records the mark on the zip and on the extracted files, the extraction's
-time, file count and size, the save folder, and each launch's windows and dialogs.
+process, which is what "Run anyway" leads to. `CSVM.exe` is started before it can find the game,
+for the screen that asks for the game files; the README's Copy, then play runs as
+`CSVM.exe --headless -- --copy-game-files=<install>` on the mapped install (the picker needs a
+click a script may not give, and both run `GameFileCopy`), which lands the files in
+`CrimsonSkiesGame` beside `CSVM.exe`; and the menu and a C1 flight read that copy in place. The
+summary records the mark on the zip and on the unzipped files, the copy's time, file count and
+size, the save folder, and each launch's windows and dialogs.
 
 What the rig had to learn, none of it visible in a failed run:
 
@@ -701,8 +658,7 @@ observed without data says nothing about the floor.
 rather than inside a sandbox: it drives WSL Debian over the tarball `ExportRelease.ps1 -Linux`
 built (`-Tarball` names another) and the author's install (`CrimsonSkiesGame\` under this tree or
 the one `CSVM_DATA_ROOT` names; `-Install` names another). It fails on any failure and prints
-RunTests.ps1-style stage lines and one verdict; a full run takes about 2 min (extraction 25 s,
-the suites 95 s at six shards). Three stages, each run even when an earlier one failed, where it still
+RunTests.ps1-style stage lines and one verdict. Three stages, each run even when an earlier one failed, where it still
 can:
 
 - **payload**: the archive's listing against `packaging/MANIFEST.md`'s Linux table, read from that
@@ -711,11 +667,12 @@ can:
   at the root the table does not name, `CSVM.x86_64` at `-rwxr-xr-x`, the
   notice stamped for the Linux payload, and no carriage return in any top-level text file (a file
   with no NUL byte).
-- **extract**: the unpacked `CSVM.x86_64 --headless -- --extract=<install>` into a fresh data root
-  with the player's defaults (zips only), which must exit 0 and stamp `VERSION.json`. A missing
-  runtime file in `data_CSVM_linuxbsd_x86_64/` fails the launch.
-- **engine** (skipped by `-NoSuites`): `--run-tests=shard:<i>/<n>` over that same zips-only root,
-  the shape every player's install reads, in `-Shards` processes (default 6, the alone suite taking one of them), shard `k` with
+- **copy**: the unpacked `CSVM.x86_64 --headless -- --copy-game-files=<install>` into a fresh data
+  root, the source screen's Copy, then play, which must exit 0 and leave the copy's `ZBD` folder in
+  `<data root>/CrimsonSkiesGame`. A missing runtime file in `data_CSVM_linuxbsd_x86_64/` fails the
+  launch.
+- **engine** (skipped by `-NoSuites`): `--run-tests=shard:<i>/<n>` over that same root, whose game
+  files every session reads in place, in `-Shards` processes (default 6, the alone suite taking one of them), shard `k` with
   `--net-port-base=30000 + (k - 1) * 100`, below Linux's ephemeral range. The suite list is the harness registry's and the division is `analysis/engine-suite-weights.json`,
   copied in beside the exe where the harness looks for it; the merge refuses a missing report, a
   suite run twice, a coverage short of the registry, and an unexpected engine error line.
@@ -855,7 +812,7 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   `Pads.ClaimForSticks`, and `Pads.Connected` leaves every Godot pad of a claimed model out of the
   pad roster, so the stick is read once, through its stick profile. A raw `InputEventJoypadButton`
   handler that does not ask `Pads` still sees its presses: the cutscene and cinema skips, and the
-  extraction screen's install picker.
+  source screen's picker.
 - **Device GUIDs** are SDL's 16 bytes printed in memory order on both platforms. Their content
   differs (a Linux GUID carries the bus type, vendor, product and version), and only the log
   prints them; bindings and profiles key on the model.
@@ -1117,8 +1074,8 @@ slower than budget, leaving the rest of the machine to the game.
   -SelfTest` holds `.pi` to the same value and Codex's one hook for every gate to at least the
   format and content timeouts together. A throttled gate measured 170 s on a busy machine against
   69 s unthrottled; past 240 s in gaming mode the gate prints one warning on stderr.
-- **Not covered:** `RunGame.ps1` and `RunDev.ps1` (the user plays through them), `ExportRelease.ps1`,
-  `Extract.ps1`. `-WaitQuiet` is separate: it waits for scripted Godots whatever the mode.
+- **Not covered:** `RunGame.ps1` and `RunDev.ps1` (the user plays through them), and `ExportRelease.ps1`.
+  `-WaitQuiet` is separate: it waits for scripted Godots whatever the mode.
 - **Goldens that move under the game's GPU load are a determinism defect**, owned by #210; gaming
   mode reduces contention between test runs and is not a fix for one. How the goldens stage reports
   such a move is in the goldens stage's own paragraph above.

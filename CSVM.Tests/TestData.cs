@@ -59,8 +59,8 @@ public static class TestData
     /// when no install is reachable.</summary>
     public static string? ExtractedRoot { get; }
 
-    /// <summary>The folder <c>extracted/</c> sits in, the "data root" the engine's
-    /// <see cref="CSVM.Extraction.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
+    /// <summary>The folder <c>extracted/</c> sits in, the data root the tests hand a reader that
+    /// takes one. Null when <see cref="ExtractedRoot"/> is.</summary>
     public static string? DataRoot { get; }
 
     /// <summary>The install folder holding the ten <c>.mpg</c> cinemas, or null when none is

@@ -601,13 +601,7 @@ internal static class NetSessionSuites
         ctx.Host.AddChild(pane);
         var paths = new BasePaths(
             RepoRoot: ctx.RepoRoot,
-            DataRoot: ctx.DataRoot,
-            PlanesGamezPath: ctx.PlanesGamezPath,
-            ZrdrPath: string.Empty,
-            SoundsPath: ctx.SoundsPath,
-            InterpPath: ctx.InterpPath,
-            MessagesPath: ctx.MessagesPath,
-            RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"))
+            DataRoot: ctx.DataRoot)
         { Game = ctx.Game, Data = ctx.Data };
         var session = new GameSession(spec, new LauncherContext
         {
