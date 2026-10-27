@@ -212,7 +212,9 @@ public class RofFilesTests
             Assert.True(rof.Read(file) is { Length: > 0 }, file);
         }
 
-        Assert.Equal(1217, rof.Files.Count() - movies.Count);
+        // The patch archive adds one member; a pressed disc carries no patch.
+        int patched = GameFilesData.Source!.Exists(RofFiles.PatchPath) ? 1 : 0;
+        Assert.Equal(1216 + patched, rof.Files.Count() - movies.Count);
         Assert.Equal(10, movies.Count);
         Assert.All(movies, m => Assert.True(rof.Head(m, 4) is [0x00, 0x00, 0x01, 0xBA], m));
         Assert.All(movies, m => Assert.True(CSVM.Video.MpegMovie.FromBytes(rof.Read(m)!).NextFrame() != null, m));

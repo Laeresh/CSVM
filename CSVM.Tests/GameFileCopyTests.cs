@@ -175,7 +175,8 @@ public class GameFileCopyTests
         {
             var result = GameFileCopy.Run(install, dataRoot);
             _output.WriteLine($"{result.Files} files, {result.Bytes} bytes copied from {install.Location}");
-            Assert.Empty(result.Missing);
+            // An installed patch leaves nothing missing; a pressed disc lacks only crimptch.rof.
+            Assert.Equal(GameFileCopy.Files.Where(file => !install.Exists(file)), result.Missing);
             var copy = GameFileSource.Locate(null, dataRoot, null, Nowhere);
             Assert.Equal(GameFileCopy.Target(dataRoot), copy?.Location);
             AssertReadsLike(install, copy!);

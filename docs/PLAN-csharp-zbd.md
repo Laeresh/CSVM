@@ -204,7 +204,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 42. ☑ Dev-only `--dump`
 43. ☑ Delete the extraction pipeline
 44. ☑ Packaging, licences, credit and docs
-45. ☐ Final ISO-only run
+45. ☑ Final ISO-only run
 46. ☑ The modding folder: unzbd's output read per archive, opt-in
 
 ## Dependency and parallelism notes
@@ -1792,7 +1792,23 @@ for the fork's repository path returns nothing.
 
 **⚠ Traps.** The release check's extract stages depend on the bundled `unzbd` (see **Landed**).
 
-## E45 ☐ Final ISO-only run
+## E45 ☑ Final ISO-only run
+
+**Landed.** The complete battery runs from the English pressing's raw image alone: `CSVM_DATA_ROOT`
+at an empty scratch folder (holding only a copy of `tools/godot`, which `RunTests.ps1` looks for
+under the data root in a worktree), `CSVM_INSTALL_ROOT` and `CSVM_TEST_CUE` at `tmp/CRIMSON.cue`,
+no install, no copy and no `extracted/` reachable. The engine logs `rof: 1226 files from
+...CRIMSON.cue` and the missing patch archive. No golden moved without `crimptch.rof`. Two units
+assumed the install's patch (the ROF view's member count, a copy with nothing missing) and now take
+their expectation from the source.
+
+**Verified.** complete `RunTests.ps1` on the plan tree at `024a0ddd0` plus the two unit fixes,
+from `tmp/CRIMSON.cue`, PASS: units 6,833 passed, 0 failed, 330 skipped (the tests that compare
+with `extracted/` or need the install); engine 616 passed, 3 skipped (the two webrtc suites and
+`modding-folder`, which builds its folder from `extracted/`), engine errors clean; 38 goldens
+hash-identical.
+
+**Original approach (kept for reference).**
 
 **Goal.** The game runs from an `.iso` with no install, no copy and no `extracted/` present.
 
