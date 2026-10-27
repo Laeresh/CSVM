@@ -603,7 +603,7 @@ internal static class NetSessionSuites
             RepoRoot: ctx.RepoRoot,
             DataRoot: ctx.DataRoot,
             PlanesGamezPath: ctx.PlanesGamezPath,
-            ZrdrPath: ctx.ZrdrPath,
+            ZrdrPath: string.Empty,
             SoundsPath: ctx.SoundsPath,
             InterpPath: ctx.InterpPath,
             MessagesPath: ctx.MessagesPath,

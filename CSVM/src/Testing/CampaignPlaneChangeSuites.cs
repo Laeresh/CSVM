@@ -43,10 +43,10 @@ internal static class CampaignPlaneChangeSuites
         + "keeps its selection and offers both buttons")]
     internal static void CampaignFlightCheckPlaneChange(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         var report = new StringBuilder();
-        var reward = CheckAuthored(ctx, ctx.ZrdrPath, report);
+        var reward = CheckAuthored(ctx, ctx.Zrdr, report);
         string root = Path.Combine(ctx.ScratchDir, "campaign-plane-change");
         if (Directory.Exists(root))
         {
@@ -77,10 +77,10 @@ internal static class CampaignPlaneChangeSuites
     // What the shipped data says before anything is driven: both missions author a wingman row, and
     // the reward table's own entry for this mission awards an aircraft under no objective gate. A
     // suite that drove a re-authored table would prove nothing about the game.
-    private static MissionReward CheckAuthored(TestContext ctx, string zrdrPath, StringBuilder report)
+    private static MissionReward CheckAuthored(TestContext ctx, ZrdrSet zrdr, StringBuilder report)
     {
         var wings = new Dictionary<int, bool>();
-        foreach (var mission in CampaignSequence.Load(zrdrPath))
+        foreach (var mission in CampaignSequence.Load(zrdr))
         {
             wings[mission.Seq] = mission.Wingman;
         }
@@ -125,7 +125,7 @@ internal static class CampaignPlaneChangeSuites
         MissionReward reward, StringBuilder report)
     {
         var profile = Owning("Below", 2);
-        var flow = Open(store, strings, dataRoot, profile, GrantSeq);
+        var flow = Open(ctx, store, strings, dataRoot, profile, GrantSeq);
         ctx.Same(3, profile.Planes.Count, $"opening the flight check grants the mission's aircraft to a two-plane profile");
         CheckAward(ctx, profile, reward, "Below");
         ctx.Check(store.Load("Below") is { Planes.Count: 3 } saved && saved.SelectedPlane == profile.SelectedPlane,
@@ -145,7 +145,7 @@ internal static class CampaignPlaneChangeSuites
         MissionReward reward, StringBuilder report)
     {
         var profile = Owning("Floor", 3);
-        var flow = Open(store, strings, dataRoot, profile, GrantSeq);
+        var flow = Open(ctx, store, strings, dataRoot, profile, GrantSeq);
         ctx.Same(4, profile.Planes.Count, $"the same grant on a three-plane profile takes it to four");
         CheckAward(ctx, profile, reward, "Floor");
 
@@ -168,7 +168,7 @@ internal static class CampaignPlaneChangeSuites
         profile.GrantedAircraft.Add(reward.Airframe);
         profile.Planes.Add(new OwnedPlane { Name = reward.Name, Airframe = reward.Airframe, Special = true });
         profile.SelectedPlane = 0;
-        var flow = Open(store, strings, dataRoot, profile, GrantSeq);
+        var flow = Open(ctx, store, strings, dataRoot, profile, GrantSeq);
         ctx.Same(4, profile.Planes.Count, $"a replay grants the award no second time");
         ctx.Same(1, profile.GrantedAircraft.Count, $"…and records it once");
         CheckAward(ctx, profile, reward, "Replay");
@@ -186,7 +186,7 @@ internal static class CampaignPlaneChangeSuites
         MissionReward reward, StringBuilder report)
     {
         var profile = Owning("Control", 4);
-        var flow = Open(store, strings, dataRoot, profile, ControlSeq);
+        var flow = Open(ctx, store, strings, dataRoot, profile, ControlSeq);
         ctx.Same(4, profile.Planes.Count, $"the neighbouring mission grants nothing");
         ctx.Same(0, profile.SelectedPlane, $"…and leaves the pilot's own selection where it was");
         ctx.Check(!profile.GrantedAircraft.Contains(reward.Airframe),
@@ -225,10 +225,10 @@ internal static class CampaignPlaneChangeSuites
     // A flow seated on that profile and standing on the mission's flight check, entered the way a
     // player reaches it, so the screen's own on-entry write is what the checks then read.
     private static CampaignFlow Open(
-        CampaignProfileStore store, UiStrings strings, string dataRoot, CampaignProfileDef profile, int seq)
+        TestContext ctx, CampaignProfileStore store, UiStrings strings, string dataRoot, CampaignProfileDef profile, int seq)
     {
         store.Save(profile);
-        var flow = new CampaignFlow(store, strings, dataRoot);
+        var flow = new CampaignFlow(store, strings, dataRoot, data: ctx.Data);
         flow.SelectProfile(profile);
         flow.SetMission(seq);
         flow.GoTo(CampaignScreen.FlightCheck);

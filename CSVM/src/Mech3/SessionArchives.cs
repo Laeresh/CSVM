@@ -55,7 +55,7 @@ public sealed class SessionArchives
     /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
     /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
     public static SessionArchives OpenFor(ArchiveIntent intent, Func<GameZ?> gamez, TextureSet texturesSet,
-        SoundZbd? soundsZbd, string zrdrPath, bool mute)
+        SoundZbd? soundsZbd, ZrdrSet zrdr, bool mute)
     {
         long mark = StartupProfile.Mark();
         var world = gamez() ?? throw new FileNotFoundException("the game data holds no world for this build");
@@ -71,8 +71,8 @@ public sealed class SessionArchives
         StartupProfile.Record("sounds", mark);
 
         mark = StartupProfile.Mark();
-        var loadedSoundDefs = haveSounds ? Mech3.SoundDefs.Load(zrdrPath) : null;
-        var loadedSoundGroups = haveSounds ? Mech3.SoundDefs.LoadGroups(zrdrPath) : null;
+        var loadedSoundDefs = haveSounds ? Mech3.SoundDefs.Load(zrdr) : null;
+        var loadedSoundGroups = haveSounds ? Mech3.SoundDefs.LoadGroups(zrdr) : null;
         StartupProfile.Record("zrdr", mark);
 
         if (!mute && !haveSounds)

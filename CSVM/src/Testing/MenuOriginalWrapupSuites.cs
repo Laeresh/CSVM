@@ -54,7 +54,7 @@ internal static class MenuOriginalWrapupSuites
     private static void OnShell(
         TestContext ctx, string scratch, System.Action<MenuHost, ScriptedSeat, OriginalShell, BoardFit> walk)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -187,7 +187,7 @@ internal static class MenuOriginalWrapupSuites
     private static void Photographs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
         var gamez = ctx.ChapterGamez("C4");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
+        ZrdrSet zrdr = ctx.MissionZrdr("C4", "IA1");
         ctx.RequireData(gamez, $"C4 gamez");
         ctx.RequireData(zrdr, $"C4/IA1 zrdr");
         ctx.RequireMessages();

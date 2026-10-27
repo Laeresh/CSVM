@@ -42,18 +42,18 @@ internal static class StuntCaptureSuites
     internal static void StuntCaptureRun(TestContext ctx)
     {
         var chapterGamez = ctx.ChapterGamez(Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(chapterGamez, $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireMessages();
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
 
         var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} ships no Danger Zones");
 
         // The sting has something to play: the definition is a data orphan no SOUND_GROUPS entry
         // and no world data names. Nothing else in the build would notice it going missing.
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        var defs = SoundDefs.Load(ctx.Zrdr);
         ctx.Check(defs.TryGetValue(StingDef, out var sting) && sting.WavName.Length > 0,
             $"the camera sting '{StingDef}' is a real sounds.json definition");
         if (defs.TryGetValue(StingDef, out var def))

@@ -309,7 +309,7 @@ internal sealed class SessionBoards
 
         var (chapterNumber, missionNumber) = campaign.Address;
         var sheet = PauseSheet.Load(
-            _in.ZrdrPath, _in.Messages,
+            _in.Zrdr, _in.Messages,
             EscapeDialog.CampaignKey(chapterNumber, missionNumber), instantAction: false);
         if (sheet == null)
         {
@@ -337,7 +337,7 @@ internal sealed class SessionBoards
             return null;
         }
 
-        var sheet = PauseSheet.LoadMultiplayer(_in.ZrdrPath, _in.Messages, key);
+        var sheet = PauseSheet.LoadMultiplayer(_in.Zrdr, _in.Messages, key);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause: no escape.zrd or Loading.zrd sheet for {spec.Chapter} ({key})");
@@ -354,7 +354,7 @@ internal sealed class SessionBoards
     private OriginalPauseBoard? BuildOwnModePauseBoard()
     {
         string heading = LaunchBoards.Subject(_in.Spec).ToUpperInvariant();
-        if (PauseSheet.LoadOwnMode(_in.ZrdrPath, _in.Messages, heading) is not { } sheet)
+        if (PauseSheet.LoadOwnMode(_in.Zrdr, _in.Messages, heading) is not { } sheet)
         {
             Log.Warn("ui", $"pause: no ia_escape.zrd blackboard for {heading}");
             return null;
@@ -378,7 +378,7 @@ internal sealed class SessionBoards
         var spec = _in.Spec;
         string key = EscapeDialog.InstantActionKey(
             CampaignSequence.ChapterNumber(spec.Chapter), letter);
-        var sheet = PauseSheet.Load(_in.ZrdrPath, _in.Messages, key, instantAction: true);
+        var sheet = PauseSheet.Load(_in.Zrdr, _in.Messages, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause: no ia_escape.zrd sheet for {spec.Chapter} {ia.Def.MissionType}");
@@ -397,7 +397,7 @@ internal sealed class SessionBoards
         try
         {
             return BriefingObjectives.Load(
-                Zrdr.LoadFile(campaign.MissionZrdrPath, "objectives.json"),
+                campaign.MissionZrdr.LoadFile("objectives.json"),
                 _in.Messages);
         }
         catch (Exception e) when (
@@ -622,7 +622,8 @@ internal sealed class SessionBoards
         // The options leaf the launcher builds for the pause board, null for no PREFERENCES door.
         public Func<PausePreferences?>? PauseOptions;
         public Func<IReadOnlyList<Node3D>> LockCandidates = null!;
-        public string ZrdrPath = "", DataRoot = "";
+        public ZrdrSet Zrdr = ZrdrSet.None;
+        public string DataRoot = "";
         public Messages Messages = new();
         // The rimage art the Original pause and race sheets draw.
         public TextureSet Rimage = TextureSet.Empty;

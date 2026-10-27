@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Modes;
+using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Spec;
 using CSVM.Utils;
@@ -41,7 +42,7 @@ public class StartGridTests
     {
         // Heading 0° faces -Z, so the line across it is +X and the offsets read straight off X.
         var starts = Grid(Flat(0f)).ChooseStarts(
-            Spawns(HighAnchor, 0f), "", 0, players);
+            Spawns(HighAnchor, 0f), ZrdrSet.None, 0, players);
 
         Assert.Equal(players, starts.Count);
         for (int i = 0; i < players; i++)
@@ -67,7 +68,7 @@ public class StartGridTests
     {
         const float Heading = 37f;
         var starts = Grid(Flat(0f)).ChooseStarts(
-            Spawns(HighAnchor, Heading), "", 0, players);
+            Spawns(HighAnchor, Heading), ZrdrSet.None, 0, players);
 
         var nose = Forward(Heading);
         foreach (var s in starts)
@@ -93,7 +94,7 @@ public class StartGridTests
     public void EveryPlaneIsOnTheAnchorHeading(float headingDeg)
     {
         var starts = Grid(Flat(0f)).ChooseStarts(
-            Spawns(HighAnchor, headingDeg), "", 0, 4);
+            Spawns(HighAnchor, headingDeg), ZrdrSet.None, 0, 4);
 
         var nose = Forward(headingDeg);
         foreach (var s in starts)
@@ -119,7 +120,7 @@ public class StartGridTests
         // 450 + 100 - 500 = 50 m. The outer two need none (300 and 100 leave them clear already).
         var ground = Heights(new Dictionary<float, float> { [-60f] = 300f, [0f] = 450f, [60f] = 100f });
 
-        var starts = Grid(ground).ChooseStarts(Spawns(anchor, 0f), "", 0, 3);
+        var starts = Grid(ground).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 3);
 
         Assert.Equal(550f, starts[0].Pos.Y, 3);
         Assert.Equal(550f, starts[1].Pos.Y, 3);
@@ -145,7 +146,7 @@ public class StartGridTests
             [-30f] = 400f,
             [30f] = 120f,
             [90f] = 90f,
-        })).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
+        })).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 4);
 
         foreach (var s in starts)
         {
@@ -166,7 +167,7 @@ public class StartGridTests
             [-30f] = 0f,
             [30f] = 0f,
             [90f] = 0f,
-        })).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
+        })).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 4);
 
         foreach (var s in starts)
         {
@@ -190,7 +191,7 @@ public class StartGridTests
             // x = -90 finds nothing; x = -30 needs 550; the other two are clear.
             starts = Grid(p => MathF.Abs(p.X + 90f) < 1f
                 ? (float?)null
-                : p.X < -20f ? 450f : 0f).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
+                : p.X < -20f ? 450f : 0f).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 4);
         }
 
         foreach (var s in starts)
@@ -212,7 +213,7 @@ public class StartGridTests
         IReadOnlyList<FlightStart> starts;
         using (Log.PushConsoleSink(lines.Add))
         {
-            starts = Grid(_ => null).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
+            starts = Grid(_ => null).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 4);
         }
 
         foreach (var s in starts)
@@ -229,12 +230,12 @@ public class StartGridTests
     public void FoundSeaLevelGroundIsNotTheSameAsFindingNone()
     {
         var anchor = new Vector3(0f, 50f, 0f);
-        var found = Grid(Flat(0f)).ChooseStarts(Spawns(anchor, 0f), "", 0, 2);
+        var found = Grid(Flat(0f)).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 2);
         var lines = new List<string>();
         IReadOnlyList<FlightStart> none;
         using (Log.PushConsoleSink(lines.Add))
         {
-            none = Grid(_ => null).ChooseStarts(Spawns(anchor, 0f), "", 0, 2);
+            none = Grid(_ => null).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 2);
         }
 
         Assert.Equal(Clearance, found[0].Pos.Y, 3);   // ground found at 0 ⇒ raised to the clearance
@@ -255,7 +256,7 @@ public class StartGridTests
         // there being nothing to beat.
         var spawns = new[] { new SpawnPoint(new Vector3(-9999f, 300f, 9999f), 123f) };
 
-        var starts = grid.ChooseStarts(spawns, "", 0, 4);
+        var starts = grid.ChooseStarts(spawns, ZrdrSet.None, 0, 4);
 
         // Facing +X ⇒ the line runs along Z; the field's centre is the --pos point exactly.
         Assert.Equal(100f, starts.Average(s => s.Pos.X), 3);
@@ -282,7 +283,7 @@ public class StartGridTests
             new SpawnPoint(new Vector3(4000f, 800f, 1000f), 0f),
         };
         var starts = new StartGrid(new SpawnPicker(SessionSpec.Parse(new[] { "--stunt" })), Flat(0f))
-            .ChooseStarts(spawns, "", 1, 4);
+            .ChooseStarts(spawns, ZrdrSet.None, 1, 4);
 
         Assert.Equal(4000f, starts.Average(s => s.Pos.X), 3);
         foreach (var s in starts)
@@ -318,7 +319,7 @@ public class StartGridTests
         using (Log.PushConsoleSink(lines.Add))
         {
             // Flat ground at 450 ⇒ the whole field lifts 50 m, to y = 550.
-            Grid(Flat(450f)).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
+            Grid(Flat(450f)).ChooseStarts(Spawns(anchor, 0f), ZrdrSet.None, 0, 4);
         }
 
         for (int i = 0; i < 4; i++)
@@ -338,7 +339,7 @@ public class StartGridTests
         var lines = new List<string>();
         using (Log.PushConsoleSink(lines.Add))
         {
-            Grid(Flat(0f)).ChooseStarts(Spawns(HighAnchor, 37f), "", 0, 2);
+            Grid(Flat(0f)).ChooseStarts(Spawns(HighAnchor, 37f), ZrdrSet.None, 0, 2);
         }
 
         // The anchor's own line carries the heading too, so the count is qualified to slot lines.

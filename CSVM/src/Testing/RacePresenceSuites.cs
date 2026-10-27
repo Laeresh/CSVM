@@ -54,7 +54,7 @@ internal static class RacePresenceSuites
     internal static void RacePresence(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireMessages();
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -154,7 +154,7 @@ internal static class RacePresenceSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
                 Racing = racing,
             },
             new HumanRosterBindings { RigCount = rigs.Length, Rigs = rigs, PauseState = new PauseState() },
@@ -340,7 +340,7 @@ internal static class RacePresenceSuites
     private sealed class HeadOnStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var flown = new Vector3(0f, AltitudeM + SinkAllowanceM, 0f);
             var parked = new Vector3(0f, AltitudeM, -GapM);

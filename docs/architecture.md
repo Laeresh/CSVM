@@ -72,7 +72,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell.
 - `src/Mech3/ClutterTemplates.cs`, the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
-- `src/Mech3/Zrdr.cs`, zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
+- `src/Mech3/Zrdr.cs`, the modding path's reader of unzbd's zrdr zip or folder + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/GamePath.cs`, splits a path out of game data on `\` and `/` alike on every host, where `System.IO.Path` splits `\` on Windows only.
 - `src/Mech3/LandingApproaches.cs`, a chapter's `landings.zrd` approach table resolved against the gamez: volume, attitude cone, speed band.
 - `src/Mech3/Pickups.cs`, a mission's compact `pickups.zrd` sensor and radius table, the spheres the ladder switch tests against.
@@ -106,6 +106,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TextureZbd.cs`, the engine-free reader for `texture`/`rtextureN`/`rimage.zbd`: each texture's name, alpha class, flags and pixels, and `TextureSet`, one archive's records by name.
 - `src/Mech3/GameZZbd.cs`, the engine-free reader for `gamez.zbd`/`planes.zbd` into the `GameZ` model.
 - `src/Mech3/ZrdrZbd.cs`, the engine-free reader for `zrdr.zbd` into each reader file's list, with the lookup by name.
+- `src/Mech3/ZrdrSet.cs`, one reader scope (root, chapter or mission) as the lookup every consumer reads, each read a fresh copy.
 - `src/Mech3/AnimZbd.cs`, the engine-free reader for `cam_anim.zbd`/`mis_anim.zbd` into the `AnimArchive` model.
 - `src/Mech3/AnimZbdEvents.cs`, the compiled anim archive's sequence-event payloads, for `AnimZbd`.
 - `src/Mech3/AnimRuntime.cs`, the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
@@ -727,16 +728,17 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
-- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
+- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree (the Original shell's files) into scratch, stamped synthetic.
 - `src/Tooling/SyntheticTextures.cs`, the synthetic run's C1 texture archive, built in memory: one checker record per entry.
-- `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model in memory, plane records, one gun, one rocket and shakes.
+- `src/Tooling/SyntheticPlane.cs`, the synthetic run's stand-in aircraft `probe_plane` and nine more: their box-built model in memory.
 - `src/Tooling/SyntheticPlaneRecords.cs`, the stand-in aircraft archive's records as code: every node in flat order and one box per mesh.
 - `src/Tooling/SyntheticGameData.cs`, the game data a `--synthetic-data` run reads, every model built in memory with no game-file source.
 - `src/Tooling/SyntheticMessages.cs`, the synthetic run's invented message table, built in code.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
-- `src/Tooling/SyntheticSounds.cs`, the synthetic run's sounds: the fixture `sounds.json` plus an in-memory `SoundZbd` of one generated ADPCM WAV per row, and the `voice.json` accent table.
-- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
-- `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez and a compiled anim archive in memory, reader destructibles and two puffer readers.
+- `src/Tooling/SyntheticSounds.cs`, the synthetic run's sounds: an in-memory `SoundZbd` of one generated ADPCM WAV per row.
+- `src/Tooling/SyntheticZrdr.cs`, the synthetic run's reader scopes built in code: the root's invented records, the empty C1 chapter and the invented missions.
+- `src/Tooling/SyntheticMission.cs`, the synthetic run's invented mission addresses: `C1/PROBE1` and the campaign's one story position at `C1/M09`.
+- `src/Tooling/SyntheticEffects.cs`, the synthetic run's anim and effect models: a box-built template gamez and a compiled anim archive in memory.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
 - `src/Tooling/DumpGameFiles.cs`, `--dump`: the game files read through the C# readers, their models written as JSON, PNG and WAV for analysis scripts; never read back.
 
@@ -1061,7 +1063,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 - `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
-- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`, `soundsh.zbd`) and its per-session chapter part (the chapter's textures and world), handed down in place of paths.
+- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`, `soundsh.zbd`, the root `zrdr.zbd`) and its per-session chapter part (the chapter's textures, world and reader scopes), handed down in place of paths.
 
 ### `CSVM.Tests/`, the unit tests
 

@@ -27,9 +27,9 @@ internal static class ZeppelinFuseSuites
         + "damage through the destructible sink")]
     internal static void ZeppelinFuse(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
 
         // Data-driven: the air-to-air suite's fuse pick (a dumbfire, spread-free rocket with no dot
         // cone), so the positive half of this claim is that suite's fused pass on an aircraft.

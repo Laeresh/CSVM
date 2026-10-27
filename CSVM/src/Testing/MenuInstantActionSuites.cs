@@ -57,7 +57,7 @@ internal static class MenuInstantActionSuites
         + "by Down for Weapon Loadout, and its removal hides it.")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");

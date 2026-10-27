@@ -49,16 +49,16 @@ internal static class NetCutsceneSuites
         + "drawn and is visible there, while the host's own aeroplane holds where it stood")]
     internal static void RemoteOwner(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+        var mission = CampaignSequence.Load(ctx.Zrdr).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {FirstSeq} -> {chapter}/{folder}");
@@ -188,7 +188,7 @@ internal static class NetCutsceneSuites
     // episode is claimed by that copy, as a replicated row start claims it.
     private static void Dock(TestContext ctx, TestWorld world, StringBuilder report)
     {
-        var rows = LandingApproaches.Resolve(SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter),
+        var rows = LandingApproaches.Resolve(ctx.ChapterZrdr(world.Chapter),
             world.Gamez, name => world.Runtime.Handles(name));
         var row = rows.FirstOrDefault(r => r.Auto);
         if (row == null || world.Session.Aircraft is not { PlayerMarker: { } marker } stage)

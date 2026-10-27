@@ -63,14 +63,14 @@ internal static class CutsceneFastForwardSuites
         + "handed back at 1 when it ends; a stick's declined skip press, held, fast-forwards it the same way")]
     internal static void HeldFastForward(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = CutsceneSkipSuites.MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = CutsceneSkipSuites.MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");

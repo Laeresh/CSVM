@@ -7,7 +7,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The mission <c>targets.json</c> reader (<c>docs/formats/missions.md</c>): a list of entries,
 /// each a list of <c>[key, value]</c> pairs, not the flat alternating reader form.
-/// Input is <c>fixtures/zrdr/targets.json</c>.
+/// Input is <c>fixtures/zrdr/targets.zrd.json</c>.
 /// </summary>
 public class MissionTargetsTests
 {
@@ -67,12 +67,12 @@ public class MissionTargetsTests
         // `objective` picks the Enemy cycle and `other_target` the Non-Aircraft one, so a reader
         // that folded them together would put every flagged structure on one cycle.
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "targets.json"),
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"),
             "[[[\"nodes\",[\"only_other\"]],[\"other_target\"]],"
             + "[[\"nodes\",[\"only_objective\"]],[\"objective\"]],"
             + "[[\"nodes\",[\"both\"]],[\"other_target\"],[\"objective\"]],"
             + "[[\"nodes\",[\"neither\"]],[\"description\",\"MSG_PLAIN\"]]]");
-        var targets = MissionTargets.Load(dir);
+        var targets = MissionTargets.Load(TestZrdr.Folder(dir));
 
         Assert.True(targets.For("only_other").OtherTarget);
         Assert.False(targets.For("only_other").Objective);
@@ -88,10 +88,10 @@ public class MissionTargetsTests
         // C3/M01's own `other_target` entry: the curated list's whole answer for that mission is
         // one nested [piratezep, rock_zeppelin], and the bare child name must carry nothing.
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "targets.json"),
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"),
             "[[[\"nodes\",[[\"probe_hull\",\"probe_bag\"]]],[\"other_target\"],"
             + "[\"category_label\",\"MSG_PROBE_ZEP\"]]]");
-        var targets = MissionTargets.Load(dir);
+        var targets = MissionTargets.Load(TestZrdr.Folder(dir));
 
         Assert.True(targets.For("probe_hull/probe_bag").OtherTarget);
         Assert.Equal("MSG_PROBE_ZEP", targets.For("probe_hull/probe_bag").CategoryLabel);
@@ -102,7 +102,7 @@ public class MissionTargetsTests
     [Fact]
     public void AMissionWithNoTargetsFileIsEmptyRatherThanAThrow()
     {
-        Assert.Equal(0, MissionTargets.Load(TestData.TempDir()).Count);
+        Assert.Equal(0, MissionTargets.Load(TestZrdr.Folder(TestData.TempDir())).Count);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class MissionTargetsTests
     {
         // The reader search path: the mission's zrdr, then the chapter's. C1C/M01 is the shipped
         // case, labelled entirely by C1C/zrdr/targets.zrd.
-        var fromChapter = MissionTargets.Load(TestData.TempDir(), TestData.Fixture("zrdr"));
+        var fromChapter = MissionTargets.Load(TestZrdr.Folder(TestData.TempDir()), TestZrdr.Fixture("zrdr"));
         Assert.Equal(4, fromChapter.Count);
         Assert.Equal("MSG_PROBE_POINT", fromChapter.For("probe_point").Description);
     }
@@ -119,13 +119,13 @@ public class MissionTargetsTests
     public void AMissionsOwnTargetsFileWinsOverTheChaptersRatherThanMerging()
     {
         var missionZrdr = TestData.TempDir();
-        File.WriteAllText(Path.Combine(missionZrdr, "targets.json"),
+        File.WriteAllText(Path.Combine(missionZrdr, "targets.zrd.json"),
             "[[[\"description\", \"MSG_OWN\"], [\"nodes\", [\"own_node\"]]]]");
-        var targets = MissionTargets.Load(missionZrdr, TestData.Fixture("zrdr"));
+        var targets = MissionTargets.Load(TestZrdr.Folder(missionZrdr), TestZrdr.Fixture("zrdr"));
         Assert.Equal(1, targets.Count);
         Assert.Equal("MSG_OWN", targets.For("own_node").Description);
         Assert.Null(targets.For("probe_point").Description);
     }
 
-    private static MissionTargets Load() => MissionTargets.Load(TestData.Fixture("zrdr"));
+    private static MissionTargets Load() => MissionTargets.Load(TestZrdr.Fixture("zrdr"));
 }

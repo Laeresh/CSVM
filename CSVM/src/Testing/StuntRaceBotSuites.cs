@@ -118,7 +118,7 @@ internal static class StuntRaceBotSuites
         int row = setup.Bots.Rows[0].Id;
         setup.RenameBot(row, Callsign);
         setup.Bots.SetSkill(row, NetBotSkill.Ace);
-        var ia = InstantActionFeature.ForDataRoot(ctx.DataRoot);
+        var ia = InstantActionFeature.ForGameData(ctx.Data);
         ia.SelectEnvironment(InstantActionFeature.Environments.ToList().FindIndex(e => e.Code == chapter));
         ia.ConfirmEnvironment();
         var seats = new[] { new MenuSeatChoice("player_pfighter", Array.Empty<int>()) };
@@ -358,9 +358,9 @@ internal static class StuntRaceBotSuites
     private static string Course(TestContext ctx, string chapter)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, SessionSpec.StuntRaceMission), $"{chapter}/{SessionSpec.StuntRaceMission} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, SessionSpec.StuntRaceMission), $"{chapter}/{SessionSpec.StuntRaceMission} zrdr");
         return chapter;
     }
 

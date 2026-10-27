@@ -117,7 +117,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Availability = OriginalAvailable;
         host.Held = () => stamp.DesktopModeNotice?.Visible == true;
         host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForDataRoot(at.DataRoot));
+        host.Features.Add(InstantActionFeature.ForGameData(at.Data));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature { SeatLimit = SeatLimit() });
@@ -129,7 +129,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
 
         host.Features.Add(notice);
         var strings = UiStrings.TryLoad(at.DataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.ZrdrPath));
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.Data.Zrdr));
         // The campaign feature carries both cinemas because the presentation reads it and cannot
         // reach this module to play a film through.
         _chapterCinema = new ChapterCinema(audio.PlayCinema, audio.StopCinema);

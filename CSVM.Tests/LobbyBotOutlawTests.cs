@@ -213,7 +213,7 @@ public sealed class LobbyBotOutlawTests
         byte hunter = (byte)InstantAction.Militias.ToList().FindIndex(m => m.Name == InstantAction.PlayerMilitia);
         byte medusa = (byte)InstantAction.Militias.ToList().FindIndex(m => m.Name == "Medusa");
 
-        var closed = SeatFields.BotArmsUnder(list, Path.Combine(TestData.RepoRoot, "no-such-zrdr"), messages, Stock)!;
+        var closed = SeatFields.BotArmsUnder(list, ZrdrSet.None, messages, Stock)!;
 
         Assert.True(closed(hunter, "player_kestrel"));
         Assert.False(closed(medusa, "player_kestrel"));
@@ -222,9 +222,9 @@ public sealed class LobbyBotOutlawTests
         Assert.True(SeatFields.BotArmsUnder(list, zrdr, messages, Stock)!(medusa, "player_kestrel"));
     }
 
-    private static (string Zrdr, Messages Messages, MilitiaFits Militias) Install()
+    private static (ZrdrSet Zrdr, Messages Messages, MilitiaFits Militias) Install()
     {
-        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
         var messages = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         return (zrdr, messages, MilitiaFits.Load(zrdr, messages));
     }

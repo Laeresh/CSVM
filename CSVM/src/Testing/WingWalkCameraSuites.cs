@@ -87,15 +87,15 @@ internal static class WingWalkCameraSuites
         + "aeroplane's own position")]
     internal static void WingWalkCamera(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
@@ -133,8 +133,8 @@ internal static class WingWalkCameraSuites
     internal static RosterSpawnPlan? PlanNamed(TestContext ctx, string chapter, string folder,
         string name)
     {
-        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder));
-        var plan = CampaignRosterPlan.Build(blocks, VehicleDefs.Load(ctx.ZrdrPath),
+        var blocks = AiSkills.LoadRoster(ctx.MissionZrdr(chapter, folder));
+        var plan = CampaignRosterPlan.Build(blocks, VehicleDefs.Load(ctx.Zrdr),
             Array.Empty<AiNet>());
         foreach (var spawn in plan.Spawns)
         {
@@ -155,16 +155,16 @@ internal static class WingWalkCameraSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, ctx.DataRoot),
@@ -173,7 +173,7 @@ internal static class WingWalkCameraSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                ChapterZrdr = ctx.ChapterZrdr(chapter),
             },
             new HumanRosterBindings
             {
@@ -582,7 +582,7 @@ internal static class WingWalkCameraSuites
         internal WingWalkStarts(Vector3 near) => _near = near;
 
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

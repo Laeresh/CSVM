@@ -21,8 +21,7 @@ public class LevelOffRateAbsenceTests
 {
     private const float Dt = 1f / 60f;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The census: every <c>dynamics</c> block in the shipped data, the ten keys each one
     /// authors, and the eleventh the parser accepts that none of them does. <c>return_rate</c> is
@@ -32,7 +31,7 @@ public class LevelOffRateAbsenceTests
     [ExtractedDataFact]
     public void NoShippedDynamicsBlockAuthorsTheLevelOffRate()
     {
-        var root = Zrdr.LoadFile(ZrdrPath, "vehicle.json")[0] as List<object?>;
+        var root = ZrdrPath.LoadFile("vehicle.json")[0] as List<object?>;
         Assert.NotNull(root);
         int blocks = 0, withReturnRate = 0, withLevelOff = 0;
         for (int i = 0; i + 1 < root!.Count; i += 2)

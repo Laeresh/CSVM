@@ -237,7 +237,7 @@ internal sealed class NetFlight
     /// A guest builds none, since the host's roster replaces it. A lobby host sends every seat's
     /// fit and custom plane to every guest before the session's opener.</summary>
     public void TakeLaunch(MenuNetLaunch? net, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits,
-        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Messages messages, string zrdrPath)
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Messages messages, ZrdrSet zrdr)
     {
         _wire = net?.Transport;
         _isHost = net?.IsHost ?? false;
@@ -257,7 +257,7 @@ internal sealed class NetFlight
         var mission = _lobbyFlight ? (DogfightMissionType)Door!.Dogfight!.Options.MissionType : DogfightMissionType.Deathmatch;
         var owners = _lobbyFlight ? Door!.Dogfight!.SeatOwners : null;
         var stock = _stock ??= StockLoadouts.Load();
-        var botArms = bots.Count > 0 ? SeatFields.BotArmsUnder(rules, zrdrPath, messages, stock) : null;
+        var botArms = bots.Count > 0 ? SeatFields.BotArmsUnder(rules, zrdr, messages, stock) : null;
         (_roster, _seatFits) = SeatFields.VersusLaunchField(_wire, planes, fits, stock, rules, teamOf,
             bots, pool, mission: mission, owners: owners, botArms: botArms);
         _seatBuilds = SeatFields.SeatBuildsFor(_roster, customs, _wire, rules);

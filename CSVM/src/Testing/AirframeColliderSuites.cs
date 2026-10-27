@@ -75,13 +75,13 @@ internal static class AirframeColliderSuites
     internal static void AirframeColliderHitRate(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         var planesGamez = ctx.Planes;
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a cannon carrying ARMOR_DAMAGE exists in the data");
         if (gun == null)
@@ -214,7 +214,7 @@ internal static class AirframeColliderSuites
         TextureArchive textures, ProjectilePool live, WeaponDef gun, string model)
     {
         string display = MarkerRig.PlayerAirframes.First(a => a.Model == model).Display;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+        var stats = PlaneStats.Load(ctx.Zrdr, model);
         FlightController? rig = null;
         try
         {

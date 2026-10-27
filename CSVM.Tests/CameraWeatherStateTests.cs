@@ -11,9 +11,9 @@ namespace CSVM.Tests;
 /// (1/2/3). Ships dark, nothing consumes it yet, so these tests are the only thing pinning the
 /// state machine until a consumer is wired in.
 ///
-/// <para>The fixture's <c>CLOUD_COVER</c> (<c>fixtures/zrdr/weather.json</c>) is invented, not
-/// copied from an extraction (per <c>fixtures/README.md</c>): TOP 2000/BOTTOM 1000/THICKNESS 200
-/// ⇒ band centre 1500, opaque-core bottom (<see cref="WeatherState.CloudCoreBottom"/>) 1400, the
+/// <para>The fixture's <c>CLOUD_COVER</c> (<c>fixtures/zrdr/weather.zrd.json</c>) is invented, per
+/// <c>fixtures/README.md</c>. TOP 2000/BOTTOM 1000/THICKNESS 200 ⇒ band centre 1500 and
+/// opaque-core bottom (<see cref="WeatherState.CloudCoreBottom"/>) 1400. That bottom is the
 /// state-2 threshold, which is NOT the band centre and NOT <c>BOTTOM</c>.</para>
 /// </summary>
 public class CameraWeatherStateTests
@@ -62,7 +62,7 @@ public class CameraWeatherStateTests
         // A mission whose weather.json carries no CLOUD_COVER block at all (HasCloudBand false)
         // must never reach state 2, at any altitude, the binary's gate sits inside the
         // CLOUD_COVER-exists check.
-        var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
         Assert.False(weather!.HasCloudBand);
         Assert.Equal(1, weather.CameraWeatherState(At(-1000f), fogZoneArmed: false, NoVolumes));
@@ -76,7 +76,7 @@ public class CameraWeatherStateTests
         // C5-style: fog_zone armed (FogVolumeSpec.FogZoneArmed), camera inside one of the
         // chapter's fvol volumes. Uses the no-cloud-band fixture so the result isolates the
         // state-3 test from the altitude threshold above.
-        var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
         var volumes = new[] { BoxVolume("fvol1", new Vector3(-10, -10, -10), new Vector3(10, 10, 10)) };
 
@@ -86,7 +86,7 @@ public class CameraWeatherStateTests
     [Fact]
     public void FogZoneArmedButOutsideEveryVolumeIsNotState3()
     {
-        var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
         var volumes = new[] { BoxVolume("fvol1", new Vector3(-10, -10, -10), new Vector3(10, 10, 10)) };
 
@@ -99,7 +99,7 @@ public class CameraWeatherStateTests
         // C1-style: the chapter's fvol volumes exist but fogvol.zrd's fog_zone is 0 (present,
         // disarmed), FogVolumeSpec.FogZoneArmed is false, and a camera inside a volume must not
         // pick up state 3 from geometry alone.
-        var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
         var volumes = new[] { BoxVolume("fvol1", new Vector3(-10, -10, -10), new Vector3(10, 10, 10)) };
 
@@ -122,7 +122,7 @@ public class CameraWeatherStateTests
 
     private static WeatherState Load()
     {
-        var weather = WeatherState.Load(TestData.Fixture("zrdr"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("zrdr"));
         Assert.NotNull(weather);
         return weather!;
     }

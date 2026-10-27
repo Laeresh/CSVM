@@ -82,8 +82,8 @@ internal static class NetWorldSuites
     internal static void TheHostOwnsTheWorld(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
@@ -92,7 +92,7 @@ internal static class NetWorldSuites
             "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
             "--no-pads", AiField,
         });
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f)
             ?? throw new SuiteSkippedException($"the weapon catalogue holds no cannon with health damage");
 
@@ -162,9 +162,9 @@ internal static class NetWorldSuites
     internal static void TheHostVoicesItsAi(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
@@ -636,7 +636,7 @@ internal static class NetWorldSuites
                 RepoRoot: ctx.RepoRoot,
                 DataRoot: ctx.DataRoot,
                 PlanesGamezPath: ctx.PlanesGamezPath,
-                ZrdrPath: ctx.ZrdrPath,
+                ZrdrPath: string.Empty,
                 SoundsPath: ctx.SoundsPath,
                 InterpPath: ctx.InterpPath,
                 MessagesPath: ctx.MessagesPath,

@@ -173,12 +173,12 @@ public sealed class StuntMission
     /// <c>dzN</c>'s world position from <paramref name="worldGamez"/> and its display strings from
     /// the mission's targets.json (keys resolved via <paramref name="messages"/>). Null if the
     /// mission has no dzones or none of them resolve to a world node (not a stunt mission).</summary>
-    public static StuntMission? Load(GameZ worldGamez, string missionZrdrPath, Messages messages)
+    public static StuntMission? Load(GameZ worldGamez, ZrdrSet missionZrdr, Messages messages)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "ia.json");
+            root = missionZrdr.LoadFile("ia.json");
         }
         catch (System.IO.IOException)
         {
@@ -189,7 +189,7 @@ public sealed class StuntMission
         if (dzones == null || dzones.Count == 0)
             return null;
 
-        var targets = MissionTargets.Load(missionZrdrPath);
+        var targets = MissionTargets.Load(missionZrdr);
         var zones = new List<StuntZone>();
         var unresolved = new List<string>();
         foreach (var pairObj in dzones)

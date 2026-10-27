@@ -26,9 +26,9 @@ public sealed class MilitiaFits
 
     /// <summary>Reads the shared zrdr scope's <c>vehicle.json</c> once for both halves, naming each
     /// militia through <paramref name="messages"/>.</summary>
-    public static MilitiaFits Load(string zrdrPath, Messages messages)
+    public static MilitiaFits Load(ZrdrSet zrdr, Messages messages)
     {
-        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+        var root = zrdr.LoadFile("vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
         return new MilitiaFits(MilitiaPaint.PatternByMilitia(root, messages), VehicleDefs.FromRoot(root));
     }

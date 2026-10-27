@@ -40,7 +40,7 @@ public sealed partial class LoadBoard : Control
     /// is the campaign screen's whole content, null where the extraction could not answer for it.
     /// The briefing is a Dogfight's multiplayer dialog key.</summary>
     public static LoadBoard Build(
-        string dataRoot, Mech3.TextureSet rimage, string zrdrPath, Messages messages, bool campaign, string subject,
+        string dataRoot, Mech3.TextureSet rimage, ZrdrSet zrdr, Messages messages, bool campaign, string subject,
         string? missionType, LoadSheet? sheet = null, string? briefing = null)
     {
         var board = new LoadBoard
@@ -48,7 +48,7 @@ public sealed partial class LoadBoard : Control
             _dataRoot = dataRoot,
             _rimage = rimage,
             _board = LoadScreens.For(
-                campaign, subject, missionType, zrdrPath, messages, sheet, pumped: true,
+                campaign, subject, missionType, zrdr, messages, sheet, pumped: true,
                 briefing: briefing),
             _motion = LoadScreens.MotionFor(campaign, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,

@@ -92,12 +92,12 @@ internal static class HdModelSwapSuites
         + "subtree's target centre, objective site and effect box read the gamez models")]
     internal static void SwapSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var weapon = weapons.All.FirstOrDefault(w => w.Flyout?.Model != null);
         ctx.Check(weapon != null, $"the weapon catalogue holds a weapon with a flyout model");
         if (weapon == null)

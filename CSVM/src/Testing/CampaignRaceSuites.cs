@@ -58,16 +58,16 @@ internal static class CampaignRaceSuites
         + "a racer dying afterwards fires its DEDG and kills the rest of the chain")]
     internal static void CampaignRaceChain(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionAt(CampaignSequence.Load(ctx.ZrdrPath))
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionAt(CampaignSequence.Load(ctx.Zrdr))
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
-        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter));
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(Chapter));
         var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         report.AppendLine($"{Chapter}/{Mission}: {targets.Count} target entries, {script.Objectives.Count} objectives");

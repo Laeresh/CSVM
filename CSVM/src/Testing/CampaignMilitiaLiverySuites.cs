@@ -41,7 +41,7 @@ internal static class CampaignMilitiaLiverySuites
     internal static void CampaignMilitiaLivery(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -52,7 +52,7 @@ internal static class CampaignMilitiaLiverySuites
             throw new SuiteSkippedException("the game files' UI archive ships no paint patterns");
         }
 
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
@@ -65,8 +65,8 @@ internal static class CampaignMilitiaLiverySuites
             var roster = Spawner(ctx, spec, liveries, planesGamez, textures, pool);
             foreach (var (chapter, mission) in Missions)
             {
-                string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
-                string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+                ZrdrSet chapterZrdr = ctx.ChapterZrdr(chapter);
+                ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
                 ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
                 ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
                 var plan = CampaignRosterPlan.Build(AiSkills.LoadRoster(missionZrdr), defs,
@@ -116,7 +116,7 @@ internal static class CampaignMilitiaLiverySuites
                 block, at, at + Vector3.Forward, AiPilot.HoldingCourse(at, at + Vector3.Forward)));
             built.Add(rig);
             var authored = (block.AiDef ?? block.LiveryDef) is { } def
-                ? liveries.DefScheme(ctx.ZrdrPath, def) : null;
+                ? liveries.DefScheme(ctx.Zrdr, def) : null;
             report.AppendLine($"  {block.Name}: team {block.Team} def '{block.AiDef ?? block.LiveryDef ?? "-"}' "
                 + $"-> {rig.Scheme?.Pattern ?? "(unpainted)"} shipped-skins={rig.ShippedSkins} "
                 + $"painter={(rig.Painter == null ? "none" : rig.Painter.PatternMissesAircraft ? "decals only" : "skins")}");
@@ -126,7 +126,7 @@ internal static class CampaignMilitiaLiverySuites
                 friends++;
                 ctx.Check(!rig.ShippedSkins,
                     $"{block.Name} flies on the player's team, outside the shipped-skins reading");
-                if (block.LiveryDef is { } own && liveries.DefScheme(ctx.ZrdrPath, own) == null)
+                if (block.LiveryDef is { } own && liveries.DefScheme(ctx.Zrdr, own) == null)
                 {
                     // The Black Swan: her def authors nothing, so the original sends no scheme and
                     // the Fury's own key skins show, not the player's default pattern.

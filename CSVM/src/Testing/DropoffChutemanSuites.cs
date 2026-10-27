@@ -48,13 +48,13 @@ internal static class DropoffChutemanSuites
         + "directly (never the approach cone) switches it visible")]
     internal static void DropoffChutemanStage(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 

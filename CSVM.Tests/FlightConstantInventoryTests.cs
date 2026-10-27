@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -139,8 +140,7 @@ public class FlightConstantInventoryTests
         typeof(AircraftContactResolver), typeof(NitroSystem),
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>Every constant the plant carries is in the inventory at the recorded value, and the
     /// inventory names nothing the plant has dropped. A new constant is unclassified until its row

@@ -61,9 +61,9 @@ internal static class PauseWorldIconSuites
         + "answer rather than a lookup that found nothing")]
     internal static void PauseWorldIcons(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (MissionAt(missions, BothSeq) is not { } mission)
         {
             throw new SuiteSkippedException($"cm_sequence carries no story position {BothSeq}");
@@ -71,8 +71,8 @@ internal static class PauseWorldIconSuites
 
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(chapter);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
@@ -246,7 +246,7 @@ internal static class PauseWorldIconSuites
         int measured = 0;
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         var script = ObjectiveScript.Load(
-            SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission.MissionFolder.ToUpperInvariant()));
+            ctx.MissionZrdr(chapter, mission.MissionFolder.ToUpperInvariant()));
         foreach (var objective in script.Objectives)
         {
             if (objective.Travelers is not { WherePoint: { Length: >= 3 } at }
@@ -287,7 +287,7 @@ internal static class PauseWorldIconSuites
 
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        var start = SpawnPoints.LoadPlayerInit(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder));
+        var start = SpawnPoints.LoadPlayerInit(ctx.MissionZrdr(chapter, folder));
         if (start is not { } init)
         {
             ctx.Check(false, $"{chapter}/{folder} authors a PLAYER_INIT");
@@ -330,7 +330,7 @@ internal static class PauseWorldIconSuites
 
     private static PauseSheet? SheetOf(TestContext ctx, CampaignMission mission) =>
         PauseSheet.Load(
-            ctx.ZrdrPath, ctx.Data.Messages,
+            ctx.Zrdr, ctx.Data.Messages,
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), instantAction: false);
 
     private static BoardPicture? FindArt(ComposedBoard board, string name)

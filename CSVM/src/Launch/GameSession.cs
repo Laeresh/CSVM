@@ -349,7 +349,7 @@ public partial class GameSession : Node3D
         // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
         // story position, not a chapter, and every path below is derived from those two fields.
         _spec = CampaignDirector.ResolveSeatedPlane(
-            ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.Paths.ZrdrPath), ctx.Paths.DataRoot));
+            ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.Paths.Data.Zrdr), ctx.Paths.Data));
         _paths = ctx.Paths;
         _decode = ctx.Decode;
         _probeRunner = ctx.ProbeRunner;
@@ -654,7 +654,7 @@ public partial class GameSession : Node3D
         SmokeScreenTunables smokeTunables;
         try
         {
-            smokeTunables = SmokeScreenTunables.Load(_paths.ZrdrPath);
+            smokeTunables = SmokeScreenTunables.Load(_paths.Data.Zrdr);
         }
         catch (Exception e)
         {
@@ -680,21 +680,19 @@ public partial class GameSession : Node3D
         var state = new BuildState
         {
             DataRoot = _paths.DataRoot,
-            ZrdrPath = _paths.ZrdrPath,
             SoundsPath = _paths.SoundsPath,
             Data = _paths.Data,
             Chapter = _paths.Data.LoadChapter(_spec.Chapter, _spec.Mission),
             Mute = _spec.Mute,
             DebugCollision = _spec.DebugCollision,
         };
-        state.MissionZrdrPath = SessionPaths.MissionZrdr(_paths.DataRoot, _spec.Chapter, _spec.Mission);
         LoadProgress.Report(LoadStep.Paths);
 
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
-        _campaign = CampaignDirector.TryCreate(_spec, _paths.ZrdrPath, state.MissionZrdrPath, _wire.CoopWingman, _wire.CoopPersisted);
+        _campaign = CampaignDirector.TryCreate(_spec, _paths.Data.Zrdr, state.MissionZrdr, _wire.CoopWingman, _wire.CoopPersisted);
         if (_campaign is { } campaign)
         {
             // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the
@@ -1182,13 +1180,13 @@ public partial class GameSession : Node3D
     // before the mission is known), so this peeks both loaders once ResolveSpec has settled
     // Chapter/Mission. Internal, not private, so the campaign-zeppelins suite exercises the exact
     // code the constructor runs rather than a copy of it. See WithCampaignZeppelins for the why.
-    internal static SessionSpec ResolveCampaignZeppelins(SessionSpec spec, string dataRoot)
+    internal static SessionSpec ResolveCampaignZeppelins(SessionSpec spec, GameData data)
     {
         if (spec.CampaignProfile == null)
         {
             return spec;
         }
-        var missionZrdr = SessionPaths.MissionZrdr(dataRoot, spec.Chapter, spec.Mission);
+        var missionZrdr = data.LoadChapter(spec.Chapter, spec.Mission).MissionZrdr;
         return spec.WithCampaignZeppelins(
             HasMissionRecords(() => Zeppelins.Load(missionZrdr)),
             HasMissionRecords(() => EnemyGenerators.Load(missionZrdr)));
@@ -1369,7 +1367,7 @@ public partial class GameSession : Node3D
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            gamez, state.Chapter.Textures, state.Data.Sounds, state.ZrdrPath, state.Mute);
+            gamez, state.Chapter.Textures, state.Data.Sounds, state.Zrdr, state.Mute);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;
@@ -1517,7 +1515,7 @@ public partial class GameSession : Node3D
             var seatPilots = _wire.Seats.Select(s => UI.Menu.PilotVoices.SpeakerFor(s.Voice))
                 .OfType<int>().ToList();
             voiceClips = CombatVoice.SessionPrewarmNames(
-                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, extraAccents, seatPilots);
+                state.Zrdr, state.MissionZrdr, voiceDefs, voiceGroups, extraAccents, seatPilots);
         }
         var session = WorldSession.Build(
             new WorldSession.Options
@@ -1525,10 +1523,10 @@ public partial class GameSession : Node3D
                 DataRoot = state.DataRoot,
                 Chapter = _spec.Chapter,
                 Mission = _spec.Mission,
-                ZrdrPath = state.ZrdrPath,
+                Zrdr = state.Zrdr,
                 Interp = state.Data.Interp,
-                MissionZrdrPath = state.MissionZrdrPath,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
+                MissionZrdr = state.MissionZrdr,
+                ChapterZrdr = state.ChapterZrdr,
                 ChapterAnim = () => state.Chapter.ChapterAnim,
                 MissionAnim = () => state.Chapter.MissionAnim,
                 Decode = _decode,
@@ -1826,7 +1824,7 @@ public partial class GameSession : Node3D
 
     private void BuildFlightRigs(BuildState state)
     {
-        var voices = _voices = new SessionVoices(_spec, _paths.ZrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
+        var voices = _voices = new SessionVoices(_spec, _paths.Data.Zrdr, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
             onWire: _wire.Link != null);
         long mark = StartupProfile.Mark();
         // On the empty stage the session gamez IS planes.zbd (there is no chapter world). ⚠ Unless
@@ -1843,7 +1841,7 @@ public partial class GameSession : Node3D
         {
             if (statsCache.TryGetValue(plane, out var cached))
                 return cached;
-            var loaded = PlaneStats.Load(state.ZrdrPath, plane);
+            var loaded = PlaneStats.Load(state.Zrdr, plane);
             statsCache[plane] = loaded;
             Log.Info("flight", $"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
             return loaded;
@@ -1858,7 +1856,7 @@ public partial class GameSession : Node3D
             string key = aiDef == null ? plane : $"{plane}/{aiDef}";
             if (aiStatsCache.TryGetValue(key, out var cached))
                 return cached;
-            var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane, aiDef);
+            var loaded = PlaneStats.LoadForAi(state.Zrdr, plane, aiDef);
             aiStatsCache[key] = loaded;
             Log.Info("flight", $"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
             return loaded;
@@ -1870,7 +1868,7 @@ public partial class GameSession : Node3D
         {
             if (camCache.TryGetValue(plane, out var cached))
                 return cached;
-            var loaded = CamParams.Load(state.ZrdrPath, plane);
+            var loaded = CamParams.Load(state.Zrdr, plane);
             camCache[plane] = loaded;
             Log.Info("flight", $"camera [{loaded.DisplayName ?? plane}]: dist={loaded.Dist:0.##} m{(loaded.FromData ? loaded.DisplayName == null ? " (camparam default, no block of its own)" : "" : " (no camparam.json, built-in defaults)")}");
             return loaded;
@@ -1895,7 +1893,7 @@ public partial class GameSession : Node3D
             PadAssignment = padAssignment,
             PauseOptions = _pauseOptionsFactory,
             LockCandidates = LockCandidateAircraft,
-            ZrdrPath = _paths.ZrdrPath,
+            Zrdr = _paths.Data.Zrdr,
             Messages = _paths.Data.Messages,
             Rimage = _paths.Data.Rimage,
             DataRoot = _paths.DataRoot,
@@ -1919,7 +1917,7 @@ public partial class GameSession : Node3D
         _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
         // A team Dogfight walks its teams' blocks of the whole table instead of the free-for-all's.
         _spawnPicker.SeatTeams = VersusDirector.SpawnTeams(_spec, _wire.Seats);
-        var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdrPath, iaScenario);
+        var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdr, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
         _spawnPicker.PlanTeams(spawnList, spawnBase);
 
@@ -1928,18 +1926,18 @@ public partial class GameSession : Node3D
         // reuses the session archives and the world gamez, so rockets get their flyout bodies.
         mark = StartupProfile.Mark();
         var weaponMessages = state.Data.Messages;
-        var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
+        var weaponDefs = WeaponDefs.Load(state.Zrdr, weaponMessages);
         // Decode the catalogue's own sounds while the archive is open. Nothing else covers them:
         // weapons.json names them, not the anim program, and every one is first reached in flight
         // from a trigger pull or an impact, long after the build scope closes.
         PrewarmWeaponSounds(state, weaponDefs);
         var stockLoadouts = StockLoadouts.Load();
-        var shakeDefs = ShakeDefs.Load(state.ZrdrPath);
+        var shakeDefs = ShakeDefs.Load(state.Zrdr);
         // The ai.zrd turret table. A missing/broken file costs the gunners, not the session.
         TurretDefs? turretDefs = null;
         try
         {
-            turretDefs = TurretDefs.Load(state.ZrdrPath);
+            turretDefs = TurretDefs.Load(state.Zrdr);
         }
         catch (Exception e)
         {
@@ -2002,7 +2000,7 @@ public partial class GameSession : Node3D
         }
         else if (wantStunt)
         {
-            stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, state.Data.Messages);
+            stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
             if (stuntZones == null)
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B), a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
@@ -2025,7 +2023,7 @@ public partial class GameSession : Node3D
             Strings = weaponMessages,
             ClockTime = () => _clock?.Time ?? 0.0,
             NetClock = _wire.Clock,
-        }, state.ZrdrPath, _wire.TeamNames);
+        }, state.Zrdr, _wire.TeamNames);
         VersusMatch? versus = _dogfight?.Match;
         // The original's HUD bitmap font, loaded once and shared across panes. Null when the rimage
         // atlas is absent, and its consumers are then simply not built.
@@ -2077,7 +2075,7 @@ public partial class GameSession : Node3D
             HudFont = hudFont,
             ReticleTex = reticleTex,
             Textures = state.Textures,
-            ZrdrPath = state.ZrdrPath,
+            Zrdr = state.Zrdr,
         };
         // Ensured here, before the roster reads it, rather than left to the later mode-ship/
         // generator spawn sites: those cache-check the same field, so this only moves WHEN the
@@ -2110,8 +2108,8 @@ public partial class GameSession : Node3D
             Ambience = _ambience,
             Projectiles = projectiles,
             HumanPositions = PlayerPositionsSnapshot,
-            ChapterZrdrPath = SessionPaths.ChapterZrdr(_paths.DataRoot, _spec.Chapter),
-            MissionZrdrPath = state.MissionZrdrPath,
+            ChapterZrdr = state.ChapterZrdr,
+            MissionZrdr = state.MissionZrdr,
             Gamez = state.Gamez,
             WorldScene = state.WorldScene,
             WorldRuntime = state.WorldRuntime,
@@ -2327,9 +2325,9 @@ public partial class GameSession : Node3D
             state.What += iaDirActors.BuildActors(new InstantActionDirector.ActorBuildInputs
             {
                 Rigs = _rigs,
-                ChapterZrdrPath = worldBindings.ChapterZrdrPath,
-                MissionZrdrPath = state.MissionZrdrPath,
-                ZrdrPath = state.ZrdrPath,
+                ChapterZrdr = worldBindings.ChapterZrdr,
+                MissionZrdr = state.MissionZrdr,
+                Zrdr = state.Zrdr,
                 Messages = state.Data.Messages,
                 SpawnList = spawnList,
                 SpawnBase = spawnBase,
@@ -2350,9 +2348,9 @@ public partial class GameSession : Node3D
                 SpawnSurface = surfaceVehicles != null
                     ? (plan, pos, forward) => surfaceVehicles.Spawn(plan, pos, forward)
                     : null,
-                ChapterZrdrPath = worldBindings.ChapterZrdrPath,
-                MissionZrdrPath = state.MissionZrdrPath,
-                ZrdrPath = state.ZrdrPath,
+                ChapterZrdr = worldBindings.ChapterZrdr,
+                MissionZrdr = state.MissionZrdr,
+                Zrdr = state.Zrdr,
                 MinAiActiveDist = voices.MinAiActiveDist(),
                 Player = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
                 PlayerAirframe = flightRoster.FlyingAirframeOf(0),
@@ -2391,7 +2389,7 @@ public partial class GameSession : Node3D
             WorldRoot = _worldRoot!,
             Roster = flightRoster,
             NetTrailers = netTrailers,
-            ChapterZrdrPath = worldBindings.ChapterZrdrPath,
+            ChapterZrdr = worldBindings.ChapterZrdr,
             World = worldBindings.WorldRuntime,
             Campaign = _campaign,
             MinAiActiveDist = voices.MinAiActiveDist,
@@ -2512,13 +2510,13 @@ public partial class GameSession : Node3D
         // Zeppelin vs Zeppelin, once the hulls, their pools and the world's wire stand.
         _dogfight?.WireZeppelinVersus(new VersusDirector.ZeppelinVersusWireInputs
         {
-            ZrdrPath = state.ZrdrPath,
+            Zrdr = state.Zrdr,
             Zeppelins = _zeppelins,
             SeatOfShooter = _wire.SeatOfShooter,
             Radio = voices.Radio,
             GroundAt = GroundSampler(),
         });
-        _dogfight?.WireRearmBases(state.WorldRuntime, _stageArena, state.ZrdrPath, _zeppelins);
+        _dogfight?.WireRearmBases(state.WorldRuntime, _stageArena, state.Zrdr, _zeppelins);
 
         _wire.WirePositionalStarts(_landings, _ladder, state.WorldRuntime);
         _wire.WireCutscenes(_cutscene);
@@ -2582,7 +2580,7 @@ public partial class GameSession : Node3D
             }
             else if (def != null)
             {
-                scheme = _liveryResolver.DefScheme(state.ZrdrPath, def);
+                scheme = _liveryResolver.DefScheme(state.Zrdr, def);
             }
 
             if (stage.Paint(node, scheme, _liveryResolver.Patterns) is { } painter)
@@ -3415,7 +3413,7 @@ public partial class GameSession : Node3D
             return null;
         }
         _surfaceVehicles = new SurfaceVehicleRuntime(gamez, scene, runtime,
-            VehicleDefs.Load(state.ZrdrPath), runtime.WorldRoot ?? _worldRoot)
+            VehicleDefs.Load(state.Zrdr), runtime.WorldRoot ?? _worldRoot)
         {
             Strings = state.Data.Messages,
         };

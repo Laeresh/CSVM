@@ -77,16 +77,16 @@ internal static class CampaignSquadWakeSuites
     internal static void CampaignSquadWakeup(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -104,7 +104,7 @@ internal static class CampaignSquadWakeSuites
         var report = new StringBuilder();
         CheckAuthored(ctx, script, blocks, Zeppelins.Load(missionZrdr), report);
 
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Zachary"), null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -122,16 +122,16 @@ internal static class CampaignSquadWakeSuites
     internal static void CampaignRosterWakeNode(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -158,7 +158,7 @@ internal static class CampaignSquadWakeSuites
 
     private static void DriveNodeOverride(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = ctx.Planes;
@@ -193,10 +193,10 @@ internal static class CampaignSquadWakeSuites
 
             string what = director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
-                MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
+                MinAiActiveDist = AiSkills.Load(ctx.Zrdr).MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
                     () => human.WorldPosition,
@@ -338,7 +338,7 @@ internal static class CampaignSquadWakeSuites
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, AiSkills skills,
-        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = ctx.Planes;
@@ -358,9 +358,9 @@ internal static class CampaignSquadWakeSuites
 
             string what = director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
@@ -628,7 +628,7 @@ internal static class CampaignSquadWakeSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {
@@ -659,15 +659,15 @@ internal static class CampaignSquadWakeSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, ctx.DataRoot),

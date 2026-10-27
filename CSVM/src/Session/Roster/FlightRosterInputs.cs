@@ -168,7 +168,7 @@ internal sealed class AircraftAssemblyResources
     public HudFont? HudFont { get; init; }
     public Texture2D? ReticleTex { get; init; }
     public RandomNumberGenerator PaintRng { get; init; } = null!;
-    public string ZrdrPath { get; init; } = "";
+    public ZrdrSet Zrdr { get; init; } = ZrdrSet.None;
 }
 
 internal sealed class FlightWorldBindings
@@ -190,8 +190,8 @@ internal sealed class FlightWorldBindings
     /// <summary>The session's one engine duck, handed to every engine voice the roster builds, own
     /// ship and AI alike. A radio line lowers them all through the same gain.</summary>
     public EngineVoiceDuck? VoiceDuck { get; init; }
-    public string ChapterZrdrPath { get; init; } = "";
-    public string MissionZrdrPath { get; init; } = "";
+    public ZrdrSet ChapterZrdr { get; init; } = ZrdrSet.None;
+    public ZrdrSet MissionZrdr { get; init; } = ZrdrSet.None;
     public bool DebugCollision { get; init; }
 
     /// <summary>The live fog band (near, far) the spyglass's range gate reads, for one pane by its

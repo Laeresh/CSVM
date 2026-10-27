@@ -65,7 +65,7 @@ internal static class BotContactSuites
     internal static void GrazeBounceBot(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(StockAirframes.Nodes.ToArray());
@@ -82,7 +82,7 @@ internal static class BotContactSuites
                 planeName ??= ctx.PlaneName;
                 var plane = new PlaneBuilder(planesGamez, textures).Build(planeName);
                 // Each rig loads its own stats: the ground blow switch below writes into them.
-                var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
+                var stats = PlaneStats.Load(ctx.Zrdr, planeName);
                 var model = new FlightModel(stats, aiForcePath: pilot != Pilot.Person);
                 var rig = new FlightController
                 {

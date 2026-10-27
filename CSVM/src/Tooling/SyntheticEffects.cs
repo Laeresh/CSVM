@@ -7,8 +7,8 @@ using Godot;
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The synthetic tree's anim and effect records, the <c>effects</c> family. Under <c>zrdr/</c> it
-/// copies the reader-form destructibles and the two puffer readers. The compiled anim archive
+/// The synthetic run's anim and effect records. The reader-form destructibles and the two puffer
+/// readers are <see cref="SyntheticZrdr"/>'s. The compiled anim archive
 /// (<see cref="Anims"/>) and the template roots it stages (<see cref="Gamez"/>) are built in
 /// memory. No session loader reads them; a suite asks for them by name. Engine-free.
 /// </summary>
@@ -17,23 +17,6 @@ public static class SyntheticEffects
     /// <summary>The compiled archive's label, a name no install carries.</summary>
     public const string Folder = "probe_effects";
 
-    private const string Records = "synthetic/";
-
-    private static readonly (string Fixture, string Target)[] ReaderRecords =
-    {
-        (Records + "zrdr/probe_world.json", "zrdr/probe_world.json"),
-        (Records + "zrdr/flame_ball.json", "zrdr/flame_ball.json"),
-        (Records + "zrdr/pufftrails.json", "zrdr/pufftrails.json"),
-    };
-
-    /// <summary>Writes the reader records.</summary>
-    public static void Write(SyntheticTree tree)
-    {
-        foreach (var (fixture, target) in ReaderRecords)
-        {
-            tree.CopyFixture(fixture, target);
-        }
-    }
 
     /// <summary>The template gamez, built in memory: one node per template, depth first, children by
     /// flat index. Each node that names a box gets its mesh in the order met.</summary>

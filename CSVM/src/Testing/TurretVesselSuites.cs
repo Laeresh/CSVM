@@ -36,9 +36,9 @@ internal static class TurretVesselSuites
         + "still runs the one hostility predicate rather than shooting at everything afloat")]
     internal static void TurretVesselTargets(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BoatChapter, BoatMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(BoatChapter);
         TextureSet texturesPath = ctx.ChapterTextures(BoatChapter);
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
@@ -46,10 +46,10 @@ internal static class TurretVesselSuites
 
         var mission = MissionOf(ctx, BoatChapter, BoatMission);
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Guns"), null);
 
         var textures = new TextureArchive(texturesPath);
@@ -65,9 +65,9 @@ internal static class TurretVesselSuites
                 int aircraftAsked = 0;
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     FindNodes = name => world.Runtime.FindNodes(name),
                     Spawn = (_, _, _, _) =>
@@ -181,7 +181,7 @@ internal static class TurretVesselSuites
 
     private static CampaignMission MissionOf(TestContext ctx, string chapter, string folder)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))

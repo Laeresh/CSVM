@@ -425,7 +425,7 @@ public class AiTargetRankingTests
         // Read off vehicle.json, never typed in: a wingman def carries -100 target_bias and -200
         // struct_bias, a bare enemy AI def carries neither, and the player chain's own
         // player_airplane carries the -300 that makes a human the most attractive candidate.
-        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
         var wingman = PlaneStats.LoadForAi(zrdr, "player_bhawk", "wbloodhawk");
         Assert.Equal(-100f, wingman.AiTargetBias, 1);
         Assert.Equal(-200f, wingman.AiStructBias, 1);
@@ -608,7 +608,7 @@ public class AiTargetRankingTests
             {
                 // Chapter-scope dirs (anim/texture/zrdr/…) are not missions and have no
                 // <dir>/zrdr scope; a mission dir without an aiv also just contributes nothing.
-                string zrdr = SessionPaths.MissionZrdr(root, chapter, Path.GetFileName(missionDir));
+                var zrdr = TestZrdr.Mission(chapter, Path.GetFileName(missionDir));
                 List<(string Name, List<object?> Fields)> roster;
                 try
                 {

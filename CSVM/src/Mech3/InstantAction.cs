@@ -140,9 +140,9 @@ public static class InstantAction
     /// <summary>Loads one chapter's shipped <c>ia.zrd.json</c> (the mission's own zrdr scope,
     /// e.g. <c>&lt;chapter&gt;/IA1/zrdr</c>, only IA1 folders carry one). Throws
     /// <see cref="FileNotFoundException"/> when the mission has no such file.</summary>
-    public static InstantActionDef Load(string missionZrdrPath)
+    public static InstantActionDef Load(ZrdrSet missionZrdr)
     {
-        var root = Zrdr.LoadFile(missionZrdrPath, "ia.json");
+        var root = missionZrdr.LoadFile("ia.json");
         return BuildDef(ZrdrDict.FromAlternating(root));
     }
 

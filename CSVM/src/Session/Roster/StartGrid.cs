@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
@@ -45,18 +46,18 @@ public sealed class StartGrid : IFlightStarts
     /// ⚠ The ground is probed under every slot and the entire field raised by the worst slot's
     /// need, never each plane by its own ground (this module's docs/architecture.md entry).</summary>
     public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-        string missionZrdrPath, int spawnBase, int playerCount)
+        ZrdrSet missionZrdr, int spawnBase, int playerCount)
     {
         // Read-through at the point of use, once per session: the grid is constructed at session
         // build and asked exactly once, so this is also the moment the values in force are logged.
         float spacing = Config.GetFloat("startGrid.slotSpacing", SlotSpacingDefault);
         float clearance = Config.GetFloat("startGrid.groundClearance", GroundClearanceDefault);
 
-        var (anchorPos, anchorLookAt) = _picker.ChooseSpawn(spawns, missionZrdrPath, spawnBase, 0, "grid anchor ");
+        var (anchorPos, anchorLookAt) = _picker.ChooseSpawn(spawns, missionZrdr, spawnBase, 0, "grid anchor ");
         // One start state for the whole grid, from the picker, so every slot begins on the same
         // throttle and speed. Deriving it per slot is the mixed-grid unfairness the grid exists
         // to remove, in the one coordinate the slot geometry does not control.
-        var (throttle, speed) = _picker.StartState(spawns, missionZrdrPath);
+        var (throttle, speed) = _picker.StartState(spawns, missionZrdr);
 
         // The heading comes from the anchor's own pos→look-at pair, never from the spawn's
         // HeadingDeg: the --pos override has no heading field, and re-reading the list entry would

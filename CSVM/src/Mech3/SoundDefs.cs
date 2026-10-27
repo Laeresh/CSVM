@@ -12,7 +12,7 @@ namespace CSVM.Mech3;
 public static class SoundDefs
 {
     /// <summary>Loads all SETS entries from sounds.json in a zrdr extraction (zip or dir).</summary>
-    public static Dictionary<string, SoundDef> Load(string zrdrPath)
+    public static Dictionary<string, SoundDef> Load(ZrdrSet zrdr)
     {
         static float? Num(object? v) => v switch
         {
@@ -23,7 +23,7 @@ public static class SoundDefs
         };
 
         var defs = new Dictionary<string, SoundDef>(StringComparer.OrdinalIgnoreCase);
-        var root = Zrdr.LoadFile(zrdrPath, "sounds.json")[0] as List<object?>
+        var root = zrdr.LoadFile("sounds.json")[0] as List<object?>
             ?? throw new InvalidOperationException("sounds.json: unexpected root shape");
         var sets = ZrdrDict.FromAlternating(root).List("SETS")
             ?? throw new InvalidOperationException("sounds.json: no SETS block");
@@ -73,10 +73,10 @@ public static class SoundDefs
     /// member is kept as <see cref="SoundGroup.Chains"/> rather than a weighted member. A group
     /// with neither members nor chains is not registered.
     /// </summary>
-    public static Dictionary<string, SoundGroup> LoadGroups(string zrdrPath)
+    public static Dictionary<string, SoundGroup> LoadGroups(ZrdrSet zrdr)
     {
         var groups = new Dictionary<string, SoundGroup>(StringComparer.OrdinalIgnoreCase);
-        var root = Zrdr.LoadFile(zrdrPath, "sounds.json")[0] as List<object?>
+        var root = zrdr.LoadFile("sounds.json")[0] as List<object?>
             ?? throw new InvalidOperationException("sounds.json: unexpected root shape");
         var list = ZrdrDict.FromAlternating(root).List("SOUND_GROUPS");
         if (list == null)

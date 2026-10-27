@@ -36,7 +36,7 @@ internal static class ExhaustSmokeSuites
     internal static void ExhaustSmokeCharge(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
@@ -104,7 +104,7 @@ internal static class ExhaustSmokeSuites
     internal static void ExhaustSmokeAi(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
@@ -194,7 +194,7 @@ internal static class ExhaustSmokeSuites
     // so it exists only once the plane model is under the controller.
     private static FlightController IdlingRig(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var pos = new Vector3(0f, SpawnAltitudeM, 0f);
         var rig = new FlightController

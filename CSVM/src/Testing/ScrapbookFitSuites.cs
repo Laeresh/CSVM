@@ -74,7 +74,8 @@ internal static class ScrapbookFitSuites
         var flow = new CampaignFlow(
             new CampaignProfileStore(Path.Combine(ctx.ScratchDir, "scrapbook-fit", "Profiles")),
             UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty,
-            ctx.DataRoot);
+            ctx.DataRoot,
+            data: ctx.Data);
         var page = new CampaignScrapbookZoomPage(flow);
         var report = new StringBuilder();
         var swollen = new List<string>();

@@ -173,12 +173,12 @@ internal static class WingmanSuites
         JitterGate(ctx);
 
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         try
         {
@@ -217,7 +217,7 @@ internal static class WingmanSuites
     internal static void WingmanEngage(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -244,8 +244,8 @@ internal static class WingmanSuites
     internal static void WingmanLostLeader(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, LostLeaderChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(LostLeaderChapter);
         ctx.RequireData(chapterZrdr, $"{LostLeaderChapter} chapter zrdr");
         TextureSet texturesPath = ctx.ChapterTextures(LostLeaderChapter);
         ctx.RequireData(texturesPath, $"{LostLeaderChapter} textures");
@@ -255,7 +255,7 @@ internal static class WingmanSuites
             throw new SuiteSkippedException($"{LostLeaderChapter} carries no net #{LostLeaderNetId}");
         }
 
-        float minActive = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist;
+        float minActive = AiSkills.Load(ctx.Zrdr).MinAiActiveDist;
         var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         try
@@ -273,13 +273,13 @@ internal static class WingmanSuites
     // gate reaching an aircraft it was not authored on, so the gate is read before the behaviour.
     private static void EngageGates(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, EngageChapter, EngageMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(EngageChapter, EngageMission);
         ctx.RequireData(missionZrdr, $"{EngageChapter}/{EngageMission} zrdr");
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var plan = CampaignRosterPlan.Build(
             AiSkills.LoadRoster(missionZrdr),
-            VehicleDefs.Load(ctx.ZrdrPath),
-            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, EngageChapter)),
+            VehicleDefs.Load(ctx.Zrdr),
+            AiNets.Load(ctx.ChapterZrdr(EngageChapter)),
             netDraw: _ => 0);
 
         int escorts = 0, biased = 0, gated = 0;
@@ -291,7 +291,7 @@ internal static class WingmanSuites
             }
             escorts++;
             biased += spawn.Biases.Count > 0 ? 1 : 0;
-            var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, spawn.PlaneNode);
+            var stats = PlaneStats.LoadForAi(ctx.Zrdr, spawn.PlaneNode);
             var machine = new AiModeMachine(new System.Random(7))
             {
                 ActivationRange = skills.MinAiActiveDist,
@@ -315,9 +315,9 @@ internal static class WingmanSuites
     // tells anyone to ignore, so nothing here is answered by a bias.
     private static void FlyEngageLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, FlownPlaneNode);
-        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var stats = PlaneStats.Load(ctx.Zrdr, FlownPlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, FlownPlaneNode);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         LoadoutDef? stock = null;
         foreach (var def in StockLoadouts.Load().All.Values)
         {
@@ -417,8 +417,8 @@ internal static class WingmanSuites
     private static void FlyLostLeaderLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures,
         AiNet leadersNet, float minActive)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, FlownPlaneNode);
-        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        var stats = PlaneStats.Load(ctx.Zrdr, FlownPlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, FlownPlaneNode);
         ProjectilePool? pool = null;
         FlightController? leader = null, wing = null, human = null, humansWing = null;
         try
@@ -565,10 +565,10 @@ internal static class WingmanSuites
     // must be moved by one. The jet arm is the able-to-fail control for the wingman arm.
     private static void JitterGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane(FlownPlaneNode);
-        var wingman = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode, WingmanAiDef);
-        var jet = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        var wingman = PlaneStats.LoadForAi(ctx.Zrdr, FlownPlaneNode, WingmanAiDef);
+        var jet = PlaneStats.LoadForAi(ctx.Zrdr, FlownPlaneNode);
         ctx.Note($"[jitter] '{wingman.AiDefName}' mode={wingman.VehicleMode} fd_speed {wingman.FdSpeed:0.0} m/s, '{jet.AiDefName}' mode={jet.VehicleMode} fd_speed {jet.FdSpeed:0.0} m/s");
 
         float worstWingman = 0f, worstJet = 0f;
@@ -690,8 +690,8 @@ internal static class WingmanSuites
     private static void FlyFlownLeaderLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures,
         string planeNode)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
-        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, planeNode);
+        var stats = PlaneStats.Load(ctx.Zrdr, planeNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, planeNode);
         ctx.Note($"[flown {planeNode}] leader fd_speed {stats.FdSpeed:0.0} m/s, wingman fd_speed {aiStats.FdSpeed:0.0} m/s, ceiling {AiControlLaw.SpeedCeiling:0.0} m/s, margin {stats.FdSpeed - AiControlLaw.SpeedCeiling:0.0} m/s");
         ProjectilePool? pool = null;
         FlightController? leader = null;
@@ -823,8 +823,8 @@ internal static class WingmanSuites
     // measures what the burn costs the station and what the leader's turns give back.
     private static void FlyNitroLeaderLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, FlownPlaneNode);
-        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        var stats = PlaneStats.Load(ctx.Zrdr, FlownPlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, FlownPlaneNode);
         ProjectilePool? pool = null;
         FlightController? leader = null;
         FlightController? wing = null;

@@ -45,9 +45,9 @@ public sealed record LoadSheet(
     /// unreadable extraction or a key the file does not carry, which leaves the screen its frame
     /// and its bar.</summary>
     public static LoadSheet? Load(
-        string zrdrPath,
+        ZrdrSet zrdr,
         Messages messages,
-        string missionZrdrPath,
+        ZrdrSet missionZrdr,
         string dialogKey,
         string memento)
     {
@@ -55,9 +55,9 @@ public sealed record LoadSheet(
         IReadOnlyList<BriefingObjective> objectives;
         try
         {
-            dialog = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
+            dialog = EscapeDialog.Load(zrdr, EscapeDialog.LoadingFile);
             objectives = BriefingObjectives.Load(
-                Zrdr.LoadFile(missionZrdrPath, "objectives.json"), messages);
+                missionZrdr.LoadFile("objectives.json"), messages);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -161,16 +161,16 @@ public static class LoadScreens
         bool campaign,
         string subject,
         string? missionType,
-        string zrdrPath,
+        ZrdrSet zrdr,
         Messages messages,
         LoadSheet? sheet = null,
         bool pumped = false,
         string? briefing = null) =>
         campaign
             ? CampaignSheet(sheet, pumped)
-            : briefing != null && Briefing(briefing, zrdrPath, messages, pumped) is { } board
+            : briefing != null && Briefing(briefing, zrdr, messages, pumped) is { } board
                 ? board
-                : Blackboard(Texts(missionType, subject, zrdrPath, messages), pumped);
+                : Blackboard(Texts(missionType, subject, zrdr, messages), pumped);
 
     /// <summary>The two moving pieces of one launch's screen, found once because a build reports
     /// its steps ten times a second and a composition is not worth redoing per step.</summary>
@@ -287,14 +287,14 @@ public static class LoadScreens
     /// place, no dialog's blurb being true of it. So does a Dogfight whose multiplayer dialog did
     /// not read.</summary>
     public static IReadOnlyList<BoardLine> Texts(
-        string? missionType, string heading, string zrdrPath, Messages messages)
+        string? missionType, string heading, ZrdrSet zrdr, Messages messages)
     {
         if (LetterFor(missionType) is not { } letter)
         {
             return new[] { new BoardLine(heading, 70f, 35f, 0f, TitleFace, BoardInk.Heading) };
         }
 
-        return DialogTexts(zrdrPath, DialogFile, DialogPrefix + letter, messages);
+        return DialogTexts(zrdr, DialogFile, DialogPrefix + letter, messages);
     }
 
     /// <summary>The words one blackboard dialog writes, Instant Action or multiplayer, at its own
@@ -302,11 +302,11 @@ public static class LoadScreens
     /// dialog draws through the same composition as the load screen's. The two author the same
     /// texts (docs/org/pause-screen.md).</summary>
     public static IReadOnlyList<BoardLine> DialogTexts(
-        string zrdrPath, string file, string dialog, Messages messages)
+        ZrdrSet zrdr, string file, string dialog, Messages messages)
     {
         ArgumentNullException.ThrowIfNull(messages);
         var lines = new List<BoardLine>(4);
-        foreach (var text in Widgets(zrdrPath, file, dialog))
+        foreach (var text in Widgets(zrdr, file, dialog))
         {
             var at = text.List("at");
             if (at is not { Count: >= 2 } || at[0] is not float x || at[1] is not float y)
@@ -491,12 +491,12 @@ public static class LoadScreens
     // A Dogfight's multiplayer screen: the dialog's frame, the photographs and propeller its script
     // places, its texts, and the chalk bar its PROGRESS authors. Null for a dialog the file lacks.
     // Never the file's default, whose bare frame says less than the heading the caller keeps.
-    private static ComposedBoard? Briefing(string key, string zrdrPath, Messages messages, bool pumped)
+    private static ComposedBoard? Briefing(string key, ZrdrSet zrdr, Messages messages, bool pumped)
     {
         EscapeDialog dialog;
         try
         {
-            dialog = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
+            dialog = EscapeDialog.Load(zrdr, EscapeDialog.LoadingFile);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -523,7 +523,7 @@ public static class LoadScreens
         return new ComposedBoard(
             pictures,
             Array.Empty<BoardStroke>(),
-            OnBoard(DialogTexts(zrdrPath, DialogFile, key, messages), ChalkBarY),
+            OnBoard(DialogTexts(zrdr, DialogFile, key, messages), ChalkBarY),
             Array.Empty<BoardPlaque>());
     }
 
@@ -594,12 +594,12 @@ public static class LoadScreens
 
     // Every Text the named dialog's script places, in script order, as its own property dict. An
     // unreadable or absent extraction yields none, since a board must still come up without one.
-    private static IEnumerable<ZrdrDict> Widgets(string zrdrPath, string file, string dialog)
+    private static IEnumerable<ZrdrDict> Widgets(ZrdrSet zrdr, string file, string dialog)
     {
         List<object?>? script;
         try
         {
-            script = Script(Zrdr.LoadFile(zrdrPath, file), dialog);
+            script = Script(zrdr.LoadFile(file), dialog);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {

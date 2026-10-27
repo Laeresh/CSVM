@@ -36,11 +36,11 @@ internal static class TorpedoInterceptSuites
     internal static void TorpedoIntercept(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         if (OrdnanceSuites.PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo && w.Targetable) is not { } torpedo
             || OrdnanceSuites.PickWeapon(ctx, weapons, "wep_06", w => w.IsRocket && !w.Targetable) is not { } rocket)
         {
@@ -242,8 +242,8 @@ internal static class TorpedoInterceptSuites
         WeaponDefs weapons, WeaponDef torpedo, WeaponDef rocket, float reveal)
     {
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var stock = StockLoadouts.Load().All.Values.FirstOrDefault(d => d.Model == ctx.PlaneName);
         ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
         if (stock == null)

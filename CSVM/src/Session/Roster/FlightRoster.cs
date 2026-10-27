@@ -61,7 +61,7 @@ public sealed class FlightRoster
     private readonly FlightWorldBindings _world;
     private readonly HumanRosterBindings _human;
     private readonly Action? _aiAssemblyFault;
-    private readonly string _zrdrPath;
+    private readonly ZrdrSet _zrdr;
     private readonly LiveryResolver _liveries;
     private readonly List<FlightController> _ai = new();
     private readonly IReadOnlyList<FlightController> _aiView;
@@ -105,7 +105,7 @@ public sealed class FlightRoster
         _world = world;
         _human = human;
         _aiAssemblyFault = aiAssemblyFault;
-        _zrdrPath = aircraft.ZrdrPath;
+        _zrdr = aircraft.Zrdr;
         _liveries = liveries;
         _aiView = _ai.AsReadOnly();
         _aiAssembler = new AiFlightAssembler(policy, liveries, worldEffects, worldRoot,
@@ -460,7 +460,7 @@ public sealed class FlightRoster
 
         if (AirframeHandover.CapturedPaintDef(airframe) is { } def && !_liveries.PaintRequested)
         {
-            return (_liveries.DefScheme(_zrdrPath, def), true);
+            return (_liveries.DefScheme(_zrdr, def), true);
         }
 
         return (null, airframe.ShippedSkins);

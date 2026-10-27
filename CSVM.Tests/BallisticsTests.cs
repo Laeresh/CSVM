@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -21,8 +22,7 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public class BallisticsTests
 {
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     /// <summary>With no ACCELERATION and no GRAVITY the march is a straight line of exactly the
     /// asked-for path length, and the step size cannot move it, which is the whole reason the

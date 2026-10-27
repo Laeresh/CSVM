@@ -27,13 +27,13 @@ public static class MissionCutscenes
     /// order, de-duplicated. A mission with no <c>cutscenes\</c> entry, and one whose
     /// <c>mis_anim.zrd</c> is missing or unreadable, resolves to nothing, so a caller can treat
     /// "this mission hosts no cutscene of its own" and "this is not a story mission" alike.</summary>
-    public static List<string> AnimNames(string missionZrdrPath)
+    public static List<string> AnimNames(ZrdrSet missionZrdr)
     {
         var names = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in Files(missionZrdrPath))
+        foreach (var file in Files(missionZrdr))
         {
-            foreach (var def in AnimDefs.LoadFileDefs(missionZrdrPath, file))
+            foreach (var def in AnimDefs.LoadFileDefs(missionZrdr, file))
             {
                 if (def.AnimName is { Length: > 0 } name && seen.Add(name))
                 {
@@ -93,12 +93,12 @@ public static class MissionCutscenes
         return files;
     }
 
-    private static List<string> Files(string missionZrdrPath)
+    private static List<string> Files(ZrdrSet missionZrdr)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFileOrEmpty(missionZrdrPath, FileName);
+            root = missionZrdr.LoadFileOrEmpty(FileName);
         }
         catch (Exception e) when (e is IOException or System.Text.Json.JsonException)
         {

@@ -59,7 +59,7 @@ public sealed class MatchScoresTests
     public void AnUnreadableArchiveKeepsTheFallbacksAndSaysWhy()
     {
         string? why = null;
-        var scores = MatchScores.Load(Path.Combine(TestData.TempRoot, "no-such-zrdr"), reason => why = reason);
+        var scores = MatchScores.Load(ZrdrSet.None, reason => why = reason);
         Assert.Equal(MatchScores.Fallback, scores);
         Assert.NotNull(why);
     }
@@ -67,7 +67,7 @@ public sealed class MatchScoresTests
     [ExtractedDataFact]
     public void TheShippedPlayerZrdAuthorsKillSuicideHullAndBothFlags()
     {
-        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
 
         var shipped = MatchScores.Load(zrdr);
 

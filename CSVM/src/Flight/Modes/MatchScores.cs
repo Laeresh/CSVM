@@ -39,13 +39,13 @@ public sealed record MatchScores(
             Key("score_enemy_flag", fb.FlagCapture));
     }
 
-    /// <summary>The values of the <c>player.zrd</c> in <paramref name="zrdrPath"/>, else
+    /// <summary>The values of the <c>player.zrd</c> in <paramref name="zrdr"/>, else
     /// <see cref="Fallback"/> with the reason handed to <paramref name="warn"/>.</summary>
-    public static MatchScores Load(string zrdrPath, Action<string>? warn = null)
+    public static MatchScores Load(ZrdrSet zrdr, Action<string>? warn = null)
     {
         try
         {
-            if (Zrdr.LoadFile(zrdrPath, "player.json") is [List<object?> list, ..])
+            if (zrdr.LoadFile("player.json") is [List<object?> list, ..])
             {
                 return Read(ZrdrDict.FromAlternating(list));
             }

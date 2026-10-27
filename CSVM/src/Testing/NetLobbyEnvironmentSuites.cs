@@ -62,7 +62,7 @@ internal static class NetLobbyEnvironmentSuites
         ctx.Check(LoadScreens.MultiplayerKey(spec.Chapter, DogfightMissionType.ZeppelinVsZeppelin, true) == "loading_m3z",
             $"and its load screen names the row's own dialog ({LoadScreens.MultiplayerKey(spec.Chapter, DogfightMissionType.ZeppelinVsZeppelin, true)})");
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, spec.Chapter, spec.Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(spec.Chapter, spec.Mission);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.ChapterGamez(spec.Chapter), $"{spec.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{spec.Chapter}/{spec.Mission} zrdr");
@@ -174,9 +174,9 @@ internal static class NetLobbyEnvironmentSuites
         }),
             $"the lobby's options launch C1's IA1 as a {RaceMinutes} minute race on both machines ({specs[0].Chapter}/{specs[0].Mission}, {specs[0].MissionType}, {specs[0].StuntRaceMinutes} min)");
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RaceChapter, SessionSpec.StuntRaceMission);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 

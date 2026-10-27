@@ -210,17 +210,17 @@ public class ClutterTemplatesTests
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "templates.zrd.json"), "null");
 
-        var empty = ClutterTemplateSpec.Load(dir);
+        var empty = ClutterTemplateSpec.Load(TestZrdr.Folder(dir));
         Assert.NotNull(empty);
         Assert.Empty(empty!.Kinds);
-        Assert.Null(ClutterTemplateSpec.Load(TestData.TempDir()));
+        Assert.Null(ClutterTemplateSpec.Load(TestZrdr.Folder(TestData.TempDir())));
     }
 
     [ExtractedDataTheory]
     [MemberData(nameof(ChapterTemplateCensus))]
     public void EveryChaptersTemplateCensusIsWhatTheDataSays(string chapter, string expected)
     {
-        var spec = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+        var spec = ClutterTemplateSpec.Load(TestZrdr.Chapter(chapter));
 
         Assert.NotNull(spec);
         Assert.StartsWith(expected, spec!.Census());
@@ -232,7 +232,7 @@ public class ClutterTemplatesTests
     {
         // The load-bearing negative, asserted per chapter: with none of these five authored, the
         // install has no random input affecting position or orientation (docs/formats/templates.md).
-        var spec = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+        var spec = ClutterTemplateSpec.Load(TestZrdr.Chapter(chapter));
 
         Assert.NotNull(spec);
         Assert.EndsWith(
@@ -251,7 +251,7 @@ public class ClutterTemplatesTests
         float fadeLo = float.MaxValue, fadeHi = float.MinValue;
         foreach (var chapter in new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" })
         {
-            var spec = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+            var spec = ClutterTemplateSpec.Load(TestZrdr.Chapter(chapter));
             Assert.NotNull(spec);
             foreach (var kind in spec!.Kinds)
             {

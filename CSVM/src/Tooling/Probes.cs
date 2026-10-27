@@ -64,13 +64,6 @@ public static class Probes
     // `&lt;Cx&gt;/zrdr/` patrol-net scope and mission dirs.
     private static readonly string[] AiChapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
-    // Chapter-scope directory names that are NOT mission dirs, so a plain
-    // Directory.EnumerateDirectories(string) over a chapter folder can tell a
-    // mission (`IA1`/`M0x`/`MP1-3`) from the chapter's own gamez/texture/zrdr/anim
-    // scopes without a fixed mission-name table.
-    private static readonly HashSet<string> AiChapterScopeDirs =
-        new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
-
     // One mean texel per sheet: a chapter's destructible population repeats its materials. A
     // decode per row would read the same archive entry dozens of times.
     private static readonly Dictionary<string, Vector3?> MeanTexelCache = new(StringComparer.OrdinalIgnoreCase);
@@ -142,7 +135,7 @@ public static class Probes
 
     // ---- weapons -----------------------------------------------------------------------------
 
-    public static WeaponsResult Weapons(string zrdrPath, Messages messages, string filter)
+    public static WeaponsResult Weapons(ZrdrSet zrdr, Messages messages, string filter)
     {
         // A committed verification artifact must read the same everywhere: a German machine
         // otherwise writes "6,25" where an invariant one writes "6.25".
@@ -151,11 +144,11 @@ public static class Probes
         WeaponDefs weapons;
         try
         {
-            weapons = WeaponDefs.Load(zrdrPath, messages);
+            weapons = WeaponDefs.Load(zrdr, messages);
         }
         catch (Exception e)
         {
-            r.Error = $"could not load weapons.json ({zrdrPath}): {e.Message}";
+            r.Error = $"could not load weapons.json ({zrdr}): {e.Message}";
             r.Summary = $"weapons dump: {r.Error}";
             return r;
         }
@@ -163,7 +156,7 @@ public static class Probes
         r.EmptyClipSound = weapons.EmptyClipSound;
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# weapons.json: {zrdrPath}");
+        sb.AppendLine($"# weapons.json: {zrdr}");
         sb.AppendLine($"# {weapons.All.Count} BALLISTICS entries; empty-clip sound = {weapons.EmptyClipSound}");
         sb.AppendLine("# See docs/formats/weapons.md.");
         sb.AppendLine();
@@ -231,7 +224,7 @@ public static class Probes
 
     // ---- loadouts ----------------------------------------------------------------------------
 
-    public static LoadoutResult Loadouts(string zrdrPath, Messages messages, GameZ? planes,
+    public static LoadoutResult Loadouts(ZrdrSet zrdr, Messages messages, GameZ? planes,
         TextureSet c1Textures, string filter, string? loadoutOverride, bool forRig = false)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -243,7 +236,7 @@ public static class Probes
         try
         {
             stock = StockLoadouts.Load();
-            weapons = WeaponDefs.Load(zrdrPath, messages);
+            weapons = WeaponDefs.Load(zrdr, messages);
             planesGamez = planes ?? throw new FileNotFoundException("the game data holds no planes.zbd");
             // Any texture archive resolves the (meshless) markers; the C1 set is the viewer default.
             textures = new TextureArchive(c1Textures);
@@ -436,10 +429,10 @@ public static class Probes
     // ---- AI data -------------------------------------------------------------------------------
 
     /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families,
-    /// patrol nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators. No world, no
-    /// scene: every family is read straight off the extraction, loosely, tolerating the same traps
-    /// <see cref="AiNets"/> does (real block width, <c>neindex</c>'s leading number skipped).</summary>
-    public static AiDumpResult Ai(string dataRoot, string sharedZrdrPath, string chapterFilter)
+    /// patrol nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators. No world: each
+    /// family is read off the game data loosely, tolerating the traps <see cref="AiNets"/> does
+    /// (real block width, <c>neindex</c>'s leading number skipped).</summary>
+    public static AiDumpResult Ai(Spec.GameData data, string chapterFilter)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new AiDumpResult();
@@ -454,7 +447,7 @@ public static class Probes
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# AI data families: {dataRoot}");
+        sb.AppendLine($"# AI data families: {data.Zrdr}");
         sb.AppendLine("# nets (patrol graphs), aiv (rosters), ai.zrd (turrets), zeppelins, egen (generators)");
         sb.AppendLine("# See docs/formats/ai-nets.md, ai-rosters.md, turrets.md, mission-entities.md.");
         sb.AppendLine();
@@ -463,7 +456,7 @@ public static class Probes
         // chapter filter, since ai.zrd.json is not chapter-scoped.
         try
         {
-            var root = Zrdr.LoadFile(sharedZrdrPath, "ai.json");
+            var root = data.Zrdr.LoadFile("ai.json");
             // The whole reader is wrapped in one outer element, same as zeppelins/egen:
             // [ ["TURRET", [entry0, entry1, …]] ].
             if (root.Count == 0 || root[0] is not List<object?> alt)
@@ -481,7 +474,7 @@ public static class Probes
                 }
             }
             r.TurretEntries = entries.Count;
-            sb.AppendLine($"=== turrets: {sharedZrdrPath}/ai.json ===");
+            sb.AppendLine($"=== turrets: {data.Zrdr}/ai.json ===");
             sb.AppendLine($"  {r.TurretEntries} TURRET entries "
                 + $"({carried} CREATE_STANDALONE/carried, {r.TurretEntries - carried} NODES/world emplacements)");
             sb.AppendLine();
@@ -494,7 +487,7 @@ public static class Probes
 
         foreach (var chapter in chapters)
         {
-            var chapterZrdr = SessionPaths.ChapterZrdr(dataRoot, chapter);
+            var chapterZrdr = data.LoadChapter(chapter, string.Empty).ChapterZrdr;
             List<AiNet> nets;
             try
             {
@@ -510,15 +503,15 @@ public static class Probes
             int nodeSum = nets.Sum(n => n.Nodes.Count);
             int edgeSum = nets.Sum(n => n.Edges.Count);
 
-            var missions = DiscoverMissions(dataRoot, chapter);
+            var missions = DiscoverMissions(chapter);
             int aivBlocksChapter = 0, zepChapter = 0, genChapter = 0;
             foreach (var mission in missions)
             {
-                var missionZrdr = SessionPaths.MissionZrdr(dataRoot, chapter, mission);
+                var missionZrdr = data.LoadChapter(chapter, mission).MissionZrdr;
 
                 try
                 {
-                    var root = Zrdr.LoadFile(missionZrdr, "aiv.json");
+                    var root = missionZrdr.LoadFile("aiv.json");
                     // Element 0 is the header (slotId/label pairs); 1..N are [name, fields] pairs.
                     // Never assume a fixed field count, 42/65/66/67/68/81 all ship.
                     for (int i = 1; i < root.Count; i++)
@@ -1097,11 +1090,11 @@ public static class Probes
     /// <paramref name="aoaLimiterFactor"/> is the A/B seam (1 the decode); <paramref name="liftAccelRate"/>
     /// replaces the authored lag rate for one diagnostic run and is never a setting.
     /// ⚠ An instrument, not an assertion: nothing here is a target.</summary>
-    public static string PullToLimit(string zrdrPath, string planeNodeName, float entryMph,
+    public static string PullToLimit(ZrdrSet zrdr, string planeNodeName, float entryMph,
         float seconds, float aoaLimiterFactor, float? liftAccelRate = null)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
-        var stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        var stats = PlaneStats.Load(zrdr, planeNodeName);
         if (liftAccelRate is float rate)
             stats.LiftAccelRate = rate;
         var m = new FlightModel(stats) { AoaLimiterFactor = aoaLimiterFactor };
@@ -1157,11 +1150,11 @@ public static class Probes
     /// (<c>arm</c>, <c>cmdPitch</c>) without flying the aeroplane, so the arm's command and the
     /// plant's own authority stay separable; <paramref name="aiPath"/> runs the plant's AI arm, which
     /// carries neither drop nor weathervane. ⚠ An instrument, not an assertion.</summary>
-    public static string StallEntry(string zrdrPath, string planeNodeName, float entryMph,
+    public static string StallEntry(ZrdrSet zrdr, string planeNodeName, float entryMph,
         float noseDeg, float seconds, bool aiPath)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
-        var stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        var stats = PlaneStats.Load(zrdr, planeNodeName);
         var m = new FlightModel(stats, aiPath);
         m.Reset(Vector3.Zero, Pitched(noseDeg), entryMph * Mph, 0f);
         var sb = new StringBuilder();
@@ -1209,13 +1202,13 @@ public static class Probes
     /// instrument, since the constants are coupled and a change to one moves rows on airframes
     /// nobody was looking at. <c>--dump-flight=all</c> and the parity ledger both run this, so the
     /// dump a change is diffed against and the ledger published from cannot disagree.</summary>
-    public static FlightEnvelopeResult FlightEnvelopeAll(string zrdrPath)
+    public static FlightEnvelopeResult FlightEnvelopeAll(ZrdrSet zrdr)
     {
         var all = new FlightEnvelopeResult();
         var sb = new StringBuilder();
         foreach (string plane in StockAirframeNodes)
         {
-            var one = FlightEnvelope(zrdrPath, plane);
+            var one = FlightEnvelope(zrdr, plane);
             sb.AppendLine(one.Error ?? one.Text);
             sb.AppendLine();
             all.Rows.AddRange(one.Rows);
@@ -1240,18 +1233,18 @@ public static class Probes
     /// integrates it at the fixed <c>--det</c> step.
     /// ⚠ Every target is the Bloodhawk's, the only airframe recorded flying. Another plane's run
     /// reports its numbers with nothing to assert against; that is honest, not a gap to fill.</summary>
-    public static FlightEnvelopeResult FlightEnvelope(string zrdrPath, string planeNodeName)
+    public static FlightEnvelopeResult FlightEnvelope(ZrdrSet zrdr, string planeNodeName)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new FlightEnvelopeResult();
         PlaneStats stats;
         try
         {
-            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+            stats = PlaneStats.Load(zrdr, planeNodeName);
         }
         catch (Exception e)
         {
-            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdr}): {e.Message}";
             r.Summary = $"flight envelope: {r.Error}";
             return r;
         }
@@ -1525,16 +1518,16 @@ public static class Probes
         // comparison over 36 s, not a single number with a tolerance, so it has no row here, but
         // every instrument that dumps the envelope should carry it, or the recipe gets lost again.
         sb.AppendLine();
-        sb.Append(KnifeEdge(zrdrPath, planeNodeName, watch).Text);
+        sb.Append(KnifeEdge(zrdr, planeNodeName, watch).Text);
         // Same reasoning as the knife-edge above: a speed-against-time SHAPE rather than one number
         // with a tolerance, and the recipe belongs in code where it cannot be lost.
         sb.AppendLine();
-        sb.Append(SustainedClimb(zrdrPath, planeNodeName, watch).Text);
+        sb.Append(SustainedClimb(zrdr, planeNodeName, watch).Text);
         // The same manoeuvre as the climb above, taken the original's own way instead of the
         // footage's. It says what the original settles at. A disagreeing filmed number is judged
         // against that figure.
         sb.AppendLine();
-        sb.Append(TunerEnvelope(zrdrPath, planeNodeName).Text);
+        sb.Append(TunerEnvelope(zrdr, planeNodeName).Text);
 
         // Branch coverage last, because it is a claim about the whole report above it: which
         // decoded branches these scenarios drove, and which the set leaves untouched.
@@ -1561,7 +1554,7 @@ public static class Probes
     /// own sample times. ⚠ The discriminating signature is the SHAPE, not one number: the original
     /// drifts the whole 36 s with no equilibrium, where a bounded sag settles inside a second, see
     /// <see cref="KnifeEdgeRun.DriftDegS"/>/<see cref="KnifeEdgeRun.SettledFrac"/>, docs/org/flightModel.md.</summary>
-    public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName,
+    public static KnifeEdgeResult KnifeEdge(ZrdrSet zrdr, string planeNodeName,
                                             EnvelopeMargins? watch = null)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -1569,11 +1562,11 @@ public static class Probes
         PlaneStats stats;
         try
         {
-            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+            stats = PlaneStats.Load(zrdr, planeNodeName);
         }
         catch (Exception e)
         {
-            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdr}): {e.Message}";
             r.Summary = $"knife-edge: {r.Error}";
             return r;
         }
@@ -1623,7 +1616,7 @@ public static class Probes
     /// Entry at the footage's own 300 mph, attitude set once (<see cref="Banked"/>'s pitched twin,
     /// not a continuous pull), held 18 sim s, long enough for the plateau, short enough the
     /// altitude clamp cannot bind. Targets and the UNDERSHOOT shape: docs/org/flightModel.md.</summary>
-    public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName,
+    public static ClimbResult SustainedClimb(ZrdrSet zrdr, string planeNodeName,
                                              EnvelopeMargins? watch = null)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -1631,11 +1624,11 @@ public static class Probes
         PlaneStats stats;
         try
         {
-            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+            stats = PlaneStats.Load(zrdr, planeNodeName);
         }
         catch (Exception e)
         {
-            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdr}): {e.Message}";
             r.Summary = $"sustained climb: {r.Error}";
             return r;
         }
@@ -1748,18 +1741,18 @@ public static class Probes
     /// at, not a reading off footage. The rig pins attitude, altitude, rotation and throttle and
     /// leaves speed the only free variable. The climb it reports is therefore an equilibrium of
     /// the force sum and nothing else (docs/org/flightModel.md, "The sustained climb").</summary>
-    public static TunerEnvelopeResult TunerEnvelope(string zrdrPath, string planeNodeName)
+    public static TunerEnvelopeResult TunerEnvelope(ZrdrSet zrdr, string planeNodeName)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new TunerEnvelopeResult { Plane = planeNodeName };
         PlaneStats stats;
         try
         {
-            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+            stats = PlaneStats.Load(zrdr, planeNodeName);
         }
         catch (Exception e)
         {
-            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdr}): {e.Message}";
             r.Summary = $"tuner envelope: {r.Error}";
             return r;
         }
@@ -1900,27 +1893,18 @@ public static class Probes
         return r;
     }
 
-    // Every mission dir under a chapter, `IA1`/`M0x`/`MP1-3`, sorted so
-    // campaign missions list before multiplayer ones. Empty when the chapter is not extracted
-    // here. See `analysis/m4-ai-data/aiv_skill_slots.py`'s `*/*/zrdr/aiv.zrd.json` glob
-    // for the same discovery done from the shell.
-    private static List<string> DiscoverMissions(string dataRoot, string chapter)
+    // Every mission of a chapter the install ships, `IA1`/`M0x`/`MP1-3`, sorted so campaign
+    // missions list before multiplayer ones: the manifest's mission-scope reader archives.
+    private static List<string> DiscoverMissions(string chapter)
     {
-        var dir = Extraction.ZbdTree.Folder(dataRoot, chapter);
         var missions = new List<string>();
-        if (!Directory.Exists(dir))
+        foreach (var path in Extraction.ZbdManifest.Expected)
         {
-            return missions;
-        }
-        foreach (var d in Directory.EnumerateDirectories(dir))
-        {
-            var name = Path.GetFileName(d);
-            if (AiChapterScopeDirs.Contains(name)
-                || name.StartsWith("rtexture", StringComparison.OrdinalIgnoreCase))
+            var parts = path.Split('/');
+            if (parts.Length == 3 && parts[2] == "zrdr.zbd" && parts[0].Equals(chapter, StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                missions.Add(parts[1]);
             }
-            missions.Add(name);
         }
         missions.Sort(StringComparer.OrdinalIgnoreCase);
         return missions;
@@ -1930,9 +1914,9 @@ public static class Probes
     // one outer element, the shape `zeppelins.zrd.json` and `egen.zrd.json` both use:
     // `[[record0, record1, …]]` when the mission carries any, bare `[null]` when it
     // ships none. Loosely parsed (a dump probe, not a typed reader, B7/F17/F20 own those).
-    private static List<List<object?>> LoadRecordList(string missionZrdrPath, string fileName)
+    private static List<List<object?>> LoadRecordList(ZrdrSet missionZrdr, string fileName)
     {
-        var root = Zrdr.LoadFile(missionZrdrPath, fileName);
+        var root = missionZrdr.LoadFile(fileName);
         var records = new List<List<object?>>();
         if (root.Count > 0 && root[0] is List<object?> list)
         {

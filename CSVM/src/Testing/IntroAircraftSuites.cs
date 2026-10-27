@@ -61,13 +61,13 @@ internal static class IntroAircraftSuites
         + "the pilot out of flight, and the drop's launch cue fires")]
     internal static void IntroAircraftStage(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), IntroSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), IntroSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {IntroSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
 
@@ -294,7 +294,7 @@ internal static class IntroAircraftSuites
             };
             rig.AddChild(model);
             ctx.Host.AddChild(rig);
-            rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null, new CamParams(),
+            rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null, new CamParams(),
                 Vector3.Zero, Vector3.Forward, 0f, 0f);
             return rig;
         }

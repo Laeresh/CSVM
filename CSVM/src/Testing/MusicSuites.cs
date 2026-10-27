@@ -27,10 +27,10 @@ internal static class MusicSuites
         + "releases it")]
     internal static void MusicStates(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
-        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var defs = SoundDefs.Load(ctx.Zrdr);
+        var groups = SoundDefs.LoadGroups(ctx.Zrdr);
         using var archive = new SoundArchive(ctx.Sounds);
         var report = new StringBuilder();
         var rng = new Random(7);

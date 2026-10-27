@@ -90,7 +90,7 @@ internal static class CloudFieldSuites
     {
         foreach (var (chapter, expectBase, expectExtension, expectUp, expectSloped, lit) in Fields)
         {
-            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+            ZrdrSet zrdr = ctx.ChapterZrdr(chapter);
             TextureSet texturePath = ctx.ChapterTextures(chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
             ctx.RequireData(texturePath, $"{chapter} textures");
@@ -166,7 +166,7 @@ internal static class CloudFieldSuites
         }
         foreach (var chapter in PuffChapters)
         {
-            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+            ZrdrSet zrdr = ctx.ChapterZrdr(chapter);
             TextureSet texturePath = ctx.ChapterTextures(chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
             ctx.RequireData(texturePath, $"{chapter} textures");
@@ -213,7 +213,7 @@ internal static class CloudFieldSuites
     {
         foreach (var (chapter, expectVolumes, armed) in CensusChapters)
         {
-            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+            ZrdrSet zrdr = ctx.ChapterZrdr(chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
             ctx.WithWorld(chapter, collision: false, world =>
             {

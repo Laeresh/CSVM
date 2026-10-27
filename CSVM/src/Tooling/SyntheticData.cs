@@ -12,10 +12,10 @@ namespace CSVM.Tooling;
 
 /// <summary>
 /// The synthetic data root behind <c>--synthetic-data</c>: an <c>extracted/</c> tree of invented
-/// records and code-generated files. It is written at run time, so every loader takes its normal
-/// path with no install. The hand-authored records are the <c>CSVM.Tests/fixtures/</c> files, read
-/// from the repo checkout: the tests and the engine share one copy, and an export carries none.
-/// Each record family is one entry in <see cref="Families"/> or, for the Original shell, in
+/// records and code-generated files, written at run time. Every other synthetic model is built in
+/// memory (<c>SyntheticGameData</c>). The hand-authored records are the <c>CSVM.Tests/fixtures/</c>
+/// files, read from the repo checkout: the tests and the engine share one copy, and an export
+/// carries none. The one record family left is the Original shell's, in
 /// <c>SyntheticShell.TreeFamilies</c>. The tree's stamp carries a
 /// <see cref="StampField"/> field, which is how <see cref="Marks"/> tells a synthetic tree apart.
 /// Engine-free, so <c>CSVM.Tests</c> builds the same tree the engine does.
@@ -29,20 +29,6 @@ public static class SyntheticData
     /// <summary>The folder under the repo's <c>.scratch/</c> that holds one tree per process.</summary>
     public const string ScratchFolder = "synthetic-data";
 
-    /// <summary>The record families written from this namespace, in this order. Adding a family is one
-    /// entry here and one writer that touches only its own folder under <c>extracted/</c>. The
-    /// Original shell's family reads UI types, so it joins in <c>SyntheticShell.TreeFamilies</c>.</summary>
-    public static readonly IReadOnlyList<SyntheticFamily> Families = new SyntheticFamily[]
-    {
-        new("plane", SyntheticPlane.WritePlane),
-        new("armament", SyntheticPlane.WriteArmament),
-        new("sounds", SyntheticSounds.WriteDefinitions),
-        new("voice", SyntheticSounds.WriteVoice),
-        new("mission", SyntheticMission.WriteMission),
-        new("campaign", SyntheticMission.WriteCampaign),
-        new("instant-action", SyntheticMission.WriteInstantAction),
-        new("effects", SyntheticEffects.Write),
-    };
 
     /// <summary>Where the hand-authored records sit in a repo checkout. An exported build has no
     /// such folder, which is what keeps the switch out of a shipped game.</summary>

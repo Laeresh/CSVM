@@ -706,12 +706,12 @@ internal static class NetFlagSuites
     }
 
     // Two captures end it and nothing short of them can: team 2 scores only by its flags.
-    private static int ScoreTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.ZrdrPath).FlagCapture;
+    private static int ScoreTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.Zrdr).FlagCapture;
 
     private static SessionSpec Spec(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         return SessionSpec.Parse(new[] { "--vs" }
             .Concat(NetCombatSuites.Arena(ctx, mission: SessionSpec.CtfMission))
             .Concat(new[] { "--players=1", "--mute", "--no-pads", "--ctf", TrackedFlight, $"--vs-kills={ScoreTarget(ctx)}" })

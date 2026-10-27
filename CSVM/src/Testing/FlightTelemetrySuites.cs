@@ -40,12 +40,12 @@ internal static class FlightTelemetrySuites
     internal static void FlightTelemetryGate(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = ctx.Planes;
-        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weaponDefs = WeaponDefs.Load(ctx.Zrdr, null);
         var textures = new TextureArchive(texturesPath);
         bool wasCollected = Log.ConsoleShows("flight", Log.Level.Debug);
         ProjectilePool? pool = null;
@@ -61,14 +61,14 @@ internal static class FlightTelemetrySuites
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             // worldEffects null!: never dereferenced, CrashProgram/WorldScene stay null, so the
             // spawner's crash-runtime block (its only reader) is skipped.

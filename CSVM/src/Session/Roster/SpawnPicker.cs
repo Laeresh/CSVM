@@ -77,7 +77,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// neither it is null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. A team match takes the
     /// whole table. The empty stage walks <see cref="EmptyStage.SpawnRing"/>, or for a team match
     /// <see cref="EmptyStage.SpawnTable"/>. Sets <see cref="NetSpawns"/>, so call it once per launch.</summary>
-    public List<SpawnPoint>? LoadSpawnList(string missionZrdrPath, string scenario)
+    public List<SpawnPoint>? LoadSpawnList(ZrdrSet missionZrdr, string scenario)
     {
         SeatEntries = null;
         SeatBlocks = null;
@@ -92,15 +92,15 @@ public sealed class SpawnPicker : IFlightStarts
             var stage = Teamed ? EmptyStage.SpawnTable : EmptyStage.SpawnRing;
             return stage.Select(s => new SpawnPoint(s.Position, s.HeadingDeg)).ToList();
         }
-        var ia = SpawnPoints.LoadIa(missionZrdrPath, scenario);
+        var ia = SpawnPoints.LoadIa(missionZrdr, scenario);
         if (ia is { Count: > 0 })
             return ia;
         // Dogfight on a multiplayer map: an MP mission ships no ia.json, and its own table is
         // what the original opens a deathmatch on. ⚠ Only this mode may read it; every campaign
         // mission ships a placeholder table the original never looks at.
         var table = !_spec.Versus ? null
-            : Teamed ? SpawnPoints.LoadNetTable(missionZrdrPath)
-            : SpawnPoints.LoadNetFreeForAll(missionZrdrPath);
+            : Teamed ? SpawnPoints.LoadNetTable(missionZrdr)
+            : SpawnPoints.LoadNetFreeForAll(missionZrdr);
         if (table is not { Count: > 0 } net)
             return ia;
         NetSpawns = true;
@@ -137,15 +137,15 @@ public sealed class SpawnPicker : IFlightStarts
     /// (wrapping). No player's start depends on another's, so the loop is the whole
     /// implementation.</summary>
     public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-        string missionZrdrPath, int spawnBase, int playerCount)
+        ZrdrSet missionZrdr, int spawnBase, int playerCount)
     {
-        var (throttle, speed) = StartState(spawns, missionZrdrPath);
+        var (throttle, speed) = StartState(spawns, missionZrdr);
         var starts = new FlightStart[playerCount];
         for (int pi = 0; pi < playerCount; pi++)
         {
             // The log tag names the pane in splitscreen and is empty when flying alone.
             string tag = playerCount > 1 ? $"P{pi + 1} " : "";
-            var (pos, lookAt) = ChooseSpawn(spawns, missionZrdrPath, spawnBase, pi, tag);
+            var (pos, lookAt) = ChooseSpawn(spawns, missionZrdr, spawnBase, pi, tag);
             starts[pi] = new FlightStart(pos, lookAt, throttle, speed);
         }
         return starts;
@@ -157,7 +157,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// answer the original does not have. <see cref="StartGrid"/> calls it rather than
     /// restating it.</summary>
     public (float ThrottleFrac, float SpeedMps) StartState(IReadOnlyList<SpawnPoint>? spawns,
-        string missionZrdrPath)
+        ZrdrSet missionZrdr)
     {
         // A multiplayer opening spawn reads neither field of the record: the original hands its
         // own constants to the same placement call every other mode reaches through PLAYER_INIT.
@@ -170,11 +170,11 @@ public sealed class SpawnPicker : IFlightStarts
         // A present ia.json spawn list is what makes this an instant-action launch, the same test
         // ChooseSpawn already selects the position source on.
         bool instantAction = spawns is { Count: > 0 };
-        if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is not { } init)
+        if (SpawnPoints.LoadPlayerInit(missionZrdr) is not { } init)
         {
             // Silent with no mission to read (a lab, a headless test): that is not a data problem.
             // A mission that HAS a zrdr and still has no record is, so that one says so.
-            if (!string.IsNullOrEmpty(missionZrdrPath))
+            if (missionZrdr.Exists)
                 Log.Warn("flight", $"no PLAYER_INIT for {_spec.Chapter}/{_spec.Mission}, starting on the shipped-majority throttle/speed");
             return (instantAction ? SpawnPoints.InstantActionThrottleFrac : SpawnPoints.DefaultThrottleFrac,
                 SpawnPoints.DefaultSpeedMps);
@@ -190,7 +190,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// (M0x, no ia.json) fall back to objectives.json PLAYER_INIT. A fixed C1 spawn is the last
     /// resort if neither is present.</summary>
     public (Vector3 pos, Vector3 lookAt) ChooseSpawn(IReadOnlyList<SpawnPoint>? spawns,
-        string missionZrdrPath, int spawnBase, int playerIndex, string tag)
+        ZrdrSet missionZrdr, int spawnBase, int playerIndex, string tag)
     {
         // ⚠ Tested BEFORE the spawn list, that order is why --pos beats it, and StartGrid
         // inherits the override for free by delegating here rather than reimplementing it.
@@ -221,7 +221,7 @@ public sealed class SpawnPicker : IFlightStarts
         }
         // No instant-action spawns (only IA1 folders have ia.json), use the story-mission
         // spawn from objectives.json PLAYER_INIT (position + heading; StartState takes the rest).
-        if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
+        if (SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
             return LogSpawn("PLAYER_INIT", init.Spawn);
 
         Log.Warn("flight", $"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission}, using fallback spawn");

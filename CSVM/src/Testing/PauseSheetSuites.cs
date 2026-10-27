@@ -148,12 +148,12 @@ internal static class PauseSheetSuites
         + "nothing")]
     internal static void PauseSheetScreen(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
 
         // Every campaign mission, not the run's own chapter: no world is built here, so the whole
         // sequence is affordable, and the filmed mission has to be in it whatever chapter is up.
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (missions.Count == 0)
         {
             throw new SuiteSkippedException($"cm_sequence names no campaign mission");
@@ -164,7 +164,7 @@ internal static class PauseSheetSuites
         foreach (var mission in missions)
         {
             string key = EscapeDialog.CampaignKey(mission.Campaign, mission.Mission);
-            var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.Data.Messages, key, instantAction: false);
+            var sheet = PauseSheet.Load(ctx.Zrdr, ctx.Data.Messages, key, instantAction: false);
             if (sheet == null)
             {
                 ctx.Check(false, $"{mission.ChapterFolder}/{mission.MissionFolder} resolves {key}");
@@ -215,8 +215,8 @@ internal static class PauseSheetSuites
         + "and fires the one it was pressed and released on")]
     internal static void InstantActionPauseSheet(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, EscapeDialog.InstantActionFile);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, EscapeDialog.InstantActionFile);
 
         var report = new StringBuilder();
         var sheets = new List<(string Key, PauseSheet Sheet)>();
@@ -231,7 +231,7 @@ internal static class PauseSheetSuites
                 }
 
                 string key = EscapeDialog.InstantActionKey(environment, letter);
-                var sheet = PauseSheet.Load(ctx.ZrdrPath, ctx.Data.Messages, key, instantAction: true);
+                var sheet = PauseSheet.Load(ctx.Zrdr, ctx.Data.Messages, key, instantAction: true);
                 if (sheet == null)
                 {
                     ctx.Check(false, $"{key} resolves an ia_escape.zrd dialog");
@@ -374,14 +374,14 @@ internal static class PauseSheetSuites
     {
         foreach (string heading in new[] { "FREE FLIGHT", "STUNT RACE" })
         {
-            if (PauseSheet.LoadOwnMode(ctx.ZrdrPath, ctx.Data.Messages, heading) is not { } sheet)
+            if (PauseSheet.LoadOwnMode(ctx.Zrdr, ctx.Data.Messages, heading) is not { } sheet)
             {
                 ctx.Check(false, $"{heading} resolves the bare blackboard");
                 continue;
             }
 
             var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
-            var expected = LoadScreens.Texts(null, heading, ctx.ZrdrPath, ctx.Data.Messages);
+            var expected = LoadScreens.Texts(null, heading, ctx.Zrdr, ctx.Data.Messages);
             report.AppendLine(
                 $"{heading}: backdrop={string.Join(",", board.Backdrop.Select(p => p.Art.Name))} "
                 + $"pictures={board.Pictures.Count} lines={string.Join("|", board.Lines.Select(l => l.Text))}");
@@ -537,7 +537,7 @@ internal static class PauseSheetSuites
             $"and every other ace head at x={AceHeadX} ({(rest.Texts.Count == 4 ? rest.Texts[1].X : -1f)})");
 
         // The inverse the session keys on: a chapter code back to its world-folder digit.
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         int inverted = 0;
         foreach (var mission in missions)
         {
@@ -581,7 +581,7 @@ internal static class PauseSheetSuites
                 offered++;
                 if (LoadScreens.MultiplayerKey(
                         chapter, mode.Type, mode.Teamed) is not { } key
-                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.Data.Messages, key) is not { } sheet)
+                    || PauseSheet.LoadMultiplayer(ctx.Zrdr, ctx.Data.Messages, key) is not { } sheet)
                 {
                     ctx.Check(false, $"{chapter}'s Dogfight ({mode}) resolves a multiplayer sheet");
                     continue;
@@ -739,7 +739,7 @@ internal static class PauseSheetSuites
         }
 
         return PauseSheet.Load(
-            ctx.ZrdrPath,
+            ctx.Zrdr,
             ctx.Data.Messages,
             EscapeDialog.InstantActionKey(CampaignSequence.ChapterNumber(chapter), letter),
             instantAction: true);
@@ -1099,10 +1099,7 @@ internal static class PauseSheetSuites
         }
 
         var entry = sheets[at];
-        var reader = Zrdr.LoadFile(
-            SessionPaths.MissionZrdr(
-                ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder),
-            "objectives.json");
+        var reader = ctx.MissionZrdr(entry.Mission.ChapterFolder, entry.Mission.MissionFolder).LoadFile("objectives.json");
         var note = BriefingObjectives.Load(reader, ctx.Data.Messages);
         ctx.Check(
             note.Count == 2 && note[0].Priority == 1 && note[0].Number == 15
@@ -1348,10 +1345,7 @@ internal static class PauseSheetSuites
 
         var entry = sheets[at];
         var note = BriefingObjectives.Load(
-            Zrdr.LoadFile(
-                SessionPaths.MissionZrdr(
-                    ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder),
-                "objectives.json"),
+            ctx.MissionZrdr(entry.Mission.ChapterFolder, entry.Mission.MissionFolder).LoadFile("objectives.json"),
             ctx.Data.Messages);
         int fromBlock = 0;
         int priority = 0;
@@ -1408,9 +1402,7 @@ internal static class PauseSheetSuites
         TestContext ctx, CampaignMission mission, PauseSheet sheet, int completed)
     {
         var objectives = BriefingObjectives.Load(
-            Zrdr.LoadFile(
-                SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
-                "objectives.json"),
+            ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder).LoadFile("objectives.json"),
             ctx.Data.Messages);
         var rows = new List<PauseObjective>(objectives.Count);
         for (int i = 0; i < objectives.Count; i++)
@@ -1447,8 +1439,7 @@ internal static class PauseSheetSuites
         }
 
         var entry = sheets[at];
-        string missionZrdr = SessionPaths.MissionZrdr(
-            ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(entry.Mission.ChapterFolder, entry.Mission.MissionFolder);
         var director = Session.Campaign.CampaignDirector.Create(
             Session.Objectives.ObjectiveScript.Load(missionZrdr), entry.Mission, Seated, null);
         ctx.Check(

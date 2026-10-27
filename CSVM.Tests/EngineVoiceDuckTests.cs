@@ -119,7 +119,7 @@ public class EngineVoiceDuckTests
     [ExtractedDataFact]
     public void TheInstallAuthorsTheLimitAtPointFour()
     {
-        string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
         Assert.Equal(0.4f, PlaneStats.Load(zrdr, "player_bhawk").VoiceoverVolumeLimiter, 5);
         Assert.Equal(0.4f, PlaneStats.LoadForAi(zrdr, "player_fury").VoiceoverVolumeLimiter, 5);
     }

@@ -8,11 +8,11 @@ namespace CSVM.Tests;
 /// <summary>
 /// The sounds.json front-end (<c>docs/formats/sounds.md</c>): the <c>SETS</c> flag/value grammar
 /// and the <c>SOUND_GROUPS</c> weighted picker, including its <c>DYNAMIC_WEIGHTS</c> recency
-/// memory. Input is <c>fixtures/zrdr/sounds.json</c>.
+/// memory. Input is <c>fixtures/zrdr/sounds.zrd.json</c>.
 /// </summary>
 public class SoundDefsTests
 {
-    private static string FixtureDir => TestData.Fixture("zrdr");
+    private static ZrdrSet FixtureDir => TestZrdr.Fixture("zrdr");
 
     [Fact]
     public void EverySetsBlockContributesItsEntries()

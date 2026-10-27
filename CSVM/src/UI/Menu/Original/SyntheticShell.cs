@@ -21,11 +21,11 @@ namespace CSVM.UI.Menu.Original;
 /// </summary>
 public static class SyntheticShell
 {
-    /// <summary>Every family of the synthetic tree, the tooling ones and then this one. A tooling
-    /// family may not name a UI type, so the whole list is composed here, the lowest family that
-    /// names both. Every caller of <see cref="SyntheticData.Build"/> hands it in.</summary>
+    /// <summary>Every family of the synthetic tree, this one alone: every other synthetic model is
+    /// built in memory (<c>SyntheticGameData</c>). Every caller of <see cref="SyntheticData.Build"/>
+    /// hands it in.</summary>
     public static readonly IReadOnlyList<SyntheticFamily> TreeFamilies =
-        SyntheticData.Families.Append(new SyntheticFamily("original-shell", WriteShell)).ToArray();
+        new[] { new SyntheticFamily("original-shell", WriteShell) };
 
     private const string LayoutFixture = "menu-layout-original/LAYOUT.CSV";
     private const string StringsFixture = "synthetic/rof/ui_strings.json";

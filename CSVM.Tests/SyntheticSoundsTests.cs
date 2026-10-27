@@ -23,7 +23,7 @@ public class SyntheticSoundsTests
     public void EveryDefinitionDecodesAsMonoAdpcmAtTheArchiveRate()
     {
         string root = Built();
-        var defs = SoundDefs.Load(Path.Combine(root, "extracted", "zrdr"));
+        var defs = SoundDefs.Load(SyntheticZrdr.Root());
         using var zbd = SyntheticSounds.Zbd();
         using var archive = new SoundArchive(zbd);
 
@@ -44,7 +44,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void EveryGroupMemberIsADefinition()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var defs = SoundDefs.Load(zrdr);
         var groups = SoundDefs.LoadGroups(zrdr);
 
@@ -55,7 +55,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void ThePlaneAndItsWeaponsNameSoundsTheArchiveHolds()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var defs = SoundDefs.Load(zrdr);
         var groups = SoundDefs.LoadGroups(zrdr);
         var stats = PlaneStats.Load(zrdr, SyntheticPlane.Plane);
@@ -84,7 +84,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void EveryAccentDealsAPilotWhoseWholeSetResolves()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var defs = SoundDefs.Load(zrdr);
         var voice = new CombatVoice(defs, SoundDefs.LoadGroups(zrdr), CombatVoice.LoadAccents(zrdr));
 
@@ -114,7 +114,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void TheArchiveHoldsExactlyTheWavsTheDefinitionsName()
     {
-        var defs = SoundDefs.Load(Path.Combine(Built(), "extracted", "zrdr"));
+        var defs = SoundDefs.Load(SyntheticZrdr.Root());
         using var zbd = SyntheticSounds.Zbd();
 
         Assert.Equal(SyntheticSounds.Wavs.Select(w => w.Name), zbd.Sounds.Select(s => s.Key));

@@ -63,9 +63,9 @@ internal static class AiWaveLaunchHitchSuites
     internal static void AiWaveLaunchHitch(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
@@ -96,13 +96,13 @@ internal static class AiWaveLaunchHitchSuites
     // own measurement shape: nothing in the assembly walks the human field. A launch frame that
     // grew with the player count would say the cost is somewhere else entirely.
     private static void Drive(TestContext ctx, TestWorld world, IReadOnlyList<EnemyGeneratorDef> defs,
-        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = ctx.Planes;
         var nets = AiNets.Load(chapterZrdr);
         var templates = CampaignRosterPlan.GeneratorTemplates(
-            missionZrdr, VehicleDefs.Load(ctx.ZrdrPath), nets);
+            missionZrdr, VehicleDefs.Load(ctx.Zrdr), nets);
         try
         {
             foreach (int rigs in new[] { 1, 4 })
@@ -121,7 +121,7 @@ internal static class AiWaveLaunchHitchSuites
     private static Window RunWindow(TestContext ctx, TestWorld world,
         IReadOnlyList<EnemyGeneratorDef> defs, IReadOnlyList<AiNet> nets,
         IReadOnlyDictionary<string, RosterSpawnPlan> templates, GameZ planesGamez,
-        TextureArchive textures, string chapterZrdr, string missionZrdr, int rigCount,
+        TextureArchive textures, ZrdrSet chapterZrdr, ZrdrSet missionZrdr, int rigCount,
         StringBuilder report)
     {
         var runtime = world.Runtime;
@@ -158,8 +158,8 @@ internal static class AiWaveLaunchHitchSuites
                     Gamez = world.Gamez,
                     WorldScene = world.Session.Builder.Scene,
                     CrashProgram = world.Session.Program,
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
                     HumanPositions = () =>
                     {
                         positions.Clear();
@@ -342,7 +342,7 @@ internal static class AiWaveLaunchHitchSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, int index, Vector3 pos)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

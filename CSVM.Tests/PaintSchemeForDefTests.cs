@@ -12,8 +12,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class PaintSchemeForDefTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     // Black Hat's Warhawk against Studio Security's Fury: two militias, two schemes, neither of them
     // the player's Fortune Hunters red.

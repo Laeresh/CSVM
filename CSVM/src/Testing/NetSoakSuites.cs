@@ -84,7 +84,7 @@ internal static class NetSoakSuites
     {
         var spec = SoakSpec(ctx);
         var airframes = NetCombatSuites.AirframesFor(spec);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f);
         if (gun == null)
         {
@@ -334,7 +334,7 @@ internal static class NetSoakSuites
     private static SessionSpec SoakSpec(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         // Both limits off, so no number of kills or minutes ends the match mid-matrix and holds
         // every world at the wrap-up board.

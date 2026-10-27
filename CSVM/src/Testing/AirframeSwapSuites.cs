@@ -136,15 +136,15 @@ internal static class AirframeSwapSuites
         + "heading with the sums measured off the hull it was given")]
     internal static void AirframeSwap(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
@@ -176,22 +176,22 @@ internal static class AirframeSwapSuites
         + "the lease out")]
     internal static void CaptureSilencesGuns(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         using var archive = new SoundArchive(ctx.Sounds);
         var ears = new List<Vector3> { Vector3.Zero };
-        var voices = new SwapVoices(TurretDefs.Load(ctx.ZrdrPath), archive,
-            SoundDefs.Load(ctx.ZrdrPath), () => ears);
+        var voices = new SwapVoices(TurretDefs.Load(ctx.Zrdr), archive,
+            SoundDefs.Load(ctx.Zrdr), () => ears);
         ctx.CutsceneRoots = true;
         try
         {
@@ -248,15 +248,15 @@ internal static class AirframeSwapSuites
         + "hangar rather than kilometres off it")]
     internal static void HangarHandover(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm07Seq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm07Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm07Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm07Seq} -> {chapter}/{folder}");
@@ -289,15 +289,15 @@ internal static class AirframeSwapSuites
         + "carries those")]
     internal static void WarhawkCaptureLivery(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm19Seq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm19Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm19Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm19Seq} -> {chapter}/{folder}");
@@ -1032,7 +1032,7 @@ internal static class AirframeSwapSuites
         var seen = new List<int>();
         foreach (var entry in AirframeSwapCodes.Table)
         {
-            var stats = PlaneStats.Load(ctx.ZrdrPath, entry.PlaneNode);
+            var stats = PlaneStats.Load(ctx.Zrdr, entry.PlaneNode);
             report.AppendLine($"code {entry.Code}: '{entry.PlaneNode}' def '{stats.DefName}' " +
                 $"(decoded '{entry.Def}')");
             ctx.Check(string.Equals(stats.DefName, entry.Def, StringComparison.OrdinalIgnoreCase),
@@ -1057,9 +1057,8 @@ internal static class AirframeSwapSuites
         ctx.Check(!AirframeHandover.Resolves(mission.ChapterFolder, "m01"),
             $"and in no other mission of the same chapter, so the hand-over is not a chapter-wide rule");
 
-        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot,
-            mission.ChapterFolder.ToUpperInvariant(), mission.MissionFolder.ToUpperInvariant()));
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var blocks = AiSkills.LoadRoster(ctx.MissionZrdr(mission.ChapterFolder.ToUpperInvariant(), mission.MissionFolder.ToUpperInvariant()));
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var nets = Array.Empty<AiNet>();
         var own = PlanNamed(CampaignRosterPlan.Build(blocks, defs, nets),
             AirframeHandover.WingmanName);
@@ -1116,7 +1115,7 @@ internal static class AirframeSwapSuites
     // than through a scheme this suite would otherwise have to invent.
     private static int CapturedTeamFor(TestContext ctx, string chapter, string folder, string blockName)
     {
-        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder));
+        var blocks = AiSkills.LoadRoster(ctx.MissionZrdr(chapter, folder));
         foreach (var (name, fields) in blocks)
         {
             if (string.Equals(name, blockName, StringComparison.OrdinalIgnoreCase))
@@ -1159,7 +1158,7 @@ internal static class AirframeSwapSuites
             // On the w<plane> twin the plan gives it, so the hand-over's cap is that def's pair.
             var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
                 before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true,
-                aiDef: "w" + VehicleDefs.Load(ctx.ZrdrPath).BaseDefForPlayerNode(StartPlane));
+                aiDef: "w" + VehicleDefs.Load(ctx.Zrdr).BaseDefForPlayerNode(StartPlane));
             Damage(wingman, 0.10f);
             leg(new Staged(roster, rig, before, cutscene, captured, wingman, pool));
         }
@@ -1224,7 +1223,7 @@ internal static class AirframeSwapSuites
         ctx.Check(!GodotObject.IsInstanceValid(before) || !before.IsInsideTree(),
             $"and the aircraft it replaced is out of the world, not left flying beside it");
 
-        CheckAirframe(ctx, ctx.ZrdrPath, after, wanted, wasDef, report);
+        CheckAirframe(ctx, ctx.Zrdr, after, wanted, wasDef, report);
         ctx.Check(after.WorldPosition.DistanceTo(wasPos) < PoseTolerance,
             $"the replacement starts where the aircraft it replaced was flying");
         ctx.Check(after.NoseDirection.Dot(wasNose) > 0.99f,
@@ -1432,7 +1431,7 @@ internal static class AirframeSwapSuites
         }
 
         ctx.Check(calls.Count > 0, $"the mission authors callback {WarhawkSwapCode}, the Warhawk capture");
-        var militia = PaintScheme.ForDef(ctx.ZrdrPath, WarhawkMilitia);
+        var militia = PaintScheme.ForDef(ctx.Zrdr, WarhawkMilitia);
         report.AppendLine($"'{WarhawkMilitia}' authors '{militia?.ToString() ?? "-"}'");
         ctx.Check(militia != null, $"'{WarhawkMilitia}' authors a scheme of its own");
         if (calls.Count == 0 || militia == null)
@@ -1455,7 +1454,7 @@ internal static class AirframeSwapSuites
         {
             var standIn = StageAi(roster, call.Root, wanted.PlaneNode,
                 before.WorldPosition + (before.NoseDirection * 300f), inert: false,
-                scheme: PaintScheme.ForDef(ctx.ZrdrPath, StandInDef), team: AimAssist.PlayerTeam + 1,
+                scheme: PaintScheme.ForDef(ctx.Zrdr, StandInDef), team: AimAssist.PlayerTeam + 1,
                 shippedSkins: true);
             standIn.Group = StandInGroup;
             Damage(standIn, 0.25f);
@@ -1608,10 +1607,10 @@ internal static class AirframeSwapSuites
     // What the replacement is: the named airframe's own def, its own stock hardpoint table, and its
     // own armour pools. The comparison is against the airframe LEFT as much as against the data,
     // because a swap that changed the model and kept the previous fit would read right on its own.
-    private static void CheckAirframe(TestContext ctx, string zrdrPath, FlightController after,
+    private static void CheckAirframe(TestContext ctx, ZrdrSet zrdr, FlightController after,
         AirframeSwapCode wanted, string wasDef, StringBuilder report)
     {
-        var stats = PlaneStats.Load(zrdrPath, wanted.PlaneNode);
+        var stats = PlaneStats.Load(zrdr, wanted.PlaneNode);
         var stock = PlaneDamage.For(stats);
         ctx.Check(after.Loadout is { } fit
                   && string.Equals(fit.Def.Def, wanted.Def, StringComparison.OrdinalIgnoreCase),
@@ -1723,16 +1722,16 @@ internal static class AirframeSwapSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
             TurretDefs = voices?.Turrets,
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
@@ -1742,7 +1741,7 @@ internal static class AirframeSwapSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                ChapterZrdr = ctx.ChapterZrdr(chapter),
                 Sounds = voices?.Archive,
                 SoundDefs = voices?.Defs,
                 HumanPositions = voices?.Ears,
@@ -1815,7 +1814,7 @@ internal static class AirframeSwapSuites
     private sealed class SwapFlightStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

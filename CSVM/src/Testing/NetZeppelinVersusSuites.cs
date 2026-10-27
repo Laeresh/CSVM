@@ -323,7 +323,7 @@ internal static class NetZeppelinVersusSuites
             $"ABLE-TO-FAIL CONTROL: the same seat's own crash still costs it score_suicide {scores.Suicide} on every machine ({Boards()})");
         BackInTheAir(peers);
 
-        var broadside = WeaponDefs.Load(ctx.ZrdrPath).Get(ZeppelinRuntime.BroadsideWeaponId);
+        var broadside = WeaponDefs.Load(ctx.Zrdr).Get(ZeppelinRuntime.BroadsideWeaponId);
         scoreBefore = match.ScoreOf(2);
         if (broadside != null)
         {
@@ -389,9 +389,9 @@ internal static class NetZeppelinVersusSuites
 
     private static SessionSpec Spec(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.ZvzMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, SessionSpec.ZvzMission);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.ZvzMission} zrdr");
         return SessionSpec.Parse(new[]
@@ -523,7 +523,7 @@ internal static class NetZeppelinVersusSuites
     private static void HullKill(TestContext ctx, GameSession[] peers)
     {
         var scores = peers[0].Dogfight!.Match.Scores;
-        var round = WeaponDefs.Load(ctx.ZrdrPath).Get(ZeppelinRuntime.BroadsideWeaponId);
+        var round = WeaponDefs.Load(ctx.Zrdr).Get(ZeppelinRuntime.BroadsideWeaponId);
         if (round == null)
         {
             ctx.Check(false, $"the weapon catalogue holds the broadside's {ZeppelinRuntime.BroadsideWeaponId}");

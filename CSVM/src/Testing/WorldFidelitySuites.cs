@@ -111,13 +111,13 @@ internal static class WorldFidelitySuites
             ctx.Check(started.Count == 1 && submarine.Visible,
                 $"sub_movement resolves its anchor and activates the submarine started={started.Count}");
 
-            string mission = SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03");
+            var mission = ctx.MissionZrdr("C3", "M03");
             var defs = EnemyGenerators.Load(mission);
             var parameters = AiSkills.LoadGeneratorRoster(mission);
             var template = parameters.Count == 1
                 ? CampaignRosterPlan.BuildGeneratorTemplate(parameters[0].Name, parameters[0].Fields,
-                    VehicleDefs.Load(ctx.ZrdrPath),
-                    AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3")))
+                    VehicleDefs.Load(ctx.Zrdr),
+                    AiNets.Load(ctx.ChapterZrdr("C3")))
                 : null;
             ctx.Check(parameters.Count == 1 && parameters[0].Parameter == "BarracudaPlanes"
                 && template?.PlaneNode == "player_peacemaker",
@@ -128,7 +128,7 @@ internal static class WorldFidelitySuites
             var generators = new AiGeneratorRuntime(defs,
                 (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits
                     ? hits[0] : null,
-                AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3")), ctx.PlaneName,
+                AiNets.Load(ctx.ChapterZrdr("C3")), ctx.PlaneName,
                 (EnemyGeneratorDef def, Vector3 pos, Vector3 look, AiPilot pilot) =>
                 {
                     launchedDef = def;
@@ -468,10 +468,10 @@ internal static class WorldFidelitySuites
         + "hangar")]
     internal static void HangarDoorWake(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(DoorChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(DoorMission, StringComparison.OrdinalIgnoreCase))
@@ -485,7 +485,7 @@ internal static class WorldFidelitySuites
             throw new SuiteSkippedException($"{DoorChapter}/{DoorMission} is not in cm_sequence");
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, DoorChapter, DoorMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(DoorChapter, DoorMission);
         ctx.RequireData(missionZrdr, $"{DoorChapter}/{DoorMission} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
@@ -543,7 +543,7 @@ internal static class WorldFidelitySuites
             var spawns = new List<(float At, Vector3 Pos)>();
             var generators = new AiGeneratorRuntime(defs,
                 (name, scope) => runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
-                AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, DoorChapter)), ctx.PlaneName,
+                AiNets.Load(ctx.ChapterZrdr(DoorChapter)), ctx.PlaneName,
                 (plane, pos, look, pilot) =>
                 {
                     spawns.Add((clock, pos));
@@ -719,7 +719,7 @@ internal static class WorldFidelitySuites
     {
         ctx.WithWorld(DoorChapter, collision: false, DoorMission, world =>
         {
-            string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, DoorChapter, DoorMission);
+            ZrdrSet missionZrdr = ctx.MissionZrdr(DoorChapter, DoorMission);
             var spec = SessionSpec.Parse(new[] { $"--chapter={DoorChapter}", $"--mission={DoorMission}", "--mute" });
             var sun = new DirectionalLight3D();
             world.Stage.AddChild(sun);
@@ -883,13 +883,13 @@ internal static class WorldFidelitySuites
         Action<List<Vector3>, AiGeneratorRuntime, FlightController> body)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(RunChapter);
         ctx.RequireData(texturesPath, $"{RunChapter} textures");
         ctx.WithWorld(RunChapter, collision, RunMission, world =>
         {
-            string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RunChapter, RunMission);
-            string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, RunChapter);
+            ZrdrSet missionZrdr = ctx.MissionZrdr(RunChapter, RunMission);
+            ZrdrSet chapterZrdr = ctx.ChapterZrdr(RunChapter);
             var nets = AiNets.Load(chapterZrdr);
             EnemyGeneratorDef? def = null;
             foreach (var d in EnemyGenerators.Load(missionZrdr))
@@ -937,19 +937,19 @@ internal static class WorldFidelitySuites
                 var resources = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                     PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
+                    Zrdr = ctx.Zrdr,
                     StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                     Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Shakes = ShakeDefs.Load(ctx.Zrdr),
                 };
                 var roster = new FlightRoster(FlightRosterPolicy.From(spec),
                     new LiveryResolver(spec, ctx.DataRoot),
                     null, ctx.Host, resources,
-                    new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez, ChapterZrdrPath = chapterZrdr },
+                    new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez, ChapterZrdr = chapterZrdr },
                     new HumanRosterBindings());
                 generators = new AiGeneratorRuntime(new[] { def },
                     (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,

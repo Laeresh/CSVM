@@ -72,7 +72,7 @@ internal static class ClutterCardDepthSuites
 
         var scene = new SceneBuilder(gamez, textures);
         var clutter = new ClutterBuilder(gamez, textures, scene,
-            ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter)));
+            ClutterTemplateSpec.Load(ctx.ChapterZrdr(Chapter)));
         var built = clutter.Build(names);
         ClutterBuilder.KindExport? card = null;
         foreach (var kind in clutter.ExportedKinds ?? Array.Empty<ClutterBuilder.KindExport>())

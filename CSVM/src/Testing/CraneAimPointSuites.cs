@@ -38,7 +38,7 @@ internal static class CraneAimPointSuites
         + "with no lead offset, where the old origin point pulled it about 23 m high")]
     internal static void CraneAimPoint(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         var report = new StringBuilder();

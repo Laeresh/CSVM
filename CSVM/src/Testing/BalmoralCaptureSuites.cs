@@ -62,13 +62,13 @@ internal static class BalmoralCaptureSuites
         + "here")]
     internal static void Cm15Capture(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
@@ -102,13 +102,13 @@ internal static class BalmoralCaptureSuites
         + "position it was built at")]
     internal static void Cm15BalmoralHidden(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), OtherMissionSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), OtherMissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {OtherMissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
@@ -141,13 +141,13 @@ internal static class BalmoralCaptureSuites
         + "vehicle def authors, and the parachutist carries no skins so nothing reaches it")]
     internal static void Cm15StagedPaint(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
@@ -161,7 +161,7 @@ internal static class BalmoralCaptureSuites
 
         var stand = StandInPlan(ctx, chapter, missionZrdr);
         var balmoralScheme = RigScheme(ctx, liveries, stand);
-        var propScheme = liveries.DefScheme(ctx.ZrdrPath, PropDef);
+        var propScheme = liveries.DefScheme(ctx.Zrdr, PropDef);
         report.AppendLine($"'{StandInBlock}' -> def '{stand?.Def}' ai '{stand?.AiDef}' "
             + $"airframe '{stand?.PlaneNode}' team {stand?.Team} -> {balmoralScheme}");
         report.AppendLine($"'{AircraftStage.PropNode}' -> def '{PropDef}' -> {propScheme}");
@@ -170,7 +170,7 @@ internal static class BalmoralCaptureSuites
         // ⚠ Its def chain authors none, so this scheme is the default-pattern rule's, not a value
         // read out of the data; only the intro prop's own is authored.
         ctx.Check(balmoralScheme != null && stand?.AiDef != null
-            && liveries.DefScheme(ctx.ZrdrPath, stand.AiDef) == null
+            && liveries.DefScheme(ctx.Zrdr, stand.AiDef) == null
             && string.Equals(balmoralScheme.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase),
             $"and wears the default pattern ('{balmoralScheme?.Pattern}'), its own def chain authoring none");
         ctx.Check(propScheme != null && balmoralScheme != null
@@ -203,23 +203,23 @@ internal static class BalmoralCaptureSuites
             return null;
         }
 
-        if (plan.AiDef is { } aiDef && liveries.DefScheme(ctx.ZrdrPath, aiDef) is { } authored)
+        if (plan.AiDef is { } aiDef && liveries.DefScheme(ctx.Zrdr, aiDef) is { } authored)
         {
             return authored;
         }
 
-        return liveries.SchemeFor(0, ctx.ZrdrPath, liveries.NewPaintRng(),
+        return liveries.SchemeFor(0, ctx.Zrdr, liveries.NewPaintRng(),
             useDefaultPattern: plan.Team == AimAssist.PlayerTeam);
     }
 
     // The mission's own roster block the staged Balmoral stands in for, planned off the mission
     // data alone: what its rig resolves is decided here, before any aeroplane is built.
-    private static RosterSpawnPlan? StandInPlan(TestContext ctx, string chapter, string missionZrdr)
+    private static RosterSpawnPlan? StandInPlan(TestContext ctx, string chapter, ZrdrSet missionZrdr)
     {
         var plan = CampaignRosterPlan.Build(
             AiSkills.LoadRoster(missionZrdr),
-            VehicleDefs.Load(ctx.ZrdrPath),
-            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter)),
+            VehicleDefs.Load(ctx.Zrdr),
+            AiNets.Load(ctx.ChapterZrdr(chapter)),
             netDraw: _ => 0);
         foreach (var spawn in plan.Spawns)
         {

@@ -40,7 +40,7 @@ public class StuntBotObjectiveTests
         { "C5", 17 },
     };
 
-    private static string ZrdrPath => SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>Per shipped course, the zone ends whose rail run needs a lead-in, and its metres.</summary>
     private static Dictionary<string, string> LeadIns => new()
@@ -437,7 +437,7 @@ public class StuntBotObjectiveTests
     private static StuntMission Load(string chapter)
     {
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
-        var course = StuntMission.Load(gamez, SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, "IA1"),
+        var course = StuntMission.Load(gamez, TestZrdr.Mission(chapter, "IA1"),
             MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.NotNull(course);
         return course!;

@@ -58,5 +58,5 @@ public class CampaignSequenceTests
 
     private static System.Collections.Generic.List<CampaignMission> Load() =>
         CampaignSequence.Load(
-            SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip")));
+            TestZrdr.Root);
 }

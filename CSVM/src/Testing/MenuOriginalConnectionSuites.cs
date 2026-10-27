@@ -653,7 +653,7 @@ internal static class MenuOriginalConnectionSuites
         + "the guest joins that match reading both bots on real stock planes")]
     internal static void TheLobbyBots(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireMessages();
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
@@ -831,7 +831,7 @@ internal static class MenuOriginalConnectionSuites
         + "the menu's own spec turns into the chapter's IA1. Back on a Deathmatch every option is live again")]
     internal static void TheLobbyStuntRace(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -906,7 +906,7 @@ internal static class MenuOriginalConnectionSuites
         + "Dogfight's, onto the Connection page")]
     internal static void TheLobbyRaceEnd(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1084,7 +1084,7 @@ internal static class MenuOriginalConnectionSuites
         + "0:0:0:0:0:0:0:1 joins on the board's port with its last group left in the host")]
     internal static void AnIpv6AddressIsTypedAndJoined(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1153,7 +1153,7 @@ internal static class MenuOriginalConnectionSuites
         + "Enter lowers it and is the box's own Connect")]
     internal static void TheOnScreenKeyboard(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1236,7 +1236,7 @@ internal static class MenuOriginalConnectionSuites
         + "offers the plane and picks it, and the host's untick greys that tab again")]
     internal static void BuildCustomPlaneFromTheConnectionPage(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1590,7 +1590,7 @@ internal static class MenuOriginalConnectionSuites
         + "the loopback")]
     internal static void TheMasterServersGames(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1689,7 +1689,7 @@ internal static class MenuOriginalConnectionSuites
         + "lands. None posts a chat note. The server is a canned list and the wire the loopback")]
     internal static void TheLobbysNetworkRows(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1766,7 +1766,7 @@ internal static class MenuOriginalConnectionSuites
         + "The listed carrier stands for the master server and the wire is the loopback")]
     internal static void TheCopyControl(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1879,7 +1879,7 @@ internal static class MenuOriginalConnectionSuites
         + "more. A server serving this build's version lists the same game. The server is a canned list")]
     internal static void TheOutdatedMasterServer(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");

@@ -93,7 +93,7 @@ public class FogVolumeTests
     [Fact]
     public void TheHeaderKeysAndTheWeightedClutterBlockAreRead()
     {
-        var spec = FogVolumeSpec.Load(TestData.Fixture("zrdr"));
+        var spec = FogVolumeSpec.Load(TestZrdr.Fixture("zrdr"));
 
         Assert.NotNull(spec);
         Assert.Equal(0, spec!.FogZone);
@@ -157,7 +157,7 @@ public class FogVolumeTests
     [Fact]
     public void AnAbsentFileIsNullRatherThanAThrow()
     {
-        Assert.Null(FogVolumeSpec.Load(TestData.TempDir()));
+        Assert.Null(FogVolumeSpec.Load(TestZrdr.Folder(TestData.TempDir())));
     }
 
     /// <summary>A stamp inside a volume carries its texture row, one past the zone row. That row
@@ -194,7 +194,7 @@ public class FogVolumeTests
     public void EveryChapterFogVolumeCensusIsWhatTheDataSays(string chapter, string expected)
     {
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
-        var spec = FogVolumeSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+        var spec = FogVolumeSpec.Load(TestZrdr.Chapter(chapter));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
 
         Assert.NotNull(spec);

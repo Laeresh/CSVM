@@ -94,9 +94,9 @@ internal static class LookStickSuites
     internal static void LookStick(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
 
@@ -134,9 +134,9 @@ internal static class LookStickSuites
     internal static void LookStickEdge(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
 
@@ -344,7 +344,7 @@ internal static class LookStickSuites
 
     // One flight: build a single human in the named view with the stick pinned, settle, read the
     // swing, then centre the stick and settle again to read what release leaves behind.
-    private static Swing? Fly(TestContext ctx, TextureSet texturesPath, string chapterZrdr,
+    private static Swing? Fly(TestContext ctx, TextureSet texturesPath, ZrdrSet chapterZrdr,
         PilotViewMode mode, StringBuilder report)
     {
         Swing? result = null;
@@ -373,7 +373,7 @@ internal static class LookStickSuites
 
     // Builds one human in the named view with the stick pinned at `look`, hands it to the sortie
     // unsettled and tears everything down after. False when no aircraft was built.
-    private static bool WithFlight(TestContext ctx, TextureSet texturesPath, string chapterZrdr,
+    private static bool WithFlight(TestContext ctx, TextureSet texturesPath, ZrdrSet chapterZrdr,
         PilotViewMode mode, string look, Action<GameClock, FlightController> sortie)
     {
         var planesGamez = ctx.Planes;
@@ -572,21 +572,21 @@ internal static class LookStickSuites
     }
 
     private static FlightRoster BuildRoster(TestContext ctx, SessionSpec spec, GameZ planesGamez,
-        TextureArchive textures, ProjectilePool pool, string chapterZrdr, IReadOnlyList<PlayerRig> rigs)
+        TextureArchive textures, ProjectilePool pool, ZrdrSet chapterZrdr, IReadOnlyList<PlayerRig> rigs)
     {
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, ctx.DataRoot),
@@ -595,7 +595,7 @@ internal static class LookStickSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = chapterZrdr,
+                ChapterZrdr = chapterZrdr,
             },
             new HumanRosterBindings
             {
@@ -620,7 +620,7 @@ internal static class LookStickSuites
     private sealed class LevelStart : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

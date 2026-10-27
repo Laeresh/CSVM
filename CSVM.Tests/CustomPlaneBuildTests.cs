@@ -375,7 +375,7 @@ public class CustomPlaneBuildTests : IDisposable
     [ExtractedDataFact]
     public void TheEnginePickResolvesToItsAuthoredRegistryRow()
     {
-        string zrdr = Path.Combine(TestData.ExtractedRoot!, "zrdr");
+        var zrdr = TestZrdr.Root;
         var def = Def();
         def.Airframe = 7;
 
@@ -394,7 +394,7 @@ public class CustomPlaneBuildTests : IDisposable
     [ExtractedDataFact]
     public void EveryAirframesRegistryBaseRowExists()
     {
-        string zrdr = Path.Combine(TestData.ExtractedRoot!, "zrdr");
+        var zrdr = TestZrdr.Root;
         var def = Def();
         for (int airframe = 0; airframe <= CustomPlaneDef.MaxAirframe; airframe++)
         {

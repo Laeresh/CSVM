@@ -35,7 +35,7 @@ internal static class StuntTargetSuites
         + "pilot's cycle and nobody else's")]
     internal static void StuntTargetCycle(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireMessages();
 

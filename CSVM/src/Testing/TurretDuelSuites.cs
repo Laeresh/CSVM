@@ -31,15 +31,15 @@ internal static class TurretDuelSuites
     internal static void TurretDuel(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane(PlaneNode);
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         var planesGamez = ctx.Planes;
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == PlaneNode);
-        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode);
         ctx.Check(aiStats.AiTargetBias == 0f, $"the AI aeroplane carries no target_bias={aiStats.AiTargetBias:0}");
 
         var gunDef = turretDefs.All.FirstOrDefault(d => !d.Carried && weapons.Get(d.WeaponName) is { IsGun: true });

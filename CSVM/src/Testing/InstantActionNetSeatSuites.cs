@@ -34,10 +34,10 @@ internal static class InstantActionNetSeatSuites
     internal static void InstantActionWaveNetSeat(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
 
         var planesGamez = ctx.Planes;
@@ -168,7 +168,7 @@ internal static class InstantActionNetSeatSuites
     // One actor build through the director, the human parked 800 m over the origin. The spawns come
     // back in build order: the ace, the wingmen, then waves 1 to 4.
     private static ActorBuild Build(FlightRoster roster, List<FlightController> built, TestContext ctx,
-        string missionZrdr, InstantActionDef def)
+        ZrdrSet missionZrdr, InstantActionDef def)
     {
         var spec = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()),
             Chapter, new[] { "player_bhawk" }, MenuMode.Free, def);
@@ -184,9 +184,9 @@ internal static class InstantActionNetSeatSuites
         director.BuildActors(new InstantActionDirector.ActorBuildInputs
         {
             Rigs = new List<PlayerRig> { new() { Controller = lead } },
-            ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter),
-            MissionZrdrPath = missionZrdr,
-            ZrdrPath = ctx.ZrdrPath,
+            ChapterZrdr = ctx.ChapterZrdr(Chapter),
+            MissionZrdr = missionZrdr,
+            Zrdr = ctx.Zrdr,
             Messages = ctx.Data.Messages,
             SpawnList = spawnList,
             SpawnBase = 0,

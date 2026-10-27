@@ -53,12 +53,12 @@ internal static class PlaneRigSuites
     internal static void PlaneRigSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = ctx.Planes;
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string gunId = ctx.SyntheticData ? "wep_probe_gun" : weapons.All.First(w => w.IsGun).Id;

@@ -46,8 +46,8 @@ internal static class AceWakeTerrainSuites
     internal static void AceWakeTerrain(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -71,7 +71,7 @@ internal static class AceWakeTerrainSuites
         report.AppendLine($"{PlayerBlock} authored at ({player.Pos.X:0}, {player.Pos.Y:0}, {player.Pos.Z:0}); wake range {wakeRangeM:0} m");
 
         var planesGamez = ctx.Planes;
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         string plane = ctx.PlaneName;
         if (defs.DefForBlock(AceBlock) is { } aceDef && defs.AirframeFor(aceDef) is { } airframe)
             plane = airframe.PlaneNode;
@@ -89,7 +89,7 @@ internal static class AceWakeTerrainSuites
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, plane);
+        var stats = PlaneStats.Load(ctx.Zrdr, plane);
         var humans = new List<Vector3> { player.Pos };
         FlightController? far = null;
         FlightController? near = null;

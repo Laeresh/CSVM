@@ -24,7 +24,7 @@ namespace CSVM.Launch;
 internal sealed class SessionVoices
 {
     private readonly SessionSpec _spec;
-    private readonly string _zrdrPath;
+    private readonly ZrdrSet _zrdr;
     private readonly Node3D _worldRoot;
     private readonly IReadOnlyList<PlayerRig> _rigs;
     private readonly IReadOnlyList<PlayerRig> _seatRigs;
@@ -41,12 +41,12 @@ internal sealed class SessionVoices
     /// <summary>The voices over one flight build: its panes, its seats and the match's seat roster.
     /// The roster is empty in a local match without bots. <paramref name="onWire"/> says whether
     /// it is a network match's.</summary>
-    public SessionVoices(SessionSpec spec, string zrdrPath, Node3D worldRoot,
+    public SessionVoices(SessionSpec spec, ZrdrSet zrdr, Node3D worldRoot,
         IReadOnlyList<PlayerRig> rigs, IReadOnlyList<PlayerRig> seatRigs,
         IReadOnlyList<Net.NetSeat> netSeats, bool onWire)
     {
         _spec = spec;
-        _zrdrPath = zrdrPath;
+        _zrdr = zrdr;
         _worldRoot = worldRoot;
         _rigs = rigs;
         _seatRigs = seatRigs;
@@ -79,7 +79,7 @@ internal sealed class SessionVoices
         var radio = Radio = new MissionRadio(vDefs, vGroups, worldSounds.StreamFor);
         worldSounds.Radio = radio;
         _worldRoot.AddChild(radio);
-        var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
+        var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.Zrdr));
         var voice = Voice = new AiVoiceRuntime(combatVoice, worldSounds, radio, Rng.NewSystemRandom(Rng.Ai));
         _worldRoot.AddChild(voice); // its realtime tick; freed with the world subtree
         // WA-Turret: subscribed to the pool, not to a turret list, so the emplacements built
@@ -104,7 +104,7 @@ internal sealed class SessionVoices
     {
         try
         {
-            _aiSkills ??= AiSkills.Load(_zrdrPath);
+            _aiSkills ??= AiSkills.Load(_zrdr);
             return _aiSkills.MinAiActiveDist;
         }
         catch (Exception e)
@@ -172,7 +172,7 @@ internal sealed class SessionVoices
         // A match may fly no AI, so the table the spawner loads on its first AI may not be read yet.
         try
         {
-            _aiSkills ??= _roster?.AiSkills ?? AiSkills.Load(_zrdrPath);
+            _aiSkills ??= _roster?.AiSkills ?? AiSkills.Load(_zrdr);
         }
         catch (Exception e) when (e is IOException or InvalidDataException)
         {

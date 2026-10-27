@@ -97,7 +97,7 @@ internal static class NetCtfBotSuites
     private static SessionSpec Spec(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         return SessionSpec.Parse(new[] { "--vs" }
             .Concat(NetCombatSuites.Arena(ctx, mission: SessionSpec.CtfMission))
             .Concat(new[] { "--players=1", "--mute", "--no-pads", "--ctf", TrackedFlight, "--vs-kills=1000" })

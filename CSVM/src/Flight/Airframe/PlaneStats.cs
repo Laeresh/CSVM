@@ -391,8 +391,8 @@ public sealed class PlaneStats
 
     /// <summary>The player airframe as flown by a person: every property, including the damage
     /// model, resolves down the <c>player_airplane</c> chain.</summary>
-    public static PlaneStats Load(string zrdrPath, string planeNodeName) =>
-        LoadCore(zrdrPath, planeNodeName, forAi: false);
+    public static PlaneStats Load(ZrdrSet zrdr, string planeNodeName) =>
+        LoadCore(zrdr, planeNodeName, forAi: false);
 
     /// <summary>The same airframe as flown by the AI: the damage model and the armament resolve
     /// down the AI def's own chain (an <c>armor</c>/<c>health</c> pair, no
@@ -400,8 +400,8 @@ public sealed class PlaneStats
     /// where <see cref="DefName"/>, <see cref="TurretMounts"/> and the built model must stay.
     /// <paramref name="aiDefName"/> names a militia variant and must derive from the base def.
     /// ⚠ The <c>r*</c> family carries parts but is the remote-player family; no roster spawns one.</summary>
-    public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName, string? aiDefName = null) =>
-        LoadCore(zrdrPath, planeNodeName, forAi: true, aiDefName);
+    public static PlaneStats LoadForAi(ZrdrSet zrdr, string planeNodeName, string? aiDefName = null) =>
+        LoadCore(zrdr, planeNodeName, forAi: true, aiDefName);
 
     /// <summary>The original's per-spawn dynamics jitter (docs/org/flightModel.md "The per-spawn
     /// jitter"), applied only to the two vehicle classes it reaches. Always returns a COPY: the
@@ -483,10 +483,10 @@ public sealed class PlaneStats
         return copy;
     }
 
-    private static PlaneStats LoadCore(string zrdrPath, string planeNodeName, bool forAi,
+    private static PlaneStats LoadCore(ZrdrSet zrdr, string planeNodeName, bool forAi,
         string? aiDefName = null)
     {
-        var vehicleRoot = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+        var vehicleRoot = zrdr.LoadFile("vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
 
         // defs alternate: name, property-list, name, property-list, ...
@@ -866,12 +866,12 @@ public sealed class PlaneStats
 
         // stock engine power factor: 'engine' prop → engines.json row [id, name, power]
         int engineId = (int)Prop("engine", 0f);
-        foreach (var row in Zrdr.LoadFile(zrdrPath, "engines.json"))
+        foreach (var row in zrdr.LoadFile("engines.json"))
             if (row is List<object?> { Count: >= 3 } r && r[0] is float id && (int)id == engineId && r[2] is float power)
                 stats.EnginePower = power;
 
         // global flight constants + sound curves
-        if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is List<object?> playerList)
+        if (zrdr.LoadFile("player.json")[0] is List<object?> playerList)
         {
             var player = ZrdrDict.FromAlternating(playerList);
             stats.Gravity = player.Float("nom_gravity", stats.Gravity);

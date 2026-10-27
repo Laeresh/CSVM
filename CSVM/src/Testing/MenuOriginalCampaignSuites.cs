@@ -69,9 +69,9 @@ internal static class MenuOriginalCampaignSuites
         + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, Mech3.CampaignSequence.FileName);
+        ctx.RequireZrdrEntry(ctx.Zrdr, Mech3.CampaignSequence.FileName);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)

@@ -75,10 +75,10 @@ public sealed class CombatVoice
 
     /// <summary>Loads the accent table (<c>zrdr/voice.zrd</c>): rows of
     /// <c>[accentId, voId, …]</c>.</summary>
-    public static Dictionary<int, int[]> LoadAccents(string zrdrPath)
+    public static Dictionary<int, int[]> LoadAccents(ZrdrSet zrdr)
     {
         var accents = new Dictionary<int, int[]>();
-        foreach (var row in Zrdr.LoadFile(zrdrPath, "voice.json"))
+        foreach (var row in zrdr.LoadFile("voice.json"))
         {
             if (row is not List<object?> { Count: >= 2 } r || r[0] is not float accent)
             {
@@ -103,12 +103,12 @@ public sealed class CombatVoice
     /// fields ship); one shorter than 66 simply has no accent and is skipped. A mission without a
     /// roster yields an empty list.
     /// </summary>
-    public static IReadOnlyList<int> MissionAccentIds(string missionZrdrPath)
+    public static IReadOnlyList<int> MissionAccentIds(ZrdrSet missionZrdr)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "aiv.json");
+            root = missionZrdr.LoadFile("aiv.json");
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or InvalidDataException)
         {
@@ -132,12 +132,12 @@ public sealed class CombatVoice
     /// The extra accents are those assigned outside the roster, the <c>--ai=…:accent=N</c> spawns.
     /// The extra pilots are VO ids, the voices network players chose. A clip not in this set never
     /// plays.</summary>
-    public static IReadOnlyCollection<string> SessionPrewarmNames(string zrdrPath,
-        string missionZrdrPath, IReadOnlyDictionary<string, SoundDef> defs,
+    public static IReadOnlyCollection<string> SessionPrewarmNames(ZrdrSet zrdr,
+        ZrdrSet missionZrdr, IReadOnlyDictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup> groups, IEnumerable<int>? extraAccents = null,
         IEnumerable<int>? extraPilots = null)
     {
-        var accents = new SortedSet<int>(MissionAccentIds(missionZrdrPath));
+        var accents = new SortedSet<int>(MissionAccentIds(missionZrdr));
         if (extraAccents != null)
         {
             foreach (int accent in extraAccents)
@@ -150,7 +150,7 @@ public sealed class CombatVoice
         {
             return Array.Empty<string>();
         }
-        var voice = new CombatVoice(defs, groups, LoadAccents(zrdrPath));
+        var voice = new CombatVoice(defs, groups, LoadAccents(zrdr));
         var names = new HashSet<string>(voice.PrewarmNames(accents), StringComparer.OrdinalIgnoreCase);
         names.UnionWith(voice.PilotPrewarmNames(pilots));
         return names;

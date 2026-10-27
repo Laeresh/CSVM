@@ -22,8 +22,7 @@ public class ManeuverExecutorTests
 {
     private const float Dt = 1f / 60f;
 
-    private static string InstallZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet InstallZrdr => TestZrdr.Root;
 
     [Fact]
     public void TimedStepsAdvanceOnTheirDurationsAndFinish()

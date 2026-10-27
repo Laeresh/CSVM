@@ -50,14 +50,14 @@ internal static class NetDirectorSuites
         + "world following with the catch-up off trails by the latency")]
     internal static void DirectorFollow(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>().FirstOrDefault(m =>
+        var mission = CampaignSequence.Load(ctx.Zrdr).Cast<CampaignMission?>().FirstOrDefault(m =>
                 string.Equals(m!.Value.ChapterFolder, Chapter, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(m.Value.MissionFolder, Folder, StringComparison.OrdinalIgnoreCase))
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Folder}");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Folder);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 

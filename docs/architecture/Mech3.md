@@ -337,10 +337,22 @@ over a reader list, so all eight chapters pin off engine (`CSVM.Tests/ClutterTem
 read. Schema, offsets, the per-chapter census and the keying rules: [../formats/templates.md](../formats/templates.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Zrdr.cs
-Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
-`LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
-`ne0*` nets), `HasFile` (whether an entry is there, under either stored name), and `ZrdrDict`, the
-key/[values…] view over a reader's alternating list.
+The reader of unzbd's zrdr output (zip or unpacked dir), kept as the modding path: `ReadScope`
+turns one into the `ZrdrFile` list `ZrdrSet.FromExtracted` wraps, and the path forms of `LoadFile`,
+`LoadFileOrEmpty`, content-sniffing `LoadMatchingFiles`, name-predicate `LoadFilesNamed` and
+`HasFile` serve the model diff and the units. Only the fork's entry names are read
+(`vehicle.zrd.json` for a request of `vehicle.json`); v0.6.1's `vehicle.json` entries are not.
+`ZrdrDict` is the key/[values…] view over a reader's alternating list.
+
+## src/Mech3/ZrdrSet.cs
+One reader scope (root, chapter or mission) as the `ZrdrFile`s every consumer reads in place of a
+path: `GameData.Zrdr`, `ChapterData.ChapterZrdr`/`MissionZrdr`, built by `Load` from a `zrdr.zbd`,
+by `Tooling/SyntheticZrdr.cs` in code, or by `FromExtracted` from a zip or folder. Its reads keep
+the path forms' contracts: `LoadFile` throws on an absent reader and on an empty one,
+`LoadFileOrEmpty` returns the empty root, `HasFile` asks `ZrdrZbd.Find`, `LoadMatchingFiles` walks
+for a string holding the filter, `LoadFilesNamed` sees `Key + ".json"`; both skip empty readers.
+Every read is a deep copy, so a consumer's edit (an anim def keeps reader sub-lists) reaches no
+other session. `None` is an absent scope; a suite skips on it through `TestContext.RequireData`.
 
 ## src/Mech3/GamePath.cs
 Splits a path the game's data names (`..\data\c1\m02\zrdr\cutscenes\cabpickup.zrd`) on `\` and `/`
@@ -659,8 +671,8 @@ through `Extraction/ZbdArchive.cs` and decodes every entry into a `ZrdrFile` in 
 name, collision rename, and the root list in the shape `Zrdr.LoadFile` returns, every number a
 `float` with its stored bits). `Load(game, path)` returns null without a source or without the
 file. `Find` is the lookup a consumer's name goes through: the stored name or a repeat's rename,
-or today's zip spelling, case ignored, the first `player.zrd` for `player.json`. Nothing in the
-engine calls it yet; the switch hands the files to the session in place of the zip path.
+or today's zip spelling, case ignored, the first `player.zrd` for `player.json`. The engine reads
+its files through `ZrdrSet.Load`.
 Value encoding and lookup rule: [../formats/zrdr.md](../formats/zrdr.md#binary-encoding).
 
 ## src/Mech3/AnimZbd.cs
@@ -940,7 +952,7 @@ Decode: docs/formats/campaign-sequence.md.
 Builds one chapter world and binds its `AnimProgram`, the world+anim half of a session build:
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights, and stops before
 the per-view steps the caller drives. `Options` is the whole seam, and everything above Mech3 comes
-in through it: the chapter zrdr path, the two compiled anim archives, the shared `DecodeCache`, the
+in through it: the three reader scopes, the two compiled anim archives, the shared `DecodeCache`, the
 emitter factory a suite substitutes and the archive factory that builds the real one, the clutter debug switches, the
 sound-group prewarm names, the callback and trigger hosts, and `CutsceneNames` (the session's
 camera, bars and intro names), whose presence gates `camera1`, the letterbox bars, the composition
@@ -969,7 +981,7 @@ binds; `StageFlown` puts the one flown airframe in the node table and parks its 
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
-`OpenFor(ArchiveIntent, gamez, textures, soundsZbd, zrdrPath, mute)` opens the five archives one
+`OpenFor(ArchiveIntent, gamez, textures, soundsZbd, zrdr, mute)` opens the five archives one
 chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns the
 `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair the intent implies, so none of
 `GameSession`, the anim lab and the harness hand-sets them: `Session` and `Lab` set the texture flag,

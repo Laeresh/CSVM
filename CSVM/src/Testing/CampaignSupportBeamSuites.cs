@@ -33,13 +33,13 @@ internal static class CampaignSupportBeamSuites
         + "site's REMOVE_OBJECTIVE_TARGET has not run and its own objective has not completed")]
     internal static void CampaignSupportBeamDestroyed(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -54,7 +54,7 @@ internal static class CampaignSupportBeamSuites
         }
 
         var shipped = ObjectiveScript.Load(missionZrdr);
-        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter));
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(Chapter));
         var messages = ctx.Data.Messages;
 
         // Appended past the last shipped number, so OBJECTIVE7's own real TRAVELERS-gated
@@ -62,7 +62,7 @@ internal static class CampaignSupportBeamSuites
         // parser's contiguous-from-1 walk still reaches every shipped objective.
         int synthetic = shipped.Objectives.Count + 1;
         var script = ObjectiveScript.Parse(
-            WithSyntheticAdd(Zrdr.LoadFileOrEmpty(missionZrdr, "objectives.json"), synthetic));
+            WithSyntheticAdd(missionZrdr.LoadFileOrEmpty("objectives.json"), synthetic));
         ctx.Same(synthetic, script.Objectives.Count,
             $"the driven script is the shipped one with a single objective appended");
 

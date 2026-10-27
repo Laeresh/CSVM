@@ -64,16 +64,16 @@ internal static class CaptureGroupSuites
     internal static void CaptureGroup(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -89,7 +89,7 @@ internal static class CaptureGroupSuites
         var script = ObjectiveScript.Load(missionZrdr);
         var report = new StringBuilder();
         var chain = CheckAuthored(ctx, script, report);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         // The capture's wing walk stages aircraft-archive figures, which only a world built with
         // its cutscene library roots can answer for.
@@ -145,7 +145,7 @@ internal static class CaptureGroupSuites
     }
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director, Chain chain,
-        AiSkills skills, string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
+        AiSkills skills, ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = ctx.Planes;
@@ -170,9 +170,9 @@ internal static class CaptureGroupSuites
             int grafted = 0;
             string what = director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 PlayerAirframe = roster.FlyingAirframeOf(0),
                 Player = () => rig.Controller,
@@ -452,16 +452,16 @@ internal static class CaptureGroupSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, ctx.DataRoot),
@@ -470,7 +470,7 @@ internal static class CaptureGroupSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter),
+                ChapterZrdr = ctx.ChapterZrdr(Chapter),
             },
             new HumanRosterBindings
             {
@@ -486,7 +486,7 @@ internal static class CaptureGroupSuites
     private sealed class HighStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

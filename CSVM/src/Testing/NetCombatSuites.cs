@@ -104,7 +104,7 @@ internal static class NetCombatSuites
         // a broken rule. The lossy link is asserted on in net-aircraft-replication.
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(4211));
         var roster = Roster(2, spec);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f);
         if (gun == null)
         {
@@ -438,8 +438,8 @@ internal static class NetCombatSuites
         params string[] extraArgs)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
         ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         var args = new List<string> { "--vs" };
         args.AddRange(Arena(ctx));
@@ -462,8 +462,8 @@ internal static class NetCombatSuites
     // names the arena in the report. A mode with its own map names it, as Capture the Flag does MP2.
     internal static string[] Arena(TestContext ctx, bool gateChapterGamez = true, string mission = MpMission)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, mission);
-        if (!System.IO.File.Exists(missionZrdr) && !System.IO.Directory.Exists(missionZrdr))
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, mission);
+        if (!missionZrdr.Exists)
         {
             ctx.Note($"arena: --stage=empty and its spawn ring, the data root carries no {ctx.Chapter}/{mission}");
             return new[] { "--stage=empty" };
@@ -1450,7 +1450,7 @@ internal static class NetCombatSuites
         // Both machines score with the values player.zrd authors, which the shipped file sets apart
         // from the executable's fallbacks.
         var scores = host.Dogfight!.Match.Scores;
-        var authored = MatchScores.Load(ctx.ZrdrPath);
+        var authored = MatchScores.Load(ctx.Zrdr);
         ctx.Check(scores == authored && guest.Dogfight!.Match.Scores == authored,
             $"both sessions score with player.zrd's values ({scores})");
         ctx.Check(authored != MatchScores.Fallback,
@@ -1528,7 +1528,7 @@ internal static class NetCombatSuites
         rig.Damage!.WholeArmor + rig.Damage.WholeHealth;
 
     // Two kills' worth of player.zrd's score_kill, so one seat reaches it off two real deaths.
-    private static int HostKillTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.ZrdrPath).Kill;
+    private static int HostKillTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.Zrdr).Kill;
 
     private static bool Matches(VersusMatch match, int seat, (int Score, int Deaths, int Kills) want) =>
         match.ScoreOf(seat) == want.Score && match.DeathsOf(seat) == want.Deaths
@@ -1670,7 +1670,7 @@ internal static class NetCombatSuites
                 RepoRoot: ctx.RepoRoot,
                 DataRoot: ctx.DataRoot,
                 PlanesGamezPath: ctx.PlanesGamezPath,
-                ZrdrPath: ctx.ZrdrPath,
+                ZrdrPath: string.Empty,
                 SoundsPath: ctx.SoundsPath,
                 InterpPath: ctx.InterpPath,
                 MessagesPath: ctx.MessagesPath,

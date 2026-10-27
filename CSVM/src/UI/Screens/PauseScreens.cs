@@ -44,7 +44,7 @@ public sealed record PauseSheet(
     /// table. An Instant Action dialog also takes the four texts its own script writes, which no
     /// campaign dialog carries.</summary>
     public static PauseSheet? Load(
-        string zrdrPath, Messages messages, string dialogKey, bool instantAction)
+        ZrdrSet zrdr, Messages messages, string dialogKey, bool instantAction)
     {
         EscapeDialog dialog;
         string file = instantAction
@@ -52,7 +52,7 @@ public sealed record PauseSheet(
             : EscapeDialog.CampaignFile;
         try
         {
-            dialog = EscapeDialog.Load(zrdrPath, file);
+            dialog = EscapeDialog.Load(zrdr, file);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -75,7 +75,7 @@ public sealed record PauseSheet(
             labels,
             instantAction,
             instantAction
-                ? LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages)
+                ? LoadScreens.DialogTexts(zrdr, file, state.Key, messages)
                 : Array.Empty<BoardLine>(),
             strips);
     }
@@ -85,16 +85,16 @@ public sealed record PauseSheet(
     /// that name, <c>Loading.zrd</c>'s own stands in. Null when neither file carries it, which leaves
     /// the chrome board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
     /// <c>escape.zrd</c>'s block lays the campaign's two columns under a blackboard.</summary>
-    public static PauseSheet? LoadMultiplayer(string zrdrPath, Messages messages, string dialogKey)
+    public static PauseSheet? LoadMultiplayer(ZrdrSet zrdr, Messages messages, string dialogKey)
     {
         EscapeDialog escape;
         EscapeDialog loading;
         EscapeDialog blackboard;
         try
         {
-            escape = EscapeDialog.Load(zrdrPath, EscapeDialog.CampaignFile);
-            loading = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
-            blackboard = EscapeDialog.Load(zrdrPath, EscapeDialog.InstantActionFile);
+            escape = EscapeDialog.Load(zrdr, EscapeDialog.CampaignFile);
+            loading = EscapeDialog.Load(zrdr, EscapeDialog.LoadingFile);
+            blackboard = EscapeDialog.Load(zrdr, EscapeDialog.InstantActionFile);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -119,7 +119,7 @@ public sealed record PauseSheet(
             labels,
             true,
             LoadScreens.OnBoard(
-                LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages), StripsTop(strips)),
+                LoadScreens.DialogTexts(zrdr, file, state.Key, messages), StripsTop(strips)),
             strips);
     }
 
@@ -128,12 +128,12 @@ public sealed record PauseSheet(
     /// alone, as the mode's load screen is. Every <c>ia_escape.zrd</c>
     /// dialog shares that frame and differs only in words, so <see cref="OwnModeKey"/> names one.
     /// Null when the file does not read, which leaves the chrome board.</summary>
-    public static PauseSheet? LoadOwnMode(string zrdrPath, Messages messages, string heading) =>
-        Load(zrdrPath, messages, OwnModeKey, instantAction: true) is { } sheet
+    public static PauseSheet? LoadOwnMode(ZrdrSet zrdr, Messages messages, string heading) =>
+        Load(zrdr, messages, OwnModeKey, instantAction: true) is { } sheet
             ? sheet with
             {
                 Reveal = EscapeDialog.Settled(Array.Empty<BriefingStep>()),
-                Texts = LoadScreens.Texts(null, heading, zrdrPath, messages),
+                Texts = LoadScreens.Texts(null, heading, zrdr, messages),
             }
             : null;
 

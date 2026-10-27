@@ -40,9 +40,9 @@ public sealed class VehicleDefs
     public IReadOnlyList<string> Names { get; private set; } = Array.Empty<string>();
 
     /// <summary>Loads the table from the shared zrdr scope's <c>vehicle.json</c>.</summary>
-    public static VehicleDefs Load(string zrdrPath)
+    public static VehicleDefs Load(ZrdrSet zrdr)
     {
-        if (Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] is not List<object?> root)
+        if (zrdr.LoadFile("vehicle.json")[0] is not List<object?> root)
             throw new InvalidOperationException("vehicle.json: unexpected root shape");
         return FromRoot(root);
     }

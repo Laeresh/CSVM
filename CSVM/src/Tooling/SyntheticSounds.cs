@@ -9,8 +9,8 @@ using CSVM.Mech3;
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The synthetic run's sounds. Its definitions are the hand-authored
-/// <c>fixtures/synthetic/zrdr/sounds.json</c>, copied into the tree as it stands. Its WAVs are
+/// The synthetic run's sounds. Its definitions are the <c>sounds</c> reader of
+/// <see cref="SyntheticZrdr"/>. Its WAVs are
 /// generated MS ADPCM, one per <see cref="Wavs"/> entry, built in memory. They are packed into the
 /// container of <c>docs/formats/zbd-archive.md</c> and opened with <see cref="SoundZbd.Read"/>,
 /// the install's reader.
@@ -23,8 +23,6 @@ public static class SyntheticSounds
     /// shipped archive holds.</summary>
     public const int Rate = 22050;
 
-    private const string SoundsFixture = "synthetic/zrdr/sounds.json";
-    private const string VoiceFixture = "synthetic/zrdr/voice.json";
 
     // The archive table's entry size and name field, docs/formats/zbd-archive.md.
     private const int EntrySize = 148;
@@ -134,13 +132,6 @@ public static class SyntheticSounds
         ("probe_vo26_DI-LowDmg-B.wav", 0.6, 370),
     };
 
-    /// <summary>Writes <c>zrdr/sounds.json</c> under <paramref name="tree"/>.</summary>
-    public static void WriteDefinitions(SyntheticTree tree) => tree.CopyFixture(SoundsFixture, "zrdr/sounds.json");
-
-    /// <summary>Writes <c>zrdr/voice.json</c>, the accent table whose pools name the pilot VO ids
-    /// the <c>snd_id&lt;N&gt;_*</c> clip sets of <c>sounds.json</c> carry. Shape:
-    /// <c>docs/formats/combat-voice.md</c>.</summary>
-    public static void WriteVoice(SyntheticTree tree) => tree.CopyFixture(VoiceFixture, "zrdr/voice.json");
 
     /// <summary>The archive of every <see cref="Wavs"/> entry, built afresh in memory.</summary>
     public static SoundZbd Zbd()

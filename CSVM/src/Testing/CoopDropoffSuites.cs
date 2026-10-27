@@ -57,14 +57,14 @@ internal static class CoopDropoffSuites
         + "definition claimed by nobody poses the scripted player and holds the guest instead")]
     internal static void CampaignCoopDropoff(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
@@ -105,12 +105,12 @@ internal static class CoopDropoffSuites
         };
         plane.AddChild(model);
         ctx.Host.AddChild(plane);
-        plane.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null, new CamParams(),
+        plane.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null, new CamParams(),
             at, at + Vector3.Forward, 0f, 0f);
         return plane;
     }
 
-    private static void Drive(TestContext ctx, TestWorld world, string missionZrdr, StringBuilder report)
+    private static void Drive(TestContext ctx, TestWorld world, ZrdrSet missionZrdr, StringBuilder report)
     {
         string? anim = ReplacingAnimOf(world, MissionCutscenes.AnimNames(missionZrdr));
         report.AppendLine($"re-placing definition: '{anim ?? "-"}' (callback {ReplaceCode})");

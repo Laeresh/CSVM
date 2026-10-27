@@ -60,13 +60,13 @@ internal static class CampaignBalloonDeathSuites
         + "own downward launch on the sea it already floats on, where it takes the water branch")]
     internal static void CampaignBalloonDeath(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), BalloonSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), BalloonSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {BalloonSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var report = new StringBuilder();

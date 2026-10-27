@@ -15,8 +15,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class PlaneStatsTitleTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     private static string MessagesPath =>
         Path.Combine(TestData.ExtractedRoot!, "messages.json");

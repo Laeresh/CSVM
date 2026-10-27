@@ -38,18 +38,18 @@ public sealed class MissionTargets
     /// targets the mission flags <c>objective</c> before its script has edited anything.</summary>
     public IReadOnlyDictionary<string, MissionTarget> ByNode => _byNode;
 
-    /// <summary>Loads targets.json from a mission's zrdr (zip or unpacked dir). Missing file
+    /// <summary>Loads targets.json from a mission's reader scope. Missing file
     /// → an empty set (a mission may have none); malformed entries are skipped.</summary>
-    public static MissionTargets Load(string missionZrdrPath) =>
-        TryLoad(missionZrdrPath) ?? new MissionTargets();
+    public static MissionTargets Load(ZrdrSet missionZrdr) =>
+        TryLoad(missionZrdr) ?? new MissionTargets();
 
     /// <summary>The original's reader search path: the mission's own zrdr first, then the
     /// chapter's, one file wins whole (<c>init.gw</c>'s <c>RdrAddPath</c> chain, read by the
     /// reader opener the targets loader calls).
     /// ⚠ Do not read the mission scope alone. C1C/M01 ships no targets.zrd of its own and takes
     /// the chapter's, which is where every one of its objective labels lives.</summary>
-    public static MissionTargets Load(string missionZrdrPath, string chapterZrdrPath) =>
-        TryLoad(missionZrdrPath) ?? TryLoad(chapterZrdrPath) ?? new MissionTargets();
+    public static MissionTargets Load(ZrdrSet missionZrdr, ZrdrSet chapterZrdr) =>
+        TryLoad(missionZrdr) ?? TryLoad(chapterZrdr) ?? new MissionTargets();
 
     /// <summary>A table built in code for a stage that ships no <c>targets.json</c>. Every key is
     /// flagged <c>objective</c> with no display keys, for a mode that labels each site itself.
@@ -67,12 +67,12 @@ public sealed class MissionTargets
     public MissionTarget For(string nodeName) =>
         _byNode.TryGetValue(nodeName, out var t) ? t : default;
 
-    private static MissionTargets? TryLoad(string zrdrPath)
+    private static MissionTargets? TryLoad(ZrdrSet zrdr)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(zrdrPath, "targets.json");
+            root = zrdr.LoadFile("targets.json");
         }
         catch (IOException)
         {

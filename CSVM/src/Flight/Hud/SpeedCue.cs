@@ -44,13 +44,13 @@ public sealed class SpeedCue
     /// <summary>Loads all three authored states and parents their world-space renderers beneath
     /// <paramref name="parent"/>. The optional decorator stamps a splitscreen visual layer after
     /// each puffer has built its renderer subtree.</summary>
-    public static SpeedCue? Build(string chapterZrdrPath, TextureArchive textures, Node parent,
+    public static SpeedCue? Build(ZrdrSet chapterZrdr, TextureArchive textures, Node parent,
         EffectAmbience? ambience = null, Action<Node>? decorate = null)
     {
         var puffers = new Puffer[3];
         for (int i = 0; i < puffers.Length; i++)
         {
-            if (Puffer.MakePuffer(chapterZrdrPath, textures, parent, "speed_cue.json",
+            if (Puffer.MakePuffer(chapterZrdr, textures, parent, "speed_cue.json",
                     $"cuepuffer{i + 1}", ambience: ambience) is not { } puffer)
             {
                 for (int built = 0; built < i; built++)

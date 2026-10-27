@@ -28,12 +28,12 @@ public static class Maneuvers
         "lag_pursuit_roll", "high_yo_yo", "nitro_evade", "barrel_roll", "spiral_dive",
     };
 
-    /// <summary>Loads the library in file order from the shared zrdr scope
-    /// (<c>extracted/zrdr.zip</c> or its unpacked sibling): an alternating
+    /// <summary>Loads the library in file order from the shared scope's <c>maneuvers.zrd</c>:
+    /// an alternating
     /// <c>name, [properties…]</c> root list, 17 entries in this install.</summary>
-    public static List<Maneuver> Load(string zrdrPath)
+    public static List<Maneuver> Load(ZrdrSet zrdr)
     {
-        var root = Zrdr.LoadFile(zrdrPath, "maneuvers.json");
+        var root = zrdr.LoadFile("maneuvers.json");
         var maneuvers = new List<Maneuver>();
         for (int i = 0; i + 1 < root.Count; i += 2)
         {

@@ -111,9 +111,9 @@ internal static class CampaignBlackeSearchSuites
     internal static void CampaignBlackeSearch(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
@@ -129,7 +129,7 @@ internal static class CampaignBlackeSearchSuites
         var report = new StringBuilder();
         var points = CheckAuthored(ctx, script, report);
 
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Zachary"), null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -149,9 +149,9 @@ internal static class CampaignBlackeSearchSuites
     internal static void NetBlackeWarp(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
@@ -179,7 +179,7 @@ internal static class CampaignBlackeSearchSuites
         var report = new StringBuilder();
         report.AppendLine($"host draws waypoint {hostPick + 1} of {points.Count}; a guest drawing on seed {guestSeed} would take {new Random(guestSeed).Next(points.Count) + 1}");
         var blocks = AiSkills.LoadRoster(missionZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
             DriveWarp(ctx, world, script, mission, blocks, skills, points, hostPick, guestSeed,
                 missionZrdr, chapterZrdr, texturesPath, report));
@@ -201,8 +201,8 @@ internal static class CampaignBlackeSearchSuites
     internal static void BlackeIntroHandoff(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -244,7 +244,7 @@ internal static class CampaignBlackeSearchSuites
         try
         {
             var planesGamez = ctx.Planes;
-            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
             var pos = new Vector3(0f, 500f, 0f);
             var rig = new FlightController
@@ -442,7 +442,7 @@ internal static class CampaignBlackeSearchSuites
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, AiSkills skills,
-        IReadOnlyList<WarpPoint> points, string missionZrdr, string chapterZrdr,
+        IReadOnlyList<WarpPoint> points, ZrdrSet missionZrdr, ZrdrSet chapterZrdr,
         TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
@@ -465,9 +465,9 @@ internal static class CampaignBlackeSearchSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 Player = () => human,
                 FindNodes = name => world.Runtime.FindNodes(name),
@@ -557,7 +557,7 @@ internal static class CampaignBlackeSearchSuites
     private static void DriveWarp(TestContext ctx, TestWorld world, ObjectiveScript script,
         CampaignMission mission, IReadOnlyList<(string Name, List<object?> Fields)> blocks,
         AiSkills skills, IReadOnlyList<WarpPoint> points, int hostPick, int guestSeed,
-        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = ctx.Planes;
@@ -576,9 +576,9 @@ internal static class CampaignBlackeSearchSuites
                 ends.Add(end);
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     Player = () => human,
                     FindNodes = n => world.Runtime.FindNodes(n),
@@ -779,7 +779,7 @@ internal static class CampaignBlackeSearchSuites
 
     private static CampaignMission? MissionAt(TestContext ctx, string chapter, string mission)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(mission, StringComparison.OrdinalIgnoreCase))
@@ -826,7 +826,7 @@ internal static class CampaignBlackeSearchSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {
@@ -857,15 +857,15 @@ internal static class CampaignBlackeSearchSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, ctx.DataRoot),

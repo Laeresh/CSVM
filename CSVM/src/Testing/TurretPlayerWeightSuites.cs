@@ -32,20 +32,20 @@ internal static class TurretPlayerWeightSuites
     internal static void TurretPlayerWeight(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane(PlaneNode);
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         var planesGamez = ctx.Planes;
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == PlaneNode);
 
         // Each through the path its pilot spawns by: GameSession's human load and the AI one. The
         // -300 sits on player_airplane, the -100 on the wingman defs, and a plain AI def has none.
-        var humanStats = PlaneStats.Load(ctx.ZrdrPath, PlaneNode);
-        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
-        var wingStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
+        var humanStats = PlaneStats.Load(ctx.Zrdr, PlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode);
+        var wingStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode, WingmanDef);
         ctx.Check(humanStats.AiTargetBias == -300f && aiStats.AiTargetBias == 0f && wingStats.AiTargetBias == -100f,
             $"target_bias: human {humanStats.AiTargetBias:0} [{humanStats.DefName}], AI {aiStats.AiTargetBias:0} [{aiStats.DefName}], wingman def {wingStats.AiTargetBias:0} [{wingStats.DefName}]");
 

@@ -638,7 +638,7 @@ internal static class WorldAndToolSuites
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireZrdrEntry(missionZrdr, "weather.json");
 
         var weather = WeatherState.Load(missionZrdr);
@@ -1456,7 +1456,7 @@ internal static class WorldAndToolSuites
         var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
         var names = ClutterBuilder.TemplateNames(interp, chapter);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
         ctx.Check(props != null && props.Kinds.Count > 0, $"{chapter} templates.zrd read");
 
         // Each build's kinds as (label → placements), plus the flat transform list in kind order.
@@ -1547,7 +1547,7 @@ internal static class WorldAndToolSuites
 
         var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
 
         var root = ClutterBuilder.FindTemplateRoot(gamez, template);
         ctx.Check(root != null, $"{chapter} carries the {template} template");
@@ -1673,7 +1673,7 @@ internal static class WorldAndToolSuites
 
         var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
         var clutter = new ClutterBuilder(gamez, textures, null, props);
         var built = clutter.Build(new[] { template });
 
@@ -2325,7 +2325,7 @@ internal static class WorldAndToolSuites
     internal static void SunOrientation(TestContext ctx)
     {
         var (chapter, mission) = WeatherMission(ctx, "C2", "MP2");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ZrdrSet zrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
         var zone1 = AuthoredBearing(ctx, zrdr, "zone1", -65f, 90f);
         var zone2 = AuthoredBearing(ctx, zrdr, "zone2", -25f, 90f);
@@ -2393,7 +2393,7 @@ internal static class WorldAndToolSuites
 
     // A zone's sun bearing in degrees: the shipped literal on an install, the record's own on the
     // synthetic tree. The CSVM.Tests units pin the reader, so the suite's question stays the wiring.
-    internal static (float Pitch, float Yaw) AuthoredBearing(TestContext ctx, string zrdr, string zone,
+    internal static (float Pitch, float Yaw) AuthoredBearing(TestContext ctx, ZrdrSet zrdr, string zone,
         float pitch, float yaw)
     {
         if (!ctx.SyntheticData)
@@ -2411,9 +2411,9 @@ internal static class WorldAndToolSuites
         "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission gets a dimmer scene sun than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
     internal static void SunEnergy(TestContext ctx)
     {
-        string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");
-        string dayZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1C", "M01");
-        string edgeZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1C", "MP1");
+        ZrdrSet nightZrdr = ctx.MissionZrdr("C1B", "IA1");
+        ZrdrSet dayZrdr = ctx.MissionZrdr("C1C", "M01");
+        ZrdrSet edgeZrdr = ctx.MissionZrdr("C1C", "MP1");
         ctx.RequireData(nightZrdr, $"C1B/IA1 mission zrdr");
         ctx.RequireData(dayZrdr, $"C1C/M01 mission zrdr");
         ctx.RequireData(edgeZrdr, $"C1C/MP1 mission zrdr");
@@ -2480,8 +2480,8 @@ internal static class WorldAndToolSuites
     {
         var lit = WeatherMission(ctx, "C1", "IA1");
         var cross = WeatherMission(ctx, "C2", "MP2");
-        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, lit.Chapter, lit.Mission);
-        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, cross.Chapter, cross.Mission);
+        ZrdrSet litZrdr = ctx.MissionZrdr(lit.Chapter, lit.Mission);
+        ZrdrSet crossZrdr = ctx.MissionZrdr(cross.Chapter, cross.Mission);
         ctx.RequireData(litZrdr, $"{lit.Chapter}/{lit.Mission} mission zrdr");
         ctx.RequireData(crossZrdr, $"{cross.Chapter}/{cross.Mission} mission zrdr");
         var litBearing = AuthoredBearing(ctx, litZrdr, "zone1", -25f, 90f);
@@ -2577,7 +2577,7 @@ internal static class WorldAndToolSuites
     internal static void WeatherCockpitWhiteout(TestContext ctx)
     {
         var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ZrdrSet zrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
         // C1/IA1's band is 970-1124 m, so its centre is 1047 m.
         float core = ctx.SyntheticData ? WeatherState.Load(zrdr)?.CloudBandCentre ?? 0f : 1047f;
@@ -3803,7 +3803,7 @@ internal static class WorldAndToolSuites
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
     // comparing two missions' cloud tops is not the night-against-day question.
     private static (float Sun, float Ambient, Godot.Environment.AmbientSource Source, Color Color, Color Authored) ZoneEnergies(
-        TestContext ctx, string chapter, string mission, string zrdr)
+        TestContext ctx, string chapter, string mission, ZrdrSet zrdr)
     {
         var sun = new DirectionalLight3D { Name = $"sun-energy-{chapter}-{mission}" };
         var env = new Godot.Environment();

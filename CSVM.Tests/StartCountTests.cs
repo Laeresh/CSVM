@@ -154,7 +154,7 @@ public class StartCountTests
     // A mission's own spawn, attitude and speed, read the way the session reads them.
     private static (Vector3 Pos, Basis Attitude, float Speed) SpawnOf(string chapter, string mission)
     {
-        var start = SpawnPoints.LoadPlayerInit(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission));
+        var start = SpawnPoints.LoadPlayerInit(TestZrdr.Mission(chapter, mission));
         Assert.True(start.HasValue, $"{chapter}/{mission} authors a PLAYER_INIT");
         var spawn = start!.Value.Spawn;
         var lookAt = spawn.Position + spawn.Forward;

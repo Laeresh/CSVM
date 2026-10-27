@@ -34,7 +34,7 @@ internal static class XrRigSuites
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet zrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(zrdr, $"C1/IA1 mission zrdr");
         if (XRServer.PrimaryInterface != null)
         {
@@ -159,7 +159,7 @@ internal static class XrRigSuites
 
     // The weather tick centres the pane's dome and deck on the tracked head while the rig flies the
     // pane. Once the rig lets the pane go, the flat camera takes over: the flat path's control.
-    private static void SkyFollowsHead(TestContext ctx, string zrdr, XrRig rig, Camera3D flat, DirectionalLight3D sun)
+    private static void SkyFollowsHead(TestContext ctx, ZrdrSet zrdr, XrRig rig, Camera3D flat, DirectionalLight3D sun)
     {
         var dome = new Node3D { Name = "xr-rig-dome" };
         var deck = new Node3D { Name = "xr-rig-deck" };

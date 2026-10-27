@@ -82,9 +82,9 @@ internal static class SurfaceVehicleGunSuites
         + "costs more aim quality than the gun's gate allows")]
     internal static void SurfaceVehicleGuns(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BoatChapter, BoatMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(BoatChapter);
         TextureSet texturesPath = ctx.ChapterTextures(BoatChapter);
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
@@ -92,9 +92,9 @@ internal static class SurfaceVehicleGunSuites
 
         var mission = MissionOf(ctx, BoatChapter, BoatMission);
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Guns"), null);
         var planesGamez = ctx.Planes;
 
@@ -119,9 +119,9 @@ internal static class SurfaceVehicleGunSuites
                 worldRoot.AddChild(vessels);
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     FindNodes = name => world.Runtime.FindNodes(name),
                     Spawn = (_, _, _, _) => null,   // the aircraft half stays unbuilt on purpose
@@ -248,11 +248,11 @@ internal static class SurfaceVehicleGunSuites
         + "where the turret path's half-second lease would still be sounding")]
     internal static void SurfaceGunVoices(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, VoiceChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(VoiceChapter, VoiceMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(VoiceChapter);
         TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(missionZrdr, $"{VoiceChapter}/{VoiceMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{VoiceChapter} zrdr");
@@ -264,10 +264,10 @@ internal static class SurfaceVehicleGunSuites
 
         var mission = MissionOf(ctx, VoiceChapter, VoiceMission);
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
         soundDefs.TryGetValue(HullCue, out var cue);
         ctx.Check(cue is { Is3D: true, Looped: true },
             $"{HullCue} is authored 3D and LOOPED, so a hull's voice is a point in the world");
@@ -309,9 +309,9 @@ internal static class SurfaceVehicleGunSuites
                 worldRoot.AddChild(vessels);
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     FindNodes = name => world.Runtime.FindNodes(name),
                     Spawn = (_, _, _, _) => null,   // the aircraft half stays unbuilt on purpose
@@ -506,7 +506,7 @@ internal static class SurfaceVehicleGunSuites
     private static FlightController Rig(TestContext ctx, GameZ planesGamez, TextureArchive textures,
         ProjectilePool live, int index, Vector3 at, int team)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {
@@ -532,7 +532,7 @@ internal static class SurfaceVehicleGunSuites
 
     private static CampaignMission MissionOf(TestContext ctx, string chapter, string folder)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))

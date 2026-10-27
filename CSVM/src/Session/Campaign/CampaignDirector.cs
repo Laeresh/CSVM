@@ -63,7 +63,7 @@ public sealed class CampaignDirector
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
-    private readonly string _missionZrdrPath;
+    private readonly ZrdrSet _missionZrdr;
 
     // The objective numbers this attempt's completed danger zones stand for, the second source of
     // the completed-objective mask (docs/org/debrief.md, "The completed-objective mask has two
@@ -155,14 +155,14 @@ public sealed class CampaignDirector
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
+        CampaignProfileDef profile, CampaignProfileStore? store, ZrdrSet missionZrdr,
         int? carryThroughSeq)
     {
         Script = script;
         _mission = mission;
         _profile = profile;
         _store = store;
-        _missionZrdrPath = missionZrdrPath;
+        _missionZrdr = missionZrdr;
         _carryThroughSeq = carryThroughSeq;
     }
 
@@ -264,7 +264,7 @@ public sealed class CampaignDirector
 
     /// <summary>The mission's own <c>objectives.zrd</c> path, for a screen that reads the reader
     /// rather than this director's own graph.</summary>
-    public string MissionZrdrPath => _missionZrdrPath;
+    public ZrdrSet MissionZrdr => _missionZrdr;
 
     /// <summary>Raised when the mission has ended and its result is banked: the session layer's cue
     /// to leave the world and put the player back in the cabin. The cabin screen itself is C22's.</summary>
@@ -296,14 +296,14 @@ public sealed class CampaignDirector
     /// mission out of <c>cm_sequence.zrd</c>, so the rest of the build sees an ordinary
     /// chapter/mission session. Returns the spec unchanged when no campaign mission was asked for,
     /// or when the story position is not one the sequence carries.</summary>
-    public static SessionSpec ResolveSpec(SessionSpec spec, string zrdrPath)
+    public static SessionSpec ResolveSpec(SessionSpec spec, ZrdrSet zrdr)
     {
         if (spec.CampaignProfile == null || spec.CampaignMissionSeq is not { } seq)
         {
             return spec;
         }
 
-        if (MissionFor(zrdrPath, seq) is not { } mission || mission.ChapterFolder.Length == 0)
+        if (MissionFor(zrdr, seq) is not { } mission || mission.ChapterFolder.Length == 0)
         {
             Log.Warn("core", $"--campaign: seq {seq} is not in cm_sequence, flying the CLI chapter instead");
             return spec;
@@ -393,7 +393,7 @@ public sealed class CampaignDirector
     /// <paramref name="hostPersisted"/> (its world opens on the host's persist log). A host whose
     /// humans hold the saved wingman plane flies the cabin's (<see cref="SessionSpec.CampaignWingman"/>).
     /// </summary>
-    public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath,
+    public static CampaignDirector? TryCreate(SessionSpec spec, ZrdrSet zrdr, ZrdrSet missionZrdr,
         Func<Net.CoopWingmanMessage?>? hostWingman = null,
         Func<IReadOnlyCollection<Net.CoopPersistMessage>?>? hostPersisted = null)
     {
@@ -417,7 +417,7 @@ public sealed class CampaignDirector
             return null;
         }
 
-        if (MissionFor(zrdrPath, seq) is not { } mission)
+        if (MissionFor(zrdr, seq) is not { } mission)
         {
             return null;
         }
@@ -434,10 +434,10 @@ public sealed class CampaignDirector
             Log.Info("core", $"campaign: co-op guest takes {persisted.Count} object(s) of its host's persist log");
         }
 
-        var script = ObjectiveScript.Load(missionZrdrPath);
+        var script = ObjectiveScript.Load(missionZrdr);
         Log.Info("core", $"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, {script.Objectives.Count} objective(s)");
-        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
-            CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
+        var director = new CampaignDirector(script, mission, profile, store, missionZrdr,
+            CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdr), seq)?.Seq);
         if (hostWingman != null)
         {
             director.BindHostWingman(hostWingman());
@@ -455,15 +455,15 @@ public sealed class CampaignDirector
     }
 
     /// <summary>The suite/test entry: a director over an already-loaded script, mission and
-    /// profile, with no profile file behind it unless one is handed in. <paramref
-    /// name="missionZrdrPath"/> is only needed to arm danger zones (its <c>dzones.zrd</c> overrides,
-    /// which say what is disabled and which objective each zone photographs into); omitted, every
-    /// zone is armed and none is bound to an objective.</summary>
+    /// profile, with no profile file behind it unless one is handed in. The mission scope
+    /// <paramref name="missionZrdr"/> only arms danger zones. Its <c>dzones.zrd</c> says what is
+    /// disabled and which objective each zone photographs into. Omitted, every zone is armed and
+    /// none is bound to an objective.</summary>
     internal static CampaignDirector Create(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "",
+        CampaignProfileDef profile, CampaignProfileStore? store, ZrdrSet? missionZrdr = null,
         int? carryThroughSeq = null) =>
-        new(script, mission, profile, store, missionZrdrPath, carryThroughSeq);
+        new(script, mission, profile, store, missionZrdr ?? ZrdrSet.None, carryThroughSeq);
 
     /// <summary>Hands every wingman whose leader has left play the leader's own patrol net, and
     /// returns how many were moved. A netless escort has no orders of its own once its leader is
@@ -537,9 +537,9 @@ public sealed class CampaignDirector
         VehicleDefs defs;
         try
         {
-            blocks = AiSkills.LoadRoster(inputs.MissionZrdrPath);
-            nets = AiNets.Load(inputs.ChapterZrdrPath);
-            defs = VehicleDefs.Load(inputs.ZrdrPath);
+            blocks = AiSkills.LoadRoster(inputs.MissionZrdr);
+            nets = AiNets.Load(inputs.ChapterZrdr);
+            defs = VehicleDefs.Load(inputs.Zrdr);
         }
         catch (Exception e)
         {
@@ -694,12 +694,12 @@ public sealed class CampaignDirector
         Graph.Transitioned += OnObjectiveTransition;
         Graph.TargetsChanged += ApplyHelpLabels;
         _dangerZones = inputs.Gamez is { } gamez
-            ? CampaignDangerZones.Load(Script, gamez, _missionZrdrPath)
+            ? CampaignDangerZones.Load(Script, gamez, _missionZrdr)
             : null;
         // The AI's ribbons are every dzpath of the world, not the mission's objective names: a
         // net node may send a pilot through a zone the script never scores.
         _ribbons = inputs.Gamez is { } ribbonGamez
-            ? DangerZoneRibbons.Load(ribbonGamez, CampaignDangerZones.ReadDisabled(_missionZrdrPath))
+            ? DangerZoneRibbons.Load(ribbonGamez, CampaignDangerZones.ReadDisabled(_missionZrdr))
             : null;
         foreach (var rig in _roster.Values)
         {
@@ -947,9 +947,9 @@ public sealed class CampaignDirector
         picks.Enqueue(index);
     }
 
-    private static CampaignMission? MissionFor(string zrdrPath, int seq)
+    private static CampaignMission? MissionFor(ZrdrSet zrdr, int seq)
     {
-        foreach (var mission in CampaignSequence.Load(zrdrPath))
+        foreach (var mission in CampaignSequence.Load(zrdr))
         {
             if (mission.Seq == seq)
             {
@@ -1692,9 +1692,9 @@ public sealed class CampaignDirector
     /// registration), the shape <c>InstantActionDirector.ActorBuildInputs</c> has.</summary>
     internal sealed class RosterInputs
     {
-        public string ChapterZrdrPath = "";
-        public string MissionZrdrPath = "";
-        public string ZrdrPath = "";
+        public ZrdrSet ChapterZrdr = ZrdrSet.None;
+        public ZrdrSet MissionZrdr = ZrdrSet.None;
+        public ZrdrSet Zrdr = ZrdrSet.None;
 
         /// <summary>player.json's <c>min_ai_active_dist</c>, the floor under every activation
         /// radius.</summary>

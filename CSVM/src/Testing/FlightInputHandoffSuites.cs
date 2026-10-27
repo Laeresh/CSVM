@@ -116,7 +116,7 @@ internal static class FlightInputHandoffSuites
     internal static void FlightLiveRespawnGate(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
@@ -184,11 +184,11 @@ internal static class FlightInputHandoffSuites
     internal static void StuntRespawnTapHold(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         var chapterGamez = ctx.ChapterGamez("C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
@@ -305,11 +305,11 @@ internal static class FlightInputHandoffSuites
     internal static void StuntStartCount(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         var chapterGamez = ctx.ChapterGamez("C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
@@ -466,7 +466,7 @@ internal static class FlightInputHandoffSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, float? spawnSpeed = null)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var pos = new Vector3(0f, SpawnAltitudeM, 0f);
         var rig = new FlightController

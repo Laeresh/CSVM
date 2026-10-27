@@ -221,10 +221,10 @@ public sealed class EscapeDialog
     /// <summary>Loads a definition file from a shared zrdr scope. Every dialog is kept, including
     /// <c>default</c>, since a key that misses falls back to it the way the original's lookup
     /// does.</summary>
-    public static EscapeDialog Load(string zrdrPath, string file)
+    public static EscapeDialog Load(ZrdrSet zrdr, string file)
     {
         var dialog = new EscapeDialog();
-        var root = Zrdr.LoadFile(zrdrPath, file);
+        var root = zrdr.LoadFile(file);
         if (root.Count == 0 || root[0] is not List<object?> entries)
         {
             return dialog;

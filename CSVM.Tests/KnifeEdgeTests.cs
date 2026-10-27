@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Godot;
 using Xunit;
@@ -26,8 +27,7 @@ public class KnifeEdgeTests
         "player_peacemaker",
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>Wings level, nose 45° up, flight path along the nose, stick centred: every torque
     /// in the model is identically zero there, so one step must leave the attitude exactly where

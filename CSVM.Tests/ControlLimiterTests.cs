@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -52,8 +53,7 @@ public class ControlLimiterTests
         ("rudder @ fd", 1.0f, new FlightInput { Yaw = 1f, Throttle = 1f }),
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The G limiter's ramp begins at the authored <c>highGs[0]</c>, so it has no effect at
     /// all below that. No airframe's hardest manoeuvre demands that much, and the demand read here

@@ -27,7 +27,7 @@ internal static class XrModeSuites
         + "second pad is refused a seat, and the Dogfight screen names VR as what holds a local match")]
     internal static void XrOneSeat(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         OriginalOneSeat(ctx);
     }
 
@@ -37,7 +37,7 @@ internal static class XrModeSuites
         + "once, so a later show is clean")]
     internal static void XrFallbackNotice(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         OriginalNotice(ctx);
     }
 

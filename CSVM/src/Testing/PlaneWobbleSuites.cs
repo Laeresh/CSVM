@@ -36,7 +36,7 @@ internal static class PlaneWobbleSuites
     internal static void PlaneWobbleWalk(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -126,7 +126,7 @@ internal static class PlaneWobbleSuites
             // The ramp law's swing off the record's own nitro: (1+k)/(4·f·k) s, k = e^(-damp/2f),
             // with the substep and tick quantisation either side. A sawtooth wrapping at the
             // authored rate alternates one-tick and whole-period gaps instead.
-            var nitro = ShakeDefs.Load(ctx.ZrdrPath).Nitro;
+            var nitro = ShakeDefs.Load(ctx.Zrdr).Nitro;
             float k = nitro is { Frequency: > 0f } n ? Mathf.Exp(-n.Damp / (2f * n.Frequency)) : 0f;
             float swingTicks = nitro != null && k > 0f ? (1f + k) / (4f * nitro.Frequency * k) / Dt : 0f;
             ctx.Check(swingTicks > 0f && gaps.Count >= 4 && gaps.All(g => g >= swingTicks - 1.5f && g <= swingTicks + 2f),

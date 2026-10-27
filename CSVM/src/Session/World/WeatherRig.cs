@@ -540,10 +540,10 @@ public sealed class WeatherRig
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
     /// fog + whiteout + precipitation, in that order. ⚠ Do not reorder: each step depends on the
     /// zone the previous one resolved.</summary>
-    public void Build(string missionZrdrPath, IReadOnlyList<PlayerRig> rigs,
+    public void Build(ZrdrSet missionZrdr, IReadOnlyList<PlayerRig> rigs,
         IReadOnlyList<HorizonZone> horizonZones, Action<string> buildDomes)
     {
-        LoadWeather(missionZrdrPath, horizonZones);
+        LoadWeather(missionZrdr, horizonZones);
         buildDomes(_activeZone);
         SetupWeather(rigs);
         _zoneWritten = true;
@@ -1189,9 +1189,9 @@ public sealed class WeatherRig
     // (a bare-marker dome yields to a zone that has one). An explicit --sky-zone= is honoured
     // literally, empty dome and all, see docs/cli.md. Called before the domes because C5's
     // zone1+zone3 chapter needs the fallback before the zone2 default renders neither.
-    private void LoadWeather(string missionZrdrPath, IReadOnlyList<HorizonZone> horizonZones)
+    private void LoadWeather(ZrdrSet missionZrdr, IReadOnlyList<HorizonZone> horizonZones)
     {
-        _weather = WeatherState.Load(missionZrdrPath);
+        _weather = WeatherState.Load(missionZrdr);
         // The mission's WIND block, read per mission rather than baked, see docs/org/weather.md
         // for the authored values every weather.zrd shares. A mission with no weather.json gets
         // still air, not someone else's breeze.

@@ -5,6 +5,7 @@ using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Roster;
@@ -61,8 +62,8 @@ internal static class NetAiSpawnSuites
     internal static void GuestsBuildTheHostsLaunches(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");

@@ -117,13 +117,13 @@ internal sealed class ZeppelinVersusRuntime
     /// <summary><c>player.zrd</c>'s <c>respawn_rad</c> and <c>respawn_el</c> (1200 and 100 shipped),
     /// read by <c>FUN_004735b0</c> into <c>0x628f08</c> and <c>0x628f0c</c>. A key the file lacks
     /// keeps the executable's initialised value.</summary>
-    public static (float Radius, float Margin) LoadRespawnRing(string zrdrPath)
+    public static (float Radius, float Margin) LoadRespawnRing(ZrdrSet zrdr)
     {
         const float InitialRadius = 4000.4f;
         const float InitialMargin = 100.2f;
         try
         {
-            if (Zrdr.LoadFile(zrdrPath, "player.json") is [List<object?> list, ..])
+            if (zrdr.LoadFile("player.json") is [List<object?> list, ..])
             {
                 var player = ZrdrDict.FromAlternating(list);
                 float radius = player.TryFloat("respawn_rad", out float r) ? r : InitialRadius;

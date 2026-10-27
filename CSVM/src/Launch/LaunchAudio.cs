@@ -104,7 +104,7 @@ internal sealed class LaunchAudio(Node host)
         {
             _archive = new SoundArchive(paths.Data.Sounds
                 ?? throw new System.IO.FileNotFoundException($"{GameData.SoundsPath} is not in the game data"));
-            _music = new MusicPlayer(SoundDefs.Load(paths.ZrdrPath), SoundDefs.LoadGroups(paths.ZrdrPath))
+            _music = new MusicPlayer(SoundDefs.Load(paths.Data.Zrdr), SoundDefs.LoadGroups(paths.Data.Zrdr))
             {
                 Loader = (def, looped) => _archive.Find(def.WavName, looped, warn: false),
             };

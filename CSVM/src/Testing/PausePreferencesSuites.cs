@@ -49,8 +49,8 @@ internal static class PausePreferencesSuites
         + "hitting the rows it is drawn over")]
     internal static void PausePreferencesLeaf(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -59,7 +59,7 @@ internal static class PausePreferencesSuites
             return;
         }
 
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (missions.Count == 0)
         {
             throw new SuiteSkippedException($"cm_sequence names no campaign mission");
@@ -67,7 +67,7 @@ internal static class PausePreferencesSuites
 
         var mission = missions[0];
         var sheet = PauseSheet.Load(
-            ctx.ZrdrPath, ctx.Data.Messages,
+            ctx.Zrdr, ctx.Data.Messages,
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), instantAction: false);
         if (sheet == null)
         {
@@ -112,7 +112,7 @@ internal static class PausePreferencesSuites
         + "headLook.autohead config key and the targeting switch back to the decoded head rule")]
     internal static void PausePreferencesLiveOptions(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         MenuSuiteHost.RequireLayout(ctx);
         ctx.RequirePlane("player_bhawk");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
@@ -136,7 +136,7 @@ internal static class PausePreferencesSuites
         GameClock.Current = clock;
         var panes = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
         ctx.Host.AddChild(panes);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var stats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
         var one = CockpitSeat(ctx, panes, stats, 0);
         var two = CockpitSeat(ctx, panes, stats, 1);
         var seats = new[] { one, two };

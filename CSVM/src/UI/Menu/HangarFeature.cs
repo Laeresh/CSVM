@@ -102,17 +102,17 @@ public sealed class HangarFeature : IMenuFeature
     // edited on another tab first, and Cancel must not leave a row ticked nobody picked.
     private bool _askPreviousChosen;
 
-    /// <summary>A feature labelling from <paramref name="strings"/>, resolving an airframe id to
-    /// its planes.zbd node through <paramref name="nodeOfAirframe"/> (the stock-fit and vehicle
-    /// tables are keyed by node), reading stock fits through <paramref name="stockFits"/> on first
-    /// need and stock armour off the zrdr scope at <paramref name="zrdrPath"/>. Either source may be
+    /// <summary>A feature labelling from <paramref name="strings"/>. It resolves an airframe id to
+    /// its planes.zbd node through <paramref name="nodeOfAirframe"/>, since the stock-fit and vehicle
+    /// tables are keyed by node. It reads stock fits through <paramref name="stockFits"/> on first
+    /// need and stock armour off the reader scope <paramref name="zrdr"/>. Either source may be
     /// absent; the affected defaults then load empty, the hangar's missing-data idiom.</summary>
-    public HangarFeature(UiStrings strings, Func<int, string> nodeOfAirframe, Func<StockLoadouts?>? stockFits = null, string? zrdrPath = null)
+    public HangarFeature(UiStrings strings, Func<int, string> nodeOfAirframe, Func<StockLoadouts?>? stockFits = null, ZrdrSet? zrdr = null)
     {
         Strings = strings ?? throw new ArgumentNullException(nameof(strings));
         _nodeOfAirframe = nodeOfAirframe ?? throw new ArgumentNullException(nameof(nodeOfAirframe));
         _stockFits = stockFits;
-        ZrdrPath = zrdrPath;
+        Zrdr = zrdr;
         Saved = Array.Empty<CustomPlaneDef>();
     }
 
@@ -120,7 +120,7 @@ public sealed class HangarFeature : IMenuFeature
     public UiStrings Strings { get; }
 
     /// <summary>The zrdr scope the stock armour allocations are read from, or null.</summary>
-    public string? ZrdrPath { get; }
+    public ZrdrSet? Zrdr { get; }
 
     /// <summary>The stock-fit table the airframe defaults read guns and hardpoints off, read on
     /// first need; null when the caller gave none or the read failed.</summary>
@@ -1087,7 +1087,7 @@ public sealed class HangarFeature : IMenuFeature
         }
 
         units = new int[ArmourZones.Length];
-        if (ZrdrPath is { } zrdr)
+        if (Zrdr is { } zrdr)
         {
             try
             {

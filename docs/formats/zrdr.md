@@ -33,13 +33,13 @@ fields are little-endian.
 
 - **A list's count is one more than its items.** A count of `1` is an empty list; `0` does not
   occur.
-- **The model** (`Zrdr.LoadFile` over today's JSON, `ZrdrZbd` over the file) holds strings,
+- **The model** (`ZrdrZbd` over the file, `Zrdr` over unzbd's JSON on the modding path) holds strings,
   `float`s and nested `List<object?>`s. Both number tags become a `float`: an integer converted to
   the nearest one, a float with its stored bits. The JSON detour widened each `f32` to `f64` and
   the loader narrowed it back; for every shipped float that gives back the stored bits.
 - **An empty nested list is `null`** in the model, as the extraction wrote it, which is why a key
   followed by `null` reads as a bare flag. An empty root is an empty list for
-  `Zrdr.LoadFileOrEmpty` and a refusal for `Zrdr.LoadFile`. Five readers are empty: the root's
+  `ZrdrSet.LoadFileOrEmpty` and a refusal for `ZrdrSet.LoadFile`. Five readers are empty: the root's
   `dlgMessage.zrd` and `mp_dialog.zrd`, C1C's and C2B's `templates.zrd`, C2B/MP1's `targets.zrd`.
 - **Every shipped float is finite and every string ASCII**; the extraction refused anything else
   and read every archive. `ZrdrZbd` carries any float's bits and refuses a non-ASCII byte.
@@ -47,8 +47,10 @@ fields are little-endian.
 ## Lookup by name
 
 A consumer names a reader file by its stem in one of three spellings: the stored `vehicle.zrd`,
-or today's zip spellings `vehicle.json` and `vehicle.zrd.json`, which all mean `vehicle.zrd`. The
-match ignores case; no archive holds two names differing only by case.
+or the zip spellings `vehicle.json` and `vehicle.zrd.json`, which all mean `vehicle.zrd`. The
+match ignores case; no archive holds two names differing only by case. The engine looks names up
+in a `ZrdrSet`, one scope's readers. Unzbd's output, the modding path, is read under the fork's
+entry names alone (`vehicle.zrd.json`); an entry named `vehicle.json` is not a reader.
 
 - **A repeat is renamed** `stem-N.ext`, the smallest `N` from 1 not yet taken, matched with case
   (the collision rule of [zbd-archive.md](zbd-archive.md#reader-rules-and-edge-cases)). The 62 archives
@@ -58,7 +60,7 @@ match ignores case; no archive holds two names differing only by case.
   the player plane's damage `ANIMATION_DEFINITIONS`
   ([anim-definitions.md](anim-definitions.md)).
 - **Content scans see every entry.** A consumer that walks all readers for a family
-  (`Zrdr.LoadMatchingFiles`) reaches the repeat by content, under its rename.
+  (`ZrdrSet.LoadMatchingFiles`) reaches the repeat by content, under its rename.
 
 ## Archive scopes
 

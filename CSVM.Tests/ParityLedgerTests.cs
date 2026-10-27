@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CSVM.Extraction;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Xunit;
 
@@ -153,8 +154,7 @@ public class ParityLedgerTests
         ("ground-blow", "GroundBlowTests"),
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>Every plant constant is in the ledger with one of the three classes and, unless it
     /// is a product exception, a source. A constant with no source is a fitted constant.</summary>

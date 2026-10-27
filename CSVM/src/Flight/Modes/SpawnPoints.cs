@@ -58,13 +58,13 @@ public static class SpawnPoints
     public const float MultiplayerSpeedMps = 25.7f;
 
     /// <summary>Loads the spawn list for <paramref name="scenario"/> from the mission's
-    /// ia.json (a zrdr zip or unpacked dir). Null if the file or scenario is absent.</summary>
-    public static List<SpawnPoint>? LoadIa(string missionZrdrPath, string scenario)
+    /// ia.json (a mission reader scope). Null if the file or scenario is absent.</summary>
+    public static List<SpawnPoint>? LoadIa(ZrdrSet missionZrdr, string scenario)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "ia.json");
+            root = missionZrdr.LoadFile("ia.json");
         }
         catch (IOException)
         {
@@ -87,15 +87,15 @@ public static class SpawnPoints
     /// table: up to <see cref="NetBlock"/> <c>[x, y, z, heading°]</c> entries, the same record
     /// <c>ia.json</c> authors. Null when the file is absent or holds no entries, which is every
     /// campaign mission (their copies are an unread placeholder).</summary>
-    public static List<SpawnPoint>? LoadNetFreeForAll(string missionZrdrPath) =>
-        LoadNet(missionZrdrPath, NetBlock);
+    public static List<SpawnPoint>? LoadNetFreeForAll(ZrdrSet missionZrdr) =>
+        LoadNet(missionZrdr, NetBlock);
 
     /// <summary>Loads a multiplayer mission's whole <c>net.zrd</c> table in file order, every
     /// block: block 0 the free-for-all's and block N lobby team N's, <see cref="NetBlock"/> entries
     /// each. A team match walks it through <see cref="TeamBlocks"/>. Null as
     /// <see cref="LoadNetFreeForAll"/>.</summary>
-    public static List<SpawnPoint>? LoadNetTable(string missionZrdrPath) =>
-        LoadNet(missionZrdrPath, int.MaxValue);
+    public static List<SpawnPoint>? LoadNetTable(ZrdrSet missionZrdr) =>
+        LoadNet(missionZrdr, int.MaxValue);
 
     /// <summary>Each seat's opening entry in a whole table of <paramref name="tableCount"/>
     /// entries, and the block it comes back within. A seat on lobby team N walks block N by its
@@ -128,18 +128,16 @@ public static class SpawnPoints
     /// throttle verbatim, and the speed scaled by the original's own 0.1 into m/s. Null if the
     /// file or block is absent. ⚠ Pitch and roll are dropped because the original's own spawn
     /// only ever authors yaw; do not "restore" them without re-reading the data.</summary>
-    public static PlayerStart? LoadPlayerInit(string missionZrdrPath)
+    public static PlayerStart? LoadPlayerInit(ZrdrSet missionZrdr)
     {
-        // A caller with no mission at all (a lab, a headless test) is asking the same question as
-        // a mission whose file is missing, and gets the same answer. Zrdr throws ArgumentException
-        // rather than IOException on an empty path, so the guard is here and not in the catch.
-        if (string.IsNullOrEmpty(missionZrdrPath))
+        // A caller with no mission (a lab, a headless test) gets the answer a missing file gives.
+        if (!missionZrdr.Exists)
             return null;
 
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "objectives.json");
+            root = missionZrdr.LoadFile("objectives.json");
         }
         catch (IOException)
         {
@@ -163,15 +161,15 @@ public static class SpawnPoints
         return new PlayerStart(new SpawnPoint(new Vector3(x, y, z), yaw), throttle, speed);
     }
 
-    private static List<SpawnPoint>? LoadNet(string missionZrdrPath, int limit)
+    private static List<SpawnPoint>? LoadNet(ZrdrSet missionZrdr, int limit)
     {
-        if (string.IsNullOrEmpty(missionZrdrPath))
+        if (!missionZrdr.Exists)
             return null;
 
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "net.json");
+            root = missionZrdr.LoadFile("net.json");
         }
         catch (IOException)
         {

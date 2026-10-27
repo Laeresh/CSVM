@@ -120,9 +120,9 @@ internal static class NetZvzBotSuites
 
     private static SessionSpec Spec(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.ZvzMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, SessionSpec.ZvzMission);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.ZvzMission} zrdr");
         return SessionSpec.Parse(new[]

@@ -215,12 +215,13 @@ public class CampaignBriefingPageTests
     {
         var dir = Path.Combine(TestData.TempDir(), "Profiles");
         Directory.CreateDirectory(dir);
-        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: new Spec.GameData
+        var data = new Spec.GameData
         {
             Messages = MessagesLegacy.Data(dataRoot).Messages,
             Rimage = TexturesLegacy.Rimage(dataRoot),
             Sounds = dataRoot == null ? null : InstallSounds.Value,
-        });
+        };
+        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: dataRoot == null ? data : TestZrdr.Readers(data));
         flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
         flow.SetMission(seq);
         return flow;

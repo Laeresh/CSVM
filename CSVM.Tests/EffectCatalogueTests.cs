@@ -28,8 +28,7 @@ public class EffectCatalogueTests
         "player_avenger", "player_brigand",
     };
 
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     /// <summary>The graze family's whole producible range, over every surface id the cascade can be
     /// handed: every registry slot, plus the out-of-range and null-material arms. Against a program
@@ -138,14 +137,14 @@ public class EffectCatalogueTests
     public void EveryChapterShipsExactlyTheThreeAiCrashDefs()
     {
         string dataRoot = TestData.DataRoot!;
-        string shared = SharedZrdr;
+        var shared = SharedZrdr;
         var chapters = new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
         var programs = chapters
             .Select(chapter => Task.Run(() =>
             {
                 var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, "IA1");
-                return AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
-                    SessionPaths.MissionZrdr(dataRoot, chapter, "IA1"),
+                return AnimProgram.Load(shared, TestZrdr.Chapter(chapter),
+                    TestZrdr.Mission(chapter, "IA1"),
                     AnimArchive.Load(chapterAnim, "cam_anim"), AnimArchive.Load(missionAnim, "mis_anim"));
             }))
             .ToArray();

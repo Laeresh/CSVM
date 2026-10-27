@@ -184,7 +184,7 @@ internal sealed class HumanFlightAdapter
         // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
         // per-airframe cache). Stock pick (id 6) keeps the airframe's own row.
         if (custom != null
-            && Flight.Hangar.CustomPlaneBuild.EnginePowerFor(_aircraft.ZrdrPath, custom) is { } enginePower)
+            && Flight.Hangar.CustomPlaneBuild.EnginePowerFor(_aircraft.Zrdr, custom) is { } enginePower)
         {
             stats = stats.WithEnginePower(enginePower);
         }
@@ -199,10 +199,10 @@ internal sealed class HumanFlightAdapter
             ? capturedSwap.Scheme
             : swap?.Scheme
                 ?? (militia is { Name: not Mech3.InstantAction.PlayerMilitia } && !_liveries.PaintRequested
-                    ? (militiaPattern == null ? null : _liveries.CatalogScheme(_aircraft.ZrdrPath, militiaPattern))
+                    ? (militiaPattern == null ? null : _liveries.CatalogScheme(_aircraft.Zrdr, militiaPattern))
                     : custom != null && !_liveries.PaintRequested
                     ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, Flight.Hangar.CustomPlaneBuild.PatternName(custom.PaintPattern))
-                    : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
+                    : _liveries.SchemeFor(pi, _aircraft.Zrdr, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         // The stereo interior's per-plane scale goes on the mount before XrCockpit captures it.
@@ -700,7 +700,7 @@ internal sealed class HumanFlightAdapter
         // single pilot's answer exists until every slot is known. Resolved lazily on the first rig,
         // so the caller can construct the assembler first. A swap brings its own instead.
         var start = swap?.Start ?? (_starts ??= _spawns.ChooseStarts(
-            _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
+            _human.SpawnList, _world.MissionZrdr, _human.SpawnBase, _human.RigCount))[pi];
         // The plant's force path is chosen once, here, off who is flying: a person takes the player
         // path and a bot the AI one. FlightModel.UsesAiForcePath carries why this is a construction
         // argument rather than the original's own pointer-compare-against-the-player test.
@@ -769,7 +769,7 @@ internal sealed class HumanFlightAdapter
         // drawn ahead of a camera, so a remote seat, which has none, takes no copy.
         if (!paneless && !_policy.EmptyStage)
         {
-            controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
+            controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdr, _aircraft.Textures, _worldRoot,
                 _world.Ambience,
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
         }
@@ -885,7 +885,7 @@ internal sealed class HumanFlightAdapter
         {
             try
             {
-                _militias = MilitiaFits.Load(_aircraft.ZrdrPath, _aircraft.WeaponMessages);
+                _militias = MilitiaFits.Load(_aircraft.Zrdr, _aircraft.WeaponMessages);
             }
             catch (Exception e)
             {

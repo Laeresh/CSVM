@@ -78,7 +78,7 @@ internal static class GroundShadowSuites
     internal static void GroundShadow(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(RotorPlane);
@@ -114,7 +114,7 @@ internal static class GroundShadowSuites
         bool human, Vector3 at, string? plane = null, bool spinning = false)
     {
         string name = plane ?? ctx.PlaneName;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, name);
+        var stats = PlaneStats.Load(ctx.Zrdr, name);
         var model = new PlaneBuilder(planesGamez, textures, spinningProps: spinning).Build(name);
         var nose = at + Vector3.Forward;
         var rig = new FlightController

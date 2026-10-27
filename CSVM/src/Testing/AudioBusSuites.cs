@@ -64,7 +64,7 @@ internal static class AudioBusSuites
         + "engine players on a silent bus at once rather than at the next start")]
     internal static void AudioBusPlacement(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
@@ -74,10 +74,10 @@ internal static class AudioBusSuites
         CheckLayout(ctx, report);
         CheckMix(ctx, report);
 
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
-        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var defs = SoundDefs.Load(ctx.Zrdr);
+        var groups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         string? gunLoop = weapons.All
             .Select(w => w.LoopedSoundName)
             .FirstOrDefault(n => !string.IsNullOrEmpty(n));

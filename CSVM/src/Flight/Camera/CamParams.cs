@@ -90,13 +90,13 @@ public sealed class CamParams
     /// keys layered over it. ⚠ Keyed by DISPLAY name ("Bloodhawk"), not the model node or the
     /// vehicle def, so the lookup goes through <see cref="MarkerRig.PlayerAirframes"/>
     /// (docs/formats/camparam.md).</summary>
-    public static CamParams Load(string zrdrPath, string planeNodeName)
+    public static CamParams Load(ZrdrSet zrdr, string planeNodeName)
     {
         var result = new CamParams();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(zrdrPath, "camparam.json");
+            root = zrdr.LoadFile("camparam.json");
         }
         catch (FileNotFoundException)
         {

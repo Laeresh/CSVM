@@ -44,15 +44,15 @@ internal static class WarhawkTorpedoRunSuites
     internal static void WarhawkTorpedoRun(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk");
 
         var planesGamez = ctx.Planes;
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var stats = PlaneStats.LoadForAi(ctx.Zrdr, "player_warhawk", "bhatwarhawk");
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -185,7 +185,7 @@ internal static class WarhawkTorpedoRunSuites
     internal static void BotTorpedoLead(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk");
@@ -270,9 +270,9 @@ internal static class WarhawkTorpedoRunSuites
     private static float? LaunchRange(TestContext ctx, TextureSet texturesPath, bool botSeat)
     {
         var planesGamez = ctx.Planes;
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var stats = PlaneStats.LoadForAi(ctx.Zrdr, "player_warhawk", "bhatwarhawk");
         var textures = new TextureArchive(texturesPath);
         var gasbagNode = new Node3D { Name = "gasbag4", Position = new Vector3(0f, 625f, 0f) };
         ProjectilePool? pool = null;

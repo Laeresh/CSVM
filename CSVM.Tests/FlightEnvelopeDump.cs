@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using CSVM.Extraction;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Xunit;
 
@@ -13,8 +14,7 @@ namespace CSVM.Tests;
 /// <c>flight-dump.txt</c>) and asserts nothing about the numbers: the diff is the instrument.</summary>
 public class FlightEnvelopeDump
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void DumpEveryAirframe()

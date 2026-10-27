@@ -130,9 +130,9 @@ public sealed class SmokeScreenTunables
     /// <see cref="Image"/>'s value for any key that is absent, as the original's loader does.
     /// Throws when the file itself cannot be read: a miss is a wrong path, not a default to paper
     /// over.</summary>
-    public static SmokeScreenTunables Load(string zrdrPath)
+    public static SmokeScreenTunables Load(ZrdrSet zrdr)
     {
-        if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is not List<object?> playerList)
+        if (zrdr.LoadFile("player.json")[0] is not List<object?> playerList)
             throw new InvalidDataException("player.json: unexpected root shape");
         var player = ZrdrDict.FromAlternating(playerList);
         float range = player.TryFloat("smokescreen_stun_range", out float r) ? r : Image.RangeM;

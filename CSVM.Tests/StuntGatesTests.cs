@@ -25,7 +25,7 @@ public class StuntGatesTests
 
     private static string GamezPath => SessionPaths.ChapterGamez(TestData.DataRoot!, Chapter);
 
-    private static string MissionPath => SessionPaths.MissionZrdr(TestData.DataRoot!, Chapter, "IA1");
+    private static ZrdrSet MissionPath => TestZrdr.Mission(Chapter, "IA1");
 
     private static string MessagesPath => Path.Combine(TestData.ExtractedRoot!, "messages.json");
 

@@ -21,8 +21,8 @@ instead; read `TestHarness.cs` for that half.
 scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld`
 chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
 `TestContext.ScratchDir` (its `syntheticData` names a synthetic data root), and the exit code.
-Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
-(a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
+Its input gates SKIP a suite and name what it lacks: `RequireData` (a file, or an absent model of the game data) and `RequireZrdrEntry` (a reader file of a scope) on every tree,
+`RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one. The reader scopes are `Zrdr`, `ChapterZrdr` and `MissionZrdr`, out of the run's game data.
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs, `SuiteShards` the shard term and `SuiteRender` the render term. The world
 cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. After a suite that grew Godot's static memory it collects and finalizes, so dead wrappers free their sessions before the next suite (`CollectAfterStaticGrowth`). It keeps the shader cache's unworn shaders, since dropping them costs about as much wall time as the peak memory it saves (`analysis/shard-memory/FINDINGS.md`). A destroyed `TestWorld` takes the shader cache's tracked materials with it. Under `--debug-mem` the harness logs a `MemoryCensus` line per suite, with the cache's live and tracked counts. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 

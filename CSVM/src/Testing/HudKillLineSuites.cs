@@ -46,7 +46,7 @@ internal static class HudKillLineSuites
     internal static void HudKillLine(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireMessages();
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -84,15 +84,15 @@ internal static class HudKillLineSuites
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                 WeaponMessages = strings,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             // worldEffects null!: never dereferenced with no CrashProgram/WorldScene, so the
             // spawner's crash-runtime block is skipped.
@@ -339,7 +339,7 @@ internal static class HudKillLineSuites
     private static void GaugeBlinkClock(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
         const float WallFrame = 10f * GaugeCluster.DamageBlinkPeriod + GaugeCluster.DamageBlinkPeriod / 8f;
-        var parts = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).DestroyableParts;
+        var parts = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName).DestroyableParts;
         var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, parts);
         // A synthetic tree carries no cockpit art to build a cluster from.
         if (cluster == null)

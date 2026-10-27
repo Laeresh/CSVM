@@ -5,6 +5,7 @@ using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.World;
 using CSVM.Spec;
@@ -63,7 +64,7 @@ internal static class CrashRespawnSuites
     {
         var bots = NetCombatSuites.MatchSpec(ctx, out _, "--vs-bots=1");
         var panes = NetCombatSuites.MatchSpec(ctx, out _, "--players=2");
-        string raceZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
+        ZrdrSet raceZrdr = ctx.MissionZrdr(RaceChapter, SessionSpec.StuntRaceMission);
         ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(raceZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
         var race = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), RaceChapter, Airframes,

@@ -149,7 +149,7 @@ internal sealed class AiFlightAssembler
             else
             {
                 scheme = _liveries.SchemeFor(
-                    _humanCount + index, _aircraft.ZrdrPath,
+                    _humanCount + index, _aircraft.Zrdr,
                     _aircraft.PaintRng, _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
                     useDefaultPattern: !spawn.ShippedSkins);
             }
@@ -461,7 +461,7 @@ internal sealed class AiFlightAssembler
         }
 
         scheme = MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
-            0, _aircraft.ZrdrPath, _aircraft.PaintRng,
+            0, _aircraft.Zrdr, _aircraft.PaintRng,
             _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
             useDefaultPattern: !spawn.ShippedSkins && spawn.LiveryDef == null);
         return true;
@@ -492,7 +492,7 @@ internal sealed class AiFlightAssembler
         {
             try
             {
-                _aiSkills ??= AiSkills.Load(_aircraft.ZrdrPath);
+                _aiSkills ??= AiSkills.Load(_aircraft.Zrdr);
                 var rng = new RandomNumberGenerator
                 { Seed = (ulong)(uint)Rng.NewIntSeed(stream) };
                 pilot.Gunner = new AiGunner(rng)
@@ -522,8 +522,8 @@ internal sealed class AiFlightAssembler
             return;
         try
         {
-            _aiSkills ??= AiSkills.Load(_aircraft.ZrdrPath);
-            _maneuvers ??= Maneuvers.Load(_aircraft.ZrdrPath);
+            _aiSkills ??= AiSkills.Load(_aircraft.Zrdr);
+            _maneuvers ??= Maneuvers.Load(_aircraft.Zrdr);
             int rating = spawn.AttackRating ?? _policy.AiAttackSkill ?? 5;
             int sixthSense = SkillFor(defSkills.SixthSense, rating, roster.SixthSense);
             pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(stream))
@@ -570,7 +570,7 @@ internal sealed class AiFlightAssembler
         if (_liveries.PaintRequested || (spawn.LiveryDef ?? stats.AiDefName) is not { } def
             || (spawn.ShippedSkins && spawn.AiDef == null && spawn.LiveryDef == null))
             return null;
-        var scheme = _liveries.DefScheme(_aircraft.ZrdrPath, def);
+        var scheme = _liveries.DefScheme(_aircraft.Zrdr, def);
         if (_liveryDefsLogged.Add(def))
         {
             // Once per def, not per spawn: a mission fields fourteen of one militia variant.

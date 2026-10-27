@@ -51,8 +51,8 @@ internal static class CutsceneHostCodeSuites
     {
         TextureSet texturesPath = ctx.ChapterTextures(DropChapter);
         ctx.RequireData(texturesPath, $"{DropChapter} textures");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (!weapons.TryGet(TestWeapon, out var gun))
         {
             throw new SuiteSkippedException($"{TestWeapon} is not in this install's weapons");
@@ -72,15 +72,15 @@ internal static class CutsceneHostCodeSuites
     internal static void CampaignWingmanRemoval(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, HookChapter, HookMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, HookChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(HookChapter, HookMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(HookChapter);
         TextureSet texturesPath = ctx.ChapterTextures(HookChapter);
         ctx.RequireData(missionZrdr, $"{HookChapter}/{HookMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{HookChapter} zrdr");
         ctx.RequireData(texturesPath, $"{HookChapter} textures");
 
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), HookChapter, HookMission)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), HookChapter, HookMission)
             ?? throw new SuiteSkippedException($"cm_sequence carries no {HookChapter}/{HookMission}");
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission,
@@ -161,7 +161,7 @@ internal static class CutsceneHostCodeSuites
     }
 
     private static void DriveRemoval(TestContext ctx, TestWorld world, CampaignDirector director,
-        string missionZrdr, string chapterZrdr, TextureSet texturesPath, StringBuilder report)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var raisers = RaisersOf(world.Runtime, RemoveWingmanCode);
         ctx.Check(raisers.Contains(HookAnim),
@@ -189,10 +189,10 @@ internal static class CutsceneHostCodeSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
-                MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
+                MinAiActiveDist = AiSkills.Load(ctx.Zrdr).MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
                     () => human.WorldPosition,
@@ -351,7 +351,7 @@ internal static class CutsceneHostCodeSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

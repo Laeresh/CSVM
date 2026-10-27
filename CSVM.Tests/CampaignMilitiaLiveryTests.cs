@@ -69,8 +69,7 @@ public class CampaignMilitiaLiveryTests
         ("C5/M04", "stihellhound_5:sactrust x1"),
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The campaign's own enemy set, mission by mission. Every enemy aeroplane of every
     /// shipped mission resolves the militia def its block name carries. All but two of those defs
@@ -89,8 +88,8 @@ public class CampaignMilitiaLiveryTests
             var (chapter, folder) = Address(missions[i]);
             Assert.Equal(EnemyDefsByMission[i].Address, $"{chapter}/{folder}");
             var plan = CampaignRosterPlan.Build(
-                AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, folder)),
-                defs, AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)));
+                AiSkills.LoadRoster(TestZrdr.Mission(chapter, folder)),
+                defs, AiNets.Load(TestZrdr.Chapter(chapter)));
 
             Assert.Equal(EnemyDefsByMission[i].Enemies, Table(plan.Spawns, patterns));
         }
@@ -111,8 +110,8 @@ public class CampaignMilitiaLiveryTests
         {
             var (chapter, folder) = Address(mission);
             var templates = CampaignRosterPlan.GeneratorTemplates(
-                SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, folder),
-                defs, AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)));
+                TestZrdr.Mission(chapter, folder),
+                defs, AiNets.Load(TestZrdr.Chapter(chapter)));
 
             string table = Table(templates.Values.ToList(), patterns);
             Assert.Equal(expected.TryGetValue($"{chapter}/{folder}", out var want) ? want : string.Empty, table);
@@ -166,8 +165,8 @@ public class CampaignMilitiaLiveryTests
         {
             var (chapter, folder) = Address(mission);
             var plan = CampaignRosterPlan.Build(
-                AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, folder)),
-                defs, AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)));
+                AiSkills.LoadRoster(TestZrdr.Mission(chapter, folder)),
+                defs, AiNets.Load(TestZrdr.Chapter(chapter)));
             foreach (var block in plan.Spawns)
             {
                 if (block.LiveryDef is { } def)
@@ -204,8 +203,8 @@ public class CampaignMilitiaLiveryTests
         {
             var parts = address.Split('/');
             var plan = CampaignRosterPlan.Build(
-                AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, parts[0], parts[1])),
-                defs, AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, parts[0])));
+                AiSkills.LoadRoster(TestZrdr.Mission(parts[0], parts[1])),
+                defs, AiNets.Load(TestZrdr.Chapter(parts[0])));
             var friends = plan.Spawns
                 .Where(p => !p.Surface && p.Team == AimAssist.PlayerTeam)
                 .Select(p =>

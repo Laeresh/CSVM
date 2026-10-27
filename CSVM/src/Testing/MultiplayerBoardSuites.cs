@@ -40,8 +40,8 @@ internal static class MultiplayerBoardSuites
         + "authored points reach the bar, propeller or strips, so both measures can fail")]
     internal static void MultiplayerBoard(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, EscapeDialog.LoadingFile);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, EscapeDialog.LoadingFile);
         var probe = new Control();
         ctx.Host.AddChild(probe);
         try
@@ -77,14 +77,14 @@ internal static class MultiplayerBoardSuites
 
                 offered++;
                 if (LoadScreens.MultiplayerKey(chapter, mode.Type, mode.Teamed) is not { } key
-                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.Data.Messages, key) is not { } sheet)
+                    || PauseSheet.LoadMultiplayer(ctx.Zrdr, ctx.Data.Messages, key) is not { } sheet)
                 {
                     ctx.Check(false, $"{chapter}'s Dogfight ({mode}) resolves a multiplayer dialog");
                     continue;
                 }
 
                 var load = LoadScreens.For(
-                    false, string.Empty, null, ctx.ZrdrPath, ctx.Data.Messages, briefing: key);
+                    false, string.Empty, null, ctx.Zrdr, ctx.Data.Messages, briefing: key);
                 var pause = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
                 if (load.Pictures.Count == 0 || pause.Backdrop.Count == 0)
                 {
@@ -105,7 +105,7 @@ internal static class MultiplayerBoardSuites
 
                 // The controls: the texts unwrapped, and wrapped but at their authored points and
                 // sizes, must fail the same measures.
-                var raw = LoadScreens.DialogTexts(ctx.ZrdrPath, EscapeDialog.LoadingFile, key, messages);
+                var raw = LoadScreens.DialogTexts(ctx.Zrdr, EscapeDialog.LoadingFile, key, messages);
                 unwrapped += judge.Screen($"{key} load unwrapped", load.Pictures[0].Art.Name, raw, loadOver, false).Outside;
                 var loadAuthored = judge.Screen(
                     $"{key} load at authored points", load.Pictures[0].Art.Name, Measured(raw), loadOver, false);
@@ -158,10 +158,10 @@ internal static class MultiplayerBoardSuites
     // The pause sheet's texts as its file authors them, from the file the sheet itself read.
     private static IReadOnlyList<BoardLine> Authored(TestContext ctx, string key, Messages messages)
     {
-        var escape = LoadScreens.DialogTexts(ctx.ZrdrPath, EscapeDialog.CampaignFile, key, messages);
+        var escape = LoadScreens.DialogTexts(ctx.Zrdr, EscapeDialog.CampaignFile, key, messages);
         return escape.Count > 0
             ? escape
-            : LoadScreens.DialogTexts(ctx.ZrdrPath, EscapeDialog.LoadingFile, key, messages);
+            : LoadScreens.DialogTexts(ctx.Zrdr, EscapeDialog.LoadingFile, key, messages);
     }
 
     private static List<(string Art, float X, float Y, bool Centered)> Over(

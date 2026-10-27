@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The typed <c>BALLISTICS</c> reader (<c>docs/formats/weapons.md</c>): scalar typing, the
 /// key-paired-with-null class flags, the nested <c>FIRE</c>/<c>FLYOUT</c>/<c>IMPACT</c>
-/// bindings, and the unhandled-key tripwire. Input is <c>fixtures/zrdr/weapons.json</c>.
+/// bindings, and the unhandled-key tripwire. Input is <c>fixtures/zrdr/weapons.zrd.json</c>.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class WeaponDefsTests
@@ -173,5 +173,5 @@ public class WeaponDefsTests
         Assert.Equal("MSG_PROBE_GUN", Load().Get("wep_probe_gun")!.DisplayName);
     }
 
-    private static WeaponDefs Load() => WeaponDefs.Load(TestData.Fixture("zrdr"));
+    private static WeaponDefs Load() => WeaponDefs.Load(TestZrdr.Fixture("zrdr"));
 }

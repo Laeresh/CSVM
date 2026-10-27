@@ -854,7 +854,7 @@ internal static class DestroyChoreographySuites
     internal static void AiWreckFall(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: true, world =>
         {
             var planesGamez = ctx.Planes;
@@ -871,14 +871,14 @@ internal static class DestroyChoreographySuites
                 var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                     PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
+                    Zrdr = ctx.Zrdr,
                     StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                     Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Shakes = ShakeDefs.Load(ctx.Zrdr),
                 };
                 var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, factory, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = world.Gamez, WorldScene = world.Session.Builder.Scene, CrashProgram = world.Session.Program }, new HumanRosterBindings());
 
@@ -927,7 +927,7 @@ internal static class DestroyChoreographySuites
     internal static void PlayerDestroyChoreography(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
@@ -962,7 +962,7 @@ internal static class DestroyChoreographySuites
     internal static void DeathRespawnRestPose(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
@@ -1233,7 +1233,7 @@ internal static class DestroyChoreographySuites
     {
         const string model = "player_warhawk";
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
@@ -1244,7 +1244,7 @@ internal static class DestroyChoreographySuites
                 var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var spawn = new Vector3(0f, 500f, 0f);
-                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var stats = PlaneStats.Load(ctx.Zrdr, model);
                 var builder = new PlaneBuilder(planesGamez, textures);
                 var planeModel = builder.Build(model);
                 player = new FlightController
@@ -1353,7 +1353,7 @@ internal static class DestroyChoreographySuites
         const float Dt = 1f / 60f;
         const int Running = 2, Executed = 3;   // AnimRuntime.AnimStateOf's ANIM_STATE numbering
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
@@ -1363,7 +1363,7 @@ internal static class DestroyChoreographySuites
             {
                 var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
-                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var stats = PlaneStats.Load(ctx.Zrdr, model);
                 FlightController? Build(bool human, Vector3 spawn, int index)
                 {
                     // ⚠ spinningProps, as both flight assemblers build: the exterior build drops the
@@ -1630,12 +1630,12 @@ internal static class DestroyChoreographySuites
         const float Dt = 1f / 60f;
         const int Frames = 900;
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
-            var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+            var soundDefs = SoundDefs.Load(ctx.Zrdr);
             using var sounds = new SoundArchive(ctx.Sounds);
             FlightController? ai = null;
             try
@@ -1643,10 +1643,10 @@ internal static class DestroyChoreographySuites
                 var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var spawn = new Vector3(0f, 500f, 0f);
-                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var stats = PlaneStats.Load(ctx.Zrdr, model);
                 var builder = new PlaneBuilder(planesGamez, textures);
                 var planeModel = builder.Build(model);
-                var nitroEvade = Maneuvers.Load(ctx.ZrdrPath).FirstOrDefault(m => m.Nitro);
+                var nitroEvade = Maneuvers.Load(ctx.Zrdr).FirstOrDefault(m => m.Nitro);
                 if (nitroEvade == null)
                 {
                     ctx.Check(false, $"the shipped maneuver library carries a nitro-flagged maneuver");
@@ -1797,7 +1797,7 @@ internal static class DestroyChoreographySuites
         const string model = "player_warhawk";
         const float Dt = 1f / 60f;
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
@@ -1805,7 +1805,7 @@ internal static class DestroyChoreographySuites
             FlightController? ai = null;
             try
             {
-                var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+                var weapons = WeaponDefs.Load(ctx.Zrdr, null);
                 var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.Caliber > 0);
                 var heRocket = weapons.All.FirstOrDefault(w => !w.IsCannon && w.HighExplosive);
                 if (gun == null || heRocket == null)
@@ -1816,7 +1816,7 @@ internal static class DestroyChoreographySuites
                 var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var spawn = new Vector3(0f, 500f, 0f);
-                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var stats = PlaneStats.Load(ctx.Zrdr, model);
                 var builder = new PlaneBuilder(planesGamez, textures);
                 var planeModel = builder.Build(model);
                 var pivot = new Node3D { Name = "ShakePivot" };
@@ -1831,7 +1831,7 @@ internal static class DestroyChoreographySuites
                     PadDevices = System.Array.Empty<int>(),
                     AllowPause = false,
                     // No ledger, so the rounds below rock the aircraft without ever killing it.
-                    Shake = new PlaneShake(ShakeDefs.Load(ctx.ZrdrPath)),
+                    Shake = new PlaneShake(ShakeDefs.Load(ctx.Zrdr)),
                     ShakePivot = pivot,
                 };
                 ai.AddChild(pivot);
@@ -2087,7 +2087,7 @@ internal static class DestroyChoreographySuites
     internal static void AiCrashRigDeferral(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
@@ -2106,14 +2106,14 @@ internal static class DestroyChoreographySuites
                 var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                     PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
+                    Zrdr = ctx.Zrdr,
                     StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                     Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Shakes = ShakeDefs.Load(ctx.Zrdr),
                 };
                 var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, factory,
                     ctx.Host, inputs,
@@ -2202,12 +2202,12 @@ internal static class DestroyChoreographySuites
     internal static void AiCrashDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var planesGamez = ctx.Planes;
             var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
-            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             var factory = new Session.World.WorldEffectsFactory(
                 SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
             FlightController? ai = null;
@@ -2936,7 +2936,7 @@ internal static class DestroyChoreographySuites
         try
         {
             var spawn = new Vector3(0f, 500f, 0f);
-            var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
+            var stats = PlaneStats.Load(ctx.Zrdr, planeName);
             var builder = new PlaneBuilder(planesGamez, textures);
             var planeModel = builder.Build(planeName);
             player = new FlightController
@@ -3094,7 +3094,7 @@ internal static class DestroyChoreographySuites
         try
         {
             var spawn = new Vector3(0f, 500f, 0f);
-            var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
+            var stats = PlaneStats.Load(ctx.Zrdr, planeName);
             var builder = new PlaneBuilder(planesGamez, textures, cockpitInterior: true);
             var planeModel = builder.Build(planeName);
             player = new FlightController

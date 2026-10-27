@@ -62,10 +62,10 @@ internal static class OrdnanceSuites
         "takes the curve's value with no engine error")]
     internal static void BlastCurveCoverCap(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
         {
@@ -228,10 +228,10 @@ internal static class OrdnanceSuites
         "their launcher's velocity undecayed, since the gate is the MOTOR round's alone")]
     internal static void LaunchVelocityDecay(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null) is not { } choker
             || PickWeapon(ctx, weapons, "wep_00", w => w.IsGun) is not { } gun)
@@ -342,10 +342,10 @@ internal static class OrdnanceSuites
         "original carries no drag term")]
     internal static void MotorAcceleration(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_04", w => w.Acceleration is > 0f && !ProjectilePool.CarriesLockOn(w)) is not { } incendiary
             || PickWeapon(ctx, weapons, "wep_26", w => w.Acceleration is > 0f && !ProjectilePool.CarriesLockOn(w)) is not { } fake
             || PickWeapon(ctx, weapons, "wep_12", w => w.IsRocket && (w.Acceleration ?? 0f) == 0f && !ProjectilePool.CarriesLockOn(w)) is not { } choker
@@ -458,11 +458,11 @@ internal static class OrdnanceSuites
         "300 m and hittable from there on")]
     internal static void OrdnanceEndConditions(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_24", w => w.HighExplosive && ProjectilePool.CarriesLockOn(w)
                 && w.Range != null && (w.Acceleration ?? 0f) == 0f) is not { } he
             || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null) is not { } choker
@@ -501,7 +501,7 @@ internal static class OrdnanceSuites
         }
 
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? bystander = null;
@@ -686,11 +686,11 @@ internal static class OrdnanceSuites
         "torpedo_trail's folded look and unfolds its wings at the def's 3.5 s")]
     internal static void ShootableFlyout(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireMessages();
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, ctx.Data.Messages);
         if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || PickWeapon(ctx, weapons, "wep_06", w => w.HighExplosive && !w.Targetable
                 && w.DetonationDistance is > AimAssist.MinFuseDistance) is not { } rocket)
@@ -968,13 +968,13 @@ internal static class OrdnanceSuites
         "never reaches the def's 4.0 s rear_flash_effect, which a lab flare with no fuse does reach")]
     internal static void FlyoutRackPose(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireMessages();
         // Every check reads a body built off C1's FLYOUT models, so the world gates the whole suite.
         ctx.RequireData(ctx.ChapterGamez("C1"), $"chapter C1 gamez");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, ctx.Data.Messages);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, ctx.Data.Messages);
         if (!weapons.TryGet("wep_15", out var flare) || !weapons.TryGet("wep_14", out var torpedo))
         {
             ctx.Check(false, $"wep_15 and wep_14 both resolve");
@@ -1184,11 +1184,11 @@ internal static class OrdnanceSuites
         "ledger untouched, expiring at 20 s and collapsing on death")]
     internal static void OrdnanceGuidance(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_11", w => w.BeeperSeeker) is not { } seeker
             || PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || PickWeapon(ctx, weapons, "wep_10", w => w.BeeperTime != null) is not { } beeper)
@@ -1215,7 +1215,7 @@ internal static class OrdnanceSuites
         }
 
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         var tags = new BeeperTags<FlightController>();
         ProjectilePool? pool = null;
@@ -1526,18 +1526,18 @@ internal static class OrdnanceSuites
     internal static void SmokeScreenSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_13", w => w.SmokeScreenTime != null) is not { } smoker
             || smoker.SmokeScreenTime is not { } screenTime)
         {
             ctx.Check(false, $"wep_13 resolves and carries a SMOKE_SCREEN TIME");
             return;
         }
-        var tunables = SmokeScreenTunables.Load(ctx.ZrdrPath);
+        var tunables = SmokeScreenTunables.Load(ctx.Zrdr);
         // The layout below puts an AI 300 m astern inside the cone and one 400 m out at 97° outside it.
         float coneDeg = Mathf.RadToDeg(Mathf.Acos(tunables.HalfAngleCos));
         ctx.Check(screenTime > 3f && tunables.RangeM > 400f && coneDeg < 97f && coneDeg > 1f
@@ -1552,7 +1552,7 @@ internal static class OrdnanceSuites
         }
 
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         var rigs = new List<FlightController>();
@@ -1750,11 +1750,11 @@ internal static class OrdnanceSuites
     internal static void DisablingHits(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_08", w => w.Sonic) is not { } sonic
             || PickWeapon(ctx, weapons, "wep_09", w => w.Flash && w.IsRocket && w.DetonationTime == null) is not { } flashRocket
             || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null) is not { } choker)
@@ -1779,7 +1779,7 @@ internal static class OrdnanceSuites
         }
 
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         var rigs = new List<FlightController>();
@@ -2040,10 +2040,10 @@ internal static class OrdnanceSuites
         "effect unchanged")]
     internal static void ImpactOrientation(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_06", w => w.ImpactFor(SurfaceRegistry.Default) is { Animation: null, SurfaceAnimation: not null }) is not { } he
             || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null && w.ImpactFor(SurfaceRegistry.Default) is { Animation: not null, SurfaceAnimation: null }) is not { } choker)
         {
@@ -2193,10 +2193,10 @@ internal static class OrdnanceSuites
         "none in either presentation")]
     internal static void BurstLightEnvelope(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickFireballRocket(ctx, weapons) is not { } he || DefaultBurst(he) is not { } heFx)
         {
             ctx.Check(false, $"wep_06 resolves");
@@ -2341,10 +2341,10 @@ internal static class OrdnanceSuites
         "recycles the oldest quad past it, and the faithful presentation builds no pool at all")]
     internal static void HeatShimmerBurst(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickFireballRocket(ctx, weapons) is not { } he || DefaultBurst(he) is not { } heFx)
         {
             ctx.Check(false, $"wep_06 resolves");
@@ -2596,11 +2596,11 @@ internal static class OrdnanceSuites
         "static gamez-template instance in for it")]
     internal static void OrdnanceImpactEffects(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_10", w => w.BeeperTime != null) is not { } beeper
             || PickWeapon(ctx, weapons, "wep_11", w => w.BeeperSeeker) is not { } seeker
             || PickWeapon(ctx, weapons, "wep_07", w => ProjectilePool.CarriesLockOn(w) && w.DetonationDistance is > 0f
@@ -2647,7 +2647,7 @@ internal static class OrdnanceSuites
         string? gunHit = gun.ImpactFor(SurfaceRegistry.Player)?.Animation;
 
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? victim = null;
@@ -2830,12 +2830,12 @@ internal static class OrdnanceSuites
         "the aphagar03 faces read default off their own material and play the gunhit")]
     internal static void ImpactBuildingSurface(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
         TextureSet texturesPath = ctx.ChapterTextures(FilmLotChapter);
         ctx.RequireData(texturesPath, $"{FilmLotChapter} textures");
         var airportTextures = ctx.ChapterTextures("C1");
         ctx.RequireData(airportTextures, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (!weapons.TryGet("wep_00", out var gun) || !weapons.TryGet("wep_02", out var fifty))
         {
             ctx.Check(false, $"wep_00 and wep_02 resolve");
@@ -2897,10 +2897,10 @@ internal static class OrdnanceSuites
             $"and an AI with no aim to clamp keeps the mount's own axis");
 
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (PickWeapon(ctx, weapons, "wep_13", w => w.SmokeScreenTime != null) is not { } smoker
             || smoker.SmokeScreenTime is not { } screenTime)
         {
@@ -2956,7 +2956,7 @@ internal static class OrdnanceSuites
                     $"no shipped airframe cants a pylon marker (worst {shippedCantDeg:0.00}°); the salvo flies the {worstDisplay}'s {mostPylons} pylons");
             }
 
-            var stats = PlaneStats.Load(ctx.ZrdrPath, worstModel);
+            var stats = PlaneStats.Load(ctx.Zrdr, worstModel);
             var stock = StockFor(stockLoadouts, worstModel);
             ProjectilePool? pool = null;
             FlightController? human = null;

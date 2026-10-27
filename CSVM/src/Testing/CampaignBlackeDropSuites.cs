@@ -74,7 +74,7 @@ internal static class CampaignBlackeDropSuites
     internal static void BlackeDropCameras(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         var report = new StringBuilder();
         ctx.CutsceneRoots = true;
@@ -278,7 +278,7 @@ internal static class CampaignBlackeDropSuites
         ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
         var planesGamez = ctx.Planes;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

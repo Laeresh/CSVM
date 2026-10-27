@@ -80,7 +80,7 @@ public class SyntheticPlaneTests
     [Fact]
     public void ThePlayerAndAiDefsResolveWithEveryFlightRecord()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
 
         var stats = PlaneStats.Load(zrdr, SyntheticPlane.Plane);
         Assert.Equal("pprobe", stats.DefName);
@@ -102,7 +102,7 @@ public class SyntheticPlaneTests
     public void TheGunAndTheRocketResolveTheirNamesAndTheStockFitArmsThem()
     {
         string root = Built();
-        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var messages = SyntheticGameData.Build().Messages;
 
         var weapons = WeaponDefs.Load(zrdr, messages);
@@ -144,7 +144,7 @@ public class SyntheticPlaneTests
     {
         string root = Built();
         var gamez = SyntheticPlane.Gamez();
-        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
 
         var probeRig = MarkerRig.Extract(gamez, SyntheticPlane.Plane)!;
         var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter);
@@ -184,7 +184,7 @@ public class SyntheticPlaneTests
     {
         string root = Built();
         var gamez = SyntheticPlane.Gamez();
-        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter)!;
         var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
         var stock = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
@@ -228,7 +228,7 @@ public class SyntheticPlaneTests
     {
         string root = Built();
         var gamez = SyntheticPlane.Gamez();
-        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter)!;
         var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
         var stock = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
@@ -264,7 +264,7 @@ public class SyntheticPlaneTests
     {
         string root = Built();
         var gamez = SyntheticPlane.Gamez();
-        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var weapons = WeaponDefs.Load(zrdr, null);
 
         // The variants a suite names derive from their airframe's own AI def.

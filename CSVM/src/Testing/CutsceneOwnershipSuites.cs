@@ -36,12 +36,12 @@ internal static class CutsceneOwnershipSuites
         + "objective started and outlives that callee to the code the mission ends on")]
     internal static void CutsceneOwnership(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = MissionIn(CampaignSequence.Load(ctx.ZrdrPath), Chapter, Folder)
+        var mission = MissionIn(CampaignSequence.Load(ctx.Zrdr), Chapter, Folder)
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Folder}");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Folder);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 

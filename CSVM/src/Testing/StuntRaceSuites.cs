@@ -60,11 +60,11 @@ internal static class StuntRaceSuites
     internal static void StuntRaceTimeAttack(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var chapterGamez = ctx.ChapterGamez("C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         ctx.RequireMessages();
@@ -96,7 +96,7 @@ internal static class StuntRaceSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
             },
             new HumanRosterBindings
             {
@@ -354,11 +354,11 @@ internal static class StuntRaceSuites
     internal static void ARaceWatcherFollowsTheRacersStillInARun(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var chapterGamez = ctx.ChapterGamez("C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         ctx.RequireMessages();
@@ -390,7 +390,7 @@ internal static class StuntRaceSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
             },
             new HumanRosterBindings { RigCount = rigs.Length, Rigs = rigs, PauseState = new PauseState(), StuntZones = zones, Race = race },
             new ApartStarts());
@@ -749,11 +749,11 @@ internal static class StuntRaceSuites
     internal static void StuntRaceSpendsNoLives(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var chapterGamez = ctx.ChapterGamez("C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         ctx.RequireMessages();
@@ -789,7 +789,7 @@ internal static class StuntRaceSuites
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
             },
             new HumanRosterBindings
             {
@@ -1044,7 +1044,7 @@ internal static class StuntRaceSuites
     internal sealed class ApartStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

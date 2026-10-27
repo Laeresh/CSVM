@@ -52,7 +52,7 @@ internal static class GunVoiceReachSuites
         + "amount of level work moves it")]
     internal static void GunVoiceReach(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(ReachChapter);
@@ -61,9 +61,9 @@ internal static class GunVoiceReachSuites
         // The whole point of this suite: the reach a player flies with, not the decoded radii.
         using var shipped = TestContext.AtShippedSoundRadii();
 
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
         if (!soundDefs.TryGetValue(TurretCue, out var turretDef)
             || !soundDefs.TryGetValue(MountCue, out var mountDef))
         {
@@ -259,7 +259,7 @@ internal static class GunVoiceReachSuites
     private static FlightController BuildRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, string plane, Vector3 pos, Vector3 look)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, plane);
+        var stats = PlaneStats.Load(ctx.Zrdr, plane);
         var model = new PlaneBuilder(planesGamez, textures).Build(plane);
         var rig = new FlightController
         {

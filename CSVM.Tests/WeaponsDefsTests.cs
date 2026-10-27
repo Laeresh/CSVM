@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Tests.Oracle;
 using CSVM.Tooling;
 using Xunit;
@@ -18,8 +19,7 @@ public class WeaponsDefsTests
 {
     private const int WeaponDefCount = 48;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     private static string MessagesPath =>
         Path.Combine(TestData.ExtractedRoot!, "messages.json");

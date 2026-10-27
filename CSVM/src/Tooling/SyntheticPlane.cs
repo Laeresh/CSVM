@@ -9,11 +9,10 @@ namespace CSVM.Tooling;
 /// The synthetic tree's stand-in aircraft, <see cref="Plane"/>, <see cref="Fighter"/>,
 /// <see cref="Firebrand"/>, <see cref="Avenger"/> and six more under shipped airframe names the
 /// suites fly. Their models are <see cref="Gamez"/>, box-built airframes each carrying the marker
-/// rig, built in memory from <see cref="SyntheticPlaneRecords"/>. The plane family writes the
-/// <c>vehicle.json</c>, <c>engines.json</c> and <c>player.json</c> records and the maneuver
-/// library. The armament family is the weapons in <c>weapons.json</c>, the turret table in
-/// <c>ai.json</c> and the shake sources; their names are in <c>SyntheticMessages.cs</c>. Every
-/// record is hand-authored from <c>docs/formats/</c>.
+/// rig, built in memory from <see cref="SyntheticPlaneRecords"/>. Their readers, the maneuver
+/// library, the weapons, the turret table and the shake sources are <see cref="SyntheticZrdr"/>'s.
+/// The weapon names are in <c>SyntheticMessages.cs</c>. Every record is hand-authored from
+/// <c>docs/formats/</c>.
 /// </summary>
 public static class SyntheticPlane
 {
@@ -33,25 +32,6 @@ public static class SyntheticPlane
     /// <summary>The custom-plane suites' guest airframe (id 1), invented under the code's name.</summary>
     public const string Avenger = "player_avenger";
 
-    // A record written for the tree keeps its path under extracted/ beneath this fixtures folder.
-    private const string Records = "synthetic/";
-
-    // Each record as (fixture, path under extracted/). The maneuver library is the unit tests'
-    // own, which already holds every step shape the AI pilot's reader takes.
-    private static readonly (string Fixture, string Target)[] PlaneRecords =
-    {
-        (Records + "zrdr/vehicle.json", "zrdr/vehicle.json"),
-        (Records + "zrdr/engines.json", "zrdr/engines.json"),
-        (Records + "zrdr/player.json", "zrdr/player.json"),
-        ("zrdr/maneuvers.json", "zrdr/maneuvers.json"),
-    };
-
-    private static readonly (string Fixture, string Target)[] ArmamentRecords =
-    {
-        (Records + "zrdr/weapons.json", "zrdr/weapons.json"),
-        (Records + "zrdr/shakes.json", "zrdr/shakes.json"),
-        (Records + "zrdr/ai.json", "zrdr/ai.json"),
-    };
 
     // A box's six faces as indices into its eight corners, with each face's outward normal. Each
     // winds counter-clockwise seen from outside, so its Newell normal points out (docs/formats/gamez.md).
@@ -71,26 +51,6 @@ public static class SyntheticPlane
     public static string LoadoutsUnder(string fixturesRoot) =>
         Path.Combine(fixturesRoot, "synthetic", "stock_loadouts.json");
 
-    /// <summary>Writes the plane records under <c>zrdr/</c>, and the empty C1 chapter scope a
-    /// flight is handed for its speed cue. The models are <see cref="Gamez"/>'s, in memory.</summary>
-    public static void WritePlane(SyntheticTree tree)
-    {
-        foreach (var (fixture, target) in PlaneRecords)
-        {
-            tree.CopyFixture(fixture, target);
-        }
-
-        tree.Folder(SyntheticTextures.Chapter + "/zrdr");
-    }
-
-    /// <summary>Writes the weapon catalogue, the turret table and the shake sources.</summary>
-    public static void WriteArmament(SyntheticTree tree)
-    {
-        foreach (var (fixture, target) in ArmamentRecords)
-        {
-            tree.CopyFixture(fixture, target);
-        }
-    }
 
     /// <summary>The stand-ins' aircraft archive, built in memory from
     /// <see cref="SyntheticPlaneRecords"/>: what <c>planes.zbd</c> is to an install.</summary>

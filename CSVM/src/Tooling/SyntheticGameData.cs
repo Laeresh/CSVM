@@ -16,6 +16,14 @@ public static class SyntheticGameData
         Messages = SyntheticMessages.Table(),
         Planes = SyntheticPlane.Gamez(),
         Sounds = SyntheticSounds.Zbd(),
-        LoadChapter = (chapter, mission) => new ChapterData { Chapter = chapter, Mission = mission, Textures = SyntheticTextures.For(chapter) },
+        Zrdr = SyntheticZrdr.Root(),
+        LoadChapter = (chapter, mission) => new ChapterData
+        {
+            Chapter = chapter,
+            Mission = mission,
+            TexturesSource = new(() => SyntheticTextures.For(chapter)),
+            ChapterZrdrSource = new(() => SyntheticZrdr.Chapter(chapter)),
+            MissionZrdrSource = new(() => SyntheticZrdr.Mission(chapter, mission)),
+        },
     };
 }

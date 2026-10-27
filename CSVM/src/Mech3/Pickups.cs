@@ -13,13 +13,13 @@ public static class Pickups
 {
     public const string FileName = "pickups.json";
 
-    public static List<PickupSpec> Load(string missionZrdrPath)
+    public static List<PickupSpec> Load(ZrdrSet missionZrdr)
     {
         var found = new List<PickupSpec>();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFileOrEmpty(missionZrdrPath, FileName);
+            root = missionZrdr.LoadFileOrEmpty(FileName);
         }
         catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException)
         {

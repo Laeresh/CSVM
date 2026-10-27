@@ -108,7 +108,7 @@ public sealed class WorldSession
         // The EFFECTS flipbooks (effects.zrd) are installed on their target materials BEFORE the
         // build, because a material's frame list is part of what SceneBuilder registers with the
         // TextureCycler as it builds. Same ordering the engine uses. See EffectCycles.
-        var effectCycles = EffectCycles.Apply(gamez, o.ZrdrPath);
+        var effectCycles = EffectCycles.Apply(gamez, o.Zrdr);
         if (effectCycles.Count > 0)
         {
             Log.Info("world", $"effect cycles: {effectCycles.Count} material(s): {string.Join(", ", effectCycles)}");
@@ -175,10 +175,10 @@ public sealed class WorldSession
             // templates.zrd drives `substitute` and `scale_range` (docs/formats/templates.md).
             // Null when the chapter ships no such file, every decoration then stands at its
             // authored model and size, which is also what an empty file (C1C/C2B) produces.
-            var clutterProps = ClutterTemplateSpec.Load(o.ChapterZrdrPath);
+            var clutterProps = ClutterTemplateSpec.Load(o.ChapterZrdr);
             // The armed volumes mark the stamps inside them by row. ⚠ The rows are VolumesOf's
             // order, a walk of gamez.Nodes, which SkyStage's census for WeatherRig repeats exactly.
-            var fogVolumes = FogVolumeSpec.Load(o.ChapterZrdrPath) is { FogZoneArmed: true }
+            var fogVolumes = FogVolumeSpec.Load(o.ChapterZrdr) is { FogZoneArmed: true }
                 ? FogVolumeSpec.VolumesOf(gamez) : null;
             clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
@@ -219,8 +219,8 @@ public sealed class WorldSession
         // at end state (hangar doors swing, the C1 train drives its loop). The program merges the
         // compiled cam_anim/mis_anim archives with the three zrdr scopes.
         mark = StartupProfile.Mark();
-        var chapterZrdrPath = o.ChapterZrdrPath;
-        AnimProgram LoadAnim() => AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
+        var chapterZrdr = o.ChapterZrdr;
+        AnimProgram LoadAnim() => AnimProgram.Load(o.Zrdr, chapterZrdr, o.MissionZrdr,
             o.ChapterAnim(), o.MissionAnim());
         var animProgram = o.Decode == null ? LoadAnim() : o.Decode.Anim(o.Chapter, o.Mission, LoadAnim);
         StartupProfile.Record("anim", mark);
@@ -229,9 +229,9 @@ public sealed class WorldSession
         if (o.LandingTriggers)
         {
             s.Landings = LandingApproaches.Resolve(
-                chapterZrdrPath, gamez, name => animProgram.ByAnimName(name).Count > 0);
-            s.Pickups = CSVM.Mech3.Pickups.Load(o.MissionZrdrPath);
-            s.MissionCutsceneAnims = MissionCutscenes.AnimNames(o.MissionZrdrPath);
+                chapterZrdr, gamez, name => animProgram.ByAnimName(name).Count > 0);
+            s.Pickups = CSVM.Mech3.Pickups.Load(o.MissionZrdr);
+            s.MissionCutsceneAnims = MissionCutscenes.AnimNames(o.MissionZrdr);
             s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings, s.MissionCutsceneAnims);
         }
         // Puffer factory retirement: see Options.TexturesOutliveBuild. root is the caller's
@@ -669,14 +669,14 @@ public sealed class WorldSession
         public required string DataRoot { get; init; }
         public required string Chapter { get; init; }
         public required string Mission { get; init; }
-        public required string ZrdrPath { get; init; }
+        public required ZrdrSet Zrdr { get; init; }
         public InterpScripts? Interp { get; init; }
-        public required string MissionZrdrPath { get; init; }
+        public required ZrdrSet MissionZrdr { get; init; }
 
         /// <summary>The chapter's own zrdr scope, which <c>templates.zrd</c>, <c>landings.zrd</c>
         /// and the chapter animation layer are read from. The caller resolves it, since the data
         /// root's layout is the session's to know.</summary>
-        public required string ChapterZrdrPath { get; init; }
+        public required ZrdrSet ChapterZrdr { get; init; }
 
         /// <summary>The chapter's compiled anim archive, null for none. Read inside the <c>anim</c>
         /// startup phase, and not at all when <see cref="Decode"/> already holds the program.</summary>

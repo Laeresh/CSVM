@@ -22,7 +22,7 @@ public class InstantActionTests
     [Fact]
     public void TheFullRecordParsesFromTheFixture()
     {
-        var def = InstantAction.Load(TestData.Fixture("ia"));
+        var def = InstantAction.Load(TestZrdr.Fixture("ia"));
 
         Assert.Equal("dogfight_squadron", def.MissionType);
         Assert.Equal(new[] { "ground_target" }, def.DisallowMissions);
@@ -70,7 +70,7 @@ public class InstantActionTests
     {
         // dogfight_ace with a group1 authoring 6 enemies: the mission-type zero-forcing rule
         // must win over the authored count, exactly as the parser's own reset does.
-        var def = InstantAction.Load(TestData.Fixture("ia-minimal"));
+        var def = InstantAction.Load(TestZrdr.Fixture("ia-minimal"));
 
         Assert.Equal("dogfight_ace", def.MissionType);
         Assert.Empty(def.DisallowMissions);
@@ -164,7 +164,7 @@ public class InstantActionTests
     [Fact]
     public void BuildFromWizardConvergesWithAnEquivalentIaJsonFile()
     {
-        var baseDef = InstantAction.Load(TestData.Fixture("ia"));
+        var baseDef = InstantAction.Load(TestZrdr.Fixture("ia"));
         var waves = new[]
         {
             new InstantActionWave(4, "Black Hat Warhawk", "Warhawk", "veteran", -1),
@@ -238,7 +238,7 @@ public class InstantActionTests
     [Fact]
     public void BuildFromWizardForcesTheAceDuelSoloEvenWithStaleWizardState()
     {
-        var baseDef = InstantAction.Load(TestData.Fixture("ia"));
+        var baseDef = InstantAction.Load(TestZrdr.Fixture("ia"));
         var waves = new[]
         {
             new InstantActionWave(6, "Some Militia Warhawk", "Warhawk", "ace", -1),
@@ -265,7 +265,7 @@ public class InstantActionTests
         var fromCursors = UI.Menu.InstantActionFeature.WaveFor(0, militiaIndex: 7, aircraftIndex: 1, skillIndex: 2);
         Assert.Equal(InstantAction.EmptyWave, fromCursors);
 
-        var fromFile = InstantAction.Load(TestData.Fixture("ia-minimal")).Waves[1]; // group2: unauthored
+        var fromFile = InstantAction.Load(TestZrdr.Fixture("ia-minimal")).Waves[1]; // group2: unauthored
         Assert.Equal(InstantAction.EmptyWave, fromFile);
     }
 
@@ -293,7 +293,7 @@ public class InstantActionTests
 
         foreach (var row in expected)
         {
-            var def = InstantAction.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, row.Chapter, "IA1"));
+            var def = InstantAction.Load(TestZrdr.Mission(row.Chapter, "IA1"));
             Assert.Equal(row.MissionType, def.MissionType);
             Assert.Equal(row.PlayerPlane, def.PlayerPlane);
             Assert.Equal(row.NumWingmen, def.NumWingmen);

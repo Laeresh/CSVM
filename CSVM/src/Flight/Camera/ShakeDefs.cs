@@ -57,9 +57,9 @@ public sealed class ShakeDefs
     public ShakeSource? HighSpeed => Get("high_speed");
     public ShakeSource? Nitro => Get("nitro");
 
-    public static ShakeDefs Load(string zrdrPath)
+    public static ShakeDefs Load(ZrdrSet zrdr)
     {
-        var root = Zrdr.LoadFile(zrdrPath, "shakes.json");
+        var root = zrdr.LoadFile("shakes.json");
         var defs = new ShakeDefs();
         for (int i = 0; i + 1 < root.Count; i += 2)
         {

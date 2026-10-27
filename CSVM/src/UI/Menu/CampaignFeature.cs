@@ -229,7 +229,7 @@ public sealed class CampaignFeature : IMenuFeature
             if (_briefingSeq != MissionSeq)
             {
                 _briefingSeq = MissionSeq;
-                _briefing = DataRoot is { } root && MissionSeq >= 0 ? CampaignBriefing.Load(root, Data.Messages, Data.Sounds, MissionSeq) : null;
+                _briefing = MissionSeq >= 0 ? CampaignBriefing.Load(Data, Data.Messages, Data.Sounds, MissionSeq) : null;
             }
 
             return _briefing;
@@ -1441,15 +1441,9 @@ public sealed class CampaignFeature : IMenuFeature
     // entry all read as null: a screen then draws no wingman rather than refusing to open.
     private CampaignMission? ReadMission()
     {
-        if (DataRoot is not { } root)
-        {
-            return null;
-        }
-
         try
         {
-            string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
-            foreach (var mission in CampaignSequence.Load(zrdrPath))
+            foreach (var mission in CampaignSequence.Load(Data.Zrdr))
             {
                 if (mission.Seq == MissionSeq)
                 {

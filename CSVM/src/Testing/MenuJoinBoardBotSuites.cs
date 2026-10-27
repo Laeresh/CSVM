@@ -27,7 +27,7 @@ internal static class MenuJoinBoardBotSuites
         + "launch carries the seat and every bot row in order")]
     internal static void JoinBoardBots(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireMessages();
         MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);

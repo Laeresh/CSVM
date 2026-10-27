@@ -196,7 +196,7 @@ internal sealed class SkyStage
         // gamez authors. World-anchored, so it is built once beside the world rather than per
         // rig, and needs no per-frame driving unlike the dome/deck/whiteout below.
         var fogVolumes = FogVolumeSpec.VolumesOf(state.Gamez);
-        var fogVolumeSpec = FogVolumeSpec.Load(SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter));
+        var fogVolumeSpec = FogVolumeSpec.Load(state.ChapterZrdr);
         var cloudField = FogVolumeClutter.Create(state.Gamez, state.Textures,
             fogVolumeSpec, fogVolumes, _spec.CloudJitter);
         CloudField = cloudField;
@@ -241,7 +241,7 @@ internal sealed class SkyStage
         weather.SetSpyglassEyes(SpyglassEye);
         // The horizon's zone children go in with the mission's weather. The zone the fog and the
         // dome share is picked from both, since three chapters ship an empty zone2.
-        weather.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),
+        weather.Build(state.MissionZrdr, _rigs, builder.HorizonZones(),
             activeZone => BuildDomes(builder, activeZone));
         if (_fogStateBeforeWeather is { } heldFog)
         {

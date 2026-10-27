@@ -696,16 +696,16 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private string ReadObjectivesNote()
     {
-        if (Flow.DataRoot is not { } root || Flow.Mission is not { } mission)
+        if (Flow.Mission is not { } mission)
         {
             return string.Empty;
         }
 
         try
         {
-            var script = ObjectiveScript.Load(
-                SessionPaths.MissionZrdr(root, mission.ChapterFolder, mission.MissionFolder));
-            var messages = Flow.Feature.Data.Messages;
+            var data = Flow.Feature.Data;
+            var script = ObjectiveScript.Load(data.LoadChapter(mission.ChapterFolder, mission.MissionFolder).MissionZrdr);
+            var messages = data.Messages;
             var lines = new List<string>();
             foreach (var identity in script.DisplayIdentities())
             {

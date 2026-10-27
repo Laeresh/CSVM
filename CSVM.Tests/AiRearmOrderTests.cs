@@ -79,7 +79,7 @@ public sealed class AiRearmOrderTests
     [ExtractedDataFact]
     public void EveryPylonOrdnanceIsARocketAndEveryStockFitCarriesSome()
     {
-        var weapons = WeaponDefs.Load(SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip")));
+        var weapons = WeaponDefs.Load(TestZrdr.Root);
         var loadouts = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
 
         var pickable = loadouts.Options.PylonOrdnance.Where(o => o.Id != LoadoutChoice.None).ToList();

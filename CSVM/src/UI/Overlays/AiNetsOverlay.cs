@@ -32,7 +32,7 @@ public sealed partial class AiNetsOverlay : Node
     private const float LeashTick = 20f;   // the vertical mark at the plane end, metres
     private const float HeldLeashDim = 0.6f; // how far a merely-held leash darkens off its net colour
 
-    private readonly string _chapterZrdrPath;
+    private readonly ZrdrSet _chapterZrdr;
     private readonly string _chapter;
 
     private readonly List<AiNetLeash> _leashes = new();
@@ -50,9 +50,9 @@ public sealed partial class AiNetsOverlay : Node
     private ImmediateMesh? _leashMesh;
     private int _leashCount = -1;
 
-    public AiNetsOverlay(string chapterZrdrPath, string chapter)
+    public AiNetsOverlay(ZrdrSet chapterZrdr, string chapter)
     {
-        _chapterZrdrPath = chapterZrdrPath;
+        _chapterZrdr = chapterZrdr;
         _chapter = chapter;
         Name = "ainets_overlay";
     }
@@ -134,7 +134,7 @@ public sealed partial class AiNetsOverlay : Node
         _nets ??= LoadAndCensus();
         if (_nets.Count == 0)
         {
-            Log.Warn("world", $"ai nets overlay: {_chapter} ships no ne0* patrol nets ({_chapterZrdrPath})");
+            Log.Warn("world", $"ai nets overlay: {_chapter} ships no ne0* patrol nets ({_chapterZrdr})");
             ShowNotice($"NO PATROL NETS IN {_chapter}");
             _shown = true; // the notice is the overlay; F13 again clears it
             return;
@@ -221,11 +221,11 @@ public sealed partial class AiNetsOverlay : Node
         List<AiNet> nets;
         try
         {
-            nets = AiNets.Load(_chapterZrdrPath);
+            nets = AiNets.Load(_chapterZrdr);
         }
         catch (Exception e) when (e is System.IO.IOException or System.IO.InvalidDataException)
         {
-            Log.Warn("world", $"ai nets overlay: cannot read {_chapterZrdrPath}: {e.Message}");
+            Log.Warn("world", $"ai nets overlay: cannot read {_chapterZrdr}: {e.Message}");
             return new List<AiNet>();
         }
         Log.Info("world", $"ai nets: {_chapter} ships {nets.Count} patrol net(s)");

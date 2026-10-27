@@ -61,9 +61,9 @@ internal static class TargetClassCycleSuites
         + "selected part instead of holding it")]
     internal static void TargetClassCycle(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
@@ -71,8 +71,8 @@ internal static class TargetClassCycleSuites
 
         var zepDefs = Zeppelins.Load(missionZrdr);
         var nets = AiNets.Load(chapterZrdr);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         // The Non-Aircraft cycle's torpedo gate, read off the install's own weapon table rather
         // than a stand-in def: a zeppelin's parts reach that cycle only while the pilot's selected
         // ordnance carries LOCK_ON, so every pane below flies one.
@@ -85,7 +85,7 @@ internal static class TargetClassCycleSuites
 
         // The curated list and the director that edits it: the mission's own story position, so
         // the script runs against the same world the cycles above are read from.
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath))
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr))
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Mission}");
         var script = ObjectiveScript.Load(missionZrdr);
         var missionTargets = MissionTargets.Load(missionZrdr, chapterZrdr);

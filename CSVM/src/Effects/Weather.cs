@@ -103,14 +103,14 @@ public sealed class WeatherState
     /// twins are excluded. Empty only if the file carries no <c>ZONE*</c> block at all.</summary>
     public IReadOnlyList<string> ZoneNames => _zoneNames;
 
-    /// <summary>Loads the flown mission's weather.json (a zrdr zip or unpacked dir). Null if
+    /// <summary>Loads the flown mission's weather.json (a mission reader scope). Null if
     /// the file is absent (some folders are multiplayer-only, etc.).</summary>
-    public static WeatherState? Load(string missionZrdrPath)
+    public static WeatherState? Load(ZrdrSet missionZrdr)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "weather.json");
+            root = missionZrdr.LoadFile("weather.json");
         }
         catch (IOException)
         {

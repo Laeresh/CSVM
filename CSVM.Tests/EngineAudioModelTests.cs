@@ -24,8 +24,7 @@ public class EngineAudioModelTests
         "player_avenger", "player_brigand",
     };
 
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     /// <summary>Slot 1, the overspeed whine, is unassigned on every airframe in the install: the KEY
     /// is real and read (<c>prop_sound</c>, VDEF+0x74), and no shipped def authors it, so the

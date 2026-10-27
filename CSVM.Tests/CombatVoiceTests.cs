@@ -12,9 +12,9 @@ namespace CSVM.Tests;
 /// </summary>
 public class CombatVoiceTests
 {
-    private static string FixtureDir => TestData.Fixture("voice");
+    private static ZrdrSet FixtureDir => TestZrdr.Fixture("voice");
 
-    private static string MissionDir => TestData.Fixture("voice", "mission");
+    private static ZrdrSet MissionDir => TestZrdr.Fixture("voice", "mission");
 
     [Fact]
     public void TheAccentTableLoadsPoolsAndSingles()
@@ -101,9 +101,9 @@ public class CombatVoiceTests
     [Fact]
     public void AMissingRosterYieldsNoAccentsAndNoPrewarm()
     {
-        Assert.Empty(CombatVoice.MissionAccentIds(TestData.Fixture("voice", "no-such-mission")));
+        Assert.Empty(CombatVoice.MissionAccentIds(TestZrdr.Fixture("voice", "no-such-mission")));
         Assert.Empty(CombatVoice.SessionPrewarmNames(FixtureDir,
-            TestData.Fixture("voice", "no-such-mission"),
+            TestZrdr.Fixture("voice", "no-such-mission"),
             SoundDefs.Load(FixtureDir), SoundDefs.LoadGroups(FixtureDir)));
     }
 

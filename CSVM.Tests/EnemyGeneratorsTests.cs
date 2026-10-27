@@ -23,7 +23,7 @@ public class EnemyGeneratorsTests
     [Fact]
     public void TheThreeShapesParseFromTheFixture()
     {
-        var defs = EnemyGenerators.Load(TestData.Fixture("egen"));
+        var defs = EnemyGenerators.Load(TestZrdr.Fixture("egen"));
         Assert.Equal(3, defs.Count);
 
         var zep = defs[0];
@@ -64,7 +64,7 @@ public class EnemyGeneratorsTests
     [Fact]
     public void ANullFileIsNoGeneratorsNotAnError()
     {
-        Assert.Empty(EnemyGenerators.Load(TestData.Fixture("egen-null")));
+        Assert.Empty(EnemyGenerators.Load(TestZrdr.Fixture("egen-null")));
     }
 
     // ---- Goldens over the install ---------------------------------------------------------------
@@ -77,7 +77,7 @@ public class EnemyGeneratorsTests
         var waveSizes = new Dictionary<int, int>();
         foreach (var (chapter, mission) in Missions())
         {
-            var defs = EnemyGenerators.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission));
+            var defs = EnemyGenerators.Load(TestZrdr.Mission(chapter, mission));
             files++;
             if (defs.Count == 0)
             {
@@ -85,7 +85,7 @@ public class EnemyGeneratorsTests
                 continue;
             }
             var netNames = new HashSet<string>(
-                AiNets.LoadIndex(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)).Values,
+                AiNets.LoadIndex(TestZrdr.Chapter(chapter)).Values,
                 StringComparer.OrdinalIgnoreCase);
             foreach (var def in defs)
             {
@@ -141,7 +141,7 @@ public class EnemyGeneratorsTests
     public void TheWorkedExampleGeneratorReadsExactlyAsTheScopingDocMeasuredIt()
     {
         // C1/M04 generator 1 of 2: the plan's worked example.
-        var defs = EnemyGenerators.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04"));
+        var defs = EnemyGenerators.Load(TestZrdr.Mission("C1", "M04"));
         Assert.Equal(2, defs.Count);
         var gen = defs[0];
         Assert.Equal("eairg31", gen.Node);
@@ -163,7 +163,7 @@ public class EnemyGeneratorsTests
         var misses = new List<string>();
         foreach (var (chapter, mission) in Missions())
         {
-            var missionZrdr = SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            var missionZrdr = TestZrdr.Mission(chapter, mission);
             foreach (var def in EnemyGenerators.Load(missionZrdr))
             {
                 if (def.VehicleParams == null)
@@ -171,7 +171,7 @@ public class EnemyGeneratorsTests
                     continue;
                 }
                 var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var aiv = Zrdr.LoadFile(missionZrdr, "aiv.json");
+                var aiv = missionZrdr.LoadFile("aiv.json");
                 if (aiv.Count > 0 && aiv[0] is List<object?> header)
                 {
                     foreach (var h in header)

@@ -79,13 +79,13 @@ internal static class DropoffPlacementSuites
         + "original's release speed, rather than out of where the pilot flew in")]
     internal static void DropoffPlacement(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
@@ -122,13 +122,13 @@ internal static class DropoffPlacementSuites
         + "on the world root the marker is parked at")]
     internal static void CutsceneHandoffUnposed(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), UnposedMissionSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), UnposedMissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {UnposedMissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.Data.Planes, $"aircraft archive");
@@ -150,7 +150,7 @@ internal static class DropoffPlacementSuites
         ctx.Note($"drove {chapter}/{folder}'s unposed re-placement over a built world");
     }
 
-    private static void Drive(TestContext ctx, TestWorld world, string missionZrdr, StringBuilder report)
+    private static void Drive(TestContext ctx, TestWorld world, ZrdrSet missionZrdr, StringBuilder report)
     {
         var cutscenes = MissionCutscenes.AnimNames(missionZrdr);
         report.AppendLine($"cutscene definitions: {string.Join(", ", cutscenes)}");
@@ -202,7 +202,7 @@ internal static class DropoffPlacementSuites
         }
     }
 
-    private static void DriveUnposed(TestContext ctx, TestWorld world, string missionZrdr,
+    private static void DriveUnposed(TestContext ctx, TestWorld world, ZrdrSet missionZrdr,
         StringBuilder report)
     {
         var cutscenes = MissionCutscenes.AnimNames(missionZrdr);
@@ -434,7 +434,7 @@ internal static class DropoffPlacementSuites
             };
             rig.AddChild(model);
             ctx.Host.AddChild(rig);
-            rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null, new CamParams(),
+            rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null, new CamParams(),
                 Vector3.Zero, Vector3.Forward, 0f, 0f);
             return rig;
         }

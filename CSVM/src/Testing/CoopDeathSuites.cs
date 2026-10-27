@@ -45,14 +45,14 @@ internal static class CoopDeathSuites
     internal static void CampaignCoopDeath(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -362,7 +362,7 @@ internal static class CoopDeathSuites
         // seats sharing one would hide a pane taken from the wrong human.
         private PlayerRig BuildRig(int index, Vector3 at)
         {
-            var stats = PlaneStats.Load(_ctx.ZrdrPath, _ctx.PlaneName);
+            var stats = PlaneStats.Load(_ctx.Zrdr, _ctx.PlaneName);
             var model = new PlaneBuilder(_planesGamez, _textures).Build(_ctx.PlaneName);
             var pilot = new FlightController
             {

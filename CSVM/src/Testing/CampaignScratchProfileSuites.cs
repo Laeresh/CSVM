@@ -38,12 +38,12 @@ internal static class CampaignScratchProfileSuites
     internal static void CampaignScratchProfiles(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        var mission = CampaignSequence.Load(ctx.ZrdrPath).FirstOrDefault(m =>
+        var mission = CampaignSequence.Load(ctx.Zrdr).FirstOrDefault(m =>
             m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
             && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase));
         if (mission.ChapterFolder == null)
@@ -66,7 +66,7 @@ internal static class CampaignScratchProfileSuites
             string node = StockAirframes.Node(5);
             ctx.Check(seated.PlaneNames.Count > 0 && seated.PlaneNames[0] == node,
                 $"the seat is read off the copy in the named store, {node}");
-            var director = CampaignDirector.TryCreate(seated, ctx.ZrdrPath, missionZrdr);
+            var director = CampaignDirector.TryCreate(seated, ctx.Zrdr, missionZrdr);
             ctx.Check(director != null, $"the director loads '{Copy}' from the named store");
             if (director == null)
             {

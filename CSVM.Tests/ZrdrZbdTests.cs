@@ -139,6 +139,29 @@ public class ZrdrZbdTests
     }
 
     [GameFilesTheory(AlsoExtracted = true)]
+    [MemberData(nameof(ReaderArchives))]
+    public void TheEngineScopeOfTheArchiveAnswersAsTheExtractedScopeDoes(string path)
+    {
+        string zip = Path.Combine(TestData.ExtractedRoot!, Path.ChangeExtension(ZbdTree.Canonical(path), ".zip"));
+        var extracted = ZrdrSet.FromExtracted(zip);
+        var archive = ZrdrSet.Load(GameFilesData.Source, "ZBD/" + path);
+
+        int compared = ModelDiff.AssertEqual(
+            extracted.Files.ToDictionary(f => f.Key, f => f.Root), archive.Files.ToDictionary(f => f.Key, f => f.Root));
+        foreach (var file in archive.Files)
+        {
+            string name = file.Key + ".json";
+            Assert.True(extracted.HasFile(name), name);
+            ModelDiff.AssertEqual(extracted.LoadFileOrEmpty(name), archive.LoadFileOrEmpty(name));
+        }
+
+        Assert.Equal(extracted.LoadMatchingFiles("ANIMATION_DEFINITIONS").Select(r => r.Name).OrderBy(n => n, StringComparer.Ordinal),
+            archive.LoadMatchingFiles("ANIMATION_DEFINITIONS").Select(r => r.Name).OrderBy(n => n, StringComparer.Ordinal));
+        _output.WriteLine($"{path}: {archive.Files.Count} readers, {compared} leaf values compared");
+        Assert.True(compared > 0);
+    }
+
+    [GameFilesTheory(AlsoExtracted = true)]
     [InlineData("zrdr.zbd", "camparam.zrd")]
     public void OneFlippedFloatBitInTheArchiveIsFoundUnderItsReader(string path, string reader)
     {

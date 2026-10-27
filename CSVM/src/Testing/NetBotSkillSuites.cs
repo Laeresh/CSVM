@@ -40,10 +40,10 @@ internal static class NetBotSkillSuites
     internal static void BotSkillTiers(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(ctx.Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         ctx.RequireData(chapterZrdr, $"{ctx.Chapter} zrdr");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
@@ -90,7 +90,7 @@ internal static class NetBotSkillSuites
             flightRoster.BuildPlayers(rigs);
             var person = rigs[0].Controller!;
             var bots = rigs.Skip(1).Select(rig => rig.Controller!).ToArray();
-            var skills = AiSkills.Load(ctx.ZrdrPath);
+            var skills = AiSkills.Load(ctx.Zrdr);
 
             ctx.Check(bots.All(b => !b.IsHumanPiloted && b.Pilot is { Gunner: not null, Machine: not null }),
                 $"every bot seat is flown by an armed AI pilot");
@@ -173,7 +173,7 @@ internal static class NetBotSkillSuites
 
     private static FlightRoster NewRoster(TestContext ctx, SessionSpec spec, GameZ planesGamez,
         TextureArchive textures, ProjectilePool pool, List<SpawnPoint> table, SpawnPicker picker,
-        string chapterZrdr, string missionZrdr, IReadOnlyList<NetSeat> roster, List<PlayerRig> rigs,
+        ZrdrSet chapterZrdr, ZrdrSet missionZrdr, IReadOnlyList<NetSeat> roster, List<PlayerRig> rigs,
         VersusMatch match) =>
         new(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, ctx.DataRoot),
@@ -181,23 +181,23 @@ internal static class NetBotSkillSuites
             new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 CamParamsFor = _ => new CamParams(),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                 WeaponMessages = ctx.Data.Messages,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             },
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
             },
             new HumanRosterBindings
             {

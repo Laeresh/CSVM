@@ -26,13 +26,12 @@ internal static class MenuSuiteHost
         NetPlayFeature? netDoor = null)
     {
         host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForDataRoot(dataRoot));
+        host.Features.Add(InstantActionFeature.ForGameData(data));
         host.Features.Add(new PlayerSetupFeature());
-        // The hangar reads its labels and stock defaults the way the launcher wires them: the langui
-        // table, the stock fits on first need and the zrdr scope the data root carries.
-        string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(dataRoot, "extracted", "zrdr.zip"));
+        // The hangar reads its labels and stock defaults as the launcher wires them: the langui
+        // table, the stock fits and the root reader scope.
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), zrdr));
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), data.Zrdr));
         host.Features.Add(new CampaignFeature(
             strings, StockAirframes.Node, chapterCinema, closingCinema)
         { Data = data });

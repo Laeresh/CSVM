@@ -29,7 +29,7 @@ public class ZeppelinsTests
     [Fact]
     public void TheFullRecordParsesFromTheFixture()
     {
-        var defs = Zeppelins.Load(TestData.Fixture("zeppelins"));
+        var defs = Zeppelins.Load(TestZrdr.Fixture("zeppelins"));
         Assert.Equal(2, defs.Count);
 
         var zep = defs[0];
@@ -76,7 +76,7 @@ public class ZeppelinsTests
     [Fact]
     public void TheDecodedThresholdRulesApply()
     {
-        var defs = Zeppelins.Load(TestData.Fixture("zeppelins"));
+        var defs = Zeppelins.Load(TestZrdr.Fixture("zeppelins"));
 
         // Clamped at load to the healthy count: authored 4 over 3 zones reads 3.
         Assert.Equal(3, defs[0].NumHealthyRequired);
@@ -88,7 +88,7 @@ public class ZeppelinsTests
     [Fact]
     public void TheMinimalRecordParsesWithEveryOptionalKeyAbsent()
     {
-        var defs = Zeppelins.Load(TestData.Fixture("zeppelins"));
+        var defs = Zeppelins.Load(TestZrdr.Fixture("zeppelins"));
         var bare = defs[1];
         Assert.Equal("barezep", bare.Node);
         Assert.Empty(bare.Gasbags);           // the C5/M01 piratezep shape
@@ -110,7 +110,7 @@ public class ZeppelinsTests
     [Fact]
     public void ANullFileIsNoZeppelinsNotAnError()
     {
-        Assert.Empty(Zeppelins.Load(TestData.Fixture("zeppelins-null")));
+        Assert.Empty(Zeppelins.Load(TestZrdr.Fixture("zeppelins-null")));
     }
 
     // ---- Goldens over the install ---------------------------------------------------------------
@@ -125,7 +125,7 @@ public class ZeppelinsTests
         var gasbagless = new List<string>();
         foreach (var (chapter, mission) in Missions())
         {
-            var missionZrdr = SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            var missionZrdr = TestZrdr.Mission(chapter, mission);
             List<ZeppelinDef> defs;
             try
             {
@@ -142,7 +142,7 @@ public class ZeppelinsTests
                 continue;
             }
             var netNames = new HashSet<string>(
-                AiNets.LoadIndex(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)).Values,
+                AiNets.LoadIndex(TestZrdr.Chapter(chapter)).Values,
                 StringComparer.OrdinalIgnoreCase);
             foreach (var def in defs)
             {
@@ -214,7 +214,7 @@ public class ZeppelinsTests
     public void TheWorkedExampleZeppelinReadsExactlyAsTheScopingDocMeasuredIt()
     {
         // C1/M04 piratezep: the plan's worked example.
-        var defs = Zeppelins.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04"));
+        var defs = Zeppelins.Load(TestZrdr.Mission("C1", "M04"));
         var zep = Assert.Single(defs);
         Assert.Equal("piratezep", zep.Node);
         Assert.Equal("PirateZep1", zep.Net);
@@ -243,7 +243,7 @@ public class ZeppelinsTests
         float shortest = float.MaxValue;
         foreach (var (chapter, mission) in Missions())
         {
-            var missionZrdr = SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            var missionZrdr = TestZrdr.Mission(chapter, mission);
             List<ZeppelinDef> defs;
             try
             {
@@ -257,7 +257,7 @@ public class ZeppelinsTests
             {
                 continue;
             }
-            var nets = AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+            var nets = AiNets.Load(TestZrdr.Chapter(chapter));
             foreach (var def in defs)
             {
                 var net = AiNets.ByName(nets, def.Net);
@@ -286,8 +286,8 @@ public class ZeppelinsTests
     public void TheWorstShippedTurnBreaksOutRatherThanOrbits()
     {
         var net = AiNets.ByName(
-            AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C1B")), "ZVZ1a")!;
-        var def = Zeppelins.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1B", "MP3"))
+            AiNets.Load(TestZrdr.Chapter("C1B")), "ZVZ1a")!;
+        var def = Zeppelins.Load(TestZrdr.Mission("C1B", "MP3"))
             .First(d => d.Node.Equals("multiplayer1zep", StringComparison.OrdinalIgnoreCase));
 
         var follower = new AiNetFollower(net, new Random(1), ZeppelinRuntime.ArrivalFloorM,

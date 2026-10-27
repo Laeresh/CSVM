@@ -23,8 +23,7 @@ public class AiRocketeerTests
     private static readonly Vector3 TargetPos = Vector3.Zero;
     private static readonly Vector3 TargetForward = Vector3.Forward; // nose on -Z
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [Fact]
     public void ADeadAsternShotPassesEveryGateAndTakesThePylon()
@@ -490,7 +489,7 @@ public class AiRocketeerTests
     // test reads the tuple here directly so the authored order is pinned independently of it.
     private static AuthoredFit AuthoredOrdnance(string defName, WeaponDefs weapons)
     {
-        var root = Zrdr.LoadFile(ZrdrPath, "vehicle.json")[0] as List<object?>;
+        var root = ZrdrPath.LoadFile("vehicle.json")[0] as List<object?>;
         Assert.NotNull(root);
         for (int i = 0; i + 1 < root!.Count; i += 2)
         {

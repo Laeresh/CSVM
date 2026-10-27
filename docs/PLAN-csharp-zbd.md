@@ -182,7 +182,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `interp.zbd`
 12. ☑ `strings.dll` messages
 13. ☑ Sound archives
-14. ◐ Reader archives (`zrdr.zbd`)
+14. ☑ Reader archives (`zrdr.zbd`)
 15. ☑ Texture archives
 
 ### Wave C, large formats
@@ -680,9 +680,81 @@ the zip path.
 (`VO_c4-RM-m3_Blacke_9.wav`). Today's zips store a repeat as `stem-N.ext`, counting from 1;
 reproduce that wherever a loader looks a sound up by name (A1's finding).
 
-## B14 ◐ Reader archives (`zrdr.zbd`)
+## B14 ☑ Reader archives (`zrdr.zbd`)
 
-**Reader landed, engine switch pending.** `ZrdrZbd.Read(byte[])` and
+**Landed.** The engine reads no extracted zrdr zip or folder. A reader scope is a `ZrdrSet`
+(`CSVM/src/Mech3/ZrdrSet.cs`): one archive's `ZrdrFile`s with its label, built by
+`ZrdrSet.Load(game, path)` over `ZrdrZbd.Load`, `ZrdrSet.None` without a source or a file.
+`GameData.Zrdr` holds the root `ZBD/zrdr.zbd`, decoded in `GameData.Load` (28 to 43 ms Debug);
+`ChapterData.ChapterZrdr` and `MissionZrdr` hold `ZBD/<chapter>/zrdr.zbd` and
+`ZBD/<chapter>/<mission>/zrdr.zbd`, each a lazy decode the install's chapter loader holds, the
+chapter's per chapter and the mission's for the last mission. The set serves the four `Zrdr`
+entry points with today's contracts: `LoadFile` through `ZrdrZbd.Find`, throwing
+`FileNotFoundException` on an absent reader and `InvalidDataException` on an empty one;
+`LoadFileOrEmpty` returning the empty root; `HasFile` as `Find != null`; `LoadMatchingFiles` a walk
+for a string holding the filter (an empty filter takes every reader, as the raw-text sniff did);
+`LoadFilesNamed` with the predicate seeing `Key + ".json"`. Both enumerations skip empty readers and
+name a reader as its zip entry (`vehicle.zrd.json`). Every consumer took the type in place of its
+path, mechanically: `zrdrPath`/`ZrdrPath` became `zrdr`/`Zrdr`, `MissionZrdrPath`/`ChapterZrdrPath`
+became `MissionZrdr`/`ChapterZrdr` (on `WorldSession.Options`, `FlightRosterInputs`, the
+director inputs, `SessionBoards`' inputs, `HangarFeature`), and `Zrdr.LoadFile(path, name)` became
+`zrdr.LoadFile(name)`; an empty path became `ZrdrSet.None` and `string.IsNullOrEmpty` became
+`!Exists`. `BuildState` reads the three scopes through `Data` and `Chapter`; `GameSession`,
+`InspectionLabs`, `ObjectiveReadouts`, `SkyStage` and `LaunchBoards` take the session chapter's.
+The menu reads through the game data: `CampaignBriefing.Load(data, …)`, `CampaignFeature`'s
+sequence read and `CampaignFlightCheckPage`'s objectives note (no longer gated on a data root),
+`InstantActionFeature.ForGameData(data)` (was `ForDataRoot`), `HangarFeature` over `Data.Zrdr`.
+`GameSession.ResolveCampaignZeppelins(spec, data)` reads the mission scope out of the game data.
+`Probes.Ai(data, chapter)` finds a chapter's missions in `ZbdManifest.Expected` instead of the
+extracted folders. The suites read `ctx.Zrdr`, `ctx.ChapterZrdr(chapter)` and
+`ctx.MissionZrdr(chapter, mission)` (`TestContext`, over `Data.LoadChapter`), skip on
+`ctx.RequireData(ZrdrSet, …)` (`!Exists`) and `RequireZrdrEntry(ZrdrSet, name)`; a suite's own
+`BasePaths` passes `ZrdrPath: string.Empty`. `TestContext.ZrdrPath` and `BuildState.ZrdrPath`/
+`MissionZrdrPath` are gone. `ChapterData.Textures` is now a lazy decode too (`TexturesSource`):
+a menu screen or a suite that reads another chapter's mission scope through `LoadChapter` no longer
+decodes that chapter's textures.
+
+`Zrdr`'s zip and folder reading stays in the engine as the modding path (Decision 18):
+`Zrdr.ReadScope(path)` turns one into `ZrdrFile`s, which `ZrdrSet.FromExtracted(path)` wraps for
+E46. The v0.6.1 shape is dropped (Decision 20): an entry is read only under the fork's name
+(`vehicle.zrd.json` for a request of `vehicle.json`), and a folder's `manifest.json` is no reader.
+The unit fixtures stored under v0.6.1 names were renamed to `.zrd.json` (`fixtures/zrdr/`,
+`voice/`, `voice/mission/`, `mission-cutscenes/`, `weather-no-cloud/`, `zrdr-skills/`), and the
+units read the extraction and the fixtures as scopes through `CSVM.Tests/TestZrdr.cs` (`Root`,
+`Chapter`, `Mission`, read once per run; `Folder`, `Fixture`, `Readers(data)` for a screen test).
+Counting through the reader, the root holds 219 non-empty readers, not 220, and each chapter one
+fewer than before (`ExtractedGoldenTests`): the 220 counted the unpacked folder's `manifest.json`.
+
+The synthetic scopes are built in code: `Tooling/SyntheticZrdr.cs` holds the 18 records as C#
+literals (`L(...)` lists, generated from the fixtures and reviewed), `Root()` the 14 root readers,
+`Chapter("C1")` an existing empty scope, `Mission` the `C1/PROBE1`, `C1/M09` and the four `IA1`
+scopes, every other scope `None`; `SyntheticGameData.Build` hands them out. Before the fixtures
+were deleted, `ModelDiff` found the built scopes equal to `ZrdrSet.FromExtracted` over the fixture
+records: root 5,411 leaves, `C1/PROBE1` 178, `C1/M09` 9, the `IA1` scopes 4 × 131. The 16
+`fixtures/synthetic/zrdr/` and `synthetic/C1/` files are deleted; `fixtures/zrdr/maneuvers.zrd.json`
+and `ia/ia.zrd.json` stay as unit fixtures, so their content now lives in both places. The
+`plane`, `armament`, `sounds`, `voice`, `mission`, `campaign`, `instant-action` and `effects`
+families and `SyntheticData.Families` are gone; `SyntheticShell.TreeFamilies` is the Original
+shell's alone, and the tree carries no `zrdr/` and no `C1/` folder. `SyntheticMission` keeps its
+three address constants. The fixtures README's synthetic rows now name the code records.
+
+**Shared state (decided: fresh copies).** No loader writes into the lists `Zrdr` hands it (a
+search of the 50 consumers for list writes found none on a reader list), but parsed models keep
+reader sub-lists alive past the load: `AnimDefs` puts the reader's own lists into an
+`AnimDefinition`'s data (`node_path`, `raw`), which a session's runtime holds, and `ZrdrDict` views
+reference the reader's value lists. Today every read re-parsed, so a later write stayed local. Each
+`ZrdrSet` read returns a deep copy instead, which keeps that contract for every present and future
+consumer at a cost below today's re-parse (no inflate, no JSON), and lets the chapter scope be
+shared per chapter rather than held per (chapter, mission) as C21's anim archives are.
+`ZrdrSetTests.EveryReadIsAFreshCopy` pins it.
+
+Unused now, for E43: `BasePaths.ZrdrPath` (still filled by `Resolve`), `SessionPaths.ChapterZrdr`
+and `MissionZrdr` (read by the units' `TestZrdr` and `SessionPathsTests` only), `PreferUnzipped` for
+zrdr, `--zrdr=` (`SessionSpec.Zrdr`), and the `reader` `ZbdExtraction` mode.
+
+**Verified.** <pending orchestrator run>
+
+**Reader (kept from the reader landing).** `ZrdrZbd.Read(byte[])` and
 `ZrdrZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/ZrdrZbd.cs`) decode a root, chapter or
 mission `zrdr.zbd` through A1's `ZbdArchive` into `ZrdrFile` records in table order: the stored
 name, the collision rename (`Key` is the name a lookup uses, today's zip entry name without
@@ -723,7 +795,8 @@ readers) 28 to 43 ms; a chapter 0.1 to 1.7 ms (C2 1.65); a mission 0.06 to 1.1 m
 C5/M02 0.4), apart from a single 3.7 ms reading of C4/M03. A session's three archives
 cost under 50 ms.
 
-**Remaining switch work (after A3).**
+**Switch work as planned** (steps 1 and 2 landed above; step 3 is superseded, Decision 18 keeps
+the zip and folder reading in the engine, apart from the v0.6.1 drop, which landed).
 
 1. **The game-data slots.** `GameData` carries the root files (`ZBD/zrdr.zbd`), `ChapterData` the
    chapter's (`ZBD/<chapter>/zrdr.zbd`) and the mission's (`ZBD/<chapter>/<mission>/zrdr.zbd`).
@@ -749,8 +822,6 @@ cost under 50 ms.
    `SessionPaths.MissionZrdr`, `PreferUnzipped` for zrdr, `--zrdr=` and the `reader`
    `ZbdExtraction` mode.
 4. ~~One rename rule.~~ Done in B13: `ZbdArchive.Rename` is the one home, and every reader calls it.
-
-**Verified.** <pending orchestrator run>
 
 **Original approach (kept for reference).**
 
@@ -1497,9 +1568,9 @@ suites never see them); `source-notes` forces them for a capture.
 warning, now behind `SourceFlow.HasExtracted`), the `--extract*`/`--unzbd=` flags and
 `ExtractionRun`. Unused after this item: `ExtractionRun.DefaultUnzbd` from the launcher,
 `ExtractionStamp.Standing` outside its tests, `ExtractionProgress`/`ExtractionPhase` as screen
-inputs, and `ExtractionRun.Header`/`Summary` as screen output. ⚠ Until B14 and C21 switch, the
-engine still reads `extracted/zrdr.zip` and the anim zips, so the prompt's Delete breaks a
-session that needs them; the prompt's "does not use it" is true only once both land.
+inputs, and `ExtractionRun.Header`/`Summary` as screen output. The engine reads neither
+`extracted/zrdr.zip` nor the anim zips (B14, C21), so the prompt's "does not use it" holds for
+them.
 
 **Verified.** complete `RunTests.ps1` on the merged plan tree at `1b5e0d65a` (battery 4), PASS: units 7,663 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 

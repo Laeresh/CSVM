@@ -58,6 +58,34 @@ public class SyntheticDataTests
         Assert.NotNull(paths.Data.Sounds?.ReadWavBytes(SyntheticSounds.Wavs[0].Name));
         Assert.False(Directory.Exists(Path.Combine(root, "extracted", "soundsh")));
         Assert.Null(paths.Data.LoadChapter("C1", "M01").Gamez);
+        Assert.True(paths.Data.Zrdr.HasFile("vehicle.json"));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "zrdr")));
+        var probe = paths.Data.LoadChapter(SyntheticMission.Chapter, SyntheticMission.Mission);
+        Assert.True(probe.ChapterZrdr.Exists);
+        Assert.Empty(probe.ChapterZrdr.Files);
+        Assert.True(probe.MissionZrdr.HasFile("weather.json"));
+        Assert.False(paths.Data.LoadChapter("C2", "M01").MissionZrdr.Exists);
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "C1")));
+    }
+
+    /// <summary>The run's reader scopes are the root's records, the empty C1 chapter, the two invented
+    /// missions and four chapters' <c>ia</c>. No other scope exists.</summary>
+    [Fact]
+    public void TheReaderScopesHoldTheRecordsTheSuitesRead()
+    {
+        Assert.Equal(
+            new[] { "vehicle.zrd", "engines.zrd", "player.zrd", "maneuvers.zrd", "weapons.zrd", "shakes.zrd", "ai.zrd",
+                "probe_world.zrd", "flame_ball.zrd", "pufftrails.zrd", "cm_sequence.zrd", "Briefing.zrd", "sounds.zrd", "voice.zrd" },
+            SyntheticZrdr.Root().Files.Select(f => f.Key));
+        Assert.All(SyntheticZrdr.Root().Files, f => Assert.NotEmpty(f.Root));
+        Assert.Equal(new[] { "objectives.zrd" }, SyntheticZrdr.Mission("C1", SyntheticMission.CampaignMission).Files.Select(f => f.Key));
+        foreach (string chapter in new[] { "C1B", "C3", "C4", "C5" })
+        {
+            Assert.True(SyntheticZrdr.Mission(chapter, "IA1").HasFile("ia.json"));
+        }
+
+        Assert.False(SyntheticZrdr.Mission("C1", "IA1").Exists);
+        Assert.False(SyntheticZrdr.Chapter("C2").Exists);
     }
 
     [Fact]
@@ -141,7 +169,7 @@ public class SyntheticDataTests
     [Fact]
     public void TheInventedMissionCarriesTwoBearingsACloudBandAndANetBlock()
     {
-        string zrdr = SessionPaths.MissionZrdr(Built(), SyntheticMission.Chapter, SyntheticMission.Mission);
+        var zrdr = SyntheticZrdr.Mission(SyntheticMission.Chapter, SyntheticMission.Mission);
 
         // A zone change shows only where the two zones author different bearings. A whiteout
         // shows only where the band's core sits above the ground.
@@ -160,7 +188,7 @@ public class SyntheticDataTests
     public void ARebuildReplacesWhatAnEarlierRunLeft()
     {
         string root = Built();
-        string stray = Path.Combine(root, "extracted", "C1", "probe_stray.png");
+        string stray = Path.Combine(root, "extracted", "probe_stray.png");
         File.WriteAllBytes(stray, Array.Empty<byte>());
 
         SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);

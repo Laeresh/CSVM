@@ -1,6 +1,7 @@
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -31,8 +32,7 @@ public class HeadLookTests
 
     private static HeadLookInput Idle => default;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     // The original's two mode keys, K and J, as the frame they are pressed on.
     private static HeadLookInput SnapKey =>

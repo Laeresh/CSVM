@@ -35,7 +35,7 @@ public class MissionCutscenesTests
         File.WriteAllText(Path.Combine(dir, MissionCutscenes.FileName),
             "[[\"ANIMATION_DEFINITIONS\",[\"ANIMATION_LIST\",[\"ANIMATION_DEFINITION_FILE\","
             + "[\"..\\\\data\\\\probe\\\\m01\\\\zrdr\\\\envmodels\\\\probe_ambient.zrd\"]]]]]");
-        Assert.Empty(MissionCutscenes.AnimNames(dir));
+        Assert.Empty(MissionCutscenes.AnimNames(TestZrdr.Folder(dir)));
     }
 
     [Fact]
@@ -68,9 +68,9 @@ public class MissionCutscenesTests
     [Fact]
     public void AMissionWithNoReaderAtAllIsEmptyRatherThanAThrow()
     {
-        Assert.Empty(MissionCutscenes.AnimNames(TestData.TempDir()));
+        Assert.Empty(MissionCutscenes.AnimNames(TestZrdr.Folder(TestData.TempDir())));
     }
 
     private static System.Collections.Generic.List<string> Load() =>
-        MissionCutscenes.AnimNames(TestData.Fixture("mission-cutscenes"));
+        MissionCutscenes.AnimNames(TestZrdr.Fixture("mission-cutscenes"));
 }

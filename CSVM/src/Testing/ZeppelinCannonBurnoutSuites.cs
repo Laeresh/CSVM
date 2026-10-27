@@ -46,15 +46,15 @@ internal static class ZeppelinCannonBurnoutSuites
         "the hull down and the primary completes off lkgasbag05/panelleft1")]
     internal static void ZeppelinCannonBurnout(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f && w.ImpactProximity is not > 0f)
             ?? weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f);
         ctx.Check(gun != null, $"a gun with HEALTH_DAMAGE ships");
         if (gun == null)
             return;
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         var mission = missions.Where(m =>
             m.ChapterFolder.Equals("C1", System.StringComparison.OrdinalIgnoreCase)
             && m.MissionFolder.Equals("M04", System.StringComparison.OrdinalIgnoreCase))
@@ -218,7 +218,7 @@ internal static class ZeppelinCannonBurnoutSuites
         "zeppelins' intact panels, and switches gasbag1's panels off, OBJECTIVE10's read")]
     internal static void DanteCannonBurnout(TestContext ctx)
     {
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"), $"C5/M04 zrdr");
+        ctx.RequireData(ctx.MissionZrdr("C5", "M04"), $"C5/M04 zrdr");
         var report = new StringBuilder();
         ctx.WithWorld("C5", collision: true, mission: "M04", world =>
         {

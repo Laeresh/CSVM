@@ -37,7 +37,7 @@ public class FogZoneStateTests
     {
         // C1/IA1: below the deck (state 1) it must wear ZONE1's 1000-1750 m fog, above it
         // (state 2) ZONE2's 1000-4000 m, a 2.3x below-deck fog error if the state is ignored.
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal("zone1", weather!.ZoneForState(1));
         Assert.Equal("zone2", weather.ZoneForState(2));
@@ -54,7 +54,7 @@ public class FogZoneStateTests
     {
         // C5 ships ZONE1 + ZONE3 (no ZONE2 anywhere in the chapter), so its states exercise both
         // the direct hit (3 → zone3) and the fallback (2 → zone1).
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C5", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal("zone1", weather!.ZoneForState(1));
         Assert.Equal("zone1", weather.ZoneForState(2));
@@ -75,7 +75,7 @@ public class FogZoneStateTests
     [InlineData("MP3")]
     public void EveryC5MissionAuthorsZone1AndZone3(string mission)
     {
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", mission));
+        var weather = WeatherState.Load(TestZrdr.Mission("C5", mission));
         Assert.NotNull(weather);
         Assert.Contains("zone1", weather!.ZoneNames);
         Assert.Contains("zone3", weather.ZoneNames);
@@ -90,7 +90,7 @@ public class FogZoneStateTests
     [ExtractedDataFact]
     public void StateThreeFlipAppliesZone3FogAndExitRestoresZone1()
     {
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C5", "IA1"));
         Assert.NotNull(weather);
         // C5's own default resolution (ResolveZone falling back off "zone2") already lands on
         // zone1, mirroring what WeatherRig.Build hands the trigger as its starting buildZone.
@@ -128,7 +128,7 @@ public class FogZoneStateTests
     [ExtractedDataFact]
     public void AFogZoneZeroChapterNeverAppliesZone3EvenIfStateThreeWereRequested()
     {
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(weather);
         Assert.DoesNotContain("zone3", weather!.ZoneNames);
         var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone1");
@@ -204,14 +204,14 @@ public class FogZoneStateTests
     {
         // C1/IA1 is one of the 18 of 24 deck-chapter missions where fog and world light agree,
         // so the below-deck difference is fog-only in practice for the mission every golden flies.
-        var ia1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var ia1 = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(ia1);
         Assert.Equal(
             ia1!.Zone(ia1.ZoneForState(1)).WorldLight,
             ia1.Zone(ia1.ZoneForState(2)).WorldLight,
             3);
 
-        var m02 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M02"));
+        var m02 = WeatherState.Load(TestZrdr.Mission("C1", "M02"));
         Assert.NotNull(m02);
         // ZONE1 ambient 0.20 / diffuse 1.5 vs ZONE2 0.25 / 1.2, a real per-state brightness the
         // static resolution could never render.
@@ -221,11 +221,11 @@ public class FogZoneStateTests
             3);
     }
 
-    // The zrdr fixture authors ZONE1 only (fixtures/zrdr/weather.json), which is precisely the
-    // shape the fallback exists for, a state-2 flip there has no ZONE2 to land on.
+    // The zrdr fixture authors ZONE1 only (fixtures/zrdr/weather.zrd.json), the shape the fallback
+    // exists for: a state-2 flip there has no ZONE2 to land on.
     private static WeatherState OneZoneFixture()
     {
-        var weather = WeatherState.Load(TestData.Fixture("zrdr"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("zrdr"));
         Assert.NotNull(weather);
         return weather!;
     }

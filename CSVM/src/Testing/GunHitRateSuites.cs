@@ -57,13 +57,13 @@ internal static class GunHitRateSuites
     internal static void GunHitRate(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? shooter = null;
@@ -86,7 +86,7 @@ internal static class GunHitRateSuites
                 AiPilot.HoldingCourse(tpos, tpos + Vector3.Forward), Team: AimAssist.PlayerTeam + 1));
             float targetSpeed = target.WorldVelocity.Length();
 
-            var stats = PlaneStats.Load(ctx.ZrdrPath, ShooterPlane);
+            var stats = PlaneStats.Load(ctx.Zrdr, ShooterPlane);
             var model = new PlaneBuilder(planesGamez, textures).Build(ShooterPlane);
             var stock = StockLoadouts.Load().For(stats.DefName);
             ctx.Check(stock != null, $"{ShooterPlane} has a stock loadout ({stats.DefName})");

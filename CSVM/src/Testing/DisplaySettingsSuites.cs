@@ -348,7 +348,7 @@ internal static class DisplaySettingsSuites
             $"this screen's list fits inside the {screen.X}x{screen.Y} the engine reports and falls back to it ({string.Join(" ", here.Words)})");
 
         MenuSuiteHost.RequireLayout(ctx);
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)

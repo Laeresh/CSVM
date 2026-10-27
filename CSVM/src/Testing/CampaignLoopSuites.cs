@@ -73,14 +73,14 @@ internal static class CampaignLoopSuites
         + "reads what the first one wrote")]
     internal static void CampaignLoop(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string missionFolder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, missionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, missionFolder);
         ctx.RequireData(missionZrdr, $"{chapter}/{missionFolder} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
@@ -269,13 +269,13 @@ internal static class CampaignLoopSuites
     // The mission itself: the built world, the intro cutscene, the objectives director, the flown
     // approach that completes the primary, a mission-data music cue, and the authored end.
     private static void FlyTheMission(
-        TestContext ctx, CampaignMission mission, string chapter, string missionFolder, string missionZrdr,
+        TestContext ctx, CampaignMission mission, string chapter, string missionFolder, ZrdrSet missionZrdr,
         CampaignProfileDef profile, CampaignProfileStore store, LoadoutChoice fit, StockLoadouts stock,
         StringBuilder report)
     {
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, profile, store);
-        var music = new MusicPlayer(SoundDefs.Load(ctx.ZrdrPath), SoundDefs.LoadGroups(ctx.ZrdrPath));
+        var music = new MusicPlayer(SoundDefs.Load(ctx.Zrdr), SoundDefs.LoadGroups(ctx.Zrdr));
         using var archive = new SoundArchive(ctx.Sounds);
         music.Loader = (def, looped) => archive.Find(def.WavName, looped, warn: false);
         ctx.Host.AddChild(music);
@@ -419,7 +419,7 @@ internal static class CampaignLoopSuites
         var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
-            var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
+            var stats = PlaneStats.Load(ctx.Zrdr, planeNode);
             var model = new PlaneBuilder(ctx.Planes, textures).Build(planeNode);
             var rig = new FlightController
             {
@@ -464,7 +464,7 @@ internal static class CampaignLoopSuites
             return;
         }
 
-        var bound = Loadout.Bind(fit.ApplyTo(stockDef), model, WeaponDefs.Load(ctx.ZrdrPath, null));
+        var bound = Loadout.Bind(fit.ApplyTo(stockDef), model, WeaponDefs.Load(ctx.Zrdr, null));
         string ammo = CampaignLoadout.AmmoNames[ChosenAmmo];
         bool carries = false;
         foreach (var gun in bound.Guns)

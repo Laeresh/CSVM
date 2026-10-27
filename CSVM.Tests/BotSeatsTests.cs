@@ -217,7 +217,7 @@ public sealed class BotSeatsTests
     [ExtractedDataFact]
     public void OnlyTheBlackHatWarhawksDefCarriesTorpedoes()
     {
-        string zrdr = Extraction.SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
         var defs = VehicleDefs.Load(zrdr);
         var patterns = MilitiaPaint.PatternByMilitia(zrdr, MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         var torpedoes = new List<string>();

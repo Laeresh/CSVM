@@ -379,7 +379,7 @@ internal static class SeatFields
     /// The militia/airframe pairs whose def's weapons <paramref name="rules"/> allow whole
     /// (<see cref="Session.Roster.BotSeats.ArmsAdmitted"/>), read once from the install. Null while
     /// the outlaw list is not in force, which leaves the draw's candidates the whole table.</summary>
-    internal static System.Func<byte, string, bool>? BotArmsUnder(Net.NetPlaneRules? rules, string zrdrPath,
+    internal static System.Func<byte, string, bool>? BotArmsUnder(Net.NetPlaneRules? rules, ZrdrSet zrdr,
         Messages messages, StockLoadouts stock)
     {
         if (rules is not { Outlawing: true } outlaws)
@@ -389,8 +389,8 @@ internal static class SeatFields
 
         try
         {
-            var militias = MilitiaFits.Load(zrdrPath, messages);
-            var weapons = WeaponDefs.Load(zrdrPath);
+            var militias = MilitiaFits.Load(zrdr, messages);
+            var weapons = WeaponDefs.Load(zrdr);
             var admitted = new HashSet<(byte, string)>();
             foreach (var (militia, plane) in Session.Roster.BotSeats.Pairs)
             {

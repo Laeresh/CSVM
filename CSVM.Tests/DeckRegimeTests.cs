@@ -139,7 +139,7 @@ public class DeckRegimeTests
     {
         // ⚠ Asserted against the authored band, not a hand-typed one: a mismatch is a finding
         // about the whiteout band, never a licence to move the flip.
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal(C1Bottom, weather!.CloudBottom, 3);
         Assert.Equal(C1Top, weather.CloudTop, 3);

@@ -7,6 +7,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.Tooling;
@@ -163,7 +164,7 @@ internal static class GraphicsSwitchSuites
     internal static void SpyglassSunLayers(TestContext ctx)
     {
         RequireData(ctx);
-        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
+        ZrdrSet crossZrdr = ctx.MissionZrdr("C2", "MP2");
         ctx.RequireData(crossZrdr, $"C2/MP2 mission zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         try
@@ -236,7 +237,7 @@ internal static class GraphicsSwitchSuites
     internal static void FlareFollowsSwitch(TestContext ctx)
     {
         RequireData(ctx);
-        ctx.RequireData(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"), $"C3 zrdr");
+        ctx.RequireData(ctx.ChapterZrdr("C3"), $"C3 zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         try
         {
@@ -686,7 +687,7 @@ internal static class GraphicsSwitchSuites
     internal static void OceanWake(TestContext ctx)
     {
         RequireData(ctx, OceanChapter);
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, OceanChapter, WakeMission), $"{OceanChapter}/{WakeMission} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(OceanChapter, WakeMission), $"{OceanChapter}/{WakeMission} zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = WaterQualitySetting.Word;
         var launchedClock = GameClock.Current;
@@ -1402,7 +1403,7 @@ internal static class GraphicsSwitchSuites
 
     // A zone the weather rig lights, crossed under Enhanced. C2/MP2's two zones disagree about the
     // bearing, so a copy that took the sun once at build would be left behind.
-    private static void ZoneCrossing(TestContext ctx, string zrdr)
+    private static void ZoneCrossing(TestContext ctx, ZrdrSet zrdr)
     {
         GraphicsMode.Set(true);
         var root = new Node3D { Name = "spyglass-sun-zone" };
@@ -1464,7 +1465,7 @@ internal static class GraphicsSwitchSuites
     {
         chapter ??= ctx.Chapter;
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
     }
@@ -1752,7 +1753,7 @@ internal static class GraphicsSwitchSuites
             RepoRoot: ctx.RepoRoot,
             DataRoot: ctx.DataRoot,
             PlanesGamezPath: ctx.PlanesGamezPath,
-            ZrdrPath: ctx.ZrdrPath,
+            ZrdrPath: string.Empty,
             SoundsPath: ctx.SoundsPath,
             InterpPath: ctx.InterpPath,
             MessagesPath: ctx.MessagesPath,

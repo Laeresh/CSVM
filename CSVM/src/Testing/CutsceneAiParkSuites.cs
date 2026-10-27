@@ -56,9 +56,9 @@ internal static class CutsceneAiParkSuites
     internal static void CutsceneParksAiWithNoAuthored913(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -105,9 +105,9 @@ internal static class CutsceneAiParkSuites
     internal static void MissionStartParksAiWithNoIntro(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         TextureSet texturesPath = ctx.ChapterTextures(IaChapter);
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, IaChapter, IaMission),
+        ctx.RequireData(ctx.MissionZrdr(IaChapter, IaMission),
             $"{IaChapter}/{IaMission} zrdr");
         ctx.RequireData(texturesPath, $"{IaChapter} textures");
 
@@ -170,7 +170,7 @@ internal static class CutsceneAiParkSuites
 
             // The gamez node's own pose sits under the generator's 300 m launch gate; the mission's
             // zeppelin record is where ZeppelinRuntime.Place puts it in a flown session.
-            foreach (var z in Zeppelins.Load(SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission)))
+            foreach (var z in Zeppelins.Load(ctx.MissionZrdr(Chapter, Mission)))
             {
                 if (z.Node.Equals(Generator, StringComparison.OrdinalIgnoreCase))
                 {
@@ -306,7 +306,7 @@ internal static class CutsceneAiParkSuites
     private static FlightController BuildAiRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool pool, string name = "cm14_gemini_fighter")
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

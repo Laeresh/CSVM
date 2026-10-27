@@ -45,7 +45,7 @@ public class SyntheticEffectsTests
     [Fact]
     public void TheReaderDestructiblesAndPuffersParse()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var destructibles = AnimDefs.LoadFileDefs(zrdr, "probe_world.json");
 
         Assert.Equal(2, destructibles.Count);

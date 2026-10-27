@@ -79,16 +79,16 @@ internal static class NetPositionalStartSuites
         + "the host's own aeroplane is untouched")]
     internal static void PositionalStart(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+        var mission = CampaignSequence.Load(ctx.Zrdr).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
@@ -127,10 +127,10 @@ internal static class NetPositionalStartSuites
     internal static void SwapRewire(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterTextures(SwapChapter), $"{SwapChapter} textures");
         ctx.RequireData(ctx.ChapterGamez(SwapChapter), $"{SwapChapter} gamez");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, SwapChapter, SwapStage), $"{SwapChapter}/{SwapStage} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(SwapChapter, SwapStage), $"{SwapChapter}/{SwapStage} zrdr");
         AirframeSwapCode? found = null;
         foreach (var code in AirframeSwapCodes.Table)
         {
@@ -385,7 +385,7 @@ internal static class NetPositionalStartSuites
     // its approach node hangs under and the definition root the code is raised from.
     private static Capture? CaptureRow(TestContext ctx, TestWorld world)
     {
-        var rows = LandingApproaches.Resolve(SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter),
+        var rows = LandingApproaches.Resolve(ctx.ChapterZrdr(world.Chapter),
             world.Gamez, name => world.Runtime.Handles(name));
         foreach (var row in rows)
         {
@@ -542,7 +542,7 @@ internal static class NetPositionalStartSuites
             var frame = World.Runtime.FindNodes(row.Node)[0].GlobalTransform;
             plane.Held = false;
             plane.AutoLand = row.Auto;
-            plane.Setup(new FlightModel(PlaneStats.Load(_ctx.ZrdrPath, Airframes[_local])), null,
+            plane.Setup(new FlightModel(PlaneStats.Load(_ctx.Zrdr, Airframes[_local])), null,
                 new CamParams(), frame * (row.Apex + ((row.BaseCentre - row.Apex) * AxisFraction)),
                 frame * row.Apex, ApproachThrottle, ApproachSpeedMps);
         }

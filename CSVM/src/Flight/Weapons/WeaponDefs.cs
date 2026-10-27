@@ -208,9 +208,9 @@ public sealed class WeaponDefs
     /// <summary>Loads and types every <c>BALLISTICS</c> entry. <paramref name="messages"/> resolves
     /// each <c>DESC</c> key to a display name; null leaves <see cref="WeaponDef.DisplayName"/> the
     /// raw key (visible, not blank).</summary>
-    public static WeaponDefs Load(string zrdrPath, Messages? messages = null)
+    public static WeaponDefs Load(ZrdrSet zrdr, Messages? messages = null)
     {
-        var outer = Zrdr.LoadFile(zrdrPath, "weapons.json");
+        var outer = zrdr.LoadFile("weapons.json");
         if (outer.Count == 0 || outer[0] is not List<object?> rootList)
             throw new InvalidOperationException("weapons.json: unexpected root shape");
         var root = ZrdrDict.FromAlternating(rootList);

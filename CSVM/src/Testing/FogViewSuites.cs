@@ -82,7 +82,7 @@ internal static class FogViewSuites
         + "pane's, and one pane alone draws the very bytes it draws beside the other")]
     internal static void FogPerView(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet zrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(zrdr, $"{Chapter}/{Mission} mission zrdr");
         var weatherState = WeatherState.Load(zrdr);
         ctx.Check(weatherState != null, $"{Chapter}/{Mission} carries a weather.json");
@@ -188,7 +188,7 @@ internal static class FogViewSuites
         + "own pane's, and each pane draws the bytes it draws as the only view")]
     internal static void SunPerView(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, SunChapter, SunMission);
+        ZrdrSet zrdr = ctx.MissionZrdr(SunChapter, SunMission);
         ctx.RequireData(zrdr, $"{SunChapter}/{SunMission} mission zrdr");
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         TextureSet texturesPath = ctx.ChapterTextures(SunChapter);

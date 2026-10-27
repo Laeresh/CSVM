@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -17,8 +18,7 @@ public class BounceRestitutionTests
 {
     private const float Sink = 30f;      // m/s of closing speed along the normal in every case here
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The restitution proper, isolated: a non-rotating contact on an arm along the normal
     /// rebounds at exactly <c>bounce_factor</c>. That is the decode's [0, 0.6] ceiling touched, and

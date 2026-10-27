@@ -183,9 +183,9 @@ internal static class NetRearmSuites
                   && hostSpec is { Versus: true, MissionType: DogfightMissionType.Deathmatch },
             $"both machines' menu launches fly {ctx.Chapter}'s MP1 as a Deathmatch whatever their command lines name ({hostSpec.Mission}, {guestSpec.Mission})");
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.DeathmatchMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, SessionSpec.DeathmatchMission);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.DeathmatchMission} zrdr");
         var block = SpawnPoints.LoadNetFreeForAll(missionZrdr);
@@ -217,9 +217,9 @@ internal static class NetRearmSuites
 
     private static SessionSpec ZvzSpec(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.ZvzMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, SessionSpec.ZvzMission);
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.ZvzMission} zrdr");
         return SessionSpec.Parse(new[]

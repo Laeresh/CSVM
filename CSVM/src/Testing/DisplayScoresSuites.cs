@@ -32,7 +32,7 @@ internal static class DisplayScoresSuites
         + "the release takes both back; a seat in no race shows nothing however long it holds")]
     internal static void StuntRaceDisplayScores(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         var chapterGamez = ctx.ChapterGamez("C1");
         ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
@@ -168,7 +168,7 @@ internal static class DisplayScoresSuites
         public static TwoSeats Build(TestContext ctx, HumanRosterBindings human)
         {
             ctx.RequireData(ctx.Data.Planes, $"planes gamez");
-            ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+            ctx.RequireData(ctx.Zrdr, $"zrdr archive");
             TextureSet texturesPath = ctx.ChapterTextures("C1");
             ctx.RequireData(texturesPath, $"C1 textures");
             var planesGamez = ctx.Planes;
@@ -192,7 +192,7 @@ internal static class DisplayScoresSuites
                 {
                     Projectiles = pool,
                     Gamez = planesGamez,
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                    ChapterZrdr = ctx.ChapterZrdr("C1"),
                 },
                 new HumanRosterBindings
                 {

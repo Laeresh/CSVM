@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Session.Roster;
@@ -17,7 +18,7 @@ public interface IFlightStarts
     /// <summary>Resolves one start per player, for players <c>0 … playerCount-1</c> in ascending
     /// order. ⚠ Ascending is a contract: the spawn-list index wraps from
     /// <paramref name="spawnBase"/> per player, and the log order depends on it.</summary>
-    IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns, string missionZrdrPath,
+    IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns, ZrdrSet missionZrdr,
         int spawnBase, int playerCount);
 }
 

@@ -37,9 +37,9 @@ internal static class WingmanFitSuites
         + "authors no block, binds the weapons it always did")]
     internal static void AWingmanFliesItsPickedFit(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane(FuryNode, BalmoralNode);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         WingmanDefCensus(ctx, defs);
 
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
@@ -59,18 +59,18 @@ internal static class WingmanFitSuites
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var stock = StockLoadouts.Load();
-            var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+            var weapons = WeaponDefs.Load(ctx.Zrdr, null);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = stock,
                 WeaponDefs = weapons,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             var roster = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs,
                 new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());

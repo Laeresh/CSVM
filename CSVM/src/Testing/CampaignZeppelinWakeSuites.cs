@@ -41,14 +41,14 @@ internal static class CampaignZeppelinWakeSuites
         + "OBJECTIVE39's own WAKEUP_ENEMIES puts it into the world through the real graph")]
     internal static void CampaignZeppelinWakeup(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(chapter);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
         ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
@@ -81,7 +81,7 @@ internal static class CampaignZeppelinWakeSuites
         int allies = 0, enemies = 0, unauthored = 0;
         foreach (var (chapter, folder) in new[] { ("C3", "M01"), ("C1", "MP3"), ("C5", "M03") })
         {
-            string path = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+            var path = ctx.MissionZrdr(chapter, folder);
             ctx.RequireData(path, $"{chapter}/{folder} zrdr");
             foreach (var def in Zeppelins.Load(path))
             {

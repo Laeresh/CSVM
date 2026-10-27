@@ -252,7 +252,6 @@ public sealed class ProbeRunner
             SyntheticData = SyntheticData.Marks(_paths.DataRoot),
             Chapter = spec.Chapter,
             Mission = spec.Mission,
-            ZrdrPath = _paths.ZrdrPath,
             MessagesPath = _paths.MessagesPath,
             PlanesGamezPath = _paths.PlanesGamezPath,
             InterpPath = _paths.InterpPath,
@@ -288,7 +287,7 @@ public sealed class ProbeRunner
     public bool DumpWeapons(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Weapons(_paths.ZrdrPath, _paths.Data.Messages, spec.DumpWeaponsFilter);
+        var r = Probes.Weapons(_paths.Data.Zrdr, _paths.Data.Messages, spec.DumpWeaponsFilter);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-weapons: {r.Error}");
@@ -310,8 +309,8 @@ public sealed class ProbeRunner
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         string plane = spec.DumpFlightPlane.Length > 0 ? spec.DumpFlightPlane : spec.PlaneName;
         var r = plane.Equals("all", StringComparison.OrdinalIgnoreCase)
-            ? Probes.FlightEnvelopeAll(_paths.ZrdrPath)
-            : Probes.FlightEnvelope(_paths.ZrdrPath, plane);
+            ? Probes.FlightEnvelopeAll(_paths.Data.Zrdr)
+            : Probes.FlightEnvelope(_paths.Data.Zrdr, plane);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-flight: {r.Error}");
@@ -332,7 +331,7 @@ public sealed class ProbeRunner
     public bool DumpLoadout(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Loadouts(_paths.ZrdrPath, _paths.Data.Messages, _paths.Data.Planes, _paths.Data.LoadChapter("C1", spec.Mission).Textures,
+        var r = Probes.Loadouts(_paths.Data.Zrdr, _paths.Data.Messages, _paths.Data.Planes, _paths.Data.LoadChapter("C1", spec.Mission).Textures,
             spec.DumpLoadoutFilter, spec.LoadoutOverride, forRig: spec.WeaponLab);
         if (r.Error != null)
         {
@@ -372,7 +371,7 @@ public sealed class ProbeRunner
     public bool DumpAi(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Ai(_paths.DataRoot, _paths.ZrdrPath, spec.DumpAiChapter);
+        var r = Probes.Ai(_paths.Data, spec.DumpAiChapter);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-ai: {r.Error}");

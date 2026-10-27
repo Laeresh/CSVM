@@ -63,14 +63,14 @@ internal static class CampaignSnapshotSuites
         + "frame landing after the mission-end sweep takes that sweep's keep or drop")]
     internal static void CampaignDangerZoneSnapshot(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        if (MissionAt(CampaignSequence.Load(ctx.ZrdrPath)) is not { } mission)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        if (MissionAt(CampaignSequence.Load(ctx.Zrdr)) is not { } mission)
         {
             throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
         string root = Path.Combine(ctx.ScratchDir, "CampaignSnapshot");
@@ -103,7 +103,7 @@ internal static class CampaignSnapshotSuites
 
     private static void Fly(TestContext ctx, TestWorld world, ObjectiveScript script,
         CampaignMission mission, CampaignProfileDef profile, CampaignProfileStore store,
-        string missionZrdr, StringBuilder report)
+        ZrdrSet missionZrdr, StringBuilder report)
     {
         var zones = CampaignDangerZones.Load(script, world.Gamez, missionZrdr);
         if (zones == null || !zones.TryZone(Zone, out int objective, out bool snapshot))
@@ -172,7 +172,7 @@ internal static class CampaignSnapshotSuites
     // The real gate geometry driving the real latch: a fresh tracker so one zone's probe jump
     // cannot cross another's plane, and the director's own notify as the sink.
     private static void Cross(TestContext ctx, ObjectiveScript script, TestWorld world,
-        string missionZrdr, CampaignDirector director)
+        ZrdrSet missionZrdr, CampaignDirector director)
     {
         var solo = CampaignDangerZones.Load(script, world.Gamez, missionZrdr)!;
         ctx.Check(solo.TryGateProbe(Zone, out var gc, out var gn, out var rc, out var rn),
@@ -215,7 +215,7 @@ internal static class CampaignSnapshotSuites
     private static void Draws(TestContext ctx, CampaignProfileStore store, CampaignProfileDef profile,
         CampaignMission mission, (int Spread, ScrapbookScrap Scrap) row, string kept, StringBuilder report)
     {
-        var flow = new CampaignFlow(store, UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty, ctx.DataRoot);
+        var flow = new CampaignFlow(store, UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty, ctx.DataRoot, data: ctx.Data);
         flow.SelectProfile(profile);
         ctx.Check(string.Equals(flow.CapturePath(row.Scrap), kept, StringComparison.OrdinalIgnoreCase),
             $"the scrapbook row resolves to the file the latch wrote");
@@ -286,8 +286,8 @@ internal static class CampaignSnapshotSuites
     private static void StuntRunWritesNoSnap(TestContext ctx, string root, string profileDir, StringBuilder report)
     {
         var chapterGamez = ctx.ChapterGamez("C4");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
-        if (chapterGamez == null || !Directory.Exists(missionZrdr))
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C4", "IA1");
+        if (chapterGamez == null || !missionZrdr.Exists)
         {
             return;
         }
