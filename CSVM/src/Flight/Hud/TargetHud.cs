@@ -104,14 +104,16 @@ public sealed partial class TargetHud : Control
     private const int DiscSegments = 48;
 
     // The lead marker's own pixels, remake-only like the marker itself: the circle, its rim, and the
-    // dotted line's dash and width.
+    // dotted line's dash, gap and width.
     private const float RefLeadRadius = 9f;
     private const float RefLeadRim = 2f;
-    private const float RefLeadDash = 5f;
+    private const float RefLeadDash = 3f;
+    private const float RefLeadGap = 9f;
     private const float RefLeadLine = 1.5f;
     private const float LeadFillAlpha = 0.25f;
     private const float LeadRimAlpha = 0.85f;
-    private const float LeadLineAlpha = 0.5f;
+    private const float LeadLineAlpha = 0.3f;
+    private const float LeadLineEdgeAlpha = 0.15f;
 
     // The selected target's marker: the original's own absolute pixel constants (0x00607a0c /
     // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor). They are read at the 1440p
@@ -514,20 +516,41 @@ public sealed partial class TargetHud : Control
         QueueRedraw();
     }
 
-    /// <summary>The tracked hostile's lead point at this frame's drawn poses, or null where the marker
-    /// is off or has nothing to mark. It is solved on the simulation poses and moved by the target's
-    /// draw offset, so it holds still against the drawn target. Read by the suite.</summary>
+    /// <summary>The marked target's lead point at this frame's drawn poses, or null where the marker
+    /// is off or has nothing to mark. The target is the one <see cref="WorldMarks"/> marks: the
+    /// selection, and the nearest hostile only with nothing selected, since that one changes
+    /// whenever another plane comes closer. It is solved on the simulation poses and moved by the
+    /// target's draw offset, so it holds still against the drawn target. Read by the suite.</summary>
     public (Vector3 Lead, Vector3 Target)? LeadMark()
     {
-        if (Own is not { LeadMarker: true } own || !GodotObject.IsInstanceValid(_hostile)
-            || _hostile is not { InPlay: true } hostile || !hostile.IsInsideTree()
-            || own.LeadPointFor(hostile.WorldPosition, hostile.WorldVelocity) is not { } lead)
+        if (Own is not { LeadMarker: true } own)
         {
             return null;
         }
 
-        var at = TargetPool.TryRenderPosition(hostile, out var render) ? render : hostile.GlobalPosition;
-        return (lead + (at - hostile.WorldPosition), at);
+        object source;
+        Vector3 pos, vel;
+        if (Selected is { Source: { } selected } target)
+        {
+            (source, pos, vel) = (selected, target.Position, target.Velocity);
+        }
+        else if (GodotObject.IsInstanceValid(_hostile) && _hostile is { InPlay: true } hostile
+            && hostile.IsInsideTree())
+        {
+            (source, pos, vel) = (hostile, hostile.WorldPosition, hostile.WorldVelocity);
+        }
+        else
+        {
+            return null;
+        }
+
+        if (own.LeadPointFor(pos, vel) is not { } lead)
+        {
+            return null;
+        }
+
+        var at = TargetPool.TryRenderPosition(source, out var render) ? render : pos;
+        return (lead + (at - pos), at);
     }
 
     /// <summary>Re-answers the bracket gate for this frame's selection: the selected gun's reach
@@ -977,11 +1000,21 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        var from = center + (toTarget.Normalized() * (radius + rim));
+        // Short dots on wide gaps, which DrawDashedLine cannot draw: its gap is always its dash.
+        var dir = toTarget.Normalized();
+        var from = center + (dir * (radius + rim));
+        var to = center + toTarget;
         float line = Mathf.Max(1f, RefLeadLine * s);
         float dash = Mathf.Max(1f, RefLeadDash * s);
-        DrawDashedLine(from, center + toTarget, new Color(LeadEdge, LeadLineAlpha), line + (2f * rim), dash, antialiased: true);
-        DrawDashedLine(from, center + toTarget, new Color(color, LeadLineAlpha), line, dash, antialiased: true);
+        float step = dash + Mathf.Max(1f, RefLeadGap * s);
+        float length = from.DistanceTo(to);
+        for (float d = 0f; d < length; d += step)
+        {
+            var a = from + (dir * d);
+            var b = from + (dir * Mathf.Min(d + dash, length));
+            DrawLine(a, b, new Color(LeadEdge, LeadLineEdgeAlpha), line + (2f * rim), antialiased: true);
+            DrawLine(a, b, new Color(color, LeadLineAlpha), line, antialiased: true);
+        }
     }
 
     // The picture itself: the viewport's texture masked to a circle of that radius at that centre,

@@ -357,7 +357,8 @@ new goes on the wire: the fired direction already does.
 ### The lead marker
 
 `--lead-marker`, the **Lead Marker** box (`leadMarker`). `TargetHud` draws a circle on the intercept
-of the plane its hostile tracker follows, with a dotted line from the circle to that plane. The point
+of the selected target, or of the nearest hostile while nothing is selected, with a dotted line from
+the circle to that target. The point
 is `AimAssist.TryIntercept` on the selected gun group's `VELOCITY` from its muzzle midpoint, and the
 marker stands on the world intercept, the target's own position `t` seconds on. A round's world path
 carries the plane's velocity, which is the pipper's ray above, so the pipper laid on the marker fires
