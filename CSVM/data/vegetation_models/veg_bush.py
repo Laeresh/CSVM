@@ -1,5 +1,5 @@
-"""The bush builder bush1.py and bush2.py share: each holds one card species' numbers (a SPEC dict)
-and calls main(SPEC).
+"""The bush builder bush1.py, bush2.py and C2's brush2.py and brush4.py share: each holds one card
+species' numbers (a SPEC dict) and calls main(SPEC).
 
 A bush is a few stems fanning up from the base, an optional dark leaf core (a dense bush, so it
 does not read see-through), and leaf clusters scattered through the card's silhouette (PROFILE:

@@ -807,12 +807,14 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   ships with none of the installed versions). Species that share a builder keep it beside
   `veg_blender.py`, and each species' generator holds one card species' numbers (silhouette,
   shape and colours, the cards per chapter) and calls it: `veg_palm.py` builds `palmtree1`,
-  `palmtree2` and `palmtree3`; `veg_fir.py` builds `firtree1`, `firtree2` and `dougfirtree1`
-  (a numbers key it leaves out takes `firtree1`'s value); `veg_bush.py` builds `bush1` and
-  `bush2`. A module named `veg_*.py` is a helper, not a species, and is never passed to
-  `-Species`. `canopytree.py` builds C3's crown model, which stands over the painted jungle
-  canopy where no card exists: a crown with no trunk, its pivot at its lowest point, rendered
-  beside a 12.8 m swatch of `forest1` (one repeat of the painted canopy) in place of a card.
+  `palmtree2` and `palmtree3`; `veg_fir.py` builds `firtree1`, `firtree2`, `dougfirtree1` and
+  `spruce` (a numbers key it leaves out takes `firtree1`'s value; `colours` may be a dict per
+  chapter); `veg_bush.py` builds `bush1`, `bush2`, `brush2` and `brush4`; `veg_rosette.py`
+  builds `brush1`; `veg_tussock.py` builds `brush3`. A module named `veg_*.py` is a helper, not
+  a species, and is never passed to `-Species`. `canopytree.py` builds C3's crown model, which
+  stands over the painted jungle canopy where no card exists: a crown with no trunk, its pivot at
+  its lowest point, rendered beside a 12.8 m swatch of `forest1` (one repeat of the painted
+  canopy) in place of a card.
 - The output is `CSVM/data/vegetation_models/<chapter>/<species>.glb.bin`, committed beside its
   generator: GLB bytes under the `.bin` extension, so Godot imports nothing, no `.import` file
   exists, and the export's `data/*.bin` filter packs it. `Mech3/VegetationModels.cs` loads it at run
@@ -823,14 +825,16 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   `CARDS`; where the chapters' cards are one species at one size (the palms on C2 and C3,
   `dougfirtree1`, `bush1` and `bush2` on C1 and C1B), the files are identical. Where a chapter's
   card is the same picture at another width and height (C4's firs), its entry builds the model
-  to that card, so the silhouette follows the card rather than a uniformly scaled model.
+  to that card, so the silhouette follows the card rather than a uniformly scaled model. Where a
+  chapter's card is the same picture in other colours (`spruce` on C2 and C4), its entry takes
+  its own colours and writes its own bytes.
 - Conventions: metres, the pivot at the trunk base on the ground, Y up in the GLB (Blender's Z up,
   converted by the exporter), the height of the card it replaces, one mesh with one alpha-masked,
   double-sided material on one texture atlas, and normals bent out from the trunk axis so the
   crown shades as a volume. The chapter folder exists because one model name carries different
   cards per chapter (`firtree1` is 10 x 18 m on C1 and 10 x 13 m on C4).
 - **The clump tiles** (`veg_blender.clump_render`), for a species that draws as forest mass (the
-  firs; the palms and bushes do not, and write none), sit beside the model: `<species>.clump.png.bin`,
+  firs and `spruce`; the palms, bushes and brushes do not, and write none), sit beside the model: `<species>.clump.png.bin`,
   `<species>.clump.side.png.bin` and `<species>.clump.json`, the far forest's tiles for that card
   ([formats/model-packs.md](formats/model-packs.md), "Clump tiles"). Each tile is a group of the
   generator's `clump_trees` count of the model's trees (2 to 4), laid out as `CanopyClumps` composes

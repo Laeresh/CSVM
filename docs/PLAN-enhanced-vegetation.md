@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
 32. ☑ Near-radius 3D draw with a dither handover to the card
-33. ☐ Look-alike models for every listed card species
+33. ☑ Look-alike models for every listed card species
 34. ☐ Ground cover prototype: new-art grass and crop cards
 35. ☐ Ground cover prototype: procedural shells; pick at the controls
 36. ☐ Deck and Linux: measure Rich and set their default
@@ -1608,8 +1608,10 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   in its generator (D33, "Colour in game"). Grades: C1 `firtree1` (0.342, 0.335, 0.337),
   `firtree2` (0.327, 0.329, 0.361), `dougfirtree1` (0.301, 0.309, 0.308), `bush1` (0.739, 0.778,
   0.853), `bush2` (0.518, 0.59, 0.6); C4 `firtree1` (0.299, 0.294, 0.295), `firtree2` (0.302, 0.303,
-  0.334), `dougfirtree1` (0.293, 0.3, 0.3); C2 `palmtree1` (1.062, 0.882, 1.062), `palmtree2` (0.6,
-  0.523, 0.6), `palmtree3` (0.665, 0.744, 0.812); C3 `palmtree1` (0.651, 0.532, 0.651), `palmtree2`
+  0.334), `dougfirtree1` (0.293, 0.3, 0.3), `spruce` (0.383, 0.385, 0.373); C2 `palmtree1` (1.062,
+  0.882, 1.062), `palmtree2` (0.6, 0.523, 0.6), `palmtree3` (0.665, 0.744, 0.812), `spruce` (0.758,
+  0.767, 0.713), `brush1` (1.171, 1.014, 1.117), `brush2` (0.641, 0.62, 0.661), `brush3` (0.621,
+  0.621, 0.615), `brush4` (0.667, 0.678, 0.734); C3 `palmtree1` (0.651, 0.532, 0.651), `palmtree2`
   (0.603, 0.527, 0.603), `palmtree3` (0.71, 0.789, 0.868).
 - *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
   ground where the cards cast none, and casting re-renders the models into each Ultra cascade.
@@ -1738,7 +1740,7 @@ none; D37 re-pins.
 - Never give the model shader an instance uniform: every model cell would take a block of Godot's
   global buffer, and the cell count grows with each species.
 
-## D33 ☐ Look-alike models for every listed card species
+## D33 ☑ Look-alike models for every listed card species
 
 **Goal.** A Blender model per listed card species: C1's firs and bushes, C2's spruce, palms and
 brushes, C3's palms, C4's firs.
@@ -1793,8 +1795,8 @@ C4. Two more shared builders: `veg_fir.py`, `firtree1`'s builder with its number
   10.0 × 17.8, `firtree2` 15.1 × 13.2 against 10.7 × 20.9, `dougfirtree1` 10.0 × 17.2 against
   10.0 × 22.5. Each takes a C4 `CARDS` entry, which builds the crown to that card's width and
   height from the same silhouette fractions, so the model's outline is the card's. A uniformly
-  scaled C1 model would stand narrower than the card (`firtree1` 7.4 m against 10 m). C4's
-  `spruce` and C2's brushes wait for their own pass.
+  scaled C1 model would stand narrower than the card (`firtree1` 7.4 m against 10 m). The spruce
+  and C2's brushes are below.
 - *`firtree2`.* A dense olive cone on a dark trunk bare to 0.11 of the height, its widest skirt to
   0.36, then a straight taper to a rounded top. Its 190 clumps droop at 0.6 of `firtree1`'s, so the
   skirt hangs near the card's level edge, and are lit nearly evenly across, so the crown reads as
@@ -1873,6 +1875,61 @@ card to match.
 32 m cell; its top 6 m over the painted canopy; and the lighter crown, about 150 triangles with
 five-sided domes, for the cost, over the same band. `.scratch/c3canopy/montage-final.png`.
 
+*The spruce and C2's brushes (as built).* `spruce` on C2 and C4, and C2's `brush1` to `brush4`.
+C2 lists only vegetation kinds (the palms, `spruce` and the brushes; no suburb, building or car),
+so nothing solid takes a model. A C2 Rich build logs 7,009 model nodes over its 21 modelled kinds,
+`spruce` 816, `brush2` 485 and the other brushes about 1,200 each in their main group; C4 logs
+1,940 for `spruce` in three groups and 259 for its added treeline stamps.
+- *`spruce`.* `veg_fir.py` with whorls: a narrow cone of nine drooping branch tiers swept to the
+  ground at 0.05 of the height, widest at 0.3, on a short trunk, 110 clumps lit across their tops
+  and dark beneath with yellow-green tips, and a thin core so the shade between tiers shows as on
+  the card. C2's and C4's cards are one picture at one size (5.57 × 9.00 m), but C4's texels are
+  about half as bright and a few degrees bluer, so `colours` takes an entry per chapter and the
+  two files differ in their texture alone.
+- *`spruce`'s clump tiles.* Both chapters write them, (3, 2, 4) trees, though neither builds
+  clumps by default (`DefaultOn` names C1 and C3). Under `--canopy-clumps=on` a C4 build gives
+  `spruce` three of the six slots (it carries 49,428 of the census' 88,630 stamps), beside one
+  each for `firtree1`, `firtree2` and `dougfirtree1`, so no slot is composed; a C2 build gives it
+  one slot and composes the other five from the palm and brush cards. Each `clump_grade` puts
+  its tile's mean on its card's solid mean (C2 53.5, 65.5, 29.0; C4 28.2, 34.8, 17.3).
+- *`brush1`.* An agave, built by `veg_rosette.py`: 24 stiff, broad, pointed leaves fanning up and
+  out from a small base, each a strip folded along its middle on a quadratic curve to a tip on the
+  card's silhouette, its texture darker down the fold and pale at the margins.
+- *`brush2` and `brush4`.* `veg_bush.py` shrubs with no core and leaves sparse enough to leave
+  holes: in game the cards show the sand through their leafage, and a dense ball read darker and
+  more solid than the card. `brush2` is a round shrub on three short stems; `brush4` a wide dome to
+  the ground.
+- *`brush3`.* A grass tussock, built by `veg_tussock.py`. Its texture is a fan of blades: each
+  rises nearly straight from the base on its tip's side to a tip on the card's silhouette, past it
+  by up to 15 % (`over`) or inside it, so the blade ends trace the wide mound loosely, spikes stand
+  above the body as on the card, and the outer blades reach the ground. Three upright quads crossed
+  through the centre carry the dense fan (260 blades) at the card's width and height and give the
+  outline from every side; 16 smaller tufts round them, each two crossed quads, give it depth, the
+  outer ones on a sparse fan (110 blades) so the edge reads loose; a small dark core sits at the
+  foot. The spikes past the outline make the model 6.05 m wide against the card's 5.67. The atlas is 512 × 512, as
+  a blade a few centimetres wide needs. Two earlier builds read as a different plant: strips of
+  blades arching from a base stood as a narrow column, and `veg_bush.py`'s leaf clusters drawn as
+  thin blades read as a dark leafy mound.
+- *Budget.* C2 stamps about 13,000 brushes against 6,200 palms (`analysis/bl-305-clutter-uv`'s
+  census: `brush2` 6,909, `brush3` 2,588, `brush1` 2,136, `brush4` 1,699), so every brush stays
+  under 350 triangles; `brush3` takes 100.
+
+| Model | Chapters | Card (w × h, m) | Model size (w × d × h, m) | Triangles | GLB bytes | Clump tile |
+|---|---|---|---|---|---|---|
+| `spruce` | C2 | 5.57 × 9.00 | 5.21 × 5.03 × 8.82 | 960 | 108,112 | yes |
+| `spruce` | C4 | 5.57 × 9.00 | 5.21 × 5.03 × 8.82 | 960 | 106,396 | yes |
+| `brush1` | C2 | 2.37 × 2.10 | 2.26 × 2.16 × 2.01 | 288 | 51,748 | no |
+| `brush2` | C2 | 2.36 × 2.08 | 2.20 × 2.27 × 2.03 | 204 | 74,232 | no |
+| `brush3` | C2 | 5.67 × 5.00 | 6.05 × 6.06 × 5.00 | 100 | 181,736 | no |
+| `brush4` | C2 | 5.67 × 5.00 | 4.93 × 4.92 × 4.97 | 332 | 79,144 | no |
+
+*Ruling (yours, from the in-game montages).* `brush1`, `brush2`, `brush4` and the spruce on C2 and
+C4 ship as built, with the spruce's clump tiles on both chapters. `brush3` took another pass toward
+a grass tussock with visible blades, since the leaf-cluster build read as a dark leafy mound, a
+different plant (`.scratch/d33/c2c4-brush3.png`). On that tussock: a raggeder edge, blade tips
+running past the outline and the outer tufts thinned, so the edge reads loose like the card rather
+than a smooth dome; the tussock above is that pass (`.scratch/d33/c2c4-brush3b.png`).
+
 *Ruling (yours, from the in-game recolour montages).* The firs keep the cards' blue-green; the palms
 take the greener, darker option B over the card texels' mean hue; `palmtree1`'s lit fronds are pale
 green rather than yellow; the bushes stay as they were.
@@ -1908,6 +1965,19 @@ and needle colours are therefore set against the card's texels, not the render.
   81 and 0.53 to 0.74.
 - *The bushes* keep their colours: in game `bush1` reads hue 91 against its card's 86 at the same
   saturation, and `bush2` the card's blue-green.
+- *The spruce and C2's brushes* take the rule from the start: each palette level is the card's
+  crown texels at that level, scaled in linear by one factor per model (1.5 for the brushes, 1 for
+  C2's `spruce`, 2 for C4's darker card), which the brightness grade takes back. The grades land
+  at 0.38 (C4 `spruce`) to 1.17 (`brush1`). In game, over the foliage pixels (green over red) of
+  the plants inside 150 m, card against model: C2 `spruce` hue 73 to 78 and saturation 0.36 to
+  0.46 against 71 to 81 and 0.36 to 0.51; C4 `spruce`, every one in the frame together, hue 79 and
+  0.43 against 80 and 0.42; `brush1` 94 and 0.31 against 98 and 0.28; `brush3` 90 and 0.37 against
+  92 and 0.40; `brush4` 71 and 0.55 against 67 and 0.50. `brush2`'s card reads red-brown (green
+  under red), so over all its changed pixels: hue 34 to 40 and saturation 0.34 to 0.39 against 32
+  to 40 and 0.38 to 0.41. The spruce, `brush3` and `brush4` cover more of their outline than their
+  cards, whose holes show the ground (1.1 to 2.7 times the foliage pixels), and the brushes' cards
+  draw the sand through their leafage as pale flecks the models show less of. `brush1` covers 0.6
+  of its card's pixels: the card shows every leaf flat in its plane, the model many edge on.
 
 **Ruling (yours, from the renders).** The palms: `palmtree1` takes a darker crown body with
 stronger yellow highlights, closer to the card's punch (the lit-frond strip above). `palmtree2` stays
@@ -1939,6 +2009,21 @@ For C3's `canopytree`: `.\MakeVegetationModel.ps1 -Species canopytree` exits 0 h
 reads one mesh with one primitive, `alphaMode: MASK`, `doubleSided: true`, POSITION y from 0 to
 6.55; a rerun writes the same bytes. Look: `.scratch/vegetation/C3_canopytree_{side,above,atlas}.png`
 (beside a forest1 swatch) and the in-game montages in `.scratch/c3canopy/` (D32).
+For the spruce and C2's brushes: the same per model and chapter of their table; a rerun of all six
+writes every model and tile byte for byte the same; every committed model and tile of `firtree1`,
+`firtree2`, `dougfirtree1`, `bush1` and `bush2`, rebuilt after the change to `veg_fir.py` (per
+chapter `colours`), writes the same bytes, and every other C2 and C4 file is unchanged. A C2 and a C4 Rich build log each new model's grade and its cells
+(`vegetation models:`), and a C2 or C4 build with `--canopy-clumps=on` logs `spruce` in its slots
+from its shipped tile. Look: `.scratch/d33/c2c4-sheet.png` (each new model and chapter beside its
+card, side and above), the clump strips `.scratch/vegetation/C2_spruce_clump.png` and
+`C4_spruce_clump.png`, and `.scratch/d33/c2c4-ingame-<view>.png`, cards only
+(`--vegetation-models=off`) against models (`near`) at `--graphics=enhanced
+--vegetation-quality=rich --det`: C2's desert scrub (`--pos=-100,20,-3100 --lookat=-200,8,-3200`),
+A7 view, desert palms and hills among spruce (`--pos=-560,70,-5560 --lookat=-680,45,-5680`), and
+C4 among firs and spruce; those show the leaf-cluster `brush3`. `.scratch/d33/c2c4-brush3.png`
+shows the scrub view with cards only, that build and the first tussock, and
+`.scratch/d33/c2c4-brush3b.png` cards only, the first tussock and the ragged one. Engine: `vegetation-models` and
+`canopy-clumps`, which prove the mechanism on C1 and need nothing for C2 or C4.
 
 **⚠ Traps.** Match the card's silhouette and colour, or the handover in D32 shows.
 - The first node named after a card can be a placed copy without a model (C3's `palmtree2`);

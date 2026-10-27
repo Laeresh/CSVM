@@ -264,6 +264,9 @@ def main(spec):
     w, h = spec["cards"][args.chapter]
     name = os.path.splitext(spec["model"])[0]
     spec = _merged(dict(spec, name=name))
+    # Colours per chapter where one card name carries another picture's colours (C2's and C4's spruce).
+    if isinstance(spec["colours"], dict):
+        spec["colours"] = spec["colours"][args.chapter]
     vb.reset_scene()
     rng = np.random.default_rng(spec["seed"])
     atlas = vb.make_image(name + "_atlas", draw_texture(spec, rng))
