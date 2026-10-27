@@ -1806,7 +1806,10 @@ their expectation from the source.
 from `tmp/CRIMSON.cue`, PASS: units 6,833 passed, 0 failed, 330 skipped (the tests that compare
 with `extracted/` or need the install); engine 616 passed, 3 skipped (the two webrtc suites and
 `modding-folder`, which builds its folder from `extracted/`), engine errors clean; 38 goldens
-hash-identical.
+hash-identical. The 8-chapter `--freecam --chapter=<X> --screenshot` regression, main `601a2280b`
+against the plan tree at `80b891eea` on the install: every chapter builds the same gamez node,
+mesh instance and clamped-surface counts, logs the same warnings and one identical shutdown line
+(Godot's `finalize` render-thread notice), and its screenshot is byte-identical.
 
 **Original approach (kept for reference).**
 
