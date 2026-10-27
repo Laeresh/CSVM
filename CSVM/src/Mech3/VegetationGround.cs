@@ -8,6 +8,12 @@ namespace CSVM.Mech3;
 /// height there.</summary>
 public readonly record struct GroundLayer(string Texture, bool NoClutter, float Y);
 
+/// <summary>One world triangle as <see cref="VegetationGround.PaintedSurface"/> gives it.</summary>
+public readonly record struct SurfaceTriangle(string Texture, bool Lit, Corner A, Corner B, Corner C);
+
+/// <summary>One corner of a <see cref="SurfaceTriangle"/>, in world space.</summary>
+public readonly record struct Corner(Vector3 At, Vector2 Uv, Color Color, Vector3 Normal);
+
 /// <summary>
 /// The ground textures under a world point, what the vegetation lab's texture pick reads. It walks the
 /// world node's tree as the clutter does, skipping the same nodes and every LOD but the nearest.
@@ -74,6 +80,38 @@ public static class VegetationGround
             }
         });
         return corners.ToArray();
+    }
+
+    /// <summary>As <see cref="Painted"/>, each triangle with what the world draws it with: its texture and lit flag.
+    /// Each corner carries its UV, baked vertex colour (white for none) and world normal.</summary>
+    public static List<SurfaceTriangle> PaintedSurface(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    {
+        var found = new List<SurfaceTriangle>();
+        WalkWorld(gamez, worldName, (mesh, xf) =>
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
+                    || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex || !picked(tex) || poly.UvCoords is not { } uvs)
+                    continue;
+                var ids = poly.VertexIndices;
+                for (int i = 0; i + 2 < ids.Count; i++)
+                {
+                    var slots = poly.TriangleStrip ? new[] { i, i + 1, i + 2 } : new[] { 0, i + 1, i + 2 };
+                    var corners = new Corner[3];
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int s = slots[k];
+                        var n = poly.NormalIndices is { } ni && s < ni.Count && ni[s] >= 0 && ni[s] < mesh.Normals.Count
+                            ? (xf.Basis * mesh.Normals[ni[s]]).Normalized() : Vector3.Up;
+                        corners[k] = new Corner(xf * mesh.Vertices[ids[s]], s < uvs.Count ? uvs[s] : Vector2.Zero,
+                            poly.VertexColors is { } vc && s < vc.Count ? vc[s] : Colors.White, n);
+                    }
+                    found.Add(new SurfaceTriangle(tex, mesh.Lighting, corners[0], corners[1], corners[2]));
+                }
+            }
+        });
+        return found;
     }
 
     /// <summary>The nearest point ahead of <paramref name="from"/> along <paramref name="dir"/> on any of

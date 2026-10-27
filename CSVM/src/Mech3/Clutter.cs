@@ -223,6 +223,9 @@ public sealed class ClutterBuilder
     /// <summary>The brush mask the Rich variant was last baked under, null for none.</summary>
     public VegetationMask? Mask => _mask;
 
+    /// <summary>The world archive the clutter was stamped from.</summary>
+    public GameZ Gamez => _gamez;
+
     /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
     public int InstanceCount { get; private set; }
 

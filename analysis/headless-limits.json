@@ -12,6 +12,7 @@
     "display-resolution": "reads the screen size; the headless display server reports 0x0",
     "display-vsync": "applies V-Sync to a real window's swap chain; headless has none",
     "fog-per-view": "reads each splitscreen pane's rendered fog colour back from its viewport; headless renders none",
+    "ground-cover-shells": "reads each shell piece back out of the built mesh, which the headless dummy renderer does not store",
     "graphics-live-switch": "reads the drawn clutter buffers and every texture's image back after each switch, which the headless renderer keeps neither of",
     "graphics-retext-compiles": "its able-to-fail control reads a drawn pixel back, and headless draws none",
     "menu-original-tracer": "reads the OS pointer's visibility and the monitor list from the display server, which headless does not provide",

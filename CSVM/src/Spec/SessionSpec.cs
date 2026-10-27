@@ -460,6 +460,10 @@ public sealed record SessionSpec
     /// either way. See <c>docs/cli.md</c>.</summary>
     public bool? CanopyClumps { get; private set; }
 
+    /// <summary><c>--ground-cover-shells</c>: D35's procedural ground cover prototype
+    /// (<see cref="Mech3.GroundCoverShells"/>), Rich only. See <c>docs/cli.md</c>.</summary>
+    public bool GroundCoverShells { get; private set; }
+
     /// <summary>Resolved. The enhanced passes this run leaves out, one bit per
     /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
     /// See <c>docs/cli.md</c>.</summary>
@@ -1728,6 +1732,7 @@ public sealed record SessionSpec
             else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg is "--canopy-clumps=on" or "--canopy-clumps=off") { s.CanopyClumps = arg.EndsWith("on", StringComparison.Ordinal); }
+            else if (arg == "--ground-cover-shells") { s.GroundCoverShells = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg == "--screen-flare") { s.ScreenFlare = true; }

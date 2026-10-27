@@ -2059,13 +2059,85 @@ you pick one.
 
 **Evidence (confidence: lead-only).** Decision 6.
 
-**Approach.** <TODO>
+**Approach (as prototyped).** `Mech3/GroundCoverShells.cs` behind `--ground-cover-shells`, C1 only, built
+while Rich is on and never otherwise, so without the flag nothing changes. Mech3.md has the rules.
+- *Why shells, not generated blades.* From 20 to 40 m a pixel at 5120x1440 is 2 to 5 cm on the ground,
+  so single blades are a pixel or less across most of the band and would cost hundreds of thousands of
+  instances inside 120 m. Shells cost a fixed geometry (the ground's own pieces, eight times) and a
+  fill that the band bounds; they carry crop rows and grass tufts, the structure that reads at that
+  range, and they follow the ground exactly because they are the ground lifted.
+- *Where.* `crop04` and `crop05` grow crop rows, `terpat03`, `terpat03b` and `grass1` grass tufts. The
+  picked triangles (`VegetationGround.PaintedSurface`) are cut on C1's brush mask's 12 m texel grid and
+  every piece on a texel at 0 is dropped, so the 150 m beside and 600 m beyond each landing strip grow
+  nothing (C22's mask). 194,874 pieces cover 23.06 km² (`crop04` 6.79, `crop05` 4.16, `terpat03` 9.15,
+  `terpat03b` 2.24, `grass1` 0.72), in 510 chunks of 256 m per texture, built in about 0.9 s at load.
+- *Draw.* Each chunk is one MultiMesh drawing its mesh `Layers` (8) times, each layer lifted by its
+  share of the cover's height (instance custom data): grass 0.5 m, crops 0.9 m. `Band` sets each
+  cover's reach in one place: grass whole inside 160 m of the eye and dithered out by 240 m, crops whole
+  inside 80 m and out by 120 m (eye to fragment, so from that height up nothing draws). A piece past its
+  band collapses in the vertex stage. Ranged at the band plus the chunk's farthest corner. No collider,
+  no shadow cast or received, no instance uniform.
+- *Pattern.* Hashed in the texture's own metres, so it moves with the painted ground. Grass: a tuft every
+  0.45 m, jittered, widening with height and split into nine blades that thin toward their tips. Crops:
+  rows 0.75 m apart along the texture axis across the painted stripes, read from the live texture at load
+  (a luminance structure tensor over a 32 × 32 grid, never saved). The painted fields run along the
+  texture's axes, so the axis is snapped: following the field's angle smoothly bent the rows into
+  fingerprint swirls. The rows follow it loosely: they wander up to 0.8 of a row over 23 m and wobble
+  per row over a few metres, each row sits off its slot by up to 0.15, and each plant (one every 0.2 m)
+  by up to 0.125 more. A plant varies in height (0.55 to 1) and thickness (0.7 to 1.35) and is cut into
+  strands. Patches of about 7 m (value noise) keep 60 to 100 % of the plants and lower the crop by up to
+  30 %, so neither the near rows nor the far cover is even. Where a cell is under a few pixels (two for
+  grass, four to ten for crops) a fragment dithers at its layer's mean cover, the crop's taken under its
+  patch, which does not shimmer or band. A slow sway moves the tips.
+- *Colour.* The ground's own texel, a mip and a half softer, times its baked vertex colour, lit as the
+  world (Enhanced's lit terrain), so hue and brightness are the ground's; only a shade from 0.53 at the
+  foot to 1.27 at the tip (crops 0.68 to 1.26, times its patch's 0.93 to 1.05) and a spread per tuft of
+  ±15 % (per plant ±10 %) move it. Over the pixels the shells change, the captures keep the ground's hue
+  and read 0.3 sRGB levels darker at 30 m over the fields, 4 up close, 2.5 on the meadow and 1 at its
+  far edge.
+- *At the probe poses* (ground in the band from the 12 m raster, chunks whose range reaches the eye,
+  each one draw of 8 layers before the frustum cull): low over a crop field 4.2 ha, about 4 chunks; 8 m
+  over crops 4.4 ha, 5 chunks; low over meadow 17.8 ha, 9 chunks (4.2 ha and 4 chunks at the first
+  80-120 m band); 30 m over meadow looking out 13.4 ha, 8 chunks; facing a strip's clearance 9.5 ha,
+  9 chunks; 60 m up 3.4 ha, 5 chunks; 150 m up none. The far ground covers fewer pixels a hectare, so the
+  meadow's fill grows less than its area.
+- *Ruling (yours, from the first montages).* "the crop fields are to regular or need more density. the
+  stripes look bad in the top row. can you add more randomness to it? the meadow distance is too short.
+  double it or if its to expensive leave it out." The crop randomness and the grass band above are that pass
+  (`.scratch/d35b/`).
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus: a shader look iterated against captures, and the clutter's gating and
+mask rules to respect.
 
-**Verify.** <TODO>
+**Verify.** Units: `GroundCoverShellsTests` (only C1's fields and meadows grow cover; the layers rise
+evenly to the full height; kept pieces tile the triangle inside their cells; a refused cell takes
+nothing and the rest lose exactly its share; the row field reads stripes along v, along u, diagonal
+and flat). Engine: `ground-cover-shells` (a rich C1 flight without the flag builds none; with it, every
+chunk draws a picked texture, no chunk declares an instance uniform, stands a collider or casts a
+shadow, each draws 8 layers ranged inside the band; no piece centre stands on a cleared mask texel, the
+clearance holds picked ground the cut drops, and sampled pieces lie on a picked texture at their
+height; a live move to original and a switch to Original drop them and back builds the same; a session
+at original builds none). Look: `.scratch/d35/montage-<pose>.png` (off against on, a full-size crop and
+where the shells moved a pixel) and `montage-all.png`, at `--freecam --chapter=C1 --graphics=enhanced
+--vegetation-quality=rich --frames=40`, 2560x720: crop `--pos=-2142,158,-4602 --lookat=-2142,128,-4702`,
+meadow `--pos=-4566,153,-4794 --lookat=-4566,128,-4894`, strip `--pos=-6490,150,-4074
+--lookat=-6380,128,-4074`, mid `--pos=-2142,188,-4560 --lookat=-2142,128,-4760`, high
+`--pos=-2142,278,-4560 --lookat=-2142,128,-4760`, close `--pos=-2142,136,-4640 --lookat=-2142,128,-4680`.
+The rework's `.scratch/d35b/montage-<pose>.png` show flag off, the first prototype and the rework for
+crop, close and meadow, and off against the rework for meadowfar (`--pos=-4566,158,-4600
+--lookat=-4566,128,-4954`, the 160-240 m edge), each with where the rework moved a pixel.
+Budget: not measured (D37 measures it beside D34 on an idle machine).
 
 **⚠ Traps.** The look call is yours.
+- Never give the shell shader an instance uniform: each of the 510 chunks would take 16 slots of
+  Godot's global buffer.
+- Keep the row direction snapped to the texture's axes: a smoothly turning direction times a phase
+  measured from the world origin bends the rows into swirls. Add the randomness as offsets to the row
+  coordinate, never as a turn of the direction.
+- `patch` is a reserved word in Godot's shading language; the crop's patch noise is `field_patch`.
+- The cut follows the mask's 12 m texels, so the clearance's edge is a 12 m stair step; a crater
+  (`TerrainCarve`) leaves the shells at the old ground, and the map edge copies none. A prototype
+  accepts all three.
 
 ## D36 ☐ Deck and Linux: measure Rich and set their default
 

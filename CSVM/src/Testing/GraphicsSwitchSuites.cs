@@ -625,6 +625,110 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("ground-cover-shells",
+        "D35's procedural ground cover in a C1 Enhanced flight at rich: without --ground-cover-shells nothing is built; with "
+        + "it the shells stand over the picked crop and meadow textures alone, never on a cleared mask texel (the landing "
+        + "strips), with no collider, no shadow and no instance uniform, one MultiMesh of Layers instances a chunk ranged "
+        + "inside the band; a live move to original or a switch to Original drops them and back builds the same; a session "
+        + "at original builds none")]
+    internal static void GroundCoverShellsFollowRich(TestContext ctx)
+    {
+        RequireData(ctx);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        static List<MultiMeshInstance3D> Chunks(Rig rig) =>
+            rig.Session.GroundCover?.GetChildren().OfType<MultiMeshInstance3D>().Where(m => m.IsInsideTree() && !m.IsQueuedForDeletion()).ToList() ?? new();
+        // A chunk is named <texture>_<i>_<j>.
+        static string ChunkTexture(MultiMeshInstance3D m) => string.Join('_', m.Name.ToString().Split('_')[..^2]);
+        static string Census(List<MultiMeshInstance3D> chunks) => string.Create(CultureInfo.InvariantCulture,
+            $"{chunks.Count} chunks, {chunks.Sum(m => m.Multimesh.Mesh.GetFaces().Length / 3)} triangles a layer");
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            var plain = Open(ctx, true, 1, "C1");
+            try
+            {
+                ctx.Check(plain.Built && plain.Session.GroundCover == null, $"a rich C1 flight without --ground-cover-shells builds none");
+            }
+            finally
+            {
+                plain.Close();
+            }
+
+            var live = Open(ctx, true, 1, "C1", "--ground-cover-shells");
+            try
+            {
+                var chunks = Chunks(live);
+                string built = Census(chunks);
+                ctx.Check(live.Built && chunks.Count > 0, $"--ground-cover-shells builds the shells ({built})");
+                ctx.Check(chunks.All(m => Mech3.GroundCoverShells.CoverOf("C1", ChunkTexture(m) + ".tif") != null),
+                    $"every chunk draws a picked crop or meadow texture ({string.Join(", ", chunks.Select(ChunkTexture).Distinct())})");
+                var (uniforms, _) = InstanceUniformNodes(live.Session.GroundCover!);
+                static float Far(MultiMeshInstance3D m) => Mech3.GroundCoverShells.Band(Mech3.GroundCoverShells.CoverOf("C1", ChunkTexture(m) + ".tif")!.Value).Y;
+                ctx.Check(uniforms == 0 && !HasCollider(live.Session.GroundCover!)
+                    && chunks.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && m.Multimesh.InstanceCount == Mech3.GroundCoverShells.Layers
+                        && m.VisibilityRangeEnd > Far(m) && m.VisibilityRangeEnd < Far(m) + Mech3.GroundCoverShells.ChunkM),
+                    $"no chunk declares an instance uniform ({uniforms}), stands a collider or casts a shadow; each draws {Mech3.GroundCoverShells.Layers} layers, ranged {chunks.Min(m => m.VisibilityRangeEnd):0}-{chunks.Max(m => m.VisibilityRangeEnd):0} m");
+
+                // Every piece's centre on the mask: none on a cleared texel.
+                var mask = live.Session.Clutter!.Mask!;
+                byte[] texels = mask.ToBytes();
+                float texel = (mask.MaxX - mask.MinX) / mask.Side;
+                byte TexelAt(Vector3 p) => texels[(Math.Clamp((int)MathF.Floor((p.Z - mask.MinZ) / texel), 0, mask.Side - 1) * mask.Side)
+                    + Math.Clamp((int)MathF.Floor((p.X - mask.MinX) / texel), 0, mask.Side - 1)];
+                var centres = chunks.SelectMany(m => Centres(m)).ToList();
+                int cleared = centres.Count(p => TexelAt(p) == 0);
+                ctx.Check(centres.Count > 0 && cleared == 0, $"no piece of {centres.Count} stands on a cleared mask texel ({cleared})");
+
+                // The clearance is not empty of picked ground: the cut drops it.
+                var gamez = live.Session.Clutter.Gamez;
+                var picked = Mech3.VegetationGround.PaintedSurface(gamez, t => Mech3.GroundCoverShells.CoverOf("C1", t) != null);
+                double bare = picked.Sum(t => Mech3.GroundCoverShells.Clip(new Vector2(t.A.At.X, t.A.At.Z), new Vector2(t.B.At.X, t.B.At.Z), new Vector2(t.C.At.X, t.C.At.Z),
+                    new Vector2(mask.MinX, mask.MinZ), texel, (i, j) => i >= 0 && j >= 0 && i < mask.Side && j < mask.Side && texels[(j * mask.Side) + i] == 0).Count);
+                ctx.Check(bare > 0, $"the strip clearance holds {bare:0} pieces of picked ground the shells leave bare");
+
+                // A sample of pieces stands on a picked texture at its own height.
+                int step = Math.Max(1, centres.Count / 60), off = 0;
+                var sample = centres.Where((_, k) => k % step == 0).Take(60).ToList();
+                foreach (var p in sample)
+                {
+                    bool on = Mech3.VegetationGround.LayersAt(gamez, p).Any(l => Math.Abs(l.Y - p.Y) < 0.5f && Mech3.GroundCoverShells.CoverOf("C1", l.Texture) != null);
+                    off += on ? 0 : 1;
+                }
+                ctx.Check(off == 0, $"each of {sample.Count} sampled pieces lies on a picked texture at its height ({off} off)");
+
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(live.Session.GroundCover == null && chunks.All(m => !m.IsInsideTree() || m.IsQueuedForDeletion()), $"a live move to original drops them");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                ctx.Check(Census(Chunks(live)) == built, $"a move back to rich builds the same ({Census(Chunks(live))})");
+                Switch(live, enhanced: false);
+                ctx.Check(live.Session.GroundCover == null, $"a live switch to Original drops them");
+                Switch(live, enhanced: true);
+                ctx.Check(Census(Chunks(live)) == built, $"and a switch back to Enhanced builds them again");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
+            var original = Open(ctx, true, 1, "C1", "--ground-cover-shells");
+            try
+            {
+                ctx.Check(original.Built && original.Session.GroundCover == null, $"a session built at original builds none");
+            }
+            finally
+            {
+                original.Close();
+            }
+        }
+        finally
+        {
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("vegetation-models",
         "the near 3D models in a C1 Enhanced flight at rich: every listed card with a model shipped for C1 takes it and its "
         + "Rich card material the band, every other card none; no model node declares an instance uniform, and the build's "
@@ -2298,6 +2402,21 @@ internal static class GraphicsSwitchSuites
                 count++;
         });
         return count;
+    }
+
+    // Each shell piece's centre in world space: its corners share it in UV2, and its height is its corners' mean.
+    private static IEnumerable<Vector3> Centres(MultiMeshInstance3D chunk)
+    {
+        var arrays = ((ArrayMesh)chunk.Multimesh.Mesh).SurfaceGetArrays(0);
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var centres = arrays[(int)Mesh.ArrayType.TexUV2].AsVector2Array();
+        var seen = new Dictionary<Vector2, (float Y, int N)>();
+        for (int v = 0; v < vertices.Length; v++)
+        {
+            var (y, n) = seen.GetValueOrDefault(centres[v]);
+            seen[centres[v]] = (y + vertices[v].Y, n + 1);
+        }
+        return seen.Select(kv => chunk.Position + new Vector3(kv.Key.X, kv.Value.Y / kv.Value.N, kv.Key.Y));
     }
 
     // The near models' drawn cells under the model root, standing in the tree.

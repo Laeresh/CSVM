@@ -311,6 +311,9 @@ public partial class GameSession : Node3D
     private bool _oceanEligible;
     // The canopy clumps over the forest, standing while Rich is on and the chapter or --canopy-clumps draws them.
     private Mech3.CanopyClumps.Field? _canopyClumps;
+
+    // D35's procedural ground cover, standing while Rich is on under --ground-cover-shells.
+    private Node3D? _groundCover;
     // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
     // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
     private Effects.SeaState _seaSaved = Effects.SeaState.Default;
@@ -417,6 +420,8 @@ public partial class GameSession : Node3D
 
     /// <summary>The canopy clumps standing, with their tiles and rate, null while none stand. Read by the suites.</summary>
     internal Mech3.CanopyClumps.Field? CanopyClumpField => _canopyClumps;
+
+    internal Node3D? GroundCover => _groundCover;
 
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
@@ -2701,6 +2706,7 @@ public partial class GameSession : Node3D
     // and the cards' handover go with them. A lab edit builds them again from the re-baked canopy mask.
     private void FollowCanopyClumps(bool rebake = false)
     {
+        FollowGroundCover(rebake);
         bool wanted = (_spec.CanopyClumps ?? Mech3.CanopyClumps.DefaultOn(_spec.Chapter)) && VegetationQualitySetting.RichOn;
         if (_canopyClumps != null && (!wanted || rebake))
         {
@@ -2720,6 +2726,22 @@ public partial class GameSession : Node3D
             return;
         _plane.AddChild(_canopyClumps.Root);
         _edgeExtender?.SetClumps(_canopyClumps);
+    }
+
+    // The ground cover shells follow Rich as the clumps do, and a lab edit builds them again under its mask.
+    private void FollowGroundCover(bool rebake)
+    {
+        bool wanted = _spec.GroundCoverShells && VegetationQualitySetting.RichOn;
+        if (_groundCover != null && (!wanted || rebake))
+        {
+            Drop(_groundCover);
+            _groundCover = null;
+        }
+        if (!wanted || _groundCover != null || _plane == null || _sessionTextures == null || _clutter?.Mask is not { } mask)
+            return;
+        _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, mask, _sessionTextures, _spec.Chapter ?? "");
+        if (_groundCover != null)
+            _plane.AddChild(_groundCover);
     }
 
     // The chapter's sea from the shipped file, read once per session that can stand an ocean, under
