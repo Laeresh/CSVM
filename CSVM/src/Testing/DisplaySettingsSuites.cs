@@ -58,6 +58,7 @@ internal static class DisplaySettingsSuites
         ("InstallPath", Path.GetFullPath(Path.GetTempPath()), false),
         ("ExtractedPromptAnswered", true, false),
         ("PatchNoteShown", true, false),
+        ("ModFolder", Path.GetFullPath(Path.GetTempPath()), false),
         ("NetCallsign", "Laeresh", false),
         ("NetVoice", 5, false),
         ("NetGameName", "DaRein", false),

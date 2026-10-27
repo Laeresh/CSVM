@@ -10,7 +10,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Net;
-using CSVM.Tests.Oracle;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -438,7 +437,7 @@ public class StuntBotObjectiveTests
     {
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var course = StuntMission.Load(gamez, TestZrdr.Mission(chapter, "IA1"),
-            MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+            Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.NotNull(course);
         return course!;
     }

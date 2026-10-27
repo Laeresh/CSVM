@@ -51,8 +51,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
-    /// <summary>The Game Options aid's argument that scrolls its window to the foot, onto Lead Marker.</summary>
+    /// <summary>The Game Options aid's argument that scrolls its window to the foot, onto Modding Folder.</summary>
     public const string GameOptionsScrolledAid = "scrolled";
+
+    /// <summary>The Game Options aid's argument that opens the Modding Folder list at the window's foot.</summary>
+    public const string GameOptionsFoldersAid = "folders";
 
     /// <summary>The aid value that opens the AUDIO page behind the Preferences page's second door.</summary>
     public const string AudioAid = "audio";
@@ -564,7 +567,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                     OpenGameOptionsAid(aid);
                     break;
                 case GameOptionsAid + ":" + GameOptionsScrolledAid:
-                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.LeadMarkerKey);
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+                    break;
+                case GameOptionsAid + ":" + GameOptionsFoldersAid:
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+                    _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case AudioAid:
                     _shell.Options.Audio.Open();

@@ -1056,7 +1056,8 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 - `src/Spec/BasePaths.cs`, the repo and data roots, the located game-file source and the game data read through it, as one value.
-- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`, `soundsh.zbd`, the root `zrdr.zbd`) and its per-session chapter part (the chapter's textures, world and reader scopes), handed down in place of paths.
+- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`, `soundsh.zbd`, the root `zrdr.zbd`, the UI half's `RofFiles`) and its per-session chapter part (the chapter's textures, world and reader scopes), handed down in place of paths.
+- `src/Spec/ModdingFolder.cs`, the opt-in folder of unzbd output read in place of the game files archive by archive: its layout, and the flag-over-saved-option rule.
 
 ### `CSVM.Tests/`, the unit tests
 

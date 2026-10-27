@@ -1189,6 +1189,10 @@ public sealed record SessionSpec
     /// config.json names.</summary>
     public bool NoHdModels { get; private set; }
 
+    /// <summary><c>--mod-folder=</c>: the modding folder of unzbd output this launch reads
+    /// (<see cref="ModdingFolder"/>), beating the saved one. Empty names none. Null when absent.</summary>
+    public string? ModFolder { get; private set; }
+
     /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
@@ -1759,6 +1763,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
+            else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
             else if (arg.StartsWith("--hitch-inject="))
             {
                 (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =

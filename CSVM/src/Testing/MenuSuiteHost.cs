@@ -49,7 +49,7 @@ internal static class MenuSuiteHost
     /// <paramref name="relative"/>, the way <c>RequireData</c> does for a missing file.</summary>
     internal static void RequireRof(TestContext ctx, string relative, FormattableString what)
     {
-        if (!RofFiles.For(ctx.DataRoot).Exists(relative))
+        if (!ctx.Data.Rof.Exists(relative))
         {
             throw new SuiteSkippedException($"{CSVM.Utils.Log.Format(what)} not found: no {relative} in the game files for {ctx.DataRoot}");
         }

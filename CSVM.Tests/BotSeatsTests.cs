@@ -7,7 +7,6 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.Roster;
 using CSVM.Spec;
-using CSVM.Tests.Oracle;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -18,7 +17,7 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public sealed class BotSeatsTests
 {
-    private static readonly Messages Names = MessagesLegacy.Parse("""
+    private static readonly Messages Names = Messages.ParseExtracted("""
         { "entries": [
           { "key": "MSG_PLAYER_NAME", "id": 13000, "value": "Zachary" },
           { "key": "MSG_JACK_NAME", "id": 13001, "value": "Jack" },
@@ -219,7 +218,7 @@ public sealed class BotSeatsTests
     {
         var zrdr = TestZrdr.Root;
         var defs = VehicleDefs.Load(zrdr);
-        var patterns = MilitiaPaint.PatternByMilitia(zrdr, MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+        var patterns = MilitiaPaint.PatternByMilitia(zrdr, Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         var torpedoes = new List<string>();
         int withDef = 0;
         foreach (var (militia, plane) in BotSeats.Pairs)
@@ -301,7 +300,7 @@ public sealed class BotSeatsTests
     [ExtractedDataFact]
     public void TheShippedPoolSeatsAFullFieldOfDistinctNames()
     {
-        var pool = BotSeats.CallsignPool(MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+        var pool = BotSeats.CallsignPool(Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
 
         Assert.Equal(28, pool.Count);
         Assert.Equal(pool.Count, pool.Distinct(StringComparer.OrdinalIgnoreCase).Count());

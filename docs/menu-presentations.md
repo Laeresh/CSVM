@@ -553,7 +553,7 @@ wrap-up page a flown mission's ending lands on, over a sample stunt run in each 
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
 `instant-action-wrapup:photos` and `instant-action-wrapup:long-photos` over the same two runs with a
 stand-in photograph per zone (the long run's last one still on its way), `options`,
-`game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
+`game-options`, `game-options:open` with its Difficulty list standing open, `game-options:scrolled` at the window's foot, `game-options:folders` with its Modding Folder list open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
 standing open, the one leaf list whose sizes can outrun the window its row authors,

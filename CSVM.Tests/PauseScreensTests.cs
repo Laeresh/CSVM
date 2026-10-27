@@ -4,7 +4,6 @@ using System.Linq;
 using CSVM;
 using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Overlays;
@@ -471,5 +470,5 @@ public class PauseScreensTests
     private static ZrdrSet Zrdr() => TestZrdr.Root;
 
     private static Messages MessagesPath() =>
-        MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
 }

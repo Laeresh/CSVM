@@ -53,30 +53,64 @@ public sealed class GameData
     /// by every session; each read hands out a fresh copy.</summary>
     public ZrdrSet Zrdr { get; init; } = ZrdrSet.None;
 
+    /// <summary>The UI half, <c>crimson.rof</c> and its siblings, read in place on first lookup;
+    /// <see cref="RofFiles.Empty"/> without it. Never read from a modding folder.</summary>
+    public RofFiles Rof { get; init; } = RofFiles.Empty;
+
     /// <summary>Builds the per-chapter part for a chapter and mission folder (<c>C1</c>,
     /// <c>M01</c>). Each factory sets its own.</summary>
     public Func<string, string, ChapterData> LoadChapter { get; init; } = ChapterData.Bare;
 
+    /// <summary>The modding folder <see cref="Load"/> read archives from, absolute; null for none.</summary>
+    public string? ModFolder { get; init; }
+
     /// <summary>The chapter-independent part read through <paramref name="game"/>; a null source
-    /// gives what <see cref="Empty"/> holds. A file that does not decode is logged and read as
-    /// absent, so a damaged install still reaches the menu.</summary>
-    public static GameData Load(IGameFileSource? game) => new()
+    /// gives what <see cref="Empty"/> holds. Where <paramref name="modFolder"/> holds an archive's
+    /// unzbd output, that output is read instead (<see cref="ModdingFolder"/>). A file that does not
+    /// decode is logged and read as absent, so a damaged install still reaches the menu.</summary>
+    public static GameData Load(IGameFileSource? game, string? modFolder = null)
     {
-        Interp = Read(game, InterpScripts.GamePath, () => InterpScripts.Load(game), null),
-        Messages = Read(game, Messages.GameFile, () => Messages.Load(game), new Messages()),
-        Rimage = Read(game, RimagePath, () => TextureSet.Load(game, RimagePath), TextureSet.Empty),
-        Planes = Read(game, PlanesPath, () => GameZZbd.Load(game, PlanesPath), null),
-        Sounds = Read(game, SoundsPath, () => SoundZbd.Load(game, SoundsPath), null),
-        Zrdr = Read(game, RootZrdrPath, () => ZrdrSet.Load(game, RootZrdrPath), ZrdrSet.None),
-        LoadChapter = Chapters(game),
-    };
+        var mods = Mods(modFolder);
+        return new()
+        {
+            Interp = Read(game, mods, InterpScripts.GamePath, () => InterpScripts.Load(game), InterpScripts.FromExtracted, null),
+            Messages = Read(game, mods, Messages.GameFile, () => Messages.Load(game), Messages.FromExtracted, new Messages()),
+            Rimage = Read(game, mods, RimagePath, () => TextureSet.Load(game, RimagePath), o => TextureSet.FromExtracted(RimagePath, o), TextureSet.Empty),
+            Planes = Read(game, mods, PlanesPath, () => GameZZbd.Load(game, PlanesPath), GameZ.Load, null),
+            Sounds = Read(game, mods, SoundsPath, () => SoundZbd.Load(game, SoundsPath), SoundZbd.FromExtracted, null),
+            Zrdr = ReaderScope(game, mods, RootZrdrPath).Value,
+            Rof = RofFiles.Open(game),
+            LoadChapter = Chapters(game, mods),
+            ModFolder = mods?.Root,
+        };
+    }
+
+    private static ModdingFolder? Mods(string? modFolder)
+    {
+        if (modFolder == null)
+        {
+            return null;
+        }
+
+        var mods = new ModdingFolder(modFolder);
+        if (Directory.Exists(mods.Root))
+        {
+            Log.Info("core", $"modding folder {mods.Root}: its unzbd output replaces the game files archive by archive");
+        }
+        else
+        {
+            Log.Warn("core", $"modding folder {mods.Root} does not exist, reading the game files alone");
+        }
+
+        return mods;
+    }
 
     // The chapter loader of an install. The last chapter's textures, world and readers are held,
     // each decoded on its first read, so a caller pays only for what it reads.
     // ⚠ Both anim archives are held for the last mission only. AnimProgram.Load writes a reader
     // def's PERSIST_LOG onto its compiled twin, so a chapter archive shared across missions would
     // carry one mission's flags into the next. A reader scope copies on every read, so it is shared.
-    private static Func<string, string, ChapterData> Chapters(IGameFileSource? game)
+    private static Func<string, string, ChapterData> Chapters(IGameFileSource? game, ModdingFolder? mods)
     {
         var gate = new object();
         string? heldChapter = null, heldMission = null;
@@ -91,18 +125,18 @@ public sealed class GameData
                 bool newChapter = heldGamez == null || !string.Equals(heldChapter, chapter, StringComparison.OrdinalIgnoreCase);
                 if (newChapter)
                 {
-                    heldTextures = new Lazy<TextureSet>(() => Read(game, $"ZBD/{chapter}", () => TextureSet.ForChapter(game, chapter), TextureSet.Empty));
+                    heldTextures = new Lazy<TextureSet>(() => ChapterTextures(game, mods, chapter));
                     string gamezPath = $"ZBD/{chapter}/gamez.zbd";
-                    heldGamez = new Lazy<GameZ?>(() => Read(game, gamezPath, () => GameZZbd.Load(game, gamezPath), null));
-                    heldChapterZrdr = ReaderScope(game, $"ZBD/{chapter}/zrdr.zbd");
+                    heldGamez = new Lazy<GameZ?>(() => Read(game, mods, gamezPath, () => GameZZbd.Load(game, gamezPath), GameZ.Load, null));
+                    heldChapterZrdr = ReaderScope(game, mods, $"ZBD/{chapter}/zrdr.zbd");
                     heldChapter = chapter;
                 }
 
                 if (newChapter || !string.Equals(heldMission, mission, StringComparison.OrdinalIgnoreCase))
                 {
-                    heldChapterAnim = Anim(game, $"ZBD/{chapter}/cam_anim.zbd", "cam_anim");
-                    heldMissionAnim = Anim(game, $"ZBD/{chapter}/{mission}/mis_anim.zbd", "mis_anim");
-                    heldMissionZrdr = ReaderScope(game, $"ZBD/{chapter}/{mission}/zrdr.zbd");
+                    heldChapterAnim = Anim(game, mods, $"ZBD/{chapter}/cam_anim.zbd", "cam_anim");
+                    heldMissionAnim = Anim(game, mods, $"ZBD/{chapter}/{mission}/mis_anim.zbd", "mis_anim");
+                    heldMissionZrdr = ReaderScope(game, mods, $"ZBD/{chapter}/{mission}/zrdr.zbd");
                     heldMission = mission;
                 }
 
@@ -122,14 +156,42 @@ public sealed class GameData
     }
 
     // The label is the one AnimProgram.Load and the anim log lines know the archive by.
-    private static Lazy<AnimArchive?> Anim(IGameFileSource? game, string path, string label) =>
-        new(() => Read(game, path, () => AnimZbd.Load(game, path, label), null));
+    private static Lazy<AnimArchive?> Anim(IGameFileSource? game, ModdingFolder? mods, string path, string label) =>
+        new(() => Read(
+            game,
+            mods,
+            path,
+            () => AnimZbd.Load(game, path, label),
+            output => AnimArchive.Load(output, label) ?? throw new InvalidDataException("the archive does not read"),
+            null));
 
-    private static Lazy<ZrdrSet> ReaderScope(IGameFileSource? game, string path) =>
-        new(() => Read(game, path, () => ZrdrSet.Load(game, path), ZrdrSet.None));
+    private static Lazy<ZrdrSet> ReaderScope(IGameFileSource? game, ModdingFolder? mods, string path) =>
+        new(() => Read(game, mods, path, () => ZrdrSet.Load(game, path), ZrdrSet.FromExtracted, ZrdrSet.None));
 
-    private static T Read<T>(IGameFileSource? game, string path, Func<T> load, T absent)
+    // The tier the game files pick (TextureSet.ForChapter), so a modded chapter keeps the original's.
+    private static TextureSet ChapterTextures(IGameFileSource? game, ModdingFolder? mods, string chapter) =>
+        TextureSet.ChapterArchive(game, chapter) is { } path
+            ? Read(game, mods, path, () => TextureSet.Load(game, path), output => TextureSet.FromExtracted(path, output), TextureSet.Empty)
+            : TextureSet.Empty;
+
+    // The modding folder's output for the path when it holds one and it reads, else the game file.
+    // ⚠ The output is a modder's own files: any failure falls back, never takes the launch down.
+    private static T Read<T>(IGameFileSource? game, ModdingFolder? mods, string path, Func<T> load, Func<string, T> modded, T absent)
     {
+        if (mods?.Find(path) is { } output)
+        {
+            try
+            {
+                var model = modded(output);
+                Log.Info("core", $"modding folder: {path} read from {output}");
+                return model;
+            }
+            catch (Exception e)
+            {
+                Log.Error("core", $"modding folder: {output} does not read, using the game file {path}: {e.GetType().Name}: {e.Message}");
+            }
+        }
+
         try
         {
             return load();

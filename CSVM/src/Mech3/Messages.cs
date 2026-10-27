@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using CSVM.Extraction;
 
 namespace CSVM.Mech3;
@@ -34,6 +35,14 @@ public sealed class Messages
     /// <see cref="InvalidDataException"/>.</summary>
     public static Messages Load(IGameFileSource? game) =>
         game != null && game.Exists(GameFile) ? FromStringsDll(game.ReadAllBytes(GameFile)) : new Messages();
+
+    /// <summary>The table of unzbd's <c>messages.json</c>, the modding path; a missing file is an
+    /// empty table.</summary>
+    public static Messages FromExtracted(string path) =>
+        File.Exists(path) ? ReadExtracted(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
+
+    /// <summary>The same table out of <c>messages.json</c> text already in hand.</summary>
+    public static Messages ParseExtracted(string json) => ReadExtracted(JsonDocument.Parse(json));
 
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
@@ -141,5 +150,27 @@ public sealed class Messages
         }
 
         return msgs;
+    }
+
+    // Each entry's key and value, an entry missing either skipped.
+    private static Messages ReadExtracted(JsonDocument doc)
+    {
+        var entries = new List<(string, string)>();
+        using (doc)
+        {
+            if (doc.RootElement.TryGetProperty("entries", out var list) && list.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var e in list.EnumerateArray())
+                {
+                    if (e.TryGetProperty("key", out var k) && k.GetString() is { } key
+                        && e.TryGetProperty("value", out var v) && v.GetString() is { } value)
+                    {
+                        entries.Add((key, value));
+                    }
+                }
+            }
+        }
+
+        return Of(entries);
     }
 }

@@ -79,8 +79,9 @@ and run. The engine reads the game files in place through its own readers
 
 **Modding.** Players who want to edit the game's archives run unzbd, mech3ax's extractor,
 themselves (the build CSVM v0.4.0 bundled writes the layout CSVM reads), edit its output, and
-name that folder as the modding folder in Options or with a command-line flag. CSVM then loads
-each archive the folder holds from there and everything else from the game files.
+name it with `--mod-folder=<folder>`. The Modding Folder row of Options' GAME OPTIONS page then
+offers it to keep for later launches, as it offers an old `extracted` folder. CSVM loads each
+archive the folder holds from there and everything else from the game files; [`docs/modding.md`](docs/modding.md) lists the files it reads.
 
 ### Build and run
 

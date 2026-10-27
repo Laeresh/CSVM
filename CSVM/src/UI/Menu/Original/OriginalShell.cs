@@ -446,7 +446,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _box = new OriginalShellDialog(_campaignLayout, Measure, () => MenuStrings, FocusBox);
         NetInfo = new OriginalNetInfoBox(this, dataRoot, RememberNetInfo);
         InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
-        Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls);
+        Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls, () => Spec.ModdingFolder.Offered(dataRoot, Data.ModFolder));
         Campaign = new OriginalCampaignScreen(
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net, (hosting, then) => AskNetInfo(hosting, then));
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;

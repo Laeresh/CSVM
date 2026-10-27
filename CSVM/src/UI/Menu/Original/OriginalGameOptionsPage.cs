@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It stages its seven settings in
+/// the three it is painted with, its plaques moving down with it. It stages its eight settings in
 /// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
@@ -45,6 +45,10 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The page's lead marker checkbox, a remake-only row.</summary>
     public const string LeadMarkerKey = "LEADMARKER";
+
+    /// <summary>The page's Modding Folder dropdown, a remake-only row: Off, or a folder of unzbd
+    /// output read from the next start (<c>Spec.ModdingFolder</c>).</summary>
+    public const string ModFolderKey = "MODFOLDER";
 
     /// <summary>The window the option rows scroll through, its arrows keyed under it.</summary>
     public const string WindowKey = "GO_WINDOW";
@@ -129,39 +133,43 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     private static readonly GameOption[] Options =
     {
         new(DifficultyKey, "Difficulty", _ => "Select the difficulty level for a solo campaign.",
-            OriginalRowKind.Dropdown, DifficultyWords,
+            OriginalRowKind.Dropdown, _ => DifficultyWords,
             c => CSVM.Flight.Hangar.Difficulty.Clamp(c.Difficulty),
             (c, i) => c.Difficulty = CSVM.Flight.Hangar.Difficulty.Clamp(i)),
         new(DefaultViewKey, "Default View", _ => "Select your default view.",
-            OriginalRowKind.Dropdown, DefaultViewWords,
+            OriginalRowKind.Dropdown, _ => DefaultViewWords,
             c => IndexOfView(c.DefaultViewMode),
             (c, i) => c.DefaultView = CSVM.Flight.Camera.PilotView.Name(
                 CSVM.Flight.Camera.PilotView.Selectable[Math.Clamp(i, 0, CSVM.Flight.Camera.PilotView.Selectable.Count - 1)])),
         new(AutoHeadTurnKey, "Auto Head Turn",
             _ => "Select to turn your head automatically as your aircraft turns.",
-            OriginalRowKind.Radio, SwitchWords,
+            OriginalRowKind.Radio, _ => SwitchWords,
             c => c.AutoHeadTurnOn ? 1 : 0,
             (c, i) => c.AutoHeadTurn = i == 1),
         new(NearestAfterKillKey, "Next Target",
             _ => "Take the nearest target after a kill instead of the first of the list.",
-            OriginalRowKind.Radio, SwitchWords,
+            OriginalRowKind.Radio, _ => SwitchWords,
             c => c.NearestAfterKillOn ? 1 : 0,
             (c, i) => c.NearestAfterKill = i == 1),
         new(RumbleKey, "Rumble",
             _ => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
-            OriginalRowKind.Radio, SwitchWords,
+            OriginalRowKind.Radio, _ => SwitchWords,
             c => c.RumbleOn ? 1 : 0,
             (c, i) => c.Rumble = i == 1),
         new(LeadingAimAssistKey, "Leading Aim",
             _ => "Fire each round on the lead, not the original's lagging gun line.",
-            OriginalRowKind.Radio, SwitchWords,
+            OriginalRowKind.Radio, _ => SwitchWords,
             c => c.LeadingAimAssistOn ? 1 : 0,
             (c, i) => c.LeadingAimAssist = i == 1),
         new(LeadMarkerKey, "Lead Marker",
             _ => "Mark where to aim to hit the tracked enemy.",
-            OriginalRowKind.Radio, SwitchWords,
+            OriginalRowKind.Radio, _ => SwitchWords,
             c => c.LeadMarkerOn ? 1 : 0,
             (c, i) => c.LeadMarker = i == 1),
+        new(ModFolderKey, "Modding Folder", ModFolderDescription,
+            OriginalRowKind.Dropdown, ModFolderWords,
+            c => c.ModFolder is { } folder ? 1 + IndexOfFolder(c.ModFolders, folder) : 0,
+            (c, i) => c.ModFolder = i <= 0 ? null : c.ModFolders[Math.Min(i, c.ModFolders.Count) - 1]),
     };
 
     // The furthest the window scrolls, which puts the last option on its bottom row.
@@ -220,6 +228,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The lead marker the page would apply, null while never set.</summary>
     public bool? LeadMarkerChoice => _choices.LeadMarker;
 
+    /// <summary>The modding folder the page would apply, null for none.</summary>
+    public string? ModFolderChoice => _choices.ModFolder;
+
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.GameOptions;
 
     string IOriginalOptionsPage.AcceptKey => AcceptKey;
@@ -261,7 +272,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             for (int i = 0; i < Options.Length; i++)
             {
                 var option = Options[i];
-                rows.Add(_host.PlaqueRow(option.Key, option.Words[option.Read(_choices)], i, true, 0));
+                rows.Add(_host.PlaqueRow(option.Key, option.Words(_choices)[option.Read(_choices)], i, true, 0));
             }
 
             _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
@@ -307,7 +318,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             return false;
         }
 
-        int count = option.Words.Count;
+        int count = option.Words(_choices).Count;
         option.Write(_choices, ((option.Read(_choices) + direction) % count + count) % count);
         _host.FocusKey(option.Key);
         return true;
@@ -358,7 +369,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             return null;
         }
 
-        option.Write(_choices, (option.Read(_choices) + 1) % option.Words.Count);
+        option.Write(_choices, (option.Read(_choices) + 1) % option.Words(_choices).Count);
         return null;
     }
 
@@ -428,6 +439,28 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         {
             layers.Overlays.Add(_chrome.ComposeOptionList(drop, _listTop, rows, focus));
         }
+    }
+
+    // Off, then each offered folder by its own name; the description names the whole path.
+    private static IReadOnlyList<string> ModFolderWords(OptionsChoices choices) =>
+        new[] { "Off" }.Concat(choices.ModFolders.Select(f => System.IO.Path.GetFileName(f) is { Length: > 0 } name ? name : f)).ToArray();
+
+    // The folder's whole path, and that a change waits for the next start, the game data being read once.
+    private static string ModFolderDescription(OriginalGameOptionsPage page) => page.ModFolderChoice is { } folder
+        ? $"From the next start, read unzbd output from {folder}."
+        : "Read the game files alone, or from the next start a folder of unzbd output in their place.";
+
+    private static int IndexOfFolder(IReadOnlyList<string> folders, string folder)
+    {
+        for (int i = 0; i < folders.Count; i++)
+        {
+            if (string.Equals(folders[i], folder, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return 0;
     }
 
     // Where a view stands in the Default View dropdown's own list.
@@ -596,7 +629,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             return null;
         }
 
-        return OriginalOptionsChrome.DropList(key, screen.Widget(DropKey), open.Words,
+        return OriginalOptionsChrome.DropList(key, screen.Widget(DropKey), open.Words(_choices),
             ReadShape(screen).DropBoxFor(IndexOf(key) - _top));
     }
 
@@ -613,7 +646,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             if (option.Kind == OriginalRowKind.Dropdown)
             {
                 var box = shape.DropBoxFor(line);
-                rows.Add(new OriginalRow(option.Key, option.Words[option.Read(_choices)], OriginalRowKind.Dropdown,
+                rows.Add(new OriginalRow(option.Key, option.Words(_choices)[option.Read(_choices)], OriginalRowKind.Dropdown,
                     box.X, box.Y, box.Width, box.Height, true, 0, shape.Arrow, visible));
                 continue;
             }
@@ -783,7 +816,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     private sealed record GameOption(
         string Key, string Title, Func<OriginalGameOptionsPage, string> Description, OriginalRowKind Kind,
-        IReadOnlyList<string> Words,
+        Func<OptionsChoices, IReadOnlyList<string>> Words,
         Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write);
 
     // The page's row shape in authored pixels, every number off the section's own widgets. It is

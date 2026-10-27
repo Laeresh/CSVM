@@ -232,6 +232,11 @@ public sealed class OptionsDef
     /// said once (<c>UI.Screens.SourceFlow</c>).</summary>
     public bool? PatchNoteShown { get; set; }
 
+    /// <summary>The modding folder of unzbd output a launch reads (<c>Spec.ModdingFolder</c>), fully
+    /// qualified; null reads none. Game Options' Modding Folder row sets it and
+    /// <c>--mod-folder=</c> beats it. Never read under <c>--det</c>.</summary>
+    public string? ModFolder { get; set; }
+
     /// <summary>The network callsign the Player Information box last took, which prefills it next
     /// session. At most <see cref="OptionsStore.NameLimit"/> characters. Not a display setting.
     /// </summary>
@@ -392,6 +397,7 @@ public sealed class OptionsStore
             Write(w, "installPath", def.InstallPath);
             WriteFlag(w, "extractedPromptAnswered", def.ExtractedPromptAnswered);
             WriteFlag(w, "patchNoteShown", def.PatchNoteShown);
+            Write(w, "modFolder", def.ModFolder);
             Write(w, "netCallsign", def.NetCallsign);
             if (def.NetVoice is { } voice)
             {
@@ -471,6 +477,7 @@ public sealed class OptionsStore
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
                 ExtractedPromptAnswered = ReadFlag(root, "extractedPromptAnswered"),
                 PatchNoteShown = ReadFlag(root, "patchNoteShown"),
+                ModFolder = ReadShaped(root, "modFolder", Path.IsPathFullyQualified),
                 NetCallsign = ReadShaped(root, "netCallsign", static v => v.Length <= NameLimit),
                 NetVoice = root.TryGetProperty("netVoice", out var voice) && voice.ValueKind == JsonValueKind.Number
                     && voice.TryGetInt32(out int place) && place >= 0 && place <= MaxVoice

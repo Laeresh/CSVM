@@ -1,3 +1,4 @@
+using CSVM.Extraction;
 using CSVM.Spec;
 
 namespace CSVM.Tooling;
@@ -11,8 +12,13 @@ namespace CSVM.Tooling;
 public static class SyntheticGameData
 {
     /// <summary>The invented models. No boot scripts, as the tree never carried any.</summary>
-    public static GameData Build() => new()
+    public static GameData Build() => Build(RofFiles.Empty);
+
+    /// <summary>The same, with <paramref name="rof"/> as the UI half: the Original shell's view
+    /// (<c>UI/Menu/Original/SyntheticShell.cs</c>), which the tree build makes.</summary>
+    public static GameData Build(RofFiles rof) => new()
     {
+        Rof = rof,
         Messages = SyntheticMessages.Table(),
         Planes = SyntheticPlane.Gamez(),
         Sounds = SyntheticSounds.Zbd(),

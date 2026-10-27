@@ -92,7 +92,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // would make that run's mix a function of the walk. A --no-det run with a scripted flag is
         // still such a run, which is why both halves are read rather than Det alone.
         _audio = new MenuAudioService(audio.Music, audio.FindSound,
-            Extraction.RofFiles.For(at.DataRoot), previews: !spec.Det && spec.ScriptedBy.Length == 0);
+            at.Data.Rof, previews: !spec.Det && spec.ScriptedBy.Length == 0);
         parent.AddChild(_audio);
         var seatInput = new MenuInput { Keyboard = true };
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.

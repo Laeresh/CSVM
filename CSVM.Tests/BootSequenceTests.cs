@@ -4,7 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using CSVM.Video;
@@ -160,7 +159,7 @@ public class BootSequenceTests
         string root = TestData.DataRoot!;
         Assert.True(Extraction.RofFiles.For(root).Exists("ASSETS/GRAPHICS/" + BootSequence.CardArt));
 
-        var lines = BootSequence.Card(MessagesLegacy.Load(Path.Combine(root, "extracted", "messages.json")));
+        var lines = BootSequence.Card(Messages.FromExtracted(Path.Combine(root, "extracted", "messages.json")));
         string first = lines.Lines[1].Text;
         string second = lines.Lines[3].Text;
         Assert.DoesNotContain("MSG_COPYRIGHT", first, StringComparison.Ordinal);

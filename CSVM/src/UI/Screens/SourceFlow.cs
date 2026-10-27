@@ -166,7 +166,7 @@ public sealed class SourceFlow
         SourceView.CopyFailed => $"{Failure} The data folder is as it was before the copy.",
         SourceView.Upgrade =>
             $"'{Extracted}' holds game data an older CSVM extracted. This version reads the game files directly and does not use it. "
-            + "Keep it to mod the game with: it is read again only when you name it as the modding folder, in Options or with a command-line flag. "
+            + "Keep it to mod the game with: it is read again only when you choose it as the modding folder, on the Modding Folder row of Options' GAME OPTIONS page or with --mod-folder=. "
             + "Or delete it to free the space.",
         SourceView.ConfirmDelete =>
             $"This deletes '{Extracted}' and everything in it, and cannot be undone. A linked folder inside it is unlinked, never emptied. Nothing outside it is touched.",

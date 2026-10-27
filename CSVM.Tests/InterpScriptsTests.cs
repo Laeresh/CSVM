@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -14,7 +13,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// <see cref="InterpScripts.Read"/> over hand-encoded files (CI-safe), and over the install's
 /// <c>interp.zbd</c> against the model the extraction's <c>interp.json</c> builds
-/// (<see cref="InterpLegacy"/>). Layout: docs/formats/interp.md.
+/// (<see cref="InterpScripts.FromExtracted"/>, the modding path). Layout: docs/formats/interp.md.
 /// </summary>
 public class InterpScriptsTests
 {
@@ -90,7 +89,7 @@ public class InterpScriptsTests
     }
 
     private static (InterpScripts Expected, InterpScripts Actual) Both(string path) =>
-        (InterpLegacy.Read(Path.Combine(TestData.ExtractedRoot!, "interp.json")),
+        (InterpScripts.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "interp.json")),
          InterpScripts.Read(GameFilesData.Source!.ReadAllBytes(path)));
 
     // The layout of docs/formats/interp.md: header, one 128-byte entry per script, then each

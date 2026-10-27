@@ -69,7 +69,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
 **Data paths, where the game files and the packs are read from**
-`--data-root` · `--synthetic-data` · `--hd` · `--hd-models` · `--no-hd-models`
+`--data-root` · `--synthetic-data` · `--hd` · `--hd-models` · `--no-hd-models` · `--mod-folder`
 
 **User data, where the player's own files are kept**
 `--portable`
@@ -100,8 +100,8 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
 section further down; `--perf` carries four further bullets for its other readouts, and
-`--dump-sticks` and `--menu` one more each. The counts reconcile as **207 index entries, 207 parser
-flags and 214 bullet lines**.
+`--dump-sticks` and `--menu` one more each. The counts reconcile as **208 index entries, 208 parser
+flags and 215 bullet lines**.
 
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world for deterministic weather, fog and edge screenshots. It hosts three labs, always built and needing no extra flag: the damage lab on **F19**, the livery lab on **L** and the mesh lab on **M**. All three start hidden, so an unadorned `--viewer` screenshot matches the pre-paint viewer. F19 toggles the damage lab as a whole, slider panel and HUD gauges together; the panel's own checkbox controls the gauges while it is up. **P** halts the simulation and **`.`** advances one frame)
@@ -384,6 +384,7 @@ flags and 214 bullet lines**.
 - `--hd=<folder>` (**the HD texture pack folder**, under the data root unless rooted, default `HD`, also config.json's `textures.hd`; empty reads none. Drop a pack's release zips there unchanged, `Extraction/HdTextures.cs` has the matching rules. A `--det` run, and so every `--screenshot=` and `--run-tests` run, reads no pack unless this flag names one)
 - `--hd-models=<folder>` (**the HD model pack folder**, under the data root unless rooted, default `HDModels`, also config.json's `models.hd`; empty reads none. `.glb` files are read from zips and subfolders, `.gltf` from subfolders only; `Extraction/HdModels.cs` has the key rules. Separate from the `--hd=` folder. A `--det` run reads no model pack unless this flag names one)
 - `--no-hd-models` (**read no model pack**, whatever `--hd-models=` or `models.hd` names, in either argument order)
+- `--mod-folder=<folder>` (**the modding folder**: a folder of unzbd output, each archive it holds read in place of the game file and everything else from the game files, every read logged as `modding folder: <archive> read from <path>`. It beats the saved `modFolder` option, which Game Options' Modding Folder row sets and which a `--det` or `--synthetic-data` run never reads; empty reads none. Without either, nothing reads unzbd output, an `extracted/` under the data root included. Layout and files: [`docs/modding.md`](modding.md). `Spec/ModdingFolder.cs`)
 - `--copy-game-files=<source>` (**copy the game files a session reads into `<data-root>/CrimsonSkiesGame` and exit**, where the install lookup then finds them ahead of the remembered install. The source is an install, a disc folder, an `.iso` or a raw `.cue`/`.ccd` image; a disc's chapter cabinets come out unpacked. The tree is written under `CrimsonSkiesGame.partial` and renamed into place last, so a stopped copy is never found. Refuses, exit 1, when the data root already holds `CrimsonSkiesGame` (a dev tree's is the install itself) or the source does not open. Logs each file. `GameFileCopy`)
 - `--mips=authored|generated` (**which mip levels a texture gets**, default `authored`. A chapter ships hand-drawn half- and quarter-resolution siblings (`cblock1_1`, `cblock1_2`) that no gamez material references, the original's own mip chain (`docs/formats/gamez.md`). `authored` installs those siblings as levels 1 and 2 wherever one exists, box-filtering the rest; a texture with no sibling is untouched. `generated` runs `Image.GenerateMipmaps()` all the way down. A sibling whose size disagrees with the level it claims is refused with a warning, never installed. Measure it with `--dump-mips`)
 - `--graphics=original|enhanced` (the opt-in lit-world mode, default `original`. Precedence: **this flag**, then the **saved `graphicsMode` option** (`user://options.json`), then the **`graphics.mode`** config key, then `original`. Under `--det` only the flag survives, so it is the one way to ask for the enhanced path in a scripted or golden capture. It resolves at launch (`GraphicsMode.Resolve`), announced on the `[world] graphics mode:` line; an Options apply or **G** in flight switches it live after that. An unrecognised word at any layer warns and falls back to `original`)

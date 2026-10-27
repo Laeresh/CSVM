@@ -20,12 +20,19 @@ public sealed record SoundFile(ZbdEntry Entry, string? Rename)
 /// Reads <c>soundsh.zbd</c> or <c>soundsl.zbd</c> into its <see cref="SoundFile"/>s in table order,
 /// engine-free. Opening reads only the table; each WAV is read on demand, so the 128 MB archive is
 /// never held whole. Owns the archive's stream, and reads may come from any thread. Lookup rule:
-/// docs/formats/sounds.md.
+/// docs/formats/sounds.md. <see cref="FromExtracted"/> stands unzbd's output in for the archive.
 /// </summary>
 public sealed class SoundZbd : IDisposable
 {
-    private readonly ZbdArchive _archive;
+    private readonly ZbdArchive? _archive;
+    private readonly SoundArchive? _extracted;
     private readonly Dictionary<string, SoundFile> _byKey = new(StringComparer.OrdinalIgnoreCase);
+
+    private SoundZbd(SoundArchive extracted)
+    {
+        _extracted = extracted;
+        Sounds = Array.Empty<SoundFile>();
+    }
 
     private SoundZbd(ZbdArchive archive)
     {
@@ -44,7 +51,8 @@ public sealed class SoundZbd : IDisposable
         Sounds = sounds;
     }
 
-    /// <summary>Every sound in table order, repeats included under their rename.</summary>
+    /// <summary>Every sound in table order, repeats included under their rename. Empty over
+    /// unzbd's output, which has no table.</summary>
     public IReadOnlyList<SoundFile> Sounds { get; }
 
     /// <summary>The archive at <paramref name="path"/> (<c>ZBD/soundsh.zbd</c>), or null without a
@@ -57,14 +65,33 @@ public sealed class SoundZbd : IDisposable
     /// result then owns. <paramref name="name"/> labels error messages.</summary>
     public static SoundZbd Read(Stream stream, string name) => new(ZbdArchive.Read(stream, name));
 
+    /// <summary>Unzbd's sound zip or unpacked folder at <paramref name="path"/>, the modding path,
+    /// read through <see cref="SoundArchive"/>'s lookup by WAV name.</summary>
+    public static SoundZbd FromExtracted(string path) => new(new SoundArchive(path));
+
     /// <summary>The WAV bytes of the sound whose <see cref="SoundFile.Key"/> is
     /// <paramref name="name"/>, case ignored, or null when absent.</summary>
-    public byte[]? ReadWavBytes(string name) =>
-        _byKey.TryGetValue(name, out var sound) ? ReadWavBytes(sound) : null;
+    public byte[]? ReadWavBytes(string name)
+    {
+        if (_extracted != null)
+        {
+            // A zip archive is not safe to read from two threads.
+            lock (_extracted)
+            {
+                return _extracted.ReadWavBytes(name);
+            }
+        }
+
+        return _byKey.TryGetValue(name, out var sound) ? ReadWavBytes(sound) : null;
+    }
 
     /// <summary>The WAV bytes of <paramref name="sound"/>, one of <see cref="Sounds"/>.</summary>
-    public byte[] ReadWavBytes(SoundFile sound) => _archive.ReadEntry(sound.Entry);
+    public byte[] ReadWavBytes(SoundFile sound) => _archive!.ReadEntry(sound.Entry);
 
     /// <summary>Closes the archive's stream.</summary>
-    public void Dispose() => _archive.Dispose();
+    public void Dispose()
+    {
+        _archive?.Dispose();
+        _extracted?.Dispose();
+    }
 }

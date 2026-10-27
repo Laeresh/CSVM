@@ -2753,7 +2753,7 @@ public partial class GameSession : Node3D
     // where the game files carry none.
     private SoundArchive? MenuSounds()
     {
-        var rof = RofFiles.For(_paths.DataRoot);
+        var rof = _paths.Data.Rof;
         return rof.Files.Any(f => f.StartsWith("ASSETS/SOUNDS/", StringComparison.Ordinal))
             ? new SoundArchive(name => rof.Read("ASSETS/SOUNDS/" + name))
             : null;

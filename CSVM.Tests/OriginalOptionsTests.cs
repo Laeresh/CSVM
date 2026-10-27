@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Bindings;
@@ -120,6 +120,12 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.True(host.Module.GameOptions.LeadMarkerChoice);
 
+        // The remake-only Modding Folder row, Off while nothing is saved and nothing is offered.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.ModFolderKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal("Off", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
+
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
@@ -133,6 +139,31 @@ public class OriginalOptionsTests
         // apply carries every saved choice whichever page sends it.
         Assert.Equal(GraphicsMode.Default, exit.Graphics);
         Assert.Equal("hard", exit.Difficulty);
+        Assert.Null(exit.ModFolder);
+    }
+
+    [Fact]
+    public void TheModdingFolderRowOffersTheSavedAndOfferedFoldersAndItsPickRidesTheExit()
+    {
+        string saved = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "mods"));
+        string extracted = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "extracted"));
+        var host = new OptionsHost(Measure);
+        host.Module = new OriginalOptionsScreen(
+            MenuLayoutReaderTests.OriginalLayout(), host, () => new OptionsDef { ModFolder = saved }, modFolders: () => new[] { extracted, saved });
+        host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+
+        Assert.Equal(saved, host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal("mods", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
+        Accept(host);
+        Assert.Equal(new[] { "Off", "mods", "extracted" }, host.Rows.Select(r => r.Label));
+        Down(host);
+        Accept(host);
+        Assert.Equal(extracted, host.Module.GameOptions.ModFolderChoice);
+        StepX(host, 1);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        StepX(host, -1);
+        Assert.Equal(extracted, host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal(extracted, ((IOriginalOptionsForm)host.Module).Apply().ModFolder);
     }
 
     [Fact]
@@ -882,13 +913,13 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // Seven option rows, none of them a menu presentation: the command line alone picks one.
+        // Eight option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey, OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
-                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
+                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
@@ -1510,20 +1541,20 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey,
                 OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
-                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
+                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
             },
             rows.Select(r => r.Key));
-        // Four rows stand in the window at a time, one to a frame, the three below it unseen until it scrolls.
+        // Four rows stand in the window at a time, one to a frame, the four below it unseen until it scrolls.
         RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 4; i++)
         {
             Click(host, OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix);
         }
 
-        Assert.Equal(3, host.Module.GameOptions.Top);
+        Assert.Equal(4, host.Module.GameOptions.Top);
         RowsAreClearOfEachOther(host, host.Rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
     }
 

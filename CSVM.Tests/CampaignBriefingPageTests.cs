@@ -1,7 +1,6 @@
 using System.IO;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.Tests.Oracle;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
@@ -217,8 +216,8 @@ public class CampaignBriefingPageTests
         Directory.CreateDirectory(dir);
         var data = new Spec.GameData
         {
-            Messages = MessagesLegacy.Data(dataRoot).Messages,
-            Rimage = TexturesLegacy.Rimage(dataRoot),
+            Messages = TestExtracted.Data(dataRoot).Messages,
+            Rimage = TestExtracted.Rimage(dataRoot),
             Sounds = dataRoot == null ? null : InstallSounds.Value,
         };
         var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty, dataRoot, data: dataRoot == null ? data : TestZrdr.Readers(data));

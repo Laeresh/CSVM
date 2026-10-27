@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Camera;
 using CSVM.Utils;
 using DifficultyTiers = CSVM.Flight.Hangar.Difficulty;
@@ -17,19 +18,25 @@ public sealed class OptionsChoices
 {
     private readonly Func<SizeList> _screenSizes;
     private readonly Func<ScreenList> _screens;
+    private readonly Func<IReadOnlyList<string>> _modFolders;
 
     // The size the options file named at the last Load, which the size row offers as an entry of its
     // own (Sizes). Held apart from the stepped choice, a hand-written size stays in the list after a
     // step lands elsewhere. A step back then reaches it again.
     private string? _savedResolution;
 
+    // The modding folder the options file named at the last Load, offered whatever else is.
+    private string? _savedModFolder;
+
     /// <summary>Choices over <paramref name="screenSizes"/> and <paramref name="screens"/>, read on
     /// every access since a monitor can be plugged in while a screen stands open. Null offers every
-    /// candidate size and the one screen a shell with no engine can name.</summary>
-    public OptionsChoices(Func<SizeList>? screenSizes = null, Func<ScreenList>? screens = null)
+    /// candidate size and the one screen a shell with no engine can name. The Modding Folder row
+    /// offers <paramref name="modFolders"/> beside the saved folder.</summary>
+    public OptionsChoices(Func<SizeList>? screenSizes = null, Func<ScreenList>? screens = null, Func<IReadOnlyList<string>>? modFolders = null)
     {
         _screenSizes = screenSizes ?? (() => ResolutionSetting.Unknown);
         _screens = screens ?? (() => MonitorSetting.Unknown);
+        _modFolders = modFolders ?? (() => Array.Empty<string>());
     }
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Hangar.Difficulty"/>).</summary>
@@ -93,6 +100,28 @@ public sealed class OptionsChoices
 
     /// <summary>The Voice level, null while never set.</summary>
     public int? AudioVoice { get; set; }
+
+    /// <summary>The modding folder a launch reads (<c>Spec.ModdingFolder</c>), null for none.</summary>
+    public string? ModFolder { get; set; }
+
+    /// <summary>The folders the Modding Folder row offers after Off: the saved one, the offered
+    /// ones and the staged one, each once.</summary>
+    public IReadOnlyList<string> ModFolders
+    {
+        get
+        {
+            var folders = new List<string>();
+            foreach (string? folder in new[] { _savedModFolder }.Concat(_modFolders()).Append(ModFolder))
+            {
+                if (folder != null && !folders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+                {
+                    folders.Add(folder);
+                }
+            }
+
+            return folders;
+        }
+    }
 
     /// <summary>Whether the graphics word is Enhanced, which an Enhanced-only word setting needs to
     /// step at all. Under Original each keeps its word for a later flip.</summary>
@@ -166,6 +195,7 @@ public sealed class OptionsChoices
         AudioMusic = saved?.AudioMusic;
         AudioEffects = saved?.AudioEffects;
         AudioVoice = saved?.AudioVoice;
+        ModFolder = _savedModFolder = saved?.ModFolder;
     }
 
     /// <summary>The apply exit carrying every setting, never-set ones as null.</summary>
@@ -173,7 +203,7 @@ public sealed class OptionsChoices
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
             NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
-            LeadingAimAssist, LeadMarker);
+            LeadingAimAssist, LeadMarker, ModFolder);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

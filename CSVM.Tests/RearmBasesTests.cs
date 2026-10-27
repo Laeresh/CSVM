@@ -4,7 +4,6 @@ using CSVM.Extraction;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using Godot;
 using Xunit;
 
@@ -116,7 +115,7 @@ public sealed class RearmBasesTests
         Assert.Equal(RearmBases.InitialRadiusSquared, RearmBases.LoadRadiusSquared(zrdr, reason => why = reason));
         Assert.Null(why);
 
-        var messages = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var messages = Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         Assert.Equal("Rearmed!", messages.Get(HudMessages.RearmedKey));
     }
 }

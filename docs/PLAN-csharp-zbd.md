@@ -205,7 +205,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 43. ☑ Delete the extraction pipeline
 44. ☑ Packaging, licences, credit and docs
 45. ☐ Final ISO-only run
-46. ☐ The modding folder: unzbd's output read per archive, opt-in
+46. ☑ The modding folder: unzbd's output read per archive, opt-in
 
 ## Dependency and parallelism notes
 
@@ -1812,7 +1812,79 @@ disc. The user's disc data stays out of every commit and release. That pressing 
 `crimptch.rof`, so a golden the patch's `AIRFRAME.SCRIPT` or menu overlay reaches may move; record
 each one rather than overlaying the install's patch (Decision 23).
 
-## E46 ☐ The modding folder: unzbd's output read per archive, opt-in
+## E46 ☑ The modding folder: unzbd's output read per archive, opt-in
+
+**Landed.** `CSVM/src/Spec/ModdingFolder.cs` is the folder: `Find(installPath)` maps an install
+path to unzbd's output under it (`ZBD/` dropped, `.zbd` made `.zip`, `strings.dll` to
+`messages.json`, `ZBD/interp.zbd` to `interp.json`), in `Extraction/ZbdTree.cs`'s case, with the
+unpacked folder preferred through `SessionPaths.PreferUnzipped`, null where the folder holds none.
+`GameData.Load(game, modFolder)` reads each slot through one rule (`Read`): the folder's output
+when it holds the archive and it reads, logged `modding folder: <archive> read from <path>`, else
+the game file; output that throws is logged as an error and the game file is read instead. Every
+format is wired: interp, messages, `rimage` and the chapter tier (the tier the game files pick,
+`TextureSet.ChapterArchive`, so an HD pack keeps its `c1/rtexture15` key), planes and chapter
+gamez, `soundsh`, cam and mis anim, and the root, chapter and mission zrdr. The readers are the
+fork-shape ones: `InterpScripts.FromExtracted`, `Messages.FromExtracted`/`ParseExtracted` and
+`TextureSet.FromExtracted`/`ReadExtracted` moved back from `CSVM.Tests/Oracle/` (deleted; the units
+that hand a screen an extracted data root read through `CSVM.Tests/TestExtracted.cs`), beside
+`GameZ.Load`, `AnimArchive.Load`, `ZrdrSet.FromExtracted` and `SoundZbd.FromExtracted`, which
+wraps `SoundArchive`'s zip/directory reader behind the `SoundZbd` the session already takes.
+`GameData.ModFolder` keeps the folder, so the source screen's re-load reads it too.
+
+The choice is `ModdingFolder.Choose`, called in `BasePaths.Resolve`: `--mod-folder=<folder>`
+(`SessionSpec.ModFolder`, empty names none) beats the saved `modFolder` option
+(`OptionsDef.ModFolder`, through `OptionsStore.UserOptions()`, so portable mode's folder holds
+it); a `--det` or `--synthetic-data` run never reads the saved one, and `--synthetic-data` reads
+no folder at all. With none named nothing reads unzbd output: `GameData.Load` never sees the data
+root, so an `extracted/` there is read only once named (Decision 22). The Options row is Game
+Options' Modding Folder, a remake-only dropdown at the page's foot (`OriginalGameOptionsPage.ModFolderKey`):
+Off, the saved folder, the folder this launch's `--mod-folder=` named and an old `<data root>/extracted`,
+each by its last segment (`ModdingFolder.Offered`, `OptionsChoices.ModFolders`), its description
+naming the whole path. The pick rides `OptionsApplyExit.ModFolder` into `LiveSettings.Persist`
+and takes effect at the next start. The page's rows now take their words from the staged choices,
+as the VIDEO page's do. Screenshot aids `--menu=game-options:scrolled` (now onto this row) and
+`game-options:folders` (its list open). The modder's page is [modding.md](modding.md): the unzbd
+build (v0.4.0's bundled one), `unzbd cs <mode> <input> <output>`, the table of archives and
+outputs, which archives the engine reads (the top texture tier, `soundsh` only, never the ROF
+half), naming the folder, the log lines, and matching the copy. `README.md`, both
+`packaging/README*.md` and `SourceFlow`'s Upgrade body name the row and the flag;
+`docs/cli.md` has the bullet (index, parser and bullet counts each one up).
+
+**`GameData.Rof` (the folded-in cleanup).** `GameData.Rof` is the UI half, `RofFiles.Open(game)`
+in `Load`; `SyntheticGameData.Build(RofFiles)` takes the Original shell's view, which the launcher
+hands in from the tree build's binding. The consumers holding game data read it there:
+`GameSession.MenuSounds`, `ProcessMenu`'s menu audio service, `AudioBusSuites` (two sites) and
+`MenuSuiteHost.RequireRof`. `Launcher.BindRofFiles` binds `Data.Rof` to the data root instead of
+opening a second view. **The registry stays** for the consumers that hold only a data root, where
+threading `GameData` is wide: 14 `RofFiles.For` calls in 13 engine files (`UiStrings.TryLoad`,
+`MenuLayout.TryLoad`, `OriginalAssetManifest.Check`, `OriginalArtSizes`, `ScrapbookComposition`,
+`ComposedBoardView`, `CinemaScreen`, `PlaneDiagrams`, `CampaignCabinPage`,
+`CampaignFlightCheckPage`, `CampaignScrapbookZoomPage` twice, `LiveryResolver`, `SessionBoards`),
+whose data-root signatures have about 200 callers (`OriginalAvailability.Load` 62 with the units,
+`new LiveryResolver` 56, `ScrapbookComposition` 80 with the units), and the units'
+`TestData.TempDir()` live views, which 335 call sites can reach.
+
+**Whether a folder from another release warns (the TODO): no.** The page says that archives name
+each other (textures, nodes, sounds), that CSVM checks no pair, and that the output should come
+from the copy CSVM reads, as the Trap asks. **The flag and the row (the TODO):** `--mod-folder=`,
+spelt as `--hd=` and `--profiles=` are, and the Game Options row above: the Options screens have no
+data page, and Game Options already carries the remake-only rows.
+
+`CSVM.Tests/ModdingFolderTests.cs` holds 14 tests, 18 cases: the layout map, the folder-over-zip
+rule, the choice (flag, empty flag, saved, `--det`, synthetic), the offered folders, the option's
+round trip, every root slot read from a folder with no game files, a broken output falling back,
+and over the install C1's gamez from an edited zip (one vertex moved) beside the game's C1B,
+planes and readers, C1/M02's readers from a one-reader folder beside the game's chapter scope,
+C1's tier from a one-texture folder whose flags read Both beside the game's `rimage`, `Resolve`
+over the real data root, whose `extracted/` is not read until `--mod-folder=` names it, and
+`GameData.Rof`. `OriginalOptionsTests` gained the row's walk. The engine suite `modding-folder`
+resolves a `--mod-folder=` launch whose folder holds C1's gamez with `battlement3` renamed, builds
+the flight session and finds the renamed node in its world, with the planes and readers from the
+game files. The model diffs are unchanged and stay the modding path's guard.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With a modding folder named (Options, or a flag), each archive whose unzbd output the
 folder holds loads from there, and every other archive from the game files; with none named,
@@ -1828,8 +1900,8 @@ loader, pick per archive: the modding folder's file when present (the path layou
 `extracted/` uses), else the game files. The flag and Options row, with `--det` and synthetic
 runs ignoring a saved folder. Drop the v0.6.1 shape paths. A modder-facing page in `docs/` naming
 the files read and the unzbd version that writes them (v0.4.0's bundled one). The model diffs
-become the guard for the modding path. <TODO: the flag's spelling and the Options row's place;
-whether a folder from one release over game files of another warns.>
+become the guard for the modding path. The flag's spelling, the Options row's place and whether
+a folder from one release over game files of another warns are answered in **Landed** above.
 
 **Model recommendation.** high, it touches every format's load path.
 

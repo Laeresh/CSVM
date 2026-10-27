@@ -485,8 +485,8 @@ The game's localized string table, a case-insensitive key→value map resolving 
 missions reference. `Load(IGameFileSource?)` reads the install's `strings.dll` (`FromStringsDll`: the
 `.data` key table joined to the `STRINGTABLE` by id through `Extraction/PeStringTable.cs`), empty
 without a source. A launch loads it once into `Spec/GameData.cs`, and every consumer takes that one
-object. `Of` builds a table from pairs, for `Tooling/SyntheticMessages.cs` and the test oracle
-(`CSVM.Tests/Oracle/MessagesLegacy.cs`, the old `messages.json` read). `Fill`/`Format` substitute a
+object. `Of` builds a table from pairs, for `Tooling/SyntheticMessages.cs`; `FromExtracted` and
+`ParseExtracted` read unzbd's `messages.json`, the modding path. `Fill`/`Format` substitute a
 template's `%1`…`%9` placeholders (the HUD strings' format).
 
 ## src/Mech3/UiStrings.cs
@@ -647,13 +647,13 @@ to case. `Load` returns null without a source or without the file, and each cons
 `LensFlareRig.FlareTextureNames` and `TextureArchive.MipBias`. It is read once per launch into
 `Spec/GameData.cs`, which every session (`BuildState.Data`), the launcher's mip bias, the probes
 and the suites (`TestContext.RequireInterp`) read it from. `Read` refuses a file whose table
-and bodies do not tile it. Layout: [../formats/interp.md](../formats/interp.md).
+and bodies do not tile it; `FromExtracted` reads unzbd's `interp.json`, the modding path. Layout: [../formats/interp.md](../formats/interp.md).
 
 ## src/Mech3/TextureZbd.cs
 The reader for the texture archives `texture.zbd`, `rtextureN.zbd` and `rimage.zbd`, engine-free:
 `Read` decodes a whole file into `TextureImage`s in file order (name, collision rename, size, the header's alpha class and render-flags word, and the pixels as RGB8 or RGBA8, the layout the extracted PNG had).
 `Load(game, path)` returns null without a source or without the file, and `Read` refuses a file whose textures do not tile it. `TextureSet` holds one archive's records by `Key` without case, with the `Archive` name an HD pack files them under;
-`TextureSet.ForChapter` picks a chapter's highest `rtextureN` tier, else `texture.zbd`, the set `Spec/GameData.cs` loads per chapter beside `rimage`, and `Rgba` expands a record for the menus' engine-free art.
+`TextureSet.ForChapter` picks a chapter's highest `rtextureN` tier, else `texture.zbd`, the set `Spec/GameData.cs` loads per chapter beside `rimage`, and `Rgba` expands a record for the menus' engine-free art. `ChapterArchive` names that tier's install path, and `FromExtracted`/`ReadExtracted` read unzbd's texture zip or folder (manifest plus PNGs), the modding path.
 Layout, pixel decode and the alpha class: [../formats/texture-archive.md](../formats/texture-archive.md).
 
 ## src/Mech3/GameZZbd.cs
@@ -875,7 +875,7 @@ into `Sounds`, one `SoundFile` per entry in table order (the entry and its colli
 ignored, the first in table order for the one case-only pair. The object owns the archive's
 stream, and `Dispose` ends it; reads lock the stream, so any thread may read. The launch opens
 `soundsh.zbd` once as `GameData.Sounds` (`Spec/GameData.cs`) and never closes it; every session,
-the score and the briefing read that one. Lookup rule: [../formats/sounds.md](../formats/sounds.md#the-sound-archives).
+the score and the briefing read that one. `FromExtracted` stands unzbd's sound zip or folder in for the archive (the modding path, through `SoundArchive`, `Sounds` empty). Lookup rule: [../formats/sounds.md](../formats/sounds.md#the-sound-archives).
 
 ## src/Mech3/SoundArchive.cs
 WAV lookup over the launch's `SoundZbd`, or over a soundsh/soundsl extraction (zip or directory,

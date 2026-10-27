@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using CSVM.Extraction;
 
 namespace CSVM.Mech3;
@@ -37,6 +38,26 @@ public sealed class InterpScripts
     /// source or without the file, which every consumer reads as "nothing authored".</summary>
     public static InterpScripts? Load(IGameFileSource? game) =>
         game != null && game.Exists(GamePath) ? Read(game.ReadAllBytes(GamePath)) : null;
+
+    /// <summary>The scripts of unzbd's <c>interp.json</c>, the modding path: each object's
+    /// <c>name</c> and <c>lines</c>, in file order.</summary>
+    public static InterpScripts FromExtracted(string path)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+        var scripts = new List<InterpScript>();
+        foreach (var script in doc.RootElement.EnumerateArray())
+        {
+            var lines = new List<string>();
+            foreach (var line in script.GetProperty("lines").EnumerateArray())
+            {
+                lines.Add(line.GetString() ?? "");
+            }
+
+            scripts.Add(new InterpScript(script.GetProperty("name").GetString() ?? "", lines));
+        }
+
+        return new InterpScripts(scripts);
+    }
 
     /// <summary>Decodes a whole <c>interp.zbd</c>. Throws <see cref="InvalidDataException"/> on a
     /// file that is not one, or whose script table and bodies do not tile it exactly.</summary>

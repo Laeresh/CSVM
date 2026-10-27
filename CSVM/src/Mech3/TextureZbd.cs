@@ -2,7 +2,9 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using CSVM.Extraction;
 
 namespace CSVM.Mech3;
@@ -270,11 +272,16 @@ public sealed class TextureSet
 
     /// <summary>The chapter's texture archive: its highest <c>rtextureN</c> tier, the set the
     /// original renders, else its <c>texture.zbd</c>. Empty without either.</summary>
-    public static TextureSet ForChapter(IGameFileSource? game, string chapter)
+    public static TextureSet ForChapter(IGameFileSource? game, string chapter) =>
+        ChapterArchive(game, chapter) is { } path ? Load(game, path) : Empty;
+
+    /// <summary>The install path of the archive <see cref="ForChapter"/> reads, null without a
+    /// source. The <c>texture.zbd</c> path when no tier is there, whether or not it exists.</summary>
+    public static string? ChapterArchive(IGameFileSource? game, string chapter)
     {
         if (game == null)
         {
-            return Empty;
+            return null;
         }
 
         for (int n = TopTier; n > 0; n--)
@@ -282,11 +289,70 @@ public sealed class TextureSet
             string tier = $"ZBD/{chapter}/rtexture{n}.zbd";
             if (game.Exists(tier))
             {
-                return Load(game, tier);
+                return tier;
             }
         }
 
-        return Load(game, $"ZBD/{chapter}/texture.zbd");
+        return $"ZBD/{chapter}/texture.zbd";
+    }
+
+    /// <summary>The archive <paramref name="installPath"/> names, read from unzbd's zip or unpacked
+    /// folder at <paramref name="zipOrFolder"/>, the modding path.</summary>
+    public static TextureSet FromExtracted(string installPath, string zipOrFolder) =>
+        new(ArchiveOf(installPath), ReadExtracted(zipOrFolder));
+
+    /// <summary>The records of unzbd's texture zip or folder, in its <c>manifest.json</c>'s order.
+    /// A PNG's pixels keep the layout its colour type gives, RGBA or RGB. A PNG that does not match
+    /// the manifest throws
+    /// <see cref="InvalidDataException"/>.</summary>
+    public static List<TextureImage> ReadExtracted(string zipOrFolder)
+    {
+        using var archive = Directory.Exists(zipOrFolder) ? null : ZipFile.OpenRead(zipOrFolder);
+        byte[] Read(string name)
+        {
+            if (archive == null)
+            {
+                return File.ReadAllBytes(Path.Combine(zipOrFolder, name));
+            }
+
+            var entry = archive.GetEntry(name) ?? throw new FileNotFoundException(name);
+            using var stream = entry.Open();
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            return copy.ToArray();
+        }
+
+        using var manifest = JsonDocument.Parse(Read("manifest.json"));
+        var textures = new List<TextureImage>();
+        foreach (var info in manifest.RootElement.GetProperty("texture_infos").EnumerateArray())
+        {
+            string name = info.GetProperty("name").GetString()!;
+            string? rename = info.TryGetProperty("rename", out var r) ? r.GetString() : null;
+            var png = Read((rename ?? name) + ".png");
+            if (PngImage.ReadGamma(png) != null)
+            {
+                throw new InvalidDataException($"{zipOrFolder}: {name}.png carries a gAMA chunk");
+            }
+
+            var image = PngImage.Decode(png) ?? throw new InvalidDataException($"{zipOrFolder}: {name}.png would not decode");
+            bool alphaChannel = png[25] == 6; // IHDR colour type: 6 RGBA, 2 RGB
+            if ((info.GetProperty("width").GetInt32(), info.GetProperty("height").GetInt32()) != (image.Width, image.Height))
+            {
+                throw new InvalidDataException($"{zipOrFolder}: {name}.png is not the manifest's size");
+            }
+
+            textures.Add(new TextureImage(
+                name,
+                rename,
+                image.Width,
+                image.Height,
+                Enum.Parse<TextureArchive.AlphaClass>(info.GetProperty("alpha").GetString()!),
+                Stretch(info.GetProperty("stretch").GetString()!),
+                alphaChannel,
+                alphaChannel ? image.Rgba : DropAlpha(image.Rgba)));
+        }
+
+        return textures;
     }
 
     /// <summary>The record looked up by <paramref name="key"/>, or null.</summary>
@@ -330,5 +396,29 @@ public sealed class TextureSet
         }
 
         return Path.ChangeExtension(unix, null).ToLowerInvariant();
+    }
+
+    // unzbd's spelling of the render-flags word. ⚠ Vertical is 1 and Horizontal 2.
+    private static int Stretch(string spelling) => spelling switch
+    {
+        "None" => 0,
+        "Vertical" => 1,
+        "Horizontal" => 2,
+        "Both" => 3,
+        _ when spelling.StartsWith("Unk", StringComparison.Ordinal) => int.Parse(spelling[3..], System.Globalization.CultureInfo.InvariantCulture),
+        _ => throw new InvalidDataException($"stretch {spelling}"),
+    };
+
+    private static byte[] DropAlpha(byte[] rgba)
+    {
+        var rgb = new byte[rgba.Length / 4 * 3];
+        for (int i = 0, o = 0; i < rgba.Length; i += 4)
+        {
+            rgb[o++] = rgba[i];
+            rgb[o++] = rgba[i + 1];
+            rgb[o++] = rgba[i + 2];
+        }
+
+        return rgb;
     }
 }

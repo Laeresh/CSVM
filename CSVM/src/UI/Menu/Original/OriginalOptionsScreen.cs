@@ -96,24 +96,24 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
     // carries the others' unchanged.
     private readonly OptionsChoices _choices;
 
-    /// <summary>An options form over <paramref name="layout"/>'s own five sections, calling back
-    /// into <paramref name="host"/> for the state every screen family shares. The reader
-    /// <paramref name="options"/> reads the saved settings the pages show back, null opening them on
-    /// the shipped defaults, which an engine-free test wants. The VIDEO page's two enumerated rows
-    /// come from <paramref name="screenSizes"/> and <paramref name="screens"/>, and the rebinding
-    /// pages stage in <paramref name="controls"/>. It never writes.</summary>
+    /// <summary>An options form over <paramref name="layout"/>'s five sections and
+    /// <paramref name="host"/>'s shared state. <paramref name="options"/> reads the saved settings,
+    /// null opening on the shipped defaults. The enumerated rows come from <paramref name="screenSizes"/>,
+    /// <paramref name="screens"/> and <paramref name="modFolders"/>; the rebinding pages stage in
+    /// <paramref name="controls"/>. It never writes.</summary>
     public OriginalOptionsScreen(
         MenuLayout layout,
         IOriginalScreenHost host,
         Func<CSVM.Utils.OptionsDef>? options = null,
         Func<CSVM.Utils.SizeList>? screenSizes = null,
         Func<CSVM.Utils.ScreenList>? screens = null,
-        ControlsFeature? controls = null)
+        ControlsFeature? controls = null,
+        Func<IReadOnlyList<string>>? modFolders = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _options = options;
-        _choices = new OptionsChoices(screenSizes, screens);
+        _choices = new OptionsChoices(screenSizes, screens, modFolders);
         var chrome = new OriginalOptionsChrome(layout, host);
         GameOptions = new OriginalGameOptionsPage(chrome, this, _choices);
         Audio = new OriginalAudioPage(chrome, this, _choices);
@@ -123,7 +123,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
         _pages = new IOriginalOptionsPage[] { GameOptions, Audio, Video, Controls, Keys };
     }
 
-    /// <summary>The Game Options page and the five settings it would apply.</summary>
+    /// <summary>The Game Options page and the settings it would apply.</summary>
     public OriginalGameOptionsPage GameOptions { get; }
 
     /// <summary>The AUDIO page, its four levels and the preview the host plays.</summary>

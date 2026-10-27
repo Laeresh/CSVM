@@ -488,7 +488,8 @@ public partial class Launcher : Node3D
         }
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
-        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, Tooling.SyntheticGameData.Build);
+        // A synthetic tree's build bound the Original shell's view to its root; its game data takes that view.
+        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, () => Tooling.SyntheticGameData.Build(Extraction.RofFiles.For(dataRoot)));
         BindRofFiles();
         _probeRunner = new Tooling.ProbeRunner(_paths);
         // --dump: the game files' models into a folder for analysis scripts, then quit.
@@ -1499,7 +1500,7 @@ public partial class Launcher : Node3D
             }
 
             Log.Info("core", $"game files: {source.Location}, picked");
-            _paths = _paths with { Game = source, Data = GameData.Load(source) };
+            _paths = _paths with { Game = source, Data = GameData.Load(source, _paths.Data.ModFolder) };
             BindRofFiles();
             _probeRunner = new Tooling.ProbeRunner(_paths);
 
@@ -1514,13 +1515,13 @@ public partial class Launcher : Node3D
         EnterMenu();
     }
 
-    // The UI archive's view, read in place from the session's game files and bound to its data
+    // The game data's UI archive view, bound to the data root for the consumers that hold only a
     // root. A synthetic tree bound its own while it was built, and has no game files to read.
     private void BindRofFiles()
     {
         if (!_spec.SyntheticData)
         {
-            Extraction.RofFiles.Bind(_paths.DataRoot, Extraction.RofFiles.Open(_paths.Game));
+            Extraction.RofFiles.Bind(_paths.DataRoot, _paths.Data.Rof);
         }
     }
 

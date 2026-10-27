@@ -18,7 +18,7 @@ are:
   runs. Its output mirrors the game's own folder structure, chapter and mission folders upper
   case (`C1B/M03`) and archive names lower case (`zrdr.zip`, `rtexture12.zip`), and an opt-in
   modding folder holding it overrides the game files archive by archive. The shape CSVM reads is
-  the one the build CSVM v0.4.0 bundled writes (see "Supported extraction shapes" below).
+  the one the build CSVM v0.4.0 bundled writes (see "Supported extraction shapes" below); naming the folder and the files read are in [../modding.md](../modding.md).
 
 ## Support matrix
 

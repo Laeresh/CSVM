@@ -109,7 +109,7 @@ internal static class AudioBusSuites
             // With previews on, so the two preview players are built and swept like every other
             // site; the launcher turns them off in exactly the runs this suite is one of.
             menu = new MenuAudioService(null, name => Stream(archive, defs, name),
-                CSVM.Extraction.RofFiles.For(ctx.DataRoot), previews: true)
+                ctx.Data.Rof, previews: true)
             {
                 Name = "GuardMenuAudio",
             };
@@ -285,7 +285,7 @@ internal static class AudioBusSuites
 
             int fired = menu.MixPreviewStarts - starts;
             report.AppendLine($"preview clips started over twenty-one Effects changes: {fired}");
-            if (CSVM.Extraction.RofFiles.For(ctx.DataRoot).Exists("ASSETS/SOUNDS/SFX_LOOP.WAV"))
+            if (ctx.Data.Rof.Exists("ASSETS/SOUNDS/SFX_LOOP.WAV"))
             {
                 ctx.Check(fired == 1,
                     $"a level moved twenty-one times over sounds one preview clip, neither none nor one per change (started={fired})");

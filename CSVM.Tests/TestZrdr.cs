@@ -43,6 +43,7 @@ public static class TestZrdr
         Rimage = data.Rimage,
         Planes = data.Planes,
         Sounds = data.Sounds,
+        Rof = data.Rof,
         Zrdr = Root,
         LoadChapter = (chapter, mission) =>
         {

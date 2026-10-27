@@ -3,7 +3,6 @@ using CSVM.Extraction;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Testing;
-using CSVM.Tests.Oracle;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -92,7 +91,7 @@ public class StuntReturnTests
         var mission = StuntMission.Load(
             GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C1")),
             TestZrdr.Mission("C1", "IA1"),
-            MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+            Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.True(mission is { TotalCount: 5 }, "C1/IA1 loads its five danger zones");
         return mission!;
     }

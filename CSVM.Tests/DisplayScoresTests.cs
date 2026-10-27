@@ -5,7 +5,6 @@ using System.Text.Json.Nodes;
 using CSVM.Bindings;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Overlays;
 using Godot;
@@ -209,7 +208,7 @@ public class DisplayScoresTests
     [Fact]
     public void TheHeaderWordsComeFromTheMessageTableAndFallBackWord()
     {
-        var table = MessagesLegacy.Parse("{\"entries\": [{\"key\": \"MSG_MPHUD_PLAYER\", \"id\": 7008, \"value\": \"  Spieler\"}]}");
+        var table = Messages.ParseExtracted("{\"entries\": [{\"key\": \"MSG_MPHUD_PLAYER\", \"id\": 7008, \"value\": \"  Spieler\"}]}");
         var words = OriginalScoresWords.From(table);
         Assert.Equal("  Spieler", words.Player);
         Assert.Equal(OriginalScoresWords.Fallback.PlayerTeam, words.PlayerTeam);

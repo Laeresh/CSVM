@@ -2,7 +2,6 @@ using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -27,7 +26,7 @@ public class PlaneStatsTitleTests
         var stats = PlaneStats.LoadForAi(ZrdrPath, "player_kestrel", "medkestrel");
 
         Assert.Equal("MSG_VEH_MEDUSA_KESTREL", stats.AiTitleKey);
-        Assert.Equal("Medusa Kestrel", MessagesLegacy.Load(MessagesPath).Get(stats.AiTitleKey!));
+        Assert.Equal("Medusa Kestrel", Messages.FromExtracted(MessagesPath).Get(stats.AiTitleKey!));
     }
 
     // Resolved, it is what the marker prints; unresolved, the readout keeps the derivation rather
@@ -39,7 +38,7 @@ public class PlaneStatsTitleTests
 
         Assert.Equal("Kestrel", PlaneRoster.PlaneDisplayName(stats));
 
-        stats.AiTitle = MessagesLegacy.Load(MessagesPath).Get(stats.AiTitleKey!);
+        stats.AiTitle = Messages.FromExtracted(MessagesPath).Get(stats.AiTitleKey!);
         Assert.Equal("Medusa Kestrel", PlaneRoster.PlaneDisplayName(stats));
     }
 
@@ -49,7 +48,7 @@ public class PlaneStatsTitleTests
     public void ADefWithoutOneInheritsTheAirframesTitle()
     {
         var stats = PlaneStats.LoadForAi(ZrdrPath, "player_kestrel");
-        stats.AiTitle = MessagesLegacy.Load(MessagesPath).Get(stats.AiTitleKey!);
+        stats.AiTitle = Messages.FromExtracted(MessagesPath).Get(stats.AiTitleKey!);
 
         Assert.Equal("MSG_VEH_KESTREL", stats.AiTitleKey);
         Assert.Equal("Kestrel", PlaneRoster.PlaneDisplayName(stats));

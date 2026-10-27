@@ -32,7 +32,7 @@ public sealed record BasePaths(string RepoRoot, string DataRoot)
         return new BasePaths(repoRoot, dataRoot)
         {
             Game = game,
-            Data = spec.SyntheticData ? synthetic() : GameData.Load(game),
+            Data = spec.SyntheticData ? synthetic() : GameData.Load(game, ModdingFolder.Choose(spec, static () => Utils.OptionsStore.UserOptions().Load().ModFolder)),
         };
     }
 }

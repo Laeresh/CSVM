@@ -10,7 +10,6 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.Roster;
 using CSVM.Spec;
-using CSVM.Tests.Oracle;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -225,7 +224,7 @@ public sealed class LobbyBotOutlawTests
     private static (ZrdrSet Zrdr, Messages Messages, MilitiaFits Militias) Install()
     {
         var zrdr = TestZrdr.Root;
-        var messages = MessagesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var messages = Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         return (zrdr, messages, MilitiaFits.Load(zrdr, messages));
     }
 

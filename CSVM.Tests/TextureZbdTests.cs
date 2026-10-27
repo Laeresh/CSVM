@@ -6,7 +6,6 @@ using System.Linq;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.Tests.Oracle;
 using Xunit;
 using Xunit.Abstractions;
 using AlphaClass = CSVM.Mech3.TextureArchive.AlphaClass;
@@ -15,8 +14,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="TextureZbd.Read"/> over hand-encoded archives (CI-safe), and over every texture
-/// archive of the install against today's extraction. The oracle, <see cref="Oracle.TexturesLegacy"/>,
-/// reads each texture's manifest fields and its PNG's pixels without the engine. Layout: docs/formats/texture-archive.md.
+/// archive of the install against today's extraction. The modding path,
+/// <see cref="TextureSet.ReadExtracted"/>, reads each texture's manifest fields and its PNG's
+/// pixels without the engine. Layout: docs/formats/texture-archive.md.
 /// </summary>
 public class TextureZbdTests
 {
@@ -162,7 +162,7 @@ public class TextureZbdTests
 
     // Today's model, the extraction's zip read the way the engine used to read it.
     private static List<TextureImage> FromExtraction(string path) =>
-        TexturesLegacy.Load(Path.Combine(TestData.ExtractedRoot!, Path.ChangeExtension(ZbdTree.Canonical(path), ".zip")));
+        TextureSet.ReadExtracted(Path.Combine(TestData.ExtractedRoot!, Path.ChangeExtension(ZbdTree.Canonical(path), ".zip")));
 
     private static Spec Rgb565(string name, int flags, int renderFlags, params int[] texels) =>
         new(name, flags, renderFlags, texels.Length, texels.SelectMany(c => new[] { (byte)c, (byte)(c >> 8) }).ToArray(), 0, null, null, -1);

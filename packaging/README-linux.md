@@ -125,8 +125,8 @@ folder the archive goes in.
 
 Earlier versions extracted the game into an `extracted` folder next to `CSVM.x86_64`. This
 version reads the game files directly and does not use it. The first start asks once
-whether to keep it, to mod the game with (it is read again only when you name it as the
-modding folder), or to delete it and free the space.
+whether to keep it, to mod the game with (it is read again only when you choose it on the
+Modding Folder row of Options' GAME OPTIONS page), or to delete it and free the space.
 
 ## On Steam Deck
 
