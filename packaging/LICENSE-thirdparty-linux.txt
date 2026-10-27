@@ -14,7 +14,7 @@ Assembled from these exact payload versions, which ExportRelease.ps1 re-checks
 against what it packages before it will build a tarball:
 
   Godot Engine build: 4.7.stable.mono.official.5b4e0cb0f
-  .NET runtime version: 8.0.32
+  .NET runtime version: 8.0.33
   .NET runtime pack: Microsoft.NETCore.App.Runtime.linux-x64
 
 Regenerate with packaging\BuildThirdPartyNotices.ps1 -Linux, which reads every
@@ -3721,6 +3721,48 @@ https://github.com/SixLabors/ImageSharp/blob/f4f689ce67ecbcc35cebddba5aacb603e6d
 6. pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from
 ==============================================================================
 
+CSVM's MPEG-1 video and MP2 audio decoding is a port of pl_mpeg, a single-header
+C library by Dominic Szablewski (https://phoboslab.org), published at
+https://github.com/phoboslab/pl_mpeg. The C source is not in this archive and no
+pl_mpeg binary is shipped: the code that runs is C# derived from it, so this
+notice is carried for the source CSVM's own decoder is written from rather than
+for a component inside a binary here.
+
+pl_mpeg declares its terms as the line SPDX-License-Identifier: MIT in its
+header. It publishes no LICENSE file and reproduces no licence block in the
+header itself, so there is no upstream text to copy. What follows is therefore
+the standard MIT licence with pl_mpeg's author named as the copyright holder,
+kept in this project as packaging\LICENSE-plmpeg, and not a verbatim copy of a
+file upstream distributes. No copyright year is given because upstream states
+none.
+
+MIT License
+
+Copyright (c) Dominic Szablewski
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+7. PromptFont, the font the controller button pictures are drawn from
+==============================================================================
+
 The controller button pictures CSVM draws in its prompts are characters of
 PromptFont by Yukari "Shinmera" Hafner, published at
 https://github.com/Shinmera/promptfont. The font file is packed unmodified inside
@@ -3826,11 +3868,4 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
-
-
-==============================================================================
-7. PromptFont, the font the controller button pictures are drawn from
-==============================================================================
-
-
 
