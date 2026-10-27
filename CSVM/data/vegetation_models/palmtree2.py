@@ -23,10 +23,11 @@ veg_palm.main({
     "core_r": 0.35,
     # The card's trunk stands 0.5 m left of its centre and its crown on it: the lean puts the crown there.
     "trunk": {"r_base": 0.15, "r_top": 0.12, "swell": 0.5, "sides": 6, "segs": 8, "repeats": 4, "lean": 0.45},
-    # Colours are sRGB: shade, body and highlight, read off the card's crown and trunk texels.
+    # Colours are sRGB: shade, body and highlight. Trunk and bark off the card's trunk texels; fronds set
+    # against the card's crown in game, greener and darker than its texels' mean (D33, Colour in game).
     "fronds": {"count": 18, "length": (4.0, 3.4), "width": 0.2, "fold": 0.9, "elev": (88, 10), "bend": (0.4, 2.6)},
-    "frond": {"cols": ((0.06, 0.11, 0.0), (0.25, 0.30, 0.02), (0.50, 0.50, 0.14)), "rachis": (0.40, 0.38, 0.18),
-              "light": 0.5, "spread": 0.15, "high": 0.15, "gaps": 0.06, "angle": (30, 45), "step": 2.5, "thick": 2},
+    "frond": {"cols": ((0.02, 0.09, 0.0), (0.17, 0.27, 0.015), (0.72, 0.76, 0.42)), "rachis": (0.374, 0.386, 0.214),
+              "light": 0.2, "spread": 0.25, "high": 0.15, "gaps": 0.06, "angle": (30, 45), "step": 2.5, "thick": 2},
     "bark": {"pattern": "rings", "ring_px": 6, "dark": (0.17, 0.17, 0.08), "light": (0.36, 0.34, 0.20)},
     "core": ((0.08, 0.09, 0.03), (0.16, 0.16, 0.06)),
     "nut": ((0.22, 0.24, 0.06), (0.38, 0.34, 0.12)),

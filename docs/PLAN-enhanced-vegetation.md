@@ -1518,8 +1518,8 @@ models", is the reference.
   up to 16 m, 165 drooping clumps on a jittered golden-angle spiral (no whorls), spread by crown
   girth with a floor so the top keeps its share, their tips on the card's silhouette, and two
   crossed fronds as the leader. A clump is lit on its ridge, dark where its sides hang, with
-  yellow-green specks of new growth toward its tip. **1400 triangles**, 2323 vertices,
-  8.1 × 7.8 × 17.39 m, a 138 KB GLB.
+  lighter specks of new growth toward its tip. **1400 triangles**, 2323 vertices,
+  8.1 × 7.8 × 17.39 m, a 137 KB GLB.
 
 **Model recommendation.** Opus for a new species: the work is a look iterated against renders, and
 D33 adds palms and bushes the fir's builder does not cover. A mid-tier model can rerun or retune an
@@ -1605,10 +1605,12 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   montage) brightens it seen with the sun behind and darkens it against the sun, where the card does
   neither. The grade is computed at load, so a pack's model or a retuned file meets its card's
   brightness with no number to tune; its hue is the file's, so a model's colours are tuned to its card
-  in its generator. Grades: C1 `firtree1` (0.271, 0.261, 0.295); C2 `palmtree1` (0.509, 0.553, 0.611),
-  `palmtree2` (0.53, 0.499, 0.567), `palmtree3` (0.649, 0.745, 0.793); C3 `palmtree1` (0.326, 0.33,
-  0.375), `palmtree2` (0.526, 0.502, 0.569), `palmtree3` (0.693, 0.79, 0.847). `firtree1` keeps its
-  warmer yellow-green, where the per-channel grade had pulled it to the card's blue-green.
+  in its generator (D33, "Colour in game"). Grades: C1 `firtree1` (0.342, 0.335, 0.337),
+  `firtree2` (0.327, 0.329, 0.361), `dougfirtree1` (0.301, 0.309, 0.308), `bush1` (0.739, 0.778,
+  0.853), `bush2` (0.518, 0.59, 0.6); C4 `firtree1` (0.299, 0.294, 0.295), `firtree2` (0.302, 0.303,
+  0.334), `dougfirtree1` (0.293, 0.3, 0.3); C2 `palmtree1` (1.062, 0.882, 1.062), `palmtree2` (0.6,
+  0.523, 0.6), `palmtree3` (0.665, 0.744, 0.812); C3 `palmtree1` (0.651, 0.532, 0.651), `palmtree2`
+  (0.603, 0.527, 0.603), `palmtree3` (0.71, 0.789, 0.868).
 - *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
   ground where the cards cast none, and casting re-renders the models into each Ultra cascade.
 - *The draw.* `ClutterInstances` cuts the Rich variant again into `CellM` (256 m) cells, one MultiMesh
@@ -1704,8 +1706,8 @@ brushes, C3's palms, C4's firs.
 **Approach.** D31's pipeline per species, judged beside its card.
 
 *The palms (as built).* `palmtree1`, `palmtree2` and `palmtree3` are three species, not one at three
-sizes: a date palm with a thick scarred trunk and a dark crown lit in yellow-green (7.589 × 13.189 m,
-`palm1`), a coconut palm with a slender ringed trunk and an open olive crown over nuts (5.744 ×
+sizes: a date palm with a thick scarred trunk and a dark crown lit in pale green (7.589 × 13.189 m,
+`palm1`), a coconut palm with a slender ringed trunk and an open deep green crown over nuts (5.744 ×
 9.983 m, `palm2`) and a weeping palm with a red-brown trunk and dead red-brown fronds under a
 grey-green crown (5.744 × 9.983 m, `palm3`). Each has its own generator holding its numbers; the
 shared builder is `veg_palm.py`, beside `veg_blender.py`.
@@ -1722,25 +1724,22 @@ shared builder is `veg_palm.py`, beside `veg_blender.py`.
   0.5 m off its centre under a centred crown.
 - *Texture.* Leaflets drawn either side of a rachis, slanted toward the tip, their tips on an
   envelope so the frond tapers to a point, cut by the alpha with gaps between them; a bark patch
-  (leaf-base crescents or rings), a core patch and a nut patch. The colours are read off the card's
-  crown and trunk texels and tuned until the render's crown mean sits within about 5 sRGB levels of
-  the card's in each channel. A frond takes one palette with a narrow spread, so the crown keeps
-  one coherent colour (B15's rejection of the palm cards for colour variation). `palmtree1`'s
-  second strip (`frond_b`) is its lit fronds: every other frond draws nearly black-green with few
-  highlights and the rest mostly in the yellow-green highlight, so the crown carries the card's
-  dark body and whole fronds catching the sun. Its side render's crown mean is sRGB (72, 77, 64)
-  against the card's (69, 74, 61), the 10th luminance percentile 37 against the card's 20 and the
-  90th 120 against 133. The card's darker shadows are partly hard photo edges, which the model's
-  antialiased leaflets against the sky do not reach.
+  (leaf-base crescents or rings), a core patch and a nut patch. The trunk and bark colours are read
+  off the card's trunk texels; the frond colours are set in game ("Colour in game" below). A frond
+  takes one palette with a narrow spread, so the crown keeps one coherent colour (B15's rejection
+  of the palm cards for colour variation). `palmtree1`'s second strip (`frond_b`) is its lit
+  fronds: every other frond draws nearly black-green with few highlights and the rest mostly in
+  the pale green highlight, so the crown carries the card's dark body and whole fronds catching
+  the sun.
 - *Not modelled:* the yellow-green base patch on the cards. The ground under the stamp supplies it.
 - *No clump tiles.* No chapter builds palm forest (the palms are not `mass`, and C3's painted
   canopy clumps are cut from its canopy textures), so the palm generators write no clump tiles.
 
 | Model | Chapters | Model size (w × d × h, m) | Triangles | GLB bytes |
 |---|---|---|---|---|
-| `palmtree1` | C2, C3 | 8.15 × 8.16 × 12.99 | 992 | 110,048 |
-| `palmtree2` | C2, C3 | 5.65 × 6.41 × 9.90 | 546 | 84,420 |
-| `palmtree3` | C2, C3 | 6.23 × 6.85 × 9.78 | 1,234 | 122,120 |
+| `palmtree1` | C2, C3 | 8.15 × 8.16 × 12.99 | 992 | 109,996 |
+| `palmtree2` | C2, C3 | 5.65 × 6.41 × 9.90 | 546 | 83,672 |
+| `palmtree3` | C2, C3 | 6.23 × 6.85 × 9.78 | 1,234 | 121,980 |
 
 *C1's firs and bushes (as built).* `firtree2`, `dougfirtree1`, `bush1` and `bush2`, and `firtree1` on
 C4. Two more shared builders: `veg_fir.py`, `firtree1`'s builder with its numbers moved into a spec
@@ -1758,13 +1757,13 @@ C4. Two more shared builders: `veg_fir.py`, `firtree1`'s builder with its number
   0.36, then a straight taper to a rounded top. Its 190 clumps droop at 0.6 of `firtree1`'s, so the
   skirt hangs near the card's level edge, and are lit nearly evenly across, so the crown reads as
   one fuzzy mass rather than in layers; more highlight specks and a yellower palette than
-  `firtree1`, off the card's body (sRGB 30, 34, 19) and top tenth (68, 75, 44).
+  `firtree1`, as the card's body (sRGB 30, 34, 19) and top tenth (68, 75, 44) are.
 - *`dougfirtree1`.* A stout trunk bare to 0.26 of the height, green with moss as the card's is (it
   takes the needle patch, not bark), then 90 clumps gathered into eight whorls (`tiers`), longer
   and flatter than `firtree1`'s, so each tier reads as a broad plate with the trunk between tiers.
-  Strong shade across a clump with its top lit in yellow-green; a thin core above 0.45 only.
-  `firtree1`'s palette: the cards' colours are within a few levels. The card's grass tuft at the
-  base is left to the ground.
+  Strong shade across a clump with its top lit; a thin core above 0.45 only. Its palette is set
+  from its own card as `firtree1`'s is ("Colour in game" below); the two cards' colours are within
+  a few levels. The card's grass tuft at the base is left to the ground.
 - *The bushes.* A few stems, and leaf clusters scattered through the card's silhouette, their
   outer edges on it: each cluster two crossed quads, one facing out and one standing across, on
   one of three leaf cells (lit, plain, shaded) chosen by its depth and height. The normals point
@@ -1789,13 +1788,49 @@ C4. Two more shared builders: `veg_fir.py`, `firtree1`'s builder with its number
 
 | Model | Chapters | Card (w × h, m) | Model size (w × d × h, m) | Triangles | GLB bytes | Clump tile |
 |---|---|---|---|---|---|---|
-| `firtree1` | C4 | 10.03 × 13.19 | 8.05 × 7.75 × 12.86 | 1,400 | 139,432 | yes |
-| `firtree2` | C1 | 10.72 × 20.88 | 10.21 × 10.14 × 20.36 | 1,600 | 151,440 | yes |
-| `firtree2` | C4 | 15.14 × 13.19 | 14.39 × 14.25 × 12.86 | 1,600 | 150,512 | yes |
-| `dougfirtree1` | C1, C1B | 10.03 × 22.47 | 6.97 × 7.30 × 21.91 | 776 | 101,672 | yes |
-| `dougfirtree1` | C4 | 10.03 × 17.15 | 6.97 × 7.30 × 16.73 | 776 | 101,800 | yes |
+| `firtree1` | C4 | 10.03 × 13.19 | 8.05 × 7.75 × 12.86 | 1,400 | 137,948 | yes |
+| `firtree2` | C1 | 10.72 × 20.88 | 10.21 × 10.14 × 20.36 | 1,600 | 148,792 | yes |
+| `firtree2` | C4 | 15.14 × 13.19 | 14.39 × 14.25 × 12.86 | 1,600 | 147,864 | yes |
+| `dougfirtree1` | C1, C1B | 10.03 × 22.47 | 6.97 × 7.30 × 21.91 | 776 | 99,104 | yes |
+| `dougfirtree1` | C4 | 10.03 × 17.15 | 6.97 × 7.30 × 16.73 | 776 | 99,232 | yes |
 | `bush1` | C1, C1B | 5.58 × 5.06 | 5.32 × 5.24 × 4.97 | 682 | 107,488 | no |
 | `bush2` | C1, C1B | 3.69 × 3.35 | 3.73 × 3.81 × 3.32 | 192 | 59,440 | no |
+
+*Ruling (yours, from the in-game recolour montages).* The firs keep the cards' blue-green; the palms
+take the greener, darker option B over the card texels' mean hue; `palmtree1`'s lit fronds are pale
+green rather than yellow; the bushes stay as they were.
+
+*Colour in game (as built).* The game draws a model unlit and grades it to its card by brightness
+alone (D32), so a model shows its texture's own hue. A Blender render lights the model under a blue
+sky, so colours tuned until the render matched the card drew too yellow and too saturated in game:
+at the C1 handover `firtree1`'s crown read hue 75 to 84 and saturation 0.61 to 0.67 against its
+card's 84 to 95 and 0.39 to 0.46, and the palms more olive than their cards' greens. The frond
+and needle colours are therefore set against the card's texels, not the render.
+- *The rule.* Each palette level (shade, body, highlight) keeps its own brightness and takes the
+  hue and saturation of the card's crown texels at that level: the solid texels of the top half,
+  2 px in from the alpha edge, sorted by luminance, the darkest level from the 10 to 30 %, the
+  body from the 40 to 60 % and the highlight from the 80 to 100 % band. The model's
+  area-weighted crown mean then sits within a few percent of the card's in each channel over its
+  luminance (the D32 grade's own measure).
+- *The firs* (`firtree1`, `firtree2`, `dougfirtree1`) follow the rule on C1's card and also sit
+  darker, so the luminance grade lands at 0.29 to 0.34 on every chapter and inside its 0.25 floor;
+  `firtree2` and `dougfirtree1` had clamped at 0.25 and drawn up to 38 % too bright. In game, over
+  boxes inside the crowns at the handover and close up, C1's models read hue 74 to 100 and
+  saturation 0.30 to 0.45 against the same boxes' cards at 72 to 97 and 0.37 to 0.48, and C4's
+  hue 50 to 84 and saturation 0.31 to 0.41 against 51 to 74 and 0.31 to 0.39 (the boxes take in
+  some ground). The clump tiles change with the model, and each
+  `clump_grade` is refitted so the tile's mean stays within 0.3 sRGB levels of its card's.
+- *The palms* go greener and darker than the rule, since a palm card's crown mean is pulled toward
+  grey by its pale fringe and grey mid tones, and the rule alone left them olive in game.
+  `palmtree1`'s body and lit-frond highlight are green (sRGB 0.08, 0.15, 0.08 and 0.55, 0.70,
+  0.36) under the card's dark teal shade; `palmtree2` takes the card's deep green with a darker
+  body (`light` 0.2) and a brighter highlight, so its contrast nears the card's; `palmtree3`'s
+  live fronds are a deeper green and its dead fronds and skirt keep their red-brown. The D32 grade
+  holds `palmtree1` and `palmtree2` at its chroma bound on both chapters. On the C2 palm crowns'
+  green texels `palmtree2` reads hue 72 to 78 and saturation 0.62 to 0.65 against its card's 79 to
+  81 and 0.53 to 0.74.
+- *The bushes* keep their colours: in game `bush1` reads hue 91 against its card's 86 at the same
+  saturation, and `bush2` the card's blue-green.
 
 **Ruling (yours, from the renders).** The palms: `palmtree1` takes a darker crown body with
 stronger yellow highlights, closer to the card's punch (the lit-frond strip above). `palmtree2` stays

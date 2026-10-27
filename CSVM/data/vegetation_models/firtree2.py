@@ -29,7 +29,9 @@ veg_fir.main({
     "apex": 0.975,
     # Needle colours (sRGB): shade, body and highlight, olive like the card's (body 30, 34, 19;
     # top tenth 68, 75, 44), with more highlight specks than firtree1, for its finer, lighter grain.
-    "colours": ((0.04, 0.05, 0.02), (0.18, 0.20, 0.08), (0.56, 0.56, 0.26)),
+    # Hue and saturation per level are the card's crown texels', as firtree1's; the levels sit low
+    # enough that the brightness grade stays inside its range.
+    "colours": ((0.022, 0.027, 0.018), (0.129, 0.141, 0.092), (0.394, 0.428, 0.279)),
     # Lit nearly evenly across a clump, so the crown reads as one fuzzy mass rather than in layers.
     "needle": {"base": 0.5, "across": 0.3, "high": (0.12, 0.4)},
     "trunk": {"r_base": 0.32, "r_top": 0.14, "top": 0.5, "colour": (0.12, 0.09, 0.06)},
@@ -41,5 +43,5 @@ veg_fir.main({
     # The clump tiles, as firtree1's: trees per tile, and per chapter the linear factor per channel that
     # puts the tiles' mean on the card's (sRGB C1 30.9, 34.9, 19.9; C4 30.7, 34.6, 19.7 over solid texels).
     "clump_trees": (3, 2),
-    "clump_grade": {"C1": (0.265, 0.281, 0.221), "C4": (0.223, 0.236, 0.194)},
+    "clump_grade": {"C1": (0.407, 0.404, 0.214), "C4": (0.351, 0.344, 0.187)},
 })

@@ -22,12 +22,13 @@ veg_palm.main({
     "crown_z": 8.4,
     "core_r": 0.7,
     "trunk": {"r_base": 0.42, "r_top": 0.32, "swell": 0.3, "sides": 8, "segs": 6, "repeats": 3},
-    # Colours are sRGB: shade, body and highlight, read off the card's crown and trunk texels.
+    # Colours are sRGB: shade, body and highlight. Trunk and bark off the card's trunk texels; fronds set
+    # against the card's crown in game, greener and darker than its texels' mean (D33, Colour in game).
     "fronds": {"count": 42, "length": (4.8, 3.6), "width": 0.17, "fold": 1.0, "elev": (88, -40), "bend": (0.2, 2.4)},
-    "frond": {"cols": ((0.01, 0.04, 0.02), (0.12, 0.15, 0.07), (0.90, 0.90, 0.42)), "rachis": (0.40, 0.40, 0.24),
+    "frond": {"cols": ((0.022, 0.035, 0.035), (0.08, 0.15, 0.08), (0.55, 0.70, 0.36)), "rachis": (0.30, 0.36, 0.20),
               "light": 0.2, "spread": 0.2, "high": 0.04, "gaps": 0.2, "angle": (35, 50), "step": 2.5, "thick": 2},
     # Every other frond is a lit one, its leaflets mostly in the highlight, as the card shows whole fronds catching the sun.
-    "frond_b": {"cols": ((0.01, 0.04, 0.02), (0.12, 0.15, 0.07), (0.90, 0.90, 0.42)), "rachis": (0.40, 0.40, 0.24),
+    "frond_b": {"cols": ((0.022, 0.035, 0.035), (0.08, 0.15, 0.08), (0.55, 0.70, 0.36)), "rachis": (0.30, 0.36, 0.20),
                 "light": 0.6, "spread": 0.2, "high": 0.3, "gaps": 0.2, "angle": (35, 50), "step": 2.5, "thick": 2},
     "bark": {"pattern": "diamond", "dark": (0.14, 0.11, 0.09), "light": (0.48, 0.38, 0.24)},
     "core": ((0.10, 0.10, 0.07), (0.30, 0.27, 0.18)),

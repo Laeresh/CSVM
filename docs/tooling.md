@@ -847,6 +847,13 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   strip on grey (`_clump`) with its side map (`_clump_side`). These go to `.scratch/vegetation/`
   and are never committed. The card's pixels never reach a clump tile; `clump_grade` is a number
   chosen against the card's mean colour.
+- **The renders judge shape and brightness, not hue.** They light the model under a sky, while the
+  game draws it unlit and grades it to its card by brightness alone, so a palette tuned until the
+  render matches the card draws yellower in game. A generator's frond and needle colours are numbers
+  set against the card's crown texels per brightness level and judged in a game capture beside the
+  card (PLAN-enhanced-vegetation D33, "Colour in game"). A colour change that alters how many random
+  draws the texture takes (a highlight's odds, a leaflet count) also moves the geometry, which shares
+  the generator's random stream; check the printed size against the committed one.
 
 `.\MakeVegetationModel.ps1 -Species firtree1 [-Chapter C1] [-NoRender]` regenerates one species
 and its clump tiles, prints its triangle count, size, output paths and, with the renders, the

@@ -27,9 +27,9 @@ veg_fir.main({
                 (0.52, 0.31), (0.58, 0.25), (0.65, 0.25), (0.7, 0.19), (0.76, 0.155), (0.82, 0.12),
                 (0.88, 0.095), (0.93, 0.05), (0.975, 0.0)],
     "apex": 0.975,
-    # Needle colours (sRGB), as firtree1's: the card's body (16, 23, 12) and top tenth (63, 76, 48)
-    # are within a few levels of firtree1's card.
-    "colours": ((0.03, 0.06, 0.025), (0.11, 0.21, 0.06), (0.46, 0.53, 0.20)),
+    # Needle colours (sRGB), set as firtree1's from this card's crown texels: the card's body
+    # (16, 23, 12) and top tenth (63, 76, 48) are within a few levels of firtree1's card.
+    "colours": ((0.016, 0.046, 0.01), (0.116, 0.166, 0.098), (0.369, 0.448, 0.289)),
     # Whorls: the clumps gather at these height fractions, a tenth of the share left between them.
     "tiers": {"at": (0.31, 0.36, 0.49, 0.58, 0.66, 0.74, 0.82, 0.9), "width": 0.015, "gap": 0.1},
     # The card's trunk is green with moss, not brown: it takes the needle patch.
@@ -44,5 +44,5 @@ veg_fir.main({
     # The clump tiles, as firtree1's: trees per tile, and per chapter the linear factor per channel that
     # puts the tiles' mean on the card's (sRGB 20.8, 28.7, 16.0 over solid texels on every chapter).
     "clump_trees": (3, 2),
-    "clump_grade": {"C1": (0.222, 0.247, 0.193), "C1B": (0.222, 0.247, 0.193), "C4": (0.212, 0.237, 0.187)},
+    "clump_grade": {"C1": (0.262, 0.305, 0.162), "C1B": (0.262, 0.305, 0.162), "C4": (0.251, 0.291, 0.157)},
 })
