@@ -59,7 +59,7 @@ internal static class SourceScreenSuites
                 ctx.Check(screen.BarValue == 0, $"the bar has not seen the copy before the frame tick ({screen.BarValue})");
                 screen._Process(0);
                 ctx.Check(Math.Abs(screen.BarValue - 100) < 0.01, $"the tick moves the bar to the finished copy ({screen.BarValue})");
-                ctx.Check(flow.Source?.Location == GameFileCopy.Target(data) && flow.Picked, $"and the copy is the source ({flow.Source?.Location})");
+                ctx.Check(flow.Source?.Location == GameFileCopy.Target(data) && flow.Picked, $"and the copy is the source ({flow.Source?.Location}{(flow.Failure.Length > 0 ? "; " + flow.Failure : string.Empty)})");
 
                 ctx.Check(screen.Shown == SourceView.Patch && screen.BodyText.Contains("crimptch.rof", StringComparison.Ordinal),
                     $"the copy holds no patch archive, which is noted ({screen.Shown})");
