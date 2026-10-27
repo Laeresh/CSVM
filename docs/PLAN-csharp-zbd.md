@@ -752,7 +752,7 @@ Unused now, for E43: `BasePaths.ZrdrPath` (still filled by `Resolve`), `SessionP
 and `MissionZrdr` (read by the units' `TestZrdr` and `SessionPathsTests` only), `PreferUnzipped` for
 zrdr, `--zrdr=` (`SessionSpec.Zrdr`), and the `reader` `ZbdExtraction` mode.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `32e0b8e7f` (battery 5), PASS: units 7,732 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical.
 
 **Reader (kept from the reader landing).** `ZrdrZbd.Read(byte[])` and
 `ZrdrZbd.Load(IGameFileSource?, path)` (`CSVM/src/Mech3/ZrdrZbd.cs`) decode a root, chapter or
@@ -1713,7 +1713,7 @@ or never opened; its own README named the private fork.
 `--extract` against the release's own `unzbd`, which the archives no longer carry, so both fail
 until E43 replaces them.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `32e0b8e7f` (battery 5), PASS: units 7,732 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 616 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. A real `ExportRelease.ps1` run is not part of the battery and is owed before the next release.
 
 **Original approach (kept for reference).**
 
