@@ -1701,7 +1701,7 @@ writer), `ZbdTree` (`ExtractionRun.ExtractedFolder`), and the tests: `SessionPat
 `EffectCatalogueTests`, `TestZrdr`, and the 15 test files that resolved `SessionPaths` paths from
 `TestData.DataRoot`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `7a04f6949` (battery 6), PASS: units 7,710 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 617 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. The sandbox release checks are not part of the battery; a real export plus both is owed before the next release.
 
 **Original approach (kept for reference).**
 
@@ -1882,7 +1882,7 @@ resolves a `--mod-folder=` launch whose folder holds C1's gamez with `battlement
 the flight session and finds the renamed node in its world, with the planes and readers from the
 game files. The model diffs are unchanged and stay the modding path's guard.
 
-**Verified.** <pending orchestrator run>
+**Verified.** complete `RunTests.ps1` on the merged plan tree at `7a04f6949` (battery 6), PASS: units 7,710 passed, 0 failed, 6 skipped (the real-disc tests without their variables among them); engine 617 passed, 2 skipped, engine errors clean; 38 goldens hash-identical. `modding-folder` ran in the engine pass.
 
 **Original approach (kept for reference).**
 
