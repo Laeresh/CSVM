@@ -1850,6 +1850,26 @@ half), naming the folder, the log lines, and matching the copy. `README.md`, bot
 `packaging/README*.md` and `SourceFlow`'s Upgrade body name the row and the flag;
 `docs/cli.md` has the bullet (index, parser and bullet counts each one up).
 
+**The folder picker (the user's follow-up).** The Modding Folder list ends in **Choose folder...**
+(`OriginalGameOptionsPage.ChooseFolderWord`), an item only the open list carries, so a sideways
+step never lands on it. Picking it sets a request the presentation takes each frame
+(`TakeFolderRequest`) and answers with the source picker's own dialog in directory mode:
+`InstallPicker.Create(theme, folderTitle)` in `OpenDir`, built through
+`SourceScreen.NewFolderPicker` with the source screen's theme and controller hint (LB up a folder,
+Y takes the folder shown), opened over the menu layer from the staged folder or the data root.
+While it stands, and on the frame it closes, `OriginalPresentation.Tick` drops the seats'
+commands, so its B or Y never reaches the page. A chosen folder goes through
+`OriginalGameOptionsPage.TakeFolder`: `OptionsChoices.PickModFolder` stages it and keeps it in the
+offered list for the rest of the launch (a `Load` drops the staged choice, never the offer), and
+it rides ACCEPT CHANGES into `LiveSettings.Persist` like the other picks, read at the next start.
+The light check is `ModdingFolder.HoldsAny`: the root outputs, and each chapter and mission
+folder's gamez, zrdr, anim and texture outputs, through `Find`. A folder holding none raises the
+shell's warning box ("... holds no unzbd output CSVM reads yet. It is still chosen, and read from
+the next start.") and is taken all the same. Screenshot aid `--menu=game-options:choose` opens the
+dialog. Units: `HoldsAnyAnswersWhetherAnyOutputFindKnowsIsThere` (8 cases) and
+`ChooseFolderAsksForTheDialogAndAPickedFolderIsStagedOfferedAndApplied`, with the existing row walk
+now listing the new item.
+
 **`GameData.Rof` (the folded-in cleanup).** `GameData.Rof` is the UI half, `RofFiles.Open(game)`
 in `Load`; `SyntheticGameData.Build(RofFiles)` takes the Original shell's view, which the launcher
 hands in from the tree build's binding. The consumers holding game data read it there:

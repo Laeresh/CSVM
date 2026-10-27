@@ -57,6 +57,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that opens the Modding Folder list at the window's foot.</summary>
     public const string GameOptionsFoldersAid = "folders";
 
+    /// <summary>The Game Options aid's argument that opens the Modding Folder row's folder dialog.</summary>
+    public const string GameOptionsChooseAid = "choose";
+
     /// <summary>The aid value that opens the AUDIO page behind the Preferences page's second door.</summary>
     public const string AudioAid = "audio";
 
@@ -293,6 +296,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
     private ShotViewer? _shotViewer;
+    // The Modding Folder row's dialog, built on its first ask. While it stands, and the frame it
+    // closes on, the seats' commands are dropped: its own B or Y would otherwise reach the page.
+    private InstallPicker? _folderPicker;
+    private bool _picking;
     private OriginalShell? _shell;
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
@@ -573,6 +580,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
+                case GameOptionsAid + ":" + GameOptionsChooseAid:
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+                    OpenFolderPicker();
+                    break;
                 case AudioAid:
                     _shell.Options.Audio.Open();
                     break;
@@ -844,6 +855,9 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
+        bool picking = _picking || _folderPicker?.Visible == true;
+        _picking = _folderPicker?.Visible == true;
+
         // Text capture is set before the poll: the name screen's letters must be text, not
         // cursor aliases, for the frame that reads them.
         _host.Seats[0].CapturingText = _shell.CapturingText;
@@ -851,6 +865,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         for (int i = 0; i < _host.Seats.Count; i++)
         {
             var commands = _host.Seats[i].Poll(dt);
+            if (picking)
+            {
+                continue;
+            }
 
             // ⚠ A board gesture is not also a press on its plaques. Seat 0 reads every pad nobody
             // holds, so the same A would arrive here as Accept and arm CONTINUE under it. The
@@ -899,6 +917,11 @@ public sealed class OriginalPresentation : IMenuPresentation
             }
 
             changed |= step.Changed;
+        }
+
+        if (_shell.Options.GameOptions.TakeFolderRequest())
+        {
+            OpenFolderPicker();
         }
 
         // Leaving the briefing this frame, by any door, ends its narration and lifts the duck.
@@ -974,6 +997,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _shotViewer?.Close();
+        _folderPicker?.Hide();
 
         // Off screen nothing types, so a seat left capturing on the name screen is released, and
         // nothing narrates: a launch from the briefing's flight check ends the voice with it.
@@ -1470,6 +1494,33 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             Log.Info("ui", $"original presentation: --debug-join seated {setup.Seats.Count} players (the added ones have no device)");
         }
+    }
+
+    // The source picker's dialog, folders only, over the menu from the staged folder or the data
+    // root. A chosen folder is staged there and then, its warning raised when it holds no output.
+    private void OpenFolderPicker()
+    {
+        if (_layer == null || _shell is not { } shell)
+        {
+            return;
+        }
+
+        if (_folderPicker == null)
+        {
+            _folderPicker = SourceScreen.NewFolderPicker("Choose a modding folder of unzbd output");
+            _folderPicker.Chosen = folder =>
+            {
+                if (shell.Options.GameOptions.TakeFolder(folder) is { } warning)
+                {
+                    shell.RaiseWarning(warning);
+                }
+
+                Redraw();
+            };
+            _layer.AddChild(_folderPicker);
+        }
+
+        _folderPicker.Open(shell.Options.GameOptions.ModFolderChoice ?? _dataRoot);
     }
 
     private void Redraw()

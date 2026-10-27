@@ -50,6 +50,10 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// output read from the next start (<c>Spec.ModdingFolder</c>).</summary>
     public const string ModFolderKey = "MODFOLDER";
 
+    /// <summary>The Modding Folder list's last item, which asks for the folder picker rather than
+    /// naming a folder. No sideways step lands on it.</summary>
+    public const string ChooseFolderWord = "Choose folder...";
+
     /// <summary>The window the option rows scroll through, its arrows keyed under it.</summary>
     public const string WindowKey = "GO_WINDOW";
 
@@ -183,6 +187,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     private readonly OptionsChoices _choices;
 
     private string? _open;
+    private bool _folderAsked;
     private int _listTop;
     // The first option row the window shows.
     private int _top;
@@ -250,6 +255,26 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         _top = 0;
         _host.Open(OriginalScreen.GameOptions);
         _host.FocusedRow = -1;
+    }
+
+    /// <summary>Whether <see cref="ChooseFolderWord"/> was picked since the last call, which the
+    /// presentation answers with its folder dialog.</summary>
+    public bool TakeFolderRequest()
+    {
+        bool asked = _folderAsked;
+        _folderAsked = false;
+        return asked;
+    }
+
+    /// <summary>Stages the folder the dialog chose and offers it from then on. Returns a warning
+    /// when it holds no unzbd output CSVM reads, the folder taken all the same.</summary>
+    public string? TakeFolder(string folder)
+    {
+        var mods = new Spec.ModdingFolder(folder);
+        _choices.PickModFolder(mods.Root);
+        return mods.HoldsAny()
+            ? null
+            : $"{mods.Root} holds no unzbd output CSVM reads yet. It is still chosen, and read from the next start.";
     }
 
     /// <summary>Opens the page with one named row focused rather than its first, the screenshot
@@ -350,7 +375,16 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
                 return null;
             }
 
-            picked.Write(_choices, int.Parse(suffix, CultureInfo.InvariantCulture));
+            int item = int.Parse(suffix, CultureInfo.InvariantCulture);
+            if (picked.Key == ModFolderKey && item == picked.Words(_choices).Count)
+            {
+                _folderAsked = true;
+            }
+            else
+            {
+                picked.Write(_choices, item);
+            }
+
             _open = null;
             _host.FocusKey(picked.Key);
             return null;
@@ -629,7 +663,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             return null;
         }
 
-        return OriginalOptionsChrome.DropList(key, screen.Widget(DropKey), open.Words(_choices),
+        // The Modding Folder list ends in the picker's item, which only the open list offers.
+        var words = key == ModFolderKey ? open.Words(_choices).Append(ChooseFolderWord).ToArray() : open.Words(_choices);
+        return OriginalOptionsChrome.DropList(key, screen.Widget(DropKey), words,
             ReadShape(screen).DropBoxFor(IndexOf(key) - _top));
     }
 

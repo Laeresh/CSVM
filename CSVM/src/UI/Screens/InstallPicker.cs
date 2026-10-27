@@ -25,18 +25,19 @@ public sealed partial class InstallPicker : FileDialog
     /// <summary>Gets or sets where a chosen folder goes.</summary>
     public Action<string>? Chosen { get; set; }
 
-    /// <summary>A picker over the whole file system taking a folder or a disc image file. The
-    /// dialog's file-managing extras are off, since this chooses what to read and never changes it.</summary>
-    public static InstallPicker Create(Theme theme)
+    /// <summary>A picker over the whole file system taking a folder or a disc image file, or a
+    /// folder alone when <paramref name="folderTitle"/> names one. The dialog's file-managing
+    /// extras are off, since this chooses what to read and never changes it.</summary>
+    public static InstallPicker Create(Theme theme, string? folderTitle = null)
     {
         var picker = new InstallPicker
         {
-            FileMode = FileModeEnum.OpenAny,
-            Filters = new[] { "*.iso, *.cue, *.ccd, *.bin, *.img ; Disc images" },
+            FileMode = folderTitle == null ? FileModeEnum.OpenAny : FileModeEnum.OpenDir,
+            Filters = folderTitle == null ? new[] { "*.iso, *.cue, *.ccd, *.bin, *.img ; Disc images" } : Array.Empty<string>(),
             Access = AccessEnum.Filesystem,
             UseNativeDialog = false,
             DisplayMode = DisplayModeEnum.List,
-            Title = "Choose your Crimson Skies install folder, game disc or disc image",
+            Title = folderTitle ?? "Choose your Crimson Skies install folder, game disc or disc image",
             ModeOverridesTitle = false,
             FolderCreationEnabled = false,
             DeletingEnabled = false,

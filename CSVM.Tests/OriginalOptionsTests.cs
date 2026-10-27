@@ -155,15 +155,53 @@ public class OriginalOptionsTests
         Assert.Equal(saved, host.Module.GameOptions.ModFolderChoice);
         Assert.Equal("mods", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
         Accept(host);
-        Assert.Equal(new[] { "Off", "mods", "extracted" }, host.Rows.Select(r => r.Label));
+        Assert.Equal(new[] { "Off", "mods", "extracted", OriginalGameOptionsPage.ChooseFolderWord }, host.Rows.Select(r => r.Label));
         Down(host);
         Accept(host);
         Assert.Equal(extracted, host.Module.GameOptions.ModFolderChoice);
+        // A sideways step wraps past the picker's item, which only the open list offers.
         StepX(host, 1);
         Assert.Null(host.Module.GameOptions.ModFolderChoice);
         StepX(host, -1);
         Assert.Equal(extracted, host.Module.GameOptions.ModFolderChoice);
+        Assert.False(host.Module.GameOptions.TakeFolderRequest());
         Assert.Equal(extracted, ((IOriginalOptionsForm)host.Module).Apply().ModFolder);
+    }
+
+    [Fact]
+    public void ChooseFolderAsksForTheDialogAndAPickedFolderIsStagedOfferedAndApplied()
+    {
+        string empty = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "newmod"));
+        System.IO.Directory.CreateDirectory(empty);
+        string filled = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "filled"));
+        System.IO.Directory.CreateDirectory(filled);
+        System.IO.File.WriteAllText(System.IO.Path.Combine(filled, "messages.json"), "{}");
+        var host = new OptionsHost(Measure);
+        host.Module = new OriginalOptionsScreen(MenuLayoutReaderTests.OriginalLayout(), host, () => new OptionsDef());
+        host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+
+        Accept(host);
+        Assert.Equal(new[] { "Off", OriginalGameOptionsPage.ChooseFolderWord }, host.Rows.Select(r => r.Label));
+        Down(host);
+        Accept(host);
+        Assert.Null(host.Module.GameOptions.OpenOption);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        Assert.True(host.Module.GameOptions.TakeFolderRequest());
+        Assert.False(host.Module.GameOptions.TakeFolderRequest());
+
+        // An empty folder warns and is taken all the same; a folder of output does not warn.
+        Assert.Contains("holds no unzbd output", host.Module.GameOptions.TakeFolder(empty + System.IO.Path.DirectorySeparatorChar));
+        Assert.Equal(empty, host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal("newmod", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
+        Assert.Null(host.Module.GameOptions.TakeFolder(filled));
+        Assert.Equal(filled, ((IOriginalOptionsForm)host.Module).Apply().ModFolder);
+
+        // Both stay offered once Off is staged and once the page reopens on the saved options.
+        StepX(host, -2);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+        Accept(host);
+        Assert.Equal(new[] { "Off", "newmod", "filled", OriginalGameOptionsPage.ChooseFolderWord }, host.Rows.Select(r => r.Label));
     }
 
     [Fact]

@@ -20,6 +20,9 @@ public sealed class OptionsChoices
     private readonly Func<ScreenList> _screens;
     private readonly Func<IReadOnlyList<string>> _modFolders;
 
+    // The folders the row's picker chose, offered for the rest of the launch whatever is staged or saved.
+    private readonly List<string> _pickedModFolders = new();
+
     // The size the options file named at the last Load, which the size row offers as an entry of its
     // own (Sizes). Held apart from the stepped choice, a hand-written size stays in the list after a
     // step lands elsewhere. A step back then reaches it again.
@@ -104,14 +107,14 @@ public sealed class OptionsChoices
     /// <summary>The modding folder a launch reads (<c>Spec.ModdingFolder</c>), null for none.</summary>
     public string? ModFolder { get; set; }
 
-    /// <summary>The folders the Modding Folder row offers after Off: the saved one, the offered
-    /// ones and the staged one, each once.</summary>
+    /// <summary>The folders the Modding Folder row offers after Off: the saved, offered, picked
+    /// (<see cref="PickModFolder"/>) and staged ones, each once.</summary>
     public IReadOnlyList<string> ModFolders
     {
         get
         {
             var folders = new List<string>();
-            foreach (string? folder in new[] { _savedModFolder }.Concat(_modFolders()).Append(ModFolder))
+            foreach (string? folder in new[] { _savedModFolder }.Concat(_modFolders()).Concat(_pickedModFolders).Append(ModFolder))
             {
                 if (folder != null && !folders.Contains(folder, StringComparer.OrdinalIgnoreCase))
                 {
@@ -196,6 +199,18 @@ public sealed class OptionsChoices
         AudioEffects = saved?.AudioEffects;
         AudioVoice = saved?.AudioVoice;
         ModFolder = _savedModFolder = saved?.ModFolder;
+    }
+
+    /// <summary>Stages <paramref name="folder"/>, a folder the row's picker chose, and offers it from
+    /// then on: a <see cref="Load"/> drops the staged choice, never the offer.</summary>
+    public void PickModFolder(string folder)
+    {
+        if (!_pickedModFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+        {
+            _pickedModFolders.Add(folder);
+        }
+
+        ModFolder = folder;
     }
 
     /// <summary>The apply exit carrying every setting, never-set ones as null.</summary>

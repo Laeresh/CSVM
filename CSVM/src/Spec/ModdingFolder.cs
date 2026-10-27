@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using CSVM.Mech3;
 
 namespace CSVM.Spec;
 
@@ -61,6 +63,41 @@ public sealed class ModdingFolder
 
         string found = Extraction.SessionPaths.PreferUnzipped(path);
         return Directory.Exists(found) || File.Exists(found) ? found : null;
+    }
+
+    /// <summary>Whether the folder holds any output <see cref="Find"/> knows: a root archive's, or a
+    /// chapter's or mission's in a folder of its own. The Options picker's light check, which
+    /// warns and never refuses, since a modder may fill the folder later.</summary>
+    public bool HoldsAny()
+    {
+        if (!Directory.Exists(Root))
+        {
+            return false;
+        }
+
+        var paths = new List<string>
+        {
+            InterpScripts.GamePath, Messages.GameFile, GameData.RimagePath, GameData.PlanesPath,
+            GameData.SoundsPath, GameData.RootZrdrPath,
+        };
+        foreach (string chapterDir in Directory.EnumerateDirectories(Root))
+        {
+            string chapter = Path.GetFileName(chapterDir);
+            if (Directory.EnumerateFileSystemEntries(chapterDir, "rtexture*").Any())
+            {
+                return true;
+            }
+
+            paths.AddRange(new[] { "gamez", "zrdr", "cam_anim", "texture" }.Select(name => $"ZBD/{chapter}/{name}.zbd"));
+            foreach (string missionDir in Directory.EnumerateDirectories(chapterDir))
+            {
+                string mission = Path.GetFileName(missionDir);
+                paths.Add($"ZBD/{chapter}/{mission}/zrdr.zbd");
+                paths.Add($"ZBD/{chapter}/{mission}/mis_anim.zbd");
+            }
+        }
+
+        return paths.Any(path => Find(path) != null);
     }
 
     /// <summary>Where unzbd puts the output of <paramref name="installPath"/>, relative and

@@ -103,6 +103,10 @@ public sealed partial class SourceScreen : CanvasLayer
         return screen;
     }
 
+    /// <summary>A folder-only picker in this screen's theme and with its controller hint, for the
+    /// Options page's Modding Folder row.</summary>
+    public static InstallPicker NewFolderPicker(string title) => NewPicker(ScreenTheme(), title);
+
     /// <summary>The view's button labelled <paramref name="label"/>, or null.</summary>
     public Button? Button(string label) => _buttons.FirstOrDefault(b => b.Text == label);
 
@@ -224,6 +228,21 @@ public sealed partial class SourceScreen : CanvasLayer
         return box;
     }
 
+    // The picker in the screen's theme, its controller hint under the list.
+    private static InstallPicker NewPicker(Theme theme, string? folderTitle)
+    {
+        var picker = InstallPicker.Create(theme, folderTitle);
+        var hint = Line(
+            "Controller: d-pad moves, A opens a folder, LB goes up a folder, Y chooses the folder shown, B closes.",
+            BodyFontSize - 2, DimColour);
+
+        // A wrapping label reports its height at a width of one character. The dialog grows to
+        // its contents' minimum, so that would make it taller than the screen.
+        hint.AutowrapMode = TextServer.AutowrapMode.Off;
+        picker.GetVBox().AddChild(hint);
+        return picker;
+    }
+
     private void Compose()
     {
         var theme = ScreenTheme();
@@ -258,17 +277,9 @@ public sealed partial class SourceScreen : CanvasLayer
         margin.AddChild(box);
         AddChild(margin);
 
-        Picker = InstallPicker.Create(theme);
+        Picker = NewPicker(theme, null);
         Picker.Chosen = TakePick;
         Picker.Canceled += () => _chooseButton.GrabFocus();
-        var pickerHint = Line(
-            "Controller: d-pad moves, A opens a folder, LB goes up a folder, Y chooses the folder shown, B closes.",
-            BodyFontSize - 2, DimColour);
-
-        // A wrapping label reports its height at a width of one character. The dialog grows to
-        // its contents' minimum, so that would make it taller than the screen.
-        pickerHint.AutowrapMode = TextServer.AutowrapMode.Off;
-        Picker.GetVBox().AddChild(pickerHint);
         AddChild(Picker);
         Refresh();
     }

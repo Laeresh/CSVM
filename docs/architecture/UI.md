@@ -807,6 +807,9 @@ it stays inside the game window where a controller or touchscreen reaches it. Th
 extras are off because the install is only read. Godot's navigation covers the list; the left
 shoulder goes up a folder and Y takes the folder shown, since focus cannot leave the list without
 Tab. Hidden folders show outside Windows, where Wine and Steam prefixes live under dot folders.
+A folder-only variant (`SourceScreen.NewFolderPicker`, the same theme and controller hint) is the
+Modding Folder row's dialog, which `OriginalPresentation` opens over the menu, dropping the seats'
+commands while it stands.
 
 ## src/UI/Labs/MeshLab.cs
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,

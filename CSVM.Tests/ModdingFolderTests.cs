@@ -44,6 +44,29 @@ public class ModdingFolderTests
         Assert.Null(mods.Find(Messages.GameFile));
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("notes.txt", false)]
+    [InlineData("C1/readme.txt", false)]
+    [InlineData("messages.json", true)]
+    [InlineData("zrdr.zip", true)]
+    [InlineData("C1/gamez.zip", true)]
+    [InlineData("C1/rtexture15.zip", true)]
+    [InlineData("C1/M02/mis_anim.zip", true)]
+    public void HoldsAnyAnswersWhetherAnyOutputFindKnowsIsThere(string? file, bool holds)
+    {
+        string root = TestData.TempDir();
+        if (file != null)
+        {
+            string path = Path.Combine(root, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, Array.Empty<byte>());
+        }
+
+        Assert.Equal(holds, new ModdingFolder(root).HoldsAny());
+        Assert.False(new ModdingFolder(Path.Combine(root, "absent")).HoldsAny());
+    }
+
     [Fact]
     public void TheFlagBeatsTheSavedFolderWhichADeterministicOrSyntheticRunNeverReads()
     {

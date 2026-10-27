@@ -52,8 +52,12 @@ need to be there.
   folder; `--mod-folder=` names none ([cli.md](cli.md)).
 - **In Options**, the GAME OPTIONS page's Modding Folder row picks Off or one of the folders it
   offers: the saved one, the one this launch's `--mod-folder=` named, and an `extracted` folder an
-  older CSVM left beside the data. The pick is saved as `modFolder` in `options.json`, which may
-  also be set by hand, and takes effect at the next start.
+  older CSVM left beside the data. Its last item, **Choose folder...**, opens a folder dialog (the
+  same one the game-files screen uses, driven by a controller as well); the folder it returns is
+  picked and offered in the list for the rest of the launch. A folder holding none of the outputs
+  in the table above gets a warning but is still taken, so it may be filled later. The pick is
+  saved as `modFolder` in `options.json` on ACCEPT CHANGES, which may also be set by hand, and
+  takes effect at the next start.
 - With no folder named, nothing reads unzbd output, an old `extracted/` included. A deterministic
   run (`--det`, so every test and golden shot) and a `--synthetic-data` run ignore the saved folder.
 
