@@ -223,6 +223,39 @@ public sealed class CanopyClumpsTests
         Assert.Equal(new Vector2(CanopyClumps.HandoverNearM, CanopyClumps.HandoverFarM), CanopyClumps.Band(painted: false));
     }
 
+    /// <summary>The near crown models stand on painted points alone, at the painted surface. They carry about the
+    /// crowns a full cell does per covered area, the half-covered column too. The seed alone moves them.</summary>
+    [Fact]
+    public void CrownModelsStandOnThePaintedCanopyAtItsCrownRate()
+    {
+        var mask = Painted();
+        var crowns = CanopyClumps.CrownModels(mask, CanopyClumps.PaintedTreesPerCell);
+        Assert.Equal(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.PaintedTreesPerCell));
+        Assert.NotEqual(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.PaintedTreesPerCell, seed: CanopyClumps.Seed + 1));
+        Assert.All(crowns, c =>
+        {
+            Assert.True(mask.IsPainted(c.At.X, c.At.Z), $"a crown at x {c.At.X} stands off the painted canopy");
+            Assert.Equal(7f, c.At.Y, 4);
+            Assert.InRange(c.Scale, 0.85f, 1.15f);
+        });
+        float full = 40 * CanopyClumps.PaintedTreesPerCell, half = 10 * 0.5f * CanopyClumps.PaintedTreesPerCell;
+        Assert.InRange(crowns.Count(c => c.At.X < 4 * C), full * 0.85f, full * 1.15f);
+        Assert.InRange(crowns.Count(c => c.At.X >= 4 * C), half * 0.6f, half * 1.4f);
+        Assert.Contains(crowns, c => c.Mirror);
+        Assert.Contains(crowns, c => !c.Mirror);
+    }
+
+    /// <summary>The crown models alone fill the near view the clumps leave flat. They hand over to the clumps
+    /// inside the clumps' rise, and stand no taller over the canopy than a full clump.</summary>
+    [Fact]
+    public void CrownModelsHandOverInsideTheClumpsRise()
+    {
+        var band = CanopyClumps.ModelBand;
+        Assert.Equal(CanopyClumps.PaintedNearM, band.X);
+        Assert.InRange(band.Y, band.X + 1f, CanopyClumps.PaintedFarM - 1f);
+        Assert.InRange(CanopyClumps.ModelRiseM, 1f, CanopyClumps.PaintedRiseM);
+    }
+
     // A 10 x 10 cell area at 7 m. Its left four columns are painted canopy, the fifth half covered, the rest bare.
     private static CanopyMask Painted()
     {

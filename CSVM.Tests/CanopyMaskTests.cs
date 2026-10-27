@@ -89,6 +89,33 @@ public sealed class CanopyMaskTests
         Assert.Equal(0.75f, mask.DensityAt(C, 0.5f * C), 4);
     }
 
+    /// <summary>A painted bake keeps its surface. A point on it reads the slope's own height between the samples,
+    /// and whether its nearest sample is painted. A stamp bake has no surface, so it reads the cell's ground.</summary>
+    [Fact]
+    public void APaintedBakeReadsItsSurfaceBetweenItsSamples()
+    {
+        // A slope rising half a metre a metre along X over the first cell and a half; the rest bare.
+        var a = new Vector3(0f, 0f, 0f);
+        var b = new Vector3(1.5f * C, 0.75f * C, 0f);
+        var c = new Vector3(1.5f * C, 0.75f * C, C);
+        var d = new Vector3(0f, 0f, C);
+        var mask = CanopyMask.FromPainted(new[] { a, b, c, a, c, d }, 0f, 0f, 3 * C, C);
+        foreach (float x in new[] { 5f, 13.3f, 30f, 40f })
+        {
+            Assert.True(mask.IsPainted(x, 17f));
+            Assert.Equal(x / 2f, mask.SurfaceAt(x, 17f), 3);
+        }
+        Assert.False(mask.IsPainted(2.5f * C, 17f));
+        Assert.Equal(1f, mask.PaintedShare(0));
+        Assert.Equal(0.5f, mask.PaintedShare(1));
+        Assert.Equal(0f, mask.PaintedShare(2));
+
+        var stamps = CanopyMask.FromStamps(new[] { (Stamp(16f, 5f, 16f), 10f, 18f) }, 0f, 0f, C, C);
+        Assert.False(stamps.IsPainted(16f, 16f));
+        Assert.Equal(0f, stamps.PaintedShare(0));
+        Assert.Equal(stamps.Ground[0], stamps.SurfaceAt(16f, 16f));
+    }
+
     /// <summary>The brush mask thins painted canopy and clears it, but a thickened stroke never makes a cell
     /// denser than its cover.</summary>
     [Fact]

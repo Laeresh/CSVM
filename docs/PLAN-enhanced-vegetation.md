@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, near
 
 31. ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
-32. ◐ Near-radius 3D draw with a dither handover to the card
+32. ☑ Near-radius 3D draw with a dither handover to the card
 33. ☐ Look-alike models for every listed card species
 34. ☐ Ground cover prototype: new-art grass and crop cards
 35. ☐ Ground cover prototype: procedural shells; pick at the controls
@@ -1545,7 +1545,7 @@ handover, judged again in game.
 
 **Verified.** <pending orchestrator run>
 
-## D32 ◐ Near-radius 3D draw with a dither handover to the card
+## D32 ☑ Near-radius 3D draw with a dither handover to the card
 
 **Goal.** Within a near radius a listed stamp draws its 3D model, dithering over to the original card
 beyond it; from altitude nothing changes. Over C3's painted canopy, where no card stands, the near
@@ -1640,16 +1640,50 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   added kind's models stand under a child rebuilt with the added kinds. Past the map edge each Rich
   card copy gains a model copy, one node per edge cell and kind. A kind first listed by a lab edit takes
   no model until the next load.
-- *C3.* Its beach palms take models by file alone once D33 ships them. The painted-canopy fill inside
-  700 m needs more than a file: no card stands there, so it needs a model-only stamp source over the
-  painted cells (B15's clump placement at a crown rate, or a set picked on the canopy textures whose
-  member draws no card), a band of its own (models alone to 700 m, dithered out where B15's crowns rise),
-  and a crown model light enough for about 9,000 crowns inside 700 m. That is D33's work with its
-  species.
+- *C3.* Its beach palms take their models by file alone, as above. Over the painted canopy no card
+  stands, so the near models there are B15's, built with the clumps (`CanopyClumps`):
+  - *Source.* `CanopyClumps.CrownModels` (pure) stands crown models in the clumps' own mask cells, never
+    on a world grid of their own: a 3 × 3 grid of slots a 32 m cell, each kept at the cell's share of
+    `PaintedTreesPerCell` (6, B15's crown rate) over the cell's painted share, jittered inside its slot.
+    A crown stands only where the nearest painted sample point is canopy, so none stands on the beach
+    or a transition texture, and at the painted surface there (`CanopyMask.SurfaceAt`, bilinear
+    between the bake's 8 m samples, which a painted bake now keeps). Scale 0.85 to 1.15, mirror and
+    instance colour (the C3 kinds' brightness and tint spread) are hashes of the cell, as the clumps'
+    are. C3 stands 129,531 crowns in 471 cells of 256 m: 3,354 inside 700 m of the A7 view (beach and
+    sea fill half of it) and 6,781 at the low view over the jungle (`--pos=-5450,170,-3550`).
+  - *Band.* `ModelBand`, 700 to 1000 m: inside 700 m the models alone draw (the clumps there are sunk
+    to nothing by `grow`); over 700 to 1000 m the clumps keep only the 4x4 dither cells the models give
+    up (`v_model`, `csky_clutter_dither_keep` of the same share on both sides), while `grow` still
+    raises them, so at 1000 m they stand at half height (8 m front, 12.8 m back row) against the
+    model's 6 m. The map edge's clump copies keep no band, since no model stands past the edge.
+  - *The word.* Near and Far draw the same canopy band: the crowns start rising at 700 m on every
+    word, so a farther model band would replace crowns that already carry the volume, at the square
+    of the reach in instances. Off hides the crown models and zeroes the clumps' band, so B15 draws as
+    it did. A live change follows through `Field.FollowModels` with no rebuild; Original, Faithful and
+    a live move off Rich drop the clumps and their models together, and `--canopy-clumps=off` draws
+    neither.
+  - *The draw.* D32's cell scheme: one MultiMesh of the crown model per 256 m cell under the clumps'
+    root (never the clutter root), ranged at 1000 m plus the cell's half diagonal, Godot's own range
+    and frustum cull per camera, no collider, no shadow and no instance uniform (the model shader's
+    `canopy` variant: no card fade, its instance basis scales it). Graded to the B15 crowns' mean
+    colour over their top half (`VegetationModels.ForMean`), grade 0.354, 0.329, 0.372.
+  - *Cost* at 5120x1440 on an idle machine, three launches each, `off` against `near` (Off also
+    drops the palm models), with the 150-triangle crown: at the A7 view `gpu_ms` 4.45 against 4.35,
+    1,299 against 1,255 draws, 1,247,983 against 375,769 primitives, 7,933 against 7,385 scene
+    nodes, `render_cpu_ms` 1.20 against 1.10; at the low view `gpu_ms` 3.69 against 3.08, 1,362
+    against 1,300 draws, 1,879,830 against 386,580 primitives, `render_cpu_ms` 1.19 against 1.12.
+    The primitives are the crowns inside 1000 m in the frustum. The first crown, 210 triangles,
+    read 4.56 and 3.88 ms at the same views (2,477,130 primitives at the low view).
 
 **Ruling (yours, from the montages).** Brightness A: graded to the card with the card's sun-side gain.
 No shadows. The model sways with the card. The band: 150 to 250 m by default, with an option to push it
-out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). Open: C3's painted canopy inside 700 m needs a crown model and a model-only stamp source, which D33 brings.
+out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). C3's painted canopy inside 700 m takes D33's `canopytree` crowns on B15's clump cells (*C3* above).
+
+**Ruling (yours, from the montages).** C3's crowns: the greener palette (option C), 6 crowns a 32 m
+cell as built (not 9), their top 6 m over the painted canopy as built (not 3 or 10 m), and for the
+cost the lighter crown, about 150 triangles with five-sided domes, over the same 700 to 1000 m band.
+Montages: `.scratch/c3canopy/` (`montage-off-on`, `-colour`, `-height`, `-density`, and
+`montage-final.png`, off against the ruled crown before and after the lighter domes).
 
 **Model recommendation.** Opus: the item crosses the clutter's drawn layouts, the map edge, the shader
 text the Rich card shares and a look iterated against captures.
@@ -1671,7 +1705,15 @@ cells past 400 m with the far band, and back to `near` restores them; a session 
 `C1/firtree1.glb` replaces the shipped file), with `clutter-rich-variation`, `graphics-vegetation-quality`,
 `canopy-clumps`, `vegetation-added-stamps`, `vegetation-lab`, `clutter-activation`, `clutter-cells`,
 `graphics-live-switch`, `crater-carve`, `display-det-guard` (the new saved word is dropped under
-`--det`) and the VIDEO page's menu suite passing. Look: `.scratch/d32/` (montages of the low
+`--det`) and the VIDEO page's menu suite passing. C3's crowns: units
+`CanopyMaskTests.APaintedBakeReadsItsSurfaceBetweenItsSamples` (the surface between samples, the painted
+point and share, a stamp bake's ground) and `CanopyClumpsTests.CrownModelsStandOnThePaintedCanopyAtItsCrownRate`
+and `CrownModelsHandOverInsideTheClumpsRise`; engine `canopy-models` (a C3 Enhanced flight at rich: the
+crowns stand under the clumps' root outside the clutter root, no collider, no instance uniform, every
+one on the painted surface, cells ranged past 1000 m; the clumps keep the dither cells the models give
+up over the band; Off hides them and zeroes the band, Far and Near draw the same nodes; original,
+Original and back; a session at original draws none) and `canopy-clumps` (C1's card forest stands no
+crown model). Look: `.scratch/d32/` (montages of the low
 view among firs, the handover band, three band radii and the 300 m view; the brightness and gain
 options), judged by you. Budget: a first A/B, three launches a case at 5120x1440 with another
 worktree's battery running (so `gpu_ms` reads about four times C24's and its ranges overlap): at
@@ -1796,6 +1838,41 @@ C4. Two more shared builders: `veg_fir.py`, `firtree1`'s builder with its number
 | `bush1` | C1, C1B | 5.58 × 5.06 | 5.32 × 5.24 × 4.97 | 682 | 107,488 | no |
 | `bush2` | C1, C1B | 3.69 × 3.35 | 3.73 × 3.81 × 3.32 | 192 | 59,440 | no |
 
+*C3's crown model (as built).* `canopytree.py` builds `canopytree`, the crown D32 stands over C3's
+painted jungle canopy where no card exists. It is self-contained (no shared builder) since it has no
+card to match.
+- *Geometry.* A crown and nothing below it: a top dome (radius 3.6 m) and a ring of five lower domes
+  (2.4 to 3.0 m, 3.5 to 4.3 m out), each five-sided with rings at 50, 90 and 130 degrees from its top
+  and every rim vertex pushed up to 16 % in or out, so no dome outlines a regular polygon. No trunk:
+  the crown stands sunk in the painted canopy, which hides what lies under it. The pivot is the lowest
+  point, as every model's is; **150 triangles**, 11.60 × 12.32 × 6.55 m, a 98 KB GLB. Seven-sided
+  domes (210 triangles) read rounder up close and cost 0.19 ms more GPU at the low view.
+- *Texture.* Four 128-pixel discs on one 256 atlas, one a dome, mapped by the polar angle from the
+  dome's top: lit at the centre and darkening to the rim (the skirt), under soft lighter crownlets and
+  a leaf grain a texel or two across, as the painted canopy reads up close. The top dome takes the lit
+  disc, the ring the three plainer ones. Drawn unlit, the texture carries all the relief.
+- *Height.* Its top stands `ModelRiseM` (6 m) over the painted surface at scale 1. The painted surface
+  is the treetops seen from above, so a crown standing on it is an emergent crown over the canopy, as
+  B15's crowns are; 6 m sits under where the rising clumps stand at the band's far edge (8 m), so the
+  dither hands over to taller crowns rather than shorter ones, and the domes' skirts still sink into
+  the canopy on a slope. 3 and 10 m are in `.scratch/c3canopy/montage-height.png`.
+- *Colour.* D32 grades it to B15's crowns' mean, cut from the same textures, since the crowns are what
+  it hands over to and they sit within a few levels of the lit painted ground on the hills. Forest1's
+  own bands by D33's rule (sRGB 35, 51, 26; 50, 70, 38; 92, 113, 66) drew greyer than the lit painted
+  ground's yellow-green up close, so the palette is greener and yellower (option C: shade 0.11, 0.20,
+  0.06, body 0.17, 0.29, 0.09, highlight 0.40, 0.50, 0.20 in sRGB), set at 0.85 of those levels. At
+  full levels the grade's luminance ratio was 0.240, under its 0.25 floor, so the crowns drew about
+  4 % brighter than their target; at 0.85 it lands at 0.354, 0.329, 0.372 and they draw at it.
+- *No clump tile*: the clumps over painted canopy are cut from the canopy textures (B15).
+
+| Model | Chapters | Model size (w × d × h, m) | Triangles | GLB bytes |
+|---|---|---|---|---|
+| `canopytree` | C3 | 11.60 × 12.32 × 6.55 | 150 | 98,264 |
+
+*Ruling (yours, from the montages).* `canopytree` takes option C, the greener palette; 6 crowns a
+32 m cell; its top 6 m over the painted canopy; and the lighter crown, about 150 triangles with
+five-sided domes, for the cost, over the same band. `.scratch/c3canopy/montage-final.png`.
+
 *Ruling (yours, from the in-game recolour montages).* The firs keep the cards' blue-green; the palms
 take the greener, darker option B over the card texels' mean hue; `palmtree1`'s lit fronds are pale
 green rather than yellow; the bushes stay as they were.
@@ -1858,6 +1935,10 @@ reference), the clump strips in `.scratch/vegetation/<C>_<model>_clump.png`, and
 tiles, at B14's 300, 600 and 700 m poses). Engine: `canopy-clumps` (every tile a C1 flight takes is
 its own species' shipped file, `firtree1`'s among them; a pack's `firtree1` tile replaces only
 that one) and `canopy-mask`; units `ClumpTile` and `CanopyClumps`.
+For C3's `canopytree`: `.\MakeVegetationModel.ps1 -Species canopytree` exits 0 headless; the GLB
+reads one mesh with one primitive, `alphaMode: MASK`, `doubleSided: true`, POSITION y from 0 to
+6.55; a rerun writes the same bytes. Look: `.scratch/vegetation/C3_canopytree_{side,above,atlas}.png`
+(beside a forest1 swatch) and the in-game montages in `.scratch/c3canopy/` (D32).
 
 **⚠ Traps.** Match the card's silhouette and colour, or the handover in D32 shows.
 - The first node named after a card can be a placed copy without a model (C3's `palmtree2`);

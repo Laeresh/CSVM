@@ -2709,11 +2709,13 @@ public partial class GameSession : Node3D
             _edgeExtender?.SetClumps(null);
             Mech3.CanopyClumps.Handover(_clutter?.ExportedKinds, false);
         }
+        // The crown models over painted canopy follow the 3D Vegetation word on standing clumps, with no rebuild.
+        _canopyClumps?.FollowModels();
         if (!wanted || _canopyClumps != null || _plane == null || _sessionTextures == null
             || _clutter?.ExportedKinds is not { } kinds || _clutter.Vegetation is not { } entry || _clutter.Canopy() is not { } mask)
             return;
         string chapter = _spec.Chapter?.ToUpperInvariant() ?? "";
-        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, entry, _sessionTextures, card => Mech3.CanopyClumps.TileFor(chapter, card));
+        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, entry, _sessionTextures, card => Mech3.CanopyClumps.TileFor(chapter, card), chapter);
         if (_canopyClumps == null)
             return;
         _plane.AddChild(_canopyClumps.Root);

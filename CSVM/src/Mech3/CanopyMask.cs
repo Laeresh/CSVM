@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -30,6 +31,9 @@ public sealed class CanopyMask
     private readonly float[] _density;
     private readonly float[] _ground;
     private readonly float[] _top;
+
+    // A painted bake's sample heights per covered cell, PaintSamples squared row by row, NaN off the canopy.
+    private readonly Dictionary<int, float[]> _samples = new();
 
     private CanopyMask(float left, float top, float right, float bottom)
     {
@@ -124,11 +128,12 @@ public sealed class CanopyMask
             {
                 int covered = 0;
                 float sum = 0f;
+                var samples = new float[PaintSamples * PaintSamples];
                 for (int sj = 0; sj < PaintSamples; sj++)
                 {
                     for (int si = 0; si < PaintSamples; si++)
                     {
-                        float y = heights[(((j * PaintSamples) + sj) * sw) + (i * PaintSamples) + si];
+                        float y = samples[(sj * PaintSamples) + si] = heights[(((j * PaintSamples) + sj) * sw) + (i * PaintSamples) + si];
                         if (float.IsNaN(y))
                             continue;
                         covered++;
@@ -139,6 +144,7 @@ public sealed class CanopyMask
                 if (covered == 0)
                     continue;
                 int c = (j * mask.Width) + i;
+                mask._samples[c] = samples;
                 float thin = brush == null ? 1f : Math.Min(1f, brush.At(mask.MinX + ((i + 0.5f) * CellM), mask.MinZ + ((j + 0.5f) * CellM)));
                 mask._density[c] = thin * covered / (PaintSamples * PaintSamples);
                 mask._ground[c] = mask._top[c] = sum / covered;
@@ -157,6 +163,45 @@ public sealed class CanopyMask
     {
         int i = (int)MathF.Floor((x - MinX) / CellM), j = (int)MathF.Floor((z - MinZ) / CellM);
         return i < 0 || j < 0 || i >= Width || j >= Height ? -1 : (j * Width) + i;
+    }
+
+    /// <summary>The painted surface's height at a world X/Z, bilinear between the bake's sample points (8 m apart)
+    /// that lie on the canopy. Off them, and on a stamp bake, the cell's mean ground; 0 off the area.</summary>
+    public float SurfaceAt(float x, float z)
+    {
+        const float step = CellM / PaintSamples;
+        float u = ((x - MinX) / step) - 0.5f, v = ((z - MinZ) / step) - 0.5f;
+        int i0 = (int)MathF.Floor(u), j0 = (int)MathF.Floor(v);
+        float sum = 0f, weight = 0f;
+        for (int k = 0; k < 4; k++)
+        {
+            int i = i0 + (k & 1), j = j0 + (k >> 1);
+            if (i < 0 || j < 0 || i >= Width * PaintSamples || j >= Height * PaintSamples
+                || !_samples.TryGetValue(((j / PaintSamples) * Width) + (i / PaintSamples), out var cell))
+                continue;
+            float y = cell[((j % PaintSamples) * PaintSamples) + (i % PaintSamples)];
+            if (float.IsNaN(y))
+                continue;
+            float w = (1f - MathF.Abs(u - i)) * (1f - MathF.Abs(v - j));
+            sum += w * y;
+            weight += w;
+        }
+
+        return weight > 1e-6f ? sum / weight : CellAt(x, z) is int c and >= 0 ? _ground[c] : 0f;
+    }
+
+    /// <summary>The share of a cell's sample points a painted bake found on the canopy, 0 on a stamp bake.</summary>
+    public float PaintedShare(int cell) =>
+        _samples.TryGetValue(cell, out var s) ? (float)s.Count(y => !float.IsNaN(y)) / s.Length : 0f;
+
+    /// <summary>Whether the sample point nearest a world X/Z lies on the painted canopy.</summary>
+    public bool IsPainted(float x, float z)
+    {
+        const float step = CellM / PaintSamples;
+        int i = (int)MathF.Floor((x - MinX) / step), j = (int)MathF.Floor((z - MinZ) / step);
+        return i >= 0 && j >= 0 && i < Width * PaintSamples && j < Height * PaintSamples
+            && _samples.TryGetValue(((j / PaintSamples) * Width) + (i / PaintSamples), out var cell)
+            && !float.IsNaN(cell[((j % PaintSamples) * PaintSamples) + (i % PaintSamples)]);
     }
 
     /// <summary>The density at a world X/Z, bilinear between cell centres and 0 off the area.</summary>

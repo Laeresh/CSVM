@@ -45,7 +45,7 @@ public static class VegetationModels
     // The grade's bounds: a model whose colours are that far off the card is a bad file, not a grade.
     private const float MinGrade = 0.25f, MaxGrade = 4f;
 
-    private static readonly Dictionary<(bool Lit, bool Fogged), Shader> Shaders = new();
+    private static readonly Dictionary<(bool Lit, bool Fogged, bool Canopy), Shader> Shaders = new();
 
     /// <summary>The band both sides read under the standing <see cref="VegetationModelsSetting"/> word: near and
     /// far in metres, zero for Off.</summary>
@@ -68,6 +68,14 @@ public static class VegetationModels
     /// grade matches <paramref name="card"/>, the card's image.</summary>
     public static Model? For(string chapter, string species, Image? card)
     {
+        card?.Convert(Image.Format.Rgba8);
+        return ForMean(chapter, species, card != null ? MeanLinear(card.GetData(), card.GetWidth(), card.GetHeight(), CrownShare) : null);
+    }
+
+    /// <summary>The model as <see cref="For(string, string, Image?)"/> reads it, graded to <paramref name="cardMean"/>,
+    /// a mean linear colour, where no one card image is what the model must meet.</summary>
+    public static Model? ForMean(string chapter, string species, Vector3? cardMean)
+    {
         string key = $"{chapter.ToUpperInvariant()}/{species}";
         string shipped = $"{CanopyClumps.ShippedRoot}/{key}.glb.bin";
         var sources = new[]
@@ -77,7 +85,7 @@ public static class VegetationModels
         };
         foreach (var source in sources)
         {
-            if (source is { } s && Import(s.Model, s.Source, card) is { } model)
+            if (source is { } s && Import(s.Model, s.Source, cardMean) is { } model)
                 return model;
         }
 
@@ -85,11 +93,12 @@ public static class VegetationModels
     }
 
     /// <summary>A material drawing <paramref name="model"/> as a card of the given render flags and width in
-    /// metres draws.</summary>
-    public static ShaderMaterial Material(Model model, bool lit, bool fogged, float cardWidth)
+    /// metres draws. A <paramref name="canopy"/> model stands on no card, so no card fade bounds it. Its
+    /// instance basis scales it, and its band hands it over to the crowns of <see cref="CanopyClumps"/>.</summary>
+    public static ShaderMaterial Material(Model model, bool lit, bool fogged, float cardWidth, bool canopy = false)
     {
-        if (!Shaders.TryGetValue((lit, fogged), out var shader))
-            Shaders[(lit, fogged)] = shader = new Shader { Code = ShaderCode(lit, fogged) };
+        if (!Shaders.TryGetValue((lit, fogged, canopy), out var shader))
+            Shaders[(lit, fogged, canopy)] = shader = new Shader { Code = ShaderCode(lit, fogged, canopy) };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("albedo_tex", model.Albedo);
         material.SetShaderParameter("grade", model.Grade);
@@ -195,7 +204,7 @@ public static class VegetationModels
 
     // The first mesh of the file and its first surface's base-colour texture, mipmapped. A model is one mesh of
     // one material, as the pipeline writes it.
-    private static Model? Import(HdModel file, string source, Image? card)
+    private static Model? Import(HdModel file, string source, Vector3? cardMean)
     {
         var state = new GltfState();
         if (new GltfDocument().AppendFromBuffer(file.Bytes, file.GltfPath ?? string.Empty, state) != Error.Ok
@@ -213,20 +222,19 @@ public static class VegetationModels
         image.GenerateMipmaps();
         var mesh = importer.GetMesh();
         var arrays = mesh.SurfaceGetArrays(0);
-        card?.Convert(Image.Format.Rgba8);
-        var grade = Grade(card != null ? MeanLinear(card.GetData(), card.GetWidth(), card.GetHeight(), CrownShare) : null,
+        var grade = Grade(cardMean,
             SurfaceMean(image.GetData(), image.GetWidth(), image.GetHeight(), arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(),
                 arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), arrays[(int)Mesh.ArrayType.Index].AsInt32Array(), CrownShare));
         Log.Info("world", $"vegetation model {source}: {mesh.GetFaces().Length / 3} triangles, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}");
         return new Model(mesh, TextureUpload.Create(image), grade, source);
     }
 
-    // The card's look on a mesh, under the card's own far fade. Over the band the model keeps the dither cells
-    // the card gives up, so a stamp never draws both or neither. It turns by a hash of its planted point and
-    // mirrors as its card does. It leans in the card's breeze and gains on the card's sun half, by screen side.
+    // The card's look on a mesh, under the card's own far fade (none on a canopy model). Over the band the model
+    // keeps the dither cells the card or the crowns give up, so a stamp never draws both or neither. It turns by
+    // a hash of its planted point, mirrors as its card does, leans in the card's breeze and gains on its sun half.
     // ⚠ Never light it with the scene's lights: the card is unlit, and a lit model shows at the band.
     // ⚠ Never give it an instance uniform: each model cell would take 16 slots of Godot's global buffer.
-    private static string ShaderCode(bool lit, bool fogged) => $$"""
+    private static string ShaderCode(bool lit, bool fogged, bool canopy) => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{SceneBuilder.CoverageMode}};
 
@@ -250,7 +258,7 @@ public static class VegetationModels
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
-            v_far = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
+            v_far = {{(canopy ? "1.0" : "csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM)")}};
             v_card = v_far * {{ClutterBuilder.ModelShare}};
             float live = step(1e-12, dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz));
             float keep = live * step(0.004, v_far - v_card);
@@ -261,7 +269,7 @@ public static class VegetationModels
             float yaw = float(h >> 8u) * (6.2831853 / 16777216.0);
             mat3 turn = mat3(vec3(cos(yaw), 0.0, -sin(yaw)), vec3(0.0, 1.0, 0.0), vec3(sin(yaw), 0.0, cos(yaw)));
             vec3 flip = vec3(MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0, 1.0, 1.0);
-            vec3 v = turn * (VERTEX * flip);
+            vec3 v = turn * (VERTEX * flip){{(canopy ? " * MODEL_MATRIX[1].y" : "")}};
         {{ClutterBuilder.FaceBasisLines(false)}}
             v_side = dot(v.xz, face[0].xz) / half_width;
         {{ClutterBuilder.SunLine}}{{ClutterBuilder.LeanLines}}    v += vec3(breeze.x, 0.0, breeze.y) * (lean * v.y);

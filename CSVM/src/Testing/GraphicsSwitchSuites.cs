@@ -490,7 +490,7 @@ internal static class GraphicsSwitchSuites
         + "the clumps, their edge copies and the band, and a move back builds the same chunks; a live switch to Original drops "
         + "them and back builds them; a lab re-bake builds new ones; the C1 clumps take the tiles shipped beside their models, "
         + "firtree1's among them, compose from the cards without them, and take a model pack's firtree1 tile under the same key "
-        + "with its own tree count while the other species keep theirs; "
+        + "with its own tree count while the other species keep theirs, and stand no crown model; "
         + "a rich C3 flight builds them over its painted canopy alone, "
         + "fading in over their own band while the beach palms keep every distance; --canopy-clumps=off, or a session at original, builds none")]
     internal static void CanopyClumpsFollowRich(TestContext ctx)
@@ -516,6 +516,7 @@ internal static class GraphicsSwitchSuites
                     $"the cards hand over ({Handover(live)}), the grassland and hedge cards keep every distance ({Handover(live, forest: false)}), and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
                 var shipped = live.Session.CanopyClumpField!;
                 shippedTrees = shipped.TreesPerClump;
+                ctx.Check(shipped.Models == null, $"C1's card forest stands no crown model: only painted canopy does");
                 ctx.Check(shipped.Tiles.Any(t => t.StartsWith("firtree1 ", StringComparison.Ordinal)) && shipped.Tiles.All(ShippedTile),
                     $"the clumps take the firtree1 tile, and every tile is the one shipped beside its own species' model ({string.Join("; ", shipped.Tiles)})");
                 var clutter = live.Session.Clutter!;
@@ -776,6 +777,101 @@ internal static class GraphicsSwitchSuites
         finally
         {
             Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("canopy-models",
+        "the near crown models over C3's painted canopy in an Enhanced flight at rich: they stand under the clumps' root, "
+        + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "
+        + "ranged past the band's far edge; the clumps keep only the dither cells the models give up over the band, the models "
+        + "the rest; a live move to Off hides them and zeroes the clumps' band, Far and Near draw the same nodes again; a live "
+        + "move to original and a switch to Original draw none, and back the same crowns; a session at original draws none")]
+    internal static void CanopyModelsOverPaintedCanopy(TestContext ctx)
+    {
+        RequireData(ctx, "C3");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = VegetationModelsSetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            VegetationModelsSetting.Resolve(VegetationModelsSetting.Near, null, null);
+            var live = Open(ctx, true, 1, "C3");
+            try
+            {
+                if (!live.Built || live.Session.CanopyClumpField is not { Models: { } models } field || live.Session.Clutter?.Canopy() is not { } mask)
+                {
+                    ctx.Check(false, $"the rich C3 flight builds its clumps with crown models");
+                    return;
+                }
+                var crowns = field.Crowns;
+                var cells = ModelCells(models);
+                ctx.Check(crowns.Count > 0 && cells.Sum(m => m.Multimesh.InstanceCount) == crowns.Count && models.IsInsideTree()
+                        && models.GetParent() == field.Root && !UnderClutter(models) && !HasCollider(models),
+                    $"{crowns.Count} crown models stand in {cells.Count} cells under the clumps' root, outside the clutter root, with no collider");
+                int off = crowns.Count(c => !mask.IsPainted(c.At.X, c.At.Z) || MathF.Abs(c.At.Y - mask.SurfaceAt(c.At.X, c.At.Z)) > 0.01f);
+                ctx.Check(off == 0, $"every crown stands on the painted surface ({off} off it)");
+                foreach (var (name, at) in new[] { ("A7", new Vector2(-5439f, -3077f)), ("low", new Vector2(-5450f, -3550f)) })
+                    ctx.Note($"{crowns.Count(c => new Vector2(c.At.X, c.At.Z).DistanceTo(at) < Mech3.CanopyClumps.PaintedNearM)} crowns inside {Mech3.CanopyClumps.PaintedNearM:0} m of the {name} view");
+                // Every node under the crown models counts, whatever its name.
+                var (uniforms, _) = InstanceUniformNodes(models);
+                // A cell's half diagonal takes its height too, which a cliff stretches past half the cell's edge.
+                float reach = Mech3.CanopyClumps.ModelFarM + (1.5f * Mech3.VegetationModels.CellM);
+                ctx.Check(uniforms == 0 && cells.All(m => m.VisibilityRangeEnd > Mech3.CanopyClumps.ModelFarM && m.VisibilityRangeEnd < reach)
+                        && cells.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off),
+                    $"no crown cell declares an instance uniform ({uniforms}), casts a shadow or ranges past {reach:0} m (ranges {cells.Min(m => m.VisibilityRangeEnd):0}-{cells.Max(m => m.VisibilityRangeEnd):0} m)");
+
+                var model = (ShaderMaterial)cells[0].MaterialOverride;
+                var clumps = (ShaderMaterial)field.Root.GetChildren().OfType<MultiMeshInstance3D>().First().MaterialOverride;
+                Vector2 Band(ShaderMaterial m) => m.GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2();
+                ctx.Check(Band(model) == Mech3.CanopyClumps.ModelBand && Band(clumps) == Mech3.CanopyClumps.ModelBand
+                        && model.Shader.Code.Contains("v_far = 1.0;", StringComparison.Ordinal)
+                        && model.Shader.Code.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_card)", StringComparison.Ordinal)
+                        && clumps.Shader.Code.Contains("v_model = " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
+                        && clumps.Shader.Code.Contains("!csky_clutter_dither_keep(FRAGCOORD.xy, v_model)", StringComparison.Ordinal),
+                    $"over {Mech3.CanopyClumps.ModelBand} the clumps keep the dither cells the models give up, and the models the rest");
+
+                Models(live, VegetationModelsSetting.Off);
+                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && live.Session.CanopyClumpField?.Models == models,
+                    $"a live move to Off hides the crowns and zeroes the clumps' band, with no rebuild");
+                Models(live, VegetationModelsSetting.Far);
+                bool far = models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand;
+                Models(live, VegetationModelsSetting.Near);
+                ctx.Check(far && models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && live.Session.CanopyClumpField?.Models == models,
+                    $"Far and Near draw the same crowns over the same band");
+
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(live.Session.CanopyClumpField == null && !models.IsInsideTree(), $"a live move to original draws no crown");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                var again = live.Session.CanopyClumpField?.Crowns;
+                ctx.Check(again != null && again.SequenceEqual(crowns), $"a move back to rich stands the same crowns ({again?.Count ?? 0})");
+                Switch(live, enhanced: false);
+                ctx.Check(live.Session.CanopyClumpField == null, $"a live switch to Original draws none");
+                Switch(live, enhanced: true);
+                ctx.Check(live.Session.CanopyClumpField?.Crowns.SequenceEqual(crowns) == true && live.Session.CanopyClumpField.Models!.Visible,
+                    $"and a switch back to Enhanced the same crowns");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
+            var original = Open(ctx, true, 1, "C3");
+            try
+            {
+                ctx.Check(original.Built && original.Session.CanopyClumpField == null, $"a session built at original draws no crown");
+            }
+            finally
+            {
+                original.Close();
+            }
+        }
+        finally
+        {
+            VegetationModelsSetting.Resolve(launchedModels, null, null);
             VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
