@@ -34,10 +34,6 @@ public static class GroundCover
     /// <summary>The texels a side the ground colour is averaged over, so a card takes its patch's colour, not one texel's.</summary>
     public const int BlurTexels = 2;
 
-    /// <summary>How far across from a card's foot, and how far above the ground, another polygon keeps it off
-    /// (<see cref="Overlaid"/>).</summary>
-    public const float OverlayReachM = 0.5f, OverlayRiseM = 1.5f;
-
     /// <summary>The cells one frame builds once some stand, nearest first.</summary>
     public const int MaxCellsPerFrame = 2;
 
@@ -50,10 +46,6 @@ public static class GroundCover
 
     // A triangle whose lattice over one cell passes this is a stretched UV map, skipped rather than walked.
     private const long MaxPoints = 1_000_000;
-
-    // The card's foot and four points half its width around it, each tested against an overlay.
-    private static readonly (float X, float Z)[] Probes =
-        { (0f, 0f), (OverlayReachM, 0f), (-OverlayReachM, 0f), (0f, OverlayReachM), (0f, -OverlayReachM) };
 
     private static Shader? _shader;
 
@@ -237,32 +229,6 @@ public static class GroundCover
     public static double PatchKeep(double u, double v) =>
         0.6 + (0.4 * Unit(Hash((int)Math.Floor(u * Patches), (int)Math.Floor(v * Patches), 0x7A7C)));
 
-    /// <summary>Whether any of <paramref name="triangles"/> (corner triples) lies over the ground at <paramref name="at"/>.
-    /// It must reach within <see cref="OverlayReachM"/> of it across and lie under <see cref="OverlayRiseM"/> above it.
-    /// That is a rail, a road or an apron drawn as its own polygon over a picked texture, which no card pokes through.</summary>
-    public static bool Overlaid(IReadOnlyList<Vector3> triangles, Vector3 at)
-    {
-        for (int i = 0; i + 2 < triangles.Count; i += 3)
-        {
-            Vector3 a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
-            float d = ((b.Z - c.Z) * (a.X - c.X)) + ((c.X - b.X) * (a.Z - c.Z));
-            if (Math.Abs(d) < 1e-6f || at.X + OverlayReachM < MathF.Min(a.X, MathF.Min(b.X, c.X)) || at.X - OverlayReachM > MathF.Max(a.X, MathF.Max(b.X, c.X))
-                || at.Z + OverlayReachM < MathF.Min(a.Z, MathF.Min(b.Z, c.Z)) || at.Z - OverlayReachM > MathF.Max(a.Z, MathF.Max(b.Z, c.Z)))
-                continue;
-            foreach (var (dx, dz) in Probes)
-            {
-                float px = at.X + dx, pz = at.Z + dz;
-                float w0 = (((b.Z - c.Z) * (px - c.X)) + ((c.X - b.X) * (pz - c.Z))) / d;
-                float w1 = (((c.Z - a.Z) * (px - c.X)) + ((a.X - c.X) * (pz - c.Z))) / d;
-                float w2 = 1f - w0 - w1;
-                float y = (w0 * a.Y) + (w1 * b.Y) + (w2 * c.Y);
-                if (w0 >= 0f && w1 >= 0f && w2 >= 0f && y > at.Y - 0.25f && y < at.Y + OverlayRiseM)
-                    return true;
-            }
-        }
-        return false;
-    }
-
     /// <summary>A pseudo-random integer of three integers, the same on every machine and run.</summary>
     public static uint Hash(int a, int b, int c)
     {
@@ -305,25 +271,9 @@ public static class GroundCover
         }
         if (kept == 0)
             return null;
-        // Every other textured polygon over a picked cell, the overlays a card is kept off.
-        var overlays = new Dictionary<(int, int), List<Vector3>>();
-        var others = VegetationGround.Painted(gamez, tex => PickOf(chapter, tex) == null);
-        for (int i = 0; i + 2 < others.Length; i += 3)
-        {
-            Vector3 lo = others[i].Min(others[i + 1]).Min(others[i + 2]), hi = others[i].Max(others[i + 1]).Max(others[i + 2]);
-            for (int cx = Cell(lo.X - OverlayReachM); cx <= Cell(hi.X + OverlayReachM); cx++)
-            {
-                for (int cz = Cell(lo.Z - OverlayReachM); cz <= Cell(hi.Z + OverlayReachM); cz++)
-                {
-                    if (!index.ContainsKey((cx, cz)))
-                        continue;
-                    if (!overlays.TryGetValue((cx, cz), out var list))
-                        overlays[(cx, cz)] = list = new List<Vector3>();
-                    list.AddRange(new[] { others[i], others[i + 1], others[i + 2] });
-                }
-            }
-        }
-        Log.Info("world", $"ground cover: {chapter} {kept} picked triangles over {index.Count} cells of {CellM:0} m from {string.Join(", ", surfaces.Where(s => s.Value != null).Select(s => s.Key))}, {overlays.Values.Sum(o => o.Count / 3)} overlay triangles over them, crop band {Band(Cover.Crop).X:0}-{Band(Cover.Crop).Y:0} m, grass band {Band(Cover.Grass).X:0}-{Band(Cover.Grass).Y:0} m, indexed in {watch.ElapsedMilliseconds} ms");
+        // Every other textured polygon, the overlays a card is kept off.
+        var overlays = VegetationGround.OverlaysOn(gamez, tex => PickOf(chapter, tex) != null);
+        Log.Info("world", $"ground cover: {chapter} {kept} picked triangles over {index.Count} cells of {CellM:0} m from {string.Join(", ", surfaces.Where(s => s.Value != null).Select(s => s.Key))}, crop band {Band(Cover.Crop).X:0}-{Band(Cover.Crop).Y:0} m, grass band {Band(Cover.Grass).X:0}-{Band(Cover.Grass).Y:0} m, indexed in {watch.ElapsedMilliseconds} ms");
         return new Field(index, overlays, mask);
     }
 
@@ -669,14 +619,14 @@ public static class GroundCover
     public sealed class Field
     {
         private readonly Dictionary<(int X, int Z), List<Ground>> _index;
-        private readonly Dictionary<(int X, int Z), List<Vector3>> _overlays;
+        private readonly VegetationGround.Overlays _overlays;
         private readonly VegetationMask? _mask;
         private readonly ArrayMesh[] _meshes = { CardMesh(Cover.Crop), CardMesh(Cover.Grass) };
         private readonly ShaderMaterial[] _materials = { Material(Cover.Crop), Material(Cover.Grass) };
         private readonly Dictionary<((int X, int Z) Cell, Cover Cover), MultiMeshInstance3D?> _live = new();
         private bool _settled;
 
-        internal Field(Dictionary<(int X, int Z), List<Ground>> index, Dictionary<(int X, int Z), List<Vector3>> overlays, VegetationMask? mask)
+        internal Field(Dictionary<(int X, int Z), List<Ground>> index, VegetationGround.Overlays overlays, VegetationMask? mask)
         {
             _index = index;
             _overlays = overlays;
@@ -772,13 +722,12 @@ public static class GroundCover
             var cards = new[] { new List<Card>(), new List<Card>() };
             float x0 = cell.X * CellM, z0 = cell.Z * CellM;
             var tris = _index[cell];
-            var over = _overlays.GetValueOrDefault(cell);
             foreach (var g in tris)
             {
                 if (cover == Cover.Crop && g.Pick != Cover.Crop)
                     continue;
                 Bare += Place(g, x0, z0, CellM, (x, z) => _mask?.TexelAt(x, z) ?? VegetationMask.NeutralByte, cards,
-                    over == null ? null : p => Overlaid(over, p), cover);
+                    _overlays.Covers, cover);
             }
             var list = cards[(int)cover];
             if (list.Count == 0)

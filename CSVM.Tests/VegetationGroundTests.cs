@@ -66,6 +66,33 @@ public sealed class VegetationGroundTests
         Assert.Empty(VegetationGround.Painted(World(), _ => false));
     }
 
+    /// <summary>A polygon of another texture covers a foot on it or within the reach of it, flagged or not.
+    /// It covers from a little below the foot to under the rise above it, and the ground's own textures cover nothing.</summary>
+    [Fact]
+    public void AnOverlayCoversAFootOnItAndWithinTheReach()
+    {
+        float reach = VegetationGround.OverlayReachM, rise = VegetationGround.OverlayRiseM;
+        var overlays = VegetationGround.OverlaysOn(World(), t => t == "base");
+        Assert.True(overlays.Covers(new Vector3(5f, 0f, 5f)));
+        Assert.True(overlays.Covers(new Vector3(10f + (reach * 0.9f), 0f, 5f)));
+        Assert.True(overlays.Covers(new Vector3(-reach * 0.9f, 0f, 5f)));
+        Assert.False(overlays.Covers(new Vector3(10f + (reach * 1.1f), 0f, 5f)));
+        Assert.False(overlays.Covers(new Vector3(5f, 0.3f, 5f)));
+        Assert.True(overlays.Covers(new Vector3(5f, 50.1f - rise, 5f)));
+        Assert.False(overlays.Covers(new Vector3(5f, 49.9f - rise, 5f)));
+        Assert.True(overlays.Covers(new Vector3(25f, 0f, 5f)));
+        Assert.False(VegetationGround.OverlaysOn(World(), t => t is "base" or "overlay" or "hill" or "bare").Covers(new Vector3(5f, 0f, 5f)));
+    }
+
+    /// <summary>The install's three spellings of a ground transition are one, and a rail or road is none.</summary>
+    [Fact]
+    public void ATransitionIsNamedSo()
+    {
+        Assert.All(new[] { "terpat02_trans1.tif", "cliff01-trans1.tif", "hilltrans2.tif", "cliff1_watertrans2.t" },
+            t => Assert.True(VegetationGround.IsTransition(t)));
+        Assert.All(new[] { "gantry_tracks2.tif", "arcroad01.tif", "terpat03.tif" }, t => Assert.False(VegetationGround.IsTransition(t)));
+    }
+
     // One world node over one mesh. A flagged overlay lies a few centimetres above its base over x in [0, 10].
     // A lone flagged quad covers x in [20, 30], and a hilltop sits 50 m above the first square.
     private static GameZ World()

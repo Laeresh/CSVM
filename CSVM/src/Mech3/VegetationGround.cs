@@ -27,8 +27,19 @@ public readonly record struct CoverTriangle(string Texture, Vector3 A, Vector3 B
 /// </summary>
 public static class VegetationGround
 {
+    /// <summary>How far across from a foot, and how far above it, a polygon of another texture covers it
+    /// (<see cref="Overlaid"/>).</summary>
+    public const float OverlayReachM = 0.5f, OverlayRiseM = 1.5f;
+
     // Coplanar layers lie within this of each other; a decal over its base sits a few centimetres up.
     private const float CoplanarM = 0.5f;
+
+    // How far below a foot an overlay may sit and still cover it: a coplanar layer's rounding.
+    private const float OverlaySinkM = 0.25f;
+
+    // The foot and four points the reach around it, each tested against an overlay.
+    private static readonly (float X, float Z)[] Probes =
+        { (0f, 0f), (OverlayReachM, 0f), (-OverlayReachM, 0f), (0f, OverlayReachM), (0f, -OverlayReachM) };
 
     /// <summary>Every textured world polygon whose XZ shadow holds the point, nearest in height to
     /// <paramref name="point"/> first.</summary>
@@ -143,6 +154,35 @@ public static class VegetationGround
             }
         });
         return found;
+    }
+
+    /// <summary>Every world triangle whose texture <paramref name="ground"/> refuses, whatever its <c>no_clutter</c> flag,
+    /// binned for <see cref="Overlays.Covers"/>: the polygons a plant on that ground is kept off.</summary>
+    public static Overlays OverlaysOn(GameZ gamez, Func<string, bool> ground, string worldName = "world1") =>
+        new(Painted(gamez, tex => !ground(tex), worldName));
+
+    /// <summary>Whether a texture blends one ground into another, by the install's naming: <c>terpat02_trans1</c>,
+    /// <c>cliff01-trans1</c>, <c>hilltrans2</c>. Every chapter texture holding "trans" is such a blend.</summary>
+    public static bool IsTransition(string texture) => texture.Contains("trans", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether any of <paramref name="triangles"/> (three corners each) covers a foot at <paramref name="at"/>:
+    /// it holds the foot or a point <see cref="OverlayReachM"/> beside it, under <see cref="OverlayRiseM"/> above it.
+    /// That is a rail, a road, an apron or a decal drawn as its own polygon over the ground, which no plant stands on.</summary>
+    public static bool Overlaid(IReadOnlyList<Vector3> triangles, Vector3 at)
+    {
+        for (int i = 0; i + 2 < triangles.Count; i += 3)
+        {
+            Vector3 a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
+            if (at.X + OverlayReachM < MathF.Min(a.X, MathF.Min(b.X, c.X)) || at.X - OverlayReachM > MathF.Max(a.X, MathF.Max(b.X, c.X))
+                || at.Z + OverlayReachM < MathF.Min(a.Z, MathF.Min(b.Z, c.Z)) || at.Z - OverlayReachM > MathF.Max(a.Z, MathF.Max(b.Z, c.Z)))
+                continue;
+            foreach (var (dx, dz) in Probes)
+            {
+                if (HeightIn(a, b, c, new Vector3(at.X + dx, 0f, at.Z + dz)) is { } y && y > at.Y - OverlaySinkM && y < at.Y + OverlayRiseM)
+                    return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>The nearest point ahead of <paramref name="from"/> along <paramref name="dir"/> on any of
@@ -267,5 +307,36 @@ public static class VegetationGround
         if (w0 < 0f || w1 < 0f || w2 < 0f)
             return null;
         return (w0 * a.Y) + (w1 * b.Y) + (w2 * c.Y);
+    }
+
+    /// <summary>Overlay triangles binned by square cell, so a query reads only the cell its foot stands in.</summary>
+    public sealed class Overlays
+    {
+        private const float CellM = 64f;
+        private readonly Dictionary<(int, int), List<Vector3>> _cells = new();
+
+        public Overlays(Vector3[] corners)
+        {
+            for (int i = 0; i + 2 < corners.Length; i += 3)
+            {
+                Vector3 lo = corners[i].Min(corners[i + 1]).Min(corners[i + 2]), hi = corners[i].Max(corners[i + 1]).Max(corners[i + 2]);
+                for (int cx = Cell(lo.X - OverlayReachM); cx <= Cell(hi.X + OverlayReachM); cx++)
+                {
+                    for (int cz = Cell(lo.Z - OverlayReachM); cz <= Cell(hi.Z + OverlayReachM); cz++)
+                    {
+                        if (!_cells.TryGetValue((cx, cz), out var list))
+                            _cells[(cx, cz)] = list = new List<Vector3>();
+                        list.Add(corners[i]);
+                        list.Add(corners[i + 1]);
+                        list.Add(corners[i + 2]);
+                    }
+                }
+            }
+        }
+
+        /// <summary>Whether an overlay covers a foot at <paramref name="at"/> (<see cref="Overlaid"/>).</summary>
+        public bool Covers(Vector3 at) => _cells.TryGetValue((Cell(at.X), Cell(at.Z)), out var list) && Overlaid(list, at);
+
+        private static int Cell(float v) => (int)MathF.Floor(v / CellM);
     }
 }

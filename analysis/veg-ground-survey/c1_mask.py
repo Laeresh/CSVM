@@ -13,6 +13,8 @@ classed by the ground texture under its centre (layer 0, up-facing, the walk sur
 - Strips. Each tarmac01 (the runway texture: centre line, edge marks) piece of at least STRIP_TEXELS is a strip, boxed
   along its principal axis. A texel inside the box grown by side_m to each side and end_m off each end is 0 (bare), so
   no added stamp stands beside a strip or under its approach.
+- Rails. The railway's own polygons (RAIL) are skipped, so a texel under or beside it is classed by the ground beneath:
+  a field there is interior, with no hedge lining the rails. The engine keeps every added stamp off the rails themselves.
 - Every other texel is 128. A texel goes below neutral only where neither it nor any of its eight neighbours is ground
   a template stamps (the forest, the river banks), so no bilinear sample there thins an original stamp, while picked
   ground beside the aprons, hangars and roads, which nothing stamps, clears with the strip.
@@ -35,6 +37,7 @@ N, X0, SIZE = 1024, -12288.0, 12288.0
 TEXEL = SIZE / N
 CROPS = ("crop04.tif", "crop05.tif")
 STRIP, STRIP_TEXELS = "tarmac01.tif", 300  # about 4 ha; the smaller tarmac01 pieces are joins inside the margins
+RAIL = "gantry_tracks2.tif"  # the railway, rastered as the ground under it so no hedge lines it
 
 
 def raster():
@@ -85,7 +88,7 @@ def raster():
             for poly, rp in zip(mesh.polygons, rpolys):
                 t = (poly.layer_textures[0] or "").lower() if poly.layer_textures else ""
                 uvs = rp["materials"][0].get("uv_coords") if rp.get("materials") else None
-                if not t or "cloud" in t or not uvs or poly.subface:
+                if not t or "cloud" in t or not uvs or poly.subface or t == RAIL:
                     continue
                 vi = poly.vertex_indices
                 fan = [(i, i + 1, i + 2) for i in range(len(vi) - 2)] if poly.tri_strip else [(0, i, i + 1) for i in range(1, len(vi) - 1)]

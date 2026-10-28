@@ -38,6 +38,9 @@ internal static class GraphicsSwitchSuites
     // The chapter the vegetation lab suite edits: every one of its clutter kinds is listed.
     private const string VegetationChapter = "C1";
 
+    // C1's railway: its own polygons laid over the picked grassland and fields.
+    private const string RailTexture = "gantry_tracks2.tif";
+
     // The mission whose freighter cruises the ocean chapter trailing its wake sheets (startanims).
     private const string WakeMission = "M03";
 
@@ -1288,11 +1291,13 @@ internal static class GraphicsSwitchSuites
         + "standing on a picked triangle, about the set's density under the neutral mask and none counted as forest; a live move to "
         + "original and a live switch to Original draw none of them, and a move back draws the same again; a pick of another "
         + "texture, a density edit and a Clear stroke each place them again live, the stroke dropping those under it alone, and the "
-        + "shipped entry gives the first stamps back exactly; a pick to the canopy set stamps none; C5 builds no added stamp")]
+        + "shipped entry gives the first stamps back exactly; a pick to the canopy set stamps none; no added stamp stands on C1's "
+        + "railway, a polygon laid over its picked ground; C5 builds no added stamp")]
     internal static void VegetationAddedStamps(TestContext ctx)
     {
         const string Chapter = "C3";
         RequireData(ctx, Chapter);
+        RequireData(ctx, VegetationChapter);
         RequireData(ctx, "C5");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word;
@@ -1394,6 +1399,28 @@ internal static class GraphicsSwitchSuites
             finally
             {
                 c3.Close();
+            }
+
+            var c1 = Open(ctx, enhanced: true, chapter: VegetationChapter);
+            try
+            {
+                if (!c1.Built || c1.Session.Clutter is not { ExportedKinds: { } c1Kinds })
+                {
+                    ctx.Check(false, $"the Enhanced {VegetationChapter} flight builds with its clutter");
+                }
+                else
+                {
+                    var c1Gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, VegetationChapter));
+                    var rails = Mech3.VegetationGround.Painted(c1Gamez, t => t.Equals(RailTexture, StringComparison.OrdinalIgnoreCase));
+                    var onRails = AddedOf(c1Kinds).SelectMany(k => k.Rich).Where(xf => OnTriangles(rails, xf.Origin)).ToList();
+                    int standing = onRails.Count(xf => xf.Basis.Determinant() != 0f);
+                    ctx.Check(rails.Length > 0 && onRails.Count > 0 && standing == 0,
+                        $"no added stamp stands on {VegetationChapter}'s railway ({RailTexture}, {rails.Length / 3} triangles): {standing} of the {onRails.Count} candidates on it stand");
+                }
+            }
+            finally
+            {
+                c1.Close();
             }
 
             var c5 = Open(ctx, enhanced: true, chapter: "C5");

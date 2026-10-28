@@ -1297,6 +1297,9 @@ two shots run Faithful, where the added node is hidden, and no other chapter shi
 - No world grid: added stamps walk the same UV lattice.
 - Keep the strict edge test and the quarter-metre dedup (`Clutter.cs:604`) on added stamps too.
 - C5 already draws about 139k sprites; density must not reach unlisted chapters' cities.
+- Keep added stamps off any polygon laid over the picked ground (`VegetationGround.Overlays`). C1's railway
+  (`gantry_tracks2`) and roads are polygons of their own over `terpat03` and the crops, and the picked ground's
+  lattice runs on under them. Ground transitions are exempt: C1's forest-edge blends lie over the C22 hedges.
 
 ## C22 ☑ C1's grassland and fields: sparse original cards, hedgerows by mask
 
@@ -1322,8 +1325,9 @@ one knob a lab slider tunes later, so each ground that wants its own density tak
   gamez). Each 12 m texel is classed by the ground under its centre. A crop texel is an edge where it borders other
   ground, where the world's 256 m grid crosses it (the crop repeats sit on that grid, their painted border along it) or
   where u = k + 0.5 crosses it (the field line painted down the middle of both crop textures, wherever a repeat is
-  turned). That gives fields of 128 by 256 m lined on every side, the lines on the texture's own field borders. Every
-  other texel is 128.
+  turned). That gives fields of 128 by 256 m lined on every side, the lines on the texture's own field borders. The
+  railway's polygons (`gantry_tracks2`) are skipped, so a field under or beside the rails is interior and no hedge
+  lines them. Every other texel is 128.
 - *The landing strips.* No added stamp stands beside a strip or under its approach. Each piece of `tarmac01` (the
   runway texture, centre line and edge marks) of at least 300 texels is a strip: the generator finds four, the
   east-west pair north of the hangar apron and the diagonal pair south-west of it, each boxed along its principal axis.

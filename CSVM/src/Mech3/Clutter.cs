@@ -1319,7 +1319,7 @@ public sealed class ClutterBuilder
 
     // Walks the world for every picked texture's candidates and bakes each on a stream of its own, so no
     // added stamp moves an original one. A candidate takes VegetationScatter.DrawsPerStamp draws whatever
-    // the mask holds, and one the mask drops keeps its index with a zero basis.
+    // the mask holds, and one the mask drops or an overlay covers keeps its index with a zero basis.
     // Returns the added kinds with each one's forest flag, in first-stamped order.
     private List<(Kind Kind, bool Mass)> PlaceAdded(VegetationEntry entry)
     {
@@ -1331,7 +1331,11 @@ public sealed class ClutterBuilder
         var rng = new Random(VegetationScatter.StreamSeed(richSeed));
         var seen = new HashSet<(int, int, int)>();
         var stats = new LatticeStats();
-        int deduped = 0, overDense = 0, minted = 0;
+        int deduped = 0, overDense = 0, minted = 0, overlaid = 0;
+        // A rail, road or decal laid over picked ground shows there instead, so no added stamp stands on it.
+        // Transitions are exempt: the forest-edge blends sit over C1's fields, where the C22 hedges stand.
+        var overlays = VegetationGround.OverlaysOn(_gamez,
+            tex => VegetationScatter.Stamped(entry, tex) != null || VegetationGround.IsTransition(tex), _worldName);
 
         ForEachTriangle(_worldName, Resolve, stats, (picked, a, b, c, uva, uvb, uvc, owner) =>
         {
@@ -1355,10 +1359,13 @@ public sealed class ClutterBuilder
                     rich[kind] = (new List<Transform3D>(), new List<Color>());
                     added.Add((kind, picked.Set.Mass));
                 }
-                // The Original stands unvaried and is never drawn; Rich carries the variation and the mask's drop.
+                // The Original stands unvaried and is never drawn; Rich carries the variation and the drops.
                 var at = tri.World(cand.U, cand.V) + member.Lift;
-                var origin = tri.World(v.U, v.V) + member.Lift;
-                bool kept = VegetationScatter.Keeps(cand, _mask?.At(origin.X, origin.Z) ?? 1f, v.Keep);
+                var foot = tri.World(v.U, v.V);
+                var origin = foot + member.Lift;
+                bool covered = overlays.Covers(foot);
+                bool kept = !covered && VegetationScatter.Keeps(cand, _mask?.At(origin.X, origin.Z) ?? 1f, v.Keep);
+                overlaid += covered ? 1 : 0;
                 var fade = ClutterKindProps.FadeThresholds(member.FarFadeMin, member.FarFadeMax, fadeDraw);
                 kind.Instances.Add(new Transform3D(Basis.Identity, at));
                 kind.Fades.Add(new Color(fade.X, fade.Y, fade.Z, FogVolumeRow(_fogVolumes, at)));
@@ -1376,7 +1383,7 @@ public sealed class ClutterBuilder
             kind.RichColors = colors.ToArray();
         }
         if (bySet.Count > 0)
-            Log.Info("world", $"clutter added stamps: sets={string.Join(",", bySet.Where(s => s.Value != null).Select(s => s.Key))} candidates={AddedCandidates} kept={AddedKept} dedup_rejected={deduped} over_dense={overDense} skipped_no_clutter_flag={stats.NoClutterFlagged} kinds={string.Join(", ", added.Select(k => $"{k.Kind.Label}{(k.Mass ? " (forest)" : "")} x{k.Kind.Instances.Count}"))}");
+            Log.Info("world", $"clutter added stamps: sets={string.Join(",", bySet.Where(s => s.Value != null).Select(s => s.Key))} candidates={AddedCandidates} kept={AddedKept} overlaid={overlaid} dedup_rejected={deduped} over_dense={overDense} skipped_no_clutter_flag={stats.NoClutterFlagged} kinds={string.Join(", ", added.Select(k => $"{k.Kind.Label}{(k.Mass ? " (forest)" : "")} x{k.Kind.Instances.Count}"))}");
         return added;
 
         // The set a texture stamps with its members resolved to card kinds, once per set.
