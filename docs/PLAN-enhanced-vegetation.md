@@ -2081,8 +2081,10 @@ shows the scrub view with cards only, that build and the first tussock, and
 - *C4's fir ground.* `terpat01` grows grass between the firs at `min_saturation` 0.2 and `max_value` 0.55, cards
   only. Over its 2 × 2 texels that pass the saturation floor the value reads 0.31 / 0.40 / 0.52 at the 25th, 50th and
   90th percentiles: the grass. The pale paths and bare-soil patches are the 6.7 % over 0.55 (3.5 % over 0.6), so
-  0.55 leaves them bare and keeps 93 % of the grass; 0.5 drew the same frames at the 8 m views. Tufts beside a path
-  still take its pale colour, since a card's colour is blurred over 2 × 2 texels. Cards only, since the shells would
+  0.55 leaves them bare and keeps 93 % of the grass; 0.5 drew the same frames at the 8 m views. A gated pick's
+  colour averages only the texels of its block that pass the gate, read on the authored texels, so a tuft beside a
+  path takes the grass's colour; a card whose block holds no passing texel is not placed. The shells' blades of a
+  gated pick sample the drawn image with its gated-out texels filled from their passing neighbours. Cards only, since the shells would
   cut 955,150 pieces in 2,128 chunks, about 8.4 s; the shells draw exactly as without the pick. 4,457 picked
   triangles over 30,436 cells, indexed in about 80 ms; at the four views 64, 62, 62 and 51 cells, 64, 62, 56 and 38
   draws, 188,541, 181,028, 159,256 and 101,879 grass cards. `gpu_ms` at 5120x1440, three launches, `off` against

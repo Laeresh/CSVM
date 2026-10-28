@@ -194,7 +194,8 @@ public static class GroundCover
                         bare++;
                     if (under is not { } cover || (only != null && cover != only) || covered?.Invoke(at) == true)
                         continue;
-                    into[(int)cover].Add(Make(g, cover, at, u, v, alongV ?? true, Hash((int)i, (int)j, pass + 7)));
+                    if (Make(g, cover, at, u, v, alongV ?? true, Hash((int)i, (int)j, pass + 7)) is { } card)
+                        into[(int)cover].Add(card);
                 }
             }
             return bare;
@@ -297,8 +298,9 @@ public static class GroundCover
 
     // One card at a lattice point. Grass turns by a hash and scales 0.75 to 1.25. A crop card lies along its row, 1 to
     // 1.5 steps long, either way round. Its height is its patch's 0.8 to 1.15 times its own 0.85 to 1.15. It spreads 0.6
-    // to 1.4 across and leans up to a tenth of its height either way. Its foot follows the slope; brightness varies 8 %.
-    private static Card Make(Ground g, Cover cover, Vector3 at, double u, double v, bool alongV, uint h)
+    // to 1.4 across and leans up to a tenth of its height either way. Its foot follows the slope; brightness varies 8 %,
+    // and no card stands where no texel under it passes the gate.
+    private static Card? Make(Ground g, Cover cover, Vector3 at, double u, double v, bool alongV, uint h)
     {
         var n = g.Normal;
         Basis basis;
@@ -321,7 +323,9 @@ public static class GroundCover
             basis = new Basis(row * length, (Vector3.Up * tall) + lean, across * (0.6f + (0.8f * (float)Unit(a >> 16))));
         }
         float shade = 0.92f + (0.16f * (float)Unit(h >> 12));
-        var c = g.ColourAt(at, u, v) * shade;
+        if (g.ColourAt(at, u, v) is not { } ground)
+            return null;
+        var c = ground * shade;
         return new Card(new Transform3D(basis, at), new Color(c.X, c.Y, c.Z), n);
     }
 
@@ -482,6 +486,7 @@ public static class GroundCover
     public sealed class Surface
     {
         private readonly Vector3[] _linear;
+        private readonly bool[] _valid;
         private readonly bool[] _grows;
         private readonly int _w, _h, _gw, _gh;
         private readonly bool[] _rows;
@@ -498,18 +503,28 @@ public static class GroundCover
             _w = Math.Max(1, cw / block);
             _h = Math.Max(1, ch / block);
             _linear = new Vector3[_w * _h];
+            // A gated pick averages only the drawn texels whose authored texel passes its gate. A tuft beside a pale path
+            // then takes the grass's colour, not the path's.
+            var pass = minSaturation > 0f || maxValue < 1f ? TexelPass(rgba, width, height, minSaturation, maxValue) : null;
+            var counts = new int[_w * _h];
             for (int y = 0; y < ch; y++)
             {
                 for (int x = 0; x < cw; x++)
                 {
-                    int at = ((y * cw) + x) * 4;
-                    _linear[(Math.Min(y / block, _h - 1) * _w) + Math.Min(x / block, _w - 1)] +=
-                        new Vector3(Linear(colour[at] / 255f), Linear(colour[at + 1] / 255f), Linear(colour[at + 2] / 255f));
+                    if (pass != null && !pass[(y * height / ch * width) + (x * width / cw)])
+                        continue;
+                    int at = ((y * cw) + x) * 4, k = (Math.Min(y / block, _h - 1) * _w) + Math.Min(x / block, _w - 1);
+                    _linear[k] += new Vector3(Linear(colour[at] / 255f), Linear(colour[at + 1] / 255f), Linear(colour[at + 2] / 255f));
+                    counts[k]++;
                 }
             }
-            float per = (float)(_w * _h) / (cw * ch);
+            _valid = new bool[_linear.Length];
             for (int i = 0; i < _linear.Length; i++)
-                _linear[i] *= per;
+            {
+                _valid[i] = counts[i] > 0;
+                if (_valid[i])
+                    _linear[i] /= counts[i];
+            }
             _rows = RowsAlongV(rgba, width, height);
         }
 
@@ -534,6 +549,19 @@ public static class GroundCover
                 grows[i] = (minSaturation <= 0f || Saturation(srgb[i]) >= minSaturation) && (maxValue >= 1f || Value(srgb[i] * per) <= maxValue);
             return grows;
         }
+        /// <summary>Per texel of an authored RGBA8 texture: whether its own sRGB saturation reaches
+        /// <paramref name="minSaturation"/> and its value is at most <paramref name="maxValue"/>.</summary>
+        public static bool[] TexelPass(byte[] rgba, int width, int height, float minSaturation, float maxValue)
+        {
+            var pass = new bool[width * height];
+            for (int i = 0; i < pass.Length; i++)
+            {
+                var c = new Vector3(rgba[i * 4], rgba[(i * 4) + 1], rgba[(i * 4) + 2]);
+                pass[i] = (minSaturation <= 0f || Saturation(c) >= minSaturation) && (maxValue >= 1f || Value(c) <= maxValue);
+            }
+            return pass;
+        }
+
         /// <summary>An sRGB colour's saturation, max less min over max; 0 for black.</summary>
         public static float Saturation(Vector3 c)
         {
@@ -548,14 +576,30 @@ public static class GroundCover
         public bool Grows(double u, double v) =>
             _grows[(Math.Min((int)(Wrap(v) * _gh), _gh - 1) * _gw) + Math.Min((int)(Wrap(u) * _gw), _gw - 1)];
 
-        /// <summary>The colour at a texture coordinate, bilinear between the averaged texels, wrapping.</summary>
-        public Vector3 At(double u, double v)
+        /// <summary>The colour at a texture coordinate, bilinear between the averaged texels, wrapping. Only averaged
+        /// texels holding a texel that passes the gate take part; null where the one under the point holds none.</summary>
+        public Vector3? At(double u, double v)
         {
+            if (!_valid[(Math.Min((int)(Wrap(v) * _h), _h - 1) * _w) + Math.Min((int)(Wrap(u) * _w), _w - 1)])
+                return null;
             double fx = (Wrap(u) * _w) - 0.5, fy = (Wrap(v) * _h) - 0.5;
             int x0 = (int)Math.Floor(fx), y0 = (int)Math.Floor(fy);
             float tx = (float)(fx - x0), ty = (float)(fy - y0);
-            Vector3 Texel(int x, int y) => _linear[(((y % _h) + _h) % _h * _w) + (((x % _w) + _w) % _w)];
-            return Texel(x0, y0).Lerp(Texel(x0 + 1, y0), tx).Lerp(Texel(x0, y0 + 1).Lerp(Texel(x0 + 1, y0 + 1), tx), ty);
+            int Index(int x, int y) => (((y % _h) + _h) % _h * _w) + (((x % _w) + _w) % _w);
+            Vector3 Texel(int x, int y) => _linear[Index(x, y)];
+            if (_valid[Index(x0, y0)] && _valid[Index(x0 + 1, y0)] && _valid[Index(x0, y0 + 1)] && _valid[Index(x0 + 1, y0 + 1)])
+                return Texel(x0, y0).Lerp(Texel(x0 + 1, y0), tx).Lerp(Texel(x0, y0 + 1).Lerp(Texel(x0 + 1, y0 + 1), tx), ty);
+            // Beside a gated-out texel the weights renormalise over the texels that hold colour.
+            Vector3 sum = Vector3.Zero;
+            float weight = 0f;
+            foreach (var (x, y, w) in new[] { (x0, y0, (1 - tx) * (1 - ty)), (x0 + 1, y0, tx * (1 - ty)), (x0, y0 + 1, (1 - tx) * ty), (x0 + 1, y0 + 1, tx * ty) })
+            {
+                if (!_valid[Index(x, y)])
+                    continue;
+                sum += Texel(x, y) * w;
+                weight += w;
+            }
+            return weight > 0f ? sum / weight : null;
         }
 
         /// <summary>Whether the rows at a texture coordinate run along V (<see cref="RowsAlongV"/>).</summary>
@@ -644,12 +688,12 @@ public static class GroundCover
         }
 
         /// <summary>The ground's linear colour at a point: the baked corner colour there, linearised as the world
-        /// shader does, times the texture's.</summary>
-        public Vector3 ColourAt(Vector3 at, double u, double v)
+        /// shader does, times the texture's. Null where no texel there passes the pick's gate.</summary>
+        public Vector3? ColourAt(Vector3 at, double u, double v)
         {
             double a = Eval(_uvA, u, v), b = Eval(_uvB, u, v), c = 1 - a - b;
             var baked = (_t.ColA * (float)a) + (_t.ColB * (float)b) + (_t.ColC * (float)c);
-            return new Vector3(Linear(baked.R), Linear(baked.G), Linear(baked.B)) * Surface.At(u, v);
+            return Surface.At(u, v) is { } texel ? new Vector3(Linear(baked.R), Linear(baked.G), Linear(baked.B)) * texel : null;
         }
 
         private static double Eval(double[] k, double p, double q) => k[0] + (k[1] * p) + (k[2] * q);

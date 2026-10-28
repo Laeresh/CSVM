@@ -82,6 +82,22 @@ public sealed class GroundCoverShellsTests
         Assert.Equal(144f, Area(Flat(Assert.Single(GroundCoverShells.KeepOff(piece.Weights, a, b, c, wall)))), 2);
     }
 
+    /// <summary>A gated pick's blade colour: the texels that fail the gate (grey rock) take their passing neighbours'
+    /// colour, and the passing ones keep their own. An ungated pick keeps the drawn image.</summary>
+    [Fact]
+    public void AGatedAlbedoFillsTheGatedOutTexelsFromTheGrass()
+    {
+        var px = new byte[8 * 8 * 4];
+        for (int i = 0; i < 64; i++)
+        {
+            (px[i * 4], px[(i * 4) + 1], px[(i * 4) + 2]) = i % 8 < 2 ? ((byte)128, (byte)128, (byte)128) : ((byte)108, (byte)98, (byte)76);
+            px[(i * 4) + 3] = 255;
+        }
+        var filled = GroundCoverShells.FillGated(px, 8, 8, px, 8, 8, 0.2f, 1f)!;
+        for (int i = 0; i < 64; i++)
+            Assert.Equal((108, 98, 76), (filled[i * 4], filled[(i * 4) + 1], filled[(i * 4) + 2]));
+        Assert.Null(GroundCoverShells.FillGated(px, 8, 8, px, 8, 8, 0f, 1f));
+    }
     /// <summary>Stripes along v read as a gradient along u (field angle 0), and stripes along u the opposite.
     /// Diagonal stripes read a quarter turn, and a flat texture nothing.</summary>
     [Fact]

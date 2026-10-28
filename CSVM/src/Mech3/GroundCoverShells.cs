@@ -143,6 +143,56 @@ public static class GroundCoverShells
         return parts.Select(p => p.Select(v => v.W).ToArray()).ToList();
     }
 
+    /// <summary>For a gated pick, the drawn RGBA8 image with every texel whose authored texel fails the gate filled from its
+    /// passing neighbours. A blade's softened colour beside gated-out rock or a path is then the grass's. A few passes
+    /// cover the blade's sampling footprint; a texel still unfilled takes the passing mean. Null for an ungated pick.</summary>
+    public static byte[]? FillGated(byte[] authored, int width, int height, byte[] drawn, int dw, int dh, float minSaturation, float maxValue, int passes = 4)
+    {
+        if (minSaturation <= 0f && maxValue >= 1f)
+            return null;
+        var pass = GroundCover.Surface.TexelPass(authored, width, height, minSaturation, maxValue);
+        var ok = new bool[dw * dh];
+        var px = (byte[])drawn.Clone();
+        long r = 0, g = 0, b = 0, n = 0;
+        for (int i = 0; i < ok.Length; i++)
+        {
+            ok[i] = pass[(i / dw * height / dh * width) + (i % dw * width / dw)];
+            if (ok[i])
+                (r, g, b, n) = (r + px[i * 4], g + px[(i * 4) + 1], b + px[(i * 4) + 2], n + 1);
+        }
+        if (n == 0)
+            return null;
+        for (int p = 0; p < passes; p++)
+        {
+            var filled = new List<(int I, byte R, byte G, byte B)>();
+            for (int i = 0; i < ok.Length; i++)
+            {
+                if (ok[i])
+                    continue;
+                int x = i % dw, y = i / dw, sr = 0, sg = 0, sb = 0, c = 0;
+                foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+                {
+                    int j = ((((y + dy) % dh) + dh) % dh * dw) + ((((x + dx) % dw) + dw) % dw);
+                    if (ok[j])
+                        (sr, sg, sb, c) = (sr + px[j * 4], sg + px[(j * 4) + 1], sb + px[(j * 4) + 2], c + 1);
+                }
+                if (c > 0)
+                    filled.Add((i, (byte)(sr / c), (byte)(sg / c), (byte)(sb / c)));
+            }
+            foreach (var (i, fr, fg, fb) in filled)
+            {
+                (px[i * 4], px[(i * 4) + 1], px[(i * 4) + 2]) = (fr, fg, fb);
+                ok[i] = true;
+            }
+        }
+        for (int i = 0; i < ok.Length; i++)
+        {
+            if (!ok[i])
+                (px[i * 4], px[(i * 4) + 1], px[(i * 4) + 2]) = ((byte)(r / n), (byte)(g / n), (byte)(b / n));
+        }
+        return px;
+    }
+
     /// <summary>The crop rows' direction field over an RGBA8 texture, one vector per cell of a <paramref name="grid"/>
     /// square. Each is the luminance structure tensor over the cell and its eight neighbours, wrapping as the texture
     /// repeats. It reads ((Jxx - Jyy), 2 Jxy) over (Jxx + Jyy). Its angle is twice the painted stripes' gradient angle and its
@@ -250,7 +300,7 @@ public static class GroundCoverShells
             {
                 var pick = entry.CoverFor(tex)!;
                 float mpu = Median(metres.GetValueOrDefault(tex)) is > 0f and var found ? found : ChunkM;
-                materials[(tex, lit)] = material = Material(pick.Grows, lit, textures.Find(tex), mpu, pick.Grows == Cover.Crop ? RowTexture(textures, tex) : null);
+                materials[(tex, lit)] = material = Material(pick.Grows, lit, GatedAlbedo(textures, tex, pick) ?? textures.Find(tex), mpu, pick.Grows == Cover.Crop ? RowTexture(textures, tex) : null);
                 if (GateTexture(textures, tex, pick) is { } gate)
                 {
                     material.SetShaderParameter("gate_tex", gate);
@@ -329,6 +379,22 @@ public static class GroundCoverShells
 
     // The pick's gate (GroundCover.Surface.GateMap) as an R8 texture of the authored image's 2 x 2 blocks, read unfiltered.
     // Grey rock and pale paths stay bare whatever texture pack draws the ground. Null for a pick with no gate.
+    // The blades' albedo for a gated pick (FillGated over the drawn image, an HD replacement included), else null for
+    // the shared drawn texture.
+    private static ImageTexture? GatedAlbedo(TextureArchive textures, string tex, CoverPick pick)
+    {
+        if ((pick.MinSaturation <= 0f && pick.MaxValue >= 1f) || textures.FindImage(tex, authored: true) is not { } authored
+            || textures.FindImage(tex) is not { } drawn)
+            return null;
+        authored.Convert(Image.Format.Rgba8);
+        drawn.Convert(Image.Format.Rgba8);
+        if (FillGated(authored.GetData(), authored.GetWidth(), authored.GetHeight(), drawn.GetData(), drawn.GetWidth(), drawn.GetHeight(),
+            pick.MinSaturation, pick.MaxValue) is not { } px)
+            return null;
+        var image = Image.CreateFromData(drawn.GetWidth(), drawn.GetHeight(), false, Image.Format.Rgba8, px);
+        image.GenerateMipmaps();
+        return TextureUpload.Create(image);
+    }
     private static ImageTexture? GateTexture(TextureArchive textures, string tex, CoverPick pick)
     {
         if ((pick.MinSaturation <= 0f && pick.MaxValue >= 1f) || textures.FindImage(tex, authored: true) is not { } image)

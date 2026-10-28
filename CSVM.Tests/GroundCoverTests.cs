@@ -79,11 +79,28 @@ public sealed class GroundCoverTests
         var surface = new GroundCover.Surface(rgba, 8, 8, 0.2f, 1f, (hd, 32, 32));
         Assert.False(surface.Grows(0.1, 0.5));
         Assert.True(surface.Grows(0.9, 0.5));
-        Assert.Equal(new Vector3(Lin(200), Lin(60), Lin(60)).X, surface.At(0.8, 0.5).X, 4);
-        Assert.Equal(new Vector3(Lin(20), Lin(60), Lin(60)).X, surface.At(0.2, 0.5).X, 4);
-
-        static float Lin(byte c) => MathF.Pow(((c / 255f) + 0.055f) / 1.055f, 2.4f);
+        Assert.Equal(Lin(200), surface.At(0.8, 0.5)!.Value.X, 4);
+        Assert.Null(surface.At(0.2, 0.5));
+        var open = new GroundCover.Surface(rgba, 8, 8, 0f, 1f, (hd, 32, 32));
+        Assert.Equal(Lin(20), open.At(0.2, 0.5)!.Value.X, 4);
     }
+
+    /// <summary>A gated pick's colour averages only the texels that pass its gate. Where one texel of each block is a pale
+    /// path, a tuft takes the grass's colour; ungated, it takes the mix.</summary>
+    [Fact]
+    public void AGatedColourLeavesThePathTexelsOut()
+    {
+        var rgba = Flat(8, 0);
+        for (int i = 0; i < 64; i++)
+            (rgba[i * 4], rgba[(i * 4) + 1], rgba[(i * 4) + 2]) = i % 2 == 0 && i / 8 % 2 == 0 ? ((byte)230, (byte)200, (byte)160) : ((byte)108, (byte)98, (byte)76);
+        var gated = new GroundCover.Surface(rgba, 8, 8, 0.2f, 0.55f);
+        Assert.True(gated.Grows(0.3, 0.3));
+        Assert.Equal(Lin(108), gated.At(0.3, 0.3)!.Value.X, 4);
+        float mix = ((3f * Lin(108)) + Lin(230)) / 4f;
+        Assert.Equal(mix, new GroundCover.Surface(rgba, 8, 8).At(0.3, 0.3)!.Value.X, 4);
+    }
+
+    private static float Lin(byte c) => MathF.Pow(((c / 255f) + 0.055f) / 1.055f, 2.4f);
 
     [Fact]
     public void ABareTexelGrowsNothingAndAHedgeLineGrass()
