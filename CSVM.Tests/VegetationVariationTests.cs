@@ -105,6 +105,38 @@ public class VegetationVariationTests
         Assert.True(hi - lo > 0.2f, $"the spread is used {lo}..{hi}");
     }
 
+    [Theory]
+    [InlineData(1f, 1f, 1.0)]
+    [InlineData(0.6f, 1f, 0.6)]
+    [InlineData(0.6f, 0.5f, 0.3)]
+    [InlineData(0f, 1f, 0.0)]
+    public void AKindsKeepScalesTheMaskAndKeepsThatShareOfItsStamps(float keep, float mask, double expected)
+    {
+        var kind = new VegetationKind("brush2.flt", Keep: keep);
+        var rng = new Random(17);
+        int kept = 0;
+        const int Count = 20000;
+        for (int n = 0; n < Count; n++)
+            kept += VegetationVariation.Kept(VegetationVariation.Draw(Tri, 0.3, 0.3, kind, rng), kind, mask) ? 1 : 0;
+        Assert.InRange(kept / (double)Count, expected - 0.015, expected + 0.015);
+    }
+
+    [Fact]
+    public void AKeepEditMovesNoStampAndOnlyDropsOnesItKeptBefore()
+    {
+        var full = new VegetationKind("brush2.flt", JitterUv: 0.2f, Tint: 0.1f);
+        var thinned = full with { Keep = 0.6f };
+        var a = new Random(19);
+        var b = new Random(19);
+        for (int n = 0; n < 1000; n++)
+        {
+            var before = VegetationVariation.Draw(Tri, 0.3, 0.3, full, a);
+            var after = VegetationVariation.Draw(Tri, 0.3, 0.3, thinned, b);
+            Assert.Equal(before, after);
+            Assert.True(VegetationVariation.Kept(before, full, 1f) || !VegetationVariation.Kept(after, thinned, 1f));
+        }
+    }
+
     [Fact]
     public void TheRichStreamSeedIsFixedAndApartFromThePlacementSeed()
     {

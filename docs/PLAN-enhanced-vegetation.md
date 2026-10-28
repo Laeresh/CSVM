@@ -384,7 +384,16 @@ by you.
 tree, and a jitter of 0.05 repeats carries the cards off their blobs. The shipped entries carry no
 jitter: `yaw_deg` 90 (half the cards mirrored), `tint` 0.1, `brightness` 0.2. The jitter stays a
 field for the lab and for remake-added stamps, which have no painted blob. Breaking the layout's
-repeat falls to Waves B and C.
+repeat falls to Waves B and C. C2's `terpat04` and `terpat04-128` paint the same blob, dark to a
+2.5 m radius and gone by 4 to 5 m at 1 m a texel, under every brush and palm, in the original and
+the HD pack alike, so a jitter that breaks C2's rows (0.1 repeats, up to 25 m) leaves a row of bare
+blobs; a jitter the blob still holds is under 0.005 repeats and changes nothing seen. C2 breaks its
+rows by a kind's `keep` instead: the share of the original's stamps Rich draws (1 when absent), the
+rest dropped on the mask's keep draw as a zero basis, so the near models and the map-edge copies drop
+with them and no stream moves. C2's brushes keep 0.6, and its `scrub` and `scrub128` sets scatter
+brush on `terpat04` and `terpat04-128` at the density that replaces the dropped share; the palms keep
+every stamp, since `palmtree1` also stands in the residential yards. A dropped stamp leaves its blob
+bare, which reads as a ground mark.
 
 **Verified.** <pending orchestrator run>
 

@@ -699,7 +699,7 @@ public sealed partial class MapEdgeExtender : Node3D
             if (!byKind.TryGetValue(kind, out var list))
                 byKind[kind] = list = new List<(Transform3D, Color, int)>();
             // A Rich card keeps its own mirror, which the card shader reads off the basis' X axis.
-            // A stamp the mask dropped keeps its zero basis.
+            // A stamp the mask or its kind's keep dropped keeps its zero basis.
             var rich = _rich ? _clutter![kind].Rich?.Placements[source] : null;
             var placed = rich ?? xf;
             var card = rich is { } r && r.Basis.Determinant() == 0f ? r.Basis

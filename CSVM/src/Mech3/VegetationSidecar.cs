@@ -14,10 +14,12 @@ namespace CSVM.Mech3;
 /// One listed vegetation kind and its Rich variation, keyed by the decoration model name
 /// (<c>firtree1.flt</c>), the key <c>templates.zrd</c> uses. Each value is a symmetric spread drawn
 /// per stamp. The jitter is in texture repeats on each UV axis, the yaw in degrees about Y. The tint
-/// scales each colour channel and the brightness all three, both as a fraction of 1. Zero is the
+/// scales each colour channel and the brightness all three, both as a fraction of 1. The keep is the
+/// share of the original's stamps Rich draws, the rest dropped at random. The defaults are the
 /// faithful stamp.
 /// </summary>
-public sealed record VegetationKind(string Model, float JitterUv = 0f, float YawDeg = 0f, float Tint = 0f, float Brightness = 0f)
+public sealed record VegetationKind(string Model, float JitterUv = 0f, float YawDeg = 0f, float Tint = 0f, float Brightness = 0f,
+    float Keep = 1f)
 {
     /// <summary>The numeric fields in file order, each with its JSON key and the lab's range, which a
     /// load clamps into. Every range starts at 0.</summary>
@@ -27,10 +29,13 @@ public sealed record VegetationKind(string Model, float JitterUv = 0f, float Yaw
         new("yaw_deg", 180f, k => k.YawDeg, (k, v) => k with { YawDeg = v }),
         new("tint", 0.5f, k => k.Tint, (k, v) => k with { Tint = v }),
         new("brightness", 0.5f, k => k.Brightness, (k, v) => k with { Brightness = v }),
+        new("keep", 1f, k => k.Keep, (k, v) => k with { Keep = v }, Default: 1f),
     };
 
-    /// <summary>One numeric field: its JSON key, its upper bound, and how to read and set it.</summary>
-    public sealed record Field(string Key, float Max, Func<VegetationKind, float> Get, Func<VegetationKind, float, VegetationKind> With);
+    /// <summary>One numeric field: its JSON key, its upper bound, and how to read and set it. A kind the
+    /// file gives no value takes <c>Default</c>, and the writer leaves that value out.</summary>
+    public sealed record Field(string Key, float Max, Func<VegetationKind, float> Get, Func<VegetationKind, float, VegetationKind> With,
+        float Default = 0f);
 }
 
 /// <summary>A named list of listed kinds that a texture pick stamps on its ground texture. <c>Density</c> is
@@ -365,7 +370,7 @@ public sealed class VegetationSidecar
             foreach (var f in VegetationKind.Fields)
             {
                 double v = Math.Round(Math.Clamp(f.Get(kind), 0f, f.Max), 4);
-                if (v != 0)
+                if (v != f.Default)
                     values[f.Key] = v;
             }
             kinds[kind.Model] = values;
@@ -561,7 +566,7 @@ public sealed class VegetationSidecar
             }
             if (node is not JsonValue value || !value.TryGetValue(out double number) || !double.IsFinite(number))
             {
-                warnings.Add($"{chapter}: {model}: '{key}' is not a number, it takes 0");
+                warnings.Add($"{chapter}: {model}: '{key}' is not a number, it takes {field.Default.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
                 continue;
             }
             float held = Math.Clamp((float)number, 0f, field.Max);

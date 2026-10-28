@@ -132,6 +132,24 @@ public sealed class VegetationSidecarTests
         Assert.Equal(2, sidecar.Warnings.Count);
     }
 
+    /// <summary>A keep is 1 when absent and held in 0 to 1; the writer leaves out a keep of 1 and writes any other.</summary>
+    [Fact]
+    public void AKeepReadsClampsAndWritesAroundItsDefaultOfOne()
+    {
+        var sidecar = VegetationSidecar.Parse("{ \"C2\": { \"kinds\": { \"brush1.flt\": { \"keep\": 0.6 }, \"brush2.flt\": { \"keep\": 1.5 },"
+            + " \"brush3.flt\": { \"keep\": -0.2 }, \"brush4.flt\": {}, \"spruce.flt\": { \"keep\": \"most\" } } } }");
+        var c2 = sidecar.For("C2");
+        Assert.Equal(new[] { 0.6f, 1f, 0f, 1f, 1f }, c2.Kinds.Select(k => k.Keep));
+        Assert.Equal(3, sidecar.Warnings.Count);
+        Assert.Contains(sidecar.Warnings, w => w.Contains("'keep' is not a number, it takes 1"));
+
+        string written = Lf(VegetationSidecar.WithEntry(Small, "C2", c2));
+        Assert.Contains("\"brush1.flt\": {\n        \"keep\": 0.6\n      }", written);
+        Assert.Contains("\"brush2.flt\": {}", written);
+        Assert.Contains("\"brush3.flt\": {\n        \"keep\": 0\n      }", written);
+        Assert.Equal(c2.Kinds, VegetationSidecar.Parse(written).For("C2").Kinds);
+    }
+
     /// <summary>A set keeps only listed kinds and a pick needs a set, so the paint tool cannot reach a
     /// model that is not vegetation.</summary>
     [Fact]
@@ -199,9 +217,10 @@ public sealed class VegetationSidecarTests
     }
 
     /// <summary>C1B's bare rock tops take sparse bushes, not forest. C4's grass-to-rock transitions take a forest
-    /// treeline of its templates' three firs, thinner than the templated forest. C2 picks nothing.</summary>
+    /// treeline of its templates' three firs, thinner than the templated forest. C2 keeps 60% of its original brush
+    /// and scatters brush on the same two plains in place of the rest; its palms keep every stamp.</summary>
     [Fact]
-    public void TheShippedFilePicksC1BsRockTopsAndC4sTransitions()
+    public void TheShippedFilePicksC1BsRockTopsC4sTransitionsAndC2sPlain()
     {
         var sidecar = VegetationSidecar.Parse(File.ReadAllText(ShippedPath));
         foreach (string texture in new[] { "rocktop.tif", "rocktop128.tif" })
@@ -217,7 +236,15 @@ public sealed class VegetationSidecarTests
             Assert.Equal((3f, true), (set.Density, set.Mass));
         }
         Assert.Null(VegetationScatter.Stamped(sidecar.For("C4"), "terpat01.tif"));
-        Assert.Empty(sidecar.For("C2").Picks);
+        var c2 = sidecar.For("C2");
+        Assert.Equal(new[] { "terpat04.tif", "terpat04-128.tif" }, c2.Picks.Select(p => p.Texture));
+        foreach (var pick in c2.Picks)
+        {
+            var set = VegetationScatter.Stamped(c2, pick.Texture)!;
+            Assert.All(set.Models, m => Assert.StartsWith("brush", m));
+            Assert.False(set.Mass);
+        }
+        Assert.All(c2.Kinds, k => Assert.Equal(k.Model.StartsWith("brush") ? 0.6f : 1f, k.Keep));
     }
 
     /// <summary>The ground cover: C1's fields grow crops and its meadows grass, every texel. C4's grass-to-rock

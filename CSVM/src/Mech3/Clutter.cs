@@ -1408,7 +1408,8 @@ public sealed class ClutterBuilder
     // Replays the kept card stamps in walk order on the Rich stream, drawing for each stamp whose
     // landing kind is listed. Index-aligned with each kind's Instances, and never touching them, so
     // the Original stamp stays bit for bit. Each listed stamp takes the same draw count, the last the
-    // mask's keep draw. A stamp the mask drops keeps its index with a zero basis, as a cratered one does.
+    // keep draw. A stamp the mask or its kind's keep drops keeps its index with a zero basis, as a
+    // cratered one does.
     private void BakeRich()
     {
         _canopy = null;
@@ -1422,7 +1423,7 @@ public sealed class ClutterBuilder
             kind.RichColors = kind.Veg != null ? new Color[kind.Instances.Count] : null;
         }
         var rng = new Random(VegetationVariation.Seed(PlacementSeed, entry.Seed));
-        int baked = 0, mirrored = 0, clamped = 0, dropped = 0;
+        int baked = 0, mirrored = 0, clamped = 0, dropped = 0, thinned = 0;
         foreach (var s in _stamps)
         {
             if (s.Target.Veg is not { } veg)
@@ -1430,15 +1431,19 @@ public sealed class ClutterBuilder
             var v = VegetationVariation.Draw(s.Tri, s.U, s.V, veg, rng);
             var basis = Basis.Identity.Scaled(new Vector3(v.Mirror ? -s.Scale : s.Scale, s.Scale, s.Scale));
             var origin = s.Tri.World(v.U, v.V) + s.Lift;
-            bool kept = _mask == null || VegetationMask.Keeps(_mask.At(origin.X, origin.Z), v.Keep, added: false);
+            // One draw decides both the mask and the kind's keep, so neither moves a stream.
+            float density = _mask?.At(origin.X, origin.Z) ?? 1f;
+            bool kept = VegetationVariation.Kept(v, veg, density);
+            bool maskKept = VegetationMask.Keeps(density, v.Keep, added: false);
             s.Target.RichInstances![s.Index] = new Transform3D(kept ? basis : basis.Scaled(Vector3.Zero), origin);
             s.Target.RichColors![s.Index] = v.Tint;
             baked++;
             mirrored += v.Mirror ? 1 : 0;
             clamped += v.Clamped ? 1 : 0;
-            dropped += kept ? 0 : 1;
+            dropped += maskKept ? 0 : 1;
+            thinned += maskKept && !kept ? 1 : 0;
         }
-        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} mask_dropped={dropped} seed={entry.Seed}");
+        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} mask_dropped={dropped} keep_dropped={thinned} seed={entry.Seed}");
     }
 
     // The templates.zrd per-kind properties attached to the parsed kinds, and every `substitute`

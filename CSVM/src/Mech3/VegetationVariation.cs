@@ -50,6 +50,11 @@ public static class VegetationVariation
         return new Stamp(u + (t * du), v + (t * dv), mirror, new Color(r, g, b), t < 1.0, keep);
     }
 
+    /// <summary>Whether Rich draws an original stamp. Its kind's keep scales the brush mask's
+    /// <paramref name="maskDensity"/> (1 with no mask), and the stamp's keep draw decides.</summary>
+    public static bool Kept(Stamp stamp, VegetationKind kind, float maskDensity) =>
+        VegetationMask.Keeps(maskDensity * kind.Keep, stamp.Keep, added: false);
+
     // A symmetric unit draw in [-1, 1).
     private static double Spread(Random rng) => (2.0 * rng.NextDouble()) - 1.0;
 
