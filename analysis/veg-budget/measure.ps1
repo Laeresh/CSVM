@@ -2,8 +2,10 @@
 The Enhanced vegetation plan's per-wave budget (PLAN-enhanced-vegetation, Decision 18): the frame
 cost at one fixed worst-case view per chapter with a vegetation entry, under Faithful, Enhanced
 with --vegetation-quality=original and Enhanced with =rich, which on C1 draws the canopy clumps. The
-noclumps mode, asked for by name with -Modes, is rich with --canopy-clumps=off, the clumps' A/B, and
-the nomodels mode rich with --vegetation-models=off, the near models' A/B.
+noclumps mode, asked for by name with -Modes, is rich with --canopy-clumps=off, the clumps' A/B, the
+nomodels mode rich with --vegetation-models=off, the near models' A/B, and the nocover mode rich with
+--ground-cover=off, the ground cover's A/B. -ExtraViews takes "name=pos;lookat" entries (a chapter prefix
+on the name, C1-crop) in place of the chapter views.
 
 Every launch is --freecam at the chapter's pose below, --det (so no saved option reaches it and the
 sway's clock is the sim clock), --perf --no-vsync --mute, at -Resolution, and quits on a
@@ -26,6 +28,8 @@ param(
     [int]$Skip = 2,
     [string]$Resolution = "5120x1440",
     [string]$Tag = "",
+    # Never $Views: PowerShell names ignore case, and $views is the chapter table below.
+    [string[]]$ExtraViews = @(),
     # Summarise the logs already in the scratch folder without launching anything.
     [switch]$SummaryOnly
 )
@@ -53,6 +57,18 @@ $modeArgs = @{
     "rich"     = @("--graphics=enhanced", "--vegetation-quality=rich")
     "noclumps" = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-clumps=off")
     "nomodels" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=off")
+    "nocover"  = @("--graphics=enhanced", "--vegetation-quality=rich", "--ground-cover=off")
+}
+# Extra views replace the chapter ones: the name's text before the first '-' is the chapter.
+if ($ExtraViews) {
+    $views = @{}
+    $Chapters = @()
+    foreach ($v in $ExtraViews) {
+        $name, $poses = $v -split "=", 2
+        $pos, $look = $poses -split ";"
+        $views[$name] = @("--pos=$pos", "--lookat=$look")
+        $Chapters += $name
+    }
 }
 
 if (-not $SummaryOnly) {
@@ -60,7 +76,7 @@ if (-not $SummaryOnly) {
         foreach ($ch in $Chapters) {
             foreach ($mode in $Modes) {
                 $base = Join-Path $scratch "$Tag$ch-$mode-$i"
-                $godotArgs = @("--freecam", "--chapter=$ch") + $views[$ch] + $modeArgs[$mode] +
+                $godotArgs = @("--freecam", "--chapter=$(($ch -split '-')[0])") + $views[$ch] + $modeArgs[$mode] +
                     @("--det", "--perf", "--no-vsync", "--mute", "--frames=$Frames", "--screenshot=$base.png")
                 & $probe -TimeoutSec 300 -Resolution $Resolution -EngineArgs @("--log-file", "$base.log") @godotArgs | Out-Null
                 Write-Host "$ch $mode $i exit $LASTEXITCODE"

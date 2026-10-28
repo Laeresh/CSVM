@@ -2324,16 +2324,60 @@ the Deck the same way.
 
 **⚠ Traps.** <TODO>
 
-## D37 ☐ Wave D budget and goldens
+## D37 ☑ Wave D budget and goldens
 
 **Goal.** As A7, for Wave D.
 
-**Evidence (confidence: lead-only).** Decision 18.
+**Evidence (confidence: measured).** Decision 18. A7's instrument, views and ceiling.
 
-**Approach.** <TODO>
+**Approach.** `measure.ps1 -Launches 4 -Modes faithful,original,rich,nomodels,nocover` on an idle
+machine with gaming mode off: Rich carries D32's near models (and C3's crown models) and D34's ground
+cover at its default, Cards; `nomodels` and `nocover` are Rich with `--vegetation-models=off` and
+`--ground-cover=off`, each part's A/B. Six more views over the ground Wave D dresses, three launches
+each, through `-ExtraViews`: C1's crop field 30 m up (`-2142,158,-4602` to `-2142,128,-4702`), C1's
+meadow 25 m up (`-4566,153,-4794` to `-4566,128,-4894`), low among C1's firs (`-9230,206,-6235` to
+`-9330,196,-6335`), C2's plain 30 m up (`-100,40,-3100` to `-400,10,-3350`), C3's palm transitions
+close (`-6090,35,-3290` to `-6208,15,-3460`) and C4's `terpat01` 8 m up (`-1707,699,-6997` to
+`-1707,670,-7157`). The goldens stage re-pinned by hand for the shots Waves C and D moved.
 
-**Model recommendation.** <TODO>
+**Result (Wave D).** Median (range of the launch medians), four launches a case; Rich against
+Original, and against Rich with each part off:
 
-**Verify.** <TODO>
+| Chapter | `gpu_ms` Faithful | Original | Rich | no models | no cover | Rich − Original (Wave C) | draws Rich | prims Rich |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| C1 | 0.71 | 5.87 (5.87-5.89) | 5.96 (5.96-5.96) | 5.96 | 5.96 | 0.09 (0.08) | 527 | 780,853 |
+| C1B | 0.65 | 3.49 (3.49-3.49) | 3.50 (3.49-3.50) | 3.49 | 3.50 | 0.01 (0.00) | 302 | 324,170 |
+| C2 | 0.87 | 2.99 (2.99-3.00) | 3.06 (3.06-3.07) | 2.99 | 3.06 | 0.07 (0.01) | 1,685 | 1,099,417 |
+| C3 | 1.35 | 4.25 (4.25-4.25) | 4.38 (4.38-4.40) | 4.28 | 4.38 | 0.13 (0.02) | 1,299 | 1,247,983 |
+| C4 | 0.74 | 2.70 (2.70-2.70) | 2.87 (2.86-2.89) | 2.78 | 2.80 | 0.17 (0.00) | 520 | 420,866 |
+
+Off the A7 views, three launches a case:
+
+| View | `gpu_ms` Original | Rich | no models | no cover | `render_cpu_ms` Original / Rich |
+|---|---:|---:|---:|---:|---|
+| C1 crop field, 30 m | 4.59 | 5.34 (5.33-5.34) | 5.19 | 4.86 | 0.53 / 0.56 |
+| C1 meadow, 25 m | 7.41 | 7.11 (7.10-7.14) | 7.16 | 7.47 | 0.85 / 0.88 |
+| C1 among the firs | 6.83 | 6.92 (6.92-6.92) | 6.91 | 6.92 | 0.39 / 0.44 |
+| C2 plain, 30 m | 2.77 | 2.80 (2.80-2.80) | 2.77 | 2.80 | 1.22 / 1.33 |
+| C3 palm transitions | 5.28 | 5.48 (5.47-5.48) | 5.26 | 5.48 | 1.07 / 1.17 |
+| C4 `terpat01`, 8 m | 6.09 | 5.04 (5.04-5.10) | 5.10 | 6.03 | 0.37 / 0.44 |
+
+**Wave D costs at most 0.64 ms of GPU, inside its 1.8 ms share, and all four waves at most 0.75 ms of
+the 2.0 ms ceiling.** The worst view is C1's crop field at 30 m: the cards add 0.49 ms and the near
+models 0.15 ms. At the A7 views Wave D adds 0.17 ms at most (C4: models 0.09, cover 0.07), C3's
+crown and palm models 0.10 to 0.22 ms. Over the meadow and C4's `terpat01` the cover comes in under
+Original, by 0.36 and 0.99 ms, because the cards hide ground fragments that cost more to shade. CPU:
+`render_cpu_ms` rises 0.03 to 0.11 ms with the models and `proc_ms` up to 0.13 ms (C4), C2's 0.30 ms
+noise between identical cases (C24) included. C3's low jungle view of D32's C3 part (+0.61 ms there)
+is not one of these views; its pose is not recorded.
+
+**Model recommendation.** A mid-tier model suffices, as A7.
+
+**Verify.** Every launch exit 0. Goldens: Waves C and D moved exactly five Enhanced shots,
+`c1-lake-enhanced`, `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`, `c1-cockpit-enhanced` and
+`c1-cockpit-xr-sim-enhanced` (D32's and D33's C1 models, the tracks rule, the ground cover); each
+rendered to one hash in its batch and its re-render, and to the same hash in three full batteries.
+The five hashes are re-pinned by hand (never `-RegenGoldens`), and two further goldens runs pass 38 of
+38.
 
 **⚠ Traps.** As A7.
