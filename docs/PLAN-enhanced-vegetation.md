@@ -167,9 +167,8 @@ integrated GPU, the Deck's among them, runs Rich on one pane and Original from t
 `ClutterBuilder.Recut` (`CSVM/src/Mech3/Clutter.cs`). Word settings register once and every
 settings site walks the registry (`git log --grep="#162"`). Water Quality is declared in
 `CSVM/src/Utils/WaterQualitySetting.cs` and registered in `Utils/WordSettings.cs`'s `All`. Its
-fallback is `FallbackFor(OperatingSystem.IsLinux(), ShadowQualitySetting.IntegratedGpu)`: the low
-word on Linux (which covers the Deck) or an integrated GPU, the high word otherwise, and the high
-word under `--det`. The options store, the flag parser, the Options pages, the launch resolve and
+fallback is `FallbackFor(ShadowQualitySetting.IntegratedGpu)`: the low word on an integrated GPU
+(the Deck's APU reads as one), the high word otherwise, and the high word under `--det`. The options store, the flag parser, the Options pages, the launch resolve and
 the live apply all walk the registry, so a new setting is its own file, one registry line, one
 authored VIDEO row and its build added to `EnhancedLook.FollowWordSettings`.
 

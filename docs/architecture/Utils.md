@@ -361,9 +361,9 @@ casts, its angular distance and blur, and the renderer's soft filter and atlas e
 ## src/Utils/WaterQualitySetting.cs
 The Enhanced sea's water quality: `flat`, the sea-level sheet the faithful path draws, or `waves`, the wave ocean
 (`Effects/Ocean.cs`) in its place. `Resolve` runs `WordSetting` over `--water-quality=`, the saved `waterQuality` word,
-the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, otherwise `FallbackFor(linux, integrated)`,
-which is `flat` on Linux or on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`), so the Steam Deck runs flat, under
-the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store.
+the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, otherwise `FallbackFor(integrated)`,
+which is `flat` on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`) on any OS, so the Steam Deck runs flat, under
+the rule `default_integrated_gpu`. `Pick` is the lookup without the store.
 `Launch/LiveSettings.cs` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
 `Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. The VIDEO page shows it as the Ocean Waves box.
 

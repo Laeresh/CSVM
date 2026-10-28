@@ -4,20 +4,18 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The water quality's ladder and its platform fallback. Engine-free: the platform and the
-/// GPU are handed in rather than asked of a renderer, which the unit host does not have.</summary>
+/// <summary>The water quality's ladder and its GPU fallback. Engine-free: the GPU class is handed in
+/// rather than asked of a renderer, which the unit host does not have.</summary>
 public class WaterQualitySettingTests
 {
-    /// <summary>A desktop on a discrete GPU runs waves. Linux, which covers the Deck, and an
-    /// integrated GPU each run flat.</summary>
+    /// <summary>A discrete GPU runs waves on any OS; an integrated GPU, the Deck's among them, runs
+    /// flat.</summary>
     [Theory]
-    [InlineData(false, false, WaterQualitySetting.Waves)]
-    [InlineData(true, false, WaterQualitySetting.Flat)]
-    [InlineData(false, true, WaterQualitySetting.Flat)]
-    [InlineData(true, true, WaterQualitySetting.Flat)]
-    public void FallbackFollowsThePlatformAndTheGpu(bool linux, bool integrated, string expected)
+    [InlineData(false, WaterQualitySetting.Waves)]
+    [InlineData(true, WaterQualitySetting.Flat)]
+    public void FallbackFollowsTheGpu(bool integrated, string expected)
     {
-        Assert.Equal(expected, WaterQualitySetting.FallbackFor(linux, integrated));
+        Assert.Equal(expected, WaterQualitySetting.FallbackFor(integrated));
     }
 
     /// <summary>A --det run falls back to waves whatever the machine, so a capture does not depend
@@ -53,10 +51,10 @@ public class WaterQualitySettingTests
     [Fact]
     public void TheLowPowerFallbackHasItsOwnSourceAndAChoiceBeatsIt()
     {
-        string fallback = WaterQualitySetting.FallbackFor(linux: true, integrated: false);
+        string fallback = WaterQualitySetting.FallbackFor(integrated: true);
         var none = WaterQualitySetting.Pick(null, null, fallback, fallback);
         Assert.Equal((WaterQualitySetting.Flat, SettingSource.Default, WaterQualitySetting.LowPowerRule), (none.Word, none.Source, none.Rule));
-        Assert.Equal("default_linux_or_integrated_gpu", WaterQualitySetting.Lookup.SourceName(none.Source, none.Rule));
+        Assert.Equal("default_integrated_gpu", WaterQualitySetting.Lookup.SourceName(none.Source, none.Rule));
 
         var saved = WaterQualitySetting.Pick(null, WaterQualitySetting.Waves, fallback, fallback);
         Assert.Equal((WaterQualitySetting.Waves, SettingSource.Saved), (saved.Word, saved.Source));

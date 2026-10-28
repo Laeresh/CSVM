@@ -7,8 +7,8 @@ namespace CSVM.Utils;
 /// The Enhanced sea's water quality, one of <see cref="Words"/>: the flat sea-level sheet, or the
 /// wave ocean (<c>Effects.Ocean</c>) in its place. In <see cref="Lookup"/>, <c>--water-quality=</c>
 /// beats the saved <c>waterQuality</c> option, which beats the <see cref="Key"/> config key, then the
-/// fallback. That is <see cref="Waves"/> on a desktop and <see cref="Flat"/> on Linux or an
-/// integrated GPU (<see cref="FallbackFor"/>), so the Steam Deck runs flat. Under <c>--det</c> only
+/// fallback. That is <see cref="Waves"/> on a discrete GPU and <see cref="Flat"/> on an integrated
+/// one (<see cref="FallbackFor"/>), so the Steam Deck runs flat. Under <c>--det</c> only
 /// the flag survives, over <see cref="Default"/>. The faithful path draws the flat sheet whatever the
 /// word. The VIDEO page's Ocean Waves box writes the option, applied live through the session.
 /// </summary>
@@ -23,16 +23,15 @@ public static class WaterQualitySetting
     /// <summary>The wave ocean over the sea-level sheet's place.</summary>
     public const string Waves = "waves";
 
-    /// <summary>The word a desktop with nothing saved runs, and under <c>--det</c> every machine.</summary>
+    /// <summary>The word a discrete GPU with nothing saved runs, and under <c>--det</c> every machine.</summary>
     public const string Default = Waves;
 
-    /// <summary>The word Linux and an integrated GPU run when nothing is set. The ocean's wave grid
-    /// costs a low-power GPU several milliseconds a frame over the flat sheet, more than the Deck can
-    /// spare.</summary>
+    /// <summary>The word an integrated GPU runs when nothing is set. The ocean's wave grid costs a
+    /// low-power GPU several milliseconds a frame over the flat sheet, more than the Deck can spare.</summary>
     public const string LowPowerDefault = Flat;
 
     /// <summary>The log's name for the fallback rule that chose <see cref="LowPowerDefault"/>.</summary>
-    public const string LowPowerRule = "default_linux_or_integrated_gpu";
+    public const string LowPowerRule = "default_integrated_gpu";
 
     /// <summary>Every word, the cheaper first, the order the Options row offers them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Flat, Waves };
@@ -52,16 +51,15 @@ public static class WaterQualitySetting
 
     /// <summary>The fallback word for this machine. ⚠ Asks the renderer for its GPU class, so a unit
     /// test reads <see cref="FallbackFor"/> instead.</summary>
-    public static string MachineDefault => FallbackFor(OperatingSystem.IsLinux(), ShadowQualitySetting.IntegratedGpu);
+    public static string MachineDefault => FallbackFor(ShadowQualitySetting.IntegratedGpu);
 
     /// <summary>The fallback a launch resolves against. ⚠ <see cref="Default"/> under
     /// <paramref name="det"/>, so a scripted capture does not depend on the machine it runs on.</summary>
     public static string DefaultFor(bool det) => det ? Default : MachineDefault;
 
-    /// <summary>The fallback on a machine that is or is not running <paramref name="linux"/>, on a GPU
-    /// that is or is not <paramref name="integrated"/>. Either one takes <see cref="LowPowerDefault"/>.
-    /// Linux stands for the Deck, whose SteamOS reports Linux whatever its GPU reads as.</summary>
-    public static string FallbackFor(bool linux, bool integrated) => linux || integrated ? LowPowerDefault : Default;
+    /// <summary>The fallback on a GPU that is or is not <paramref name="integrated"/>, on any OS. The
+    /// Deck's APU reads as integrated (its split-screen spyglass logs <c>default_integrated_gpu_panes</c>).</summary>
+    public static string FallbackFor(bool integrated) => integrated ? LowPowerDefault : Default;
 
     /// <summary>The word <see cref="Pick"/> resolves the sources to, stored as <see cref="Word"/>.</summary>
     public static ResolvedWord Resolve(string? flagWord, string? savedWord, string? configWord,
