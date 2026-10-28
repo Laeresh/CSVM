@@ -135,8 +135,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
 32. ☑ Near-radius 3D draw with a dither handover to the card
 33. ☑ Look-alike models for every listed card species
-34. ☐ Ground cover prototype: new-art grass and crop cards
-35. ☐ Ground cover prototype: procedural shells; pick at the controls
+34. ☑ Ground cover prototype: new-art grass and crop cards
+35. ☑ Ground cover prototype: procedural shells; pick at the controls
 36. ☑ Deck and Linux: measure Rich and set their default
 37. ☐ Wave D budget and goldens
 
@@ -2060,7 +2060,7 @@ shows the scrub view with cards only, that build and the first tussock, and
 - A tile's grade is per chapter: C4's `firtree1` card is darker than C1's, so one grade would
   lighten C4's far forest.
 
-## D34 ☐ Ground cover prototype: new-art grass and crop cards
+## D34 ☑ Ground cover prototype: new-art grass and crop cards
 
 **Goal.** Close-up grass and crop cover drawn from new-art cards on picked textures.
 
@@ -2223,7 +2223,7 @@ Faithful `c1-waterfall` render identical. D37 re-pins.
   fails to compile, which draws every card as Godot's white default.
 - Keep the picks in the sidecar's `cover`; a texture with rock, tarmac or painted shadow in it takes a `min_saturation`.
 
-## D35 ☐ Ground cover prototype: procedural shells; pick at the controls
+## D35 ☑ Ground cover prototype: procedural shells; pick at the controls
 
 **Goal.** The same ground cover drawn procedurally (shells or generated blades), shown beside D34 so
 you pick one.
@@ -2282,6 +2282,8 @@ built while that word stands and Rich is on, on the same sidecar `cover` picks a
   stripes look bad in the top row. can you add more randomness to it? the meadow distance is too short.
   double it or if its to expensive leave it out." The crop randomness and the grass band above are that pass
   (`.scratch/d35b/`).
+- *Ruling (yours, at the controls).* Both covers stay behind the Ground Cover setting, Cards by default;
+  flown on every chapter at the default, the cover holds.
 
 **Model recommendation.** Opus: a shader look iterated against captures, and the clutter's gating and
 mask rules to respect.
