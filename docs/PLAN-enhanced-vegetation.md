@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, near
 
-31. ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
+31. ☑ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
 32. ☑ Near-radius 3D draw with a dither handover to the card
 33. ☑ Look-alike models for every listed card species
 34. ☐ Ground cover prototype: new-art grass and crop cards
@@ -1489,7 +1489,7 @@ pass 38 of 38.
 
 # Wave D, near
 
-## D31 ◐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
+## D31 ☑ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
 
 **Goal.** A Blender Python script per species that an agent runs headless to produce a glTF model
 and a render beside the original card, for your judgement.
