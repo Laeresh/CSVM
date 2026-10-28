@@ -683,7 +683,8 @@ void fragment() {
 
     /// <summary>The shader condition that the drawing camera is a spyglass disc's, which shows the flat
     /// sea: it carries <see cref="UI.Boards.SplitScreen.FlatSeaLayer"/> and not the sun's layer. Read in
-    /// both stages: the ocean's grid collapses on it and the sheet's hide steps back. ⚠ Keep the sun's
+    /// both stages: the ocean's grid collapses on it and the sheet's hide steps back. The vegetation
+    /// cards and clumps keep no cell for a near model on it (<c>ClutterBuilder.ModelShare</c>). ⚠ Keep the sun's
     /// bit; a pass reporting every layer (a fresh camera, a shadow pass) would read as the disc. ⚠ Keep
     /// it a property: a field runs this type's engine statics, which the unit-test host cannot build.</summary>
     internal static string FlatSeaEye => string.Create(System.Globalization.CultureInfo.InvariantCulture,

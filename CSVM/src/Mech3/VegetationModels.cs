@@ -28,6 +28,11 @@ public static class VegetationModels
     /// <summary>The edge of the square cells the models are cut into, so a pane reaches a handful of them.</summary>
     public const float CellM = 256f;
 
+    /// <summary>The visual layer every model node draws on, the sun's, which every pane camera draws and a spyglass
+    /// disc's does not. No disc draws a model, and the card and C3's clumps draw whole there (ClutterBuilder's
+    /// model share). ⚠ Never put a model on layer 1 as well: a layer mask draws on any shared bit.</summary>
+    public const uint Layer = UI.Boards.SplitScreen.SunLayer;
+
     /// <summary>The shader parameter the card's Rich material and the model read the band from. It is zero on
     /// a card with no model, which then draws at every distance.</summary>
     public const string BandParam = "vegetation_model_band";

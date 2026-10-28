@@ -23,7 +23,9 @@ public sealed partial class SplitScreen : CanvasLayer
 
     /// <summary>The layer the world sun is drawn on under Enhanced Graphics
     /// (<c>Launch.EnhancedLook.ApplySun</c>). Every pane camera draws it and the spyglass disc's
-    /// camera does not, so the disc renders no sun shadow pass. The faithful sun keeps layer 1.</summary>
+    /// camera does not, so the disc renders no sun shadow pass. The faithful sun keeps layer 1. The
+    /// near vegetation models draw on it too (<see cref="Mech3.VegetationModels.Layer"/>), so no disc
+    /// draws them.</summary>
     public const uint SunLayer = 1u << 7;
 
     /// <summary>The layer of the spyglass disc's shadowless copy of the sun
@@ -35,7 +37,8 @@ public sealed partial class SplitScreen : CanvasLayer
     /// drawn on it, and only the disc's camera carries it
     /// (<see cref="Flight.Camera.SpyglassView.DiscMask"/>); no pane's cull mask does. A camera
     /// carrying it without <see cref="SunLayer"/> sees the flat sea: the wave ocean's grid collapses
-    /// and the base sheet keeps drawing (<c>Mech3.SceneBuilder.FlatSeaEye</c>).</summary>
+    /// and the base sheet keeps drawing (<c>Mech3.SceneBuilder.FlatSeaEye</c>). The vegetation cards
+    /// and clumps it sees draw whole, with no near model to hand over to.</summary>
     public const uint FlatSeaLayer = 1u << 5;
 
     /// <summary>The world's layer 1, which every pane, spyglass and photograph camera draws. A race

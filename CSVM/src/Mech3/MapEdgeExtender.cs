@@ -742,6 +742,7 @@ public sealed partial class MapEdgeExtender : Node3D
             {
                 // ponytail: one node per edge cell; cut it into model cells if D37's edge views read it.
                 var model = Copies(near.Mesh, near.Material, $"clutter_{kindIndex}_model", default, -1);
+                model.Layers = VegetationModels.Layer;
                 var modelDraw = EdgeDraw.Of(model, kindIndex, near.Mesh.GetAabb(), placements) with { Near = true };
                 modelDraw.ApplyRange();
                 draws.Add(modelDraw);

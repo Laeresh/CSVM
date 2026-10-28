@@ -1626,6 +1626,17 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   (0.603, 0.527, 0.603), `palmtree3` (0.71, 0.789, 0.868).
 - *Shadows.* None, cast or received, as the card. A shadow that ends at 250 m draws a ring on the
   ground where the cards cast none, and casting re-renders the models into each Ultra cascade.
+- *Spyglass discs.* No disc draws a model (your ruling), in split screen and single-pane play alike, as
+  the ocean plan's B14 keeps the wave ocean out of every disc. Every model node (the cells, their map
+  edge copies and C3's crown cells) draws on `VegetationModels.Layer`, the sun's layer, which every
+  pane camera draws and an Enhanced disc's camera leaves out. B14's flat-sea marker makes `ModelShare`
+  read 1, past the band, for a disc's camera (`SceneBuilder.FlatSeaEye`), so the card and C3's clumps
+  keep every dither cell there and the disc shows what 3D Vegetation `off` shows. A vertex-stage
+  collapse alone saved no disc GPU time, since the cost is the models' vertex work. Two panes at
+  C1's crop field (1280x800, three launches): the discs draw `off`'s 1,111,248 primitives against
+  4,021,015, and `disc_gpu_ms` reads 0.68 against 1.12 (`off` 0.72, Enhanced Original 0.44). Inside
+  the discs the frame matches `off` pixel for pixel; outside them nothing moves. The ground cover
+  cards cost the discs 214,504 primitives and about 0.12 ms there, the shells nothing measurable.
 - *The draw.* `ClutterInstances` cuts the Rich variant again into `CellM` (256 m) cells, one MultiMesh
   of the model mesh each, ranged at the word's far edge plus the cell's radius. Godot's own range and frustum cull
   pick the cells per camera, so splitscreen panes and the XR stereo pair need no per-frame CPU work;

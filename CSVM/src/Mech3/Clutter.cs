@@ -45,10 +45,6 @@ public sealed class ClutterBuilder
     internal const string HandoverShare = "clamp((distance(origin, CAMERA_POSITION_WORLD) - " + CanopyClumps.HandoverParam
         + ".x) / max(" + CanopyClumps.HandoverParam + ".y - " + CanopyClumps.HandoverParam + ".x, 1.0), 0.0, 1.0)";
 
-    // How far into the near models' band the planted point is: 0 inside it, where the model alone draws.
-    internal const string ModelShare = "clamp((distance(origin, CAMERA_POSITION_WORLD) - " + VegetationModels.BandParam
-        + ".x) / max(" + VegetationModels.BandParam + ".y - " + VegetationModels.BandParam + ".x, 1.0), 0.0, 1.0)";
-
     // The breeze's lean at a planted point, which the card and its near model share so the swap does not jump.
     internal const string LeanLines = "    vec2 breeze = vec2(0.9397, 0.3420);\n"
         + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
@@ -58,24 +54,6 @@ public sealed class ClutterBuilder
     // How much the card's half facing the sun's bearing gains, before its side; the clumps share it.
     internal const string SunLine =
         "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0);\n";
-
-    // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
-    // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
-    // It goes back through the face, so a hidden stamp's keep still collapses it. Periods of 12 s and
-    // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the planted point.
-    internal const string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
-        + "    v_side = sign(VERTEX.x);\n"
-        + SunLine
-        + "    if (" + CanopyClumps.HandoverParam + ".y > 0.0) {\n"
-        + "        v_alpha *= 1.0 - " + HandoverShare + ";\n"
-        + "        keep *= step(0.004, v_alpha);\n"
-        + "    }\n"
-        + "    if (" + VegetationModels.BandParam + ".y > 0.0) {\n"
-        + "        v_alpha *= " + ModelShare + ";\n"
-        + "        keep *= step(0.004, v_alpha);\n"
-        + "    }\n"
-        + LeanLines
-        + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
     // Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
@@ -89,6 +67,30 @@ public sealed class ClutterBuilder
         "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);\n";
+
+    // How far into the near models' band the planted point is: 0 inside it, where the model alone draws.
+    // A spyglass disc's camera (SceneBuilder.FlatSeaEye) reads 1, past the band. It draws no model
+    // (VegetationModels.Layer), so the card and the clumps draw whole there, as with no models.
+    internal static readonly string ModelShare = "(" + SceneBuilder.FlatSeaEye + " ? 1.0 : clamp((distance(origin, CAMERA_POSITION_WORLD) - "
+        + VegetationModels.BandParam + ".x) / max(" + VegetationModels.BandParam + ".y - " + VegetationModels.BandParam + ".x, 1.0), 0.0, 1.0))";
+
+    // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
+    // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
+    // It goes back through the face, so a hidden stamp's keep still collapses it. Periods of 12 s and
+    // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the planted point.
+    internal static readonly string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
+        + "    v_side = sign(VERTEX.x);\n"
+        + SunLine
+        + "    if (" + CanopyClumps.HandoverParam + ".y > 0.0) {\n"
+        + "        v_alpha *= 1.0 - " + HandoverShare + ";\n"
+        + "        keep *= step(0.004, v_alpha);\n"
+        + "    }\n"
+        + "    if (" + VegetationModels.BandParam + ".y > 0.0) {\n"
+        + "        v_alpha *= " + ModelShare + ";\n"
+        + "        keep *= step(0.004, v_alpha);\n"
+        + "    }\n"
+        + LeanLines
+        + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     // The SphericalY pose, single-sourced with every other facade population so the law cannot
     // drift. Emitted into the spherical variant alone; a CylindricalY card poses off its own

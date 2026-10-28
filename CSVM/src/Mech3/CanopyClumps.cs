@@ -750,6 +750,7 @@ public static class CanopyClumps
                     ExtraCullMargin = box.Size.X,
                     Position = offset,
                     VisibilityRangeEnd = ModelFarM + (bounds.Size * 0.5f).Length() + box.Size.X,
+                    Layers = VegetationModels.Layer,
                 });
             }
             Root.AddChild(Models);

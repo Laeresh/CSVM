@@ -307,7 +307,8 @@ public sealed class ClutterInstances
             Mesh = _near.Mesh,
             Material = _near.Material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            NodeBias = default
+            NodeBias = default,
+            Layers = VegetationModels.Layer,
         };
         _nearCells ??= Layout.Cut(_nearProto, _richVariant! with { Material = _near.Material }, VegetationModels.CellM);
         _nearCells.RangeTo(VegetationModels.Band.Y);
@@ -618,6 +619,7 @@ public sealed class ClutterInstances
                 CastShadow = proto.CastShadow,
                 ExtraCullMargin = proto.ExtraCullMargin,
                 Position = at,
+                Layers = proto.Layers,
             };
             if (proto.NodeBias.VariantType != Variant.Type.Nil)
                 node.SetInstanceShaderParameter("node_bias", proto.NodeBias);
@@ -639,5 +641,8 @@ public sealed class ClutterInstances
         IReadOnlyList<Transform3D> Placements, IReadOnlyList<Color> Fades)
     {
         public Stamps Original { get; } = new(Placements, null, Material);
+
+        // The visual layers each node draws on: the world's layer 1, or VegetationModels.Layer for a model.
+        public uint Layers { get; init; } = 1u;
     }
 }

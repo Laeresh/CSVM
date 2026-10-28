@@ -889,7 +889,7 @@ disc's drawn diameter, borrows the pane camera's clip planes and cull mask and s
 `Idle` stops it. The inherited world keeps the target in play and the flown zone's fog. `DiscMask`
 drops the pilot's own aeroplane's layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by
 `Session/HumanFlightAdapter`) and the world flare's band (`SplitScreen.WorldFlareBand`); under Enhanced it trades the sun for `SpyglassSun.cs` and adds
-`SplitScreen.FlatSeaLayer`, so the disc shows the flat sea, not the wave ocean (`SceneBuilder.FlatSeaEye`). Under a headset (`Headset`) it also drops the headset's two layers. `Census` is the `--perf` spyglass line, read on the render thread. `TargetHud.DrawDisc` masks it round; a headset shows it through `Hud/XrSpyglassDisc.cs`.
+`SplitScreen.FlatSeaLayer`, so the disc shows the flat sea, not the wave ocean (`SceneBuilder.FlatSeaEye`). The sun's layer carries the near vegetation models too (`Mech3.VegetationModels.Layer`), so no disc draws them, and the marker makes the cards and C3's clumps draw whole there, as with 3D Vegetation `off`. Under a headset (`Headset`) it also drops the headset's two layers. `Census` is the `--perf` spyglass line, read on the render thread. `TargetHud.DrawDisc` masks it round; a headset shows it through `Hud/XrSpyglassDisc.cs`.
 
 ## src/Flight/Camera/SpyglassSun.cs
 The spyglass discs' own sun under Enhanced: a shadowless `DirectionalLight3D` on

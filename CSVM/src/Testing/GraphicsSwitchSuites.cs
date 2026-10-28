@@ -163,7 +163,7 @@ internal static class GraphicsSwitchSuites
         "under Enhanced the world sun sits on the layer every pane camera draws and the spyglass disc's "
         + "camera leaves out, and one shadowless copy on the disc's own layer, which no pane draws, "
         + "matches the sun's bearing, colour and energy; each disc, and no pane, carries the flat-sea "
-        + "marker: in a two-pane flight with one disc per pane, "
+        + "marker, and every pane, and no disc, draws the near vegetation models' layer: in a two-pane flight with one disc per pane, "
         + "at every Shadow Quality level including Off, across a zone crossing the weather rig lights, "
         + "and after a live switch to Original (copy freed, sun back on layer 1, each disc the pane's "
         + "view less its own airframe) and back; a fresh Original flight builds no copy and moves no layer")]
@@ -763,7 +763,8 @@ internal static class GraphicsSwitchSuites
         + "Rich card material the band, every other card none; no model node declares an instance uniform, and the build's "
         + "instance-uniform nodes stay under a quarter of Godot's buffer; the model cells stand outside the clutter root with "
         + "no collider, ranged inside the band's far edge, and draw exactly the card's Rich stamps; the model keeps the dither "
-        + "cells the card gives up; a crater and an activation hide collapse a stamp's model with its card and a show restores "
+        + "cells the card gives up; every model cell and map edge copy draws on the models' layer alone, which no spyglass disc "
+        + "draws, and a disc's camera reads the card past the band; a crater and an activation hide collapse a stamp's model with its card and a show restores "
         + "it; a live move to original and a live switch to Original draw none, and back draws the same; the map edge copies "
         + "them under rich alone; a live move to Off draws none and zeroes the card band, a move to Far ranges the same cells out to "
         + "400 m with the far band and back to Near restores them; a session at original draws none; a model pack's file under "
@@ -816,6 +817,9 @@ internal static class GraphicsSwitchSuites
                         && code.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_card)", StringComparison.Ordinal)
                         && card.Contains("v_alpha *= " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal),
                     $"the card fades by the band's share and the model discards exactly the dither cells the card keeps");
+                ctx.Check(drawn.All(m => m.Layers == Mech3.VegetationModels.Layer)
+                        && Mech3.ClutterBuilder.ModelShare.StartsWith($"({Mech3.SceneBuilder.FlatSeaEye} ? 1.0 : ", StringComparison.Ordinal),
+                    $"every model cell draws on the models' layer alone, which no spyglass disc draws, and a disc's camera reads the card past the band, so it draws whole there");
 
                 var export = withModel[0];
                 var stamps = export.Instances!;
@@ -840,6 +844,13 @@ internal static class GraphicsSwitchSuites
 
                 live.Session.EdgeExtender!.Update(live.Session.EdgeExtender.BeyondCorner);
                 int edge = EdgeModels(live);
+                int edgeOffLayer = 0;
+                Walk(live.Session.EdgeExtender!, node =>
+                {
+                    if (node is MultiMeshInstance3D m && m.Name.ToString().EndsWith("_model", StringComparison.Ordinal) && m.Layers != Mech3.VegetationModels.Layer)
+                        edgeOffLayer++;
+                });
+                ctx.Check(edgeOffLayer == 0, $"and every map edge model copy draws on that layer too ({edgeOffLayer} off it)");
                 // Godot gives every node whose shader declares an instance uniform 16 slots of one global buffer.
                 int capacity = ProjectSettings.GetSetting("rendering/limits/global_shader_variables/buffer_size").AsInt32() / 16;
                 var (carriers, modelCarriers) = InstanceUniformNodes(live.Session);
@@ -919,7 +930,7 @@ internal static class GraphicsSwitchSuites
         "the near crown models over C3's painted canopy in an Enhanced flight at rich: they stand under the clumps' root, "
         + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "
         + "ranged past the band's far edge; the clumps keep only the dither cells the models give up over the band, the models "
-        + "the rest; a live move to Off hides them and zeroes the clumps' band, Far and Near draw the same nodes again; a live "
+        + "the rest; every crown cell draws on the models' layer alone, which no spyglass disc draws; a live move to Off hides them and zeroes the clumps' band, Far and Near draw the same nodes again; a live "
         + "move to original and a switch to Original draw none, and back the same crowns; a session at original draws none")]
     internal static void CanopyModelsOverPaintedCanopy(TestContext ctx)
     {
@@ -965,6 +976,8 @@ internal static class GraphicsSwitchSuites
                         && clumps.Shader.Code.Contains("v_model = " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
                         && clumps.Shader.Code.Contains("!csky_clutter_dither_keep(FRAGCOORD.xy, v_model)", StringComparison.Ordinal),
                     $"over {Mech3.CanopyClumps.ModelBand} the clumps keep the dither cells the models give up, and the models the rest");
+                ctx.Check(cells.All(m => m.Layers == Mech3.VegetationModels.Layer),
+                    $"every crown cell draws on the models' layer alone, which no spyglass disc draws, where the clumps keep every cell (ClutterBuilder.ModelShare)");
 
                 Models(live, VegetationModelsSetting.Off);
                 ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && live.Session.CanopyClumpField?.Models == models,
@@ -2416,6 +2429,8 @@ internal static class GraphicsSwitchSuites
                 $"{label}: pane {pane.Index + 1} draws the sun's layer and not the copy's (0x{mask:X5})");
             ctx.Check((mask & UI.Boards.SplitScreen.FlatSeaLayer) == 0,
                 $"{label}: pane {pane.Index + 1} does not carry the flat-sea marker, so it draws the wave ocean (0x{mask:X5})");
+            ctx.Check((mask & Mech3.VegetationModels.Layer) != 0,
+                $"{label}: pane {pane.Index + 1} draws the near vegetation models' layer (0x{mask:X5})");
         }
         foreach (var view in views)
         {
@@ -2429,6 +2444,8 @@ internal static class GraphicsSwitchSuites
             bool flat = (disc & UI.Boards.SplitScreen.FlatSeaLayer) != 0;
             ctx.Check(fromPane && sun != enhanced && copy == enhanced && flat == enhanced,
                 $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun and the flat-sea marker" : "the sun itself and no flat-sea marker")} (0x{disc:X5}: sun {sun}, copy {copy}, flat sea {flat})");
+            ctx.Check(!enhanced || (disc & Mech3.VegetationModels.Layer) == 0,
+                $"{label}: and under Enhanced draws no near vegetation model (0x{disc:X5})");
             ctx.Check((disc & UI.Boards.SplitScreen.WorldFlareBand) == 0
                 && panes.Any(p => (p.Camera.CullMask & UI.Boards.SplitScreen.WorldFlareLayer(p.Index)) != 0),
                 $"{label}: and leaves out the world flare, which its pane draws (0x{disc:X6})");

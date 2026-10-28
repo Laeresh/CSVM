@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using Godot;
@@ -310,6 +311,10 @@ public class SpyglassTests
             // The flat-sea marker: the disc carries it, the pane does not.
             Assert.Equal(0u, pane & SplitScreen.FlatSeaLayer);
             Assert.NotEqual(0u, disc & SplitScreen.FlatSeaLayer);
+            // The near vegetation models: the pane and the photograph draw them, the disc does not.
+            Assert.Equal(0u, VegetationModels.Layer & ~pane);
+            Assert.Equal(0u, VegetationModels.Layer & ~DangerZonePhotograph.PhotoMask(pane));
+            Assert.Equal(0u, disc & VegetationModels.Layer);
             // Nothing else moves but the world flare: the world, the zone gate and every other airframe stay as the pane has them.
             Assert.Equal(pane & ~own & ~SplitScreen.SunLayer & ~SplitScreen.WorldFlareBand, disc & ~SplitScreen.SpyglassSunLayer & ~SplitScreen.FlatSeaLayer);
         }
@@ -318,6 +323,8 @@ public class SpyglassTests
         Assert.Equal(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.SpyglassSunLayer);
         Assert.Equal(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.FlatSeaLayer);
         Assert.NotEqual(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.SunLayer);
+        Assert.Equal(0u, VegetationModels.Layer & ~SplitScreen.PaneCullMask(0xFFFFF));
+        Assert.Equal(0u, SpyglassView.DiscMask(SplitScreen.PaneCullMask(0xFFFFF), SplitScreen.OwnAirframeLayer(0), enhanced: true) & VegetationModels.Layer);
     }
 
     [Fact]
