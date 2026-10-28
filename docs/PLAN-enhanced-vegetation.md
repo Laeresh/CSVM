@@ -35,7 +35,7 @@ the sidecar under Rich and nothing else; an Original golden that moves is a defe
 |---|---|---|
 | 1 | What does the first wave solve? | **All four goals, one wave each**, every wave prototyped before it ships |
 | 2 | Wave order | **Pattern, mass, density, near**. Pattern is cheapest and lays down the per-stamp data the later waves read; near may need new art |
-| 3 | Gating | **Enhanced + a Vegetation Quality word setting (Original / Rich)**, live switch like Water Quality; Rich on desktop, Original on the Deck and Linux until measured |
+| 3 | Gating | **Enhanced + a Vegetation Quality word setting (Original / Rich)**, live switch like Water Quality; Rich on a discrete GPU at every pane count, on any OS; an integrated GPU (the Deck, a laptop) runs Rich on one pane and Original from two (D36) |
 | 4 | Which decorations count as vegetation | **An explicit per-chapter list in a shipped sidecar JSON** (like `ocean_seas.json`). Unlisted kinds keep the faithful stamp, so city blocks, cars and lamp posts are never touched |
 | 5 | Undressed green ground (C3's jungle, C1's fields) and close-up grass | **In scope** |
 | 6 | Art source | **The chapter's own cards first for new ground; new art for grass and crops; procedural ground cover explored beside it.** 3D trees and bushes are Blender models |
@@ -50,7 +50,7 @@ the sidecar under Rich and nothing else; an Original golden that moves is a defe
 | 15 | Collision of 3D trees | **Not solid**, like the cards, so the setting is visual only and co-op peers on different settings play the same game |
 | 16 | 3D trees vs cards | **A Blender look-alike per card species within a near radius, dithering over to the original card beyond it**, on the same stamps |
 | 17 | Who models | **Agents, with scripted Blender run headless**, exporting glTF; you judge renders beside the card |
-| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; a co-op host adds network and simulation cost, which vegetation does not touch, so the per-chapter view is the co-op measure too; the Deck stays Original until a Deck item measures it |
+| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; a co-op host adds network and simulation cost, which vegetation does not touch, so the per-chapter view is the co-op measure too; the Deck is measured on its own (D36) |
 | 19 | Card shader upgrades (sway, sun-side shading, contact shadow) | **Wave A**, beside jitter and tint |
 
 Defaults set without a question, open to change: the variation comes from a fixed seed (identical on
@@ -137,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 33. ☑ Look-alike models for every listed card species
 34. ☐ Ground cover prototype: new-art grass and crop cards
 35. ☐ Ground cover prototype: procedural shells; pick at the controls
-36. ☐ Deck and Linux: measure Rich and set their default
+36. ☑ Deck and Linux: measure Rich and set their default
 37. ☐ Wave D budget and goldens
 
 ## Dependency and parallelism notes
@@ -158,9 +158,8 @@ each owns its own module. D36 waits for every look item. Each wave's budget item
 ## A1 ☑ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
 
 **Goal.** A Vegetation Quality word setting in the video options, Original or Rich, that only acts
-under Enhanced and switches live without a relaunch. Rich is the desktop default; the Deck, Linux
-and an integrated GPU default to Original (Water Quality's rule; the integrated-GPU half is your
-ruling, beyond Decision 3's Deck and Linux).
+under Enhanced and switches live without a relaunch. Rich is the default on a discrete GPU; an
+integrated GPU, the Deck's among them, runs Rich on one pane and Original from two (D36).
 
 **Evidence (confidence: traced-to-code).** The pattern to copy is Water Quality from PLAN-enhanced-ocean
 (`git log --grep=PLAN-enhanced-ocean`); the live clutter path already exists:
@@ -176,8 +175,9 @@ authored VIDEO row and its build added to `EnhancedLook.FollowWordSettings`.
 
 **Approach.** `Utils/VegetationQualitySetting.cs` copies Water Quality: words `original`/`rich`,
 `--vegetation-quality=`, the saved `vegetationQuality` word, the `graphics.vegetationQuality` key,
-then the same machine fallback (Original on Linux or an integrated GPU, Rich otherwise and under
-`--det`). It is Enhanced-only on the Options rows and sits on the Original VIDEO page as a
+then Shadow Quality's GPU-and-pane fallback, `FallbackFor(ShadowQualitySetting.IntegratedGpu, panes)`:
+Original on an integrated GPU drawing two or more panes, Rich otherwise and under `--det` (D36). The OS
+is not read. It is Enhanced-only on the Options rows and sits on the Original VIDEO page as a
 "Vegetation" dropdown under View Distance in the scrolled window. The clutter reads
 `VegetationQualitySetting.RichOn` (the word is `rich` and the mode is Enhanced), never the word,
 so Original mode stays Original whatever is saved. A live change runs
@@ -204,7 +204,7 @@ original kind's buffer.
 **Model recommendation.** A mid-tier model suffices: the item is a copy of a registered pattern,
 and its one judgement (recut against rebuild) is recorded above.
 
-**Verify.** Units: `VegetationQualitySettingTests` (fallback per platform and GPU, `--det`, the
+**Verify.** Units: `VegetationQualitySettingTests` (fallback per GPU and pane count, `--det`, the
 precedence ladder, flag and options-file round trip),
 `GraphicsModeTests.RichVegetationNeedsEnhancedAndTheRichWord`, and the VIDEO page's row, walk and
 scroll tests in `OriginalOptionsTests` and `OptionsChoicesTests`. Engine:
@@ -713,8 +713,8 @@ not draw. 2.0 ms is about a third of what Enhanced already costs at C1, so Rich 
 the mode that carries it. The CPU half is small because the frame's CPU side in flight belongs to
 the simulation and the AI, and a co-op host carries both (Decision 18). A wave whose difference is
 below 0.05 ms (about twice this baseline's launch range) counts as zero; a wave over its share
-either buys it back from a later wave's share or is cut before it ships. The Deck and Linux are
-outside this ceiling and stay Original until D36 measures them.
+either buys it back from a later wave's share or is cut before it ships. The Deck is outside this
+ceiling; D36 measures it and sets its defaults.
 
 **Model recommendation.** A mid-tier model suffices: the measurement is a script run and a table,
 and the goldens step follows `docs/verification.md`'s GOLD rules.
@@ -1585,8 +1585,7 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   scrub-set twin of a modelled card (C21's added stamps on the grassland) takes the model too.
 - *Band.* A registered word setting, 3D Vegetation (`Utils/VegetationModelsSetting.cs`, the VIDEO
   page's row under Vegetation, `--vegetation-models=off|near|far`, saved as `vegetationModels`): `near`,
-  the default on every machine and under `--det` (the Deck and Linux included until D36 measures them),
-  is 150 to 250 m; `far` is 250 to 400 m; `off` draws no model. Plain metres, so no View Distance moves
+  the default on every machine and under `--det` (the Deck included, D36), is 150 to 250 m; `far` is 250 to 400 m; `off` draws no model. Plain metres, so no View Distance moves
   the cost. Near sits inside C1's card fades (500 m at the nearest, at the highest View Distance) and
   the clump handover (1000 m), and short of a 300 m view's nearest stamp: the 300 m capture is
   pixel-identical with and without models. Far reaches a 300 m view and covers about 2.5 times Near's
@@ -2061,8 +2060,9 @@ shows the scrub view with cards only, that build and the first tussock, and
 [`architecture/Mech3.md`](architecture/Mech3.md) has the module.
 
 - *The setting.* A registered word setting, Ground Cover (`Utils/GroundCoverSetting.cs`, the VIDEO page's row
-  under 3D Vegetation, `--ground-cover=off|shells|cards`, saved as `groundCover`): `cards`, the default on every
-  machine and under `--det` (`GroundCoverSetting.Default`, the one place it is set), draws these cards; `shells`
+  under 3D Vegetation, `--ground-cover=off|shells|cards`, saved as `groundCover`): `cards`, the default on a
+  discrete GPU and under `--det` (`GroundCoverSetting.Default`; an integrated GPU, the Deck's among them, falls
+  back to `off`, D36), draws these cards; `shells`
   draws D35's shells; `off` draws neither. `--det` reads no saved word, so a scripted capture runs `cards` unless
   its flag says otherwise.
 - *Gating.* Rich only, as the clumps: `GameSession.FollowGroundCover` builds the word's cover while
@@ -2177,7 +2177,7 @@ shows the scrub view with cards only, that build and the first tussock, and
 **Model recommendation.** Opus: the look iterates against captures and the draw crosses the session's live
 switches; a mid-tier model can retune the constants (spacing, sizes, band) against a ruling.
 
-**Verify.** Units: `GroundCoverSettingTests` (the ladder, `cards` on every machine and under `--det`, the flag and
+**Verify.** Units: `GroundCoverSettingTests` (the ladder, `cards` on a discrete GPU and under `--det`, `off` on an integrated one, the flag and
 the file keep a known word, a `--det` launch reads no saved word), `VegetationSidecarTests` (C1's and C4's cover picks,
 a bare and a gated pick read, clamped, warned and written back), the options tests (the row walks between 3D
 Vegetation and VR Mode) and `GroundCoverTests` (the saturation gate keeps grey texels bare and the value ceiling pale paths; a bare texel grows nothing
@@ -2309,20 +2309,84 @@ Budget: not measured (D37 measures it beside D34 on an idle machine).
   (`TerrainCarve`) leaves the shells at the old ground, and the map edge copies none. A prototype
   accepts all three.
 
-## D36 ☐ Deck and Linux: measure Rich and set their default
+## D36 ☑ Deck and Linux: measure Rich and set their default
 
 **Goal.** Rich measured on the Deck and on Linux, and their default set from the measurement.
 
-**Evidence (confidence: lead-only).** Decisions 3 and 18. PLAN-enhanced-ocean measured and budgeted
+**Evidence (confidence: measured).** Decisions 3 and 18. PLAN-enhanced-ocean measured and budgeted
 the Deck the same way.
 
-**Approach.** <TODO>
+**Approach (as built).** The measurement: a Linux export of the branch (`ExportRelease.ps1 -Linux`) on
+the Deck (RADV VANGOGH) in Desktop Mode, 1280x800 `--fullscreen`, `--freecam --perf --det` with
+`--shadow-quality=high --water-quality=flat`, D37's modes plus `shells` (`--ground-cover=shells`) and
+`far` (`--vegetation-models=far`), at A7's chapter views and D37's extra views. Two rounds, the second
+in reverse order, agree within 0.02 ms. The two-pane case is C1's crop field level to the north
+(`-2142,158,-4602` to `-2142,158,-5602`), read on `frame_ms`. The defaults follow the GPU alone, as
+Shadow Quality's do; the OS is not read, so a discrete GPU on Linux runs the desktop words.
 
-**Model recommendation.** <TODO>
+- *Vegetation Quality.* `VegetationQualitySetting.FallbackFor(integrated, panes)`: an integrated GPU
+  runs `rich` on one pane and `original` from `SplitPanes` (2) up, under the rule
+  `default_integrated_gpu_panes`; a discrete GPU runs `rich` at every count. `rich` stays a choice in
+  split screen.
+- *Ground Cover.* `GroundCoverSetting.FallbackFor(integrated)`: `off` on an integrated GPU, under
+  `default_integrated_gpu`; `cards` otherwise. Cards and Shells stay choices.
+- *3D Vegetation.* `near` on every machine, unchanged.
+- *Panes.* `GameSession.BuildRigs` runs `WordSettings.FollowPanes(count)`, whose `WordSetting.Refresh`
+  resolves a setting again only when the new count moves its fallback. The flag and the saved word
+  still win, so a chosen word is never overridden. The session's exit puts one pane back with only the
+  sun following, since the rest of the world is being freed.
+- `--det` keeps `rich` and `cards` on every machine and at every pane count, so no golden moves.
 
-**Verify.** <TODO>
+**Result.** `gpu_ms`, one pane, the median of the two rounds:
 
-**⚠ Traps.** <TODO>
+| View | Original | Rich | no models | no cover | shells | far |
+|---|---:|---:|---:|---:|---:|---:|
+| C1 | 11.83 | 12.37 | 11.99 | 12.37 | 12.38 | 12.61 |
+| C1B | 8.28 | 8.33 | 8.29 | 8.32 | 8.32 | 8.52 |
+| C1 crop field, 30 m | 8.76 | 13.48 | 11.67 | 11.11 | 16.49 | 14.55 |
+| C1 meadow, 25 m | 11.75 | 15.36 | 15.27 | 11.98 | 18.61 | 15.44 |
+| C2 | 8.60 | 9.32 | 8.67 | 9.32 | 9.33 | 9.42 |
+| C3 | 8.66 | 11.03 | 9.16 | 11.02 | 11.03 | 11.06 |
+| C3 palm transitions | 8.91 | 11.38 | 9.30 | 11.38 | 11.38 | 11.59 |
+| C4 | 8.07 | 8.71 | 8.17 | 8.63 | 8.64 | 9.02 |
+| C4 `terpat01`, 8 m | 13.27 | 13.98 | 14.02 | 13.41 | 13.41 | 14.16 |
+
+Two panes, C1's crop field, `frame_ms`:
+
+| Original | Rich | Rich, no cover | Rich, no models |
+|---:|---:|---:|---:|
+| 12.42 (81 fps) | 23.40 (43 fps) | 18.83 (53 fps) | 16.87 (59 fps) |
+
+Rich costs 0.05 (C1B) to 4.72 ms (C1's crop field) over Original on one pane. Its worst view is C1's
+meadow at 15.36 ms (65 fps), against Original's worst, C4's `terpat01`, at 13.27. C3's models cost 1.9
+to 2.1 ms. Over C1's fields and meadow the cards cost 2.4 to 3.4 ms and the shells 5.4 to 6.6. Far adds
+up to 1.07 ms over near. With the cover off, Rich's worst view is 13.41 ms (75 fps), so one pane runs
+Rich without cover and two panes run Original. Load: Rich adds 1.2 s on C1 (7.9 to 9.1 s) and 1.5 s on
+C4 (6.9 to 8.4 s); the shells another 2.4 s on C1. The HD pack (`--hd`) moves the vegetation cost by
+under 0.15 ms. No Linux machine with a discrete GPU was measured; it runs the desktop words because the
+rule reads the GPU.
+
+**Model recommendation.** A mid-tier model suffices: the measurement is a script run and a table, and
+the defaults copy Shadow Quality's pane-aware fallback.
+
+**Verify.** Units: `VegetationQualitySettingTests` (the integrated and discrete matrix at one, two and
+four panes, `--det` at every count, the split rule's name, a saved Rich over the split fallback) and
+`GroundCoverSettingTests` (cards on a discrete GPU, off on an integrated one under its rule, cards under
+`--det` at every count). Engine: `graphics-vegetation-quality`, `graphics-live-switch`,
+`ground-cover-cards`, `ground-cover-shells`, `vegetation-models`, `display-det-guard`,
+`pause-preferences` and `pause-preferences-live-options`. Goldens: none may move, since `--det` keeps
+`rich` and `cards`.
+
+**⚠ Traps.**
+- The export from `vegetation` needs main's third-party notice commit for .NET runtime 8.0.33
+  (353d902de) before `ExportRelease.ps1 -Linux` runs.
+- `--det` drops the Deck's own defaults, so a Deck perf run passes `--shadow-quality=high
+  --water-quality=flat` itself.
+- Desktop Mode trims a windowed 1280x800 to 718 rows, so pass `--fullscreen`.
+- A two-pane run under `--screenshot` keeps the spyglass on. With Rich the two spyglass discs draw
+  3.5M prims and 5.5 ms, mostly the near models. That is a follow-up like the ocean's B14, not fixed
+  here.
+- The user's `/home/deck/CSVM` has no `extracted/` folder, so a run there extracts its own.
 
 ## D37 ☑ Wave D budget and goldens
 

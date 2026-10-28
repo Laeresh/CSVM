@@ -4,13 +4,24 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The Ground Cover word: its ladder, its one fallback on every machine and under <c>--det</c>, and its
-/// flag and saved field. Engine-free.</summary>
+/// <summary>The Ground Cover word: its ladder, its GPU fallback and <c>--det</c>'s, and its flag and saved field.
+/// Engine-free: the GPU is handed in rather than asked of a renderer.</summary>
 [Trait("Tier", "Quick")]
 public class GroundCoverSettingTests
 {
-    /// <summary>The flag beats the saved word, which beats the config key, and with none set every machine runs
-    /// Cards, under <c>--det</c> or not.</summary>
+    /// <summary>A discrete GPU on any OS, Linux included, runs Cards. An integrated GPU, the Deck's among them,
+    /// runs Off and names its rule.</summary>
+    [Fact]
+    public void FallbackFollowsTheGpu()
+    {
+        Assert.Equal(GroundCoverSetting.Cards, GroundCoverSetting.FallbackFor(integrated: false));
+        Assert.Equal(GroundCoverSetting.Off, GroundCoverSetting.FallbackFor(integrated: true));
+        var none = GroundCoverSetting.Lookup.Resolve(null, null, null, GroundCoverSetting.FallbackFor(integrated: true), GroundCoverSetting.IntegratedRule);
+        Assert.Equal("default_integrated_gpu", GroundCoverSetting.Lookup.SourceName(none.Source, none.Rule));
+    }
+
+    /// <summary>The flag beats the saved word, which beats the config key. With none set, a <c>--det</c> run
+    /// falls back to Cards at any pane count, never asking the renderer.</summary>
     [Fact]
     public void TheFlagBeatsTheSavedWordAndCardsIsTheFallback()
     {
@@ -30,8 +41,8 @@ public class GroundCoverSettingTests
 
             var none = GroundCoverSetting.Resolve(null, null, null);
             Assert.Equal((GroundCoverSetting.Cards, SettingSource.Default), (none.Word, none.Source));
-            foreach (bool det in new[] { true, false })
-                Assert.Equal(GroundCoverSetting.Cards, GroundCoverSetting.Lookup.Fallback(new SettingContext(det, true, 1)).Word);
+            foreach (int panes in new[] { 1, 2, 4 })
+                Assert.Equal(new ResolvedWord(GroundCoverSetting.Cards, SettingSource.Default), GroundCoverSetting.Lookup.Fallback(new SettingContext(true, true, panes)));
             Assert.True(GroundCoverSetting.Lookup.EnhancedOnly);
             Assert.Contains(GroundCoverSetting.Lookup, WordSettings.All);
         }

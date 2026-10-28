@@ -106,8 +106,8 @@ public static class ShadowQualitySetting
     public static bool HardShadows { get; set; }
 
     /// <summary>Whether the renderer runs on an integrated GPU, the Steam Deck's APU among them. Read
-    /// once, since the device cannot change under a run. <see cref="WaterQualitySetting"/>'s fallback
-    /// reads it too.</summary>
+    /// once, since the device cannot change under a run. The water, vegetation and ground cover
+    /// fallbacks read it too.</summary>
     public static bool IntegratedGpu => _integrated ??= IsIntegratedGpu();
 
     /// <summary>The fallback on a GPU that is or is not <paramref name="integrated"/>, for a session

@@ -4,33 +4,40 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The vegetation quality's ladder and its platform fallback. Engine-free: the platform and
-/// the GPU are handed in rather than asked of a renderer, which the unit host does not have. The
-/// graphics-mode gate is in <see cref="GraphicsModeTests"/>.</summary>
+/// <summary>The vegetation quality's ladder and its GPU and pane fallback. Engine-free: the GPU is
+/// handed in rather than asked of a renderer, which the unit host does not have. The graphics-mode
+/// gate is in <see cref="GraphicsModeTests"/>.</summary>
 public class VegetationQualitySettingTests
 {
-    /// <summary>A desktop on a discrete GPU runs Rich. Linux, which covers the Deck, and an
-    /// integrated GPU each run Original.</summary>
+    /// <summary>A discrete GPU runs Rich at any pane count, on any OS, Linux included, since the GPU
+    /// alone is read. An integrated GPU, the Deck's among them, runs Rich on one pane and Original
+    /// from two up.</summary>
     [Theory]
-    [InlineData(false, false, VegetationQualitySetting.Rich)]
-    [InlineData(true, false, VegetationQualitySetting.Original)]
-    [InlineData(false, true, VegetationQualitySetting.Original)]
-    [InlineData(true, true, VegetationQualitySetting.Original)]
-    public void FallbackFollowsThePlatformAndTheGpu(bool linux, bool integrated, string expected)
+    [InlineData(false, 1, VegetationQualitySetting.Rich)]
+    [InlineData(false, 2, VegetationQualitySetting.Rich)]
+    [InlineData(false, 4, VegetationQualitySetting.Rich)]
+    [InlineData(true, 1, VegetationQualitySetting.Rich)]
+    [InlineData(true, 2, VegetationQualitySetting.Original)]
+    [InlineData(true, 4, VegetationQualitySetting.Original)]
+    public void FallbackFollowsTheGpuAndThePanes(bool integrated, int panes, string expected)
     {
-        Assert.Equal(expected, VegetationQualitySetting.FallbackFor(linux, integrated));
+        Assert.Equal(expected, VegetationQualitySetting.FallbackFor(integrated, panes));
     }
 
-    /// <summary>A --det run falls back to Rich whatever the machine, so a capture does not depend on
-    /// where it runs.</summary>
-    [Fact]
-    public void ADetRunFallsBackToRich()
+    /// <summary>A --det run falls back to Rich at any pane count, so a capture does not depend on the
+    /// machine it runs on. The det context never asks the renderer.</summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void ADetRunFallsBackToRich(int panes)
     {
-        Assert.Equal(VegetationQualitySetting.Rich, VegetationQualitySetting.DefaultFor(det: true));
+        var none = VegetationQualitySetting.Lookup.Fallback(new SettingContext(true, true, panes));
+        Assert.Equal(new ResolvedWord(VegetationQualitySetting.Rich, SettingSource.Default), none);
     }
 
-    /// <summary>The flag beats the saved word, which beats the config key; the Original fallback names
-    /// its rule, and a choice of Rich still beats it.</summary>
+    /// <summary>The flag beats the saved word, which beats the config key. The split screen's Original
+    /// fallback names its rule, and a choice of Rich still beats it.</summary>
     [Fact]
     public void TheFlagBeatsTheSavedWordAndTheLowPowerFallbackNamesItsRule()
     {
@@ -41,9 +48,12 @@ public class VegetationQualitySettingTests
         var saved = VegetationQualitySetting.Pick(null, VegetationQualitySetting.Original, VegetationQualitySetting.Rich);
         Assert.Equal((VegetationQualitySetting.Original, SettingSource.Saved), (saved.Word, saved.Source));
 
-        string fallback = VegetationQualitySetting.FallbackFor(linux: true, integrated: false);
-        var none = VegetationQualitySetting.Pick(null, null, fallback, fallback);
-        Assert.Equal((VegetationQualitySetting.Original, SettingSource.Default, VegetationQualitySetting.LowPowerRule), (none.Word, none.Source, none.Rule));
+        string fallback = VegetationQualitySetting.FallbackFor(integrated: true, panes: 2);
+        var none = VegetationQualitySetting.Pick(null, null, null, fallback);
+        Assert.Equal((VegetationQualitySetting.Original, SettingSource.Default, VegetationQualitySetting.IntegratedSplitRule), (none.Word, none.Source, none.Rule));
+        Assert.Equal("default_integrated_gpu_panes", VegetationQualitySetting.Lookup.SourceName(none.Source, none.Rule));
+        var solo = VegetationQualitySetting.Pick(null, null, null, VegetationQualitySetting.FallbackFor(integrated: true, panes: 1));
+        Assert.Equal((VegetationQualitySetting.Rich, SettingSource.Default, (string?)null), (solo.Word, solo.Source, solo.Rule));
         var rich = VegetationQualitySetting.Pick(null, VegetationQualitySetting.Rich, fallback, fallback);
         Assert.Equal((VegetationQualitySetting.Rich, SettingSource.Saved), (rich.Word, rich.Source));
     }

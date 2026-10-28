@@ -1063,7 +1063,7 @@ public partial class GameSession : Node3D
             if (_rigs.Count > 0)
                 _xrRig?.Release(_rigs[0]);
             // The sun is Launcher-owned too, so a splitscreen session's pane default leaves with it.
-            FollowPanes(1);
+            FollowPanes(1, leaving: true);
             // A line still open when the session ends leaves no field for the keyboard to type into.
             ScreenKeyboard.Hide(SessionNet.ChatKeyboardOwner);
         }
@@ -3094,16 +3094,17 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"stereo: whiteout, flash, sun wash and mission-end fade drawn as head-locked quads");
     }
 
-    // A word setting's fallback may follow the pane count (WordSettings.FollowPanes). An integrated
-    // GPU's three- and four-pane sessions drop the sun's shadow pass unless a level was chosen. The
-    // sun is the Launcher's and outlives the session, so the exit puts one pane back.
-    private void FollowPanes(int panes)
+    // A word setting's fallback may follow the pane count (WordSettings.FollowPanes). Unless a word
+    // was chosen, an integrated GPU's split sessions draw Original vegetation, and its three- and
+    // four-pane ones drop the sun's shadow pass. The sun is the Launcher's and outlives the session,
+    // so the exit puts one pane back. Leaving, only the sun follows: the rest of the world is being freed.
+    private void FollowPanes(int panes, bool leaving = false)
     {
         var moved = WordSettings.FollowPanes(panes);
         if (moved.Count == 0)
             return;
         Log.Info("world", $"word settings at {panes} pane(s): {string.Join(" ", moved.Select(setting => setting.Describe()))}");
-        var world = new LiveWorld(IsInstanceValid(_sun) ? _sun : null, this);
+        var world = new LiveWorld(IsInstanceValid(_sun) ? _sun : null, leaving ? null : this);
         foreach (var setting in moved)
             setting.Apply?.Invoke(world);
     }

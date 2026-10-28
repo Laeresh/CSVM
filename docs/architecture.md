@@ -683,9 +683,9 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
 - `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
 - `src/Utils/WaterQualitySetting.cs`, the Enhanced sea's water quality (flat, waves): the flag/saved/config `WordSetting` lookup over waves (flat on Linux or an integrated GPU), which the session's wave ocean follows live.
-- `src/Utils/VegetationQualitySetting.cs`, the Enhanced vegetation's quality (original, rich): the flag/saved/config `WordSetting` lookup over rich (original on Linux or an integrated GPU), and `RichOn`, what the clutter reads, recut live.
+- `src/Utils/VegetationQualitySetting.cs`, the Enhanced vegetation's quality (original, rich): the flag/saved/config `WordSetting` lookup over rich (original on an integrated GPU drawing two or more panes), and `RichOn`, what the clutter reads, recut live.
 - `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
-- `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards on every machine, applied live.
+- `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
 - `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.

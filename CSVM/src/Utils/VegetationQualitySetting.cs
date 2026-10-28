@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace CSVM.Utils;
@@ -7,11 +6,12 @@ namespace CSVM.Utils;
 /// The Enhanced vegetation's quality, one of <see cref="Words"/>: the original's clutter as stamped,
 /// or the remake's richer vegetation over the same stamps. In <see cref="Lookup"/>,
 /// <c>--vegetation-quality=</c> beats the saved <c>vegetationQuality</c> option, which beats the
-/// <see cref="Key"/> config key, then the fallback. That is <see cref="Rich"/> on a desktop and
-/// <see cref="Original"/> on Linux or an integrated GPU (<see cref="FallbackFor"/>), so the Steam Deck
-/// runs Original. Under <c>--det</c> only the flag survives, over <see cref="Default"/>. The clutter
-/// reads <see cref="RichOn"/>, never the word, so the faithful path stays Original whatever the word.
-/// The VIDEO page's Vegetation row writes the option, applied live through the session.
+/// <see cref="Key"/> config key, then the fallback. That follows the GPU and the pane count
+/// (<see cref="FallbackFor"/>), so a splitscreen session resolves it again
+/// (<see cref="WordSettings.FollowPanes"/>). Under <c>--det</c> only the flag survives, over
+/// <see cref="Default"/>. The clutter reads <see cref="RichOn"/>, never the word, so the faithful path
+/// stays Original whatever the word. The VIDEO page's Vegetation row writes the option, applied live
+/// through the session.
 /// </summary>
 public static class VegetationQualitySetting
 {
@@ -24,15 +24,21 @@ public static class VegetationQualitySetting
     /// <summary>The remake's richer vegetation over the original's stamps.</summary>
     public const string Rich = "rich";
 
-    /// <summary>The word a desktop with nothing saved runs, and under <c>--det</c> every machine.</summary>
+    /// <summary>The word a launch with nothing saved runs on a discrete GPU, on an integrated one with
+    /// one pane, and under <c>--det</c> on every machine. On the Deck its worst one-pane view, the C1
+    /// meadow, ran 15.36 ms against Original's 13.27.</summary>
     public const string Default = Rich;
 
-    /// <summary>The word Linux and an integrated GPU run when nothing is set, until a measurement on
-    /// the Deck says Rich fits its frame.</summary>
-    public const string LowPowerDefault = Original;
+    /// <summary>The word an integrated GPU runs when nothing is set and the session draws
+    /// <see cref="SplitPanes"/> or more panes. On the Deck the two-pane C1 crop field ran 23.40 ms on
+    /// Rich and 12.42 on Original.</summary>
+    public const string IntegratedSplitDefault = Original;
 
-    /// <summary>The log's name for the fallback rule that chose <see cref="LowPowerDefault"/>.</summary>
-    public const string LowPowerRule = "default_linux_or_integrated_gpu";
+    /// <summary>The fewest panes that take <see cref="IntegratedSplitDefault"/>.</summary>
+    public const int SplitPanes = 2;
+
+    /// <summary>The log's name for the fallback rule that chose <see cref="IntegratedSplitDefault"/>.</summary>
+    public const string IntegratedSplitRule = "default_integrated_gpu_panes";
 
     /// <summary>Every word, the cheaper first, the order the Options row offers them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Original, Rich };
@@ -51,18 +57,12 @@ public static class VegetationQualitySetting
     /// draw the original's clutter whatever the saved word.</summary>
     public static bool RichOn => GraphicsMode.Enhanced && Word == Rich;
 
-    /// <summary>The fallback word for this machine. ⚠ Asks the renderer for its GPU class, so a unit
-    /// test reads <see cref="FallbackFor"/> instead.</summary>
-    public static string MachineDefault => FallbackFor(OperatingSystem.IsLinux(), ShadowQualitySetting.IntegratedGpu);
-
-    /// <summary>The fallback a launch resolves against. ⚠ <see cref="Default"/> under
-    /// <paramref name="det"/>, so a scripted capture does not depend on the machine it runs on.</summary>
-    public static string DefaultFor(bool det) => det ? Default : MachineDefault;
-
-    /// <summary>The fallback on a machine that is or is not running <paramref name="linux"/>, on a GPU
-    /// that is or is not <paramref name="integrated"/>. Either one takes <see cref="LowPowerDefault"/>.
-    /// Linux stands for the Deck, whose SteamOS reports Linux whatever its GPU reads as.</summary>
-    public static string FallbackFor(bool linux, bool integrated) => linux || integrated ? LowPowerDefault : Default;
+    /// <summary>The fallback on a GPU that is or is not <paramref name="integrated"/>, for a session
+    /// drawing <paramref name="panes"/>. A discrete GPU runs <see cref="Default"/> on any OS and at any
+    /// count. An integrated one runs it on one pane and <see cref="IntegratedSplitDefault"/> from
+    /// <see cref="SplitPanes"/> panes up.</summary>
+    public static string FallbackFor(bool integrated, int panes) =>
+        integrated && panes >= SplitPanes ? IntegratedSplitDefault : Default;
 
     /// <summary>The word <see cref="Pick"/> resolves the sources to, stored as <see cref="Word"/>.</summary>
     public static ResolvedWord Resolve(string? flagWord, string? savedWord, string? configWord,
@@ -74,13 +74,13 @@ public static class VegetationQualitySetting
     }
 
     /// <summary>The word <see cref="Lookup"/> resolves the sources to over <paramref name="fallback"/>,
-    /// leaving <see cref="Word"/> alone. A <see cref="LowPowerDefault"/> fallback carries its own
-    /// source, so the log line says the machine chose Original.</summary>
+    /// leaving <see cref="Word"/> alone. An <see cref="IntegratedSplitDefault"/> fallback carries its
+    /// own source, so the log line says the panes chose Original.</summary>
     public static ResolvedWord Pick(string? flagWord, string? savedWord, string? configWord,
         string fallback = Default) =>
         Lookup.Resolve(flagWord, savedWord, configWord, fallback, FallbackRule(fallback));
 
-    private static string? FallbackRule(string fallback) => fallback == LowPowerDefault ? LowPowerRule : null;
+    private static string? FallbackRule(string fallback) => fallback == IntegratedSplitDefault ? IntegratedSplitRule : null;
 
     // Built in a method rather than inline. Inside a static field initializer, the nullable analysis
     // reads the Shown hook's static Word as maybe null and warns (CS8603).
@@ -94,9 +94,10 @@ public static class VegetationQualitySetting
             ? "Original draws the original's trees and bushes; Rich adds detail to them. Applies at once."
             : "Enhanced Graphics only: the original world's vegetation is always as authored.",
         Shown = static _ => Word,
+        // ⚠ Ask the renderer only off --det: a unit test reads FallbackFor, having no renderer.
         Fallback = static context =>
         {
-            string fallback = DefaultFor(context.Det);
+            string fallback = context.Det ? Default : FallbackFor(ShadowQualitySetting.IntegratedGpu, context.Panes);
             return new ResolvedWord(fallback, SettingSource.Default, FallbackRule(fallback));
         },
         Take = static resolved =>

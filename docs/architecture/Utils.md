@@ -369,26 +369,27 @@ the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the sto
 
 ## src/Utils/VegetationQualitySetting.cs
 The Enhanced vegetation's quality: `original`, the clutter as the faithful path stamps and draws it, or `rich`, the remake's
-richer vegetation over the same stamps (`docs/PLAN-enhanced-vegetation.md`). It resolves as `WaterQualitySetting` does: `--vegetation-quality=`,
-the saved `vegetationQuality` word, the `graphics.vegetationQuality` key, then `DefaultFor(det)`, `rich` under `--det` and otherwise
-`FallbackFor(linux, integrated)`, `original` on Linux (the Steam Deck) or an integrated GPU under `default_linux_or_integrated_gpu`.
+richer vegetation over the same stamps (`docs/PLAN-enhanced-vegetation.md`). It resolves as `ShadowQualitySetting` does: `--vegetation-quality=`,
+the saved `vegetationQuality` word, the `graphics.vegetationQuality` key, then `rich` under `--det` and otherwise
+`FallbackFor(integrated, panes)`: `original` on an integrated GPU (the Steam Deck) drawing two or more panes, under
+`default_integrated_gpu_panes`, and `rich` otherwise, whatever the OS. A splitscreen session resolves it again (`WordSettings.FollowPanes`).
 The clutter reads `RichOn`, the word and the Enhanced mode together, never the word alone, so the faithful path stays Original.
 A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/GameSession.cs` recut the clutter and the map edge's copies
-(`FollowVegetationQuality`); a mode switch recuts them too. Nothing reads `RichOn` yet beyond that hook. The VIDEO page shows it as
-the Vegetation dropdown under View Distance.
+(`FollowVegetationQuality`); a mode switch recuts them too. The VIDEO page shows it as the Vegetation dropdown under View Distance.
 
 ## src/Utils/VegetationModelsSetting.cs
 How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (150 to 250 m, the default) or
 `far` (250 to 400 m); `VegetationModels.BandFor` holds the bands. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
 the saved `vegetationModels` word, the `graphics.vegetationModels` key, then `near` on every machine and under `--det`, the Steam Deck
-included until a measurement there sets its own fallback. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
+included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
 shows it as the 3D Vegetation dropdown under Vegetation.
 
 ## src/Utils/GroundCoverSetting.cs
 How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (`Mech3/GroundCoverShells.cs`) or `cards`
-(`Mech3/GroundCover.cs`), the default, held in `Default` alone. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved
-`groundCover` word, the `graphics.groundCover` key, then `cards` on every machine and under `--det`. A live change reaches
+(`Mech3/GroundCover.cs`), the default. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved
+`groundCover` word, the `graphics.groundCover` key, then `cards` under `--det` and otherwise `FallbackFor(integrated)`: `off` on an
+integrated GPU (the Steam Deck) under `default_integrated_gpu`, `cards` otherwise, whatever the OS. A live change reaches
 `Launch/GameSession.cs`'s `FollowGroundCover` through the session's follow, which builds the word's cover and drops the other with no
 other rebuild. The VIDEO page shows it as the Ground Cover dropdown under 3D Vegetation.
 ## src/Utils/ViewportQuality.cs
