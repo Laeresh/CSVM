@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using CSVM.Utils;
 using Godot;
@@ -8,8 +7,8 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Ground cover from new-art cards under Rich, a prototype behind <c>--ground-cover-cards</c>. Grass tufts grow on
-/// a chapter's picked meadow textures and crop rows on its field textures, near the camera only. A card stands on a
+/// Ground cover from new-art cards under Rich, the Ground Cover word's <c>cards</c> (<see cref="GroundCoverSetting"/>).
+/// Grass tufts and crop rows grow on the textures the sidecar's <c>cover</c> picks, near the camera only. A card stands on a
 /// lattice in the ground's own texture space, so a crop row runs along its field's painted rows (<see cref="RowsAlongV"/>).
 /// Its colour is the ground's under it (the texture blurred over <see cref="BlurTexels"/> times the baked corner
 /// colour), lit by the ground's normal. The art is a brightness map with no hue, drawn here
@@ -58,16 +57,6 @@ public static class GroundCover
         /// <summary>A meadow grass tuft.</summary>
         Grass,
     }
-
-    /// <summary>What a chapter's ground texture grows, null for nothing. C1 alone: its crop fields and its meadows.</summary>
-    public static Cover? PickOf(string chapter, string texture) =>
-        !string.Equals(chapter, "C1", StringComparison.OrdinalIgnoreCase) ? null
-        : Path.GetFileNameWithoutExtension(texture).ToLowerInvariant() switch
-        {
-            "crop04" or "crop05" => Cover.Crop,
-            "terpat03" or "terpat03b" or "grass1" => Cover.Grass,
-            _ => null,
-        };
 
     /// <summary>Each cover's band, the one place to change it: inside x every card draws, past y none, dithered
     /// between. Camera distance in three dimensions, so a camera y over the ground draws none.</summary>
@@ -196,7 +185,7 @@ public static class GroundCover
                         false => Swap(Loose((int)j, pass, h)),
                     };
                     double u = (i + 0.5 + ju) * du, v = (j + 0.5 + jv) * dv;
-                    if (g.At(u, v) is not { } at || at.X < x0 || at.X >= x0 + size || at.Z < z0 || at.Z >= z0 + size)
+                    if (g.At(u, v) is not { } at || at.X < x0 || at.X >= x0 + size || at.Z < z0 || at.Z >= z0 + size || !g.Surface.Grows(u, v))
                         continue;
                     if (alongV != null && (g.Surface.AlongV(u, v) != alongV.Value || Unit(h >> 12) > PatchKeep(u, v)))
                         continue;
@@ -240,23 +229,24 @@ public static class GroundCover
         return h ^ (h >> 16);
     }
 
-    /// <summary>The cover over a chapter's picked ground, null where it picks none. The cells build as cameras come
-    /// near (<see cref="Field.Update"/>). <paramref name="mask"/> null grows everywhere picked.</summary>
-    public static Field? Build(GameZ gamez, TextureArchive textures, VegetationMask? mask, string chapter)
+    /// <summary>The cover over the ground <paramref name="entry"/>'s <c>cover</c> picks, null where it picks none. The
+    /// cells build as cameras come near (<see cref="Field.Update"/>). <paramref name="mask"/> null grows everywhere picked.</summary>
+    public static Field? Build(GameZ gamez, TextureArchive textures, VegetationMask? mask, VegetationEntry entry, string chapter)
     {
+        if (entry.Cover.Count == 0)
+            return null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var surfaces = new Dictionary<string, Surface?>(StringComparer.OrdinalIgnoreCase);
         var index = new Dictionary<(int, int), List<Ground>>();
         int kept = 0;
-        foreach (var t in VegetationGround.Covered(gamez, tex => PickOf(chapter, tex) != null))
+        foreach (var t in VegetationGround.Covered(gamez, tex => entry.CoverFor(tex) != null))
         {
+            var pick = entry.CoverFor(t.Texture)!;
             if (!surfaces.TryGetValue(t.Texture, out var surface))
             {
-                var image = textures.FindImage(t.Texture);
-                image?.Convert(Image.Format.Rgba8);
-                surfaces[t.Texture] = surface = image == null ? null : new Surface(image.GetData(), image.GetWidth(), image.GetHeight());
+                surfaces[t.Texture] = surface = SurfaceOf(textures, t.Texture, pick);
             }
-            if (surface == null || Ground.Prepare(t, PickOf(chapter, t.Texture)!.Value, surface) is not { } g)
+            if (surface == null || Ground.Prepare(t, pick.Grows, surface) is not { } g)
                 continue;
             kept++;
             for (int cx = Cell(g.Min.X); cx <= Cell(g.Max.X); cx++)
@@ -272,10 +262,32 @@ public static class GroundCover
         if (kept == 0)
             return null;
         // Every other textured polygon, the overlays a card is kept off.
-        var overlays = VegetationGround.OverlaysOn(gamez, tex => PickOf(chapter, tex) != null);
+        var overlays = OverlaysFor(gamez, entry);
         Log.Info("world", $"ground cover: {chapter} {kept} picked triangles over {index.Count} cells of {CellM:0} m from {string.Join(", ", surfaces.Where(s => s.Value != null).Select(s => s.Key))}, crop band {Band(Cover.Crop).X:0}-{Band(Cover.Crop).Y:0} m, grass band {Band(Cover.Grass).X:0}-{Band(Cover.Grass).Y:0} m, indexed in {watch.ElapsedMilliseconds} ms");
         return new Field(index, overlays, mask);
     }
+
+    /// <summary>A picked texture's <see cref="Surface"/>: the gate and the rows from the authored image, the colour from
+    /// the drawn one when a texture pack replaces it. Null when the archive lacks the texture.</summary>
+    public static Surface? SurfaceOf(TextureArchive textures, string texture, CoverPick pick)
+    {
+        if (textures.FindImage(texture, authored: true) is not { } authored)
+            return null;
+        authored.Convert(Image.Format.Rgba8);
+        var drawn = textures.FindImage(texture);
+        drawn?.Convert(Image.Format.Rgba8);
+        bool replaced = drawn != null && drawn.GetSize() != authored.GetSize();
+        var surface = new Surface(authored.GetData(), authored.GetWidth(), authored.GetHeight(), pick.MinSaturation, pick.MaxValue,
+            drawn != null ? (drawn.GetData(), drawn.GetWidth(), drawn.GetHeight()) : null);
+        if (replaced)
+            Log.Info("world", $"ground cover: {texture} gates on its authored {authored.GetWidth()}x{authored.GetHeight()} texels, colour from the drawn {drawn!.GetWidth()}x{drawn.GetHeight()}");
+        return surface;
+    }
+    /// <summary>The polygons both covers keep off: every textured world triangle <paramref name="entry"/>'s <c>cover</c>
+    /// does not pick: rails, roads, aprons and decals over the picked ground. Transitions are exempt, as for the added
+    /// stamps (<see cref="VegetationGround.IsTransition"/>), since C1's forest-edge blends lie over its fields.</summary>
+    public static VegetationGround.Overlays OverlaysFor(GameZ gamez, VegetationEntry entry, string worldName = "world1") =>
+        VegetationGround.OverlaysOn(gamez, tex => entry.CoverFor(tex) != null || VegetationGround.IsTransition(tex), worldName);
 
     private static int Cell(float v) => (int)MathF.Floor(v / CellM);
 
@@ -465,32 +477,76 @@ public static class GroundCover
     /// carries the ground's linear colour under it and the ground's normal there.</summary>
     public readonly record struct Card(Transform3D Xf, Color Albedo, Vector3 Normal);
 
-    /// <summary>A picked texture's colour, linear and averaged over <see cref="BlurTexels"/> a side, and its row map.</summary>
+    /// <summary>A picked texture's colour, linear and averaged over <see cref="BlurTexels"/> a side, its row map and its
+    /// gate. The gate and the rows read the authored texels; the colour reads what is drawn, an HD replacement included.</summary>
     public sealed class Surface
     {
         private readonly Vector3[] _linear;
-        private readonly int _w, _h;
+        private readonly bool[] _grows;
+        private readonly int _w, _h, _gw, _gh;
         private readonly bool[] _rows;
 
-        public Surface(byte[] rgba, int width, int height)
+        /// <summary>The surface of an authored RGBA8 texture. <paramref name="drawn"/> is the image the world draws, an
+        /// HD replacement included. The colour is averaged from it over the same ground area.</summary>
+        public Surface(byte[] rgba, int width, int height, float minSaturation = 0f, float maxValue = 1f,
+            (byte[] Rgba, int Width, int Height)? drawn = null)
         {
-            _w = Math.Max(1, width / BlurTexels);
-            _h = Math.Max(1, height / BlurTexels);
+            (_grows, _gw, _gh) = (GateMap(rgba, width, height, minSaturation, maxValue), Math.Max(1, width / BlurTexels), Math.Max(1, height / BlurTexels));
+            var (colour, cw, ch) = drawn ?? (rgba, width, height);
+            // The colour block covers 2 x 2 authored texels of ground at any resolution.
+            int block = Math.Max(1, BlurTexels * cw / Math.Max(1, width));
+            _w = Math.Max(1, cw / block);
+            _h = Math.Max(1, ch / block);
             _linear = new Vector3[_w * _h];
+            for (int y = 0; y < ch; y++)
+            {
+                for (int x = 0; x < cw; x++)
+                {
+                    int at = ((y * cw) + x) * 4;
+                    _linear[(Math.Min(y / block, _h - 1) * _w) + Math.Min(x / block, _w - 1)] +=
+                        new Vector3(Linear(colour[at] / 255f), Linear(colour[at + 1] / 255f), Linear(colour[at + 2] / 255f));
+                }
+            }
+            float per = (float)(_w * _h) / (cw * ch);
+            for (int i = 0; i < _linear.Length; i++)
+                _linear[i] *= per;
+            _rows = RowsAlongV(rgba, width, height);
+        }
+
+        /// <summary>Per <see cref="BlurTexels"/> square of an authored RGBA8 texture, row 0 at the top: whether it grows
+        /// cover. Its averaged sRGB saturation reaches <paramref name="minSaturation"/> and its value is at most
+        /// <paramref name="maxValue"/>. Both covers read it, so a texture pack never moves what grows.</summary>
+        public static bool[] GateMap(byte[] rgba, int width, int height, float minSaturation, float maxValue)
+        {
+            int w = Math.Max(1, width / BlurTexels), h = Math.Max(1, height / BlurTexels);
+            var srgb = new Vector3[w * h];
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
                     int at = ((y * width) + x) * 4;
-                    _linear[(Math.Min(y / BlurTexels, _h - 1) * _w) + Math.Min(x / BlurTexels, _w - 1)] +=
-                        new Vector3(Linear(rgba[at] / 255f), Linear(rgba[at + 1] / 255f), Linear(rgba[at + 2] / 255f));
+                    srgb[(Math.Min(y / BlurTexels, h - 1) * w) + Math.Min(x / BlurTexels, w - 1)] += new Vector3(rgba[at], rgba[at + 1], rgba[at + 2]);
                 }
             }
-            float per = (float)(_w * _h) / (width * height);
-            for (int i = 0; i < _linear.Length; i++)
-                _linear[i] *= per;
-            _rows = RowsAlongV(rgba, width, height);
+            float per = (float)(w * h) / (width * height);
+            var grows = new bool[w * h];
+            for (int i = 0; i < grows.Length; i++)
+                grows[i] = (minSaturation <= 0f || Saturation(srgb[i]) >= minSaturation) && (maxValue >= 1f || Value(srgb[i] * per) <= maxValue);
+            return grows;
         }
+        /// <summary>An sRGB colour's saturation, max less min over max; 0 for black.</summary>
+        public static float Saturation(Vector3 c)
+        {
+            float max = MathF.Max(c.X, MathF.Max(c.Y, c.Z)), min = MathF.Min(c.X, MathF.Min(c.Y, c.Z));
+            return max > 0f ? (max - min) / max : 0f;
+        }
+
+        /// <summary>An sRGB colour's value, its brightest channel over 255.</summary>
+        public static float Value(Vector3 c) => MathF.Max(c.X, MathF.Max(c.Y, c.Z)) / 255f;
+
+        /// <summary>Whether the averaged texel under a texture coordinate grows cover, read unsampled.</summary>
+        public bool Grows(double u, double v) =>
+            _grows[(Math.Min((int)(Wrap(v) * _gh), _gh - 1) * _gw) + Math.Min((int)(Wrap(u) * _gw), _gw - 1)];
 
         /// <summary>The colour at a texture coordinate, bilinear between the averaged texels, wrapping.</summary>
         public Vector3 At(double u, double v)

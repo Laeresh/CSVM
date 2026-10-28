@@ -31,11 +31,11 @@ public static class VegetationGround
     /// (<see cref="Overlaid"/>).</summary>
     public const float OverlayReachM = 0.5f, OverlayRiseM = 1.5f;
 
+    /// <summary>How far below a foot an overlay may sit and still cover it: a coplanar layer's rounding.</summary>
+    public const float OverlaySinkM = 0.25f;
+
     // Coplanar layers lie within this of each other; a decal over its base sits a few centimetres up.
     private const float CoplanarM = 0.5f;
-
-    // How far below a foot an overlay may sit and still cover it: a coplanar layer's rounding.
-    private const float OverlaySinkM = 0.25f;
 
     // The foot and four points the reach around it, each tested against an overlay.
     private static readonly (float X, float Z)[] Probes =
@@ -336,6 +336,28 @@ public static class VegetationGround
 
         /// <summary>Whether an overlay covers a foot at <paramref name="at"/> (<see cref="Overlaid"/>).</summary>
         public bool Covers(Vector3 at) => _cells.TryGetValue((Cell(at.X), Cell(at.Z)), out var list) && Overlaid(list, at);
+
+        /// <summary>The overlay triangles binned in the cells an XZ box from <paramref name="lo"/> to <paramref name="hi"/>
+        /// touches, each once, three corners each.</summary>
+        public List<Vector3> Near(Vector2 lo, Vector2 hi)
+        {
+            var found = new List<Vector3>();
+            var seen = new HashSet<(Vector3, Vector3, Vector3)>();
+            for (int cx = Cell(lo.X); cx <= Cell(hi.X); cx++)
+            {
+                for (int cz = Cell(lo.Y); cz <= Cell(hi.Y); cz++)
+                {
+                    if (!_cells.TryGetValue((cx, cz), out var list))
+                        continue;
+                    for (int i = 0; i + 2 < list.Count; i += 3)
+                    {
+                        if (seen.Add((list[i], list[i + 1], list[i + 2])))
+                            found.AddRange(new[] { list[i], list[i + 1], list[i + 2] });
+                    }
+                }
+            }
+            return found;
+        }
 
         private static int Cell(float v) => (int)MathF.Floor(v / CellM);
     }

@@ -8,26 +8,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// D35's ground cover shells (<see cref="GroundCoverShells"/>): which textures grow what, and the cut of a ground
+/// The ground cover shells (<see cref="GroundCoverShells"/>): the layers, and the cut of a ground
 /// triangle on the mask's grid. Also the crop rows' direction field.
 /// </summary>
 [Trait("Tier", "Quick")]
 public sealed class GroundCoverShellsTests
 {
-    /// <summary>C1's crop fields grow crops and its meadows grass; nothing else and no other chapter grows any.</summary>
-    [Fact]
-    public void OnlyC1sFieldsAndMeadowsGrowCover()
-    {
-        Assert.Equal(GroundCoverShells.Cover.Crop, GroundCoverShells.CoverOf("C1", "crop04.tif"));
-        Assert.Equal(GroundCoverShells.Cover.Crop, GroundCoverShells.CoverOf("c1", "CROP05.tif"));
-        Assert.Equal(GroundCoverShells.Cover.Grass, GroundCoverShells.CoverOf("C1", "terpat03.tif"));
-        Assert.Equal(GroundCoverShells.Cover.Grass, GroundCoverShells.CoverOf("C1", "terpat03b.tif"));
-        Assert.Equal(GroundCoverShells.Cover.Grass, GroundCoverShells.CoverOf("C1", "grass1.tif"));
-        Assert.Null(GroundCoverShells.CoverOf("C1", "terpat02.tif"));
-        Assert.Null(GroundCoverShells.CoverOf("C1", "tarmac01.tif"));
-        Assert.Null(GroundCoverShells.CoverOf("C1", "terpat03_trans1.tif"));
-        Assert.Null(GroundCoverShells.CoverOf("C4", "crop04.tif"));
-    }
 
     /// <summary>The layers stand evenly to the full height, the lowest off the ground.</summary>
     [Fact]
@@ -71,6 +57,29 @@ public sealed class GroundCoverShellsTests
         Assert.DoesNotContain(cut, p => p.I == 0 && p.J == 0);
         Assert.Equal(all.Sum(p => Area(Points(p, a, b, c))) - 144f, cut.Sum(p => Area(Points(p, a, b, c))), 2);
         Assert.Empty(GroundCoverShells.Clip(a, b, c, Vector2.Zero, 12f, (_, _) => false));
+    }
+
+    /// <summary>A rail laid over the ground cuts its strip, grown by the half-metre reach, out of a piece, and the rest
+    /// keeps its area. A rail 10 m up, or a wall with no ground shadow, cuts nothing.</summary>
+    [Fact]
+    public void AnOverlayCutsItsGrownStripOutOfAPiece()
+    {
+        Vector3 a = new(-100f, 0f, -100f), b = new(200f, 0f, -100f), c = new(-100f, 0f, 200f);
+        var piece = Assert.Single(GroundCoverShells.Clip(new(a.X, a.Z), new(b.X, b.Z), new(c.X, c.Z), Vector2.Zero, 12f, (i, j) => i == 0 && j == 0));
+        static Vector3[] Rail(float y) => new Vector3[]
+        {
+            new(5f, y, -20f), new(7f, y, -20f), new(7f, y, 32f),
+            new(5f, y, -20f), new(7f, y, 32f), new(5f, y, 32f),
+        };
+        List<Vector2> Flat(Vector3[] w) => w.Select(v => { var p = (a * v.X) + (b * v.Y) + (c * v.Z); return new Vector2(p.X, p.Z); }).ToList();
+
+        var parts = GroundCoverShells.KeepOff(piece.Weights, a, b, c, Rail(0.05f));
+        Assert.Equal(144f - (3f * 12f), parts.Sum(p => Area(Flat(p))), 2);
+        Assert.All(parts.SelectMany(Flat), p => Assert.True(p.X <= 4.5f + 1e-3f || p.X >= 7.5f - 1e-3f, $"{p}"));
+
+        Assert.Equal(144f, GroundCoverShells.KeepOff(piece.Weights, a, b, c, Rail(10f)).Sum(p => Area(Flat(p))), 2);
+        var wall = new Vector3[] { new(6f, 0f, 0f), new(6f, 5f, 0f), new(6f, 0f, 12f) };
+        Assert.Equal(144f, Area(Flat(Assert.Single(GroundCoverShells.KeepOff(piece.Weights, a, b, c, wall)))), 2);
     }
 
     /// <summary>Stripes along v read as a gradient along u (field angle 0), and stripes along u the opposite.

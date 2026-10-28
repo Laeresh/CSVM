@@ -49,6 +49,12 @@ public sealed record VegetationSet(string Name, IReadOnlyList<string> Models, fl
 /// <summary>A ground texture given a vegetation set by the lab's paint tool.</summary>
 public sealed record TexturePick(string Texture, string Set);
 
+/// <summary>A ground texture that grows ground cover (<see cref="GroundCover"/>, <see cref="GroundCoverShells"/>):
+/// <c>Grows</c> is grass or crop. A texel grows it only where its saturation reaches <c>MinSaturation</c>, so grey rock
+/// stays bare. Its value, the brightest channel, must stay at or under <c>MaxValue</c>, so pale paths stay bare. 0 and 1
+/// grow on every texel. <c>CardsOnly</c> keeps the pick off the shells, which a large ground would make slow to build.</summary>
+public sealed record CoverPick(string Texture, GroundCover.Cover Grows, float MinSaturation = 0f, float MaxValue = 1f, bool CardsOnly = false);
+
 /// <summary>
 /// One chapter's entry: the listed kinds, the seed salt of the Rich variation stream, the vegetation
 /// sets and the texture picks. The mask is the brush mask's path relative to <c>CSVM/data</c>, empty
@@ -68,6 +74,22 @@ public sealed class VegetationEntry
     public IReadOnlyList<VegetationSet> Sets { get; init; } = Array.Empty<VegetationSet>();
 
     public IReadOnlyList<TexturePick> Picks { get; init; } = Array.Empty<TexturePick>();
+
+    /// <summary>The textures that grow ground cover, the file's <c>cover</c>.</summary>
+    public IReadOnlyList<CoverPick> Cover { get; init; } = Array.Empty<CoverPick>();
+
+    /// <summary>The ground cover a texture grows, matched by name without its extension, or null for none.</summary>
+    public CoverPick? CoverFor(string texture)
+    {
+        string name = Path.GetFileNameWithoutExtension(texture);
+        foreach (var c in Cover)
+        {
+            if (string.Equals(Path.GetFileNameWithoutExtension(c.Texture), name, StringComparison.OrdinalIgnoreCase))
+                return c;
+        }
+
+        return null;
+    }
 
     /// <summary>The listed kind for a decoration model name, or null when the model is not vegetation.</summary>
     public VegetationKind? Find(string model)
@@ -91,16 +113,16 @@ public sealed class VegetationEntry
         if (i < 0)
             throw new ArgumentException($"'{model}' is not a listed kind", nameof(model));
         kinds[i] = field.With(kinds[i], Math.Clamp(value, 0f, field.Max));
-        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = kinds, Sets = Sets, Picks = Picks };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = kinds, Sets = Sets, Picks = Picks, Cover = Cover };
     }
 
     /// <summary>A copy with the variation stream's seed salt at <paramref name="seed"/>.</summary>
     public VegetationEntry WithSeed(int seed) =>
-        new() { Seed = seed, Mask = Mask, Kinds = Kinds, Sets = Sets, Picks = Picks };
+        new() { Seed = seed, Mask = Mask, Kinds = Kinds, Sets = Sets, Picks = Picks, Cover = Cover };
 
     /// <summary>A copy whose brush mask is <paramref name="mask"/>, a path relative to <c>CSVM/data</c>.</summary>
     public VegetationEntry WithMask(string mask) =>
-        new() { Seed = Seed, Mask = mask, Kinds = Kinds, Sets = Sets, Picks = Picks };
+        new() { Seed = Seed, Mask = mask, Kinds = Kinds, Sets = Sets, Picks = Picks, Cover = Cover };
 
     /// <summary>A copy where <paramref name="texture"/> is picked for <paramref name="models"/>, the lab's pick.
     /// A set with exactly those members is reused, or one named by joining them with <c>+</c> is added.
@@ -130,7 +152,7 @@ public sealed class VegetationEntry
             picks.Add(new TexturePick(texture, set.Name));
         }
 
-        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = picks };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = picks, Cover = Cover };
     }
 
     /// <summary>A copy where set <paramref name="name"/> takes <paramref name="density"/> stamps a hectare, clamped,
@@ -142,7 +164,7 @@ public sealed class VegetationEntry
         if (i < 0)
             throw new ArgumentException($"'{name}' is not a set of this entry", nameof(name));
         sets[i] = sets[i] with { Density = Math.Clamp(density, 0f, VegetationSet.MaxDensity), Mass = mass };
-        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = Picks };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = Picks, Cover = Cover };
     }
 
     /// <summary>The vegetation set picked for a ground texture, or null when the texture has no pick.</summary>
@@ -378,6 +400,30 @@ public sealed class VegetationSidecar
                 picks[p.Texture] = p.Set;
             node["picks"] = picks;
         }
+        if (entry.Cover.Count > 0)
+        {
+            var cover = new JsonObject();
+            foreach (var c in entry.Cover)
+            {
+                string grows = c.Grows.ToString().ToLowerInvariant();
+                double min = Math.Round(Math.Clamp(c.MinSaturation, 0f, 1f), 4), max = Math.Round(Math.Clamp(c.MaxValue, 0f, 1f), 4);
+                // The bare word at the defaults, as a set with its defaults is a bare list; otherwise only what differs.
+                if (min == 0 && max == 1 && !c.CardsOnly)
+                {
+                    cover[c.Texture] = grows;
+                    continue;
+                }
+                var pick = new JsonObject { ["grows"] = grows };
+                if (min != 0)
+                    pick["min_saturation"] = min;
+                if (max != 1)
+                    pick["max_value"] = max;
+                if (c.CardsOnly)
+                    pick["covers"] = "cards";
+                cover[c.Texture] = pick;
+            }
+            node["cover"] = cover;
+        }
         return node;
     }
 
@@ -387,6 +433,7 @@ public sealed class VegetationSidecar
         string mask = "";
         var kinds = new List<VegetationKind>();
         JsonObject? sets = null, picks = null;
+        var cover = new List<CoverPick>();
         foreach (var (key, node) in fields)
         {
             if (key.StartsWith('_'))
@@ -421,6 +468,12 @@ public sealed class VegetationSidecar
                     if (picks == null)
                         warnings.Add($"{chapter}: 'picks' is not an object, ignored");
                     break;
+                case "cover":
+                    if (node is JsonObject c)
+                        ReadCover(chapter, c, cover, warnings);
+                    else
+                        warnings.Add($"{chapter}: 'cover' is not an object, ignored");
+                    break;
                 default:
                     warnings.Add($"{chapter}: '{key}' is not a vegetation field, ignored");
                     break;
@@ -429,7 +482,48 @@ public sealed class VegetationSidecar
 
         var readSets = sets == null ? new List<VegetationSet>() : ReadSets(chapter, sets, new VegetationEntry { Kinds = kinds }, warnings);
         var readPicks = picks == null ? new List<TexturePick>() : ReadPicks(chapter, picks, readSets, warnings);
-        return new VegetationEntry { Seed = seed, Mask = mask, Kinds = kinds, Sets = readSets, Picks = readPicks };
+        return new VegetationEntry { Seed = seed, Mask = mask, Kinds = kinds, Sets = readSets, Picks = readPicks, Cover = cover };
+    }
+
+    // A bare "grass" or "crop", or {"grows": ..., "min_saturation": n, "max_value": m, "covers": "cards"|"both"}, n and m
+    // held to 0..1.
+    private static void ReadCover(string chapter, JsonObject node, List<CoverPick> cover, List<string> warnings)
+    {
+        foreach (var (texture, value) in node)
+        {
+            if (texture.StartsWith('_'))
+                continue;
+            var fields = value as JsonObject;
+            if ((fields?["grows"] ?? value) is not JsonValue word || !word.TryGetValue(out string? grows)
+                || !Enum.TryParse<GroundCover.Cover>(grows, ignoreCase: true, out var kind) || !Enum.IsDefined(kind))
+            {
+                warnings.Add($"{chapter}: cover '{texture}' grows {value?.ToJsonString()}, which is neither grass nor crop, dropped");
+                continue;
+            }
+            float min = 0f, max = 1f;
+            bool cardsOnly = false;
+            foreach (var (key, field) in fields ?? new JsonObject())
+            {
+                if (key.StartsWith('_') || key == "grows")
+                    continue;
+                if (key is "min_saturation" or "max_value" && field is JsonValue nv && nv.TryGetValue(out double n) && double.IsFinite(n))
+                {
+                    float held = Math.Clamp((float)n, 0f, 1f);
+                    if (held != (float)n)
+                        warnings.Add($"{chapter}: cover '{texture}': '{key}' {n.ToString(System.Globalization.CultureInfo.InvariantCulture)} is held at {held.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                    (min, max) = key == "min_saturation" ? (held, max) : (min, held);
+                }
+                else if (key == "covers" && field is JsonValue cv && cv.TryGetValue(out string? covers) && covers is "cards" or "both")
+                {
+                    cardsOnly = covers == "cards";
+                }
+                else
+                {
+                    warnings.Add($"{chapter}: cover '{texture}': '{key}' is not a cover field or not its type, ignored");
+                }
+            }
+            cover.Add(new CoverPick(texture, kind, min, max, cardsOnly));
+        }
     }
 
     private static void ReadKinds(string chapter, JsonObject node, List<VegetationKind> kinds, List<string> warnings)

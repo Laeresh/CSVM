@@ -23,6 +23,7 @@ public class OptionsChoicesTests
         Assert.False(choices.Live(WaterQualitySetting.Lookup));
         Assert.False(choices.Live(VegetationQualitySetting.Lookup));
         Assert.False(choices.Live(VegetationModelsSetting.Lookup));
+        Assert.False(choices.Live(GroundCoverSetting.Lookup));
         Assert.True(choices.Live(RenderScaleSetting.Lookup));
         Assert.Equal(new WordValues(), choices.ToExit().Words);
 

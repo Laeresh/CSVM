@@ -4,12 +4,13 @@ using System.Globalization;
 using System.Linq;
 using CSVM.Utils;
 using Godot;
+using Cover = CSVM.Mech3.GroundCover.Cover;
 
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Procedural ground cover near the camera, D35's prototype (<c>--ground-cover-shells</c>, Rich only). Stacked
-/// alpha-tested shells over the picked grass and crop textures draw tufts and crop rows. The shells are the
+/// Procedural ground cover near the camera, the Ground Cover word's <c>shells</c> (Rich only). Stacked
+/// alpha-tested shells over the sidecar's <c>cover</c> textures draw tufts and crop rows. The shells are the
 /// picked world triangles cut on the brush mask's texel grid, so a cleared texel (the landing strips) grows none.
 /// Each 256 m chunk of a texture is one MultiMesh drawing its mesh once per layer. A blade takes the ground's
 /// own texture and vertex colour under the world's light, so it reads as the ground it grows from.
@@ -29,35 +30,14 @@ public static class GroundCoverShells
     /// <summary>The row field's cells along each side of a crop texture.</summary>
     public const int RowGrid = 32;
 
+    /// <summary>The cut's cell edge where the chapter has no brush mask, the C1 mask's own texel.</summary>
+    public const float UnmaskedCellM = 12f;
+
     private static readonly Dictionary<(Cover, bool), Shader> Shaders = new();
 
-    /// <summary>What a picked texture grows.</summary>
-    public enum Cover
-    {
-        /// <summary>Grass tufts.</summary>
-        Grass,
-
-        /// <summary>Crop rows along the field's painted direction.</summary>
-        Crop,
-    }
-
-    /// <summary>What <paramref name="texture"/> grows on <paramref name="chapter"/>, null for nothing. C1 alone:
-    /// its crop fields and its meadows (the survey's FINDINGS).</summary>
-    public static Cover? CoverOf(string chapter, string texture)
-    {
-        if (!string.Equals(chapter, "C1", StringComparison.OrdinalIgnoreCase))
-            return null;
-        return System.IO.Path.GetFileNameWithoutExtension(texture).ToLowerInvariant() switch
-        {
-            "crop04" or "crop05" => Cover.Crop,
-            "terpat03" or "terpat03b" or "grass1" => Cover.Grass,
-            _ => null,
-        };
-    }
-
-    /// <summary>The band of <paramref name="cover"/>, near and far in metres, the one place the bands are set.
+    /// <summary>The band of <paramref name="cover"/>, near and far in metres, the cards' (<see cref="GroundCover.Band"/>).
     /// Inside near it draws whole, and it dithers out by far, eye to fragment, so it ends with altitude too.</summary>
-    public static Vector2 Band(Cover cover) => cover == Cover.Grass ? new Vector2(160f, 240f) : new Vector2(80f, 120f);
+    public static Vector2 Band(Cover cover) => GroundCover.Band(cover);
 
     /// <summary>The share of the cover's height shell <paramref name="layer"/> stands at; the top one at full.</summary>
     public static float LayerShare(int layer) => (layer + 1f) / Layers;
@@ -80,16 +60,87 @@ public static class GroundCoverShells
                     continue;
                 var poly = new List<(Vector2 P, Vector3 W)> { (a, Vector3.Right), (b, Vector3.Up), (c, Vector3.Back) };
                 float x0 = origin.X + (i * cell), z0 = origin.Y + (j * cell);
-                poly = Side(poly, 0, x0, 1f);
-                poly = Side(poly, 0, x0 + cell, -1f);
-                poly = Side(poly, 1, z0, 1f);
-                poly = Side(poly, 1, z0 + cell, -1f);
-                if (poly.Count >= 3 && PolygonArea(poly.Select(v => v.P).ToList()) > 1e-4f)
+                poly = Cut(poly, p => p.X - x0);
+                poly = Cut(poly, p => -(p.X - (x0 + cell)));
+                poly = Cut(poly, p => p.Y - z0);
+                poly = Cut(poly, p => -(p.Y - (z0 + cell)));
+                if (Solid(poly))
                     pieces.Add(new Piece(i, j, poly.Select(v => v.W).ToArray()));
             }
         }
 
         return pieces;
+    }
+
+    /// <summary>The convex parts of a piece of triangle <paramref name="a"/>, <paramref name="b"/>, <paramref name="c"/>
+    /// (its corners as barycentric weights) that no overlay lies over. Each of <paramref name="overlays"/> (three corners
+    /// each) is cut out grown by <see cref="VegetationGround.OverlayReachM"/> across. It is cut only where it lies in the
+    /// cards' height window over the piece (<see cref="VegetationGround.Overlaid"/>). A rail keeps a half-metre margin.</summary>
+    public static List<Vector3[]> KeepOff(Vector3[] weights, Vector3 a, Vector3 b, Vector3 c, IReadOnlyList<Vector3> overlays)
+    {
+        Vector3 At(Vector3 w) => (a * w.X) + (b * w.Y) + (c * w.Z);
+        var parts = new List<List<(Vector2 P, Vector3 W)>> { weights.Select(w => (Flat(At(w)), w)).ToList() };
+        const float reach = VegetationGround.OverlayReachM;
+        var whole = parts[0];
+        Vector2 lo = parts[0].Aggregate(parts[0][0].P, (m, v) => m.Min(v.P)), hi = parts[0].Aggregate(parts[0][0].P, (m, v) => m.Max(v.P));
+        for (int t = 0; t + 2 < overlays.Count && parts.Count > 0; t += 3)
+        {
+            Vector3 o0 = overlays[t], o1 = overlays[t + 1], o2 = overlays[t + 2];
+            Vector2 p0 = Flat(o0), p1 = Flat(o1), p2 = Flat(o2);
+            Vector2 olo = p0.Min(p1).Min(p2), ohi = p0.Max(p1).Max(p2);
+            float area = (p1 - p0).Cross(p2 - p0);
+            if (MathF.Abs(area) < 1e-4f || olo.X - reach > hi.X || ohi.X + reach < lo.X || olo.Y - reach > hi.Y || ohi.Y + reach < lo.Y)
+                continue;
+            float sign = MathF.Sign(area);
+            // The grown triangle, positive inside: its edges pushed out by the reach, and its box grown by the reach.
+            // The box blunts a sliver's sharp corners, which on a rail's long thin triangle reach metres past its end.
+            Func<Vector2, float> Edge(Vector2 from, Vector2 along) => p => (sign * along.Cross(p - from) / along.Length()) + reach;
+            var inside = new[]
+            {
+                Edge(p0, p1 - p0), Edge(p1, p2 - p1), Edge(p2, p0 - p2),
+                p => p.X - (olo.X - reach), p => (ohi.X + reach) - p.X, p => p.Y - (olo.Y - reach), p => (ohi.Y + reach) - p.Y,
+            };
+            // The overlay misses the piece when all its corners lie outside one side, the common case, cut for nothing.
+            if (inside.Any(side => whole.TrueForAll(v => side(v.P) <= 0f)))
+                continue;
+            var next = new List<List<(Vector2 P, Vector3 W)>>();
+            foreach (var part in parts)
+            {
+                var under = part;
+                foreach (var side in inside)
+                    under = under.Count >= 3 ? Cut(under, side) : under;
+                if (!Solid(under) || !Over(under))
+                {
+                    next.Add(part);
+                    continue;
+                }
+                // The part outside the grown triangle, as convex pieces: outside the first side, then inside it and
+                // outside the second, and so on.
+                var rest = part;
+                foreach (var side in inside)
+                {
+                    if (rest.Count < 3)
+                        break;
+                    if (Cut(rest, p => -side(p)) is var outside && Solid(outside))
+                        next.Add(outside);
+                    rest = Cut(rest, side);
+                }
+            }
+            parts = next;
+
+            // Whether the overlay lies over the ground at the cut part's centre, in the cards' height window.
+            bool Over(List<(Vector2 P, Vector3 W)> under)
+            {
+                var ground = At(under.Aggregate(Vector3.Zero, (s, v) => s + v.W) / under.Count);
+                var n = (o1 - o0).Cross(o2 - o0);
+                if (MathF.Abs(n.Y) < 1e-6f)
+                    return false;
+                float y = o0.Y - (((n.X * (ground.X - o0.X)) + (n.Z * (ground.Z - o0.Z))) / n.Y);
+                return y > ground.Y - VegetationGround.OverlaySinkM && y < ground.Y + VegetationGround.OverlayRiseM;
+            }
+        }
+
+        return parts.Select(p => p.Select(v => v.W).ToArray()).ToList();
     }
 
     /// <summary>The crop rows' direction field over an RGBA8 texture, one vector per cell of a <paramref name="grid"/>
@@ -133,19 +184,25 @@ public static class GroundCoverShells
         return field;
     }
 
-    /// <summary>The shells over <paramref name="chapter"/>'s picked ground on <paramref name="gamez"/>, none where
-    /// <paramref name="mask"/> is bare. Null when the chapter picks nothing or nothing is left.</summary>
-    public static Node3D? Build(GameZ gamez, VegetationMask mask, TextureArchive textures, string chapter, string worldName = "world1")
+    /// <summary>The shells over the ground <paramref name="entry"/>'s <c>cover</c> picks on <paramref name="gamez"/>, a
+    /// cards-only pick left out, none where <paramref name="mask"/> is bare. Null when nothing is picked or left. With no mask
+    /// the cut runs on an <see cref="UnmaskedCellM"/> grid and keeps every piece.</summary>
+    public static Node3D? Build(GameZ gamez, VegetationMask? mask, TextureArchive textures, VegetationEntry entry, string worldName = "world1")
     {
+        // The shells' own picks: a cards-only one neither grows shells nor counts as their ground, so it changes nothing here.
+        entry = new VegetationEntry { Cover = entry.Cover.Where(c => !c.CardsOnly).ToList() };
+        if (entry.Cover.Count == 0)
+            return null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var triangles = VegetationGround.PaintedSurface(gamez, t => CoverOf(chapter, t) != null, worldName);
+        var triangles = VegetationGround.PaintedSurface(gamez, t => entry.CoverFor(t) != null, worldName);
         if (triangles.Count == 0)
             return null;
-        byte[] texels = mask.ToBytes();
-        int side = mask.Side;
-        float cell = (mask.MaxX - mask.MinX) / side;
-        var origin = new Vector2(mask.MinX, mask.MinZ);
-        bool Keep(int i, int j) => i < 0 || j < 0 || i >= side || j >= side || texels[(j * side) + i] > 0;
+        byte[]? texels = mask?.ToBytes();
+        int side = mask?.Side ?? 0;
+        float cell = mask != null ? (mask.MaxX - mask.MinX) / side : UnmaskedCellM;
+        var origin = mask != null ? new Vector2(mask.MinX, mask.MinZ) : Vector2.Zero;
+        bool Keep(int i, int j) => texels == null || i < 0 || j < 0 || i >= side || j >= side || texels[(j * side) + i] > 0;
+        var overlays = GroundCover.OverlaysFor(gamez, entry, worldName);
 
         var chunks = new Dictionary<(string Texture, bool Lit, int Ci, int Cj), Chunk>();
         var metres = new Dictionary<string, List<float>>(StringComparer.OrdinalIgnoreCase);
@@ -161,9 +218,18 @@ public static class GroundCoverShells
                     metres[t.Texture] = list = new List<float>();
                 list.Add(MathF.Sqrt((b - a).Cross(c - a).Length() / uvArea));
             }
-            foreach (var piece in Clip(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z), new Vector2(c.X, c.Z), origin, cell, Keep))
+            var cut = Clip(Flat(a), Flat(b), Flat(c), origin, cell, Keep);
+
+            // The overlays binned around one piece, from the overlays' own 64 m bins.
+            List<Vector3> NearPiece(Vector3[] weights)
             {
-                var corners = piece.Weights.Select(w => (At: (a * w.X) + (b * w.Y) + (c * w.Z), W: w)).ToList();
+                var at = weights.Select(w => Flat((a * w.X) + (b * w.Y) + (c * w.Z))).ToList();
+                var grow = Vector2.One * VegetationGround.OverlayReachM;
+                return overlays.Near(at.Aggregate((m, v) => m.Min(v)) - grow, at.Aggregate((m, v) => m.Max(v)) + grow);
+            }
+            foreach (var weights in cut.SelectMany(piece => KeepOff(piece.Weights, a, b, c, NearPiece(piece.Weights))))
+            {
+                var corners = weights.Select(w => (At: (a * w.X) + (b * w.Y) + (c * w.Z), W: w)).ToList();
                 var centre = corners.Aggregate(Vector3.Zero, (s, v) => s + v.At) / corners.Count;
                 var key = (t.Texture, t.Lit, (int)MathF.Floor(centre.X / ChunkM), (int)MathF.Floor(centre.Z / ChunkM));
                 if (!chunks.TryGetValue(key, out var chunk))
@@ -182,11 +248,16 @@ public static class GroundCoverShells
         {
             if (!materials.TryGetValue((tex, lit), out var material))
             {
-                var cover = CoverOf(chapter, tex)!.Value;
+                var pick = entry.CoverFor(tex)!;
                 float mpu = Median(metres.GetValueOrDefault(tex)) is > 0f and var found ? found : ChunkM;
-                materials[(tex, lit)] = material = Material(cover, lit, textures.Find(tex), mpu, cover == Cover.Crop ? RowTexture(textures, tex) : null);
+                materials[(tex, lit)] = material = Material(pick.Grows, lit, textures.Find(tex), mpu, pick.Grows == Cover.Crop ? RowTexture(textures, tex) : null);
+                if (GateTexture(textures, tex, pick) is { } gate)
+                {
+                    material.SetShaderParameter("gate_tex", gate);
+                    material.SetShaderParameter("gated", true);
+                }
             }
-            root.AddChild(chunk.Draw(material, Band(CoverOf(chapter, tex)!.Value).Y, string.Create(CultureInfo.InvariantCulture, $"{System.IO.Path.GetFileNameWithoutExtension(tex)}_{ci}_{cj}")));
+            root.AddChild(chunk.Draw(material, Band(entry.CoverFor(tex)!.Grows).Y, string.Create(CultureInfo.InvariantCulture, $"{System.IO.Path.GetFileNameWithoutExtension(tex)}_{ci}_{cj}")));
         }
         string areas = string.Join(", ", area.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => string.Create(CultureInfo.InvariantCulture,
             $"{k.Key} {k.Value / 1e6:0.00} km2 at {Median(metres.GetValueOrDefault(k.Key)):0.#} m/uv")));
@@ -197,14 +268,14 @@ public static class GroundCoverShells
 
     private static float Median(List<float>? values) => values is { Count: > 0 } ? values.OrderBy(v => v).ElementAt(values.Count / 2) : 0f;
 
-    // Keeps the side of a clip polygon where sign * (axis - bound) is at least zero, cutting the edges that cross it.
-    private static List<(Vector2 P, Vector3 W)> Side(List<(Vector2 P, Vector3 W)> poly, int axis, float bound, float sign)
+    // Keeps the side of a clip polygon where `side` is at least zero, cutting the edges that cross it.
+    private static List<(Vector2 P, Vector3 W)> Cut(List<(Vector2 P, Vector3 W)> poly, Func<Vector2, float> side)
     {
         var kept = new List<(Vector2 P, Vector3 W)>();
         for (int k = 0; k < poly.Count; k++)
         {
             var (p, q) = (poly[k], poly[(k + 1) % poly.Count]);
-            float dp = sign * (p.P[axis] - bound), dq = sign * (q.P[axis] - bound);
+            float dp = side(p.P), dq = side(q.P);
             if (dp >= 0f)
                 kept.Add(p);
             if ((dp >= 0f) != (dq >= 0f))
@@ -217,11 +288,17 @@ public static class GroundCoverShells
         return kept;
     }
 
+    private static bool Solid(List<(Vector2 P, Vector3 W)> poly) => poly.Count >= 3 && PolygonArea(poly.Select(v => v.P).ToList()) > 1e-4f;
+
+    private static Vector2 Flat(Vector3 v) => new(v.X, v.Z);
+
+    // Summed about the first corner. Summed about the origin, world coordinates in the thousands round a small part's
+    // area away, and an overlay's sliver read as no overlap.
     private static float PolygonArea(List<Vector2> poly)
     {
         float sum = 0f;
-        for (int k = 0; k < poly.Count; k++)
-            sum += poly[k].Cross(poly[(k + 1) % poly.Count]);
+        for (int k = 1; k + 1 < poly.Count; k++)
+            sum += (poly[k] - poly[0]).Cross(poly[k + 1] - poly[0]);
         return Math.Abs(sum) / 2f;
     }
 
@@ -235,7 +312,7 @@ public static class GroundCoverShells
     // The crop texture's row field as an RG8 texture, read from the live texture at load; nothing is kept on disk.
     private static ImageTexture? RowTexture(TextureArchive textures, string tex)
     {
-        if (textures.FindImage(tex) is not { } image)
+        if (textures.FindImage(tex, authored: true) is not { } image)
             return null;
         image.Decompress();
         image.Convert(Image.Format.Rgba8);
@@ -248,6 +325,19 @@ public static class GroundCoverShells
             bytes[(i * 2) + 1] = (byte)Mathf.RoundToInt(Math.Clamp((field[i].Y * 0.5f) + 0.5f, 0f, 1f) * 255f);
         }
         return TextureUpload.Create(RowGrid, RowGrid, Image.Format.Rg8, bytes);
+    }
+
+    // The pick's gate (GroundCover.Surface.GateMap) as an R8 texture of the authored image's 2 x 2 blocks, read unfiltered.
+    // Grey rock and pale paths stay bare whatever texture pack draws the ground. Null for a pick with no gate.
+    private static ImageTexture? GateTexture(TextureArchive textures, string tex, CoverPick pick)
+    {
+        if ((pick.MinSaturation <= 0f && pick.MaxValue >= 1f) || textures.FindImage(tex, authored: true) is not { } image)
+            return null;
+        image.Convert(Image.Format.Rgba8);
+        var grows = GroundCover.Surface.GateMap(image.GetData(), image.GetWidth(), image.GetHeight(), pick.MinSaturation, pick.MaxValue);
+        int w = Math.Max(1, image.GetWidth() / GroundCover.BlurTexels), h = Math.Max(1, image.GetHeight() / GroundCover.BlurTexels);
+        image.Dispose();
+        return TextureUpload.Create(w, h, Image.Format.R8, grows.Select(g => g ? (byte)255 : (byte)0).ToArray());
     }
 
     private static ShaderMaterial Material(Cover cover, bool lit, Texture2D? ground, float metresPerUv, Texture2D? rows)
@@ -325,6 +415,8 @@ public static class GroundCoverShells
             uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
             {{(crop ? "uniform sampler2D row_tex : filter_linear, repeat_enable;" : "")}}
             uniform float metres_per_uv = 256.0;
+            uniform sampler2D gate_tex : filter_nearest, repeat_enable;
+            uniform bool gated = false;
 
             #include "res://shaders/csky_atmosphere.gdshaderinc"
             #include "res://shaders/csky_srgb.gdshaderinc"
@@ -387,10 +479,12 @@ public static class GroundCoverShells
             {{pattern}}
                 float detail = clamp((CELL / max(px, 1e-5) - DETAIL_LO) / DETAIL_SPAN, 0.0, 1.0);
                 bool keep = csky_clutter_dither_keep(fc.yx, detail) ? hit : csky_clutter_dither_keep(fc, cover);
-                if (!keep || !csky_clutter_dither_keep(FRAGCOORD.xy, 1.0 - smoothstep(NEAR_M, FAR_M, d))) {
+                vec3 ground = texture(albedo_tex, UV, 1.5).rgb;
+                // The pick's gate, the cards' own map of the authored texels: grey rock and pale paths grow none.
+                bool grows = !gated || texture(gate_tex, UV).r > 0.5;
+                if (!keep || !grows || !csky_clutter_dither_keep(FRAGCOORD.xy, 1.0 - smoothstep(NEAR_M, FAR_M, d))) {
                     discard;
                 }
-                vec3 ground = texture(albedo_tex, UV, 1.5).rgb;
                 ALBEDO = csky_srgb_to_linear(COLOR.rgb) * ground * shade;
                 float fog_amt = csky_fog_amount(v_world, CAMERA_POSITION_WORLD);
             {{(lit ? """

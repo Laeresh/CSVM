@@ -629,16 +629,16 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("ground-cover-shells",
-        "D35's procedural ground cover in a C1 Enhanced flight at rich: without --ground-cover-shells nothing is built; with "
-        + "it the shells stand over the picked crop and meadow textures alone, never on a cleared mask texel (the landing "
+        "the Ground Cover word's shells in a C1 Enhanced flight at rich: at off or cards no shell is built; at shells "
+        + "they stand over the C1 entry's cover textures alone, never on a cleared mask texel (the landing "
         + "strips), with no collider, no shadow and no instance uniform, one MultiMesh of Layers instances a chunk ranged "
-        + "inside the band; a live move to original or a switch to Original drops them and back builds the same; a session "
-        + "at original builds none")]
+        + "inside the band; a live move to original or a switch to Original drops them and back builds the same; a live "
+        + "move to cards drops them for the cards and back to shells builds the same; a session at original builds none")]
     internal static void GroundCoverShellsFollowRich(TestContext ctx)
     {
         RequireData(ctx);
         bool wasEnhanced = GraphicsMode.Enhanced;
-        string launched = VegetationQualitySetting.Word;
+        string launched = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
         static List<MultiMeshInstance3D> Chunks(Rig rig) =>
             rig.Session.GroundCover?.GetChildren().OfType<MultiMeshInstance3D>().Where(m => m.IsInsideTree() && !m.IsQueuedForDeletion()).ToList() ?? new();
         // A chunk is named <texture>_<i>_<j>.
@@ -648,26 +648,32 @@ internal static class GraphicsSwitchSuites
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
-            var plain = Open(ctx, true, 1, "C1");
-            try
+            foreach (string word in new[] { GroundCoverSetting.Off, GroundCoverSetting.Cards })
             {
-                ctx.Check(plain.Built && plain.Session.GroundCover == null, $"a rich C1 flight without --ground-cover-shells builds none");
-            }
-            finally
-            {
-                plain.Close();
+                GroundCoverSetting.Resolve(word, null, null);
+                var plain = Open(ctx, true, 1, "C1");
+                try
+                {
+                    ctx.Check(plain.Built && plain.Session.GroundCover == null, $"a rich C1 flight at {word} builds no shells");
+                }
+                finally
+                {
+                    plain.Close();
+                }
             }
 
-            var live = Open(ctx, true, 1, "C1", "--ground-cover-shells");
+            GroundCoverSetting.Resolve(GroundCoverSetting.Shells, null, null);
+            var live = Open(ctx, true, 1, "C1");
             try
             {
                 var chunks = Chunks(live);
                 string built = Census(chunks);
-                ctx.Check(live.Built && chunks.Count > 0, $"--ground-cover-shells builds the shells ({built})");
-                ctx.Check(chunks.All(m => Mech3.GroundCoverShells.CoverOf("C1", ChunkTexture(m) + ".tif") != null),
-                    $"every chunk draws a picked crop or meadow texture ({string.Join(", ", chunks.Select(ChunkTexture).Distinct())})");
+                var entry = live.Session.Clutter!.Vegetation!;
+                ctx.Check(live.Built && chunks.Count > 0 && live.Session.GroundCoverCards == null, $"shells builds the shells and no cards ({built})");
+                ctx.Check(chunks.All(m => entry.CoverFor(ChunkTexture(m)) != null),
+                    $"every chunk draws a texture the entry's cover picks ({string.Join(", ", chunks.Select(ChunkTexture).Distinct())})");
                 var (uniforms, _) = InstanceUniformNodes(live.Session.GroundCover!);
-                static float Far(MultiMeshInstance3D m) => Mech3.GroundCoverShells.Band(Mech3.GroundCoverShells.CoverOf("C1", ChunkTexture(m) + ".tif")!.Value).Y;
+                float Far(MultiMeshInstance3D m) => Mech3.GroundCoverShells.Band(entry.CoverFor(ChunkTexture(m))!.Grows).Y;
                 ctx.Check(uniforms == 0 && !HasCollider(live.Session.GroundCover!)
                     && chunks.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && m.Multimesh.InstanceCount == Mech3.GroundCoverShells.Layers
                         && m.VisibilityRangeEnd > Far(m) && m.VisibilityRangeEnd < Far(m) + Mech3.GroundCoverShells.ChunkM),
@@ -685,7 +691,7 @@ internal static class GraphicsSwitchSuites
 
                 // The clearance is not empty of picked ground: the cut drops it.
                 var gamez = live.Session.Clutter.Gamez;
-                var picked = Mech3.VegetationGround.PaintedSurface(gamez, t => Mech3.GroundCoverShells.CoverOf("C1", t) != null);
+                var picked = Mech3.VegetationGround.PaintedSurface(gamez, t => entry.CoverFor(t) != null);
                 double bare = picked.Sum(t => Mech3.GroundCoverShells.Clip(new Vector2(t.A.At.X, t.A.At.Z), new Vector2(t.B.At.X, t.B.At.Z), new Vector2(t.C.At.X, t.C.At.Z),
                     new Vector2(mask.MinX, mask.MinZ), texel, (i, j) => i >= 0 && j >= 0 && i < mask.Side && j < mask.Side && texels[(j * mask.Side) + i] == 0).Count);
                 ctx.Check(bare > 0, $"the strip clearance holds {bare:0} pieces of picked ground the shells leave bare");
@@ -695,10 +701,25 @@ internal static class GraphicsSwitchSuites
                 var sample = centres.Where((_, k) => k % step == 0).Take(60).ToList();
                 foreach (var p in sample)
                 {
-                    bool on = Mech3.VegetationGround.LayersAt(gamez, p).Any(l => Math.Abs(l.Y - p.Y) < 0.5f && Mech3.GroundCoverShells.CoverOf("C1", l.Texture) != null);
+                    bool on = Mech3.VegetationGround.LayersAt(gamez, p).Any(l => Math.Abs(l.Y - p.Y) < 0.5f && entry.CoverFor(l.Texture) != null);
                     off += on ? 0 : 1;
                 }
                 ctx.Check(off == 0, $"each of {sample.Count} sampled pieces lies on a picked texture at its height ({off} off)");
+
+                // The railway laid over the picked ground takes no shell: no piece corner stands on a rail triangle,
+                // where the uncut pieces stand.
+                // A rail's side faces have no ground shadow, and a point in line with one would read as on it.
+                var rails = Mech3.VegetationGround.Painted(gamez, tx => tx.Equals(RailTexture, StringComparison.OrdinalIgnoreCase)).Chunk(3)
+                    .Where(r => MathF.Abs(new Vector2(r[1].X - r[0].X, r[1].Z - r[0].Z).Cross(new Vector2(r[2].X - r[0].X, r[2].Z - r[0].Z))) > 1e-3f).SelectMany(r => r).ToArray();
+                var railLo = rails.Aggregate(rails[0], (m, v) => m.Min(v)) - (Vector3.One * 0.5f);
+                var railHi = rails.Aggregate(rails[0], (m, v) => m.Max(v)) + (Vector3.One * 0.5f);
+                bool OnRail(Vector3 p) => p.X >= railLo.X && p.X <= railHi.X && p.Z >= railLo.Z && p.Z <= railHi.Z && OnTriangles(rails, p);
+                int cornersOnRail = chunks.Sum(m => ((ArrayMesh)m.Multimesh.Mesh).SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array()
+                    .Count(v => OnRail(m.Position + v)));
+                int uncutOnRail = picked.Sum(t => Mech3.GroundCoverShells.Clip(new Vector2(t.A.At.X, t.A.At.Z), new Vector2(t.B.At.X, t.B.At.Z), new Vector2(t.C.At.X, t.C.At.Z),
+                    new Vector2(mask.MinX, mask.MinZ), texel, (_, _) => true).Count(p => OnRail(p.Weights.Aggregate(Vector3.Zero, (s, w) => s + (t.A.At * w.X) + (t.B.At * w.Y) + (t.C.At * w.Z)) / p.Weights.Length)));
+                ctx.Check(rails.Length > 0 && uncutOnRail > 0 && cornersOnRail == 0,
+                    $"no shell stands on C1's railway ({RailTexture}, {rails.Length / 3} triangles): {cornersOnRail} piece corners on it, where {uncutOnRail} uncut pieces stand");
 
                 ApplyVegetation(live, VegetationQualitySetting.Original);
                 ctx.Check(live.Session.GroundCover == null && chunks.All(m => !m.IsInsideTree() || m.IsQueuedForDeletion()), $"a live move to original drops them");
@@ -708,6 +729,10 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(live.Session.GroundCover == null, $"a live switch to Original drops them");
                 Switch(live, enhanced: true);
                 ctx.Check(Census(Chunks(live)) == built, $"and a switch back to Enhanced builds them again");
+                ApplyGroundCover(live, GroundCoverSetting.Cards);
+                ctx.Check(live.Session.GroundCover == null && live.Session.GroundCoverCards != null, $"a live move to cards drops the shells for the cards");
+                ApplyGroundCover(live, GroundCoverSetting.Shells);
+                ctx.Check(live.Session.GroundCoverCards == null && Census(Chunks(live)) == built, $"and back to shells builds the same shells");
             }
             finally
             {
@@ -715,7 +740,7 @@ internal static class GraphicsSwitchSuites
             }
 
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
-            var original = Open(ctx, true, 1, "C1", "--ground-cover-shells");
+            var original = Open(ctx, true, 1, "C1");
             try
             {
                 ctx.Check(original.Built && original.Session.GroundCover == null, $"a session built at original builds none");
@@ -727,6 +752,7 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            GroundCoverSetting.Resolve(launchedCover, null, null);
             VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
@@ -985,38 +1011,42 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("ground-cover-cards",
-        "the new-art ground cover prototype on C1 at rich: without --ground-cover-cards nothing builds; with it, the cells "
-        + "around a crop field, a meadow and the strip clearance's edge hold crop and grass cards on picked ground alone "
-        + "(read back through the world's own layers), none on a bare mask texel, under their own root with no collider, "
-        + "no shadow cast or received, no instance uniform; a live move to original and a switch to Original drop it, and "
-        + "back builds it; with --ground-cover-shells as well the cards alone draw")]
+        "the Ground Cover word's cards on C1 at rich: at off nothing builds; at cards, the launch default, the cells "
+        + "around a crop field, a meadow and the strip clearance's edge hold crop and grass cards on the entry's cover "
+        + "textures alone (read back through the world's own layers), none on a bare mask texel, under their own root with "
+        + "no collider, no shadow cast or received, no instance uniform; a live move to original and a switch to Original "
+        + "drop it, and back builds it; a live move to off drops it and back to cards builds it again")]
     internal static void GroundCoverCards(TestContext ctx)
     {
         RequireData(ctx, "C1");
         bool wasEnhanced = GraphicsMode.Enhanced;
-        string launched = VegetationQualitySetting.Word;
+        string launched = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
         var gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"));
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            GroundCoverSetting.Resolve(GroundCoverSetting.Off, null, null);
             var off = Open(ctx, true, 1, "C1");
             try
             {
                 bool any = false;
                 Walk(off.Session, n => any |= n.Name == "ground_cover");
-                ctx.Check(off.Built && off.Session.GroundCoverCards == null && !any, $"without the flag a rich C1 flight builds no ground cover");
+                ctx.Check(off.Built && off.Session.GroundCoverCards == null && off.Session.GroundCover == null && !any, $"at off a rich C1 flight builds no ground cover");
             }
             finally
             {
                 off.Close();
             }
 
-            var live = Open(ctx, true, 1, "C1", "--ground-cover-cards");
+            ctx.Check(GroundCoverSetting.Default == GroundCoverSetting.Cards, $"cards is the default word");
+            GroundCoverSetting.Resolve(null, null, null);
+            var live = Open(ctx, true, 1, "C1");
             try
             {
-                if (!live.Built || live.Session.GroundCoverCards is not { } field || live.Session.Clutter?.Mask is not { } mask)
+                if (!live.Built || live.Session.GroundCoverCards is not { } field || live.Session.Clutter?.Mask is not { } mask
+                    || live.Session.Clutter.Vegetation is not { } entry)
                 {
-                    ctx.Check(false, $"the flag builds the cover on a rich C1 flight over the shipped mask");
+                    ctx.Check(false, $"the default word builds the cover on a rich C1 flight over the shipped mask");
                     return;
                 }
                 foreach (var (name, x, z) in new[] { ("crop field", -640f, -4482f), ("meadow", -4890f, -6018f), ("strip edge", -6090f, -4494f) })
@@ -1028,7 +1058,7 @@ internal static class GraphicsSwitchSuites
                     int onBare = cards.Count(c => mask.TexelAt(c.At.X, c.At.Z) == 0);
                     var sample = cards.Where((_, i) => i % Math.Max(1, cards.Count / 60) == 0).ToList();
                     var offPick = sample.Where(c => Mech3.VegetationGround.Decorating(Mech3.VegetationGround.LayersAt(gamez, c.At + (Vector3.Up * 0.05f)))
-                        is not { } layer || Mech3.GroundCover.PickOf("C1", layer.Texture) == null).ToList();
+                        is not { } layer || entry.CoverFor(layer.Texture) == null).ToList();
                     ctx.Note($"{name}: {field.Cells} cells, {field.Draws.Count()} draws, crop {cards.Count(c => c.Cover == 0)} and grass {cards.Count(c => c.Cover == 1)} cards, {field.Bare - bareBefore} lattice points bare under the mask");
                     ctx.Check(cards.Count > 0 && onBare == 0 && offPick.Count == 0,
                         $"at the {name} every card stands on picked ground ({offPick.Count} of {sample.Count} sampled off it{(offPick.Count > 0 ? $", first at {offPick[0].At}" : "")}) and none on a bare mask texel ({onBare})");
@@ -1049,25 +1079,19 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(live.Session.GroundCoverCards == null, $"a live switch to Original drops it");
                 Switch(live, enhanced: true);
                 ctx.Check(live.Session.GroundCoverCards != null, $"and a switch back to Enhanced builds it again");
+                ApplyGroundCover(live, GroundCoverSetting.Off);
+                ctx.Check(live.Session.GroundCoverCards == null && live.Session.GroundCover == null, $"a live move to off drops it");
+                ApplyGroundCover(live, GroundCoverSetting.Cards);
+                ctx.Check(live.Session.GroundCoverCards != null && live.Session.GroundCover == null, $"and back to cards builds it again");
             }
             finally
             {
                 live.Close();
             }
-
-            var both = Open(ctx, true, 1, "C1", "--ground-cover-cards", "--ground-cover-shells");
-            try
-            {
-                ctx.Check(both.Built && both.Session.GroundCoverCards != null && both.Session.GroundCover == null,
-                    $"with --ground-cover-shells as well the cards alone draw");
-            }
-            finally
-            {
-                both.Close();
-            }
         }
         finally
         {
+            GroundCoverSetting.Resolve(launchedCover, null, null);
             VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
@@ -2610,6 +2634,14 @@ internal static class GraphicsSwitchSuites
             });
         }
         return count;
+    }
+
+    // A Ground Cover apply as the Options accept makes it, then the steps a reading waits for.
+    private static void ApplyGroundCover(Rig rig, string word)
+    {
+        GroundCoverSetting.Resolve(word, null, null);
+        EnhancedLook.FollowWordSettings(rig.Session);
+        Step(rig);
     }
 
     // A 3D Vegetation apply as the Options accept makes it, then the steps a reading waits for.

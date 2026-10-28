@@ -9,23 +9,80 @@ using Cover = CSVM.Mech3.GroundCover.Cover;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The ground cover cards' placement (<see cref="GroundCover"/>). C1's crop and meadow textures alone are picked, a bare
+/// The ground cover cards' placement (<see cref="GroundCover"/>). A pick's saturation gate keeps grey texels bare, a bare
 /// mask texel grows nothing and a hedge line grows grass. A card stands on the triangle's texture lattice inside its
 /// cell, coloured by the ground under it. A crop row runs along the rows its patch paints. The art is the same on every run.
 /// </summary>
 [Trait("Tier", "Quick")]
 public sealed class GroundCoverTests
 {
+    /// <summary>A pick's saturation gate: grey texels grow nothing, coloured ones grow, and a pick with no gate grows on
+    /// grey ground too.</summary>
     [Fact]
-    public void C1PicksItsCropFieldsAndMeadowsAlone()
+    public void ASaturationGateKeepsTheCoverOffGreyTexels()
     {
-        Assert.Equal(Cover.Crop, GroundCover.PickOf("C1", "crop04.tif"));
-        Assert.Equal(Cover.Crop, GroundCover.PickOf("c1", "CROP05"));
-        foreach (var meadow in new[] { "terpat03.tif", "terpat03b.tif", "grass1.tif" })
-            Assert.Equal(Cover.Grass, GroundCover.PickOf("C1", meadow));
-        Assert.Null(GroundCover.PickOf("C1", "terpat02.tif"));
-        Assert.Null(GroundCover.PickOf("C1", "tarmac01.tif"));
-        Assert.Null(GroundCover.PickOf("C4", "crop04.tif"));
+        // The left half of the texture is grey rock, the right half dry grass; U runs along world X, 200 m a repeat.
+        var rgba = Flat(8, 128);
+        for (int i = 0; i < 64; i++)
+        {
+            if (i % 8 >= 4)
+                (rgba[i * 4], rgba[(i * 4) + 1], rgba[(i * 4) + 2]) = (108, 98, 76);
+        }
+        Assert.Equal(0f, GroundCover.Surface.Saturation(new Vector3(128f, 128f, 128f)));
+        Assert.Equal(32f / 108f, GroundCover.Surface.Saturation(new Vector3(108f, 98f, 76f)), 4);
+        var t = new CoverTriangle("x.tif", Vector3.Zero, new Vector3(400f, 0f, 0f), new Vector3(0f, 0f, 400f),
+            Vector2.Zero, new Vector2(2f, 0f), new Vector2(0f, 2f), Colors.White, Colors.White, Colors.White);
+        // The cell at X 0 to 64 m lies on the grey half, the one at 128 to 192 m on the grass half.
+        var gated = GroundCover.Ground.Prepare(t, Cover.Grass, new GroundCover.Surface(rgba, 8, 8, 0.2f))!;
+        Assert.Empty(Place(gated, 0f, 0f, out int bare)[(int)Cover.Grass]);
+        Assert.Equal(0, bare);
+        Assert.NotEmpty(Place(gated, 128f, 0f, out _)[(int)Cover.Grass]);
+        var open = GroundCover.Ground.Prepare(t, Cover.Grass, new GroundCover.Surface(rgba, 8, 8))!;
+        Assert.NotEmpty(Place(open, 0f, 0f, out _)[(int)Cover.Grass]);
+    }
+
+    /// <summary>A pick's value ceiling: a pale path's texels grow nothing however saturated they are, and the darker
+    /// grass grows. A pick with no ceiling grows on the path too.</summary>
+    [Fact]
+    public void AValueCeilingKeepsTheCoverOffPalePaths()
+    {
+        // The left half is a pale, saturated path (value 0.9, saturation 0.3), the right half dry grass (value 0.42).
+        var rgba = Flat(8, 128);
+        for (int i = 0; i < 64; i++)
+        {
+            (rgba[i * 4], rgba[(i * 4) + 1], rgba[(i * 4) + 2]) = i % 8 >= 4 ? ((byte)108, (byte)98, (byte)76) : ((byte)230, (byte)200, (byte)160);
+        }
+        Assert.Equal(230f / 255f, GroundCover.Surface.Value(new Vector3(230f, 200f, 160f)), 4);
+        var t = new CoverTriangle("x.tif", Vector3.Zero, new Vector3(400f, 0f, 0f), new Vector3(0f, 0f, 400f),
+            Vector2.Zero, new Vector2(2f, 0f), new Vector2(0f, 2f), Colors.White, Colors.White, Colors.White);
+        var gated = GroundCover.Ground.Prepare(t, Cover.Grass, new GroundCover.Surface(rgba, 8, 8, 0.2f, 0.55f))!;
+        Assert.Empty(Place(gated, 0f, 0f, out _)[(int)Cover.Grass]);
+        Assert.NotEmpty(Place(gated, 128f, 0f, out _)[(int)Cover.Grass]);
+        var open = GroundCover.Ground.Prepare(t, Cover.Grass, new GroundCover.Surface(rgba, 8, 8, 0.2f))!;
+        Assert.NotEmpty(Place(open, 0f, 0f, out _)[(int)Cover.Grass]);
+    }
+
+    /// <summary>A texture pack draws the ground at four times the size in another colour. The gate still reads the
+    /// authored texels; the colour reads the drawn image, averaged over the same ground.</summary>
+    [Fact]
+    public void AnHdReplacementColoursTheCoverButNeverMovesTheGate()
+    {
+        var rgba = Flat(8, 128);
+        for (int i = 0; i < 64; i++)
+        {
+            if (i % 8 >= 4)
+                (rgba[i * 4], rgba[(i * 4) + 1], rgba[(i * 4) + 2]) = (108, 98, 76);
+        }
+        var hd = Flat(32, 0);
+        for (int i = 0; i < 32 * 32; i++)
+            (hd[i * 4], hd[(i * 4) + 1], hd[(i * 4) + 2]) = (i % 32 >= 16 ? (byte)200 : (byte)20, 60, 60);
+        var surface = new GroundCover.Surface(rgba, 8, 8, 0.2f, 1f, (hd, 32, 32));
+        Assert.False(surface.Grows(0.1, 0.5));
+        Assert.True(surface.Grows(0.9, 0.5));
+        Assert.Equal(new Vector3(Lin(200), Lin(60), Lin(60)).X, surface.At(0.8, 0.5).X, 4);
+        Assert.Equal(new Vector3(Lin(20), Lin(60), Lin(60)).X, surface.At(0.2, 0.5).X, 4);
+
+        static float Lin(byte c) => MathF.Pow(((c / 255f) + 0.055f) / 1.055f, 2.4f);
     }
 
     [Fact]

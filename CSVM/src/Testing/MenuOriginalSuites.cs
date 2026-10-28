@@ -141,7 +141,7 @@ internal static class MenuOriginalSuites
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
         + "and picking a frame cap, over the Render Scale and Anti-aliasing rows, the Shadow Quality row "
-        + "dead under Original and live once the Enhanced Graphics checkbox flips, View Distance, Vegetation and then VR Mode "
+        + "dead under Original and live once the Enhanced Graphics checkbox flips, View Distance, Vegetation, 3D Vegetation, Ground Cover and then VR Mode "
         + "scrolling into the window's foot, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
@@ -995,13 +995,13 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
-        // The shadow row is the dropdown window's foot. Down scrolls View Distance onto it, then
-        // both Vegetation rows and VR Mode, a stop where it is live. The install draws the two checkboxes
-        // under the window, Enhanced Graphics at the column's foot, and Down from it wraps out of the column.
+        // The shadow row is the dropdown window's foot. Down scrolls View Distance onto it, then both
+        // Vegetation rows, Ground Cover and VR Mode, a stop where it is live. The install draws the two
+        // checkboxes under the window, Enhanced Graphics at the column's foot, and Down from it wraps out.
         var expected = new List<string>
         {
             OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey, OriginalVideoPage.VegetationQualityKey,
-            OriginalVideoPage.VegetationModelsKey,
+            OriginalVideoPage.VegetationModelsKey, OriginalVideoPage.GroundCoverKey,
         };
         if (System.OperatingSystem.IsWindows())
         {
@@ -1016,8 +1016,8 @@ internal static class MenuOriginalSuites
             walk.Add(shell.FocusedKey);
         }
 
-        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 4,
-            $"Down walks the shadow row, scrolls View Distance, both Vegetation rows and then VR Mode into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
+        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 5,
+            $"Down walks the shadow row, scrolls View Distance, both Vegetation rows, Ground Cover and then VR Mode into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit

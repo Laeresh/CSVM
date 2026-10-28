@@ -312,10 +312,10 @@ public partial class GameSession : Node3D
     // The canopy clumps over the forest, standing while Rich is on and the chapter or --canopy-clumps draws them.
     private Mech3.CanopyClumps.Field? _canopyClumps;
 
-    // D35's procedural ground cover, standing while Rich is on under --ground-cover-shells.
+    // The ground cover shells, standing while Rich is on and the Ground Cover word is shells.
     private Node3D? _groundCover;
 
-    // D34's ground cover cards, standing while Rich is on under --ground-cover-cards.
+    // The ground cover cards, standing while Rich is on and the Ground Cover word is cards.
     private Mech3.GroundCover.Field? _groundCoverCards;
     // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
     // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
@@ -2735,13 +2735,12 @@ public partial class GameSession : Node3D
         _edgeExtender?.SetClumps(_canopyClumps);
     }
 
-    // The ground cover follows Rich as the clumps do, and a lab edit builds it again under its mask. D34's cards
-    // draw under --ground-cover-cards, D35's shells under --ground-cover-shells. With both flags the cards alone draw,
-    // with a warning, since two covers over one ground would only stack their costs.
+    // The ground cover follows Rich and the Ground Cover word as the clumps do, and a lab edit builds it again under
+    // its mask. The word draws the cards or the shells over the entry's cover picks, never both.
     private void FollowGroundCover(bool rebake)
     {
-        bool rich = VegetationQualitySetting.RichOn;
-        bool cards = _spec.GroundCoverCards && rich, shells = _spec.GroundCoverShells && !_spec.GroundCoverCards && rich;
+        string word = VegetationQualitySetting.RichOn ? GroundCoverSetting.Word : GroundCoverSetting.Off;
+        bool cards = word == GroundCoverSetting.Cards, shells = word == GroundCoverSetting.Shells;
         if (_groundCoverCards != null && (!cards || rebake))
         {
             Drop(_groundCoverCards.Root);
@@ -2752,19 +2751,17 @@ public partial class GameSession : Node3D
             Drop(_groundCover);
             _groundCover = null;
         }
-        if (_plane == null || _sessionTextures == null || _clutter == null)
+        if (_plane == null || _sessionTextures == null || _clutter?.Vegetation is not { } entry)
             return;
         if (cards && _groundCoverCards == null)
         {
-            if (_spec.GroundCoverShells)
-                Log.Warn("world", $"ground cover: --ground-cover-cards and --ground-cover-shells both given; the cards draw and the shells do not");
-            _groundCoverCards = Mech3.GroundCover.Build(_clutter.Gamez, _sessionTextures, _clutter.Mask, _spec.Chapter ?? "");
+            _groundCoverCards = Mech3.GroundCover.Build(_clutter.Gamez, _sessionTextures, _clutter.Mask, entry, _spec.Chapter ?? "");
             if (_groundCoverCards != null)
                 _plane.AddChild(_groundCoverCards.Root);
         }
-        if (shells && _groundCover == null && _clutter.Mask is { } mask)
+        if (shells && _groundCover == null)
         {
-            _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, mask, _sessionTextures, _spec.Chapter ?? "");
+            _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, _clutter.Mask, _sessionTextures, entry);
             if (_groundCover != null)
                 _plane.AddChild(_groundCover);
         }

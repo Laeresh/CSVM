@@ -385,6 +385,12 @@ included until a measurement there sets its own fallback. A live change runs `En
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
 shows it as the 3D Vegetation dropdown under Vegetation.
 
+## src/Utils/GroundCoverSetting.cs
+How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (`Mech3/GroundCoverShells.cs`) or `cards`
+(`Mech3/GroundCover.cs`), the default, held in `Default` alone. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved
+`groundCover` word, the `graphics.groundCover` key, then `cards` on every machine and under `--det`. A live change reaches
+`Launch/GameSession.cs`'s `FollowGroundCover` through the session's follow, which builds the word's cover and drops the other with no
+other rebuild. The VIDEO page shows it as the Ground Cover dropdown under 3D Vegetation.
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports

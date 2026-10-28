@@ -220,6 +220,58 @@ public sealed class VegetationSidecarTests
         Assert.Empty(sidecar.For("C2").Picks);
     }
 
+    /// <summary>The ground cover: C1's fields grow crops and its meadows grass, every texel. C4's grass-to-rock
+    /// transitions grow grass on their saturated texels alone. Its fir ground grows grass as cards only, its pale paths
+    /// bare under a value ceiling. C1B, C2 and C3 grow none.</summary>
+    [Fact]
+    public void TheShippedFileGivesC1sFieldsAndC4sTransitionsTheirCover()
+    {
+        var sidecar = VegetationSidecar.Parse(File.ReadAllText(ShippedPath));
+        var c1 = sidecar.For("C1");
+        Assert.Equal(
+            new[] { ("crop04", GroundCover.Cover.Crop), ("crop05", GroundCover.Cover.Crop), ("terpat03", GroundCover.Cover.Grass),
+                ("terpat03b", GroundCover.Cover.Grass), ("grass1", GroundCover.Cover.Grass) },
+            c1.Cover.Select(c => (Path.GetFileNameWithoutExtension(c.Texture), c.Grows)));
+        Assert.All(c1.Cover, c => Assert.Equal(0f, c.MinSaturation));
+        Assert.Equal(GroundCover.Cover.Crop, c1.CoverFor("CROP05")?.Grows);
+        Assert.All(new[] { "terpat02.tif", "tarmac01.tif", "terpat03_trans1.tif" }, t => Assert.Null(c1.CoverFor(t)));
+        var c4 = sidecar.For("C4");
+        Assert.Equal(new[] { "cliff01-trans1.tif", "cliff01-trans3.tif", "terpat01.tif" }, c4.Cover.Select(c => c.Texture));
+        Assert.All(c4.Cover, c => Assert.Equal((GroundCover.Cover.Grass, 0.2f), (c.Grows, c.MinSaturation)));
+        Assert.All(c4.Cover.Take(2), c => Assert.Equal((1f, false), (c.MaxValue, c.CardsOnly)));
+        Assert.Equal((0.55f, true), (c4.CoverFor("terpat01")!.MaxValue, c4.CoverFor("terpat01")!.CardsOnly));
+        Assert.All(c1.Cover, c => Assert.Equal((1f, false), (c.MaxValue, c.CardsOnly)));
+        Assert.All(new[] { "C1B", "C2", "C3" }, ch => Assert.Empty(sidecar.For(ch).Cover));
+    }
+
+    /// <summary>A cover pick reads as a bare word or as an object. The object holds a saturation floor and a value
+    /// ceiling, each held to 0..1, and a cards-only choice. A word that is neither grass nor crop, an unknown field and an unknown covers
+    /// word warn. Save writes each back in the form it read.</summary>
+    [Fact]
+    public void ACoverPickReadsBareOrGatedAndRoundTrips()
+    {
+        const string text = "{\n  \"C4\": {\n    \"kinds\": {},\n    \"cover\": {\n      \"a.tif\": \"GRASS\",\n"
+            + "      \"b.tif\": { \"grows\": \"crop\", \"min_saturation\": 0.25 },\n      \"c.tif\": \"reeds\",\n"
+            + "      \"d.tif\": { \"grows\": \"grass\", \"min_saturation\": 3, \"height\": 2 },\n"
+            + "      \"e.tif\": { \"grows\": \"grass\", \"max_value\": 0.55, \"covers\": \"cards\" },\n"
+            + "      \"f.tif\": { \"grows\": \"grass\", \"max_value\": -1, \"covers\": \"shells\" }\n    }\n  }\n}\n";
+        var sidecar = VegetationSidecar.Parse(text);
+        var c4 = sidecar.For("C4");
+        Assert.Equal(5, sidecar.Warnings.Count);
+        Assert.Equal(new CoverPick("a.tif", GroundCover.Cover.Grass), c4.CoverFor("a"));
+        Assert.Equal(new CoverPick("b.tif", GroundCover.Cover.Crop, 0.25f), c4.CoverFor("b.tif"));
+        Assert.Null(c4.CoverFor("c.tif"));
+        Assert.Equal(1f, c4.CoverFor("d.tif")!.MinSaturation);
+        Assert.Equal(new CoverPick("e.tif", GroundCover.Cover.Grass, 0f, 0.55f, true), c4.CoverFor("e"));
+        Assert.Equal(new CoverPick("f.tif", GroundCover.Cover.Grass, 0f, 0f, false), c4.CoverFor("f"));
+        string saved = VegetationSidecar.WithEntry(text, "C4", c4.WithSeed(0));
+        Assert.Contains("\"a.tif\": \"grass\"", saved);
+        Assert.Contains("\"covers\": \"cards\"", saved);
+        var back = VegetationSidecar.Parse(saved);
+        Assert.Empty(back.Warnings);
+        Assert.Equal(c4.Cover, back.For("C4").Cover);
+    }
+
     /// <summary>C1 picks its grassland to a sparse scrub of bushes and the odd fir. Its fields take a hedge set,
     /// which the mask holds to the field edges. Neither is forest, so no clump rises over them.</summary>
     [Fact]
