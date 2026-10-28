@@ -138,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 34. ☑ Ground cover prototype: new-art grass and crop cards
 35. ☑ Ground cover prototype: procedural shells; pick at the controls
 36. ☑ Deck and Linux: measure Rich and set their default
-37. ☐ Wave D budget and goldens
+37. ☑ Wave D budget and goldens
 
 ## Dependency and parallelism notes
 
