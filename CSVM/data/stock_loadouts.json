@@ -88,7 +88,8 @@
             "firepoint1",
             "firepoint2"
           ],
-          "turret": true
+          "turret": true,
+          "twin": false
         }
       ],
       "hardpoints": {
@@ -129,7 +130,8 @@
             "firepoint3",
             "firepoint4"
           ],
-          "turret": true
+          "turret": true,
+          "twin": false
         },
         {
           "slot": 4,
@@ -140,7 +142,8 @@
             "firepoint1",
             "firepoint2"
           ],
-          "turret": true
+          "turret": true,
+          "twin": false
         }
       ],
       "hardpoints": {

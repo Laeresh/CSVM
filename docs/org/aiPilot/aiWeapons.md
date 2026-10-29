@@ -19,6 +19,8 @@ their own authored rate model, `WEAPON.FIRE_RATE` redrawn `uniform(min, max)` af
 ([`../../formats/turrets.md`](../../formats/turrets.md)). The projectile rate is independent of the
 cannon sound: each shot refreshes one reusable `LOOPED` sound handle for 0.5 seconds, so a carried
 turret's 0.4-second cadence sounds continuous while still emitting one projectile per interval.
+The one crossing is the player's own gunner, whose weapon and rate window `FUN_004aab00` copies from
+the player's weapon slot ([`../../formats/loadouts.md`](../../formats/loadouts.md), "Turrets").
 
 ## Contents
 
@@ -114,10 +116,20 @@ player's, with the 1 to 900 m window on every slot and 20 s on every pylon. In a
 carrying a fit is the roster's `wingman_1` alone; an enemy on the same airframe carries none, and
 its `weapons` block stays its only armament. Instant Action hands its one wingman fit to every
 wingman of the flight, where the original rebuilds `wingman_1` only, and an unedited fit reaches
-the spawn as none, so those wingmen keep the stock table's fit on the rocketeer's default gates. Two of the table's quantities have no consumer here:
-an AI gun's cadence is its weapon's own fire rate for every AI, so the 0.5 s and 1.0 s refire are
-not carried, and the wingman flies its airframe's stock build, whose wing mounts are all twinned,
-so no gun takes the halved magazine. The wiring's `Network` gate has no counterpart either: a
+the spawn as none, so those wingmen keep the stock table's fit on the rocketeer's default gates.
+`BindWingman` carries the 0.5 s and 1.0 s gun refire (`Loadout.WingmanGunRefireS`), and a single
+mount takes the halved magazine through `GunSpec.Single`.
+
+**An AI gun fires at its slot's refire, halved.** The shot routine `FUN_004b6820` sets the next
+shot at now + `+0x14` and takes half an interval back off when the group's other barrel is live
+([`../weaponFire.md`](../weaponFire.md)). Every vehicle constructor flags all eight barrel slots
+(`0x004b0154`) and an AI never changes group from 0, whose barrels `FUN_00476250` binds to
+`firepoint7` and `firepoint8` (`0x0047696b`). An AI with both therefore fires twice per refire: a
+0.05 s tuple is a round every 0.025 s, and a stock wingman's 0.5 s a round every 0.25 s.
+`Loadout.BindAi` binds the gun group to those two firepoints and carries the tuple refire, and
+`FireControl` halves it for two muzzles. The shot routine runs once per tick, so the original
+fires a 0.025 s gun at about 30 rounds/s at 30 or 60 fps where CSVM's accumulator fires 40.
+The wiring's `Network` gate has no counterpart either: a
 co-op host binds its pick and hands it to the guest, and both machines fly it. (The flag's other
 reader, the failed roll's override, is a Dogfight bot seat's; see [What `AiGunner` runs](#what-aigunner-runs).)
 

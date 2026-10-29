@@ -251,6 +251,7 @@
     "graze-bounce-bot": 3.64,
     "ground-contact": 1.257,
     "ground-contact-core": 0.022,
+    "gun-fit-cadence": 0.84,
     "gun-hit-rate": 9.0,
     "gun-voice-reach": 1.83,
     "hangar-door-wake": 2.993,

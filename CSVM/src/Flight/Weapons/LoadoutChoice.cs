@@ -181,6 +181,7 @@ public sealed class LoadoutChoice
             Caliber = gun.Caliber,
             Ammo = ammo ?? gun.Ammo,
             Turret = gun.Turret,
+            Single = gun.Single,
             Rounds = gun.Rounds,
 
             // A picked ammo has to resolve through caliber + ammo, so an inherited explicit id

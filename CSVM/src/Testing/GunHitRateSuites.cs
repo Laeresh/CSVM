@@ -44,7 +44,7 @@ internal static class GunHitRateSuites
     private const float PipperHitFloor = 0.8f;
     private const float PipperRayGapDeg = 0.5f;
 
-    // A full pack folder to compare as well as <dataRoot>/HDModels, e.g. the Deck's Corvette pack.
+    // A full pack folder to compare the hulls under as well, e.g. the Deck's Corvette pack. Opt-in only.
     private const string PackEnv = "CSVM_GUN_HIT_HD_PACK";
 
     [Suite("gun-hit-rate",
@@ -53,7 +53,7 @@ internal static class GunHitRateSuites
         "at 300 m; every astern burst lands at least half the hit fraction the shipped scatter cone allows " +
         "with the leading option off or on, the original's lagging line trails the crossing target, and the " +
         "leading option lands near its expectation there; the snap and boresight controls are reported, and " +
-        "the hit hulls are compared against the drawn meshes with and without a model pack")]
+        "the hit hulls are compared against the drawn meshes")]
     internal static void GunHitRate(TestContext ctx)
     {
         ctx.RequireData(ctx.Data.Planes, $"planes gamez");
@@ -414,12 +414,12 @@ internal static class GunHitRateSuites
         rig.Damage is { } d ? d.WholeHealth + d.WholeArmor : 0f;
 
     // The hit hulls' box against the drawn meshes' box, in the rig frame. Measured for the original
-    // model and under every model pack the suite can find.
+    // model, and under a pack only when PackEnv names one.
+    // ⚠ Never read <dataRoot>/HDModels: that is the player's modding folder, and a test that follows
+    // it measures whatever was last copied there.
     private static void CompareHulls(TestContext ctx, GameZ gamez, TextureArchive textures, string plane)
     {
         var packs = new List<(string Label, string Folder)> { ("original", "csvm-no-such-pack") };
-        if (System.IO.Directory.Exists(System.IO.Path.Combine(ctx.DataRoot, "HDModels")))
-            packs.Add(("dataRoot HDModels", "HDModels"));
         if (System.Environment.GetEnvironmentVariable(PackEnv) is { Length: > 0 } extra && System.IO.Directory.Exists(extra))
             packs.Add((extra, extra));
         foreach (var (label, folder) in packs)

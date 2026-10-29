@@ -212,6 +212,7 @@ public static class CustomPlaneBuild
             Caliber = 30 + (10 * Math.Clamp(calibre, 0, CustomPlaneDef.MaxCalibre)),
             Ammo = "slug",
             Turret = stockSpec?.Turret ?? false,
+            Single = !choice.Twin,
         };
         spec.Markers.AddRange(Markers(stockSpec, slot, choice.Twin));
         return spec;

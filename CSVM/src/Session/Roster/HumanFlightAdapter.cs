@@ -439,9 +439,9 @@ internal sealed class HumanFlightAdapter
             Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}', unarmed");
         }
 
-        // The carried turret gunners: the vehicle def's thirdp turrets block resolved
-        // by TITLE against ai.zrd and by node against this built model. Independent of the
-        // stock loadout, the gunner's weapon comes from its ai.zrd row, not from a gun slot.
+        // The carried turret gunners: the vehicle def's thirdp turrets block resolved by TITLE
+        // against ai.zrd and by node against this built model. The fit's turret slots then arm
+        // them, their weapon and refire replacing the ai.zrd row's.
         if (!_world.Racing && _aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
             // ⚠ A human's carried gunner IS positional, unlike the pilot's own forward guns: the
@@ -449,6 +449,8 @@ internal sealed class HumanFlightAdapter
             controller.Turrets = TurretController.BuildCarried(
                 turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles,
                 new GunVoiceHome(controller, _world.Sounds, _world.SoundDefs, _world.HumanPositions));
+            if (controller.Loadout != null)
+                TurretController.ArmFromLoadout(controller.Turrets, controller.Loadout, stats.GunRefireSeconds);
             if (verbose && controller.Turrets.Length > 0)
             {
                 var descs = new List<string>();

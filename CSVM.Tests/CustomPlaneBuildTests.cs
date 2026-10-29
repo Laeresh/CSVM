@@ -123,6 +123,21 @@ public class CustomPlaneBuildTests : IDisposable
         Assert.Equal("Rear Turret", built.Guns.Single(g => g.Slot == 4).Mount);
     }
 
+    /// <summary>The record's twin bit clear is a single mount, which halves the slot's load and
+    /// keeps a turret's refire whole (docs/formats/loadouts.md "Turrets").</summary>
+    [Fact]
+    public void AClearTwinBitBuildsASingleMount()
+    {
+        var def = Def();
+        def.Guns[0] = new GunChoice(0, Twin: false);
+        def.Guns[1] = new GunChoice(0, Twin: true);
+
+        var built = Build(def, "pdevastator");
+
+        Assert.True(built.Guns.Single(g => g.Slot == 1).Single);
+        Assert.False(built.Guns.Single(g => g.Slot == 2).Single);
+    }
+
     /// <summary>A wing's count hangs that wing's own pylons, outermost first. The halves
     /// interleave across the centreline, so two per wing is 1 and 3 to port with 2 and 4 to
     /// starboard, listed here in the array's fill order.</summary>

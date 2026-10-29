@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
@@ -96,6 +97,8 @@ public sealed class TurretController
     private int _team;           // team id: the authored TEAM or the host's, until a record fans one
     private float _windowLeft;   // s left in the current attack/bored window
     private float _fireIn;       // s until the next shot is allowed
+    private float _refireMin;    // the refire window, Def's FIRE_RATE until ArmFromLoadout
+    private float _refireMax;
     private int _fpNext;         // round-robin firepoint cursor
     private double _losNext;     // game-time s the cached line-of-sight verdict expires
     private bool _losBlocked;
@@ -115,6 +118,8 @@ public sealed class TurretController
     {
         Def = def;
         Weapon = weapon;
+        _refireMin = def.FireRateMin;
+        _refireMax = def.FireRateMax;
         _host = host;
         _worldQuery = worldQuery;
         _pool = pool;
@@ -150,7 +155,10 @@ public sealed class TurretController
     /// ⚠ Never take it from the stock loadout's turret slot. Those slots stay bound but inert
     /// (<see cref="GunGroup.IsTurret"/>), and reading one arms the gunner with the wrong
     /// calibre.</summary>
-    public WeaponDef Weapon { get; }
+    public WeaponDef Weapon { get; private set; }
+
+    /// <summary>Seconds between shots, redrawn uniform in this window after each one.</summary>
+    public (float Min, float Max) RefireWindow => (_refireMin, _refireMax);
 
     /// <summary>The traverse ring (<c>PARTS[0]</c> of the 3-element form), null on the
     /// 2-element form, where <see cref="PitchNode"/> takes the combined rotation.</summary>
@@ -321,6 +329,29 @@ public sealed class TurretController
                 platform: null, label: mount.Title, voices));
         }
         return built.ToArray();
+    }
+
+    /// <summary>Arms the player's carried gunners from the fit's turret slots, k-th slot to k-th
+    /// gunner (<c>FUN_00443de0</c> into <c>FUN_004aab00</c>, docs/formats/loadouts.md "Turrets").
+    /// Each fires its slot's weapon at the tuple refire, halved for a twin slot. A gunner with no
+    /// slot left keeps its <c>ai.zrd</c> weapon and window.</summary>
+    public static void ArmFromLoadout(IReadOnlyList<TurretController> turrets, Loadout loadout,
+        IReadOnlyDictionary<string, float> refire)
+    {
+        int k = 0;
+        foreach (var slot in loadout.Guns.Where(g => g.IsTurret).OrderBy(g => g.Slot))
+        {
+            if (k >= turrets.Count)
+            {
+                break;
+            }
+
+            var turret = turrets[k++];
+            turret.Weapon = slot.Weapon;
+            // No tuple entry falls back to 1 s, as the original's own does (0x004aab5a).
+            float seconds = (refire.TryGetValue(slot.Weapon.Id, out float r) ? r : 1f) * (slot.Single ? 1f : 0.5f);
+            turret._refireMin = turret._refireMax = seconds;
+        }
     }
 
     /// <summary>Builds the chapter's world emplacements: every standalone <c>ai.zrd</c> entry's
@@ -645,7 +676,7 @@ public sealed class TurretController
         Voice?.Renew(fp.GlobalPosition);
         Ammo--;
         ShotsFired++;
-        _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);
+        _fireIn = RandRange(_refireMin, _refireMax);
     }
 
     /// <summary>One candidate's cost, minimised: distance plus weight times 1200 (<c>0x004ac720</c>),

@@ -600,6 +600,83 @@ internal static class AiSuites
         }
     }
 
+    [Suite("gun-fit-cadence",
+        "the gun fits' refire as the original arms them: the player's carried gunner from its stock " +
+        "fit's turret slot (FUN_004aab00), the Kestrel's twin .40 firing wep_40 every 0.055 s and " +
+        "the Hellhound's single .50 wep_50 every 0.125 s in place of the ai.zrd row's wep_140; a " +
+        "single-mounted fixed gun carries half its CLUSTER_SIZE; an AI Fury's gun binds firepoints " +
+        "7 and 8 alone at its 0.05 s tuple refire, and a wingman's at the builder's 0.5 s")]
+    internal static void GunFitCadence(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var stock = StockLoadouts.Load();
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            foreach (var (plane, weaponId, window) in new[] { ("player_kestrel", "wep_40", 0.055f), ("player_avenger", "wep_50", 0.125f) })
+            {
+                var stats = PlaneStats.Load(ctx.Zrdr, plane);
+                var model = new PlaneBuilder(ctx.Planes, textures).Build(plane);
+                var host = new FlightController { PlaneModel = model, Projectiles = pool, UseKeyboard = false, AllowPause = false };
+                host.AddChild(model);
+                try
+                {
+                    var turrets = TurretController.BuildCarried(turretDefs, stats, model, weapons, host, pool);
+                    var fit = Loadout.Bind(stock.For(stats.DefName)!, model, weapons);
+                    string before = turrets.Length > 0 ? $"{turrets[0].Weapon.Id} {turrets[0].RefireWindow}" : "none";
+                    TurretController.ArmFromLoadout(turrets, fit, stats.GunRefireSeconds);
+                    ctx.Check(turrets.Length == 1 && turrets[0].Weapon.Id == weaponId
+                              && Mathf.IsEqualApprox(turrets[0].RefireWindow.Min, window, 1e-4f)
+                              && Mathf.IsEqualApprox(turrets[0].RefireWindow.Max, window, 1e-4f),
+                        $"{plane}'s gunner armed from its fit fires {(turrets.Length > 0 ? $"{turrets[0].Weapon.Id} {turrets[0].RefireWindow}" : "nothing")}, want {weaponId} every {window} s (was {before})");
+
+                    if (plane != "player_kestrel")
+                        continue;
+                    var first = fit.Def.Guns[0];
+                    var single = new LoadoutDef { Def = fit.Def.Def, Model = fit.Def.Model, Display = fit.Def.Display };
+                    single.Guns.Add(new GunSpec { Slot = first.Slot, Mount = first.Mount, Caliber = first.Caliber, Ammo = first.Ammo, Markers = first.Markers, Single = true });
+                    var halved = Loadout.Bind(single, model, weapons).Guns[0];
+                    ctx.Check(halved.Capacity > 0 && halved.Capacity == (int)((halved.Weapon.ClusterSize ?? 0) * 0.5f),
+                        $"a single-mounted {halved.Weapon.Id} carries half its CLUSTER_SIZE ({halved.Capacity} of {halved.Weapon.ClusterSize})");
+                }
+                finally
+                {
+                    host.Free();
+                }
+            }
+
+            var furyStats = PlaneStats.LoadForAi(ctx.Zrdr, "player_fury");
+            var fury = new PlaneBuilder(ctx.Planes, textures).Build("player_fury");
+            try
+            {
+                var ai = Loadout.BindAi(furyStats.AiWeapons, furyStats.AiDefName!, fury, weapons).Guns[0];
+                ctx.Check(ai.Muzzles.Select(m => m.Name.ToString()).SequenceEqual(new[] { "firepoint7", "firepoint8" })
+                          && Mathf.IsEqualApprox(ai.RefireSeconds, 0.05f, 1e-4f),
+                    $"an AI Fury's {ai.Weapon.Id} fires from {string.Join("/", ai.Muzzles.Select(m => m.Name))} every {ai.RefireSeconds} s of tuple refire");
+                var wing = Loadout.BindWingman(stock.For("pfury")!, fury, weapons).Guns;
+                ctx.Check(wing.Count > 0 && wing.All(g => Mathf.IsEqualApprox(g.RefireSeconds, Loadout.WingmanGunRefireS)),
+                    $"a wingman Fury's guns carry the builder's refire ({string.Join(", ", wing.Select(g => g.RefireSeconds))} s)");
+            }
+            finally
+            {
+                fury.Free();
+            }
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The world AA emplacements against the real C1 chapter world: the NODES
     // placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
     // enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
