@@ -1036,7 +1036,9 @@ path when the chapter has a `canopy` pick; C3 draws it by default (`DefaultOn` n
   keep every distance (`Handover` is not called). The clumps take their own band,
   `PaintedNearM`-`PaintedFarM` (700 to 1300 m): inside it nothing stands, so the near view is the
   painted canopy alone. Over the band a clump rises out of the canopy: the shader's `grow` sinks it
-  below the painted surface by its unfaded share of its height, so it stays opaque.
+  below the painted surface by its unfaded share of its height, so it stays opaque. That holds with 3D
+  Vegetation Off; while D32's crown models draw, the clumps stand held at one height and hand over to
+  the models at 950 to 1000 m (D32, *C3*).
 
 Rejected in the montage, one line each:
 - C3's palm cards as the clump art: too much colour variation, a grey-brown palm plantation over the
@@ -1047,8 +1049,8 @@ Rejected in the montage, one line each:
 - A 1000-1600 m band: the hills at about 1 km stay flat.
 
 **Ruling (yours, from the montage).** Crowns cut from the canopy texture, rising out over 700 to
-1300 m, on by default on C3. Once Wave D's look-alike models exist, they fill the 0 to 700 m band
-over C3's painted canopy (D32).
+1300 m, on by default on C3. Wave D's look-alike models fill the view inside 950 m over C3's painted
+canopy (D32).
 
 **Model recommendation.** Opus: the art, rate and band are look calls iterated against captures.
 
@@ -1673,47 +1675,76 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
     or a transition texture, and at the painted surface there (`CanopyMask.SurfaceAt`, bilinear
     between the bake's 8 m samples, which a painted bake now keeps). Scale 0.85 to 1.15, mirror and
     instance colour (the C3 kinds' brightness and tint spread) are hashes of the cell, as the clumps'
-    are. C3 stands 129,531 crowns in 471 cells of 256 m: 3,354 inside 700 m of the A7 view (beach and
-    sea fill half of it) and 6,781 at the low view over the jungle (`--pos=-5450,170,-3550`).
-  - *Band.* `ModelBand`, 700 to 1000 m: inside 700 m the models alone draw (the clumps there are sunk
-    to nothing by `grow`); over 700 to 1000 m the clumps keep only the 4x4 dither cells the models give
-    up (`v_model`, `csky_clutter_dither_keep` of the same share on both sides), while `grow` still
-    raises them, so at 1000 m they stand at half height (8 m front, 12.8 m back row) against the
-    model's 6 m. The map edge's clump copies keep no band, since no model stands past the edge.
-  - *The word.* Near and Far draw the same canopy band: the crowns start rising at 700 m on every
-    word, so a farther model band would replace crowns that already carry the volume, at the square
-    of the reach in instances. Off hides the crown models and zeroes the clumps' band, so B15 draws as
-    it did. A live change follows through `Field.FollowModels` with no rebuild; Original, Faithful and
+    are. C3 stands 129,531 crowns in 471 cells of 256 m: 5,789 inside 950 m of the A7 view (beach and
+    sea fill half of it) and 9,850 at the low view over the jungle (`--pos=-5450,170,-3550`).
+  - *Band.* `ModelBand` (`ModelNearM`-`ModelFarM`), 950 to 1000 m: inside 950 m the models alone draw
+    (the clumps there collapse in the vertex stage); over the band the clumps keep only the 4x4 dither
+    cells the models give up (`v_model`, `csky_clutter_dither_keep` of the same share on both sides).
+    The band is thin because the two stand on different layouts: a dithered hole in a clump shows
+    painted ground rather than a crown, so a wide band reads as a strip of half-clear forest.
+  - *Height.* While the models draw, every clump stands held at a `HeldTopM` (13 m) tile top over the
+    painted surface at every distance (the clump shader's `held`, its share of the 25.6 m tile), so its
+    front crowns top out near the models' 6 m and its back row near 13 m. B15's `grow`, which sank a
+    clump from 25.6 m at 1300 m to nothing at 700 m, applies only with the models off: as a view
+    closed, the far volume sank while a shorter crown dithered in. The map edge's clump copies keep
+    B15's rise and no band, since no model stands past the edge.
+  - *The word.* Near and Far draw the same canopy band and the same held clumps: a farther model band
+    would replace crowns that already carry the volume, at the square of the reach in instances. Off
+    hides the crown models, zeroes the clumps' band and their hold, so B15 draws as it does without
+    models. A live change follows through `Field.FollowModels` with no rebuild; Original, Faithful and
     a live move off Rich drop the clumps and their models together, and `--canopy-clumps=off` draws
     neither.
   - *The draw.* D32's cell scheme: one MultiMesh of the crown model per 256 m cell under the clumps'
     root (never the clutter root), ranged at 1000 m plus the cell's half diagonal, Godot's own range
     and frustum cull per camera, no collider, no shadow and no instance uniform (the model shader's
-    `canopy` variant: no card fade, its instance basis scales it). Graded to the B15 crowns' mean
-    colour over their top half (`VegetationModels.ForMean`), grade 0.354, 0.329, 0.372.
+    `canopy` variant: no card fade, its instance basis scales it).
+  - *Colour.* Graded per channel to the B15 crowns' mean colour over their top half times `ModelGain`
+    (1.1), through `VegetationModels.ForMean` with an unbounded chroma: grade 0.390, 0.362, 0.857 (the
+    log's `vegetation model ... canopytree` line). The palms' reason for a brightness-only grade does
+    not hold here, since the crowns and the model are both pure foliage. Brightness-only, the clamped
+    blue left the models a third short in blue against their ground, yellow-olive beside blue-green
+    clumps. Measured over seven approach poses against the painted canopy under each layer (sRGB
+    ratios): models 0.88 of their ground in luminance with the clumps' hue (r:g:b 33 : 42 : 25 against
+    34 : 40 : 26), clumps 0.95.
   - *Cost* at 5120x1440 on an idle machine, three launches each, `off` against `near` (Off also
     drops the palm models), with the 150-triangle crown: at the A7 view `gpu_ms` 4.45 against 4.35,
     1,299 against 1,255 draws, 1,247,983 against 375,769 primitives, 7,933 against 7,385 scene
     nodes, `render_cpu_ms` 1.20 against 1.10; at the low view `gpu_ms` 3.69 against 3.08, 1,362
     against 1,300 draws, 1,879,830 against 386,580 primitives, `render_cpu_ms` 1.19 against 1.12.
     The primitives are the crowns inside 1000 m in the frustum. The first crown, 210 triangles,
-    read 4.56 and 3.88 ms at the same views (2,477,130 primitives at the low view).
+    read 4.56 and 3.88 ms at the same views (2,477,130 primitives at the low view). The held clumps,
+    the 950-1000 m band and the per-channel grade move no draw or primitive and no `gpu_ms` past
+    0.04 ms against the rising clumps over 700-1000 m (`measure.ps1 -Modes rich,noclumps,nomodels
+    -Launches 3`, idle, at A7, the low view toward `-5750,120,-3850` and `--pos=-4400,550,-4600
+    --lookat=-7400,50,-4600`: `rich` 4.42 against 4.44, 3.36 against 3.35 and 3.82 against 3.79 ms).
 
 **Ruling (yours, from the montages).** Brightness A: graded to the card with the card's sun-side gain.
 No shadows. The model sways with the card. The band: 150 to 250 m by default, with an option to push it
-out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). C3's painted canopy inside 700 m takes D33's `canopytree` crowns on B15's clump cells (*C3* above).
+out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). C3's painted canopy inside 950 m takes D33's `canopytree` crowns on B15's clump cells (*C3* above).
 
 **Ruling (yours, from the montages).** C3's crowns: the greener palette (option C), 6 crowns a 32 m
 cell as built (not 9), their top 6 m over the painted canopy as built (not 3 or 10 m), and for the
-cost the lighter crown, about 150 triangles with five-sided domes, over the same 700 to 1000 m band.
+cost the lighter crown, about 150 triangles with five-sided domes.
 Montages: `.scratch/c3canopy/` (`montage-off-on`, `-colour`, `-height`, `-density`, and
 `montage-final.png`, off against the ruled crown before and after the lighter domes).
+
+**Ruling (yours, flying C3 at Rich).** The clumps held at a 13 m top at every distance beside the 6 m
+models, the models graded per channel 10 % over the crowns' mean, and the 950 to 1000 m band with the
+screen dither. Rejected in flight or in the montages, one line each:
+- The clumps rising from 700 to 1300 m beside the models: the far volume sinks as the near crowns dither in.
+- The clumps held at full height with the models at 2.2 times their size, and the clumps sinking from
+  3 km to the models' height at 1 km.
+- A whole-instance swap over the band (a hash of the planted point): single crowns pop in and out.
+- A dither fixed to the drawn surface: the dense clumps blur its holes into the same see-through strip.
+- A dither moving a phase a frame for TAA to resolve: not taken once the thin band held.
+Montages: `.scratch/c3pass/` in the item's worktree (`montage-cur`, `-v1` to `-v3`, the pan and
+forward sequences per mode).
 
 **Model recommendation.** Opus: the item crosses the clutter's drawn layouts, the map edge, the shader
 text the Rich card shares and a look iterated against captures.
 
 **Verify.** Units: `VegetationModelsTests` (the card mean is linear over solid texels; the model mean
-reads only the texels its triangles cover, weighted by area; both read only the crown's top half; the grade meets the card's luminance, keeps the model's hue within the chroma clamp, and falls back to one) and
+reads only the texels its triangles cover, weighted by area; both read only the crown's top half; the grade meets the card's luminance, keeps the model's hue within the chroma clamp, meets it per channel unbounded, and falls back to one) and
 `HdModelsTests.AVegetationModelIsReadUnderItsChapterKeyAlone`, `VegetationModelsSettingTests` (the
 ladder, `near` on every machine, the flag and the file keep a known word, each word's band) and the
 options tests (`OptionsChoicesTests`, `OriginalOptionsTests`: the row is dead under Original and walks
@@ -1735,7 +1766,7 @@ point and share, a stamp bake's ground) and `CanopyClumpsTests.CrownModelsStandO
 and `CrownModelsHandOverInsideTheClumpsRise`; engine `canopy-models` (a C3 Enhanced flight at rich: the
 crowns stand under the clumps' root outside the clutter root, no collider, no instance uniform, every
 one on the painted surface, cells ranged past 1000 m; the clumps keep the dither cells the models give
-up over the band; Off hides them and zeroes the band, Far and Near draw the same nodes; original,
+up over the band and stand held at the 13 m top; Off hides them and zeroes the band and the hold, Far and Near draw the same nodes; original,
 Original and back; a session at original draws none) and `canopy-clumps` (C1's card forest stands no
 crown model). Look: `.scratch/d32/` (montages of the low
 view among firs, the handover band, three band radii and the 300 m view; the brightness and gain
@@ -1877,16 +1908,16 @@ card to match.
   disc, the ring the three plainer ones. Drawn unlit, the texture carries all the relief.
 - *Height.* Its top stands `ModelRiseM` (6 m) over the painted surface at scale 1. The painted surface
   is the treetops seen from above, so a crown standing on it is an emergent crown over the canopy, as
-  B15's crowns are; 6 m sits under where the rising clumps stand at the band's far edge (8 m), so the
-  dither hands over to taller crowns rather than shorter ones, and the domes' skirts still sink into
-  the canopy on a slope. 3 and 10 m are in `.scratch/c3canopy/montage-height.png`.
-- *Colour.* D32 grades it to B15's crowns' mean, cut from the same textures, since the crowns are what
-  it hands over to and they sit within a few levels of the lit painted ground on the hills. Forest1's
-  own bands by D33's rule (sRGB 35, 51, 26; 50, 70, 38; 92, 113, 66) drew greyer than the lit painted
-  ground's yellow-green up close, so the palette is greener and yellower (option C: shade 0.11, 0.20,
-  0.06, body 0.17, 0.29, 0.09, highlight 0.40, 0.50, 0.20 in sRGB), set at 0.85 of those levels. At
-  full levels the grade's luminance ratio was 0.240, under its 0.25 floor, so the crowns drew about
-  4 % brighter than their target; at 0.85 it lands at 0.354, 0.329, 0.372 and they draw at it.
+  B15's crowns are; the held clumps it hands over to stand their front crowns near it and their back
+  row at 13 m (D32, *Height*), and the domes' skirts still sink into the canopy on a slope. 3 and 10 m
+  are in `.scratch/c3canopy/montage-height.png`.
+- *Colour.* D32 grades it per channel to B15's crowns' mean, cut from the same textures, since the
+  crowns are what it hands over to and they sit within a few levels of the lit painted ground on the
+  hills; the grade sets its hue, so the palette sets only its relief. Forest1's own bands by D33's rule
+  (sRGB 35, 51, 26; 50, 70, 38; 92, 113, 66) drew greyer than the lit painted ground's yellow-green up
+  close, so the palette is greener and yellower (option C: shade 0.11, 0.20, 0.06, body 0.17, 0.29,
+  0.09, highlight 0.40, 0.50, 0.20 in sRGB), set at 0.85 of those levels, which keeps the grade inside
+  its 0.25 floor.
 - *No clump tile*: the clumps over painted canopy are cut from the canopy textures (B15).
 
 | Model | Chapters | Model size (w × d × h, m) | Triangles | GLB bytes |

@@ -930,7 +930,8 @@ internal static class GraphicsSwitchSuites
         "the near crown models over C3's painted canopy in an Enhanced flight at rich: they stand under the clumps' root, "
         + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "
         + "ranged past the band's far edge; the clumps keep only the dither cells the models give up over the band, the models "
-        + "the rest; every crown cell draws on the models' layer alone, which no spyglass disc draws; a live move to Off hides them and zeroes the clumps' band, Far and Near draw the same nodes again; a live "
+        + "the rest, and the clumps stand held at one height at every distance; every crown cell draws on the models' layer alone, which no spyglass disc draws; "
+        + "a live move to Off hides them, zeroes the clumps' band and lets them rise over their own, Far and Near draw the same nodes again; a live "
         + "move to original and a switch to Original draw none, and back the same crowns; a session at original draws none")]
     internal static void CanopyModelsOverPaintedCanopy(TestContext ctx)
     {
@@ -958,7 +959,7 @@ internal static class GraphicsSwitchSuites
                 int off = crowns.Count(c => !mask.IsPainted(c.At.X, c.At.Z) || MathF.Abs(c.At.Y - mask.SurfaceAt(c.At.X, c.At.Z)) > 0.01f);
                 ctx.Check(off == 0, $"every crown stands on the painted surface ({off} off it)");
                 foreach (var (name, at) in new[] { ("A7", new Vector2(-5439f, -3077f)), ("low", new Vector2(-5450f, -3550f)) })
-                    ctx.Note($"{crowns.Count(c => new Vector2(c.At.X, c.At.Z).DistanceTo(at) < Mech3.CanopyClumps.PaintedNearM)} crowns inside {Mech3.CanopyClumps.PaintedNearM:0} m of the {name} view");
+                    ctx.Note($"{crowns.Count(c => new Vector2(c.At.X, c.At.Z).DistanceTo(at) < Mech3.CanopyClumps.ModelNearM)} crowns inside {Mech3.CanopyClumps.ModelNearM:0} m of the {name} view");
                 // Every node under the crown models counts, whatever its name.
                 var (uniforms, _) = InstanceUniformNodes(models);
                 // A cell's half diagonal takes its height too, which a cliff stretches past half the cell's edge.
@@ -978,14 +979,18 @@ internal static class GraphicsSwitchSuites
                     $"over {Mech3.CanopyClumps.ModelBand} the clumps keep the dither cells the models give up, and the models the rest");
                 ctx.Check(cells.All(m => m.Layers == Mech3.VegetationModels.Layer),
                     $"every crown cell draws on the models' layer alone, which no spyglass disc draws, where the clumps keep every cell (ClutterBuilder.ModelShare)");
+                float Held(ShaderMaterial m) => m.GetShaderParameter(Mech3.CanopyClumps.HeldParam).AsSingle();
+                float heldShare = Mech3.CanopyClumps.HeldTopM / field.Clumps.Max(c => c.Height);
+                ctx.Check(MathF.Abs(Held(clumps) - heldShare) < 1e-4f,
+                    $"the clumps stand held at a {Mech3.CanopyClumps.HeldTopM:0.#} m top at every distance (share {Held(clumps):0.###} of {heldShare:0.###})");
 
                 Models(live, VegetationModelsSetting.Off);
-                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && live.Session.CanopyClumpField?.Models == models,
-                    $"a live move to Off hides the crowns and zeroes the clumps' band, with no rebuild");
+                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && Held(clumps) == 0f && live.Session.CanopyClumpField?.Models == models,
+                    $"a live move to Off hides the crowns, zeroes the clumps' band and lets them rise over their own, with no rebuild");
                 Models(live, VegetationModelsSetting.Far);
-                bool far = models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand;
+                bool far = models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f;
                 Models(live, VegetationModelsSetting.Near);
-                ctx.Check(far && models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && live.Session.CanopyClumpField?.Models == models,
+                ctx.Check(far && models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f && live.Session.CanopyClumpField?.Models == models,
                     $"Far and Near draw the same crowns over the same band");
 
                 ApplyVegetation(live, VegetationQualitySetting.Original);

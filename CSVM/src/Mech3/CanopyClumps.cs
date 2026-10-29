@@ -39,13 +39,21 @@ public static class CanopyClumps
     /// <summary>TUNE. The crowns a fully painted cell carries: about 14 m crowns packed edge to edge.</summary>
     public const float PaintedTreesPerCell = 6f;
 
-    /// <summary>TUNE. Where the near crown models over painted canopy end: they alone draw inside
-    /// <see cref="PaintedNearM"/>, then dither over to the crowns rising there. Fixed, whatever the 3D Vegetation
-    /// word, since the crowns start rising at <see cref="PaintedNearM"/> on every word.</summary>
-    public const float ModelFarM = 1000f;
+    /// <summary>TUNE. The near crown models' band over painted canopy: they alone draw inside
+    /// <see cref="ModelNearM"/>, then dither over to the crowns by <see cref="ModelFarM"/>. Fixed, whatever the 3D
+    /// Vegetation word. A thin band: over a wide one a dithered hole shows painted ground, not a crown.</summary>
+    public const float ModelNearM = 950f, ModelFarM = 1000f;
 
     /// <summary>TUNE. How far a near crown model's top stands above the painted treetops, in metres at scale 1.</summary>
     public const float ModelRiseM = 6f;
+
+    /// <summary>TUNE. While the crown models draw, how high a crown clump's tile top stands over the painted
+    /// treetops at every distance, in metres. Its crowns then meet the models' height, and nothing rises or sinks.</summary>
+    public const float HeldTopM = 13f;
+
+    /// <summary>TUNE. The crown model's grade target over the crowns' mean colour. The grade meets the texture's
+    /// mean, and at that the model drew darker on screen than the crowns.</summary>
+    public const float ModelGain = 1.1f;
 
     /// <summary>The near crown model's name under the chapter's vegetation models.</summary>
     public const string CrownModel = "canopytree";
@@ -55,6 +63,9 @@ public static class CanopyClumps
 
     /// <summary>The shader parameter both the clumps and the listed cards' Rich material read the band from.</summary>
     public const string HandoverParam = "canopy_handover";
+
+    /// <summary>The clumps' shader parameter holding them at a share of their height at every distance; zero rises them.</summary>
+    public const string HeldParam = "held";
 
     /// <summary>Where the shipped clump tiles sit, beside the vegetation models: <c>&lt;chapter&gt;/&lt;card&gt;.clump.*</c>.</summary>
     public const string ShippedRoot = "res://data/vegetation_models";
@@ -86,7 +97,7 @@ public static class CanopyClumps
     private static Shader? _shader;
 
     /// <summary>The crown models' band: alone inside its near edge, dithered over to the clumps out to its far one.</summary>
-    public static Vector2 ModelBand => new(PaintedNearM, ModelFarM);
+    public static Vector2 ModelBand => new(ModelNearM, ModelFarM);
 
     /// <summary>Whether a chapter draws clumps when <c>--canopy-clumps</c> does not say: C1 over its cards and
     /// C3 over its painted canopy. The other stamp-mask chapters were checked and left off.</summary>
@@ -312,8 +323,10 @@ public static class CanopyClumps
             .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Y.LengthSquared() > 0f).Select(p => p.Origin)), meanTrees);
         float brightness = cards.Sum(c => c.Weight * (c.Look?.Brightness ?? 0f)) / stamps;
         float tint = cards.Sum(c => c.Weight * (c.Look?.Tint ?? 0f)) / stamps;
-        // A crown model is graded to the crowns it hands over to, which are cut from the painted canopy.
-        var crownModel = painted && chapter != null ? VegetationModels.ForMean(chapter, CrownModel, Mean(cards.Select(c => c.Image!))) : null;
+        // A crown model is graded per channel to the crowns it hands over to, which are cut from the painted canopy.
+        var crownModel = painted && chapter != null
+            ? VegetationModels.ForMean(chapter, CrownModel, Mean(cards.Select(c => c.Image!)) * ModelGain, float.PositiveInfinity)
+            : null;
         var (atlas, side) = Compose(cards.Select(c => c.Image!).ToList(), sizes, weights, tileHeight, slots, strips);
         var tiles = used.Select(t => $"{species[strips.IndexOf(t)]} in {slots.Count(s => s >= 0 && strips[s] == t)} slots from {t.Tile.Source}").ToList();
         var clumps = Place(mask, rate, cardHeight, tileHeight, brightness, tint, rise: painted ? PaintedRiseM : 0f);
@@ -580,9 +593,9 @@ public static class CanopyClumps
 
     // The Rich card's look on a clump: the same face, sun side, fog and tint lines. The fade is the card's
     // handover turned round, in past the band. Over painted canopy (grow) a clump sinks below the canopy by its
-    // unfaded share instead: a part-clear clump shows as a ghost on the skyline. The tile comes off the custom
-    // data's first channel, and each tree's sun side off the side map, swapped for a mirrored clump. Over the
-    // near crown models' band a clump keeps only the dither cells the models give up.
+    // unfaded share instead: a part-clear clump shows as a ghost on the skyline. While the crown models draw it stands
+    // at its held share. The tile comes off the custom data's first channel, and each tree's sun side off the side map,
+    // swapped for a mirrored clump. Over the models' band a clump keeps the dither cells they give up.
     private static string ShaderCode() => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled, blend_mix, depth_prepass_alpha;
@@ -591,6 +604,7 @@ public static class CanopyClumps
         uniform sampler2D side_tex : filter_linear_mipmap, repeat_disable;
         uniform float variants = 1.0;
         uniform float grow = 0.0;
+        uniform float {{HeldParam}} = 0.0;
         uniform vec2 {{HandoverParam}};
         uniform vec2 {{VegetationModels.BandParam}};
 
@@ -609,8 +623,9 @@ public static class CanopyClumps
             vec3 origin = MODEL_MATRIX[3].xyz;
             v_model = {{ClutterBuilder.ModelShare}};
             v_alpha = {{ClutterBuilder.HandoverShare}};
-            float keep = step(0.004, v_alpha);
-            origin.y -= MODEL_MATRIX[1].y * (1.0 - v_alpha) * grow;
+            float stand = {{HeldParam}} > 0.0 ? {{HeldParam}} : v_alpha;
+            float keep = step(0.004, mix(v_alpha, {{HeldParam}} > 0.0 ? v_model : v_alpha, grow));
+            origin.y -= MODEL_MATRIX[1].y * (1.0 - stand) * grow;
             v_alpha = mix(v_alpha, 1.0, grow);
         {{ClutterBuilder.FaceBasisLines(false)}}
             v_mirror = MODEL_MATRIX[0].x;
@@ -701,13 +716,16 @@ public static class CanopyClumps
         }
 
         /// <summary>The crown models and the clumps' band follow the 3D Vegetation word, with no rebuild. Off hides
-        /// the models and draws the clumps as before. Near and Far both draw over <see cref="ModelBand"/>.</summary>
+        /// the models, and the clumps rise over their own band as with no models. Near and Far both draw over
+        /// <see cref="ModelBand"/>, the clumps held at <see cref="HeldTopM"/>.</summary>
         public void FollowModels()
         {
             if (Models == null)
                 return;
-            Models.Visible = VegetationModels.On;
-            _material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.On ? ModelBand : Vector2.Zero);
+            bool on = VegetationModels.On;
+            Models.Visible = on;
+            _material.SetShaderParameter(VegetationModels.BandParam, on ? ModelBand : Vector2.Zero);
+            _material.SetShaderParameter(HeldParam, on && _clumps.Count > 0 ? Math.Min(HeldTopM / _clumps.Max(c => c.Height), 1f) : 0f);
         }
 
         // Stands the crown models in cells of VegetationModels.CellM, each ranged at the band's far edge past its
@@ -755,7 +773,7 @@ public static class CanopyClumps
             }
             Root.AddChild(Models);
             FollowModels();
-            Log.Info("world", $"canopy models: {crowns.Count} crowns over {Models.GetChildCount()} cells from {model.Source}, top {ModelRiseM:0.#} m over the painted canopy, alone to {PaintedNearM:0} m, dithered over to the crowns to {ModelFarM:0} m");
+            Log.Info("world", $"canopy models: {crowns.Count} crowns over {Models.GetChildCount()} cells from {model.Source}, top {ModelRiseM:0.#} m over the painted canopy, alone to {ModelNearM:0} m, dithered over to the crowns to {ModelFarM:0} m, the crowns held at a {HeldTopM:0.#} m top");
         }
 
         internal MultiMeshInstance3D Draw(List<Clump> list, Transform3D moved, string name, ShaderMaterial? material = null)

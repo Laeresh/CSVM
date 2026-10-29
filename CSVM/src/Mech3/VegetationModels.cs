@@ -78,8 +78,9 @@ public static class VegetationModels
     }
 
     /// <summary>The model as <see cref="For(string, string, Image?)"/> reads it, graded to <paramref name="cardMean"/>,
-    /// a mean linear colour, where no one card image is what the model must meet.</summary>
-    public static Model? ForMean(string chapter, string species, Vector3? cardMean)
+    /// a mean linear colour, where no one card image is what the model must meet. <paramref name="maxChroma"/> is
+    /// <see cref="Grade"/>'s.</summary>
+    public static Model? ForMean(string chapter, string species, Vector3? cardMean, float maxChroma = MaxChroma)
     {
         string key = $"{chapter.ToUpperInvariant()}/{species}";
         string shipped = $"{CanopyClumps.ShippedRoot}/{key}.glb.bin";
@@ -90,7 +91,7 @@ public static class VegetationModels
         };
         foreach (var source in sources)
         {
-            if (source is { } s && Import(s.Model, s.Source, cardMean) is { } model)
+            if (source is { } s && Import(s.Model, s.Source, cardMean, maxChroma) is { } model)
                 return model;
         }
 
@@ -113,15 +114,15 @@ public static class VegetationModels
     }
 
     /// <summary>The gain putting the model's mean linear colour on the card's. It is the luminance ratio, each
-    /// channel at most <see cref="MaxChroma"/> off it, all held to 0.25-4. The model keeps its own hue and
+    /// channel at most <paramref name="maxChroma"/> off it, all held to 0.25-4. The model keeps its own hue and
     /// meets the card in brightness. One where either mean is unknown. The card draws unlit, so its texture's
-    /// mean is the colour the model must meet.</summary>
-    public static Vector3 Grade(Vector3? card, Vector3? model)
+    /// mean is the colour the model must meet. An unbounded <paramref name="maxChroma"/> meets it per channel.</summary>
+    public static Vector3 Grade(Vector3? card, Vector3? model, float maxChroma = MaxChroma)
     {
         if (card is not { } c || model is not { } m)
             return Vector3.One;
         float s = Math.Clamp(Luma(c) / Math.Max(Luma(m), 1e-6f), MinGrade, MaxGrade);
-        float Channel(float a, float b) => b > 1e-6f ? Math.Clamp(s * Math.Clamp(a / b / s, 1f - MaxChroma, 1f + MaxChroma), MinGrade, MaxGrade) : s;
+        float Channel(float a, float b) => b > 1e-6f ? Math.Clamp(s * Math.Clamp(a / b / s, 1f - maxChroma, 1f + maxChroma), MinGrade, MaxGrade) : s;
         return new Vector3(Channel(c.X, m.X), Channel(c.Y, m.Y), Channel(c.Z, m.Z));
     }
 
@@ -209,7 +210,7 @@ public static class VegetationModels
 
     // The first mesh of the file and its first surface's base-colour texture, mipmapped. A model is one mesh of
     // one material, as the pipeline writes it.
-    private static Model? Import(HdModel file, string source, Vector3? cardMean)
+    private static Model? Import(HdModel file, string source, Vector3? cardMean, float maxChroma)
     {
         var state = new GltfState();
         if (new GltfDocument().AppendFromBuffer(file.Bytes, file.GltfPath ?? string.Empty, state) != Error.Ok
@@ -229,7 +230,7 @@ public static class VegetationModels
         var arrays = mesh.SurfaceGetArrays(0);
         var grade = Grade(cardMean,
             SurfaceMean(image.GetData(), image.GetWidth(), image.GetHeight(), arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(),
-                arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), arrays[(int)Mesh.ArrayType.Index].AsInt32Array(), CrownShare));
+                arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), arrays[(int)Mesh.ArrayType.Index].AsInt32Array(), CrownShare), maxChroma);
         Log.Info("world", $"vegetation model {source}: {mesh.GetFaces().Length / 3} triangles, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}");
         return new Model(mesh, TextureUpload.Create(image), grade, source);
     }

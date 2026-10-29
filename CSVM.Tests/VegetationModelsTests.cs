@@ -111,6 +111,12 @@ public sealed class VegetationModelsTests
         Assert.Equal(new Vector3(4f, 4f, 4f), VegetationModels.Grade(new Vector3(0.9f, 0.9f, 0.9f), new Vector3(0.01f, 0.01f, 0.01f)));
         Assert.Equal(Vector3.One, VegetationModels.Grade(null, new Vector3(0.2f, 0.2f, 0.2f)));
         Assert.Equal(Vector3.One, VegetationModels.Grade(new Vector3(0.2f, 0.2f, 0.2f), null));
+
+        // Unbounded, every channel meets the card's, as C3's crown model meets the crowns.
+        var full = VegetationModels.Grade(new Vector3(0.1f, 0.1f, 0.4f), new Vector3(0.1f, 0.1f, 0.1f), float.PositiveInfinity);
+        Assert.Equal(1f, full.X, 4);
+        Assert.Equal(1f, full.Y, 4);
+        Assert.Equal(4f, full.Z, 4);
     }
     private static byte[] Pixels(params byte[][] texels)
     {

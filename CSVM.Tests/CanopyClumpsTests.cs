@@ -245,15 +245,19 @@ public sealed class CanopyClumpsTests
         Assert.Contains(crowns, c => !c.Mirror);
     }
 
-    /// <summary>The crown models alone fill the near view the clumps leave flat. They hand over to the clumps
-    /// inside the clumps' rise, and stand no taller over the canopy than a full clump.</summary>
+    /// <summary>The crown models alone fill the near view past the clumps' own near edge. They hand over to the
+    /// clumps over a thin band inside the clumps' band. The held clumps stand taller than a model by about the tile's back row,
+    /// and no taller than a full clump.</summary>
     [Fact]
     public void CrownModelsHandOverInsideTheClumpsRise()
     {
         var band = CanopyClumps.ModelBand;
-        Assert.Equal(CanopyClumps.PaintedNearM, band.X);
+        Assert.Equal(new Vector2(CanopyClumps.ModelNearM, CanopyClumps.ModelFarM), band);
+        Assert.InRange(band.X, CanopyClumps.PaintedNearM, band.Y - 1f);
+        Assert.InRange(band.Y - band.X, 1f, 100f);
         Assert.InRange(band.Y, band.X + 1f, CanopyClumps.PaintedFarM - 1f);
-        Assert.InRange(CanopyClumps.ModelRiseM, 1f, CanopyClumps.PaintedRiseM);
+        Assert.InRange(CanopyClumps.ModelRiseM, 1f, CanopyClumps.HeldTopM);
+        Assert.InRange(CanopyClumps.HeldTopM, CanopyClumps.ModelRiseM, CanopyClumps.PaintedRiseM);
     }
 
     // A 10 x 10 cell area at 7 m. Its left four columns are painted canopy, the fifth half covered, the rest bare.
