@@ -99,10 +99,14 @@ public sealed class PlaneStats
     public int? AiAccentId;
 
     /// <summary>The AI def's own armament, nearest <c>weapons</c> block in the AI chain, empty on a
-    /// player load. Deliberately not read down the player chain: <c>player_airplane</c> authors a
-    /// <c>weapons</c> block too, but that one is the 39-id buyable catalogue rather than a fit, and
-    /// the player's own fit comes from <c>stock_loadouts.json</c>.</summary>
+    /// player load. Not read down the player chain: <c>player_airplane</c>'s block lists every
+    /// buyable weapon rather than a fit, which comes from <c>stock_loadouts.json</c>.</summary>
     public List<AiWeaponSlot> AiWeapons = new();
+
+    /// <summary>The player chain's <c>weapons</c> tuple refire per weapon id, seconds, empty on an
+    /// AI load. The player's guns fire at these, not at <c>FIRE_RATE</c>
+    /// (<see cref="Weapons.Loadout.ApplyGunRefire"/>).</summary>
+    public Dictionary<string, float> GunRefireSeconds = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The AI def the damage trio came from ("bloodhawk"), or null on a player load
     /// (<see cref="Load"/>). Set only by <see cref="LoadForAi"/>, and deliberately NOT used as
@@ -745,6 +749,17 @@ public sealed class PlaneStats
                     break;
                 }
             }
+        }
+
+        // The player chain's catalogue still carries each gun's refire in tuple element 2.
+        foreach (var d in aiChain == null ? chain : new List<ZrdrDict>())
+        {
+            if (d.List("weapons") is not { } catalogue)
+                continue;
+            foreach (var item in catalogue)
+                if (item is List<object?> { Count: >= 3 } w && w[0] is string weaponId && w[2] is float refire)
+                    stats.GunRefireSeconds[weaponId] = refire;
+            break;
         }
 
         // weapons: the AI chain's own armament, 5-tuples in list order. Guarded on aiChain rather

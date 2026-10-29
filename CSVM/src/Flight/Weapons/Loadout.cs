@@ -546,11 +546,12 @@ public sealed class Loadout
         }
         return loadout;
 
+        // The refire is not carried: an AI gun stays on FIRE_RATE. The original's AI rate is the
+        // tuple's, halved and capped at a round per tick, which is not ported yet.
         static void Carry(GunGroup group, AiWeaponSlot slot)
         {
             group.MinRangeM = slot.MinRangeM;
             group.MaxRangeM = slot.MaxRangeM;
-            group.RefireSeconds = slot.RefireSeconds;
         }
     }
 
@@ -585,6 +586,20 @@ public sealed class Loadout
     /// difference. Binds through the same <see cref="Bind"/> every other loadout uses.</summary>
     public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock) =>
         Bind(RigDef(CollectMarkers(plane).Keys, stock), plane, weapons);
+
+    /// <summary>Paces each gun group by the player chain's <c>weapons</c> tuple for its weapon
+    /// (<see cref="PlaneStats.GunRefireSeconds"/>). The original's fire routine reads the refire
+    /// from that slot and never from the weapon's <c>FIRE_RATE</c> (docs/org/weaponFire.md).</summary>
+    public void ApplyGunRefire(IReadOnlyDictionary<string, float> refire)
+    {
+        foreach (var gun in Guns)
+        {
+            if (refire.TryGetValue(gun.Weapon.Id, out float seconds))
+            {
+                gun.RefireSeconds = seconds;
+            }
+        }
+    }
 
     /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
     /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
@@ -756,14 +771,16 @@ public sealed class GunGroup : IGunSlot
     public IReadOnlyList<Node3D> Muzzles = Array.Empty<Node3D>();
     public bool IsTurret;
 
-    /// <summary>The engagement window and refire interval this slot's AI def authored, metres and
-    /// seconds; all three 0 on a fit from <c>stock_loadouts.json</c>, which authors none and leaves
-    /// the AI gates on their own defaults (<see cref="Loadout.BindAi"/>).</summary>
+    /// <summary>The engagement window this slot's AI def authored, metres (<see cref="Loadout.BindAi"/>).
+    /// Both are 0 on a <c>stock_loadouts.json</c> fit, which leaves the AI gates on their defaults.</summary>
     public float MinRangeM;
 
     public float MaxRangeM;
 
-    public float RefireSeconds;
+    /// <summary>The player chain's <c>weapons</c> tuple refire, seconds, through
+    /// <see cref="Loadout.ApplyGunRefire"/>. 0, as on every AI fit, leaves <see cref="FireControl"/>
+    /// on the weapon's <c>FIRE_RATE</c>.</summary>
+    public float RefireSeconds { get; set; }
 
     public WeaponDef Weapon { get; set; } = null!;
 

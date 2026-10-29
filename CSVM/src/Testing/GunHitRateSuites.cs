@@ -109,13 +109,14 @@ internal static class GunHitRateSuites
                 HitRouter = _ => true,
             };
             shooter.AddChild(model);
+            shooter.Loadout.ApplyGunRefire(stats.GunRefireSeconds);
             var spos = tpos + new Vector3(0f, 0f, 300f);
             shooter.Setup(new FlightModel(stats), null, new CamParams(), spos, spos + Vector3.Forward,
                 spawnThrottle: 1f, spawnSpeed: targetSpeed);
             ctx.Host.AddChild(shooter);
 
             var groups = shooter.Loadout!.FirableGuns.ToList();
-            ctx.Note($"{ShooterPlane} gun groups: {string.Join("; ", groups.Select(g => $"{g.Mount} {g.Weapon.Id} vel={g.Weapon.Velocity ?? 0f:0} range={g.Weapon.Range ?? 0f:0} rate={g.Weapon.FireRate:0.#}/s spread={g.Weapon.CannonSpread ?? 0f:0.#}deg muzzles={g.MuzzleCount}"))}");
+            ctx.Note($"{ShooterPlane} gun groups: {string.Join("; ", groups.Select(g => $"{g.Mount} {g.Weapon.Id} vel={g.Weapon.Velocity ?? 0f:0} range={g.Weapon.Range ?? 0f:0} refire={g.RefireSeconds:0.###}s (FIRE_RATE {g.Weapon.FireRate:0.#}/s) spread={g.Weapon.CannonSpread ?? 0f:0.#}deg muzzles={g.MuzzleCount}"))}");
             ctx.Note($"assist: inaccuracy={Mathf.RadToDeg(stats.StickyBulletInaccuracy):0.##}deg catchup={stats.StickyBulletCatchupRate:0.##}/s forget={stats.StickyBulletForgetInterval:0.##}s; target {TargetPlane} at {targetSpeed:0} m/s");
 
             int fired = 0, hits = 0;

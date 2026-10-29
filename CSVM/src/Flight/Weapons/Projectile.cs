@@ -139,10 +139,10 @@ public sealed partial class ProjectilePool : Node3D
     internal const float GunEffectTtl = 0.3f;
 
     // Minimum sim seconds between two plays of one gun's impact effect. The effect templates are
-    // shared and relocated, not copied, so two plays inside one emission window only move
-    // a single emitter, below this the extra plays buy nothing and only restart sequences. Sits at
-    // the ap/dum emission window (0.1 s) and just under the fastest gun's FIRE_RATE (10.5/s), so a
-    // single group still gets its smoke on essentially every round.
+    // shared and relocated, not copied, so two plays inside one emission window move one emitter.
+    // Below this the extra plays buy nothing and only restart sequences. Sits at
+    // the ap/dum emission window (0.1 s), so a twin group at 12-20 rounds/s shows smoke on every
+    // round or every second one.
     private const float GunEffectInterval = 0.1f;
 
     // The raw candidate ceiling of the sphere query, well above anything a chapter packs into

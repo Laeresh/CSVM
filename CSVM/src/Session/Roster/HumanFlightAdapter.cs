@@ -394,6 +394,7 @@ internal sealed class HumanFlightAdapter
                 controller.Loadout = _policy.WeaponLab
                     ? Loadout.ForRig(planeModel, _aircraft.WeaponDefs, ldef)
                     : Loadout.Bind(ldef, planeModel, _aircraft.WeaponDefs);
+                controller.Loadout.ApplyGunRefire(stats.GunRefireSeconds);
                 // The gun aim assist's structure candidates (B4): the world's
                 // destructibles, when this session built a world at all.
                 controller.Destructibles = _world.WorldRuntime?.Destructibles;

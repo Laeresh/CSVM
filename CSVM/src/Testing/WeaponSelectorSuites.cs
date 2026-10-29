@@ -214,6 +214,8 @@ internal static class WeaponSelectorSuites
         public int Capacity => 10;
 
         public int MuzzleCount => 1;
+
+        public float RefireSeconds => 0f;
     }
 
     private sealed class FakePylon : IPylonSlot

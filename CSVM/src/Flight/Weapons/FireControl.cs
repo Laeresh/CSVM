@@ -23,6 +23,10 @@ public interface IGunSlot : IAmmoSlot
     WeaponDef Weapon { get; }
 
     int MuzzleCount { get; }
+
+    /// <summary>The vehicle def's <c>weapons</c> tuple refire for this weapon, seconds, or 0 when
+    /// the slot carries none and the weapon's <c>FIRE_RATE</c> paces it instead.</summary>
+    float RefireSeconds { get; }
 }
 
 /// <summary>One rocket pylon as <see cref="FireControl"/> sees it: the ordnance weapon and a
@@ -350,11 +354,11 @@ public sealed class FireControl
         }
     }
 
-    // Advances every gun slot's fire clock: while the trigger is held, the selected slot
-    // emits shots at its `FIRE_RATE` (alternating muzzles so the slot's total rate equals it),
-    // drawing from its own ammo counter. When the selected slot runs dry the selection
-    // auto-advances to the next slot with ammo (the moment it empties); the empty-clip cue sounds
-    // only once every slot is spent.
+    // Advances every gun slot's fire clock. While the trigger is held, the selected slot fires
+    // at its tuple refire, alternating muzzles and drawing its own ammo. A twin mount fires at
+    // half the refire (FUN_004b6820 at 0x004b6d26 takes half an interval off when the group's
+    // other barrel is live), docs/org/weaponFire.md. A slot that runs dry hands the selection to
+    // the next slot with ammo at once. The empty-clip cue sounds only once every slot is spent.
     private void StepGuns(float dt, bool fire)
     {
         bool wantLoop = false;
@@ -365,12 +369,14 @@ public sealed class FireControl
             var st = _states[gi];
             // Only the selected gun slot fires, one at a time (the original's behaviour).
             bool selected = gi == _gunSel;
-            if (!fire || !selected || g.Weapon.FireRate <= 0f || g.MuzzleCount == 0)
+            if (!fire || !selected || (g.RefireSeconds <= 0f && g.Weapon.FireRate <= 0f) || g.MuzzleCount == 0)
             {
                 st.Accum = 0f;
                 continue;
             }
-            float interval = 1f / g.Weapon.FireRate;
+            float interval = g.RefireSeconds > 0f
+                ? (g.MuzzleCount > 1 ? 0.5f : 1f) * g.RefireSeconds
+                : 1f / g.Weapon.FireRate;
             if (!_firePrev)
             {
                 st.Accum = interval; // the first shot leaves the barrel the instant the trigger goes down
