@@ -4,7 +4,7 @@
   "headlessOnly": {
     "build-stamp-focus": "pushes a click at the logs icon's laid-out centre, which a headless window of no size places outside the viewport",
     "canopy-clumps": "reads each clump's place back from the clump MultiMesh's instance transforms, which the headless renderer keeps no instances for",
-    "cloud-field-fade":"reads the cloud cards' normals back out of the built mesh, which the headless dummy renderer does not store",
+    "cloud-field-fade": "reads the cloud cards' normals back out of the built mesh, which the headless dummy renderer does not store",
     "clutter-activation": "reads each stamp's drawn state back from the clutter MultiMesh's instance transforms, which the headless renderer keeps no instances for",
     "clutter-cells": "reads every placement back through the clutter cells' MultiMesh instance transforms, which the headless renderer keeps no instances for",
     "clutter-card-depth": "counts rendered pixels in a viewport; headless renders none",
