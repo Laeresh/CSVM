@@ -1,8 +1,11 @@
 """Generates canopytree, the broadleaf crown C3's near models stand over its painted jungle canopy
-(forest1, forest1-128, cliff1), where no card stands. It is a crown and nothing below it: a
-central dome and a ring of lower domes round it, each a leafy disc lit at its top and darkening to
-its rim, so it reads as a lumpy crown in the game's unlit draw. It stands sunk in the painted
-canopy (CanopyClumps places it), so no trunk shows and none is built.
+(forest1, forest1-128, cliff1), where no card stands, and its two sibling shapes canopytree2 (a
+tall, narrow emergent) and canopytree3 (a broad, low crown), which CanopyClumps mixes by a hash so
+no two neighbours share a silhouette. Each is a crown and nothing below it: a central dome and a
+ring of lower domes round it, each a leafy disc lit at its top and darkening to its rim, broken
+into leaf clumps by dark cracks, over normals that shade each dome and clump on its own under the
+game's sun term, so it reads as a lumpy crown and not a ball. It stands sunk in the painted canopy
+(CanopyClumps places it), so no trunk shows and none is built.
 
 No card exists for it, so --render sets the model beside a 12.8 m swatch of C3's forest1 (one
 repeat of the painted canopy) as the colour reference, scratch only. The palette starts from
@@ -40,11 +43,24 @@ SPEC = {
     "sides": 5,
     "rings": (50.0, 90.0, 130.0),
     # How far a rim vertex strays in or out, over the dome's radius.
-    "lumps": 0.16,
-    # The disc's light: at its centre, its fall to the rim, the soft crownlets on it and the grain.
-    "leaves": {"top": 0.68, "fall": 0.7, "crownlets": 6, "crownlet": 0.35, "grain": 0.4, "high": 0.06},
+    "lumps": 0.28,
+    # A vertex normal's mix: the crown's centre (one volume) over the dome's own (lumps), plus a random part,
+    # so the game's sun term shades each crown as leaf clumps rather than one ball.
+    "normals": {"crown": 0.3, "jitter": 0.5},
+    # The disc's light: at its centre, its fall to the rim, the leaf clumps on it (a cellular pattern, each
+    # lit its own way, a dark crack this many texels wide between neighbours) and the grain.
+    "leaves": {"top": 0.68, "fall": 0.7, "clumps": 14, "clump": 0.18, "crack": 0.45, "crack_px": 6.0, "grain": 0.4, "high": 0.06},
     "swatch": ("C3", "forest1.png", 12.8),
 }
+
+# The siblings: the emergent stands taller and narrower, the broad crown wider and flatter.
+SPECS = (
+    SPEC,
+    dict(SPEC, model="canopytree2", seed=32, top={"r": 3.2, "z": 7.0, "squash": 0.95},
+         ring={"count": 4, "out": (2.4, 3.2), "r": (2.2, 2.8), "z": (4.0, 5.2), "squash": 0.9}),
+    dict(SPEC, model="canopytree3", seed=33, top={"r": 4.6, "z": 2.6, "squash": 0.5},
+         ring={"count": 7, "out": (4.0, 5.2), "r": (2.8, 3.6), "z": (1.2, 2.2), "squash": 0.55}),
+)
 
 SIZE = 256
 CELL = 128
@@ -60,17 +76,23 @@ def shade(cols, light):
 
 
 def draw_disc(img, x0, y0, spec, lift, rng):
-    """One dome's disc: the centre (the dome's top) lit and the rim (its skirt) dark, under a few soft
-    lighter crownlets and a fine leaf grain about as fine as the painted canopy's. Clear outside it."""
+    """One dome's disc: the centre (the dome's top) lit and the rim (its skirt) dark, broken into leaf
+    clumps with dark cracks between them, under a fine leaf grain about as fine as the painted canopy's.
+    Clear outside it."""
     lv = spec["leaves"]
     c = CELL / 2
     yy, xx = np.mgrid[0:CELL, 0:CELL].astype(np.float32)
     r = np.hypot(xx - c + 0.5, yy - c + 0.5) / (c - 1)
     light = lv["top"] - lv["fall"] * r ** 1.5 + lift
-    for _ in range(lv["crownlets"]):
-        rr, a = 0.75 * math.sqrt(rng.uniform()), rng.uniform(0, 2 * math.pi)
-        bx, by, s = c + rr * c * math.cos(a), c + rr * c * math.sin(a), rng.uniform(0.08, 0.16) * CELL
-        light += lv["crownlet"] * (1.0 - rr) * np.exp(-((xx - bx) ** 2 + (yy - by) ** 2) / (2 * s * s))
+    # The clumps: each texel belongs to its nearest seed, lit by that clump's own draw, and darkens where
+    # the second-nearest seed is about as close, the crack. Coarse enough to survive the mips in game.
+    seeds = rng.uniform(0, CELL, (lv["clumps"], 2)).astype(np.float32)
+    d = np.hypot(xx[..., None] - seeds[:, 0], yy[..., None] - seeds[:, 1])
+    order = np.argsort(d, axis=2)
+    d1 = np.take_along_axis(d, order[..., :1], 2)[..., 0]
+    d2 = np.take_along_axis(d, order[..., 1:2], 2)[..., 0]
+    own = rng.uniform(-1, 1, lv["clumps"]).astype(np.float32)[order[..., 0]]
+    light += lv["clump"] * own - lv["crack"] * np.clip(1.0 - (d2 - d1) / lv["crack_px"], 0.0, 1.0)
     # The grain: specks a texel or two across, each a texel's own draw blurred by its neighbours.
     grain = rng.uniform(-1, 1, (CELL, CELL)).astype(np.float32)
     grain = (grain + np.roll(grain, 1, 0) + np.roll(grain, 1, 1)) / 3
@@ -116,8 +138,10 @@ def build(spec, mat, rng):
             q = r * (1.0 + spec["lumps"] * rng.uniform(-1, 1) * math.sin(theta))
             p = o + Vector((q * math.sin(theta) * math.cos(phi), q * math.sin(theta) * math.sin(phi), r * squash * math.cos(theta)))
             v = bm.verts.new(p)
-            # Out from the crown's centre and the dome's own, so the crown shades as one volume in a render.
-            normals[v] = ((p - centre).normalized() + (p - o).normalized()).normalized()
+            # Out from the dome's own centre, a little from the crown's, and a random part: leaf clumps, not a ball.
+            nm = spec["normals"]
+            normals[v] = ((p - centre).normalized() * nm["crown"] + (p - o).normalized()
+                          + Vector(tuple(rng.uniform(-1, 1, 3))) * nm["jitter"]).normalized()
             # The disc's centre is the dome's top, its rim the skirt: polar angle over the last ring's.
             s = 0.25 * 0.97 * theta / polar[-1]
             return v, (u0 + 0.25 + s * math.cos(phi + turn), v0 + 0.25 + s * math.sin(phi + turn))
@@ -145,20 +169,21 @@ def build(spec, mat, rng):
     return vb.mesh_object(spec["model"], bm, ordered, mat)
 
 
-def main(spec):
-    args = vb.parse_args(spec["chapters"])
-    vb.reset_scene()
-    rng = np.random.default_rng(spec["seed"])
-    atlas = vb.make_image(spec["model"] + "_atlas", draw_texture(spec, rng))
-    mat = vb.atlas_material(spec["model"], atlas)
-    obj = build(spec, mat, rng)
-    glb = vb.export_glb(obj, args.out, args.chapter, spec["model"])
-    renders = []
-    if args.render:
-        chapter, texture, size = spec["swatch"]
-        png = os.path.join(args.data_root, "extracted", chapter, "texture", texture)
-        renders = vb.compare_render(obj, (size, size, png), args.render, "%s_%s" % (args.chapter, spec["model"]), atlas)
-    vb.report(obj, glb, renders)
+def main(specs):
+    args = vb.parse_args(specs[0]["chapters"])
+    for spec in specs:
+        vb.reset_scene()
+        rng = np.random.default_rng(spec["seed"])
+        atlas = vb.make_image(spec["model"] + "_atlas", draw_texture(spec, rng))
+        mat = vb.atlas_material(spec["model"], atlas)
+        obj = build(spec, mat, rng)
+        glb = vb.export_glb(obj, args.out, args.chapter, spec["model"])
+        renders = []
+        if args.render:
+            chapter, texture, size = spec["swatch"]
+            png = os.path.join(args.data_root, "extracted", chapter, "texture", texture)
+            renders = vb.compare_render(obj, (size, size, png), args.render, "%s_%s" % (args.chapter, spec["model"]), atlas)
+        vb.report(obj, glb, renders)
 
 
-main(SPEC)
+main(SPECS)

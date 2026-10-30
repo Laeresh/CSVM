@@ -51,6 +51,11 @@ public static class VegetationModels
     // The grade's bounds: a model whose colours are that far off the card is a bad file, not a grade.
     private const float MinGrade = 0.25f, MaxGrade = 4f;
 
+    // The sun on a canopy crown: the world's vertex term on the crown's normal over its value at a half-lit
+    // normal. The crowns keep their graded brightness and gain a lit and a shaded side.
+    private const string CrownLitLines = "    float sun_mean = max(csky_sun_light.x + 0.5 * csky_sun_light.y, 1e-3);\n"
+        + "    ALBEDO *= csky_sun_vertex_light_at(v_normal, CAMERA_POSITION_WORLD) / sun_mean;\n";
+
     private static readonly Dictionary<(bool Lit, bool Fogged, bool Canopy), Shader> Shaders = new();
 
     /// <summary>The band both sides read under the standing <see cref="VegetationModelsSetting"/> word: near and
@@ -239,7 +244,8 @@ public static class VegetationModels
     // The card's look on a mesh, under the card's own far fade (none on a canopy model). Over the band the model
     // keeps the dither cells the card or the crowns give up, so a stamp never draws both or neither. It turns by
     // a hash of its stamp's origin, mirrors as its card does, leans in the card's breeze and gains on its sun half.
-    // ⚠ Never light it with the scene's lights: the card is unlit, and a lit model shows at the band.
+    // ⚠ Never light a card's model with the scene's lights: the card is unlit, and a lit model shows at the band.
+    // A canopy crown alone takes the sun term about its mean (CrownLitLines); it hands over to painted crowns.
     // ⚠ Never give it an instance uniform: each model cell would take 16 slots of Godot's global buffer.
     private static string ShaderCode(bool lit, bool fogged, bool canopy) => $$"""
         shader_type spatial;
@@ -248,6 +254,7 @@ public static class VegetationModels
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
         uniform vec3 grade = vec3(1.0);
         uniform vec2 {{BandParam}};
+        {{(canopy ? "varying vec3 v_normal;" : "")}}
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
@@ -277,7 +284,7 @@ public static class VegetationModels
             mat3 turn = mat3(vec3(cos(yaw), 0.0, -sin(yaw)), vec3(0.0, 1.0, 0.0), vec3(sin(yaw), 0.0, cos(yaw)));
             vec3 flip = vec3(MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0, 1.0, 1.0);
             vec3 v = turn * (VERTEX * flip){{(canopy ? " * MODEL_MATRIX[1].y" : "")}};
-        {{ClutterBuilder.FaceBasisLines(false)}}
+        {{(canopy ? "    v_normal = turn * (NORMAL * flip);\n" : "")}}{{ClutterBuilder.FaceBasisLines(false)}}
             v_side = dot(v.xz, face[0].xz) / half_width;
         {{ClutterBuilder.SunLine}}{{ClutterBuilder.LeanLines}}    v += vec3(breeze.x, 0.0, breeze.y) * (lean * v.y);
             VERTEX = (VIEW_MATRIX * vec4(origin + v * keep, 1.0)).xyz;
@@ -289,7 +296,7 @@ public static class VegetationModels
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb * grade{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
-        {{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
+        {{(canopy ? CrownLitLines : "")}}{{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
             ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;
         {{SceneBuilder.CoverageLines}}

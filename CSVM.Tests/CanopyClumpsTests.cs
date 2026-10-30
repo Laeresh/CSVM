@@ -224,23 +224,32 @@ public sealed class CanopyClumpsTests
     }
 
     /// <summary>The near crown models stand on painted points alone, at the painted surface. They carry about the
-    /// crowns a full cell does per covered area, the half-covered column too. The seed alone moves them.</summary>
+    /// crowns a full cell does per covered area, the half-covered column too. Fillers stand under emergents at
+    /// about the emergent share, and each crown is one of the shapes asked for. The tint stays between
+    /// yellow-green and blue-green. The seed alone moves them.</summary>
     [Fact]
     public void CrownModelsStandOnThePaintedCanopyAtItsCrownRate()
     {
         var mask = Painted();
-        var crowns = CanopyClumps.CrownModels(mask, CanopyClumps.PaintedTreesPerCell);
-        Assert.Equal(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.PaintedTreesPerCell));
-        Assert.NotEqual(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.PaintedTreesPerCell, seed: CanopyClumps.Seed + 1));
+        var crowns = CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, CanopyClumps.CrownBrightness, CanopyClumps.CrownTint, shapes: 3);
+        Assert.Equal(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, CanopyClumps.CrownBrightness, CanopyClumps.CrownTint, shapes: 3));
+        Assert.NotEqual(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, seed: CanopyClumps.Seed + 1, shapes: 3));
         Assert.All(crowns, c =>
         {
             Assert.True(mask.IsPainted(c.At.X, c.At.Z), $"a crown at x {c.At.X} stands off the painted canopy");
             Assert.Equal(7f, c.At.Y, 4);
-            Assert.InRange(c.Scale, 0.85f, 1.15f);
+            Assert.True(c.Scale is (>= 0.45f and <= 0.8f) or (>= 1f and <= 1.5f), $"a crown at scale {c.Scale} is neither a filler nor an emergent");
+            Assert.InRange(c.Shape, 0, 2);
+            // Red and blue move against each other about the brightness, so a crown is never brown or grey.
+            float b = (c.Colour.R + c.Colour.B) / 2f;
+            Assert.InRange(c.Colour.G / b, 1f - (0.3f * CanopyClumps.CrownTint), 1f + (0.3f * CanopyClumps.CrownTint));
         });
-        float full = 40 * CanopyClumps.PaintedTreesPerCell, half = 10 * 0.5f * CanopyClumps.PaintedTreesPerCell;
+        float full = 40 * CanopyClumps.CrownsPerCell, half = 10 * 0.5f * CanopyClumps.CrownsPerCell;
         Assert.InRange(crowns.Count(c => c.At.X < 4 * C), full * 0.85f, full * 1.15f);
         Assert.InRange(crowns.Count(c => c.At.X >= 4 * C), half * 0.6f, half * 1.4f);
+        Assert.InRange((float)crowns.Count(c => c.Scale >= 1f) / crowns.Count, CanopyClumps.EmergentShare * 0.8f, CanopyClumps.EmergentShare * 1.2f);
+        Assert.Equal(new[] { 0, 1, 2 }, crowns.Select(c => c.Shape).Distinct().OrderBy(s => s));
+        Assert.All(CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell), c => Assert.Equal(0, c.Shape));
         Assert.Contains(crowns, c => c.Mirror);
         Assert.Contains(crowns, c => !c.Mirror);
     }

@@ -743,10 +743,11 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   `spruce` (a numbers key it leaves out takes `firtree1`'s value; `colours` may be a dict per
   chapter); `veg_bush.py` builds `bush1`, `bush2`, `brush2` and `brush4`; `veg_rosette.py`
   builds `brush1`; `veg_tussock.py` builds `brush3`. A module named `veg_*.py` is a helper, not
-  a species, and is never passed to `-Species`. `canopytree.py` builds C3's crown model, which
-  stands over the painted jungle canopy where no card exists: a crown with no trunk, its pivot at
-  its lowest point, rendered beside a 12.8 m swatch of `forest1` (one repeat of the painted
-  canopy) in place of a card.
+  a species, and is never passed to `-Species`. `canopytree.py` builds C3's crown model and its
+  two sibling shapes (`canopytree2`, a tall emergent, and `canopytree3`, a broad low crown), which
+  stand over the painted jungle canopy where no card exists: crowns with no trunk, their pivots at
+  their lowest points, each rendered beside a 12.8 m swatch of `forest1` (one repeat of the
+  painted canopy) in place of a card.
 - The output is `CSVM/data/vegetation_models/<chapter>/<species>.glb.bin`, committed beside its
   generator: GLB bytes under the `.bin` extension, so Godot imports nothing, no `.import` file
   exists, and the export's `data/*.bin` filter packs it. `Mech3/VegetationModels.cs` loads it at run
