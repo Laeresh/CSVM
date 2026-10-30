@@ -111,7 +111,7 @@ public class DeckRegimeTests
     {
         // The authored deck-to-slab relationship (docs/formats/fogvol.md), read off the data
         // rather than re-typed as a constant, so a change to either reader fails this.
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
 
         float? deckAltitude = WorldBuilder.CloudDeckAltitudeOf(gamez);
         Assert.Equal(expectedDeckAltitude, deckAltitude);
@@ -139,7 +139,7 @@ public class DeckRegimeTests
     {
         // ⚠ Asserted against the authored band, not a hand-typed one: a mismatch is a finding
         // about the whiteout band, never a licence to move the flip.
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal(C1Bottom, weather!.CloudBottom, 3);
         Assert.Equal(C1Top, weather.CloudTop, 3);

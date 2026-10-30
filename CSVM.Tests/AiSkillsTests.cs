@@ -10,18 +10,17 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The <c>ai_skill_parameters</c> reader and the roster skill-vector accessor
-/// (docs/formats/ai-rosters.md). Mechanics on the hand-authored
-/// <c>fixtures/zrdr-skills/player.json</c>; the shipped endpoint constants and the roster's
-/// worked cases (the cabbie, the dead-eye-1 mooks) as goldens against the real extraction.
-/// The between-endpoint curve is LINEAR, and, decoded as of E42, its origin is rating 0, not
-/// rating 1: <c>value = lo + (hi-lo) · rating/9</c> (docs/org/aiControlLaw.md "The skill scalar").
+/// (docs/formats/ai-rosters.md). Mechanics run on the hand-authored
+/// <c>fixtures/zrdr-skills/player.zrd.json</c>. The shipped endpoint constants and the roster's
+/// worked cases (the cabbie, the dead-eye-1 mooks) are goldens against the real extraction.
+/// The between-endpoint curve is LINEAR, and its origin is rating 0, not rating 1:
+/// <c>value = lo + (hi-lo) · rating/9</c> (docs/org/aiControlLaw.md "The skill scalar").
 /// </summary>
 public class AiSkillsTests
 {
-    private static AiSkills Fixture => AiSkills.Load(TestData.Fixture("zrdr-skills"));
+    private static AiSkills Fixture => AiSkills.Load(TestZrdr.Fixture("zrdr-skills"));
 
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     [Fact]
     public void ReadsTheEndpointPairs()
@@ -162,7 +161,7 @@ public class AiSkillsTests
     {
         // C5/M01's cabbie autogyro: the worked skill-vector case (9 6 6 3 3 6 9 7 8, the two
         // lowest values on dead_eye/quick_draw, a cabbie who cannot shoot).
-        var roster = AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "M01"));
+        var roster = AiSkills.LoadRoster(TestZrdr.Mission("C5", "M01"));
         var cabbie = roster.First(b => b.Name.StartsWith("autogyro", System.StringComparison.OrdinalIgnoreCase));
         var v = AiSkills.RosterSkills(cabbie.Fields);
         Assert.Equal(3, v.DeadEye);
@@ -172,7 +171,7 @@ public class AiSkillsTests
         Assert.Equal(8, v.Constitution);
 
         // C1/M04 carries generic mooks: -1 in eight slots, a lone 1 on dead_eye.
-        var m04 = AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04"));
+        var m04 = AiSkills.LoadRoster(TestZrdr.Mission("C1", "M04"));
         Assert.Contains(m04, b =>
         {
             var s = AiSkills.RosterSkills(b.Fields);

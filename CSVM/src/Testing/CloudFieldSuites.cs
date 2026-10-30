@@ -90,8 +90,8 @@ internal static class CloudFieldSuites
     {
         foreach (var (chapter, expectBase, expectExtension, expectUp, expectSloped, lit) in Fields)
         {
-            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
-            string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            ZrdrSet zrdr = ctx.ChapterZrdr(chapter);
+            TextureSet texturePath = ctx.ChapterTextures(chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
             ctx.RequireData(texturePath, $"{chapter} textures");
             ctx.WithWorld(chapter, collision: false, world =>
@@ -166,8 +166,8 @@ internal static class CloudFieldSuites
         }
         foreach (var chapter in PuffChapters)
         {
-            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
-            string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            ZrdrSet zrdr = ctx.ChapterZrdr(chapter);
+            TextureSet texturePath = ctx.ChapterTextures(chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
             ctx.RequireData(texturePath, $"{chapter} textures");
             ctx.WithWorld(chapter, collision: false, world =>
@@ -213,7 +213,7 @@ internal static class CloudFieldSuites
     {
         foreach (var (chapter, expectVolumes, armed) in CensusChapters)
         {
-            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+            ZrdrSet zrdr = ctx.ChapterZrdr(chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
             ctx.WithWorld(chapter, collision: false, world =>
             {
@@ -316,7 +316,7 @@ internal static class CloudFieldSuites
         {
             return;
         }
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"), $"C1 textures");
+        ctx.RequireData(ctx.ChapterTextures("C1"), $"C1 textures");
         Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
         (int Authored, int Pooled, Vector3 Sum) faithful = default, enhanced = default;
         ctx.WithWorld("C1", collision: false, world => faithful = PlacedSprites(ctx, world, far, "faithful"));

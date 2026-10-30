@@ -16,8 +16,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class MilitiaPaintTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     private static string MessagesPath =>
         Path.Combine(TestData.ExtractedRoot!, "messages.json");
@@ -84,5 +83,5 @@ public class MilitiaPaintTests
     }
 
     private static Dictionary<string, string> Patterns() =>
-        MilitiaPaint.PatternByMilitia(ZrdrPath, Messages.Load(MessagesPath));
+        MilitiaPaint.PatternByMilitia(ZrdrPath, Messages.FromExtracted(MessagesPath));
 }

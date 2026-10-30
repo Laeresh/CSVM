@@ -163,9 +163,9 @@ public sealed class AiSkills
     /// <summary>Loads the <c>ai_skill_parameters</c> block from the shared zrdr scope's
     /// <c>player.json</c>. Throws when the block is absent, the shipped install always
     /// carries it, so a miss is a wrong path, not a default to paper over.</summary>
-    public static AiSkills Load(string zrdrPath)
+    public static AiSkills Load(ZrdrSet zrdr)
     {
-        if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is not List<object?> playerList)
+        if (zrdr.LoadFile("player.json")[0] is not List<object?> playerList)
             throw new InvalidDataException("player.json: unexpected root shape");
         var player = ZrdrDict.FromAlternating(playerList);
         if (player.List("ai_skill_parameters") is not { } block)
@@ -369,9 +369,9 @@ public sealed class AiSkills
     /// element 0 is the positional header, elements 1…N are <c>["nodename", [fields…]]</c>.
     /// Blocks are NOT fixed-width (42–81 fields ship); the fields list is returned raw so slot
     /// readers stay defensive.</summary>
-    public static List<(string Name, List<object?> Fields)> LoadRoster(string missionZrdrPath)
+    public static List<(string Name, List<object?> Fields)> LoadRoster(ZrdrSet missionZrdr)
     {
-        var root = Zrdr.LoadFileOrEmpty(missionZrdrPath, "aiv.json");
+        var root = missionZrdr.LoadFileOrEmpty("aiv.json");
         var blocks = new List<(string, List<object?>)>();
         for (int i = 1; i < root.Count; i++)
         {
@@ -386,9 +386,9 @@ public sealed class AiSkills
     /// <c>vehicle.params</c> names. The positional header carries one designer label per following
     /// block; its numeric ids are not contiguous, so block order is the join.</summary>
     public static List<(string Parameter, string Name, List<object?> Fields)> LoadGeneratorRoster(
-        string missionZrdrPath)
+        ZrdrSet missionZrdr)
     {
-        var root = Zrdr.LoadFileOrEmpty(missionZrdrPath, "aiv.json");
+        var root = missionZrdr.LoadFileOrEmpty("aiv.json");
         var templates = new List<(string, string, List<object?>)>();
         if (root.Count == 0 || root[0] is not List<object?> header)
             return templates;

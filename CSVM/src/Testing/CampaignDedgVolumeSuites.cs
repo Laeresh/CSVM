@@ -61,17 +61,17 @@ internal static class CampaignDedgVolumeSuites
         + "cylinder about that anchor, reverting when it leaves the cylinder and not before")]
     internal static void CampaignDedgVolume(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -89,7 +89,7 @@ internal static class CampaignDedgVolumeSuites
         var report = new StringBuilder();
         CheckAuthored(ctx, script, blocks, report);
 
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Zachary"), null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -143,10 +143,10 @@ internal static class CampaignDedgVolumeSuites
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, AiSkills skills,
-        string missionZrdr, string chapterZrdr, string texturesPath, StringBuilder report)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -163,9 +163,9 @@ internal static class CampaignDedgVolumeSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
@@ -392,7 +392,7 @@ internal static class CampaignDedgVolumeSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

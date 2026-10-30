@@ -87,7 +87,7 @@ public class SkyZoneTests
     public void EveryChapterHorizonCensusAndResolvedZoneAreWhatTheDataSays(
         string chapter, string expectedCensus, string expectedZone)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var zones = WorldBuilder.HorizonZonesOf(gamez);
 
         var census = new List<string>();

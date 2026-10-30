@@ -1,30 +1,48 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using CSVM.Extraction;
 
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The game's localized string table (mech3ax extracts the message resource to a plain
-/// JSON object: <c>{ "language_id": 1033, "entries": [{ "key", "id", "value" }, …] }</c>).
-/// Reader files reference display text indirectly by <c>MSG_*</c> key, targets.json's
-/// objective descriptions, briefing lines, UI labels, and this resolves them.
-/// Unlike the zrdr archives this is a single top-level file (default
-/// <c>extracted/messages.json</c>), so it is not a <see cref="Zrdr"/> list.
+/// The game's localized string table, read from <c>strings.dll</c>. Reader files reference display
+/// text indirectly by <c>MSG_*</c> key, targets.json's objective descriptions, briefing lines, UI
+/// labels, and this resolves them. A launch loads it once into <c>Spec/GameData.cs</c>, which every
+/// consumer reads it from.
 /// </summary>
 public sealed class Messages
 {
+    /// <summary>The table's file at the install root.</summary>
+    public const string GameFile = "strings.dll";
+
+    // The key table follows 48 bytes of C runtime initializer slots at the head of .data.
+    private const int KeyTableOffset = 48;
+
     private readonly Dictionary<string, string> _byKey = new(StringComparer.OrdinalIgnoreCase);
 
     public int Count => _byKey.Count;
 
-    /// <summary>Loads the message table from a messages.json file. Missing file → an empty
-    /// table (every lookup then falls back to the raw key), never throws, display strings
-    /// are cosmetic and a mission must still load without them.</summary>
-    public static Messages Load(string path) =>
-        File.Exists(path) ? Read(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
+    /// <summary>Every key and its text, for a tool that lists the table.</summary>
+    public IReadOnlyDictionary<string, string> Entries => _byKey;
+
+    /// <summary>Loads the table from the install's <c>strings.dll</c>. No source or no file gives
+    /// an empty table, whose lookups fall back to the raw key. Display strings are cosmetic, and a
+    /// mission must still load without them. A malformed DLL throws
+    /// <see cref="InvalidDataException"/>.</summary>
+    public static Messages Load(IGameFileSource? game) =>
+        game != null && game.Exists(GameFile) ? FromStringsDll(game.ReadAllBytes(GameFile)) : new Messages();
+
+    /// <summary>The table of unzbd's <c>messages.json</c>, the modding path; a missing file is an
+    /// empty table.</summary>
+    public static Messages FromExtracted(string path) =>
+        File.Exists(path) ? ReadExtracted(JsonDocument.Parse(File.ReadAllBytes(path))) : new Messages();
+
+    /// <summary>The same table out of <c>messages.json</c> text already in hand.</summary>
+    public static Messages ParseExtracted(string json) => ReadExtracted(JsonDocument.Parse(json));
 
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
@@ -82,25 +100,77 @@ public sealed class Messages
     /// <c>Fill(Get(key), args)</c>.</summary>
     public string Format(string? key, params string?[] args) => Fill(Get(key), args);
 
-    /// <summary>The same table out of JSON already in hand, for a caller with no file to point at.
-    /// Internal rather than public because every shipped caller holds a path, and only the unit
-    /// project builds a table out of a literal.</summary>
-    internal static Messages Parse(string json) => Read(JsonDocument.Parse(json));
-
-    // The one reader both entry points share. Takes the document over so a malformed file leaks
-    // nothing on the way back out.
-    private static Messages Read(JsonDocument doc)
+    /// <summary>A table out of key and value pairs, a later pair replacing an earlier one under the
+    /// same key. What the synthetic game data and the test oracle build a table with.</summary>
+    internal static Messages Of(IEnumerable<(string Key, string Value)> entries)
     {
         var msgs = new Messages();
+        foreach (var (key, value) in entries)
+        {
+            msgs._byKey[key] = value;
+        }
+
+        return msgs;
+    }
+
+    /// <summary>The table out of a <c>strings.dll</c>'s bytes. The values are its
+    /// <c>STRINGTABLE</c>; the keys are a table of name-pointer and id pairs in its <c>.data</c>
+    /// section. Layout: docs/formats/missions.md#message-table.</summary>
+    internal static Messages FromStringsDll(byte[] pe)
+    {
+        var text = PeStringTable.Read(pe);
+        var (data, address) = PeStringTable.Section(pe, ".data")
+            ?? throw new InvalidDataException("strings.dll has no .data section");
+        var msgs = new Messages();
+
+        // The pairs run up to the first name, which the last pair points at.
+        int end = data.Length;
+        int used = 0;
+        for (int o = KeyTableOffset; o + 8 <= end; o += 8)
+        {
+            long name = (long)BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(o)) - address;
+            int id = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(o + 4));
+            int nul = name >= o + 8 && name < data.Length ? Array.IndexOf(data, (byte)0, (int)name) : -1;
+            if (nul < 0)
+            {
+                throw new InvalidDataException("strings.dll key " + id + " points outside its .data section");
+            }
+
+            string key = Encoding.ASCII.GetString(data, (int)name, nul - (int)name);
+            msgs._byKey[key] = text.TryGetValue(id, out var value) ? value
+                : throw new InvalidDataException("strings.dll key " + key + " has no string " + id);
+            end = Math.Min(end, (int)name);
+            used++;
+        }
+
+        // Every string is named by a key, so a shortfall means the key table was misread.
+        if (used != text.Count)
+        {
+            throw new InvalidDataException("strings.dll names " + used + " of its " + text.Count + " strings");
+        }
+
+        return msgs;
+    }
+
+    // Each entry's key and value, an entry missing either skipped.
+    private static Messages ReadExtracted(JsonDocument doc)
+    {
+        var entries = new List<(string, string)>();
         using (doc)
         {
-            if (doc.RootElement.TryGetProperty("entries", out var entries)
-                && entries.ValueKind == JsonValueKind.Array)
-                foreach (var e in entries.EnumerateArray())
+            if (doc.RootElement.TryGetProperty("entries", out var list) && list.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var e in list.EnumerateArray())
+                {
                     if (e.TryGetProperty("key", out var k) && k.GetString() is { } key
                         && e.TryGetProperty("value", out var v) && v.GetString() is { } value)
-                        msgs._byKey[key] = value;
+                    {
+                        entries.Add((key, value));
+                    }
+                }
+            }
         }
-        return msgs;
+
+        return Of(entries);
     }
 }

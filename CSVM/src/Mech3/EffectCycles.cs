@@ -19,17 +19,17 @@ public static class EffectCycles
     /// <summary>Installs every EFFECTS flipbook onto the gamez material it targets, and returns one
     /// summary line per entry for the build log. A missing or unreadable reader is not an error,
     /// the world simply keeps its static base textures.</summary>
-    public static List<string> Apply(GameZ gamez, string sharedZrdrPath)
+    public static List<string> Apply(GameZ gamez, ZrdrSet sharedZrdr)
     {
         var applied = new List<string>();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(sharedZrdrPath, "effects.zrd.json");
+            root = sharedZrdr.LoadFile("effects.zrd.json");
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or InvalidDataException)
         {
-            Log.Warn("world", $"effects.zrd.json not readable under {sharedZrdrPath}, no effect flipbooks");
+            Log.Warn("world", $"effects.zrd.json not readable under {sharedZrdr}, no effect flipbooks");
             return applied;
         }
 

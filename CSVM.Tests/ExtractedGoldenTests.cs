@@ -21,18 +21,18 @@ namespace CSVM.Tests;
 public class ExtractedGoldenTests
 {
     /// <summary>The eight chapter worlds and the number of readers each yields. C1C and C2B ship
-    /// one file more than this (29 and 26): their <c>templates</c> reader extracts to a literal
-    /// JSON <c>null</c>, which carries no list and so is not a reader.</summary>
+    /// one reader more than this (28 and 25). Their <c>templates</c> reader extracts to a literal
+    /// JSON <c>null</c>, which carries no list.</summary>
     public static TheoryData<string, int> ChapterReaderCounts => new()
     {
-        { "C1", 71 },
-        { "C1B", 30 },
-        { "C1C", 28 },
-        { "C2", 71 },
-        { "C2B", 25 },
-        { "C3", 57 },
-        { "C4", 58 },
-        { "C5", 57 },
+        { "C1", 70 },
+        { "C1B", 29 },
+        { "C1C", 27 },
+        { "C2", 70 },
+        { "C2B", 24 },
+        { "C3", 56 },
+        { "C4", 57 },
+        { "C5", 56 },
     };
 
     /// <summary>Every player airframe's shipped chase distance from <c>camparam.json</c>. Seven
@@ -57,8 +57,7 @@ public class ExtractedGoldenTests
     private static string Extracted => TestData.ExtractedRoot!;
     private static string DataRoot => TestData.DataRoot!;
 
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(Extracted, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     private static string Planes =>
         SessionPaths.PreferUnzipped(Path.Combine(Extracted, "planes.zip"));
@@ -66,16 +65,16 @@ public class ExtractedGoldenTests
     [ExtractedDataFact]
     public void TheSharedZrdrScopeShipsItsFullReaderSet()
     {
-        // 222 files on disk; dlgMessage and mp_dialog extract to a literal JSON null and
-        // therefore yield no reader list, which is why the loader sees 220.
-        Assert.Equal(220, CountReaders(SharedZrdr));
+        // 221 readers; dlgMessage and mp_dialog extract to a literal JSON null and therefore
+        // yield no reader list, which is why the loader sees 219. The manifest is no reader.
+        Assert.Equal(219, CountReaders(SharedZrdr));
     }
 
     [ExtractedDataTheory]
     [MemberData(nameof(ChapterReaderCounts))]
     public void EachChapterShipsItsOwnReaderSet(string chapter, int expected)
     {
-        Assert.Equal(expected, CountReaders(SessionPaths.ChapterZrdr(DataRoot, chapter)));
+        Assert.Equal(expected, CountReaders(TestZrdr.Chapter(chapter)));
     }
 
     [ExtractedDataFact]
@@ -125,7 +124,7 @@ public class ExtractedGoldenTests
     [ExtractedDataFact]
     public void TheMessageTableResolvesTheInstallsStrings()
     {
-        Assert.Equal(1023, Messages.Load(Path.Combine(Extracted, "messages.json")).Count);
+        Assert.Equal(1023, Messages.FromExtracted(Path.Combine(Extracted, "messages.json")).Count);
     }
 
     [ExtractedDataFact]
@@ -208,7 +207,7 @@ public class ExtractedGoldenTests
     {
         // A reader def whose AnimName is left null instantiates a second copy alongside its
         // compiled twin instead of colliding with it.
-        var defs = AnimDefs.LoadArchive(SessionPaths.ChapterZrdr(DataRoot, "C1"));
+        var defs = AnimDefs.LoadArchive(TestZrdr.Chapter("C1"));
         Assert.NotEmpty(defs);
         foreach (var def in defs)
         {
@@ -242,10 +241,10 @@ public class ExtractedGoldenTests
 
     // A reader archive's file count, through the loader itself rather than a directory listing,
     // so the zipped and unpacked shapes are counted the same way.
-    private static int CountReaders(string zrdrPath)
+    private static int CountReaders(ZrdrSet zrdr)
     {
         int count = 0;
-        foreach (var _ in Zrdr.LoadMatchingFiles(zrdrPath, ""))
+        foreach (var _ in zrdr.LoadMatchingFiles(string.Empty))
         {
             count++;
         }

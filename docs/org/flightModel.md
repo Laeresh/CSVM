@@ -2785,7 +2785,8 @@ suppressed, so it flies into terrain. That reads as deliberate.
 
 **Emitters.** `FUN_004c8f70` walks the terrain grid and tests, per cell, the terrain geometry and
 every scene node whose flag word at `node+0x24` carries both bits `0x4` and `0x10`, which are
-`ACTIVE` and `INTERSECT_SURFACE` (`tools/mech3ax/crates/api-types/src/gamez/nodes.rs`);
+`ACTIVE` and `INTERSECT_SURFACE` (`GameZZbd.cs` reads them as `GameZNode.Active` and
+`IntersectSurface`);
 `FUN_004c8ec0` keeps the nearest hit. Terrain and ordinary scenery always qualify.
 
 **The vehicle filter, and what it excludes** (decoded 2026-08-15). Inside the player-only branch

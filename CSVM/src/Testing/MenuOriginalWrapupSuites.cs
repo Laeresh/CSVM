@@ -54,8 +54,8 @@ internal static class MenuOriginalWrapupSuites
     private static void OnShell(
         TestContext ctx, string scratch, System.Action<MenuHost, ScriptedSeat, OriginalShell, BoardFit> walk)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -68,12 +68,12 @@ internal static class MenuOriginalWrapupSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, scratch);
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -186,12 +186,12 @@ internal static class MenuOriginalWrapupSuites
     // post-its. The last frame is held back past the page waking and fills its print on landing.
     private static void Photographs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
-        string gamez = SessionPaths.ChapterGamez(ctx.DataRoot, "C4");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
+        var gamez = ctx.ChapterGamez("C4");
+        ZrdrSet zrdr = ctx.MissionZrdr("C4", "IA1");
         ctx.RequireData(gamez, $"C4 gamez");
         ctx.RequireData(zrdr, $"C4/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var run = StuntMission.Load(GameZ.Load(gamez), zrdr, Messages.Load(ctx.MessagesPath))
+        ctx.RequireMessages();
+        var run = StuntMission.Load(gamez!, zrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException("C4/IA1 ships no Danger Zones");
 
         string? previous = StuntCapture.DirectoryOverride;

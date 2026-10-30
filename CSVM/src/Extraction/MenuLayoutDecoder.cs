@@ -27,73 +27,39 @@ namespace CSVM.Extraction
         private static readonly Regex LiteralRe = new Regex("\"((?:[^\"\\\\]|\\\\.)*)\"");
         private static readonly Regex AssetRe = new Regex(@"\w\.(png|tga|jpg|jpeg|wav|mpg|tif|bm|dll|script)$", RegexOptions.IgnoreCase);
 
-        /// <summary>Reads the extracted rof tree and writes <c>menu_layout.json</c> into it.
-        /// Returns the document so the caller can print its census.</summary>
-        public static MenuLayoutDocument Run(string rofRoot, Dictionary<int, string> strings)
-        {
-            MenuLayoutInput input = ReadTree(rofRoot, strings);
-            MenuLayoutDocument doc = Decode(input);
-            string json = ToJson(doc);
-            File.WriteAllText(Path.Combine(rofRoot, "menu_layout.json"), json, new UTF8Encoding(false));
-            return doc;
-        }
-
-        /// <summary>Gathers the decode's inputs from an extracted <c>rof</c> tree.</summary>
-        public static MenuLayoutInput ReadTree(string rofRoot, Dictionary<int, string> strings)
+        /// <summary>Gathers the decode's inputs from the UI archive's files.</summary>
+        public static MenuLayoutInput ReadTree(RofFiles rof, Dictionary<int, string> strings)
         {
             var input = new MenuLayoutInput();
             input.Strings = strings;
-            string assets = Path.Combine(rofRoot, "ASSETS");
-            string layoutPath = Path.Combine(assets, "LAYOUT.CSV");
-            if (File.Exists(layoutPath))
+            input.LayoutCsv = rof.Text("ASSETS/LAYOUT.CSV", Encoding.ASCII) ?? string.Empty;
+            input.ScrapbookCsv = rof.Text("ASSETS/SCRAPBOOK.CSV", Encoding.ASCII) ?? string.Empty;
+            input.ResourceHeader = rof.Text("ASSETS/SCRIPTS/RESOURCE.H", Encoding.ASCII) ?? string.Empty;
+            const string Scripts = "ASSETS/SCRIPTS/";
+            var files = new List<string>(rof.Files);
+            files.Sort(StringComparer.OrdinalIgnoreCase);
+            string patch = RofTree.Canonical(RofFiles.PatchFolder + "/");
+            foreach (string f in files)
             {
-                input.LayoutCsv = File.ReadAllText(layoutPath, Encoding.ASCII);
-            }
-
-            string scrapbookPath = Path.Combine(assets, "SCRAPBOOK.CSV");
-            if (File.Exists(scrapbookPath))
-            {
-                input.ScrapbookCsv = File.ReadAllText(scrapbookPath, Encoding.ASCII);
-            }
-
-            string resourcePath = Path.Combine(assets, "SCRIPTS", "RESOURCE.H");
-            if (File.Exists(resourcePath))
-            {
-                input.ResourceHeader = File.ReadAllText(resourcePath, Encoding.ASCII);
-            }
-
-            string scriptDir = Path.Combine(assets, "SCRIPTS");
-            if (Directory.Exists(scriptDir))
-            {
-                string[] files = Directory.GetFiles(scriptDir, "*.SCRIPT");
-                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                foreach (string f in files)
+                if (f.StartsWith(Scripts, StringComparison.Ordinal) && f.IndexOf('/', Scripts.Length) < 0
+                    && f.EndsWith(".SCRIPT", StringComparison.OrdinalIgnoreCase))
                 {
                     var src = new MenuScriptSource();
                     src.Name = Path.GetFileNameWithoutExtension(f);
-                    src.Text = File.ReadAllText(f, Encoding.ASCII);
+                    src.Text = rof.Text(f, Encoding.ASCII) ?? string.Empty;
                     input.Scripts.Add(src);
                 }
-            }
 
-            if (Directory.Exists(assets))
-            {
-                foreach (string f in Directory.GetFiles(assets, "*", SearchOption.AllDirectories))
+                if (f.StartsWith("ASSETS/", StringComparison.Ordinal))
                 {
-                    input.ArchiveFiles.Add(f.Substring(assets.Length).Replace('\\', '/').TrimStart('/'));
+                    input.ArchiveFiles.Add(f.Substring("ASSETS/".Length));
+                }
+                else if (f.StartsWith(patch, StringComparison.Ordinal))
+                {
+                    input.PatchMembers.Add(f.Substring(patch.Length));
                 }
             }
 
-            string patchRoot = Path.Combine(rofRoot, "_crimptch");
-            if (Directory.Exists(patchRoot))
-            {
-                foreach (string f in Directory.GetFiles(patchRoot, "*", SearchOption.AllDirectories))
-                {
-                    input.PatchMembers.Add(f.Substring(patchRoot.Length).Replace('\\', '/').TrimStart('/'));
-                }
-            }
-
-            input.PatchMembers.Sort(StringComparer.OrdinalIgnoreCase);
             return input;
         }
 

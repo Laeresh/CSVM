@@ -38,7 +38,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     private readonly Transform3D _panelLocal;
 
     // Each body mesh with its twin under the panel, which takes its pose and visibility in Sync.
-    private readonly List<(Node3D Original, Node3D Twin)> _mirrored = new();
+    private readonly List<Mech3.BodyTwin> _mirrored = new();
 
     // The panel's own shader materials, whose point-light term needs the world position of this
     // pass's origin (SceneBuilder's `light_origin`).
@@ -102,7 +102,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// every <see cref="Sync"/>. Its original joins <paramref name="visibility"/>'s reseated list, so it leaves the
     /// pilot's pane while the panel draws.</summary>
     public static CockpitOverlay? BuildBody(Node parent, Node3D panel, Vector3 eye,
-        IEnumerable<(MeshInstance3D Original, MeshInstance3D Twin)> twins, CockpitVisibility? visibility,
+        IEnumerable<Mech3.BodyTwin> twins, CockpitVisibility? visibility,
         DirectionalLight3D? sun, Godot.Environment? env)
     {
         if (Build(parent, panel, sun, env, body: true, eye) is not { } overlay)
@@ -110,10 +110,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
             return null;
         }
 
-        foreach (var (original, twin) in twins)
+        foreach (var pair in twins)
         {
-            overlay._mirrored.Add((original, twin));
-            visibility?.Reseat(original);
+            overlay._mirrored.Add(pair);
+            visibility?.Reseat(pair.Original);
         }
 
         return overlay;
@@ -153,7 +153,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
         // A body turns about the shake pivot, as its originals do. The stock interior's zero origin turns about the eye.
         _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount.Basis, shakeRotation),
             attitudeOnly * ((Basis.FromEuler(shakeRotation) * _mount.Origin) - _eye));
-        MirrorBody();
+        if (_owner != null)
+        {
+            // Each twin takes its original's pose on the model root and its visibility.
+            Mech3.BodyTwins.Mirror(_mirrored, _owner, _panelLocal);
+        }
+
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
@@ -324,25 +329,6 @@ public sealed partial class CockpitOverlay : CanvasLayer
         // the mount PlaneBuilder built, and the pass changes only where the frame's origin is.
         interior.Transform = new Transform3D(_mount.Basis, _mount.Origin - _eye);
         _view.AddChild(interior);
-    }
-
-    // Each twin takes its original's pose on the model root and its visibility. A twin whose original
-    // went, or left the model, hides.
-    private void MirrorBody()
-    {
-        foreach (var (original, twin) in _mirrored)
-        {
-            if (!GodotObject.IsInstanceValid(twin))
-            {
-                continue;
-            }
-
-            twin.Visible = GodotObject.IsInstanceValid(original) && original.IsVisibleInTree() && _owner!.IsAncestorOf(original);
-            if (twin.Visible)
-            {
-                twin.Transform = XrCockpit.InInterior(_panelLocal, Mech3.PlaneRigPatch.PlaneFrame(original, _owner!));
-            }
-        }
     }
 
     // The omni muzzle flashes live in the main world, which this world cannot see, so each lit one

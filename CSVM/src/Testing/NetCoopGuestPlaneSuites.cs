@@ -49,9 +49,9 @@ internal static class NetCoopGuestPlaneSuites
         + "wingman mission only, and a splitscreen second seat follows the same rule")]
     internal static void EverySeatPicksItsOwnPlane(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath).ToArray();
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr).ToArray();
         var solo = missions.Cast<CampaignMission?>().FirstOrDefault(m => !m!.Value.Wingman)
             ?? throw new SuiteSkippedException($"cm_sequence carries no mission without a wingman");
         var wing = missions.Cast<CampaignMission?>().FirstOrDefault(m => m!.Value.Wingman && m.Value.ChapterFolder.Length > 0)
@@ -217,15 +217,15 @@ internal static class NetCoopGuestPlaneSuites
     private static void StockWingmanBinds(TestContext ctx, string root, CampaignMission wing, CoopWingmanMessage? told)
     {
         string chapter = wing.ChapterFolder.ToUpperInvariant();
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, wing.MissionFolder.ToUpperInvariant());
-        if (!Directory.Exists(zrdr) && !File.Exists(zrdr))
+        ZrdrSet zrdr = ctx.MissionZrdr(chapter, wing.MissionFolder.ToUpperInvariant());
+        if (!zrdr.Exists)
         {
             ctx.Check(false, $"the wingman mission's script is on disk ({zrdr})");
             return;
         }
 
-        var saved = CampaignDirector.TryCreate(Spec(root, wing, null), ctx.ZrdrPath, zrdr);
-        var settled = CampaignDirector.TryCreate(Spec(root, wing, told), ctx.ZrdrPath, zrdr);
+        var saved = CampaignDirector.TryCreate(Spec(root, wing, null), ctx.Zrdr, zrdr);
+        var settled = CampaignDirector.TryCreate(Spec(root, wing, told), ctx.Zrdr, zrdr);
         ctx.Check(saved?.WingmanNode == StockAirframes.Node(WingAirframe),
             $"ABLE-TO-FAIL CONTROL: with nothing settled the director binds the saved wingman plane ({saved?.WingmanNode})");
         ctx.Check(settled?.WingmanNode == StockAirframes.Node(CoopPlanePool.StockAirframe),
@@ -322,7 +322,7 @@ internal static class NetCoopGuestPlaneSuites
 
     private static CampaignFeature OpenHost(TestContext ctx, string root, CampaignProfileStore store, CampaignMission mission)
     {
-        var host = new CampaignFeature(UiStrings.Empty, StockAirframes.Node);
+        var host = new CampaignFeature(UiStrings.Empty, StockAirframes.Node) { Data = ctx.Data };
         host.Open(store, new CustomPlaneStore(Path.Combine(root, "Planes")), StockLoadouts.Load(), ctx.DataRoot);
         host.SeatProfile(HostPilot);
         host.SetMission(mission.Seq);

@@ -45,12 +45,12 @@ internal static class LoadSheetSuites
         + "reference still flag for flag")]
     internal static void LoadSheetScreen(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
 
         // Every campaign mission, not the run's own chapter: no world is built here, so the whole
         // sequence is affordable, and the filmed mission has to be in it whatever chapter is up.
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (missions.Count == 0)
         {
             throw new SuiteSkippedException($"cm_sequence names no campaign mission");
@@ -65,8 +65,8 @@ internal static class LoadSheetSuites
         {
             string key = EscapeDialog.CampaignKey(mission.Campaign, mission.Mission);
             var sheet = LoadSheet.Load(
-                ctx.ZrdrPath, ctx.MessagesPath,
-                SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
+                ctx.Zrdr, ctx.Data.Messages,
+                ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder),
                 key, memento);
             if (sheet == null)
             {
@@ -127,12 +127,12 @@ internal static class LoadSheetSuites
         ctx.Check(waits > 0, $"the sequence does author waits, so the settle is doing work ({waits})");
     }
 
-    // Every bitmap the composition names, against the extraction's own rimage folder. A name the
-    // extraction does not carry draws nothing and logs nothing, so it is invisible without this.
+    // Every bitmap the composition names, against the rimage archive. A name the
+    // archive does not carry draws nothing and logs nothing, so it is invisible without this.
     private static void CheckArtExists(
         TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, StringBuilder report)
     {
-        string rimage = Path.Combine(ctx.DataRoot, "extracted", "rimage");
+        var rimage = ctx.Data.Rimage;
         var missing = new List<string>();
         int named = 0;
         foreach (var (mission, sheet) in sheets)
@@ -140,7 +140,7 @@ internal static class LoadSheetSuites
             foreach (string name in ArtNames(Compose(sheet)))
             {
                 named++;
-                if (!File.Exists(Path.Combine(rimage, name.ToLowerInvariant() + ".png")))
+                if (rimage.Find(name) == null)
                 {
                     missing.Add($"{mission.MissionFolder}:{name}");
                 }
@@ -304,8 +304,8 @@ internal static class LoadSheetSuites
 
         var mission = sheets[0].Mission;
         var bare = LoadSheet.Load(
-            ctx.ZrdrPath, ctx.MessagesPath,
-            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
+            ctx.Zrdr, ctx.Data.Messages,
+            ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder),
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), seeded);
         var board = bare == null ? null : Compose(bare);
         ctx.Check(
@@ -334,7 +334,7 @@ internal static class LoadSheetSuites
     // which is the whole of what this screen can promise while everything else is still loading.
     private static void CheckBareSheet(TestContext ctx)
     {
-        var bare = LoadScreens.For(true, "unused", null, "no-zrdr", "no-messages");
+        var bare = LoadScreens.For(true, "unused", null, ZrdrSet.None, new Messages());
         ctx.Same(1, bare.Backdrop.Count, $"an unreadable sheet keeps the frame behind the screen");
         ctx.Check(
             bare.Pictures.Count == 1 && bare.Pictures[0].Art.Name == "prog_blkload"
@@ -393,7 +393,7 @@ internal static class LoadSheetSuites
 
         var mission = sheets[0].Mission;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign: true, string.Empty, null,
+            ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, campaign: true, string.Empty, null,
             sheets[0].Sheet);
         ctx.Host.AddChild(board);
         try
@@ -432,7 +432,7 @@ internal static class LoadSheetSuites
     }
 
     private static ComposedBoard Compose(LoadSheet sheet) =>
-        LoadScreens.For(true, string.Empty, null, "unused", "unused", sheet);
+        LoadScreens.For(true, string.Empty, null, ZrdrSet.None, new Messages(), sheet);
 
     // How many objectives the dialog's script binds, which is how many rows the parchment lists.
     private static int ObjectiveBeats(LoadSheet sheet)

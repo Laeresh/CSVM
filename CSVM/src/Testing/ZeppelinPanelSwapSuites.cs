@@ -41,9 +41,9 @@ internal static class ZeppelinPanelSwapSuites
         "the panels are gone, which is what stands in the opening")]
     internal static void ZeppelinPanelSwap(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         ctx.WithWorld(Chapter, collision: false, Mission, world => Run(ctx, world));
     }
 

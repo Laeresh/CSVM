@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -14,8 +15,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class PlaneStatsFlightGlobalsTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void TheAuthoredFlightGlobalsAreLoadedNotFallenBackTo()

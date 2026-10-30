@@ -6,6 +6,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Spec;
 using CSVM.UI.Menu;
@@ -68,10 +69,10 @@ internal static class NetStuntRaceSuites
         + "guest's race does not end at its own cap but on the host's, after the host's race has ended")]
     internal static void ANetworkRaceKeepsOneBoard(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RaceChapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var ambient = NetCombatSuites.Ambient.Save();
@@ -96,10 +97,10 @@ internal static class NetStuntRaceSuites
         + "pair, the host's Lobby takes the guest to the lobby with the same race table on both machines")]
     internal static void ANetworkRaceEndsOnTheHostsWord(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RaceChapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var ambient = NetCombatSuites.Ambient.Save();
@@ -130,10 +131,10 @@ internal static class NetStuntRaceSuites
     internal static void ANetworkRaceRespawnsInFlight(TestContext ctx)
     {
         const string cell = "respawn";
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RaceChapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var ambient = NetCombatSuites.Ambient.Save();

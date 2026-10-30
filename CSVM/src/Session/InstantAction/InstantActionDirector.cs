@@ -192,8 +192,8 @@ public sealed class InstantActionDirector
         AiNet? iaPatrolNet = null;
         try
         {
-            iaPatrolNet = AiNets.ChapterFirst(AiNets.Load(inputs.ChapterZrdrPath),
-                inputs.ChapterZrdrPath);
+            iaPatrolNet = AiNets.ChapterFirst(AiNets.Load(inputs.ChapterZrdr),
+                inputs.ChapterZrdr);
         }
         catch (Exception e)
         {
@@ -228,7 +228,7 @@ public sealed class InstantActionDirector
             {
                 Log.Warn("core", $"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven airframes, no ace spawned");
             }
-            else if (SpawnPoints.LoadIa(inputs.MissionZrdrPath, ia.Def.MissionType) is not { Count: > 0 } aceSpawns)
+            else if (SpawnPoints.LoadIa(inputs.MissionZrdr, ia.Def.MissionType) is not { Count: > 0 } aceSpawns)
             {
                 Log.Warn("core", $"ia: no '{ia.Def.MissionType}' spawn points for {_spec.Chapter}/{_spec.Mission}, no ace spawned");
             }
@@ -280,7 +280,7 @@ public sealed class InstantActionDirector
                 // player_fortune: the wingmen's shared livery. The colour and decal values ride the
                 // setup screen in the original, not ia.json, so the catalog entry stands in
                 // (docs/formats/paint.md).
-                var wingmanScheme = inputs.LiveryResolver.PaintCatalog(inputs.ZrdrPath)
+                var wingmanScheme = inputs.LiveryResolver.PaintCatalog(inputs.Zrdr)
                     .Find(s => string.Equals(s.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase));
                 if (wingmanScheme == null)
                 {
@@ -893,7 +893,7 @@ public sealed class InstantActionDirector
     private PaintScheme? WaveMilitiaScheme(ActorBuildInputs inputs, string enemyName)
     {
         return MilitiaPaint.PatternForWave(MilitiaPatterns(inputs), enemyName) is { } pattern
-            ? inputs.LiveryResolver.CatalogScheme(inputs.ZrdrPath, pattern)
+            ? inputs.LiveryResolver.CatalogScheme(inputs.Zrdr, pattern)
             : null;
     }
 
@@ -903,8 +903,8 @@ public sealed class InstantActionDirector
             return _militiaPatterns;
         try
         {
-            _militiaPatterns = MilitiaPaint.PatternByMilitia(inputs.ZrdrPath,
-                Messages.Load(inputs.MessagesPath));
+            _militiaPatterns = MilitiaPaint.PatternByMilitia(inputs.Zrdr,
+                inputs.Messages);
         }
         catch (Exception e)
         {
@@ -920,10 +920,10 @@ public sealed class InstantActionDirector
     internal sealed class ActorBuildInputs
     {
         public List<PlayerRig> Rigs = null!;
-        public string ChapterZrdrPath = "";
-        public string MissionZrdrPath = "";
-        public string ZrdrPath = "";
-        public string MessagesPath = "";
+        public ZrdrSet ChapterZrdr = ZrdrSet.None;
+        public ZrdrSet MissionZrdr = ZrdrSet.None;
+        public ZrdrSet Zrdr = ZrdrSet.None;
+        public Messages Messages = new();
         public List<SpawnPoint>? SpawnList;
         public int SpawnBase;
         public LiveryResolver LiveryResolver = null!;

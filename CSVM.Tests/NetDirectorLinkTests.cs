@@ -159,7 +159,7 @@ public sealed class NetDirectorLinkTests
     {
         // The same route ObjectiveGraphTests drives on one graph. It takes the tower down inside
         // the distress window, then a Promised Land hatch, the squad wake and the DEDG chain.
-        var script = ObjectiveScript.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04"));
+        var script = ObjectiveScript.Load(TestZrdr.Mission("C1", "M04"));
         var pair = new Linked(script);
         pair.Host.Wake(14);
         pair.HostWorld.Inactive.Add("rtwr_healthy");
@@ -194,8 +194,8 @@ public sealed class NetDirectorLinkTests
     private static ObjectiveScript Script(string body)
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "objectives.json"), "[[" + body + "]]");
-        return ObjectiveScript.Load(dir);
+        File.WriteAllText(Path.Combine(dir, "objectives.zrd.json"), "[[" + body + "]]");
+        return ObjectiveScript.Load(TestZrdr.Folder(dir));
     }
 
     // A host graph and a replicated graph over one script, each on its own session end of a

@@ -106,6 +106,9 @@ public sealed partial class GaugeCluster : Control
     internal const float LowAltAglM = 60f;              // 0x006076fc
     internal const float LowAltBlinkBaseS = 0.14f;      // 0x006076f4
     internal const float LowAltBlinkPerMetreS = 0.006f; // 0x006076f8
+    // The speedometer's placement (the screen metrics below say how it was measured). Internal
+    // because ThrottlePlate stands beside it.
+    internal const float SpdCenterFromRight = 420f, SpdCenterY = 1108.5f, SpdRadius = 85f;
     internal const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
@@ -117,10 +120,9 @@ public sealed partial class GaugeCluster : Control
 
     // Screen metrics measured in OriginalScreenshots/HUD.png (2556×1440) via dark-span
     // scans of the bezel rings, scaled by viewport height like CompassTape. All three
-    // dials share one size (R 85); x anchors from the reading box's left edge except the
-    // speedometer (from its right, mirroring the altimeter's margin).
+    // dials share one size (R 85). The x anchors run from the reading box's left edge, except the
+    // speedometer's (from its right, mirroring the altimeter's margin).
     private const float AltRadius = 85f;
-    private const float SpdCenterFromRight = 420f, SpdCenterY = 1108.5f, SpdRadius = 85f;
     private const float DmgRadius = 85f;
     // The two weapon gauges (measured off OriginalScreenshots/HUD.png): the ROCKETS dial sits one
     // dial-pitch (190.5 px, the alt→damage spacing) above the altimeter, the GUNS dial the same
@@ -565,6 +567,13 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
+    // The dials are measured off HUD.png as absolute 1440p-reference y coordinates. They are
+    // really anchored to the BOTTOM of the screen, 331 / 141 px up from it. Measuring from the
+    // bottom equals `refY · s` whenever s is the plain height ratio (single player). It is what
+    // keeps them on screen when a splitscreen pane draws them at a damped, larger scale (HudMetrics).
+    internal static float FromBottom(float refY, float s, float viewportH) =>
+        viewportH - (HudMetrics.ReferenceHeight - refY) * s;
+
     internal float BlinkLeftAt(string part) =>
         _zones.Find(z => z.Part.Equals(part, StringComparison.OrdinalIgnoreCase))?.BlinkLeft ?? 0f;
 
@@ -642,14 +651,6 @@ public sealed partial class GaugeCluster : Control
         }
         return i < name.Length && int.TryParse(name[i..], out var n) ? n : 0;
     }
-
-    // The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
-    // they are really anchored to the BOTTOM of the screen (they sit 331 / 141 px up from it).
-    // Measuring from the bottom is identical to `refY · s` whenever s is the plain
-    // height ratio (single player), and is what keeps them on screen when a splitscreen pane
-    // draws them at a damped, larger-than-proportional scale (see HudMetrics).
-    private static float FromBottom(float refY, float s, float viewportH) =>
-        viewportH - (HudMetrics.ReferenceHeight - refY) * s;
 
     // A count right-aligned into `width` digit cells, space-padded
     // (clamped 0..9999, the 4-cell readout's range).

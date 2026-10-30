@@ -27,8 +27,8 @@ internal static class ZeppelinZoneTeamSuites
         + "structure pool offers the gasbags on the engines' team rather than as nobody's")]
     internal static void ZeppelinZoneTeam(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         var defs = Zeppelins.Load(missionZrdr);

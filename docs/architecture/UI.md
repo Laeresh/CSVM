@@ -761,13 +761,13 @@ view of data collected elsewhere rather than a new sample. What a frame number p
 
 ## src/UI/Screens/BuildStamp.cs
 The build's version as `CSVM v<version>` in the menu's bottom-right corner, so a screenshot a
-stranger sends carries the build it was taken on and the number is not read as the original
-game's own. Two PromptFont icons left of it open the logs folder (the open log file's directory)
-and Godot's user folder through `Utils/FolderOpener.cs`. They are mouse-only, never focusable,
-and `Launcher` keeps their clicks from Original's polled pointer. A Game Mode refusal shows in
-`Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`,
-shown only while `MenuHost.OnMainMenu` holds or `NoGameDataScreen.cs` is up: deeper screens have
-bottom-edge plaques it overlaps at a Steam Deck's aspect. It draws on `HudLayers.PerfReadout`, above the boards. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+stranger sends carries its build and the number is not read as the original game's own. Two
+PromptFont icons left of it open the logs folder (the open log file's directory) and Godot's user
+folder through `Utils/FolderOpener.cs`; a line above it names a newer release (`Utils/ReleaseCheck.cs`)
+and opens its page. All three are mouse-only and never focusable, and `Launcher` keeps their clicks
+from Original's polled pointer. In Game Mode all three refuse, since the shell there answers Ok and
+shows no window, and the refusal shows in `Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`, on `HudLayers.BuildStamp`, and shown only on `MenuHost.OnMainMenu`
+or `SourceScreen.cs`: deeper screens' bottom plaques sit under it at a Steam Deck's aspect. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs
 A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its
@@ -783,25 +783,23 @@ under the flag, so an ordinary run and the golden sweep never build it, and fed 
 second from `Launcher.TickNetReadout`, which logs the same line. Hidden while no session holds a
 wire. Drawn on `HudLayers.Debug`, unscaled, in the top-left corner.
 
-## src/UI/Screens/NoGameDataScreen.cs
-The screen a launch reaches instead of the menu when `ExtractionFlow.ProblemAt` names a problem (no
-extraction, an unfinished run, a stamp naming another schema), or as `Unusable` when `Launcher`'s
-`OriginalAvailability.Load` refuses a current tree, the fault riding `ExtractionFlow.Detail` into the
-body. Views follow `ExtractionFlow.View`: the folder field with Choose folder, Extract (focused) and
-Quit, plus Play anyway on stale data; the phase, bar and latest line with Cancel; the failures with
-Try again and Choose another folder. Each press is a focusable button, so a pad's d-pad and A drive
-it; Esc or B cancels a run and quits otherwise. A success hands back once to `Launcher`, which
-re-resolves the data paths and enters the menu. A pad's A or a tap on the folder field raises `Utils/ScreenKeyboard.cs`; the picker's hint label does not wrap.
+## src/UI/Screens/SourceScreen.cs
+Shown instead of the menu (`Launcher.ShowSourceScreen`) when `BasePaths.Game` is null, when
+`OriginalAvailability.Load` refuses the located files (`SourceFlow.Refused`), or when a question is
+owed. It lays out `SourceFlow`'s title, body and buttons per view, the first focused and Quit last
+except while a worker runs; the field shows in the asking view, the bar in the copy and delete.
+Esc cancels a copy, waits out a delete, quits otherwise. `Launcher.LeaveSourceScreen` rebinds
+`BasePaths.Game`, `GameData` and `RofFiles` after a pick or a copy, and asks again if its menus do
+not read. A pad's A or a tap on the field raises `Utils/ScreenKeyboard.cs`.
 
-## src/UI/Screens/ExtractionFlow.cs
-The extraction screen's state, engine-free so a unit drives it with a fake runner. A stamp naming
-another schema, or the `UnfinishedMarker` a run leaves until it succeeds, stops the launch; an
-unstamped tree stays the boot's warning. The field starts with the remembered install while it is
-still one, else the first found candidate, else the remembered path as a hint. Stale or unfinished
-data re-extracts with `Force`, since the incremental rule compares file times, and adds `Unzip`
-when the tree already has unpacked siblings the loaders would prefer. The run goes to a dedicated
-worker thread rather than the thread pool, so a pool held by other blocking work cannot delay its
-start; progress and its outcome cross only through `Tick`, once a frame. Success remembers the install.
+## src/UI/Screens/SourceFlow.cs
+The game-file screen's engine-free state. `Validate` opens a pick through `GameFileSource.Open` or
+names why not (`InstallLocator.Check`'s message, or the image reader's). A pick is remembered and
+offers `GameFileCopy.Run`, never onto its own folder, asking before a replace. The questions asked
+once (`OptionsDef.ExtractedPromptAnswered`, `PatchNoteShown`, never in a scripted or `--det` run):
+keep or delete an old `extracted/`, never adopted, deleted after a second confirmation by
+`DeleteWithoutFollowingLinks`, which unlinks a junction and never enters it; and game files without
+`crimptch.rof`, naming where it goes. Workers run on a dedicated thread, crossing only through `Tick`.
 
 ## src/UI/Screens/InstallPicker.cs
 Godot's own `FileDialog` in folder mode over the whole file system, never the native dialog, so
@@ -809,6 +807,9 @@ it stays inside the game window where a controller or touchscreen reaches it. Th
 extras are off because the install is only read. Godot's navigation covers the list; the left
 shoulder goes up a folder and Y takes the folder shown, since focus cannot leave the list without
 Tab. Hidden folders show outside Windows, where Wine and Steam prefixes live under dot folders.
+A folder-only variant (`SourceScreen.NewFolderPicker`, the same theme and controller hint) is the
+Modding Folder row's dialog, which `OriginalPresentation` opens over the menu, dropping the seats'
+commands while it stands.
 
 ## src/UI/Labs/MeshLab.cs
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,
@@ -1018,7 +1019,8 @@ One notice the launcher posts for the player to read at the menu's next show: VR
 for the flat game it fell back to or a restart whose new process did not start
 (`Launch/XrRelaunch.cs`'s `MenuNotice`, posted through `Launch/ProcessMenu.cs`'s `Notice`), and a
 menu-launched flight one for an aircraft that flew without its bad `rig.json`
-(`Mech3/PlaneRigPatch.cs`'s `PlayerNotice`). Original
+(`Mech3/PlaneRigPatch.cs`'s `PlayerNotice`). Each post adds its message to the pending notice as
+a paragraph of its own, and a message already there is not repeated. Original
 raises it as the one-button warning box (`OriginalShell.ShowNotice`); a presentation takes it once,
 and a switch keeps one nothing has shown.
 
@@ -1076,8 +1078,7 @@ VIDEO pages, which read and write the values and the `*At` and `At` positions fr
 readers handed in, so it tests engine-free (`CSVM.Tests/OptionsChoicesTests.cs`).
 
 ## src/UI/Menu/MenuLayout.cs
-The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout the extraction
-emits, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with
+The runtime reader of `menu_layout.json`, the decoded menu layout `Extraction/RofFiles.cs` makes, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with
 null and a reason, never an empty layout; `Parse` builds the typed model of screens, widgets, the
 file-wide macros, the `ScriptToExe` navigation edges, the script-named external assets and the
 missing art. A `MenuLayoutWidget` keeps every field's resolved string beside the raw macro token
@@ -1502,17 +1503,15 @@ as null once and is logged once, under the host's own name, so the presentation 
 follows the screen that is standing rather than being shared across a teardown.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
-The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
-a tree stamped below `OriginalAssetManifest.StampSchema` (`ExtractionStamp.Behind`), reads the
-layout through `MenuLayout`, requires a `[MainMenu]` section in it, and then checks the manifest
+The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` reads the
+layout through `MenuLayout` from the game files bound to the data root (no extraction stamp gates it), requires a `[MainMenu]` section in it, and then checks the manifest
 derived from that layout. Returns the loaded layout when Original can run, else null and the one
 reason, which the host appends to its fallback reason; `degraded` is the optional half, for the
-caller to log once. `ArtPath` and `RelativeArtPath` are where a layout art name resolves, in
-`RofTree`'s upper case, the presentation's size read going through the first; `IsMovie` puts the movies one directory deeper,
+caller to log once. `RelativeArtPath` is where a layout art name sits in `RofFiles`, in `RofTree`'s upper case; `IsMovie` puts the movies one directory deeper,
 under `MPG`, where the executable resolves them. Coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
 ## src/UI/Menu/Original/SyntheticShell.cs
-The `--synthetic-data` tree's Original shell, `extracted/rof/`: `fixtures/menu-layout-original/LAYOUT.CSV`
+The `--synthetic-data` tree's Original shell, held in memory and bound to the tree's data root: `fixtures/menu-layout-original/LAYOUT.CSV`
 decoded by `Extraction/MenuLayoutDecoder.cs` into `menu_layout.json`, the invented string rows of
 `fixtures/synthetic/rof/ui_strings.json` (a layout symbol's row, or a row the code reads by id), and
 one generated picture per `fixtures/synthetic/rof/art.json` entry at that size. A file the asset
@@ -1650,7 +1649,7 @@ It lasts the joined session across flights and starts on `StarterAirframe`, the 
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.
 The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` (Allow Custom Planes ticked on its first `Show`, as the original's lobby opens) and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
 A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays; `Announce` posts a host's notice under no name, and `PeerAt` names the peer on a host's row. Every seat a machine flies has its own row and pick (`SeatsFlown`, `SeatPick`, `PickSeat`, and `PickCustom` for any seat's custom plane, sent under that seat's own byte), one Ready standing for all of them until a seat is given or taken; a further seat's row reads the name its machine's first row shows and its pane number there (`NetSeats.FurtherSeatName`), as the launch's roster names it. `SeatOwners` is the rows' machines and places, which the launch's field seats in the same order; that order, not a row's name, maps a row to its seat.
-The host also keeps bot rows (`Bots`, each a `DogfightBot` with an id that outlives its place, held in a `DogfightBots` whose list rules the local join board shares), listed and seated after the guests and kept across matches: `AddBot` (a Random plane at veteran, a callsign drawn from `CallsignPool`, balanced across the teams by `Arrange` until the host places it, opening a `Bots` team where one team alone holds a person or a placed bot), `FillTo(n)` (n counts people and bots together), `RemoveBot` and the per-row setters, all refused on a guest and while the host is Ready; every type takes bots (`LaunchBots`). `FieldSeats` and `BotRoom` keep people and bots within `NetSeats.MaxPlayers`, and a host's `Step` lets the newest bots go while seated people push the field past it, one per seat with a chat notice (`YieldLine`), so a person who joins a full field takes the newest bot's place and a leaver's seat is not refilled; a disbanded team's bots go teamless; `PeopleListed` and `BotsListed` count the list's people and bot rows apart; `WaitsOnMatch` is a guest held in the lobby while its host flies a match; `LaunchRefusal` and `Teamed` count bot rows; `LaunchBots` is what the launch resolves and seats.
+The host also keeps bot rows (`Bots`, each a `DogfightBot` with an id that outlives its place, held in a `DogfightBots` whose list rules the local join board shares), listed and seated after the guests and kept across matches: `AddBot` (a Random plane at veteran, a callsign drawn from `CallsignPool`, balanced across the teams by `Arrange` until the host places it, opening a `Bots` team where one team alone holds a person or a placed bot), `FillTo(n)` (n counts people and bots together), `RemoveBot` and the per-row setters, all refused on a guest and while the host is Ready, and `SetBotAirframe` also on an airframe the plane rules refuse a person's stock pick of, while a rules change puts a bot standing on one back on Random; every type takes bots (`LaunchBots`). `FieldSeats` and `BotRoom` keep people and bots within `NetSeats.MaxPlayers`, and a host's `Step` lets the newest bots go while seated people push the field past it, one per seat with a chat notice (`YieldLine`), so a person who joins a full field takes the newest bot's place and a leaver's seat is not refilled; a disbanded team's bots go teamless; `PeopleListed` and `BotsListed` count the list's people and bot rows apart; `WaitsOnMatch` is a guest held in the lobby while its host flies a match; `LaunchRefusal` and `Teamed` count bot rows; `LaunchBots` is what the launch resolves and seats.
 `CanLaunch` is the host's gate, every row Ready; the type is `Spec.DogfightMissionType` (`TypeOf` reads the wire byte); `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99 and the type with Capture the Flag's option, a Stunt Race its Time box alone, and `LaunchMode` the menu mode it leaves in; `ChapterOf` the chapter an environment flies on, the world its row's number names (Above the Clouds is `C1C`); `EnvironmentNumber` and `ModeOf` are the numbers the original's session setup writes for a row and a launch, and `Teamed` whether any pilot joined a team. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven; Stunt Race offers the six whose chapter ships Danger Zones, sets the Time box to 5, refuses every other option and launches whatever teams stand. Setters refuse on a guest and for a greyed choice. `RefusalText` words the team refusals LAUNCH! raises, and `Land` holds a match's `Scores` (from `ScoresOf`, each seat named by its callsign on the session's seat roster with a bot's line marked, the launch's list the fallback, a team match's team lines with their pilots under them), or a stunt race's `RaceScores` (`RaceTableRow`s), and opens the next round.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/DogfightLobbyTests.cs`.
 

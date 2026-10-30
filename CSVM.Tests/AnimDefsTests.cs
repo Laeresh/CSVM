@@ -6,9 +6,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The zrdr animation front-end (<c>docs/formats/anim-definitions.md</c>): reader ops normalized
-/// into the same event model the compiled archives produce, including the two places where the
-/// reader and the compiler disagree on units. Input is <c>fixtures/zrdr/demo_anims.json</c>.
+/// The zrdr animation front-end (<c>docs/formats/anim-definitions.md</c>). Reader ops are
+/// normalized into the event model the compiled archives produce, including the two places where
+/// reader and compiler disagree on units. Input is <c>fixtures/zrdr/demo_anims.zrd.json</c>.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class AnimDefsTests
@@ -30,7 +30,7 @@ public class AnimDefsTests
         var defs = Load();
         Assert.Equal(3, defs.Count);
         var tower = Def("probe_tower");
-        Assert.Equal("demo_anims.json", tower.SourceFile);
+        Assert.Equal("demo_anims.zrd.json", tower.SourceFile);
         Assert.Equal("probe_tower_root", tower.RootName);
         Assert.Equal(250f, tower.Health);
         Assert.True(tower.LocalNodesOnly);
@@ -241,7 +241,7 @@ public class AnimDefsTests
             def.PrereqAnims);
     }
 
-    private static List<AnimDefinition> Load() => AnimDefs.LoadArchive(TestData.Fixture("zrdr"));
+    private static List<AnimDefinition> Load() => AnimDefs.LoadArchive(TestZrdr.Fixture("zrdr"));
 
     private static AnimDefinition Def(string name) => Load().Find(d => d.Name == name)!;
 

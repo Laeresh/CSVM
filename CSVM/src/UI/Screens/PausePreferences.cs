@@ -31,6 +31,7 @@ public sealed partial class PausePreferences : Control
     private IMenuAudio? _audio;
     private Action<OptionsApplyExit>? _applied;
     private string _dataRoot = string.Empty;
+    private Mech3.TextureSet _rimage = Mech3.TextureSet.Empty;
     private BoardPalette _palette = BoardPalette.Chalk;
     private ComposedBoardView? _view;
     private PointerSeat? _seat;
@@ -69,6 +70,7 @@ public sealed partial class PausePreferences : Control
     /// <paramref name="audio"/> sounds its cues.</summary>
     public static PausePreferences? Build(
         string dataRoot,
+        Mech3.TextureSet rimage,
         MenuLayout? layout,
         ControlsFeature? controls,
         Action<OptionsApplyExit> applied,
@@ -84,6 +86,7 @@ public sealed partial class PausePreferences : Control
         var leaf = new PausePreferences
         {
             _dataRoot = dataRoot,
+            _rimage = rimage,
             _audio = audio,
             _applied = applied,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -114,7 +117,7 @@ public sealed partial class PausePreferences : Control
     {
         // The view sizes itself off the viewport, so it cannot draw before it is in the tree; the
         // first open is what composes anything.
-        _view = ComposedBoardView.Build(_dataRoot);
+        _view = ComposedBoardView.Build(_dataRoot, _rimage);
         AddChild(_view);
     }
 
@@ -324,12 +327,12 @@ public sealed partial class PausePreferences : Control
         }
     }
 
-    // The Auto Head Turn and Next Target switches reaching the flight behind the leaf, the head turn
-    // taking effect mid-mission as the original's does. One saved value serves every human seat and
-    // both are read per frame or per kill, so the resume flies them. A never-set value falls back as
-    // a launch with nothing saved does: the head turn to the headLook.autohead config key, the
-    // targeting switch to the decoded head rule. The selection is written in place, never rebuilt,
-    // so the pilot keeps the cycle and lock the pause stood over. Difficulty takes the next sortie.
+    // The Game Options switches reaching the flight behind the leaf, mid-mission as the original's
+    // head turn does. One saved value serves every human seat, read per frame, shot or kill. A
+    // never-set value falls back as a launch with nothing saved does. The head turn takes the
+    // headLook.autohead config key, every other switch reads off. The selection is written in place,
+    // never rebuilt, so the pilot keeps the cycle and lock the pause stood over. Difficulty takes the
+    // next sortie.
     private void FeedGameOptions(OptionsApplyExit applied)
     {
         foreach (var seat in _flying)
@@ -337,6 +340,9 @@ public sealed partial class PausePreferences : Control
             if (IsInstanceValid(seat) && seat.IsHumanPiloted)
             {
                 seat.AutoHeadTurn = applied.AutoHeadTurn;
+                seat.LeadingAimAssist = applied.LeadingAimAssist == true;
+                seat.LeadMarker = applied.LeadMarker == true;
+                seat.PilotHud.SetThrottlePlateShown(applied.ThrottlePlate == true);
                 if (seat.Targeting is { } targeting)
                 {
                     targeting.NearestAfterKill = applied.NearestAfterKill == true;

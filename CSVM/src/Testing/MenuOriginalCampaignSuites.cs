@@ -69,9 +69,9 @@ internal static class MenuOriginalCampaignSuites
         + "Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, Mech3.CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
+        ctx.RequireZrdrEntry(ctx.Zrdr, Mech3.CampaignSequence.FileName);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -92,13 +92,13 @@ internal static class MenuOriginalCampaignSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = store,
             Planes = planes,
         });
         var host = new MenuHost(registry, audio, exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         var campaign = host.Features.Get<CampaignFeature>();
         try

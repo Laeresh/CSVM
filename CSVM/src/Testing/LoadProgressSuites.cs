@@ -50,9 +50,12 @@ internal static class LoadProgressSuites
         + "the blocking build")]
     internal static void LoadScreenMoves(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage", "prog_red.png"), $"progress strip");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        if (ctx.Data.Rimage.Find("prog_red") == null)
+        {
+            throw new SuiteSkippedException("the progress strip prog_red is not in rimage");
+        }
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         var report = new StringBuilder();
 
         CheckFamily(ctx, report, campaign: false, sheet: null, stripWidth: ChalkStripWidth);
@@ -69,7 +72,7 @@ internal static class LoadProgressSuites
     // The filmed mission's own sheet, or null where the extraction cannot answer for it.
     private static LoadSheet? FilmedSheet(TestContext ctx)
     {
-        foreach (var mission in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var mission in CampaignSequence.Load(ctx.Zrdr))
         {
             if (!mission.ChapterFolder.Equals(FilmedChapter, StringComparison.OrdinalIgnoreCase)
                 || !mission.MissionFolder.Equals(FilmedMission, StringComparison.OrdinalIgnoreCase))
@@ -78,8 +81,8 @@ internal static class LoadProgressSuites
             }
 
             return LoadSheet.Load(
-                ctx.ZrdrPath, ctx.MessagesPath,
-                SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
+                ctx.Zrdr, ctx.Data.Messages,
+                ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder),
                 EscapeDialog.CampaignKey(mission.Campaign, mission.Mission),
                 Session.Campaign.CampaignMementos.BitmapFor(null));
         }
@@ -94,7 +97,7 @@ internal static class LoadProgressSuites
     {
         string family = campaign ? "chart sheet" : "blackboard";
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign, "FREE FLIGHT", null, sheet);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, campaign, "FREE FLIGHT", null, sheet);
         ctx.Host.AddChild(board);
         try
         {
@@ -203,7 +206,7 @@ internal static class LoadProgressSuites
         var held = LoadProgress.Current;
         LoadProgress.Current = null;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign: true, string.Empty, null, sheet);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, campaign: true, string.Empty, null, sheet);
         ctx.Check(LoadProgress.Current == null, $"no board up, so a build reports to nobody");
         ctx.Host.AddChild(board);
         try
@@ -243,7 +246,7 @@ internal static class LoadProgressSuites
         var held = LoadProgress.Current;
         LoadProgress.Current = null;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign: false, "FREE FLIGHT", null);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, campaign: false, "FREE FLIGHT", null);
         ctx.Host.AddChild(board);
         try
         {
@@ -344,7 +347,7 @@ internal static class LoadProgressSuites
         var held = LoadProgress.Current;
         LoadProgress.Current = null;
         var board = LoadBoard.Build(
-            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign: true, string.Empty, null, sheet);
+            ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, campaign: true, string.Empty, null, sheet);
         ctx.Host.AddChild(board);
         try
         {

@@ -53,12 +53,11 @@ public static class CampaignSequence
     /// <summary>The reader file <see cref="Load"/> reads from the shared zrdr scope.</summary>
     public const string FileName = "cm_sequence.json";
 
-    /// <summary>Loads the sequence from a shared zrdr scope (<c>extracted/zrdr.zip</c> or its
-    /// unpacked sibling), in file order. The reader is one outer element holding the records.</summary>
-    public static List<CampaignMission> Load(string zrdrPath)
+    /// <summary>Loads the sequence from the shared zrdr scope, in file order. The reader is one outer element holding the records.</summary>
+    public static List<CampaignMission> Load(ZrdrSet zrdr)
     {
         var missions = new List<CampaignMission>();
-        var root = Zrdr.LoadFile(zrdrPath, FileName);
+        var root = zrdr.LoadFile(FileName);
         if (root.Count == 0 || root[0] is not List<object?> records)
         {
             return missions;

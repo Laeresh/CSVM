@@ -1,8 +1,6 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
 
 namespace CSVM.Mech3;
 
@@ -66,27 +64,6 @@ public static class WavCues
         return times;
     }
 
-    /// <summary>Cue times for one wav inside a sound extraction (a <c>soundsh</c>/<c>soundsl</c>
-    /// directory or its <c>.zip</c>), or empty when the archive or the file is absent. Separate
-    /// from <see cref="SoundArchive"/> because that one decodes to a Godot stream, and a menu page
-    /// that only needs the timings must stay engine-free.</summary>
-    public static IReadOnlyList<double> ReadFrom(string archivePath, string wavName)
-    {
-        try
-        {
-            var bytes = ReadBytes(archivePath, wavName);
-            return bytes == null ? Array.Empty<double>() : Read(bytes);
-        }
-        catch (IOException)
-        {
-            return Array.Empty<double>();
-        }
-        catch (InvalidDataException)
-        {
-            return Array.Empty<double>();
-        }
-    }
-
     // A cue point is 24 bytes: id, play-order position, the chunk it indexes, that chunk's start,
     // the block start, and the sample offset. Position and sample offset are equal in every
     // shipped briefing wav, and the sample offset is the field that means "this many samples in".
@@ -108,31 +85,6 @@ public static class WavCues
 
             offsets.Add(BinaryPrimitives.ReadUInt32LittleEndian(cue[(point + 20)..]));
         }
-    }
-
-    private static byte[]? ReadBytes(string archivePath, string wavName)
-    {
-        if (Directory.Exists(archivePath))
-        {
-            var path = Path.Combine(archivePath, wavName);
-            return File.Exists(path) ? File.ReadAllBytes(path) : null;
-        }
-
-        if (!File.Exists(archivePath))
-        {
-            return null;
-        }
-
-        using var zip = ZipFile.OpenRead(archivePath);
-        if (zip.GetEntry(wavName) is not { } entry)
-        {
-            return null;
-        }
-
-        using var stream = entry.Open();
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
     }
 
     private static bool Tag(byte[] bytes, int at, string tag) =>

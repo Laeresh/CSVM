@@ -406,10 +406,10 @@ public sealed class CampaignRosterPlan
     /// whether or not a campaign profile is flying: without this the generated aircraft falls back
     /// to a CLI airframe and carries none of the block's fields.</summary>
     public static Dictionary<string, RosterSpawnPlan> GeneratorTemplates(
-        string missionZrdrPath, VehicleDefs defs, IReadOnlyList<AiNet> nets)
+        ZrdrSet missionZrdr, VehicleDefs defs, IReadOnlyList<AiNet> nets)
     {
         var templates = new Dictionary<string, RosterSpawnPlan>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (parameter, name, fields) in AiSkills.LoadGeneratorRoster(missionZrdrPath))
+        foreach (var (parameter, name, fields) in AiSkills.LoadGeneratorRoster(missionZrdr))
         {
             if (BuildGeneratorTemplate(name, fields, defs, nets) is { } plan)
             {

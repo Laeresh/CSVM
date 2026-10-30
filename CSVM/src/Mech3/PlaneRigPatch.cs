@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Utils;
@@ -19,6 +20,15 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class PlaneRigPatch
 {
+    /// <summary>Metres a rig's firepoint or pylon may stand outside the airframe's gamez model box
+    /// (<see cref="ModelBox"/>), room for a pack drawn larger than the original. Past it a round
+    /// leaves from open air, and every peer takes a shot's origin as sent.</summary>
+    internal const float MarkerReach = 3f;
+
+    // Triangles a rig flare's subtree may hold: an original flare's sprite is one four-corner quad.
+    // A flare is built hidden, and a hidden node leaves the hit hull, so more would be airframe lost.
+    private const int FlareTriangles = 2;
+
     // The non-weapon nodes of the original's markers group (docs/formats/markers.md, Marker group),
     // which a rig may add to a model that lacks one.
     private static readonly HashSet<string> ReferenceMarkers = new(StringComparer.OrdinalIgnoreCase)
@@ -91,17 +101,6 @@ public static class PlaneRigPatch
     internal static Vector3 ToNodeAxis(Transform3D frame, Vector3 planeAxis) =>
         (frame.Basis.Inverse() * planeAxis).Normalized();
 
-    /// <summary>The node's transform in the plane frame: every local below the built root, its own included.</summary>
-    internal static Transform3D PlaneFrame(Node3D node, Node3D built)
-    {
-        var acc = Transform3D.Identity;
-        for (Node3D? n = node; n != null && n != built; n = n.GetParent() as Node3D)
-        {
-            acc = n.Transform * acc;
-        }
-
-        return acc;
-    }
 
     /// <summary>Checks the cockpit section's names on the gamez tree, not the built one. A build with no
     /// interior then rejects what a pilot's build rejects. A hide name must be an airframe node outside the
@@ -122,15 +121,15 @@ public static class PlaneRigPatch
             }
         }
 
-        var interior = Children(gamez, root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        var interior = gamez.ChildrenOf(root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
         var gauges = interior == null ? null : FindIn(gamez, interior, n => n.Name.Equals("gauges", StringComparison.OrdinalIgnoreCase));
-        var assemblies = gauges == null ? new List<string>() : Children(gamez, gauges).ConvertAll(n => n.Name);
+        var assemblies = gauges == null ? new List<string>() : gamez.ChildrenOf(gauges).ConvertAll(n => n.Name);
         bool glass = cockpit.Gauges.ContainsKey(RigCockpit.GlassKey);
         foreach (string name in cockpit.Gauges.Keys)
         {
             if (name.Equals(RigCockpit.GlassKey, StringComparison.OrdinalIgnoreCase))
             {
-                if (interior == null || FindIn(gamez, interior, n => HoldsGlass(gamez, n)) == null)
+                if (interior == null || !GunsightReticle.HoldsGlass(gamez, interior))
                 {
                     throw Fail(rig, "cockpit.gauges." + name, "the airframe's cockpit1 holds no sight glass (a polygon wearing cockpit6 or crosshair)");
                 }
@@ -139,32 +138,61 @@ public static class PlaneRigPatch
             {
                 throw Fail(rig, "cockpit.gauges." + name, $"no assembly '{name}' under the airframe's cockpit1 gauges (it has: {string.Join(", ", assemblies)})");
             }
-            else if (glass && Children(gamez, gauges!).Find(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } held
-                && FindIn(gamez, held, n => HoldsGlass(gamez, n)) != null)
+            else if (glass && gamez.ChildrenOf(gauges!).Find(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } held
+                && GunsightReticle.HoldsGlass(gamez, held))
             {
                 throw Fail(rig, "cockpit.gauges", $"'{RigCockpit.GlassKey}' and '{name}' both place the sight glass, which '{name}' holds; name one of them");
             }
         }
     }
 
-    /// <summary>Whether the node's own mesh has a sight-glass polygon (<see cref="GunsightReticle.IsGlass"/>).</summary>
-    internal static bool HoldsGlass(GameZ gamez, GameZNode node) =>
-        node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count && gamez.Meshes[node.MeshIndex] is { } mesh
-        && mesh.Polygons.Exists(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
-            && gamez.Materials[p.MaterialIndex].TextureName is { } texture && GunsightReticle.IsGlass(texture));
+    /// <summary>The plane-frame box of the gamez models under <paramref name="built"/>, as the hit hull
+    /// reads them (<see cref="SceneBuilder.GameplayAabb"/>), from local transforms alone; null with no mesh.</summary>
+    internal static Aabb? ModelBox(Node3D built)
+    {
+        Aabb? box = null;
+        foreach (var mi in built.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
+        {
+            var local = SceneBuilder.GameplayAabb(mi);
+            if (local.Size.LengthSquared() > 1e-9f)
+            {
+                var at = NodeFrame.Under(mi, built) * local;
+                box = box is { } b ? b.Merge(at) : at;
+            }
+        }
+
+        return box;
+    }
 
     // A marker moves to its rig position by rewriting its local origin under the parent's plane frame.
     // A missing one is added under the markers group, so Loadout's cs_name walk finds it like any other.
+    // ⚠ Move only marker names: the hit hull and terrain sweep are built from every other node's transform.
     private static int MoveMarkers(PlaneRig rig, Node3D built, HashSet<string> known, Dictionary<string, List<Node3D>> byName, List<Action> edits)
     {
         int added = 0;
+        var box = ModelBox(built);
         foreach (var (name, pos) in rig.Markers)
         {
+            bool weapon = MarkerRig.Classify(name, out var kind, out _);
+            if (!weapon && !ReferenceMarkers.Contains(name))
+            {
+                throw Fail(rig, "markers." + name, $"not a marker (firepointN, pylonN, target, {string.Join(", ", ReferenceMarkers)})");
+            }
+
+            float outside = weapon && kind != MarkerRig.MarkerKind.Target && box is { } b
+                ? ((b.Position - pos).Max(Vector3.Zero) + (pos - b.End).Max(Vector3.Zero)).Length()
+                : 0f;
+            if (outside > MarkerReach)
+            {
+                throw Fail(rig, "markers." + name, string.Create(CultureInfo.InvariantCulture,
+                    $"stands {outside:0.##} m outside the airframe's model box, past the {MarkerReach} m a firepoint or pylon may reach"));
+            }
+
             if (byName.TryGetValue(name, out var nodes))
             {
                 var node = nodes[0];
                 var parent = node.GetParent() as Node3D ?? built;
-                edits.Add(() => node.Position = PlaneFrame(parent, built).AffineInverse() * pos);
+                edits.Add(() => node.Position = NodeFrame.Under(parent, built).AffineInverse() * pos);
             }
             else if (MayAdd(name))
             {
@@ -174,7 +202,7 @@ public static class PlaneRigPatch
                     var marker = new Node3D { Name = name };
                     marker.SetMeta(AnimRuntime.NameMeta, name);
                     parent.AddChild(marker);
-                    marker.Position = PlaneFrame(parent, built).AffineInverse() * pos;
+                    marker.Position = NodeFrame.Under(parent, built).AffineInverse() * pos;
                 });
                 added++;
             }
@@ -202,7 +230,7 @@ public static class PlaneRigPatch
                 {
                     PropParts.Kind.PropMain or PropParts.Kind.PropGhost => blur ? PropParts.Kind.PropGhost : PropParts.Kind.PropMain,
                     PropParts.Kind.RotorMain or PropParts.Kind.RotorGhost => blur ? PropParts.Kind.RotorGhost : PropParts.Kind.RotorMain,
-                    _ => kind,
+                    _ => throw Fail(rig, label + ".blur", "only a prop or rotor node (propN, propNb, rotorN, rotorNb) has a blur disc to choose"),
                 };
             }
 
@@ -216,7 +244,7 @@ public static class PlaneRigPatch
             {
                 edits.Add(() =>
                 {
-                    node.SetMeta(PropParts.SpinAxisMeta, prop.Axis is { } a ? ToNodeAxis(PlaneFrame(node, built), a) : axis);
+                    node.SetMeta(PropParts.SpinAxisMeta, prop.Axis is { } a ? ToNodeAxis(NodeFrame.Under(node, built), a) : axis);
                     node.SetMeta(PropParts.SpinRateMeta, prop.DegPerSec ?? rate);
                 });
             }
@@ -234,7 +262,7 @@ public static class PlaneRigPatch
             {
                 edits.Add(() =>
                 {
-                    var frame = PlaneFrame(node, built);
+                    var frame = NodeFrame.Under(node, built);
                     node.SetMeta(ControlSurfaces.KindMeta, (int)surface.ClassifierKind);
                     if (surface.HingeAxis is { } axis)
                     {
@@ -269,7 +297,7 @@ public static class PlaneRigPatch
             {
                 if (WingLights.IsFlare(node.Name))
                 {
-                    bool port = PlaneFrame(node, built).Origin.X < 0f;
+                    bool port = NodeFrame.Under(node, built).Origin.X < 0f;
                     if ((port ? rig.LeftFlare : rig.RightFlare) == null)
                     {
                         chosen.Add(node);
@@ -288,6 +316,11 @@ public static class PlaneRigPatch
             if (name != null)
             {
                 var nodes = Find(rig, side, name, known, byName);
+                if (nodes.Find(n => !WingLights.IsFlare(n.Name) && Triangles(n) > FlareTriangles) is { } held)
+                {
+                    throw Fail(rig, side, $"'{name}' holds {Triangles(held)} triangles of airframe, which a flare's hiding takes out of the hit hull; name an empty node or a flare sprite");
+                }
+
                 chosen.UnionWith(nodes);
                 edits.Add(() => nodes.ForEach(n => n.SetMeta(WingLights.StandsForMeta, names.ToArray())));
             }
@@ -297,8 +330,10 @@ public static class PlaneRigPatch
         return new FlareChoice(chosen, displaced);
     }
 
-    private static List<GameZNode> Children(GameZ gamez, GameZNode node) =>
-        node.Children.FindAll(c => c >= 0 && c < gamez.Nodes.Count).ConvertAll(c => gamez.Nodes[c]);
+    // The gamez triangles the hit hull reads under a node (SceneBuilder.GameplayMesh), itself included.
+    private static int Triangles(Node3D node) =>
+        node.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).Append(node).OfType<MeshInstance3D>()
+            .Sum(mi => (SceneBuilder.GameplayMesh(mi)?.GetFaces().Length ?? 0) / 3);
 
     private static GameZNode? FindIn(GameZ gamez, GameZNode node, Predicate<GameZNode> match)
     {
@@ -307,7 +342,7 @@ public static class PlaneRigPatch
             return node;
         }
 
-        foreach (var child in Children(gamez, node))
+        foreach (var child in gamez.ChildrenOf(node))
         {
             if (FindIn(gamez, child, match) is { } found)
             {

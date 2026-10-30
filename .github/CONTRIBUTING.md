@@ -30,8 +30,8 @@ Security problems do not go in an issue at all. See [`SECURITY.md`](SECURITY.md)
 **Small, self-contained pull requests are welcome** in the parts of the tree a contributor
 can actually verify:
 
-- `packaging/` and the repo-root scripts (extraction itself is engine code under
-  `CSVM/src/Extraction/`; `Extract.ps1` only launches it)
+- `packaging/` and the repo-root scripts (reading the game files is engine code under
+  `CSVM/src/Extraction/`)
 - documentation, including the format reference in `docs/formats/`
 - typo, spelling and broken-link fixes anywhere
 

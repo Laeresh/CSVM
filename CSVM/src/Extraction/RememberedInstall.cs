@@ -3,8 +3,8 @@ using CSVM.Utils;
 
 namespace CSVM.Extraction;
 
-/// <summary>The install folder the last extraction read, kept as <see cref="OptionsDef.InstallPath"/>
-/// in <c>user://options.json</c> so it survives a data tree being deleted. The overloads taking a
+/// <summary>The game files last picked, a folder or a disc image, kept as
+/// <see cref="OptionsDef.InstallPath"/> in the options file so it survives a data tree being deleted. The overloads taking a
 /// store are what tests call; the bare ones use <see cref="OptionsStore.UserOptions"/>, which needs
 /// the engine. A save loads first and changes only this field, so every other option is kept.</summary>
 public static class RememberedInstall

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CSVM.Extraction;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
@@ -17,7 +18,7 @@ namespace CSVM.Testing;
 /// <summary>
 /// The version stamp's two folder icons as built controls. They are mouse-only, carry their
 /// PromptFont glyphs and tooltips, and share the stamp's visibility. They open the log file's own
-/// directory and Godot's user folder, and Godot's focus walk on the extraction screen never reaches
+/// directory and Godot's user folder, and Godot's focus walk on the game-file screen never reaches
 /// them. The opener is swapped for a recorder, so no suite opens a window on the desktop.
 /// ⚠ This pins the wiring, not the look; the menu-original-flag golden is where the icons are seen.
 /// </summary>
@@ -28,7 +29,9 @@ internal static class BuildStampSuites
         + "a mouse-ignoring parent chain on a layer above the boards, with its PromptFont glyph and tooltip; "
         + "the stamp shows and hides on its tick, and the icons open the log file's directory and the user data folder; "
         + "in Game Mode the real opener refuses without the shell and logs the refusal, which stands in the Original menu's "
-        + "warning box where a messagebox is wired and in the stamp's own pad-focusable dialog where none is")]
+        + "warning box where a messagebox is wired and in the stamp's own pad-focusable dialog where none is; "
+        + "a newer release's line stays hidden until a check answers, then stands above the version, unfocusable, "
+        + "and hands the shell the release page, which in Game Mode it refuses with the stamp's dialog")]
     internal static void BuildStampIcons(TestContext ctx)
     {
         var stamp = new BuildStamp(ctx.RepoRoot, exported: false);
@@ -54,6 +57,7 @@ internal static class BuildStampSuites
             Visibility(ctx, stamp, logs);
             Folders(ctx, stamp, logs, user, opened);
             GameMode(ctx, stamp, user);
+            ReleaseLine(ctx, stamp);
         }
         finally
         {
@@ -63,30 +67,30 @@ internal static class BuildStampSuites
     }
 
     [Suite("build-stamp-focus",
-        "Godot's focus walk over the extraction screen, forward, back and in all four directions from every "
+        "Godot's focus walk over the game-file screen, forward, back and in all four directions from every "
         + "control it reaches, never lands on either folder icon while the stamp is shown over the screen, and "
-        + "a click pushed through the viewport reaches the logs icon over the screen's backdrop and leaves Extract focused")]
+        + "a click pushed through the viewport reaches the logs icon over the screen's backdrop and leaves Use these files focused")]
     internal static void BuildStampFocus(TestContext ctx)
     {
         string root = Directory.CreateDirectory(Path.Combine(ctx.ScratchDir, "build-stamp-" + Guid.NewGuid().ToString("N"))).FullName;
-        var flow = new ExtractionFlow(DataProblem.Missing, root, "unzbd", root, (r, _, _) => new ExtractionResult { Install = InstallLocator.Check(r.InstallFolder) }, _ => { }, work => work());
-        var screen = NoGameDataScreen.Build(flow, () => { }, () => { });
+        var flow = new SourceFlow(root, null, root, null, ask: false, work => work());
+        var screen = SourceScreen.Build(flow, () => { }, () => { });
         var stamp = new BuildStamp(ctx.RepoRoot, exported: false) { Opener = (path, _) => new FolderOpenResult(FolderOpenOutcome.Opened, path) };
         ctx.Host.AddChild(screen);
         ctx.Host.AddChild(stamp);
         try
         {
             stamp.Tick(true);
-            var reached = Walk(screen.ExtractButton);
+            var reached = Walk(screen.DefaultButton);
             ctx.Note($"the focus walk reached {reached.Count} controls");
-            ctx.Check(reached.Count > 1, $"the walk moved off Extract, so it ran over a real screen ({reached.Count})");
+            ctx.Check(reached.Count > 1, $"the walk moved off Use these files, so it ran over a real screen ({reached.Count})");
             ctx.Check(!reached.Contains(stamp.LogsButton) && !reached.Contains(stamp.UserButton),
                 $"and never reached a folder icon");
 
             // A real click through the viewport's GUI dispatch. It has to reach the icon over the
             // screen's full-window backdrop, and leave the focus where the pad left it.
             var viewport = screen.GetViewport();
-            ctx.Check(viewport.GuiGetFocusOwner() == screen.ExtractButton, $"Extract holds the focus before the click");
+            ctx.Check(viewport.GuiGetFocusOwner() == screen.DefaultButton, $"Use these files holds the focus before the click");
             var at = Settle(stamp.LogsButton).GetCenter();
             string? opened = null;
             stamp.Opener = (path, _) =>
@@ -97,8 +101,8 @@ internal static class BuildStampSuites
             viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
             viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
             ctx.Check(opened == stamp.LogsFolder, $"a click at {at} reaches the logs icon above the screen ({opened ?? "nothing opened"})");
-            ctx.Check(viewport.GuiGetFocusOwner() == screen.ExtractButton,
-                $"and leaves Extract focused, so Enter or A after a click still extracts ({viewport.GuiGetFocusOwner()?.Name})");
+            ctx.Check(viewport.GuiGetFocusOwner() == screen.DefaultButton,
+                $"and leaves Use these files focused, so Enter or A after a click still presses it ({viewport.GuiGetFocusOwner()?.Name})");
         }
         finally
         {
@@ -193,11 +197,11 @@ internal static class BuildStampSuites
         ctx.Check(BuildStamp.LogsFolderFor(null, ctx.RepoRoot, false) == Log.DirectoryFor(ctx.RepoRoot, false)
             && BuildStamp.LogsFolderFor(null, ctx.RepoRoot, true) == Log.DirectoryFor(ctx.RepoRoot, true),
             $"with no log file open it falls back to where the sink would write, for a repo run and an export alike");
-        ctx.Check(BuildStamp.UserFolder == OS.GetUserDataDir(), $"the user icon opens Godot's user folder ({BuildStamp.UserFolder})");
+        ctx.Check(BuildStamp.UserFolder == UserData.Root, $"the user icon opens the user data folder ({BuildStamp.UserFolder})");
 
         logs.EmitSignal(BaseButton.SignalName.Pressed);
         user.EmitSignal(BaseButton.SignalName.Pressed);
-        ctx.Check(opened.Count == 2 && opened[0].Path == stamp.LogsFolder && opened[1].Path == OS.GetUserDataDir(),
+        ctx.Check(opened.Count == 2 && opened[0].Path == stamp.LogsFolder && opened[1].Path == UserData.Root,
             $"a click hands the opener exactly its own folder ({string.Join("; ", opened)})");
     }
 
@@ -278,6 +282,54 @@ internal static class BuildStampSuites
         menu.Step(new MenuCommands { Accept = true });
         ctx.Check(menu.Dialog == null && menu.Screen == screen,
             $"A answers the box and leaves the screen under it where it was ({menu.Screen})");
+    }
+
+    // A finished check is answered on the next tick, and the shell is recorded so no browser opens.
+    private static void ReleaseLine(TestContext ctx, BuildStamp stamp)
+    {
+        const string Page = "https://github.com/Laeresh/CSVM/releases/tag/v9.0.0";
+        var line = stamp.ReleaseButton;
+        stamp.Tick(true);
+        ctx.Check(!line.Visible, $"with no check answered the release line is hidden");
+        stamp.Watch(Task.FromResult<Release?>(new Release("v9.0.0", Page)));
+        stamp.Tick(true);
+        ctx.Check(line.Visible && line.Text == "v9.0.0 available" && line.TooltipText == BuildStamp.ReleaseTooltip,
+            $"a newer release shows as its own line ({line.Visible}, \"{line.Text}\")");
+        var row = stamp.LogsButton.GetParent();
+        ctx.Check(line.GetParent() == row.GetParent() && line.GetIndex() < row.GetIndex(),
+            $"above the row that holds the version ({line.GetIndex()}, {row.GetIndex()})");
+        ctx.Check(line.FocusMode == Control.FocusModeEnum.None && line.MouseFilter == Control.MouseFilterEnum.Stop,
+            $"it never takes focus and takes the mouse ({line.FocusMode}, {line.MouseFilter})");
+
+        var shell = FolderOpener.Shell;
+        var handed = new List<string>();
+        FolderOpener.Shell = path =>
+        {
+            handed.Add(path);
+            return Error.Ok;
+        };
+        bool was = SteamOs.InGameMode;
+        var notice = stamp.DesktopModeNotice;
+        try
+        {
+            SteamOs.InGameMode = true;
+            line.EmitSignal(BaseButton.SignalName.Pressed);
+            ctx.Check(handed.Count == 0 && notice.Visible && notice.DialogText == BuildStamp.ReleaseDesktopModeOnly,
+                $"in Game Mode a click never reaches the shell and raises the stamp's dialog ({handed.Count}, {notice.Visible}, \"{notice.DialogText}\")");
+            notice.Hide();
+
+            // ABLE-TO-FAIL CONTROL: out of Game Mode the same click opens the page.
+            SteamOs.InGameMode = false;
+            line.EmitSignal(BaseButton.SignalName.Pressed);
+        }
+        finally
+        {
+            FolderOpener.Shell = shell;
+            SteamOs.InGameMode = was;
+            notice.Hide();
+        }
+
+        ctx.Check(handed.Count == 1 && handed[0] == Page, $"a click hands the shell the release page ({string.Join("; ", handed)})");
     }
 
     // A container sorts its children on a deferred call, which a suite inside one frame never

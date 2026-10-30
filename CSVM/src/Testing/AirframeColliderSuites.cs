@@ -74,14 +74,14 @@ internal static class AirframeColliderSuites
         + "and a real held gun burst over the same bearings as the control on both counts")]
     internal static void AirframeColliderHitRate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a cannon carrying ARMOR_DAMAGE exists in the data");
         if (gun == null)
@@ -116,11 +116,11 @@ internal static class AirframeColliderSuites
         + "and the per-part box-to-hull volume the sweep no longer bridges")]
     internal static void AirframeHullCoverage(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var report = new StringBuilder();
         report.AppendLine("airframe part box_m3 hull_m3 removed_m3 verts uncovered_box uncovered_hull");
@@ -214,7 +214,7 @@ internal static class AirframeColliderSuites
         TextureArchive textures, ProjectilePool live, WeaponDef gun, string model)
     {
         string display = MarkerRig.PlayerAirframes.First(a => a.Model == model).Display;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+        var stats = PlaneStats.Load(ctx.Zrdr, model);
         FlightController? rig = null;
         try
         {

@@ -64,17 +64,17 @@ internal static class NetHumanFieldSuites
         + "completes nothing and loses on the host's death")]
     internal static void GuestsAreTheHostsHumanField(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string scriptZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, ScriptMission);
-        string stageZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, StageMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, Chapter), $"{Chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet scriptZrdr = ctx.MissionZrdr(Chapter, ScriptMission);
+        ZrdrSet stageZrdr = ctx.MissionZrdr(Chapter, StageMission);
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
         ctx.RequireData(scriptZrdr, $"{Chapter}/{ScriptMission} zrdr");
         ctx.RequireData(stageZrdr, $"{Chapter}/{StageMission} zrdr");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(ScriptMission, StringComparison.OrdinalIgnoreCase))
@@ -238,7 +238,7 @@ internal static class NetHumanFieldSuites
         private readonly List<FlightController> _panes = new();
 
         public Run(GameSession host, GameSession guest, ObjectiveScript script,
-            CampaignMission mission, string scriptZrdr)
+            CampaignMission mission, ZrdrSet scriptZrdr)
         {
             Host = host;
             Guest = guest;
@@ -317,7 +317,7 @@ internal static class NetHumanFieldSuites
         }
 
         private CampaignDirector Director(ObjectiveScript script, CampaignMission mission,
-            string scriptZrdr, Func<IReadOnlyList<FlightController>> humans)
+            ZrdrSet scriptZrdr, Func<IReadOnlyList<FlightController>> humans)
         {
             var director = CampaignDirector.Create(script, mission,
                 CampaignProfileDef.NewProfile("Zachary"), null, scriptZrdr);

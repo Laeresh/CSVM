@@ -198,16 +198,16 @@ public sealed class InstantActionFeature : IMenuFeature
     public InstantActionDef? BaseDef { get; private set; }
 
     /// <summary>The feature the game runs: environment defs read from the chapter's own
-    /// <c>IA1/ia.zrd.json</c> under <paramref name="dataRoot"/>, a failed read falling back to the
-    /// built-in defaults with a warning rather than leaving the menu unable to proceed.</summary>
-    public static InstantActionFeature ForDataRoot(string dataRoot)
+    /// <c>IA1/ia.zrd</c> out of <paramref name="data"/>. A failed read falls back to the built-in
+    /// defaults with a warning rather than leaving the menu unable to proceed.</summary>
+    public static InstantActionFeature ForGameData(Spec.GameData data)
     {
-        ArgumentNullException.ThrowIfNull(dataRoot);
+        ArgumentNullException.ThrowIfNull(data);
         return new InstantActionFeature(code =>
         {
             try
             {
-                return InstantAction.Load(SessionPaths.MissionZrdr(dataRoot, code, "IA1"));
+                return InstantAction.Load(data.LoadChapter(code, "IA1").MissionZrdr);
             }
             catch (Exception e)
             {

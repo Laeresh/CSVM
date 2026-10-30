@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Testing;
 using Godot;
 using Xunit;
@@ -59,8 +60,7 @@ public class PartThrottleEquilibriumTests
         0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1f,
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>Every airframe, every lever: the plant flies to the solved equilibrium from both
     /// sides. Approaching from above and below matters because the solve only says where thrust

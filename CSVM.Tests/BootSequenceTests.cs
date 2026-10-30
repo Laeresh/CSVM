@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using CSVM.Video;
@@ -134,7 +135,7 @@ public class BootSequenceTests
     [Fact]
     public void TheCardIsTheSplashArtUnderTwoCentredLines()
     {
-        var card = BootSequence.Card(TestData.TempDir());
+        var card = BootSequence.Card(new Messages());
 
         var art = Assert.Single(card.Backdrop);
         Assert.Equal(BoardArtLibrary.Ui, art.Art.Library);
@@ -156,10 +157,9 @@ public class BootSequenceTests
     public void TheCardsArtAndStringsComeOutOfTheExtraction()
     {
         string root = TestData.DataRoot!;
-        Assert.True(File.Exists(Path.Combine(
-            root, "extracted", "rof", "ASSETS", "GRAPHICS", BootSequence.CardArt)));
+        Assert.True(Extraction.RofFiles.For(root).Exists("ASSETS/GRAPHICS/" + BootSequence.CardArt));
 
-        var lines = BootSequence.Card(root);
+        var lines = BootSequence.Card(Messages.FromExtracted(Path.Combine(root, "extracted", "messages.json")));
         string first = lines.Lines[1].Text;
         string second = lines.Lines[3].Text;
         Assert.DoesNotContain("MSG_COPYRIGHT", first, StringComparison.Ordinal);

@@ -34,7 +34,7 @@ internal static class DanteEngineFireSuites
         "to, and no call takes a still-burning engine's template copy back")]
     internal static void DanteEngineFires(TestContext ctx)
     {
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"), $"C5/M04 zrdr");
+        ctx.RequireData(ctx.MissionZrdr("C5", "M04"), $"C5/M04 zrdr");
         // The size the session ships, not a number of this suite's own: the claim under test is
         // that the shipped pool covers one hull's authored engine bank.
         int slots = EffectPools.Load().SlotsFor("fire_here", 1);

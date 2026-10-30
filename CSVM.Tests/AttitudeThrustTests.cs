@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Godot;
 using Xunit;
@@ -19,8 +20,7 @@ public class AttitudeThrustTests
 {
     private const float Dt = 1f / 60f;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The decoded numbers themselves: two coefficients, the second one-sided, so a
     /// vertical climb keeps (1 − 0.24)(1 − 0.13) = 0.6612 of available thrust and a vertical dive

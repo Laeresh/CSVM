@@ -20,10 +20,9 @@ namespace CSVM.UI.Screens;
 public sealed partial class IaWrapupBoard : ResultsBoard, IIaWrapupBoard
 {
     // The shipped row titles, langui ids 1134-1137 (docs/formats/instant-action.md "The wrap-up
-    // screen"), literal text, not read off ui_strings.json at runtime: that table is a build-time
-    // extraction artifact of the .rof archive, not one of the five archives a session build opens
-    // (Mech3/SessionArchives.cs), and six lines are stable enough not to earn a reader of their
-    // own here.
+    // screen"), literal text, not read off ui_strings.json at runtime. That table comes from the
+    // UI archive, not one of the five archives a session build opens (Mech3/SessionArchives.cs).
+    // Six lines are stable enough not to earn a reader of their own here.
     private const string TimeTitle = "Time to Complete Mission";
     private const string DestroyedTitle = "Enemies Shot Down";
     private const string ZonesTitle = "Danger Zones Completed";

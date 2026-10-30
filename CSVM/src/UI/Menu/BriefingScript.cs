@@ -137,12 +137,11 @@ public sealed class BriefingDialog
     /// folder and its <c>M0n</c> number, not the story chapter and act position.</summary>
     public static string StateKey(int campaign, int mission) => $"brief_c{campaign}{mission}";
 
-    /// <summary>Loads the dialog from a shared zrdr scope (<c>extracted/zrdr.zip</c> or its
-    /// unpacked sibling). A state with no script is skipped, which drops <c>default</c>.</summary>
-    public static BriefingDialog Load(string zrdrPath)
+    /// <summary>Loads the dialog from the shared zrdr scope. A state with no script is skipped, which drops <c>default</c>.</summary>
+    public static BriefingDialog Load(ZrdrSet zrdr)
     {
         var dialog = new BriefingDialog();
-        var root = Zrdr.LoadFile(zrdrPath, "Briefing.json");
+        var root = zrdr.LoadFile("Briefing.json");
         if (root.Count == 0 || root[0] is not List<object?> entries)
         {
             return dialog;

@@ -97,10 +97,10 @@ internal static class CampaignPandoraLossSuites
         + "definition the world holds several instances of writes inside its own instance or nowhere")]
     internal static void CampaignPandoraLoss(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var report = new StringBuilder();
@@ -108,7 +108,7 @@ internal static class CampaignPandoraLossSuites
         CheckScript(ctx, script, report);
         CheckAttackers(ctx, missionZrdr, report);
 
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath))
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr))
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Mission}");
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Zachary"), null, missionZrdr);
@@ -202,7 +202,7 @@ internal static class CampaignPandoraLossSuites
 
     // Why one attacker is enough to reach the last rung on its own: the mission flies five Brigand
     // blocks, each authored with a positive target-selection bias onto the hull, against 6 x 40 HP.
-    private static void CheckAttackers(TestContext ctx, string missionZrdr, StringBuilder report)
+    private static void CheckAttackers(TestContext ctx, ZrdrSet missionZrdr, StringBuilder report)
     {
         int biased = 0, blocks = 0;
         foreach (var (name, fields) in AiSkills.LoadRoster(missionZrdr))
@@ -278,7 +278,7 @@ internal static class CampaignPandoraLossSuites
     private static void CheckCrateDeathStaysOffTheHull(TestContext ctx, AnimRuntime runtime,
         Node3D host, IReadOnlyList<Node3D?> healthy, StringBuilder report)
     {
-        var crate = AnimDefs.LoadFileDefs(ctx.ZrdrPath, CrateFile)
+        var crate = AnimDefs.LoadFileDefs(ctx.Zrdr, CrateFile)
             .FirstOrDefault(d => d.Name.Contains('*'));
         var lake = runtime.FindNodes(LakeNode).FirstOrDefault();
         if (crate == null || lake == null)

@@ -50,7 +50,7 @@ internal static class CraterSuites
         "on both legs, uncarved with the effect it played and as a carve with the option on")]
     internal static void CraterCarve(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         var report = new StringBuilder();
         ctx.WithPrivateWorld(Chapter, collision: true, world => Drop(ctx, world, report));
         ctx.WriteArtifact("test-crater-carve.txt", report.ToString());
@@ -68,10 +68,10 @@ internal static class CraterSuites
         "is hidden once its life runs out, and the faithful presentation builds no field at all")]
     internal static void ScorchDecals(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (OrdnanceSuites.PickFireballRocket(ctx, weapons) is not { } he)
         {
             ctx.Check(false, $"wep_06 resolves");
@@ -373,7 +373,7 @@ internal static class CraterSuites
     private static void OptionalCarve(TestContext ctx, TestWorld world, (Vector3 At, StaticBody3D Body) spot,
         CraterField field, PhysicsDirectSpaceState3D space, StringBuilder report)
     {
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var rocket = weapons.All.FirstOrDefault(w =>
             w.IsRocket && !w.Crater && w.DetonationDotProduct is null && w.CannonSpread is not > 0f);
         ctx.Check(rocket != null, $"a plain rocket warhead that carries no CRATER exists in the data");
@@ -383,7 +383,7 @@ internal static class CraterSuites
         }
 
         ctx.Check(!SceneBuilder.CanModify(spot.Body), $"the spot's node carries no can_modify stamp ({spot.Body.GetParent()?.Name})");
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var plays = new List<(string Name, Vector3 At)>();
         var scorches = new List<(string? Effect, bool Carved)>();
         int asked = 0;
@@ -443,7 +443,7 @@ internal static class CraterSuites
     private static void LiveRound(TestContext ctx, TestWorld world,
         (Vector3 At, StaticBody3D Body) spot, ArrayMesh before, StringBuilder report)
     {
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (!weapons.TryGet("wep_12", out var choker) || !choker.Crater)
         {
             ctx.Check(false, $"wep_12 resolves and carries CRATER");
@@ -453,7 +453,7 @@ internal static class CraterSuites
         ctx.Same(0, flagged, $"no collider of the built C1 world carries the can_modify stamp");
 
         var mesh = ((Node3D)WorldCollision.OwnerOf(spot.Body)).GetNodeOrNull<MeshInstance3D>("mesh");
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var liveField = new CraterField(world.Session.Root);
         var plays = new List<(string Name, Vector3 At)>();
         int asked = 0;

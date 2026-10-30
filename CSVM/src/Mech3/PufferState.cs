@@ -100,13 +100,13 @@ public sealed class PufferState
     /// <c>Rand()</c> draw at spawn, so a puffer that does not author it stays bit-identical.</summary>
     public bool HasStartAgeRange => StartAgeMin != 0f || StartAgeMax != 0f;
 
-    /// <summary>Loads a reader file (e.g. "flame_ball.json") from a zrdr zip/dir and returns
+    /// <summary>Loads a reader file (e.g. "flame_ball.json") from a reader scope and returns
     /// the fully-defined <c>PUFFER_STATE</c> named <paramref name="pufferName"/>, or null.</summary>
-    public static PufferState? Load(string zrdrPath, string fileName, string pufferName)
+    public static PufferState? Load(ZrdrSet zrdr, string fileName, string pufferName)
     {
         try
         {
-            return FindInReader(Zrdr.LoadFile(zrdrPath, fileName), pufferName);
+            return FindInReader(zrdr.LoadFile(fileName), pufferName);
         }
         catch (Exception e)
         {

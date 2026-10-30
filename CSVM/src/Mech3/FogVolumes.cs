@@ -419,11 +419,11 @@ public sealed class FogVolumeSpec
 
     /// <summary>Loads a chapter's <c>fogvol.zrd</c>. Null when the chapter's zrdr scope has no
     /// such file, degrades rather than throwing, like every other optional reader here.</summary>
-    public static FogVolumeSpec? Load(string chapterZrdrPath)
+    public static FogVolumeSpec? Load(ZrdrSet chapterZrdr)
     {
         try
         {
-            return Parse(Zrdr.LoadFile(chapterZrdrPath, "fogvol.json"));
+            return Parse(chapterZrdr.LoadFile("fogvol.json"));
         }
         catch (Exception e) when (e is System.IO.FileNotFoundException
                                       or System.IO.DirectoryNotFoundException

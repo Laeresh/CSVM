@@ -231,10 +231,11 @@ public sealed class SceneBuilder
     /// step, so the plain mode ships (<c>docs/org/textures.md</c>).</summary>
     internal const string CoverageMode = ", alpha_to_coverage";
 
-    /// <summary>The fragment half of <see cref="CoverageMode"/>, and not optional. The opaque pass
-    /// writes alpha 1 unless the edge built-in is set, so the render mode alone changes no pixel.
-    /// ⚠ The value is an OFFSET Godot adds to <c>ALPHA_SCISSOR_THRESHOLD</c>, not an alpha. At 0
-    /// the edge sits on the scissor's own 0.5, the faithful silhouette. At 0.5 it sits at 1.0,
+    /// <summary>The fragment half of <see cref="CoverageMode"/>, and not optional: without it the
+    /// render mode changes no pixel. With it Godot draws the cutout in the transparent pass, sorted
+    /// per instance and blended (<c>docs/org/textures.md</c>). ⚠ The value is an OFFSET Godot adds
+    /// to <c>ALPHA_SCISSOR_THRESHOLD</c>, not an alpha. At 0 the edge sits on the scissor's own
+    /// 0.5, the faithful silhouette. At 0.5 it sits at 1.0,
     /// which halves an opaque texel's coverage wherever the texture magnifies.</summary>
     internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.0;\n"
         + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
@@ -361,6 +362,10 @@ public sealed class SceneBuilder
     /// <summary>The airframe, as its model node (<c>player_bhawk</c>), under which every node of
     /// the next build looks up its replacement. <see cref="PlaneBuilder"/> sets it per build.</summary>
     internal string? HdAirframe;
+
+    /// <summary>Only <see cref="HdAirframe"/>'s own keys reach this builder's nodes, never a bare or chapter
+    /// key. The cockpit interior sets it, so a world pack's generic <c>g366.glb</c> leaves every cockpit alone.</summary>
+    internal bool HdAirframeKeysOnly;
 
     /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
     /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
@@ -538,6 +543,8 @@ void fragment() {
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
     private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
+    // The instance ids of the bias materials built under XrPreciseInterior, which carry its placement.
+    private readonly HashSet<ulong> _interiorPlaced = new();
     // A fullbright builder's committed surface arrays, per built mesh in surface order. Reading a
     // surface back from Godot copies it off the GPU and waits for the render thread.
     private readonly Dictionary<ArrayMesh, List<Godot.Collections.Array>> _builtArrays = new();
@@ -796,6 +803,12 @@ void fragment() {
     public TransparencyClass AlphaOf(Material? material) =>
         material != null && _materialAlpha.TryGetValue(material, out var known)
             ? known : TransparencyClass.None;
+
+    /// <summary>Whether this builder made <paramref name="material"/> in the stereo interior's placement
+    /// (<see cref="XrPreciseInterior"/>), as every bias material it builds there is. A camera-facing card
+    /// is not, nor a material another builder made.</summary>
+    public bool PlacesInInterior(Material? material) =>
+        material != null && _interiorPlaced.Contains(material.GetInstanceId());
 
     /// <summary>The one biased albedo fetch every mip-mapped arm emits, defined in
     /// <c>csky_mip_bias.gdshaderinc</c> beside the global it reads.
@@ -1561,15 +1574,21 @@ void fragment() {
         int steps = 0;
         for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
         {
-            if (HdModels.Current.KeyFor(scope.Name, HdChapter, HdAirframe) != null
+            if (PackKey(scope.Name) != null
                 && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
                 return scoped;
             path.Insert(0, scope.Name);
         }
-        return HdModels.Current.KeyFor(node.Name, HdChapter, HdAirframe) != null
+        return PackKey(node.Name) != null
             ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
             : null;
     }
+
+    // The key HdModelMeshes resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
+    private string? PackKey(string name) =>
+        HdModels.Current.KeyFor(name, HdChapter, HdAirframe) is { } key
+        && (!HdAirframeKeysOnly || key.StartsWith($"planes/{HdAirframe?.ToLowerInvariant()}/", StringComparison.Ordinal))
+            ? key : null;
 
     // The names of the gamez nodes below `node`. A glTF subtree named after one is that node's to draw.
     private IEnumerable<string> DescendantNames(GameZNode node)
@@ -1646,6 +1665,13 @@ void fragment() {
             int added = result.GetSurfaceCount() - 1;
             result.SurfaceSetName(added, surface.Name);
             result.SurfaceSetMaterial(added, material);
+            // Kept for the world's merge, as BuildMesh keeps its own.
+            if (_fullbright)
+            {
+                if (!_builtArrays.TryGetValue(result, out var kept))
+                    _builtArrays[result] = kept = new List<Godot.Collections.Array>();
+                kept.Add(surface.Arrays);
+            }
         }
         // ⚠ Never fall back to the gamez model here: no surface left means the pack draws nothing.
         return result;
@@ -2258,6 +2284,8 @@ void fragment() {
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
             replacement));
         NoteAlpha(mat, blend, scissor);
+        if (XrPreciseInterior)
+            _interiorPlaced.Add(mat.GetInstanceId());
         if (XrPreciseInterior && (blend || XrUnderInterior))
             mat.RenderPriority = XrInteriorBlendPriority;
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;

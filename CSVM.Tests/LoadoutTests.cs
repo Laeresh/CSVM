@@ -50,6 +50,18 @@ public class LoadoutTests
         Assert.Null(loadouts.For("not_a_plane"));
     }
 
+    /// <summary>The stock hangar records' twin bits (<c>0x00619f58</c>, <c>+0x84</c>) are clear on
+    /// the Hellhound's turret and both of the Balmoral's. Every other stock slot is twin.</summary>
+    [Fact]
+    public void TheSingleMountedStockSlotsAreTheHellhoundAndBalmoralTurrets()
+    {
+        var single = Load().All
+            .SelectMany(kv => kv.Value.Guns.Where(g => g.Single).Select(g => $"{kv.Key}/{g.Slot}"))
+            .OrderBy(s => s, StringComparer.Ordinal);
+
+        Assert.Equal(new[] { "pavenger/4", "pbalmoral/3", "pbalmoral/4" }, single);
+    }
+
     [Fact]
     public void EveryLoadoutNamesAModelAndAtLeastOneGunGroup()
     {

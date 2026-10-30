@@ -73,9 +73,9 @@ internal static class CampaignBlackeDropSuites
         + "rather than sweeping from where the trigger found him back into the drop site")]
     internal static void BlackeDropCameras(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
         var report = new StringBuilder();
         ctx.CutsceneRoots = true;
         try
@@ -139,7 +139,7 @@ internal static class CampaignBlackeDropSuites
         var savedHost = rt.CallbackHost;
         var savedStarted = rt.OnInstanceStarted;
         var savedPositions = rt.PlayerPositions;
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var cutscene = new CutsceneController();
@@ -277,8 +277,8 @@ internal static class CampaignBlackeDropSuites
     private static FlightController HumanRig(TestContext ctx, TextureArchive textures,
         ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

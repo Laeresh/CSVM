@@ -207,9 +207,9 @@ public class ObjectiveSitesTests
     public void TheDirectorFreeFeedStillOffersAKeyOnBothFlagsOnce()
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "targets.json"),
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"),
             "[[[\"nodes\",[\"both\"]],[\"objective\"],[\"other_target\"]]]");
-        var targets = MissionTargets.Load(dir);
+        var targets = MissionTargets.Load(TestZrdr.Folder(dir));
 
         var into = new List<string>();
         ObjectiveSites.CollectFlagged(TargetFlag.Objective, null, null, targets, into);
@@ -260,8 +260,8 @@ public class ObjectiveSitesTests
     private static (List<string> Objectives, List<string> Others) Split(string chapter, string mission)
     {
         var targets = MissionTargets.Load(
-            SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission),
-            SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+            TestZrdr.Mission(chapter, mission),
+            TestZrdr.Chapter(chapter));
         var into = new List<string>();
         ObjectiveSites.CollectFlagged(TargetFlag.Objective, null, null, targets, into);
         int objectives = into.Count;
@@ -285,39 +285,39 @@ public class ObjectiveSitesTests
                 + (flag == null ? "" : ",[\"" + flag + "\"]") + "]");
         }
 
-        File.WriteAllText(Path.Combine(dir, "targets.json"), "[" + string.Join(",", text) + "]");
-        return MissionTargets.Load(dir);
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"), "[" + string.Join(",", text) + "]");
+        return MissionTargets.Load(TestZrdr.Folder(dir));
     }
 
     private static MissionTargets TargetsWithFlag(string node, string flag)
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "targets.json"),
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"),
             "[[[\"nodes\",[\"" + node + "\"]],[\"" + flag + "\",true]]]");
-        return MissionTargets.Load(dir);
+        return MissionTargets.Load(TestZrdr.Folder(dir));
     }
 
     private static MissionTargets Labelled(string node)
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "targets.json"),
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"),
             "[[[\"nodes\",[\"" + node + "\"]],[\"help_label\",\"MSG_OBJ_DESTROY\"]]]");
-        return MissionTargets.Load(dir);
+        return MissionTargets.Load(TestZrdr.Folder(dir));
     }
 
     private static MissionTargets TargetsWithObjectiveFlag(string node)
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "targets.json"),
+        File.WriteAllText(Path.Combine(dir, "targets.zrd.json"),
             "[[[\"nodes\",[\"" + node + "\"]],[\"objective\",true]]]");
-        return MissionTargets.Load(dir);
+        return MissionTargets.Load(TestZrdr.Folder(dir));
     }
 
     private static ObjectiveScript Script(string body)
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "objectives.json"), "[[" + body + "]]");
-        return ObjectiveScript.Load(dir);
+        File.WriteAllText(Path.Combine(dir, "objectives.zrd.json"), "[[" + body + "]]");
+        return ObjectiveScript.Load(TestZrdr.Folder(dir));
     }
 
     // Answers only what a test sets; no condition ever reads true unless the test drives it.

@@ -7,6 +7,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.Tooling;
@@ -170,7 +171,7 @@ internal static class GraphicsSwitchSuites
     internal static void SpyglassSunLayers(TestContext ctx)
     {
         RequireData(ctx);
-        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
+        ZrdrSet crossZrdr = ctx.MissionZrdr("C2", "MP2");
         ctx.RequireData(crossZrdr, $"C2/MP2 mission zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         try
@@ -243,7 +244,7 @@ internal static class GraphicsSwitchSuites
     internal static void FlareFollowsSwitch(TestContext ctx)
     {
         RequireData(ctx);
-        ctx.RequireData(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"), $"C3 zrdr");
+        ctx.RequireData(ctx.ChapterZrdr("C3"), $"C3 zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         try
         {
@@ -1739,7 +1740,7 @@ internal static class GraphicsSwitchSuites
     internal static void OceanWake(TestContext ctx)
     {
         RequireData(ctx, OceanChapter);
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, OceanChapter, WakeMission), $"{OceanChapter}/{WakeMission} zrdr");
+        ctx.RequireData(ctx.MissionZrdr(OceanChapter, WakeMission), $"{OceanChapter}/{WakeMission} zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = WaterQualitySetting.Word;
         var launchedClock = GameClock.Current;
@@ -2459,7 +2460,7 @@ internal static class GraphicsSwitchSuites
 
     // A zone the weather rig lights, crossed under Enhanced. C2/MP2's two zones disagree about the
     // bearing, so a copy that took the sun once at build would be left behind.
-    private static void ZoneCrossing(TestContext ctx, string zrdr)
+    private static void ZoneCrossing(TestContext ctx, ZrdrSet zrdr)
     {
         GraphicsMode.Set(true);
         var root = new Node3D { Name = "spyglass-sun-zone" };
@@ -2520,10 +2521,10 @@ internal static class GraphicsSwitchSuites
     private static void RequireData(TestContext ctx, string? chapter = null)
     {
         chapter ??= ctx.Chapter;
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
     }
 
     // A Water Quality apply as the Options accept makes it, then the steps a reading waits for.
@@ -3043,7 +3044,7 @@ internal static class GraphicsSwitchSuites
         ctx.Check(include.Contains($"csky_ocean_sea(world.xz) < {threshold}", StringComparison.Ordinal)
                 && grid.Contains($"m.r < {threshold}", StringComparison.Ordinal),
             $"the sheet's hide steps aside at the coverage the ocean discards below, {threshold} (include {(include.Length > 0 ? "read" : "missing")}, grid shader {(grid.Length > 0 ? "read" : "missing")})");
-        ctx.Check(include.Contains($"abs(zone - {Effects.OceanMask.SeamZone}.0)", StringComparison.Ordinal),
+        ctx.Check(include.Contains($"abs(zone - {Effects.OceanMaskRaster.SeamZone}.0)", StringComparison.Ordinal),
             $"and leaves a zone seam texel, which no grid draws, to the sheet");
         string hide = Effects.OceanMask.HideHeight.ToString("0.0#", CultureInfo.InvariantCulture);
         string top = Effects.OceanMask.RampTop.ToString("0.0#", CultureInfo.InvariantCulture);
@@ -3244,13 +3245,8 @@ internal static class GraphicsSwitchSuites
         ctx.Host.AddChild(pane);
         var paths = new BasePaths(
             RepoRoot: ctx.RepoRoot,
-            DataRoot: ctx.DataRoot,
-            PlanesGamezPath: ctx.PlanesGamezPath,
-            ZrdrPath: ctx.ZrdrPath,
-            SoundsPath: ctx.SoundsPath,
-            InterpPath: ctx.InterpPath,
-            MessagesPath: ctx.MessagesPath,
-            RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            DataRoot: ctx.DataRoot)
+        { Game = ctx.Game, Data = ctx.Data };
         var session = new GameSession(spec, new LauncherContext
         {
             Decode = ctx.Decode,

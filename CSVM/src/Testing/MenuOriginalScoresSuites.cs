@@ -28,8 +28,8 @@ internal static class MenuOriginalScoresSuites
         + "where a three-line chat draws no bar")]
     internal static void TheLobbyScores(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -211,9 +211,9 @@ internal static class MenuOriginalScoresSuites
     {
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data));
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, netDoor: door);
         host.AddSeat(seat);
         host.Select("original");
         host.Show(MenuReturnDestination.TopLevel);

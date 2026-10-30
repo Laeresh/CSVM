@@ -231,14 +231,14 @@ internal static class CampaignTravelersDeleteSuites
 
     private static Mission Open(TestContext ctx, string chapter, string mission, string? subject)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet zrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(mission, StringComparison.OrdinalIgnoreCase))
@@ -261,11 +261,11 @@ internal static class CampaignTravelersDeleteSuites
         Action<CampaignDirector, FlightController, FlightController> legs)
     {
         var blocks = AiSkills.LoadRoster(run.Zrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
         var director = CampaignDirector.Create(run.Script, run.Campaign,
             CampaignProfileDef.NewProfile("Zachary"), null, run.Zrdr);
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, run.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(run.Chapter));
         var rigs = new List<FlightController>();
         ProjectilePool? pool = null;
         try
@@ -275,7 +275,7 @@ internal static class CampaignTravelersDeleteSuites
             ctx.Host.AddChild(live);
 
             var pose = PlayerPose(blocks);
-            var player = Rig(ctx, planesGamez, textures, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName), live,
+            var player = Rig(ctx, planesGamez, textures, PlaneStats.Load(ctx.Zrdr, ctx.PlaneName), live,
                 ctx.PlaneName, pose.Position, pose.Position + pose.Forward, human: true, pilot: null,
                 FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
             player.Held = true;
@@ -284,9 +284,9 @@ internal static class CampaignTravelersDeleteSuites
             FlightController? subject = null;
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, run.Chapter),
-                MissionZrdrPath = run.Zrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = ctx.ChapterZrdr(run.Chapter),
+                MissionZrdr = run.Zrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 Player = () => player,
                 Spawn = (plan, pos, look, pilot) =>
@@ -356,11 +356,11 @@ internal static class CampaignTravelersDeleteSuites
     {
         try
         {
-            return PlaneStats.LoadForAi(ctx.ZrdrPath, plan.PlaneNode, plan.AiDef);
+            return PlaneStats.LoadForAi(ctx.Zrdr, plan.PlaneNode, plan.AiDef);
         }
         catch (ArgumentException)
         {
-            return PlaneStats.LoadForAi(ctx.ZrdrPath, plan.PlaneNode);
+            return PlaneStats.LoadForAi(ctx.Zrdr, plan.PlaneNode);
         }
     }
 
@@ -394,5 +394,5 @@ internal static class CampaignTravelersDeleteSuites
     // One mission's script and data, with the roster block a leg places: a named subject, or the
     // first member of a group.
     private sealed record Mission(string Chapter, string Name, CampaignMission Campaign, ObjectiveScript Script,
-        string Zrdr, string? Subject, int? Group);
+        ZrdrSet Zrdr, string? Subject, int? Group);
 }

@@ -9,6 +9,7 @@ using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -889,11 +890,14 @@ public sealed class TestContext
 
     public required string Chapter { get; init; }
     public required string Mission { get; init; }
-    public required string ZrdrPath { get; init; }
-    public required string MessagesPath { get; init; }
-    public required string PlanesGamezPath { get; init; }
-    public required string InterpPath { get; init; }
-    public required string SoundsPath { get; init; }
+
+    /// <summary>The run's game-file source, null without an install; a suite that builds its own
+    /// <c>BasePaths</c> hands it on.</summary>
+    public IGameFileSource? Game { get; init; }
+
+    /// <summary>The run's game data, the launch's own: read from <see cref="Game"/>, or built in
+    /// memory on the synthetic tree. A suite that builds its own <c>BasePaths</c> hands it on.</summary>
+    public required GameData Data { get; init; }
     public required string PlaneName { get; init; }
     public required bool Mute { get; init; }
 
@@ -956,6 +960,21 @@ public sealed class TestContext
     /// run gets a directory of its own beside its engine log, so neither a sibling shard nor a
     /// concurrent run can overwrite its report or its per-suite artifacts.</summary>
     public string ScratchDir => ShardScratch ?? Path.Combine(RepoRoot, ".scratch");
+
+    /// <summary>The aircraft archive out of the run's game data, or SKIP the way
+    /// <see cref="RequireData(GameZ, FormattableString)"/> does. Shared, so read-only.</summary>
+    public GameZ Planes =>
+        Data.Planes ?? throw new SuiteSkippedException($"{GameData.PlanesPath} not found: {Game?.Location ?? "no game install"}");
+
+    /// <summary>The sound archive out of the run's game data, or SKIP the way
+    /// <see cref="RequireData(SoundZbd, FormattableString)"/> does. Shared by every suite; a
+    /// <see cref="SoundArchive"/> over it leaves it open when disposed.</summary>
+    public SoundZbd Sounds =>
+        Data.Sounds ?? throw new SuiteSkippedException($"{GameData.SoundsPath} not found: {Game?.Location ?? "no game install"}");
+
+    /// <summary>The root reader scope out of the run's game data, <see cref="ZrdrSet.None"/>
+    /// without an install. Shared by every suite; each read hands out a fresh copy.</summary>
+    public ZrdrSet Zrdr => Data.Zrdr;
 
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
@@ -1029,6 +1048,74 @@ public sealed class TestContext
         }
     }
 
+    /// <summary>Ends the suite as SKIP when a texture archive the suite needs holds nothing: no
+    /// install, or a chapter the synthetic data does not carry.</summary>
+    public void RequireData(TextureSet textures, FormattableString what)
+    {
+        if (textures.Count == 0)
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>The chapter's texture archive out of the run's game data, empty where it has none.</summary>
+    public TextureSet ChapterTextures(string chapter) => Data.LoadChapter(chapter, Mission).Textures;
+
+    /// <summary>The chapter's reader scope out of the run's game data, <see cref="ZrdrSet.None"/>
+    /// where it has none.</summary>
+    public ZrdrSet ChapterZrdr(string chapter) => Data.LoadChapter(chapter, Mission).ChapterZrdr;
+
+    /// <summary>The mission's reader scope out of the run's game data, <see cref="ZrdrSet.None"/>
+    /// where it has none.</summary>
+    public ZrdrSet MissionZrdr(string chapter, string mission) => Data.LoadChapter(chapter, mission).MissionZrdr;
+
+    /// <summary>Ends the suite as SKIP when a world the suite needs is not in the game data. That is
+    /// no install, or a chapter or aircraft archive the synthetic data does not carry.</summary>
+    public void RequireData(GameZ? gamez, FormattableString what)
+    {
+        if (gamez == null)
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>Ends the suite as SKIP when the game data holds no sound archive: no install, or an
+    /// install without <c>soundsh.zbd</c>.</summary>
+    public void RequireData(SoundZbd? sounds, FormattableString what)
+    {
+        if (sounds == null)
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>A private aircraft archive, decoded afresh, for a suite that edits the model; the
+    /// shared <see cref="Planes"/> must never be written. SKIP as that one does.</summary>
+    public GameZ PlanesCopy() =>
+        (SyntheticData ? Tooling.SyntheticPlane.Gamez() : GameZZbd.Load(Game, GameData.PlanesPath))
+        ?? throw new SuiteSkippedException($"{GameData.PlanesPath} not found: {Game?.Location ?? "no game install"}");
+
+    /// <summary>The chapter's world out of the run's game data, null where it has none. Decoded once
+    /// per run and shared with every world built on the chapter, so read-only.</summary>
+    public GameZ? ChapterGamez(string chapter)
+    {
+        var data = Data.LoadChapter(chapter, Mission);
+        return _decode.Gamez(chapter, () => data.Gamez);
+    }
+
+    /// <summary>The install's boot scripts, or SKIP the way <see cref="RequireData"/> does when
+    /// the run has no install or the install no <c>interp.zbd</c>.</summary>
+    public InterpScripts RequireInterp() =>
+        Data.Interp
+        ?? throw new SuiteSkippedException($"{InterpScripts.GamePath} not found: {Game?.Location ?? "no game install"}");
+
+    /// <summary>The run's message table, or SKIP the way <see cref="RequireData"/> does when it
+    /// is empty: no install, or an install without <c>strings.dll</c>.</summary>
+    public Messages RequireMessages() =>
+        Data.Messages.Count > 0
+            ? Data.Messages
+            : throw new SuiteSkippedException($"{Messages.GameFile} not found: {Game?.Location ?? "no game install"}");
+
     /// <summary>On the synthetic tree, skips a suite whose body reads a shipped texture by
     /// <paramref name="name"/> that the invented archive does not carry. ⚠ Never skip on a real
     /// extraction: a shipped name missing there is a broken tree, which the body reports.</summary>
@@ -1040,16 +1127,26 @@ public sealed class TestContext
         }
     }
 
-    /// <summary>Skips a suite whose body reads the reader file <paramref name="fileName"/> when the
-    /// zrdr archive at <paramref name="zrdrPath"/> lacks it. The archive may be a ZIP or its unpacked
-    /// folder. Checked on every tree, like <see cref="RequireData"/>. A suite names only entries every
-    /// install ships, so on a real extraction the gate passes wherever the body would have run.</summary>
-    public void RequireZrdrEntry(string zrdrPath, string fileName)
+    /// <summary>Ends the suite as SKIP when a reader scope the suite needs is absent. That is no
+    /// install, or a chapter or mission the synthetic data does not carry.</summary>
+    public void RequireData(ZrdrSet zrdr, FormattableString what)
     {
-        RequireData(zrdrPath, $"zrdr archive for {fileName}");
-        if (!Zrdr.HasFile(zrdrPath, fileName))
+        if (!zrdr.Exists)
         {
-            throw new SuiteSkippedException($"{fileName} not found in {zrdrPath}");
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {Game?.Location ?? "no game install"}");
+        }
+    }
+
+    /// <summary>Skips a suite whose body reads the reader file <paramref name="fileName"/> when the
+    /// scope <paramref name="zrdr"/> lacks it. Checked on every tree, like <see cref="RequireData"/>.
+    /// A suite names only entries every install ships, so on a real install the gate passes wherever
+    /// the body would have run.</summary>
+    public void RequireZrdrEntry(ZrdrSet zrdr, string fileName)
+    {
+        RequireData(zrdr, $"zrdr archive for {fileName}");
+        if (!zrdr.HasFile(fileName))
+        {
+            throw new SuiteSkippedException($"{fileName} not found in {zrdr}");
         }
     }
 
@@ -1063,9 +1160,7 @@ public sealed class TestContext
             return;
         }
 
-        RequireData(PlanesGamezPath, $"planes gamez");
-        _syntheticPlaneNodes ??= new HashSet<string>(
-            GameZ.Load(PlanesGamezPath).Nodes.Select(n => n.Name), StringComparer.Ordinal);
+        _syntheticPlaneNodes ??= new HashSet<string>(Planes.Nodes.Select(n => n.Name), StringComparer.Ordinal);
         foreach (string name in nodeNames)
         {
             if (!_syntheticPlaneNodes.Contains(name))
@@ -1308,10 +1403,11 @@ public sealed class TestContext
 
     private TestWorld BuildWorld(string chapter, bool collision, string mission)
     {
-        string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
-        string texturesPath = SessionPaths.ChapterTextures(DataRoot, chapter);
-        RequireData(gamezPath, $"chapter {chapter} gamez");
+        var gamez = ChapterGamez(chapter);
+        var texturesPath = ChapterTextures(chapter);
+        RequireData(gamez, $"chapter {chapter} gamez");
         RequireData(texturesPath, $"chapter {chapter} textures");
+        var loaded = Data.LoadChapter(chapter, mission);
 
         var buildWatch = System.Diagnostics.Stopwatch.StartNew();
         // A private StartupProfile the shared build code's own Mark/Record calls still reach --
@@ -1325,8 +1421,8 @@ public sealed class TestContext
             var stage = new Node3D { Name = $"TestWorld_{chapter}" };
             Host.AddChild(stage);
             // The sound archive is this scope's, the texture archive the returned world's.
-            var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
-                SoundsPath, ZrdrPath, Mute, _decode);
+            var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, () => gamez, texturesPath,
+                Data.Sounds, Zrdr, Mute);
             textures = archives.Textures;
             using var sounds = archives.Sounds;
             var ambience = Ambience;
@@ -1336,13 +1432,14 @@ public sealed class TestContext
             var session = WorldSession.Build(
                 new WorldSession.Options
                 {
-                    DataRoot = DataRoot,
                     Chapter = chapter,
                     Mission = mission,
-                    ZrdrPath = ZrdrPath,
-                    InterpPath = InterpPath,
-                    MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(DataRoot, chapter),
+                    Zrdr = Zrdr,
+                    Interp = Data.Interp,
+                    MissionZrdr = loaded.MissionZrdr,
+                    ChapterZrdr = loaded.ChapterZrdr,
+                    ChapterAnim = () => loaded.ChapterAnim,
+                    MissionAnim = () => loaded.MissionAnim,
                     EffectsParent = stage,
                     PlayerPosition = () => Camera.GlobalPosition,
                     Collision = collision,
@@ -1352,7 +1449,7 @@ public sealed class TestContext
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
                     Cutscenes = CutsceneRoots ? CSVM.Launch.GameSession.CutsceneWorldNames : null,
                     LandingTriggers = CutsceneRoots,
-                    PlanesGamezPath = PlanesGamezPath,
+                    PlanesGamez = Data.Planes,
                     Decode = _decode,
                     TexturesOutliveBuild = archives.TexturesOutliveBuild,
                     SoundsOutliveBuild = archives.SoundsOutliveBuild,

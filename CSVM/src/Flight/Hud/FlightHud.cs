@@ -29,6 +29,10 @@ public struct FlightHudState
     /// <summary>Throttle 0..1, as the text line's percentage.</summary>
     public float Throttle;
 
+    /// <summary>The lever the pilot commands, 0..1, which the live <see cref="Throttle"/> slews
+    /// towards. The throttle plate's knob.</summary>
+    public float ThrottleCommand;
+
     /// <summary>Frozen at the impact point waiting for a respawn.</summary>
     public bool Crashed;
 
@@ -129,6 +133,10 @@ public sealed class FlightHud
     /// from the plane's own gauges subtree. Optional.</summary>
     public GaugeCluster? Gauges;
 
+    /// <summary>The commanded lever as a plate beside the speedometer, a remake-only readout.
+    /// Null when its SVGs are missing from the build.</summary>
+    public ThrottlePlate? ThrottlePlate;
+
     /// <summary>The <c>--hud-font-test</c> bitmap-font verification overlay, drawn over everything
     /// so it scales with the pane. Null unless the flag is set.</summary>
     public HudFontTest? FontTest;
@@ -181,7 +189,7 @@ public sealed class FlightHud
     private const float ReticleRatePerGap = 1.9848576f; // rate ceiling per metre of remaining gap
     private const float ReticleFarGap = 900f;          // m past which the ceiling is flat
     private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
-    // What the prompt reads when messages.json is absent, so a data-less rig still says the offer
+    // What the prompt reads when the message table is empty, so a data-less rig still says the offer
     // is live. Plain English, not the shipped wording, which only the message table carries.
     private const string AutoLandFallback = "AUTO-LAND AVAILABLE";
     private const string AutoLandFallbackTemplate = AutoLandFallback + " - %1";
@@ -209,6 +217,7 @@ public sealed class FlightHud
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
     private bool _spectatorView;                 // SetSpectatorView: on while a race pane spectates
     private bool _cockpitView;                   // the cockpit interior is on the screen this frame
+    private bool _throttlePlateShown;            // SetThrottlePlateShown: the Game Options box, off by default
     private float _textScale = -1f;              // last applied HudMetrics scale (window and pane)
     private float _textLeft = -1f;               // last applied reading-box left edge (0 at 16:9)
     private float _damageFlash;                  // s left on the impact line
@@ -419,6 +428,8 @@ public sealed class FlightHud
             canvas.AddChild(Compass);
         if (Gauges != null)
             canvas.AddChild(Gauges);
+        if (ThrottlePlate != null)
+            canvas.AddChild(ThrottlePlate);
         if (Reticle != null)
             canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
         if (StuntRun != null)
@@ -458,6 +469,7 @@ public sealed class FlightHud
     {
         Compass = Loose(Compass, freeNow);
         Gauges = Loose(Gauges, freeNow);
+        ThrottlePlate = Loose(ThrottlePlate, freeNow);
         Reticle = Loose(Reticle, freeNow);
         StuntRun = Loose(StuntRun, freeNow);
         TargetHud = Loose(TargetHud, freeNow);
@@ -509,6 +521,8 @@ public sealed class FlightHud
             Gauges.HeadingDeg = state.HeadingDeg;
             (Gauges.HorizonPitchRad, Gauges.HorizonRollRad) = GaugeCluster.HorizonAngles(state.Attitude);
         }
+        if (ThrottlePlate != null)
+            ThrottlePlate.Lever = state.ThrottleCommand;
         // Feeds the weapon gauges (if built) and the text readout (if built), both draw from the
         // live loadout, so this runs whenever there is one, independent of the dial cluster.
         UpdateWeaponGauges(in state);
@@ -552,6 +566,14 @@ public sealed class FlightHud
     public void SetSpectatorView(bool on)
     {
         _spectatorView = on;
+        ApplyVisibility();
+    }
+
+    /// <summary>The Game Options throttle plate switch, live mid-flight. The plate is built for every
+    /// pilot pane and drawn only while this is on, so an unticked box changes no pixel.</summary>
+    public void SetThrottlePlateShown(bool on)
+    {
+        _throttlePlateShown = on;
         ApplyVisibility();
     }
 
@@ -680,6 +702,8 @@ public sealed class FlightHud
         bool overlay = readouts && !_cockpitView;
         if (Gauges != null)
             Gauges.Visible = overlay && _instrumentsShown;
+        if (ThrottlePlate != null)
+            ThrottlePlate.Visible = overlay && _instrumentsShown && _throttlePlateShown;
         if (Reticle != null)
             Reticle.Visible = readouts && _instrumentsShown;
         if (Compass != null)

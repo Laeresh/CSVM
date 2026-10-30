@@ -71,9 +71,9 @@ internal static class StereoPaneSuites
         "the world flare's quads, built from C3's own flare for one pane and for four, are drawn by their own pane's camera alone: never by another pane, never by any pane's spyglass picture flat or Enhanced, with or without a headset, and never by the Danger Zone photograph, each of which would place a flare for its own view")]
     internal static void WorldFlareLayers(TestContext ctx)
     {
-        string texturesPath = Extraction.SessionPaths.ChapterTextures(ctx.DataRoot, "C3");
+        var texturesPath = ctx.ChapterTextures("C3");
         ctx.RequireData(texturesPath, $"C3 textures");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        ctx.RequireInterp();
         var root = new Node3D { Name = "world-flare-layers" };
         ctx.Host.AddChild(root);
         using var textures = new Mech3.TextureArchive(texturesPath);
@@ -191,7 +191,7 @@ internal static class StereoPaneSuites
         }
 
         var rig = new WorldFlareRig(Spec.SessionSpec.Parse(new[] { "--chapter=C3" }), null);
-        rig.Build(rigs, textures, ctx.InterpPath, "C3", root);
+        rig.Build(rigs, textures, ctx.RequireInterp(), "C3", root);
         var quads = new System.Collections.Generic.List<(int Pane, MeshInstance3D Quad)>(rig.Quads());
         ctx.Check(rig.InstanceCount == paneMasks.Length && quads.Count == paneMasks.Length * WorldFlareRig.Elements.Count,
             $"{label}: C3 builds a flare per pane, {quads.Count} quads for {rig.InstanceCount} pane(s)");

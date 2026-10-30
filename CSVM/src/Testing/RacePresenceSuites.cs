@@ -53,16 +53,16 @@ internal static class RacePresenceSuites
         + "on the other airframe and compiles the ghost into its shaders")]
     internal static void RacePresence(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"string table");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireMessages();
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         // ⚠ Do not remove this eviction. A cached collidable world from an earlier suite shares the
         // host's one physics space, and would be struck instead of the other seat.
         ctx.EvictCollidableWorlds();
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         try
         {
@@ -146,15 +146,15 @@ internal static class RacePresenceSuites
 
         var spec = SessionSpec.Parse(new[] { "--hold=0,0,0,1" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             SuiteConstants.AircraftResources(ctx, planesGamez, textures,
-                Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+                ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
                 Racing = racing,
             },
             new HumanRosterBindings { RigCount = rigs.Length, Rigs = rigs, PauseState = new PauseState() },
@@ -340,7 +340,7 @@ internal static class RacePresenceSuites
     private sealed class HeadOnStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var flown = new Vector3(0f, AltitudeM + SinkAllowanceM, 0f);
             var parked = new Vector3(0f, AltitudeM, -GapM);

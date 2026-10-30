@@ -32,11 +32,11 @@ the rows and the pair list, and is the authority where this paragraph and it dif
 
 ### `src/Mech3/`, extraction readers, world and scene building
 
-Everything that turns the player's install into a live scene: the mech3ax extraction readers, the
+Everything that turns the player's install into a live scene: the game-file readers, the
 GameZ→Godot builders, and the animation runtime that drives the world.
 
-- `src/Mech3/GameZ.cs`, GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
-- `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
+- `src/Mech3/GameZ.cs`, the GameZ model and its reader of unzbd's output (zip or dir, the fork's shape): nodes/models/materials/textures JSON → C# objects.
+- `src/Mech3/TextureArchive.cs`, texture lookup over one decoded archive: resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/HdModelMeshes.cs`, a model pack's replacement mesh for a gamez node, imported once per pack key with its winding reversed back.
 - `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
@@ -50,6 +50,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
+- `src/Mech3/BodyTwins.cs`, a body cockpit's airframe twins for the flat pass and the stereo interior, and the per-frame pose copy both run.
+- `src/Mech3/NodeFrame.cs`, a built node's transform in an ancestor's frame, the plane frame below a model root.
 - `src/Mech3/CockpitTransplant.cs`, the rig's gauge table: the named gauge assemblies and the cut-loose sight glass moved onto the airframe in a body cockpit, or inside `cockpit1` otherwise.
 - `src/Mech3/CockpitPlate.cs`, the head-and-shoulders plate behind the cockpit eye, selected by polygon, which the stereo interior leaves out.
 - `src/Mech3/GunsightReticle.cs`, the stereo interior's gunsight reticle lifted off the sight glass and drawn collimated at infinity.
@@ -81,7 +83,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/VegetationVariation.cs`, one listed stamp's Rich variation: a texture-space jitter clamped into its triangle, a card mirror for the yaw, an instance-colour tint, on its own fixed stream.
 - `src/Mech3/VegetationScatter.cs`, the remake's added stamps on a picked texture under Rich: a set's fixed scatter laid once per texture repeat on the triangle's own UV lattice, its count from the set's density a hectare, kept or dropped by the brush mask.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
-- `src/Mech3/Zrdr.cs`, zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
+- `src/Mech3/Zrdr.cs`, the modding path's reader of unzbd's zrdr zip or folder + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/GamePath.cs`, splits a path out of game data on `\` and `/` alike on every host, where `System.IO.Path` splits `\` on Windows only.
 - `src/Mech3/LandingApproaches.cs`, a chapter's `landings.zrd` approach table resolved against the gamez: volume, attitude cone, speed band.
 - `src/Mech3/Pickups.cs`, a mission's compact `pickups.zrd` sensor and radius table, the spheres the ladder switch tests against.
@@ -96,7 +98,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Zeppelins.cs`, the mission `zeppelins.zrd.json` reader: each instance's motion, net, damage zones and cannons.
 - `src/Mech3/InstantAction.cs`, `InstantActionDef` and its three producers: a chapter's file, `--ia=`, and the launchscreen wizard.
 - `src/Mech3/AiSkills.cs`, `player.json`'s `ai_skill_parameters` endpoint pairs by rating, plus the aiv roster block accessors.
-- `src/Mech3/Messages.cs`, the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
+- `src/Mech3/Messages.cs`, the game's localized string table: the key→value map behind every `MSG_*` key, read from `strings.dll`.
 - `src/Mech3/UiStrings.cs`, the original's UI string table by id: `langui` rows, with its placeholders converted for composite format.
 - `src/Mech3/TgaImage.cs`, the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
@@ -111,6 +113,13 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldSounds.cs`, `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot` for destruction/impact audio.
 - `src/Mech3/WorldLights.cs`, packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs`, parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
+- `src/Mech3/InterpScripts.cs`, the engine boot scripts read from `interp.zbd` in the game files, looked up by script name.
+- `src/Mech3/TextureZbd.cs`, the engine-free reader for `texture`/`rtextureN`/`rimage.zbd`: each texture's name, alpha class, flags and pixels, and `TextureSet`, one archive's records by name.
+- `src/Mech3/GameZZbd.cs`, the engine-free reader for `gamez.zbd`/`planes.zbd` into the `GameZ` model.
+- `src/Mech3/ZrdrZbd.cs`, the engine-free reader for `zrdr.zbd` into each reader file's list, with the lookup by name.
+- `src/Mech3/ZrdrSet.cs`, one reader scope (root, chapter or mission) as the lookup every consumer reads, each read a fresh copy.
+- `src/Mech3/AnimZbd.cs`, the engine-free reader for `cam_anim.zbd`/`mis_anim.zbd` into the `AnimArchive` model.
+- `src/Mech3/AnimZbdEvents.cs`, the compiled anim archive's sequence-event payloads, for `AnimZbd`.
 - `src/Mech3/AnimRuntime.cs`, the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
 - `src/Mech3/Anim/`, `AnimRuntime`'s motion value types and bind-census enums, split into their own namespace for size; the dispatch-axis modules share it.
 - `src/Mech3/Anim/MotionSet.cs`, the live motion collection: registration and eviction, the per-frame sweep, and the predicates the runtime asks it.
@@ -132,11 +141,12 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/SubtreeBounds.cs`, a built subtree's world-space extent from its own meshes, skipping a tool's overlay drawings.
 - `src/Mech3/AircraftStage.cs`, stages the aircraft-archive subtrees a cutscene animates into a chapter world's node table, at that chapter's pointer base.
 - `src/Mech3/SessionArchives.cs`, opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, per `ArchiveIntent`.
-- `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by their source paths, so one chapter built many times is decoded once.
+- `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by chapter or by chapter and mission, so one chapter built many times is decoded once.
 - `src/Mech3/EmptyStage.cs`, the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
-- `src/Mech3/SoundArchive.cs`, WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/SoundZbd.cs`, the engine-free reader for `soundsh`/`soundsl.zbd`: each WAV keyed by today's zip name, read on demand.
+- `src/Mech3/SoundArchive.cs`, WAV lookup over the launch's `SoundZbd` (or a sounds extraction) → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
 - `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts, VO dialogue chains and combat voice lines speak on.
@@ -305,7 +315,7 @@ rows).
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
 - `src/Flight/Hud/CanopyHoleCue.cs`, the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
 - `src/Flight/Hud/HudMetrics.cs`, the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
-- `src/Flight/Hud/HudFont.cs`, the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
+- `src/Flight/Hud/HudFont.cs`, the game's own 5px HUD bitmap font, auto-segmented from the `rimage` records `5pointhud*`; `--hud-font-test` proves it.
 - `src/Flight/Hud/HudFontTest.cs`, the `--hud-font-test` overlay: a known string in both variants, with a rule marking the width `Measure` reports.
 - `src/Flight/Hud/ImpactReticle.cs`, the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/Hud/EdgeMarker.cs`, the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
@@ -318,6 +328,7 @@ rows).
 - `src/Flight/Hud/ScreenSize.cs`, screen-space sizing for world sprites: the pixel-floor inversion, and the nearest-viewer floor one shared mesh takes.
 - `src/Flight/Hud/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/Hud/GaugeCluster.cs`, the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
+- `src/Flight/Hud/ThrottlePlate.cs`, the optional throttle plate beside the speedometer, drawn from two SVGs at the pane's own size.
 - `src/Flight/Hud/FlightHud.cs`, everything one pane draws for its pilot, fed one per-frame state struct; the controller's seven HUD collaborators live here.
 
 **`Flight.Modes`**, stunt flying, Dogfight and the pause state.
@@ -485,10 +496,10 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/UI/Screens/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/Screens/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
-- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, with mouse-only icons that open the logs and user folders, over every presentation's main menu and the extraction screen; hidden elsewhere.
+- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, with mouse-only icons that open the logs and user folders and a line naming a newer release, over every presentation's main menu and the extraction screen; hidden elsewhere.
 - `src/UI/Screens/ScreenKeyboardEcho.cs`, the strip across the top repeating the field Steam's on-screen keyboard types into, above everything while it is up.
-- `src/UI/Screens/NoGameDataScreen.cs`, the extraction screen shown instead of the menu when the data root holds no extraction, an unfinished one, one stamped under another schema, or one the menus cannot read: the install folder, Extract, progress, failures.
-- `src/UI/Screens/ExtractionFlow.cs`, the extraction screen's engine-free state: the stale decision, the pre-fill, and a run on a worker marshalled to the main thread by a per-frame tick.
+- `src/UI/Screens/SourceScreen.cs`, the game-file screen shown instead of the menu while no game files are found, the menus cannot read them, or a question is owed once: the picker, the copy, the old `extracted/` and patch questions.
+- `src/UI/Screens/SourceFlow.cs`, the game-file screen's engine-free state: pick validation, the copy and the delete on a worker marshalled by a per-frame tick, and the once-only answers.
 - `src/UI/Screens/InstallPicker.cs`, the install folder picker: Godot's own directory dialog embedded in the window, with pad buttons to go up a folder and take the one shown.
 - `src/UI/Screens/SelectionService.cs`, the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
 - `src/UI/Screens/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
@@ -552,7 +563,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/MenuChapters.cs`, the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
 - `src/UI/Menu/DisplaySettingRows.cs`, the monitor, size, mode and V-Sync as rows, shared by both Options screens: a label per store word, the forgiving reads, the wrap.
 - `src/UI/Menu/OptionsChoices.cs`, the Options settings the Original pages stage before the apply: the rules that couple them, and the exit.
-- `src/UI/Menu/MenuLayout.cs`, the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
+- `src/UI/Menu/MenuLayout.cs`, the runtime reader of `menu_layout.json` from `Extraction/RofFiles.cs`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs`, the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
 - `src/UI/Menu/PlayerSetupFeature.cs`, the shared player setup: seats claimed by source identity, the roster, the two-stage pick, a local Dogfight's bot rows, the gate.
 - `src/UI/Menu/HangarFeature.cs`, the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
@@ -635,7 +646,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/AudioBuses.cs`, the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
 - `src/Utils/AudioMix.cs`, the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs`, the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
-- `src/Utils/Config.cs`, dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
+- `src/Utils/ReleaseCheck.cs`, an exported build's once-per-launch ask of GitHub for a newer release, which the menu's corner stamp names; off with `updates.checkReleases`.
+- `src/Utils/Config.cs`, dev tuning-override: typed getters over an optional sparse `config.json` (`res://` in the editor, beside the executable in an export), else the caller's in-code `const`.
 - `src/Utils/DisplayModeSetting.cs`, the window's display mode: the saved word against the shipped borderless default, and the one place the window mode is set.
 - `src/Utils/EffectPools.cs`, the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs`, the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
@@ -652,6 +664,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/MeasuredRenderTime.cs`, the root viewport's measured render CPU and GPU times, published by the render thread so a frame reads them without waiting for it.
 - `src/Utils/MasterVolume.cs`, the developer gain on bus 0: `--volume=` over the `audio.volume` key over silence in a repo run, resolution only, with the player's mix a separate product underneath it.
 - `src/Utils/MonitorSetting.cs`, the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
+- `src/Utils/UserData.cs`, the folder the player's own files live in: Godot's user folder, or `userdata/` beside the executable in portable mode (`portable.txt` or `--portable`).
 - `src/Utils/OptionsStore.cs`, version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PaneReadback.cs`, one frame of a viewport read back off the frame path: an async GPU copy, the image built on a worker, handed to the Danger Zone cameras and the screenshot key.
 - `src/Utils/PerfSample.cs`, ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
@@ -731,14 +744,19 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) and its `cockpit1` interior beside it for `--export-gltf=`/F10, on a throwaway duplicate.
-- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
-- `src/Tooling/SyntheticTextures.cs`, the synthetic tree's C1 texture archive: the fixture manifest plus one generated PNG per entry.
-- `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket, shakes and messages.
+- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree (the Original shell's files) into scratch, marked synthetic.
+- `src/Tooling/SyntheticTextures.cs`, the synthetic run's C1 texture archive, built in memory: one checker record per entry.
+- `src/Tooling/SyntheticPlane.cs`, the synthetic run's stand-in aircraft `probe_plane` and nine more: their box-built model in memory.
+- `src/Tooling/SyntheticPlaneRecords.cs`, the stand-in aircraft archive's records as code: every node in flat order and one box per mesh.
+- `src/Tooling/SyntheticGameData.cs`, the game data a `--synthetic-data` run reads, every model built in memory with no game-file source.
+- `src/Tooling/SyntheticMessages.cs`, the synthetic run's invented message table, built in code.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
-- `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry, and the `voice.json` accent table.
-- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
-- `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez, a compiled anim archive, reader destructibles and two puffer readers.
+- `src/Tooling/SyntheticSounds.cs`, the synthetic run's sounds: an in-memory `SoundZbd` of one generated ADPCM WAV per row.
+- `src/Tooling/SyntheticZrdr.cs`, the synthetic run's reader scopes built in code: the root's invented records, the empty C1 chapter and the invented missions.
+- `src/Tooling/SyntheticMission.cs`, the synthetic run's invented mission addresses: `C1/PROBE1` and the campaign's one story position at `C1/M09`.
+- `src/Tooling/SyntheticEffects.cs`, the synthetic run's anim and effect models: a box-built template gamez and a compiled anim archive in memory.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
+- `src/Tooling/DumpGameFiles.cs`, `--dump`: the game files read through the C# readers, their models written as JSON, PNG and WAV for analysis scripts; never read back.
 
 ### `src/Launch/`, the composition root
 
@@ -954,37 +972,38 @@ It holds no engine type, so it runs in a plain unit test; formats and evidence a
 - `src/Video/CinemaPlayback.cs`, a cinema playing with its sound: clamped PCM out, the picture clocked by what the device has played, the two streams' start times taken against each other.
 - `src/Video/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, the skip-press set, and the latch that opens the next screen once however many times the film says it stopped.
 
-### `src/Extraction/`, turning the player's install into `extracted/`
+### `src/Extraction/`, the player's game files read in place
 
-The in-engine extraction: finding the player's install, then one module per format plus the run
-that joins them. Only `RememberedInstall` touches the engine, so every decoder runs in a plain unit
+Finding the player's game files (install, disc or image), then one module per container and format,
+the optional copy, and the layout of unzbd's output a modding folder holds. Only `RememberedInstall` touches the engine, so every decoder runs in a plain unit
 test; entries are in [`architecture/Extraction.md`](architecture/Extraction.md), the output layout
 in [`formats/extraction.md`](formats/extraction.md).
 
 - `src/Extraction/InstallLocator.cs`, the case-insensitive install lookup: the segment walk, the picked-folder check with its mis-pick messages, and the per-platform candidate list.
 - `src/Extraction/RememberedInstall.cs`, the last-used install folder, kept in `user://options.json` to pre-fill the next picker.
-- `src/Extraction/RofExtraction.cs`, the non-ZBD half of an extraction: both UI archives, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, from resolved paths.
-- `src/Extraction/RofTree.cs`, the one upper case the rof tree is written in and the name mapping every writer and reader of it shares.
+- `src/Extraction/GameFileSource.cs`, the one seam loaders read the original's files through: a game-relative path opened case-insensitively from an install folder, and the session's install located in order.
+- `src/Extraction/GameFileCopy.cs`, the files a session reads copied out of any source into `<data root>/CrimsonSkiesGame`, written under a temporary name and renamed into place, with progress and cancel.
+- `src/Extraction/IsoImage.cs`, the game disc's `.iso` read in place as a game-file source: the primary volume walked once, 8.3 names without versions, each file a window onto the image.
+- `src/Extraction/CabinetSource.cs`, the cabinet layer over a disc, `.iso` or raw image: each chapter's paths answered from its `.CAB`, unpacked in memory on first use, the `rtextureN` names restored.
+- `src/Extraction/Cabinet.cs`, a Microsoft cabinet's tables and one folder's unpacked output, stored or LZX.
+- `src/Extraction/LzxDecoder.cs`, the LZX decompressor behind `Cabinet`, with the E8 call translation.
+- `src/Extraction/RawCdImage.cs`, a raw CD image (`.cue`/`.bin`/`.img`, CloneCD `.ccd`/`.img`) read in place: its first data track's sectors translated to the 2,048-byte volume `IsoImage` reads.
+- `src/Extraction/CueSheet.cs`, the `.cue` sheet read for its first track: the image file found beside it without regard to case, the track's mode and extent in that file.
+- `src/Extraction/ZbdArchive.cs`, the named-entry `.zbd` container of `zrdr.zbd` and the sound archives: the table read and checked, each payload read on demand, and the collision rename of a repeat.
+- `src/Extraction/RofFiles.cs`, the UI half read in place: both archives' members, the `.BM` PNGs, the cinemas, `ui_strings.json` and `menu_layout.json`, bound to the launch's data root.
+- `src/Extraction/RofTree.cs`, the one upper case every `RofFiles` path is held in and the name mapping its readers share.
 - `src/Extraction/RofArchive.cs`, the `.rof` UI archive read from memory: the directory tree walked without inflating, each member inflated on demand.
 - `src/Extraction/BmTexture.cs`, one paint-shop `.BM` split into its shading map and its three paint-region masks as RGB.
-- `src/Extraction/PngWriter.cs`, a managed 24-bit RGB PNG encoder, so no image library or engine type is needed to write the `.BM` PNGs.
+- `src/Extraction/PngWriter.cs`, a managed 8-bit RGB and RGBA PNG encoder, so no image library or engine type is needed to write the `.BM` PNGs and `--dump`'s textures.
 - `src/Extraction/PeStringTable.cs`, the Win32 `STRINGTABLE` resources read out of a PE file's bytes, with no Win32 call.
 - `src/Extraction/UiStringTable.cs`, the `ui_strings.json` rows: string-table text joined to its `RESOURCE.H` symbol and split from its `[FONTID]` tag.
-- `src/Extraction/MovieCopy.cs`, the install's `.mpg` cinemas copied verbatim under upper-case names, skipping a copy already at the source's length unless forced.
 - `src/Extraction/MenuLayoutDecoder.cs`, `LAYOUT.CSV`, `SCRAPBOOK.CSV`, `RESOURCE.H` and the GUI scripts decoded into `menu_layout.json`.
-- `src/Extraction/ZbdExtraction.cs`, the ZBD half of extraction: every archive through unzbd, then `messages.json`, the optional unzip and the stamp, off the main thread.
-- `src/Extraction/ZbdPlan.cs`, the ZBD half's pure rules: the archive-name mode map, output naming, the up-to-date and unzip rules, and the stderr notes.
-- `src/Extraction/ZbdManifest.cs`, the 184 ZBD archives a complete install holds, and the ones an install is missing, checked before the ZBD half runs.
-- `src/Extraction/ZbdTree.cs`, the one case the ZBD half writes (folders upper, file names lower) and the chapter and mission path mapping its writer and readers share.
-- `src/Extraction/ZbdProgress.cs`, the ZBD runner's options, per-step progress report with its console lines, and result totals with the closing summary.
-- `src/Extraction/UnzbdTool.cs`, the bundled unzbd as a child process: its platform file name and release path, one run with both streams drained, and its identity for the stamp.
-- `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, `.rof` half, stamps) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
-- `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
-- `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
+- `src/Extraction/ZbdManifest.cs`, the 184 ZBD archives a complete install holds, the list the copy and `--dump` walk.
+- `src/Extraction/ZbdTree.cs`, the one case unzbd's output tree takes (folders upper, file names lower) and the chapter and mission path mapping under the folder holding it.
+- `src/Extraction/SessionPaths.cs`, where unzbd's per-chapter and per-mission output sits under a modding folder or the tests' oracle, in `ZbdTree`'s case, unpacked folder or `.zip`.
 - `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
-- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: `extracted/` paths and world texture names, a chapter's own entry beating the bare name.
+- `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, the UI archive's `rof/` paths, a chapter's own entry beating the bare name.
 - `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
-- `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
 ### `src/Net/`, the network seam
 
@@ -1052,7 +1071,9 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 - `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
-- `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
+- `src/Spec/BasePaths.cs`, the repo and data roots, the located game-file source and the game data read through it, as one value.
+- `src/Spec/GameData.cs`, the models a launch reads from the game files (boot scripts, message table, `rimage` art, `planes.zbd`, `soundsh.zbd`, the root `zrdr.zbd`, the UI half's `RofFiles`) and its per-session chapter part (the chapter's textures, world and reader scopes), handed down in place of paths.
+- `src/Spec/ModdingFolder.cs`, the opt-in folder of unzbd output read in place of the game files archive by archive: its layout, and the flag-over-saved-option rule.
 
 ### `CSVM.Tests/`, the unit tests
 

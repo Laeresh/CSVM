@@ -226,10 +226,10 @@ public class CampaignScrapbookZoomPageTests
         return flow;
     }
 
-    // Writes where the extraction would, in RofTree's case, so a case-sensitive disk finds it.
+    // Writes into the root's UI archive files, in RofTree's case.
     private static void WriteScrapArt(string root, string name, byte[] bytes)
     {
-        string path = RofTree.Under(root, "ASSETS/GRAPHICS/SCRAPBOOK/" + name);
+        string path = Path.Combine(TestRof.Folder(root), RofTree.Canonical("ASSETS/GRAPHICS/SCRAPBOOK/" + name));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, bytes);
     }

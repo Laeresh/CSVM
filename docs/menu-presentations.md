@@ -115,7 +115,7 @@ the dependency test rejects one that does (below). A feature also never reads a 
 pointer, a pad's Start, the keyboard's letters all arrive as semantic commands.
 
 Two shared readers sit beside the features in the same namespace and follow the same rule:
-`MenuLayout` (`CSVM/src/UI/Menu/MenuLayout.cs`), the reader of `extracted/rof/menu_layout.json`, and
+`MenuLayout` (`CSVM/src/UI/Menu/MenuLayout.cs`), the reader of `menu_layout.json` (`Extraction/RofFiles.cs`), and
 `MenuChapters`, the chapter roster. `CampaignAidProfiles` is the scratch profile store the campaign
 screenshot aids read, so every presentation's aids seat one player and none can reach
 `user://Profiles`.
@@ -329,8 +329,7 @@ with the reason logged.
 `MenuHost.Select(cliOverride)` answers availability as registration plus the owner's
 `Availability` delegate, a function from `PresentationId` to a reason or null.
 `ProcessMenu.OriginalAvailable` is the shipped delegate: it loads the decoded layout through
-`OriginalAvailability.Load`, which refuses a tree stamped behind `OriginalAssetManifest.StampSchema`,
-a missing or unreadable layout, a layout with no `[MainMenu]`, and any required file the manifest
+`OriginalAvailability.Load`, which refuses a missing or unreadable layout, a layout with no `[MainMenu]`, and any required file the manifest
 names as missing or unreadable, each with one reason the host appends and logs. Original unavailable
 at `Select` is no menu path, since the launcher has already stopped at the extraction screen (see
 [The asset policy](#the-asset-policy)), so the host keeps Original selected and logs the reason
@@ -418,7 +417,7 @@ nothing itself. ⚠ Previews are off in any run that drives itself (`--det`,
 `--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
 
 **A clip on the move is a deliberate departure.** The original's own page
-(`extracted/rof/ASSETS/SCRIPTS/AUDIO.SCRIPT`) builds one sound object per category on `gui_create`,
+(`ASSETS/SCRIPTS/AUDIO.SCRIPT` in `crimson.rof`) builds one sound object per category on `gui_create`,
 starts them there, sends only `setvolume` as a slider moves and stops all three on `gui_destroy`;
 no play message reaches a category's object on a move. This port fires a clip on the level that
 moved instead, so a slider is audible at the moment the player touches it rather than only while
@@ -506,15 +505,12 @@ section's art, those rows' art and the media a script names are optional; the fi
 and Original draws anyway (the two pointers, the font, the two export plaques) are required. `Check`
 reads no bitmap (existence plus the PNG signature and header size for required entries, existence
 alone for optional ones) and answers one report naming every fault with its section, row and file.
-A required fault makes the presentation unavailable. A menu start then stops at the extraction
-screen (`UI/Screens/NoGameDataScreen.cs`, `DataProblem.Unusable`), whose body names the fault and
-whose Extract re-extracts every output; it reaches no menu. A switch that gets past that check
+A required fault makes the presentation unavailable. A menu start then stops at the game-file
+picker (`UI/Screens/SourceScreen.cs`, `SourceFlow.Refused`), whose body names the fault and asks
+for another copy of the game; it reaches no menu. A switch that gets past that check
 keeps Original selected with the reason logged. An optional absence is logged once and degrades where it is drawn (a row with no readable strip keeps
-a fallback rectangle and no picture). The manifest's `StampSchema` is the extraction stamp's own
-schema (`ExtractionStamp.Schema`, recorded in `extracted/VERSION.json`), so a tree extracted before
-the layout decode, or before the movies were copied into it, is refused with the re-extract
-instruction rather than read as empty or opened on a menu with nothing running behind it; the
-extractor re-stamps an existing tree without re-extracting it.
+a fallback rectangle and no picture). The layout, the art and the movies are read in place from
+the game files (`Extraction/RofFiles.cs`), so no extraction stamp bears on Original.
 
 The classification is reconciled against what the screens draw: `OriginalCoverageTests` collects
 every screen-chrome name its journeys draw and fails any the manifest classes optional. Movies are
@@ -558,7 +554,7 @@ wrap-up page a flown mission's ending lands on, over a sample stunt run in each 
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
 `instant-action-wrapup:photos` and `instant-action-wrapup:long-photos` over the same two runs with a
 stand-in photograph per zone (the long run's last one still on its way), `options`,
-`game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
+`game-options`, `game-options:open` with its Difficulty list standing open, `game-options:scrolled` at the window's foot, `game-options:folders` with its Modding Folder list open, `game-options:choose` with that row's folder dialog open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
 standing open, the one leaf list whose sizes can outrun the window its row authors,

@@ -57,11 +57,11 @@ internal static class NetSeatSuites
         + "roster's AI")]
     internal static void RemoteSeatsWithoutPanes(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(ctx.Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         ctx.RequireData(chapterZrdr, $"{ctx.Chapter} zrdr");
 
@@ -85,7 +85,7 @@ internal static class NetSeatSuites
         };
         NetSeats.Validate(roster, hostPeer: 1);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
@@ -213,11 +213,11 @@ internal static class NetSeatSuites
         + "seat reads no keymap file at all")]
     internal static void GuestKeymapIsLocal(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(ctx.Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         ctx.RequireData(chapterZrdr, $"{ctx.Chapter} zrdr");
 
@@ -252,7 +252,7 @@ internal static class NetSeatSuites
         LaunchBindings.Configure(deterministic: false);
         LaunchBindings.StickRows = new MarkerStickRows();
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
@@ -324,28 +324,28 @@ internal static class NetSeatSuites
     private static FlightRoster NewRoster(TestContext ctx, SessionSpec spec, Field field,
         IReadOnlyList<NetSeat> roster, List<PlayerRig> rigs, VersusMatch match, int[][]? padAssignment) =>
         new(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
             new AircraftAssemblyResources
             {
                 PlanesGamez = field.PlanesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 CamParamsFor = _ => new CamParams(),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                WeaponMessages = Messages.Load(ctx.MessagesPath),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+                WeaponMessages = ctx.Data.Messages,
                 Textures = field.Textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             },
             new FlightWorldBindings
             {
                 Projectiles = field.Pool,
                 Gamez = field.PlanesGamez,
-                ChapterZrdrPath = field.ChapterZrdr,
-                MissionZrdrPath = field.MissionZrdr,
+                ChapterZrdr = field.ChapterZrdr,
+                MissionZrdr = field.MissionZrdr,
             },
             new HumanRosterBindings
             {
@@ -398,7 +398,7 @@ internal static class NetSeatSuites
 
     // The data one field is built from, read once per suite.
     private readonly record struct Field(GameZ PlanesGamez, TextureArchive Textures, ProjectilePool Pool,
-        List<SpawnPoint> Table, SpawnPicker Picker, string ChapterZrdr, string MissionZrdr);
+        List<SpawnPoint> Table, SpawnPicker Picker, ZrdrSet ChapterZrdr, ZrdrSet MissionZrdr);
 
     // A stick source standing in for the live profiles: it adds one marker row, so a seat that took
     // player one's stick rows shows it.

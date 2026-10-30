@@ -49,9 +49,9 @@ internal static class PausePreferencesSuites
         + "hitting the rows it is drawn over")]
     internal static void PausePreferencesLeaf(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -59,7 +59,7 @@ internal static class PausePreferencesSuites
             return;
         }
 
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (missions.Count == 0)
         {
             throw new SuiteSkippedException($"cm_sequence names no campaign mission");
@@ -67,7 +67,7 @@ internal static class PausePreferencesSuites
 
         var mission = missions[0];
         var sheet = PauseSheet.Load(
-            ctx.ZrdrPath, ctx.MessagesPath,
+            ctx.Zrdr, ctx.Data.Messages,
             EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), instantAction: false);
         if (sheet == null)
         {
@@ -112,8 +112,8 @@ internal static class PausePreferencesSuites
         + "headLook.autohead config key and the targeting switch back to the decoded head rule")]
     internal static void PausePreferencesLiveOptions(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         ctx.RequirePlane("player_bhawk");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -136,14 +136,14 @@ internal static class PausePreferencesSuites
         GameClock.Current = clock;
         var panes = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
         ctx.Host.AddChild(panes);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var stats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
         var one = CockpitSeat(ctx, panes, stats, 0);
         var two = CockpitSeat(ctx, panes, stats, 1);
         var seats = new[] { one, two };
         var selection = one.Targeting;
         OptionsApplyExit? applied = null;
         // LiveSettings.Persist's own write of the two fields, so the page reopens on what it saved.
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, a =>
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, null, a =>
         {
             applied = a;
             var store = OptionsStore.UserOptions();
@@ -230,11 +230,11 @@ internal static class PausePreferencesSuites
         var reader = new MenuInput { Keyboard = false, Pads = Array.Empty<int>() };
         var pause = new PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => reader, ctx.DataRoot, sheet,
+            pause, _ => reader, ctx.DataRoot, ctx.Data.Rimage, sheet,
             () => new PauseReadout(
                 Array.Empty<PauseObjective>(), string.Empty, Array.Empty<PauseWorldIcon>()));
         OptionsApplyExit? applied = null;
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, a => applied = a);
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, null, a => applied = a);
         ctx.Check(leaf != null, $"the leaf builds over the install's decoded layout");
         if (leaf == null)
         {

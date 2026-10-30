@@ -33,8 +33,8 @@ internal static class XrTuneSuites
         "the --xr-tune lab: with the right grip up nothing moves, with it held the right stick moves the seated eye forward and the interior's scale up in steps that reach the rig's eye and the lifted interior while the interior stays on the airframe, B raises the eye, the readout on the HUD panel names the plane and its values, the trigger writes the plane into the file and leaves the other entries as they were, the stick click resets to the file, the left stick asks for the next plane, a plane flown again takes the values it was left with, a pause holds every control, and F22 to F24 are the keyboard's twin")]
     internal static void XrCockpitTune(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         if (XRServer.PrimaryInterface != null)
         {
@@ -58,7 +58,7 @@ internal static class XrTuneSuites
         bool added = false;
         try
         {
-            var builder = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures, spinningProps: true, cockpitInterior: true);
+            var builder = new PlaneBuilder(ctx.Planes, textures, spinningProps: true, cockpitInterior: true);
             var model = builder.Build(ctx.PlaneName);
             var aircraft = new Node3D { Name = "xr-tune-aircraft" };
             aircraft.AddChild(model);

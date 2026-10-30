@@ -45,25 +45,40 @@ current numbers were drawn on. The stage prints a loud line when the running ada
 the recorded one; **that is the case where regenerating is the correct response**, and the commit
 message says so. Every other mass flip is a defect.
 
-A hash also depends on the order in which Godot draws two blended surfaces that tie in its
-transparent sort. That sort orders by render priority, then by the instance's sort depth, and it is
-not stable, so two blended surfaces of one mesh instance at one priority (a radio tower's two
-alpha sheets, a waterfall edge's two layers, a terrain tile's road and shoreline blends) come out
-in whatever order the sort leaves them, and that order follows the input list. The input list is
-the instance cull's output, which the threaded cull assembles with an unordered page merge, so it
-changes with the worker pool's size and with the scenario's instance count and layout, on screen
-or off. `c1-rocket-hit-enhanced` moves three to six pixels by one level at the radio tower with
-`threading/worker_pool/max_threads=2`, at a different hash for most pool sizes, and with seven or
-fifty extra invisible instances parked 100 km below the map; `c1-lake-enhanced`, `c1-waterfall` and
+A hash also depends on the order in which Godot draws two surfaces that tie in its transparent
+sort. That sort orders by render priority, then by the instance's sort depth, and it is not stable,
+so two transparent-pass surfaces of one mesh instance at one priority (a waterfall edge's two
+layers, a terrain tile's road and shoreline blends) come out in whatever order the sort leaves
+them, and that order follows the input list. Under Enhanced Graphics the transparent pass holds the
+cutouts as well as the blends. The coverage arm writes `ALPHA_ANTIALIASING_EDGE` beside `ALPHA`,
+and Godot 4.7 counts such a shader as alpha (`uses_alpha && (!uses_alpha_clip ||
+uses_alpha_antialiasing)` in its forward clustered `uses_alpha_pass`), then draws it with
+`BLEND_MODE_ALPHA_TO_COVERAGE`, which blends `SRC_ALPHA` over the target on the covered samples.
+A mesh with two cutout textures, or a cutout and a blend, therefore ties at its overlapping edge
+pixels. The input list is the instance cull's output, which the threaded cull assembles with an
+unordered page merge, so it changes with the worker pool's size and with the scenario's instance
+count and layout, on screen or off. With `threading/worker_pool/max_threads=2`, three of the seven
+Enhanced shots move. `c1-rocket-hit-enhanced` moves 5 pixels by one level at the radio tower's
+cutouts; a build without the coverage arm renders that shot to one hash at both pool sizes.
+`c1-lake-enhanced` moves 344 pixels by up to two levels on the waterfall edge's two blended layers
+(one texture, one layer double-sided and one not). `c1-cockpit-xr-sim-enhanced` moves 14 pixels by
+one level, located by pixel position alone on the stereo interior's gauge faces, and 10 pixels in
+the build without the coverage arm. The tower shot also moves at most other pool sizes and with
+seven or fifty extra invisible instances parked 100 km below the map; `c1-waterfall` and
 `c1-stunt-marker` move at the pool size of 2 as well. A single-threaded cull makes the pool size
 irrelevant, but the tie still follows the list's order. For a fixed scene and a fixed pool the
-order is fixed: every default-pool render of these shots lands on its pin. The single-pixel flips
-on record (`c1-cloud-deck-enhanced`, `c1-cockpit-enhanced`, `c1b-ocean-enhanced`) do not sit on
-such a tie, and their cause is unknown. A process affinity mask (gaming mode's) leaves the pool at
-the processor count, and CPU load, a second render on the same GPU, `--frame-delay` and
-`--time-scale` move no Enhanced shot. A moved Enhanced shot is therefore re-rendered once and, back on its pin,
-reported as `FLAKE` rather than red (`docs/tooling.md`). `docs/verification.md` GOLD-20 holds the
-rule.
+order is fixed: every default-pool render of these shots lands on its pin. The sort's only
+per-surface key is render priority, which outranks depth for every transparent draw in the scene,
+so ordering one mesh's surfaces by priority would also draw them over a nearer smoke puff or cutout
+edge. A fix that keeps the depth sort needs a surface-order key inside the engine's sort or one
+instance per tied surface; for the cutouts alone, `alpha_to_coverage_and_one` with
+`depth_draw_always` would resolve each sample by depth instead, at the cost of the shipped edge
+look. The single-pixel flips on record (`c1-cloud-deck-enhanced`, `c1-cockpit-enhanced`,
+`c1b-ocean-enhanced`) do not sit on such a tie, and their cause is unknown. A process affinity mask
+(gaming mode's) leaves the pool at the processor count, and CPU load, a second render on the same
+GPU, `--frame-delay` and `--time-scale` move no Enhanced shot. A moved Enhanced shot is therefore
+re-rendered once and, back on its pin, reported as `FLAKE` rather than red (`docs/tooling.md`).
+`docs/verification.md` GOLD-20 holds the rule.
 
 One shot depends on the machine in a second way: `campaign-4p-grid` names a campaign profile,
 `csvm-golden`, that lives in `user://Profiles/` and that no checkout carries, so it is pinned as a

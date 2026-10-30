@@ -51,6 +51,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
+    /// <summary>The Game Options aid's argument that scrolls its window to the foot, onto Modding Folder.</summary>
+    public const string GameOptionsScrolledAid = "scrolled";
+
+    /// <summary>The Game Options aid's argument that opens the Modding Folder list at the window's foot.</summary>
+    public const string GameOptionsFoldersAid = "folders";
+
+    /// <summary>The Game Options aid's argument that opens the Modding Folder row's folder dialog.</summary>
+    public const string GameOptionsChooseAid = "choose";
+
     /// <summary>The aid value that opens the AUDIO page behind the Preferences page's second door.</summary>
     public const string AudioAid = "audio";
 
@@ -287,6 +296,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
     private ShotViewer? _shotViewer;
+    // The Modding Folder row's dialog, built on its first ask. While it stands, and the frame it
+    // closes on, the seats' commands are dropped: its own B or Y would otherwise reach the page.
+    private InstallPicker? _folderPicker;
+    private bool _picking;
     private OriginalShell? _shell;
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
@@ -307,12 +320,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     private bool _revealRunning;
 
     /// <summary>A presentation drawing under <paramref name="parent"/> over the art beneath
-    /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>, opening its first show
-    /// on <paramref name="aid"/> (an Original <c>--menu=</c> value or "") and every later one on
-    /// the destination itself, binding pads over seat 0's poller <paramref name="player1"/>, and seating
-    /// <paramref name="debugJoin"/> device-less players once, the screenshot aid.</summary>
-    public OriginalPresentation(Node parent, string dataRoot, MenuLayout layout, string aid, MenuInput player1, int debugJoin = 0)
+    /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>. Its first show opens on
+    /// <paramref name="aid"/> (an Original <c>--menu=</c> value or ""), every later one on the
+    /// destination. Pads bind over seat 0's poller <paramref name="player1"/>, and the screenshot aid
+    /// seats <paramref name="debugJoin"/> device-less players once. The shell's screens read
+    /// <paramref name="data"/>, none when null.</summary>
+    public OriginalPresentation(
+        Node parent, string dataRoot, MenuLayout layout, string aid, MenuInput player1, int debugJoin = 0, Spec.GameData? data = null)
     {
+        Data = data ?? Spec.GameData.Empty;
         _parent = parent ?? throw new ArgumentNullException(nameof(parent));
         _dataRoot = dataRoot ?? throw new ArgumentNullException(nameof(dataRoot));
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
@@ -348,6 +364,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// sees then never depends on the player's own builds. The first show hands it to the shell,
     /// so it is set with the presentation.</summary>
     public CustomPlaneStore? Planes { get; init; }
+
+    /// <summary>The launch's game data the shell hands its screens.</summary>
+    public Spec.GameData Data { get; }
 
     /// <summary>The viewer showing the wrap-up page's open photograph, for a suite reading it back;
     /// null while the presentation has no layer.</summary>
@@ -432,6 +451,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 profiles: () => CampaignProfiles ?? CampaignProfileStore.UserProfiles(),
                 stock: () => StockLoadouts.Load(),
                 dataRoot: _dataRoot,
+                data: Data,
                 options: () => OptionsStore.UserOptions().Load(),
                 screenSizes: ResolutionSetting.ScreenSizes,
                 screens: MonitorSetting.Screens,
@@ -452,7 +472,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_layer == null)
         {
             _layer = new CanvasLayer { Name = "original_menu", Layer = HudLayers.Board };
-            _view = ComposedBoardView.Build(_dataRoot);
+            _view = ComposedBoardView.Build(_dataRoot, Data.Rimage);
             _layer.AddChild(_view);
             // The shell polls its own pointer, so the viewer over the page takes no click.
             _shotViewer = ShotViewer.Build(clickCloses: false);
@@ -552,6 +572,17 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case GameOptionsAid:
                 case GameOptionsAid + ":" + GameOptionsOpenAid:
                     OpenGameOptionsAid(aid);
+                    break;
+                case GameOptionsAid + ":" + GameOptionsScrolledAid:
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+                    break;
+                case GameOptionsAid + ":" + GameOptionsFoldersAid:
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+                    _shell.Step(new MenuCommands { Accept = true });
+                    break;
+                case GameOptionsAid + ":" + GameOptionsChooseAid:
+                    _shell.Options.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+                    OpenFolderPicker();
                     break;
                 case AudioAid:
                     _shell.Options.Audio.Open();
@@ -824,6 +855,9 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
+        bool picking = _picking || _folderPicker?.Visible == true;
+        _picking = _folderPicker?.Visible == true;
+
         // Text capture is set before the poll: the name screen's letters must be text, not
         // cursor aliases, for the frame that reads them.
         _host.Seats[0].CapturingText = _shell.CapturingText;
@@ -831,6 +865,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         for (int i = 0; i < _host.Seats.Count; i++)
         {
             var commands = _host.Seats[i].Poll(dt);
+            if (picking)
+            {
+                continue;
+            }
 
             // ⚠ A board gesture is not also a press on its plaques. Seat 0 reads every pad nobody
             // holds, so the same A would arrive here as Accept and arm CONTINUE under it. The
@@ -879,6 +917,11 @@ public sealed class OriginalPresentation : IMenuPresentation
             }
 
             changed |= step.Changed;
+        }
+
+        if (_shell.Options.GameOptions.TakeFolderRequest())
+        {
+            OpenFolderPicker();
         }
 
         // Leaving the briefing this frame, by any door, ends its narration and lifts the duck.
@@ -954,6 +997,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _shotViewer?.Close();
+        _folderPicker?.Hide();
 
         // Off screen nothing types, so a seat left capturing on the name screen is released, and
         // nothing narrates: a launch from the briefing's flight check ends the voice with it.
@@ -1450,6 +1494,33 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             Log.Info("ui", $"original presentation: --debug-join seated {setup.Seats.Count} players (the added ones have no device)");
         }
+    }
+
+    // The source picker's dialog, folders only, over the menu from the staged folder or the data
+    // root. A chosen folder is staged there and then, its warning raised when it holds no output.
+    private void OpenFolderPicker()
+    {
+        if (_layer == null || _shell is not { } shell)
+        {
+            return;
+        }
+
+        if (_folderPicker == null)
+        {
+            _folderPicker = SourceScreen.NewFolderPicker("Choose a modding folder of unzbd output");
+            _folderPicker.Chosen = folder =>
+            {
+                if (shell.Options.GameOptions.TakeFolder(folder) is { } warning)
+                {
+                    shell.RaiseWarning(warning);
+                }
+
+                Redraw();
+            };
+            _layer.AddChild(_folderPicker);
+        }
+
+        _folderPicker.Open(shell.Options.GameOptions.ModFolderChoice ?? _dataRoot);
     }
 
     private void Redraw()

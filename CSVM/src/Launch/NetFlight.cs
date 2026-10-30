@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.Utils;
@@ -188,7 +189,7 @@ internal sealed class NetFlight
     /// the socket, waits for the other end on the WALL clock, and leaves the fields a menu launch
     /// leaves. A socket that will not open leaves the launch local, with the reason logged. A
     /// smoke that flies alone reads better than one that never starts.</summary>
-    public void OpenCli(SessionSpec spec, string messagesPath)
+    public void OpenCli(SessionSpec spec, Messages messages)
     {
         if (spec.NetHostPort == null && spec.NetJoin == null)
         {
@@ -222,21 +223,21 @@ internal sealed class NetFlight
             Log.Info("core", $"net: shaping this end's link both ways, {Net.ShapedTransport.Describe(shape)}, on top of the real link's own delay and loss");
         }
 
-        AwaitCliLink(spec, messagesPath);
+        AwaitCliLink(spec, messages);
     }
 
     /// <summary>A local Dogfight with bots flies a seat roster with no wire. The roster outlives a
     /// restart, and the next launch's take clears it. A launch on a wire keeps the field it has.
     /// </summary>
-    public void SeatLocalField(SessionSpec spec, string messagesPath) =>
-        _roster = _wire == null ? SeatFields.LocalVersusField(spec, messagesPath) : _roster;
+    public void SeatLocalField(SessionSpec spec, Messages messages) =>
+        _roster = _wire == null ? SeatFields.LocalVersusField(spec, messages) : _roster;
 
     /// <summary>The wire a menu launch carried, kept for the session build. A host also builds the
     /// match's field here: the transport's peer list is the field, and only the door has seen it.
     /// A guest builds none, since the host's roster replaces it. A lobby host sends every seat's
     /// fit and custom plane to every guest before the session's opener.</summary>
     public void TakeLaunch(MenuNetLaunch? net, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits,
-        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string messagesPath)
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Messages messages, ZrdrSet zrdr)
     {
         _wire = net?.Transport;
         _isHost = net?.IsHost ?? false;
@@ -252,11 +253,13 @@ internal sealed class NetFlight
         var rules = _lobbyFlight ? Door!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
         System.Func<int, byte>? teamOf = _lobbyFlight ? Door!.Dogfight!.TeamOfPeer : null;
         var bots = _lobbyFlight ? Door!.Dogfight!.LaunchBots : System.Array.Empty<VsBotEntry>();
-        var pool = bots.Count > 0 ? Session.Roster.BotSeats.CallsignPool(Mech3.Messages.Load(messagesPath)) : null;
+        var pool = bots.Count > 0 ? Session.Roster.BotSeats.CallsignPool(messages) : null;
         var mission = _lobbyFlight ? (DogfightMissionType)Door!.Dogfight!.Options.MissionType : DogfightMissionType.Deathmatch;
         var owners = _lobbyFlight ? Door!.Dogfight!.SeatOwners : null;
-        (_roster, _seatFits) = SeatFields.VersusLaunchField(_wire, planes, fits, _stock ??= StockLoadouts.Load(), rules, teamOf,
-            bots, pool, mission: mission, owners: owners);
+        var stock = _stock ??= StockLoadouts.Load();
+        var botArms = bots.Count > 0 ? SeatFields.BotArmsUnder(rules, zrdr, messages, stock) : null;
+        (_roster, _seatFits) = SeatFields.VersusLaunchField(_wire, planes, fits, stock, rules, teamOf,
+            bots, pool, mission: mission, owners: owners, botArms: botArms);
         _seatBuilds = SeatFields.SeatBuildsFor(_roster, customs, _wire, rules);
         if (_lobbyFlight)
         {
@@ -476,7 +479,7 @@ internal sealed class NetFlight
     // The wall-clock wait a command-line join needs. ENet times itself off real seconds, so the
     // session's own tight step loop cannot carry a handshake. The link is waited for here, once,
     // before anything builds. A host waits for its first guest, a guest for its host.
-    private void AwaitCliLink(SessionSpec spec, string messagesPath)
+    private void AwaitCliLink(SessionSpec spec, Messages messages)
     {
         if (_wire is not { } wire)
         {
@@ -495,7 +498,7 @@ internal sealed class NetFlight
                 Log.Info("core", $"net: linked as {(_isHost ? "host" : "guest")} after {waited.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s, {wire.Peers.Count} peer(s)");
                 if (_isHost)
                 {
-                    _roster = SeatFields.CliHostField(spec, wire, messagesPath);
+                    _roster = SeatFields.CliHostField(spec, wire, messages);
                 }
 
                 return;

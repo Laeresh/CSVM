@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -13,8 +14,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class PlaneStatsAiWeaponsTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     // The Fury's three authored entries, in list order: two ordnance types then the gun. The gun's
     // 0.05 s over 1 to 900 m is only sensible one way round, which is what pins the field order.
@@ -111,5 +111,20 @@ public class PlaneStatsAiWeaponsTests
 
         Assert.Null(s.AiDefName);
         Assert.Empty(s.AiWeapons);
+    }
+
+    // The same catalogue carries each gun's refire, which paces the player's guns in place of
+    // FIRE_RATE (docs/org/weaponFire.md). An AI load takes its refire from its own fit instead.
+    [ExtractedDataFact]
+    public void APlayerLoadReadsItsGunsRefireFromTheCatalogue()
+    {
+        var s = PlaneStats.Load(ZrdrPath, "player_fury");
+
+        Assert.Equal(0.1f, s.GunRefireSeconds["wep_30"], 4);
+        Assert.Equal(0.11f, s.GunRefireSeconds["wep_40"], 4);
+        Assert.Equal(0.125f, s.GunRefireSeconds["wep_50"], 4);
+        Assert.Equal(0.143f, s.GunRefireSeconds["wep_60"], 4);
+        Assert.Equal(0.166f, s.GunRefireSeconds["wep_70"], 4);
+        Assert.Empty(PlaneStats.LoadForAi(ZrdrPath, "player_fury").GunRefireSeconds);
     }
 }

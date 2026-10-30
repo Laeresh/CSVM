@@ -75,6 +75,8 @@ public static class TuningWarmup
             // The warmup builds neither, so its two keys are registered here for --dump-config.
             Config.GetFloat("startGrid.slotSpacing", StartGrid.SlotSpacingDefault);
             Config.GetFloat("startGrid.groundClearance", StartGrid.GroundClearanceDefault);
+            // The release check's switch is read only by an exported build, after this warmup.
+            Config.GetBool(ReleaseCheck.Key, ReleaseCheck.DefaultEnabled);
         }
         catch (Exception e)
         {

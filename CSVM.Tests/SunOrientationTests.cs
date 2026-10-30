@@ -75,7 +75,7 @@ public class SunOrientationTests
         // The record is what WeatherRig.ApplyZone reads, so "the sun rides the zone" is a property
         // of the LOOKUP, not of the rig: whatever zone the state trigger names, its bearing comes
         // out of the same record as its fog. C1/IA1 authors both zones, so both states resolve.
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(weather);
         var below = weather!.Zone(weather.ZoneForState(1));
         var above = weather.Zone(weather.ZoneForState(2));
@@ -94,7 +94,7 @@ public class SunOrientationTests
     {
         // A missing zone lands on the launcher's hand-picked (-45, 150), not the binary's
         // straight-down; with no mission there is no authored answer.
-        var weather = WeatherState.Load(TestData.Fixture("zrdr"));
+        var weather = WeatherState.Load(TestZrdr.Fixture("zrdr"));
         Assert.NotNull(weather);
         var absent = weather!.Zone("zone9");
         Assert.Equal(Mathf.DegToRad(-45f), absent.SunOrientation.X, 4);
@@ -113,7 +113,7 @@ public class SunOrientationTests
 
     private static void AssertBearing(string chapter, string mission, float pitchDeg, float yawDeg)
     {
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission));
+        var weather = WeatherState.Load(TestZrdr.Mission(chapter, mission));
         Assert.NotNull(weather);
         var zone = weather!.Zone(weather.ZoneForState(1));
         Assert.Equal(Mathf.DegToRad(pitchDeg), zone.SunOrientation.X, 4);

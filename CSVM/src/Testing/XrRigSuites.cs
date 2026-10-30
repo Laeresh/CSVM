@@ -31,10 +31,10 @@ internal static class XrRigSuites
         "the VR seat's eye stands on the cockpit_camera marker through XrCockpit.EyeInAircraft, a per-plane eye offset moves the eye and not the interior, a recenter puts an offset head back on that eye with its tilt kept, and the sky follows the tracked head while the headset flies the pane; lifted, the interior sorts the collimated reticle's overlay a fixed offset after its glass")]
     internal static void XrRigSeat(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet zrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(zrdr, $"C1/IA1 mission zrdr");
         if (XRServer.PrimaryInterface != null)
         {
@@ -48,7 +48,7 @@ internal static class XrRigSuites
         bool added = false;
         try
         {
-            var builder = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures, spinningProps: true,
+            var builder = new PlaneBuilder(ctx.Planes, textures, spinningProps: true,
                 cockpitInterior: true);
             var model = builder.Build(ctx.PlaneName);
             var aircraft = new Node3D { Name = "xr-rig-aircraft" };
@@ -159,7 +159,7 @@ internal static class XrRigSuites
 
     // The weather tick centres the pane's dome and deck on the tracked head while the rig flies the
     // pane. Once the rig lets the pane go, the flat camera takes over: the flat path's control.
-    private static void SkyFollowsHead(TestContext ctx, string zrdr, XrRig rig, Camera3D flat, DirectionalLight3D sun)
+    private static void SkyFollowsHead(TestContext ctx, ZrdrSet zrdr, XrRig rig, Camera3D flat, DirectionalLight3D sun)
     {
         var dome = new Node3D { Name = "xr-rig-dome" };
         var deck = new Node3D { Name = "xr-rig-deck" };

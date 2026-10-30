@@ -27,6 +27,11 @@ public sealed class GroundShadowSilhouette
     /// is the software path's card, never built, so no drawn replacement shares the key.</summary>
     public const string PackShadowNode = "shadow";
 
+    /// <summary>The most triangles a pack's shadow mesh may hold; above it the shadow keeps the original
+    /// outline. The largest stock gamez airframe, the Bloodhawk's, holds 2443, and the raster walks each
+    /// one per frame per aircraft (docs/formats/model-packs.md, <c>shadow.glb</c>).</summary>
+    public const int PackShadowTriangleCap = 10000;
+
     // Where the footprint's own extremes land in the texture, in texels of the original's own 32
     // from either edge. It keeps the silhouette off the border band, which the spread writes into
     // but never scans, and it is scaled with the step so the margin is the same ground either way.
@@ -226,10 +231,21 @@ public sealed class GroundShadowSilhouette
     private static Mesh? PackShadow(Node3D model)
     {
         string airframe = Mech3.AnimRuntime.NameOf(model);
-        return Extraction.HdModels.Current.KeyFor(PackShadowNode, null, airframe)
-            == $"planes/{airframe.ToLowerInvariant()}/{PackShadowNode}"
-            ? Mech3.HdModelMeshes.Current.For(PackShadowNode, airframe: airframe)
-            : null;
+        string key = $"planes/{airframe.ToLowerInvariant()}/{PackShadowNode}";
+        if (Extraction.HdModels.Current.KeyFor(PackShadowNode, null, airframe) != key
+            || Mech3.HdModelMeshes.Current.For(PackShadowNode, airframe: airframe) is not { } mesh)
+        {
+            return null;
+        }
+
+        int triangles = mesh.GetFaces().Length / 3;
+        if (triangles <= PackShadowTriangleCap)
+        {
+            return mesh;
+        }
+
+        Utils.Log.Warn("world", $"HD models: the pack's {key} holds {triangles} triangles, over the ground shadow's {PackShadowTriangleCap}; {airframe} keeps the original outline");
+        return null;
     }
 
     // The subtree's box and drawn triangles: the still airframe (left out under a pack shadow mesh,

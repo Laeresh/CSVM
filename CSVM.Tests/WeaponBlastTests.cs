@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Testing;
 using Godot;
 using Xunit;
@@ -14,8 +15,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class WeaponBlastTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void TorpedoAuthoredFuseAndBlastRadiusAreIndependent()

@@ -60,12 +60,12 @@ internal static class CampaignZeppelinCommandSuites
         + "the director no longer declines the directive through its Gap line")]
     internal static void CampaignSetAiZeppelinNet(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, NetChapter, NetMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, NetChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(NetChapter, NetMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(NetChapter);
         ctx.RequireData(missionZrdr, $"{NetChapter}/{NetMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{NetChapter} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, NetChapter),
+        ctx.RequireData(ctx.ChapterTextures(NetChapter),
             $"{NetChapter} textures");
 
         var mission = Find(ctx, NetChapter, NetMission);
@@ -104,10 +104,10 @@ internal static class CampaignZeppelinCommandSuites
         + "Gap line")]
     internal static void CampaignSetAiZeppelinTeam(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, TeamChapter, TeamMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, TeamChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, TeamChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(TeamChapter, TeamMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(TeamChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(TeamChapter);
         ctx.RequireData(missionZrdr, $"{TeamChapter}/{TeamMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{TeamChapter} zrdr");
         ctx.RequireData(texturesPath, $"{TeamChapter} textures");
@@ -245,7 +245,7 @@ internal static class CampaignZeppelinCommandSuites
     }
 
     private static void DriveTeam(TestContext ctx, TestWorld world, CampaignDirector director,
-        IReadOnlyList<ZeppelinDef> defs, IReadOnlyList<AiNet> nets, string texturesPath,
+        IReadOnlyList<ZeppelinDef> defs, IReadOnlyList<AiNet> nets, TextureSet texturesPath,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
@@ -264,8 +264,8 @@ internal static class CampaignZeppelinCommandSuites
             ctx.Host.AddChild(runtime);
             runtime.WireDamage(world.Runtime);
 
-            emplacements = new TurretEmplacementRuntime(TurretDefs.Load(ctx.ZrdrPath),
-                WeaponDefs.Load(ctx.ZrdrPath, null),
+            emplacements = new TurretEmplacementRuntime(TurretDefs.Load(ctx.Zrdr),
+                WeaponDefs.Load(ctx.Zrdr, null),
                 (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                 world.Runtime.WorldRoot);
             runtime.FanTeamsOntoTurrets(emplacements);
@@ -482,7 +482,7 @@ internal static class CampaignZeppelinCommandSuites
 
     private static CampaignMission Find(TestContext ctx, string chapter, string folder)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))

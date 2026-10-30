@@ -64,13 +64,13 @@ internal static class BotContactSuites
         + "aeroplane bounces off it and flies on, where world AI on that ram gains no rebound")]
     internal static void GrazeBounceBot(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(StockAirframes.Nodes.ToArray());
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         StaticBody3D? floor = null;
         FlightController? parked = null;
@@ -82,7 +82,7 @@ internal static class BotContactSuites
                 planeName ??= ctx.PlaneName;
                 var plane = new PlaneBuilder(planesGamez, textures).Build(planeName);
                 // Each rig loads its own stats: the ground blow switch below writes into them.
-                var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
+                var stats = PlaneStats.Load(ctx.Zrdr, planeName);
                 var model = new FlightModel(stats, aiForcePath: pilot != Pilot.Person);
                 var rig = new FlightController
                 {
@@ -226,7 +226,7 @@ internal static class BotContactSuites
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, "--plane=player_fury", "--vs-bot=player_fury");
         var ambient = NetCombatSuites.Ambient.Save();
-        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
         ctx.Check(roster is { Length: 2 } && roster[BotSeat].IsBot, $"the local launch seats a pane and a bot");
         if (roster == null)
         {

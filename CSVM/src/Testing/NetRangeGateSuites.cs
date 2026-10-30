@@ -55,8 +55,8 @@ internal static class NetRangeGateSuites
         + "the host's decision, never before it, and takes every verdict the host sent")]
     internal static void RangeGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission), $"{Chapter}/{Mission} zrdr");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.MissionZrdr(Chapter, Mission), $"{Chapter}/{Mission} zrdr");
         var report = new StringBuilder();
         var savedClock = GameClock.Current;
         ctx.CutsceneRoots = true;

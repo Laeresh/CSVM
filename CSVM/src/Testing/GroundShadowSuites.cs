@@ -77,14 +77,14 @@ internal static class GroundShadowSuites
         "viewport on Godot's TAA or on FSR 2.2 and leaves the faithful path untouched")]
     internal static void GroundShadow(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(RotorPlane);
 
         var report = new StringBuilder();
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         bool wasEnhanced = GraphicsMode.Enhanced;
         try
@@ -114,7 +114,7 @@ internal static class GroundShadowSuites
         bool human, Vector3 at, string? plane = null, bool spinning = false)
     {
         string name = plane ?? ctx.PlaneName;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, name);
+        var stats = PlaneStats.Load(ctx.Zrdr, name);
         var model = new PlaneBuilder(planesGamez, textures, spinningProps: spinning).Build(name);
         var nose = at + Vector3.Forward;
         var rig = new FlightController

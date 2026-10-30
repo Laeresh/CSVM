@@ -93,7 +93,7 @@ public class HorizonDomeTests
     public void EveryChapterBuildsTheDomesItsOwnCensusSupports(
         string chapter, string activeZone, string expectedDomes)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var zones = WorldBuilder.HorizonZonesOf(gamez);
         Assert.Equal(expectedDomes, string.Join(", ", WorldBuilder.DomeZonesToBuild(zones, activeZone)));
     }
@@ -106,7 +106,7 @@ public class HorizonDomeTests
         // ⚠ The number this replaces is 396.4 (C1), `bbox_mid.y`, a bbox statistic the plan and
         // docs/formats/weather.md both carried as an "authored cap centre". Asserting the CAP
         // POLYGON instead is what tells the two apart: 2792.8 is where the geometry is.
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
         var horizon = gamez.FindByName("horizon");
         Assert.NotNull(horizon);
 
@@ -163,7 +163,7 @@ public class HorizonDomeTests
                      ("C1", "zone1", 0.07f), ("C1C", "zone1", 0f), ("C2B", "zone1", 0f), ("C4", "zone1", 0f),
                  })
         {
-            var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+            var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
             var horizon = gamez.FindByName("horizon");
             Assert.NotNull(horizon);
             float fastest = 0f;
@@ -190,7 +190,7 @@ public class HorizonDomeTests
                      ("C4", "zone1", 1, 192f), ("C5", "zone3", 1, 16f),
                  })
         {
-            var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+            var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
             var horizon = gamez.FindByName("horizon");
             Assert.NotNull(horizon);
             var used = new SortedSet<int>();

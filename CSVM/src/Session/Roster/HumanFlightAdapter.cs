@@ -184,7 +184,7 @@ internal sealed class HumanFlightAdapter
         // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
         // per-airframe cache). Stock pick (id 6) keeps the airframe's own row.
         if (custom != null
-            && Flight.Hangar.CustomPlaneBuild.EnginePowerFor(_aircraft.ZrdrPath, custom) is { } enginePower)
+            && Flight.Hangar.CustomPlaneBuild.EnginePowerFor(_aircraft.Zrdr, custom) is { } enginePower)
         {
             stats = stats.WithEnginePower(enginePower);
         }
@@ -199,10 +199,10 @@ internal sealed class HumanFlightAdapter
             ? capturedSwap.Scheme
             : swap?.Scheme
                 ?? (militia is { Name: not Mech3.InstantAction.PlayerMilitia } && !_liveries.PaintRequested
-                    ? (militiaPattern == null ? null : _liveries.CatalogScheme(_aircraft.ZrdrPath, militiaPattern))
+                    ? (militiaPattern == null ? null : _liveries.CatalogScheme(_aircraft.Zrdr, militiaPattern))
                     : custom != null && !_liveries.PaintRequested
                     ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, Flight.Hangar.CustomPlaneBuild.PatternName(custom.PaintPattern))
-                    : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
+                    : _liveries.SchemeFor(pi, _aircraft.Zrdr, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         // The stereo interior's per-plane scale goes on the mount before XrCockpit captures it.
@@ -231,9 +231,9 @@ internal sealed class HumanFlightAdapter
         MeshInstances += planeBuilder.MeshInstanceCount;
         // A flat body cockpit's pass draws twins of the body. Made after the ghost stamp and before the
         // stores hang, so neither reaches them; they stay hidden unless a pass mirrors them.
-        (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? flatBody = null;
+        FlatBodyTwins? flatBody = null;
         if (!xrInterior && !paneless && planeBuilder.CockpitPanel is { } flatPanel)
-            flatBody = (planeBuilder.CockpitCameraOffset, PlaneBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
+            flatBody = new(planeBuilder.CockpitCameraOffset, planeBuilder.FlatBody(planeModel, flatPanel, bodyCockpit!.Hide));
 
         var controller = new FlightController
         {
@@ -276,10 +276,10 @@ internal sealed class HumanFlightAdapter
         // A twinned body mesh leaves the pilot's pane while its stereo twin draws in its place.
         if (controller.Dressing is { Stereo: { } stereoBody, Visibility: { } seen } && planeBuilder.StereoBody.Count > 0)
         {
-            foreach (var (original, twin) in planeBuilder.StereoBody)
+            foreach (var pair in planeBuilder.StereoBody)
             {
-                stereoBody.Mirror(original, twin);
-                seen.Reseat(original);
+                stereoBody.Mirror(pair);
+                seen.Reseat(pair.Original);
             }
 
             Log.Info("flight", $"cockpit: '{planeName}' stereo body cockpit at real scale, {planeBuilder.StereoBody.Count} airframe mesh(es) drawn from the XR origin's frame, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, gunsight reticle collimated ({planeBuilder.GunsightReticles})");
@@ -337,7 +337,7 @@ internal sealed class HumanFlightAdapter
             // The keyboard is this machine's first seat's, which on a guest is not seat 0.
             UseKeyboard = !paneless && MenuSeatOf(pi) == 0,
             MouseCaptureAllowed = !paneless && _policy.MouseCaptureAllowed,
-            // The whole messages.json table, not just the weapon rows: the pilot HUD words its
+            // The whole message table, not just the weapon rows: the pilot HUD words its
             // auto-land prompt out of the same file.
             Strings = _aircraft.WeaponMessages,
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is
@@ -348,6 +348,9 @@ internal sealed class HumanFlightAdapter
                 : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
             Shake = new PlaneShake(_aircraft.Shakes),
         });
+        // The two gun aids, read on a human seat alone: a bot's rounds take its gunner's lead.
+        controller.LeadingAimAssist = _policy.LeadingAimAssist;
+        controller.LeadMarker = _policy.LeadMarker;
         onCreated(controller);
 
         // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
@@ -391,6 +394,7 @@ internal sealed class HumanFlightAdapter
                 controller.Loadout = _policy.WeaponLab
                     ? Loadout.ForRig(planeModel, _aircraft.WeaponDefs, ldef)
                     : Loadout.Bind(ldef, planeModel, _aircraft.WeaponDefs);
+                controller.Loadout.ApplyGunRefire(stats.GunRefireSeconds);
                 // The gun aim assist's structure candidates (B4): the world's
                 // destructibles, when this session built a world at all.
                 controller.Destructibles = _world.WorldRuntime?.Destructibles;
@@ -435,9 +439,9 @@ internal sealed class HumanFlightAdapter
             Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}', unarmed");
         }
 
-        // The carried turret gunners: the vehicle def's thirdp turrets block resolved
-        // by TITLE against ai.zrd and by node against this built model. Independent of the
-        // stock loadout, the gunner's weapon comes from its ai.zrd row, not from a gun slot.
+        // The carried turret gunners: the vehicle def's thirdp turrets block resolved by TITLE
+        // against ai.zrd and by node against this built model. The fit's turret slots then arm
+        // them, their weapon and refire replacing the ai.zrd row's.
         if (!_world.Racing && _aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
             // ⚠ A human's carried gunner IS positional, unlike the pilot's own forward guns: the
@@ -445,6 +449,8 @@ internal sealed class HumanFlightAdapter
             controller.Turrets = TurretController.BuildCarried(
                 turretDefs, stats, planeModel, _aircraft.WeaponDefs, controller, _world.Projectiles,
                 new GunVoiceHome(controller, _world.Sounds, _world.SoundDefs, _world.HumanPositions));
+            if (controller.Loadout != null)
+                TurretController.ArmFromLoadout(controller.Turrets, controller.Loadout, stats.GunRefireSeconds);
             if (verbose && controller.Turrets.Length > 0)
             {
                 var descs = new List<string>();
@@ -507,6 +513,10 @@ internal sealed class HumanFlightAdapter
                 if (verbose)
                     Log.Info("flight", $"gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
             }
+
+            // Built for every pilot pane so the Game Options box can show it mid-flight.
+            pilotHud.ThrottlePlate = ThrottlePlate.Build();
+            pilotHud.SetThrottlePlateShown(_policy.ThrottlePlate);
 
             // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
             // and a 4P pane can be compared (--hud-font-test). Set before the controller
@@ -697,7 +707,7 @@ internal sealed class HumanFlightAdapter
         // single pilot's answer exists until every slot is known. Resolved lazily on the first rig,
         // so the caller can construct the assembler first. A swap brings its own instead.
         var start = swap?.Start ?? (_starts ??= _spawns.ChooseStarts(
-            _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
+            _human.SpawnList, _world.MissionZrdr, _human.SpawnBase, _human.RigCount))[pi];
         // The plant's force path is chosen once, here, off who is flying: a person takes the player
         // path and a bot the AI one. FlightModel.UsesAiForcePath carries why this is a construction
         // argument rather than the original's own pointer-compare-against-the-player test.
@@ -766,7 +776,7 @@ internal sealed class HumanFlightAdapter
         // drawn ahead of a camera, so a remote seat, which has none, takes no copy.
         if (!paneless && !_policy.EmptyStage)
         {
-            controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
+            controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdr, _aircraft.Textures, _worldRoot,
                 _world.Ambience,
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
         }
@@ -882,7 +892,7 @@ internal sealed class HumanFlightAdapter
         {
             try
             {
-                _militias = MilitiaFits.Load(_aircraft.ZrdrPath, _aircraft.WeaponMessages);
+                _militias = MilitiaFits.Load(_aircraft.Zrdr, _aircraft.WeaponMessages);
             }
             catch (Exception e)
             {

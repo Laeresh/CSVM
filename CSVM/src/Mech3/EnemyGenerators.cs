@@ -15,9 +15,9 @@ public static class EnemyGenerators
     /// <summary>Loads every generator of one mission, in file order. Empty when the mission's
     /// file is <c>[null]</c>; throws <see cref="FileNotFoundException"/> when the mission scope
     /// carries no egen file at all (unseen in this install, all 53 mission dirs have one).</summary>
-    public static List<EnemyGeneratorDef> Load(string missionZrdrPath)
+    public static List<EnemyGeneratorDef> Load(ZrdrSet missionZrdr)
     {
-        var root = Zrdr.LoadFile(missionZrdrPath, "egen.json");
+        var root = missionZrdr.LoadFile("egen.json");
         var defs = new List<EnemyGeneratorDef>();
         // The whole reader is one outer element: [[record0, record1, …]], or [null] for none.
         if (root.Count == 0 || root[0] is not List<object?> records)

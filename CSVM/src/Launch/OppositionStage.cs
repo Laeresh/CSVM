@@ -115,7 +115,7 @@ internal sealed class OppositionStage
                     netsTried = true;
                     try
                     {
-                        nets = AiNets.Load(_in.ChapterZrdrPath);
+                        nets = AiNets.Load(_in.ChapterZrdr);
                     }
                     catch (Exception e)
                     {
@@ -194,7 +194,7 @@ internal sealed class OppositionStage
         List<ZeppelinDef> zepDefs;
         try
         {
-            zepDefs = Zeppelins.Load(state.MissionZrdrPath);
+            zepDefs = Zeppelins.Load(state.MissionZrdr);
         }
         catch (IOException e)
         {
@@ -211,7 +211,7 @@ internal sealed class OppositionStage
         }
         else
         {
-            zepNets = AiNets.Load(_in.ChapterZrdrPath);
+            zepNets = AiNets.Load(_in.ChapterZrdr);
         }
         var world = _in.World;
         var zeppelins = new ZeppelinRuntime(zepDefs,
@@ -265,19 +265,19 @@ internal sealed class OppositionStage
         List<EnemyGeneratorDef> egenDefs;
         try
         {
-            egenDefs = EnemyGenerators.Load(state.MissionZrdrPath);
+            egenDefs = EnemyGenerators.Load(state.MissionZrdr);
         }
         catch (IOException e)
         {
             Log.Info("world", $"egen: no generator file for {spec.Chapter}/{spec.Mission}: {e.Message}");
             egenDefs = new List<EnemyGeneratorDef>();
         }
-        var chapterNets = AiNets.Load(_in.ChapterZrdrPath);
+        var chapterNets = AiNets.Load(_in.ChapterZrdr);
         // The parameter blocks a generator's vehicle.params names are mission data, not campaign
         // state. A launch resolves its block on any run that turns the generators on. Otherwise
         // the aircraft flies a CLI airframe with none of the block's authored fields.
         var generatorTemplates = CampaignRosterPlan.GeneratorTemplates(
-            state.MissionZrdrPath, VehicleDefs.Load(state.ZrdrPath), chapterNets);
+            state.MissionZrdr, VehicleDefs.Load(state.Zrdr), chapterNets);
         float generatorActiveDist = _in.MinAiActiveDist();
         var generatorSurface = _in.EnsureSurfaceVehicles();
 
@@ -542,7 +542,7 @@ internal sealed class OppositionStage
         public Node3D WorldRoot = null!;
         public FlightRoster Roster = null!;
         public NetTrailerTargets NetTrailers = null!;
-        public string ChapterZrdrPath = "";
+        public ZrdrSet ChapterZrdr = ZrdrSet.None;
         public AnimRuntime? World;
         public CampaignDirector? Campaign;
         // player.json's activation floor, read at each use as the session reads it.

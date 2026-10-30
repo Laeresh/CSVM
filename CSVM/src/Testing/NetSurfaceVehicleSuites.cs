@@ -62,12 +62,12 @@ internal static class NetSurfaceVehicleSuites
         + "guest never fed exceeds that bar")]
     internal static void SurfacePatrolsFollowTheHost(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(BoatChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BoatChapter, BoatMission);
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var nets = AiNets.Load(chapterZrdr);
         var plans = CampaignRosterPlan.Build(AiSkills.LoadRoster(missionZrdr), defs, nets).Spawns
             .Where(p => p.Surface).ToList();
@@ -202,9 +202,9 @@ internal static class NetSurfaceVehicleSuites
     private static void SurveyRouteDraws(TestContext ctx, StringBuilder report, string chapter,
         string missionName, VehicleDefs defs)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, missionName);
-        if (!System.IO.Directory.Exists(chapterZrdr) || !System.IO.Directory.Exists(missionZrdr))
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, missionName);
+        if (!chapterZrdr.Exists || !missionZrdr.Exists)
         {
             ctx.Note($"{chapter}/{missionName}: no zrdr at {chapterZrdr} or {missionZrdr}, route survey skipped");
             return;

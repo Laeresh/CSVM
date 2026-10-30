@@ -91,7 +91,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 ### Menus and front end
 
-Nothing here is a flight question, and none of it can be answered from `extracted/rof/`: a layout
+Nothing here is a flight question, and none of it can be answered from the UI archive's files: a layout
 row and a button bitmap state composition, never what a press, a rollover or a screen change does.
 The screen and asset inventory these entries hang off is
 [`docs/org/menu-inventory.md`](docs/org/menu-inventory.md); film in 4:3 windowed, where the original
@@ -630,16 +630,16 @@ is a judgement on our own remake.
 ./ExportRelease.ps1   # then unzip .scratch\CSVM-v<version>-win64.zip into a bare folder
 ```
 
-- `PT-131` `[Own]` **An exported build started by double-clicking `CSVM.exe` sounds, and the
-  folder with no `extracted\` says so on screen.** The repo's silent master default is what keeps
+- `PT-131` `[Own]` **An exported build started by double-clicking `CSVM.exe` sounds, and with no
+  game files found it says so on screen.** The repo's silent master default is what keeps
   scripted runs quiet, so the export carries its own audible one; nothing in the payload passes a
-  flag. Run the unzipped `CSVM.exe` from Explorer, with the extraction done and again with the
-  `extracted\` folder renamed away. ⚠ Clear `CSVM_DATA_ROOT` from the environment first, or the
+  flag. Run the unzipped `CSVM.exe` from Explorer, with the game files found and again with none
+  found. ⚠ Clear `CSVM_DATA_ROOT` and `CSVM_INSTALL_ROOT` from the environment first, or the
   exported build reads the development tree and neither case is what a recipient sees. *Look for:*
-  - (a) with game data present, the menu comes up with its music and the menu cues audible at a
+  - (a) with game files found, the menu comes up with its music and the menu cues audible at a
     sensible level, without a `--volume=` argument anywhere;
-  - (b) with no `extracted\`, the in-game extraction screen comes up with the install folder field
-    and Extract focused, and stays up until Extract finishes or Esc quits, rather than a menu over
+  - (b) with none found, the source screen comes up asking for an install folder, the disc's
+    drive or a disc image, and stays up until a choice reads or Esc quits, rather than a menu over
     a world that cannot build.
   *Blocks:* nothing tracks the outcome; a fail files a new issue. The export's own default is what
   is under test here; a player retunes the mix on Preferences' AUDIO page afterwards.

@@ -170,6 +170,18 @@ public sealed class OptionsDef
     /// key deciding: the row exposes the existing key rather than replacing its default.</summary>
     public bool? AutoHeadTurn { get; set; }
 
+    /// <summary>Whether each gun round leaves along its own shot's intercept
+    /// (<c>FlightController.LeadingAimAssist</c>). Null is never set, which reads as off.</summary>
+    public bool? LeadingAimAssist { get; set; }
+
+    /// <summary>Whether the targeting HUD marks the tracked hostile's intercept point
+    /// (<c>TargetHud</c>'s lead marker). Null is never set, which reads as off.</summary>
+    public bool? LeadMarker { get; set; }
+
+    /// <summary>Whether the flight HUD draws the throttle plate beside the speedometer
+    /// (<c>ThrottlePlate</c>). Null is never set, which reads as off.</summary>
+    public bool? ThrottlePlate { get; set; }
+
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
     /// screen with that index is plugged in can only be answered by a caller holding an engine,
@@ -211,10 +223,23 @@ public sealed class OptionsDef
     /// <summary>The Voice level, on the same range as <see cref="AudioMusic"/>.</summary>
     public int? AudioVoice { get; set; }
 
-    /// <summary>The Crimson Skies install folder the last extraction read, fully qualified, which
-    /// pre-fills the next picker (<c>Extraction.RememberedInstall</c>). Not a display setting and
-    /// never read by a golden shot.</summary>
+    /// <summary>The game files last picked, a folder, drive or disc image, fully qualified, which
+    /// <c>GameFileSource.Locate</c> tries and the next picker pre-fills
+    /// (<c>Extraction.RememberedInstall</c>). Not a display setting and never read by a golden shot.</summary>
     public string? InstallPath { get; set; }
+
+    /// <summary>Whether the player answered the question about an old <c>extracted</c> folder,
+    /// keeping or deleting it, so it is asked once (<c>UI.Screens.SourceFlow</c>).</summary>
+    public bool? ExtractedPromptAnswered { get; set; }
+
+    /// <summary>Whether the player was told that the game files hold no patch archive, which is
+    /// said once (<c>UI.Screens.SourceFlow</c>).</summary>
+    public bool? PatchNoteShown { get; set; }
+
+    /// <summary>The modding folder of unzbd output a launch reads (<c>Spec.ModdingFolder</c>), fully
+    /// qualified; null reads none. Game Options' Modding Folder row sets it and
+    /// <c>--mod-folder=</c> beats it. Never read under <c>--det</c>.</summary>
+    public string? ModFolder { get; set; }
 
     /// <summary>The network callsign the Player Information box last took, which prefills it next
     /// session. At most <see cref="OptionsStore.NameLimit"/> characters. Not a display setting.
@@ -336,9 +361,9 @@ public sealed class OptionsStore
     /// read it would pass or fail with the last choice saved at the controls.</summary>
     public static string? DirectoryOverride { get; set; }
 
-    /// <summary>The production store, <c>user://</c> resolved to its OS path, or the
+    /// <summary>The production store, in <see cref="UserData.Root"/>, or the
     /// <see cref="DirectoryOverride"/> while one is set.</summary>
-    public static OptionsStore UserOptions() => new(DirectoryOverride ?? Godot.ProjectSettings.GlobalizePath("user://"));
+    public static OptionsStore UserOptions() => new(DirectoryOverride ?? UserData.Root);
 
     /// <summary>The canonical JSON text for <paramref name="def"/>.</summary>
     public static string Serialize(OptionsDef def)
@@ -358,6 +383,9 @@ public sealed class OptionsStore
             WriteFlag(w, "rumble", def.Rumble);
             Write(w, "defaultView", def.DefaultView);
             WriteFlag(w, "autoHeadTurn", def.AutoHeadTurn);
+            WriteFlag(w, "leadingAimAssist", def.LeadingAimAssist);
+            WriteFlag(w, "leadMarker", def.LeadMarker);
+            WriteFlag(w, "throttlePlate", def.ThrottlePlate);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -372,6 +400,9 @@ public sealed class OptionsStore
             WriteLevel(w, "audioEffects", def.AudioEffects);
             WriteLevel(w, "audioVoice", def.AudioVoice);
             Write(w, "installPath", def.InstallPath);
+            WriteFlag(w, "extractedPromptAnswered", def.ExtractedPromptAnswered);
+            WriteFlag(w, "patchNoteShown", def.PatchNoteShown);
+            Write(w, "modFolder", def.ModFolder);
             Write(w, "netCallsign", def.NetCallsign);
             if (def.NetVoice is { } voice)
             {
@@ -438,6 +469,9 @@ public sealed class OptionsStore
                 Rumble = ReadFlag(root, "rumble"),
                 DefaultView = Read(root, "defaultView", ValidDefaultViews),
                 AutoHeadTurn = ReadFlag(root, "autoHeadTurn"),
+                LeadingAimAssist = ReadFlag(root, "leadingAimAssist"),
+                LeadMarker = ReadFlag(root, "leadMarker"),
+                ThrottlePlate = ReadFlag(root, "throttlePlate"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
@@ -447,6 +481,9 @@ public sealed class OptionsStore
                 AudioEffects = ReadLevel(root, "audioEffects"),
                 AudioVoice = ReadLevel(root, "audioVoice"),
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
+                ExtractedPromptAnswered = ReadFlag(root, "extractedPromptAnswered"),
+                PatchNoteShown = ReadFlag(root, "patchNoteShown"),
+                ModFolder = ReadShaped(root, "modFolder", Path.IsPathFullyQualified),
                 NetCallsign = ReadShaped(root, "netCallsign", static v => v.Length <= NameLimit),
                 NetVoice = root.TryGetProperty("netVoice", out var voice) && voice.ValueKind == JsonValueKind.Number
                     && voice.TryGetInt32(out int place) && place >= 0 && place <= MaxVoice

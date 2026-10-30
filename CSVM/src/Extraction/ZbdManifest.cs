@@ -5,18 +5,12 @@ using System.Linq;
 namespace CSVM.Extraction;
 
 /// <summary>The 184 ZBD archives a complete install holds, the same on the English install and the
-/// German disc. <see cref="Missing"/> is checked before the ZBD half runs, since the walk extracts
-/// whatever it finds and a missing chapter or mission would otherwise fail only when it loads.</summary>
+/// German disc. <see cref="GameFileCopy"/> copies them and <c>--dump</c> reads them.</summary>
 public static class ZbdManifest
 {
     /// <summary>Every expected archive's path under <c>ZBD</c>, <c>/</c>-separated, in
     /// <see cref="ZbdTree"/>'s case.</summary>
     public static readonly IReadOnlyList<string> Expected = Build();
-
-    /// <summary>The <see cref="Expected"/> archives absent from the install's <c>ZBD</c> folder
-    /// <paramref name="zbdRoot"/>, each looked up without regard to case.</summary>
-    public static IReadOnlyList<string> Missing(string zbdRoot) =>
-        Expected.Where(path => InstallLocator.ResolveFile(zbdRoot, path) == null).ToList();
 
     private static List<string> Build()
     {

@@ -205,15 +205,15 @@ internal static class SpawnPropsSuites
     private static void WithSessionRoster(TestContext ctx, string playerPlane,
         Action<FlightRoster, FlightController, SoundArchive, Dictionary<string, SoundDef>> body)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
         EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter));
-            using var sounds = new SoundArchive(ctx.SoundsPath);
-            var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+            var planesGamez = ctx.Planes;
+            var textures = new TextureArchive(ctx.ChapterTextures(ctx.Chapter));
+            using var sounds = new SoundArchive(ctx.Sounds);
+            var soundDefs = SoundDefs.Load(ctx.Zrdr);
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);
             var pane = new SubViewport();
@@ -226,19 +226,19 @@ internal static class SpawnPropsSuites
                 var resources = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
-                    StatsFor = p => PlaneStats.Load(ctx.ZrdrPath, p),
-                    AiStatsFor = (p, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, p, aiDef),
+                    StatsFor = p => PlaneStats.Load(ctx.Zrdr, p),
+                    AiStatsFor = (p, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, p, aiDef),
                     CamParamsFor = _ => new CamParams(),
                     PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
+                    Zrdr = ctx.Zrdr,
                     StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                    WeaponMessages = Messages.Load(ctx.MessagesPath),
+                    WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+                    WeaponMessages = ctx.Data.Messages,
                     Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Shakes = ShakeDefs.Load(ctx.Zrdr),
                 };
                 roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                    new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                    new LiveryResolver(spec, ctx.DataRoot),
                     new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
                     new FlightWorldBindings
                     {
@@ -248,7 +248,7 @@ internal static class SpawnPropsSuites
                         CrashProgram = source.Program,
                         Sounds = sounds,
                         SoundDefs = soundDefs,
-                        SoundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath),
+                        SoundGroups = SoundDefs.LoadGroups(ctx.Zrdr),
                     },
                     new HumanRosterBindings
                     {
@@ -330,7 +330,7 @@ internal static class SpawnPropsSuites
     private sealed class HighStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

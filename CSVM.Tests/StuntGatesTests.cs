@@ -22,9 +22,9 @@ public class StuntGatesTests
 {
     private const string Chapter = "C4";
 
-    private static string GamezPath => SessionPaths.ChapterGamez(TestData.DataRoot!, Chapter);
+    private static string GamezPath => SessionPaths.ChapterGamez(TestData.ExtractedRoot!, Chapter);
 
-    private static string MissionPath => SessionPaths.MissionZrdr(TestData.DataRoot!, Chapter, "IA1");
+    private static ZrdrSet MissionPath => TestZrdr.Mission(Chapter, "IA1");
 
     private static string MessagesPath => Path.Combine(TestData.ExtractedRoot!, "messages.json");
 
@@ -36,7 +36,7 @@ public class StuntGatesTests
 
     private static void Run()
     {
-        var mission = StuntMission.Load(GameZ.Load(GamezPath), MissionPath, Messages.Load(MessagesPath));
+        var mission = StuntMission.Load(GameZ.Load(GamezPath), MissionPath, Messages.FromExtracted(MessagesPath));
         Assert.True(mission != null, "C4 IA1 loads authored Danger Zone gates");
         if (mission == null)
             return;

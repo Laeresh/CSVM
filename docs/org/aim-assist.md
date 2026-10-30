@@ -339,6 +339,35 @@ original computes the sight from the airframe's forward axis and the weapon's `V
 rounds leave along the assist's smoothed per-muzzle line inside a 1° scatter. The two disagree by
 design, and the assist is meant to be felt, not seen.
 
+## Remake-only aiming options
+
+Two switches on the Game Options page, both off by default, so a fresh install plays the decoded
+assist above. Each is saved in `options.json`, has a flag, and is ignored from the file under `--det`.
+
+### The leading option
+
+`--leading-assist`, the **Leading Aim** box (`leadingAimAssist`). The scan, the cone gate and the
+target choice are the original's. The round leaves along **this shot's own** intercept, then the
+shipped scatter. The slot is still written, so turning the option off mid-flight resumes the decoded
+line. Off, the round leaves along the slot's smoothed direction. Each barrel holds its own slot, and a
+slot is rescanned only when its barrel fires. Against a crossing target the gun line then trails by
+about one fire interval of the barrel pair plus the catch-up, which `gun-hit-rate` measures. Nothing
+new goes on the wire: the fired direction already does.
+
+### The lead marker
+
+`--lead-marker`, the **Lead Marker** box (`leadMarker`). `TargetHud` draws a circle on the intercept
+of the selected target, or of the nearest hostile while nothing is selected, with a dotted line from
+the circle to that target. The point
+is `AimAssist.TryIntercept` on the selected gun group's `VELOCITY` from its muzzle midpoint, and the
+marker stands on the world intercept, the target's own position `t` seconds on. A round's world path
+carries the plane's velocity, which is the pipper's ray above, so the pipper laid on the marker fires
+along the intercept; `gun-hit-rate` fires boresight that way and hits. The same intercept in the
+shooter's frame lies on that muzzle ray too, nearer by the plane's own travel over `t`, because a
+plane flies along its nose. The two differ only through the chase camera's offset from the muzzle.
+It shows only while the solve succeeds and the reach, measured as the bracket gate measures it, is
+inside the group's `RANGE`. The original's pipper is untouched.
+
 ## AI gunnery is a different system
 
 `FUN_004b6530`'s other branch, everything that is not the local player, reads the hardpoint's own

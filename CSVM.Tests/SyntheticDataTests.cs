@@ -16,29 +16,64 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The synthetic data root <c>--synthetic-data</c> writes, built from the fixtures the engine reads.
-/// Its stamp passes the boot check as a current tree and marks it synthetic. Its chapter texture
-/// archive opens through the path every session resolves, with one PNG per manifest entry. The
-/// Original shell's files pass its availability check, each picture at its recorded size. Decoding
+/// Its stamp marks it synthetic. Its chapter textures
+/// are built in memory, as its message table and its Original shell's files are. The shell's files
+/// pass its availability check, each picture at its recorded size. Decoding
 /// pixels needs Godot, so the in-engine run covers that half.
 /// </summary>
 public class SyntheticDataTests
 {
     [Fact]
-    public void TheTreeIsStampedCurrentAndMarkedSynthetic()
+    public void TheTreeIsMarkedSynthetic()
+    {
+        Assert.True(SyntheticData.Marks(Built()));
+    }
+
+    /// <summary>A synthetic launch resolves no game source and reads the invented message table and
+    /// aircraft out of memory. The tree it runs over carries neither, and its chapters no world.</summary>
+    [Fact]
+    public void ASyntheticLaunchBuildsItsGameDataInMemoryWithNoSource()
     {
         string root = Built();
+        var paths = Spec.BasePaths.Resolve(TestData.RepoRoot, root, Spec.SessionSpec.Parse(new[] { "--synthetic-data" }), Tooling.SyntheticGameData.Build);
 
-        Assert.Equal(StampStanding.Current, ExtractionStamp.Standing(root, out int? found));
-        Assert.Equal(ExtractionStamp.Schema, found);
-        Assert.True(SyntheticData.Marks(root));
+        Assert.Null(paths.Game);
+        Assert.Equal("Probe Gun", paths.Data.Messages.Get("MSG_PROBE_GUN"));
+        Assert.Null(paths.Data.Interp);
+        Assert.False(File.Exists(Path.Combine(root, "extracted", "messages.json")));
+        Assert.NotNull(paths.Data.Planes?.FindByName(SyntheticPlane.Plane));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "planes")));
+        Assert.NotNull(paths.Data.Sounds?.ReadWavBytes(SyntheticSounds.Wavs[0].Name));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "soundsh")));
+        Assert.Null(paths.Data.LoadChapter("C1", "M01").Gamez);
+        Assert.True(paths.Data.Zrdr.HasFile("vehicle.json"));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "zrdr")));
+        var probe = paths.Data.LoadChapter(SyntheticMission.Chapter, SyntheticMission.Mission);
+        Assert.True(probe.ChapterZrdr.Exists);
+        Assert.Empty(probe.ChapterZrdr.Files);
+        Assert.True(probe.MissionZrdr.HasFile("weather.json"));
+        Assert.False(paths.Data.LoadChapter("C2", "M01").MissionZrdr.Exists);
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "C1")));
+    }
 
-        var lines = new List<string>();
-        using (CSVM.Utils.Log.PushConsoleSink(lines.Add))
+    /// <summary>The run's reader scopes are the root's records, the empty C1 chapter, the two invented
+    /// missions and four chapters' <c>ia</c>. No other scope exists.</summary>
+    [Fact]
+    public void TheReaderScopesHoldTheRecordsTheSuitesRead()
+    {
+        Assert.Equal(
+            new[] { "vehicle.zrd", "engines.zrd", "player.zrd", "maneuvers.zrd", "weapons.zrd", "shakes.zrd", "ai.zrd",
+                "probe_world.zrd", "flame_ball.zrd", "pufftrails.zrd", "cm_sequence.zrd", "Briefing.zrd", "sounds.zrd", "voice.zrd" },
+            SyntheticZrdr.Root().Files.Select(f => f.Key));
+        Assert.All(SyntheticZrdr.Root().Files, f => Assert.NotEmpty(f.Root));
+        Assert.Equal(new[] { "objectives.zrd" }, SyntheticZrdr.Mission("C1", SyntheticMission.CampaignMission).Files.Select(f => f.Key));
+        foreach (string chapter in new[] { "C1B", "C3", "C4", "C5" })
         {
-            ExtractionStamp.Check(root);
+            Assert.True(SyntheticZrdr.Mission(chapter, "IA1").HasFile("ia.json"));
         }
 
-        Assert.Empty(lines);
+        Assert.False(SyntheticZrdr.Mission("C1", "IA1").Exists);
+        Assert.False(SyntheticZrdr.Chapter("C2").Exists);
     }
 
     [Fact]
@@ -48,35 +83,39 @@ public class SyntheticDataTests
         Directory.CreateDirectory(Path.Combine(root, "extracted"));
         File.WriteAllText(
             Path.Combine(root, "extracted", "VERSION.json"),
-            $"{{ \"schema\": {ExtractionStamp.Schema}, \"assets\": {{ \"script\": \"CSVM\" }} }}");
+            $"{{ \"schema\": 4, \"assets\": {{ \"script\": \"CSVM\" }} }}");
 
         Assert.False(SyntheticData.Marks(root));
         Assert.False(SyntheticData.Marks(TestData.TempDir()));
     }
 
+    /// <summary>The synthetic chapter textures are built in memory, one record per entry at its
+    /// size, for C1 alone; the tree carries no texture folder.</summary>
     [Fact]
-    public void TheChapterTextureArchiveOpensWithOnePngPerManifestEntry()
+    public void TheChapterTexturesAreBuiltInMemoryOneRecordPerEntry()
     {
         string root = Built();
+        var data = SyntheticGameData.Build();
         var lines = new List<string>();
         using (CSVM.Utils.Log.PushConsoleSink(lines.Add))
         {
-            using var archive = new TextureArchive(SessionPaths.ChapterTextures(root, SyntheticTextures.Chapter));
-            var entries = ManifestEntries();
-            Assert.NotEmpty(entries);
-            Assert.Equal(entries.Count, archive.ManifestTextureCount);
-            foreach (var (name, width, height) in entries)
+            using var archive = new TextureArchive(data.LoadChapter(SyntheticTextures.Chapter, "M01").Textures);
+            Assert.NotEmpty(SyntheticTextures.Entries);
+            Assert.Equal(SyntheticTextures.Entries.Count, archive.ManifestTextureCount);
+            foreach (var (name, width, height) in SyntheticTextures.Entries)
             {
-                byte[]? png = archive.ReadPngBytes(name);
-                Assert.NotNull(png);
-                Assert.Equal(width, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
-                Assert.Equal(height, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
+                var texture = archive.Lookup(name);
+                Assert.NotNull(texture);
+                Assert.Equal((width, height), (texture!.Width, texture.Height));
+                Assert.Equal(width * height * 3, texture.Pixels.Length);
             }
 
             Assert.Empty(archive.MissingTextures);
         }
 
         Assert.Empty(lines);
+        Assert.Equal(0, data.LoadChapter("C2", "M01").Textures.Count);
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "C1", "texture")));
     }
 
     [Fact]
@@ -92,6 +131,7 @@ public class SyntheticDataTests
         Assert.NotNull(layout.Screen(OriginalAvailability.MainMenuSection));
         Assert.Equal("Agreed", layout.Screen("MessageBox")!.Widget("MB_B_CENTER")!.Text);
         Assert.True(UiStrings.TryLoad(root)!.Has(10123));
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "rof")));
     }
 
     [Fact]
@@ -102,7 +142,7 @@ public class SyntheticDataTests
         foreach (var entry in doc.RootElement.GetProperty("art").EnumerateArray())
         {
             string name = entry.GetProperty("name").GetString()!;
-            byte[] bytes = File.ReadAllBytes(OriginalAvailability.ArtPath(root, name));
+            byte[] bytes = RofFiles.For(root).Read(OriginalAvailability.RelativeArtPath(name))!;
             var size = Path.GetExtension(name).ToLowerInvariant() switch
             {
                 ".png" => (BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16)), BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20))),
@@ -117,7 +157,7 @@ public class SyntheticDataTests
     [Fact]
     public void TheInventedMissionCarriesTwoBearingsACloudBandAndANetBlock()
     {
-        string zrdr = SessionPaths.MissionZrdr(Built(), SyntheticMission.Chapter, SyntheticMission.Mission);
+        var zrdr = SyntheticZrdr.Mission(SyntheticMission.Chapter, SyntheticMission.Mission);
 
         // A zone change shows only where the two zones author different bearings. A whiteout
         // shows only where the band's core sits above the ground.
@@ -136,7 +176,7 @@ public class SyntheticDataTests
     public void ARebuildReplacesWhatAnEarlierRunLeft()
     {
         string root = Built();
-        string stray = Path.Combine(root, "extracted", "C1", "texture", "probe_stray.png");
+        string stray = Path.Combine(root, "extracted", "probe_stray.png");
         File.WriteAllBytes(stray, Array.Empty<byte>());
 
         SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);
@@ -150,7 +190,7 @@ public class SyntheticDataTests
         string root = TestData.TempDir();
         string stamp = Path.Combine(root, "extracted", "VERSION.json");
         Directory.CreateDirectory(Path.GetDirectoryName(stamp)!);
-        File.WriteAllText(stamp, $"{{ \"schema\": {ExtractionStamp.Schema} }}");
+        File.WriteAllText(stamp, "{ \"schema\": 4 }");
 
         Assert.Throws<IOException>(() => SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies));
         Assert.True(File.Exists(stamp));
@@ -185,17 +225,5 @@ public class SyntheticDataTests
         }
 
         return (BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 7)), BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 5)));
-    }
-
-    private static List<(string Name, int Width, int Height)> ManifestEntries()
-    {
-        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.Fixture("synthetic", "C1", "texture", "manifest.json")));
-        var entries = new List<(string, int, int)>();
-        foreach (var info in doc.RootElement.GetProperty("texture_infos").EnumerateArray())
-        {
-            entries.Add((info.GetProperty("name").GetString()!, info.GetProperty("width").GetInt32(), info.GetProperty("height").GetInt32()));
-        }
-
-        return entries;
     }
 }

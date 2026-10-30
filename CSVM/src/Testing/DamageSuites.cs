@@ -269,10 +269,10 @@ internal static class DamageSuites
         "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)")]
     internal static void DamageStagingPool(TestContext ctx)
     {
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
 
         // Data-driven, not a hardcoded zone: any part whose authored list flips a pdpanelN, taking
         // its HIGHEST threshold so one health step crosses exactly one panel.
@@ -358,10 +358,10 @@ internal static class DamageSuites
         "the cockpit-interior torn panels pcdp4/pcdp6 flip off the SAME pdpanel4/pdpanel6 injure entries as their exterior namesakes, survive a CockpitVisibility view-mode switch, and clear together on respawn's Reset() (B12)")]
     internal static void CockpitPanelStaging(TestContext ctx)
     {
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
 
         DestroyablePart? part = null;
         float threshold = 0f;
@@ -445,9 +445,9 @@ internal static class DamageSuites
         "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)")]
     internal static void DamageStageSlots(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane("player_fury");
-        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
+        var stats = PlaneStats.LoadForAi(ctx.Zrdr, "player_fury");
         const string Remote = "random_remote_damage", Smoke = "pfsmoketrail";
         var ladder = stats.VehicleInjureAnims;
         int remote = ladder.Count(e => e.Anim == Remote);
@@ -537,7 +537,7 @@ internal static class DamageSuites
 
         // A2's other half: a player airframe DOES name pdpanel stages, so pairing (and its
         // missing-data alarm) stays armed on that path.
-        var player = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
+        var player = PlaneStats.Load(ctx.Zrdr, "player_fury");
         var playerRoot = new Node3D { Name = "player_root" };
         ctx.Host.AddChild(playerRoot);
         try
@@ -563,12 +563,12 @@ internal static class DamageSuites
         "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)")]
     internal static void AiDamageStages(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var planesGamez = ctx.Planes;
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             ProjectilePool? pool = null;
             FlightController? ai = null;
             FlightController? bhawk = null;
@@ -578,19 +578,19 @@ internal static class DamageSuites
                 pool = live;
                 ctx.Host.AddChild(live);
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
-                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                var liveries = new LiveryResolver(spec, ctx.DataRoot);
                 var factory = new Session.World.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
                 var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                     PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
+                    Zrdr = ctx.Zrdr,
                     StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                     Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Shakes = ShakeDefs.Load(ctx.Zrdr),
                 };
                 var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, factory, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = world.Gamez, WorldScene = world.Session.Builder.Scene, CrashProgram = world.Session.Program }, new HumanRosterBindings());
                 var start = new Vector3(0f, 500f, 0f);

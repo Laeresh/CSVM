@@ -307,28 +307,22 @@ public class OriginalCoverageTests : IDisposable
         Cover(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null, "fixture");
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void EveryScreenAndEdgeOfTheInstallsLayoutIsReachableAndEscapableByEveryInputFamily()
     {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
+        string dataRoot = TestRof.InstallRoot;
+        var layout = MenuLayout.TryLoad(dataRoot, out var reason);
         Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        Cover(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot, "install");
+        Cover(layout!, art => PngSize(dataRoot, art), dataRoot, "install");
     }
 
     // A PNG's pixel size off its header, the one art format every button strip ships in; any
     // other file measures as unknown and the row keeps its fallback rectangle. Shared with
     // OriginalOptionsTests, whose option-page facts walk the same install art.
-    internal static (int Width, int Height)? PngSize(string path)
+    internal static (int Width, int Height)? PngSize(string dataRoot, string art)
     {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        using var stream = File.OpenRead(path);
-        var header = new byte[24];
-        if (stream.Read(header, 0, header.Length) < header.Length || header[1] != (byte)'P' || header[2] != (byte)'N' || header[3] != (byte)'G')
+        var header = CSVM.Extraction.RofFiles.For(dataRoot).Head(OriginalAvailability.RelativeArtPath(art), 24);
+        if (header == null || header.Length < 24 || header[1] != (byte)'P' || header[2] != (byte)'N' || header[3] != (byte)'G')
         {
             return null;
         }

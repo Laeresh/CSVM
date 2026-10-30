@@ -150,7 +150,7 @@ public sealed class MarkerRig
     /// <c>cockpit1</c>.</summary>
     public static List<GaugePose>? CockpitPoses(GameZ gamez, GameZNode root)
     {
-        var interior = Children(gamez, root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
+        var interior = gamez.ChildrenOf(root).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase));
         if (interior == null)
         {
             return null;
@@ -162,9 +162,9 @@ public sealed class MarkerRig
         // Below cockpit1, whose own local the built mount replaces; depth-first, as the transplant searches.
         if (FindGauges(gamez, interior, Transform3D.Identity) is var (gauges, at))
         {
-            foreach (var assembly in Children(gamez, gauges))
+            foreach (var assembly in gamez.ChildrenOf(gauges))
             {
-                held |= HoldsGlass(gamez, assembly);
+                held |= GunsightReticle.HoldsGlass(gamez, assembly);
                 poses.Add(new GaugePose(assembly.Name, PlaneBuilder.InteriorToPlane(at * (assembly.Local ?? Transform3D.Identity), marker)));
             }
         }
@@ -373,7 +373,7 @@ public sealed class MarkerRig
 
     private static (GameZNode Node, Transform3D At)? FindGauges(GameZ gamez, GameZNode node, Transform3D at)
     {
-        foreach (var child in Children(gamez, node))
+        foreach (var child in gamez.ChildrenOf(node))
         {
             var childAt = at * (child.Local ?? Transform3D.Identity);
             if (child.Name.Equals("gauges", StringComparison.OrdinalIgnoreCase))
@@ -389,12 +389,6 @@ public sealed class MarkerRig
 
         return null;
     }
-
-    private static bool HoldsGlass(GameZ gamez, GameZNode node) =>
-        PlaneRigPatch.HoldsGlass(gamez, node) || Children(gamez, node).Exists(c => HoldsGlass(gamez, c));
-
-    private static List<GameZNode> Children(GameZ gamez, GameZNode node) =>
-        node.Children.FindAll(c => c >= 0 && c < gamez.Nodes.Count).ConvertAll(c => gamez.Nodes[c]);
 
     private static string Vec3(Vector3 v) => $"[{Num(v.X)}, {Num(v.Y)}, {Num(v.Z)}]";
 

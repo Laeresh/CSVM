@@ -21,6 +21,9 @@ public sealed class HdModelMeshes
     private static HdModelMeshes? _current;
 
     private readonly HdModels _models;
+    // Each pack file parsed once, a failure as a null state, so the nodes it replaces share its
+    // materials and textures.
+    private readonly Dictionary<string, (GltfState? State, string File)> _files = new();
     private readonly Dictionary<string, ArrayMesh?> _byKey = new();
     // Each imported mesh's surfaces as built, so a builder copies them without reading the GPU back.
     private readonly Dictionary<ArrayMesh, HdSurface[]> _surfaces = new(ReferenceEqualityComparer.Instance);
@@ -50,6 +53,49 @@ public sealed class HdModelMeshes
         }
     }
 
+    /// <summary>Drops every import keyed under a chapter folder other than <paramref name="chapter"/>'s,
+    /// keeping the airframes' and the bare keys. A session then holds one chapter's files at a time.
+    /// A mesh already handed out stays valid.</summary>
+    public void KeepChapter(string chapter)
+    {
+        string own = chapter.ToLowerInvariant() + "/";
+        // A cache key starts with its pack key, which ends at the first line break.
+        bool Other(string key) =>
+            key.Split('\n')[0] is var pack && pack.Contains('/')
+            && !pack.StartsWith("planes/", StringComparison.Ordinal) && !pack.StartsWith(own, StringComparison.Ordinal);
+        lock (_byKey)
+        {
+            foreach (string key in _files.Keys.Where(Other).ToList())
+            {
+                _files.Remove(key);
+            }
+
+            foreach (string key in _byKey.Keys.Where(Other).ToList())
+            {
+                if (_byKey[key] is { } mesh)
+                {
+                    _surfaces.Remove(mesh);
+                }
+
+                _byKey.Remove(key);
+            }
+
+            var worn = new HashSet<Texture2D>(ReferenceEqualityComparer.Instance);
+            foreach (var surface in _surfaces.Values.SelectMany(s => s))
+            {
+                if ((surface.Material as BaseMaterial3D)?.AlbedoTexture is { } texture)
+                {
+                    worn.Add(texture);
+                }
+            }
+
+            foreach (var texture in _albedos.Keys.Where(t => !worn.Contains(t)).ToList())
+            {
+                _albedos.Remove(texture);
+            }
+        }
+    }
+
     /// <summary>The replacement mesh for the gamez node named <paramref name="node"/>, or null when
     /// the pack has none or its file failed to import. An empty mesh means the file draws nothing
     /// for the node. Keys resolve as <see cref="HdModels.For"/> resolves them, and
@@ -73,6 +119,33 @@ public sealed class HdModelMeshes
     /// attributes and materials carried across. An unindexed surface gets the identity index list
     /// first. Other primitives pass through unflipped, and blend shapes and LODs are dropped.</summary>
     internal static ArrayMesh Reversed(ImporterMesh source) => Build(ReversedSurfaces(source, Transform3D.Identity).ToArray());
+
+    /// <summary>Every mesh at or below <paramref name="index"/>, placed by <paramref name="at"/>,
+    /// leaving out subtrees named in <paramref name="owned"/>. Each node is visited once.</summary>
+    internal static void Collect(Godot.Collections.Array<GltfNode> nodes, Godot.Collections.Array<GltfMesh> meshes, int index,
+        Transform3D at, ISet<string> owned, List<HdSurface> into, ISet<int> visited)
+    {
+        // ⚠ Keep the visited stop. A file whose children loop would overflow the stack. One listing
+        // a child twice per level would visit a node once per path to it.
+        if (!visited.Add(index))
+        {
+            return;
+        }
+
+        var node = nodes[index];
+        if (node.Mesh >= 0 && node.Mesh < meshes.Count && meshes[node.Mesh].Mesh is { } mesh)
+        {
+            into.AddRange(ReversedSurfaces(mesh, at));
+        }
+
+        foreach (int child in node.Children)
+        {
+            if (child >= 0 && child < nodes.Count && !owned.Contains(KeyOf(nodes[child])))
+            {
+                Collect(nodes, meshes, child, at * nodes[child].Xform, owned, into, visited);
+            }
+        }
+    }
 
     /// <summary>The surfaces <paramref name="mesh"/> was built from, in surface order, or null for a
     /// mesh this cache did not import. ⚠ Do not edit them; they are the shared mesh's own.</summary>
@@ -114,7 +187,8 @@ public sealed class HdModelMeshes
         // moving every vertex by up to 1/65536 of the mesh's extent.
         for (int i = 0; i < source.GetSurfaceCount(); i++)
         {
-            var arrays = source.GetSurfaceArrays(i);
+            // ⚠ Keep the Duplicate(): the importer hands back its own array, and every node of the file reads it.
+            var arrays = source.GetSurfaceArrays(i).Duplicate();
             var primitive = source.GetSurfacePrimitiveType(i);
             if (at != Transform3D.Identity)
             {
@@ -288,54 +362,20 @@ public sealed class HdModelMeshes
         return best;
     }
 
-    // Every mesh at or below `index`, placed by `at`, leaving out subtrees named in `owned`.
-    private static void Collect(Godot.Collections.Array<GltfNode> nodes, Godot.Collections.Array<GltfMesh> meshes, int index,
-        Transform3D at, ISet<string> owned, List<HdSurface> into, int depth = 0)
-    {
-        // ⚠ Keep the depth stop; a file whose children loop would otherwise overflow the stack.
-        if (depth > nodes.Count)
-        {
-            return;
-        }
-
-        var node = nodes[index];
-        if (node.Mesh >= 0 && node.Mesh < meshes.Count && meshes[node.Mesh].Mesh is { } mesh)
-        {
-            into.AddRange(ReversedSurfaces(mesh, at));
-        }
-
-        foreach (int child in node.Children)
-        {
-            if (child >= 0 && child < nodes.Count && !owned.Contains(KeyOf(nodes[child])))
-            {
-                Collect(nodes, meshes, child, at * nodes[child].Xform, owned, into, depth + 1);
-            }
-        }
-    }
-
     // Read straight off the parsed state, not a generated scene. No node is built to be freed, and
     // the node names are the file's own.
-    private static HdSurface[]? Import(HdModel model, string nodeKey, string[]? path, string file, ISet<string> owned)
+    private static HdSurface[]? Import(GltfState state, string nodeKey, string[]? path, string file, ISet<string> owned)
     {
-        var document = new GltfDocument();
-        var state = new GltfState();
-        // The base path is the file itself: the reader resolves buffers against its folder.
-        var error = document.AppendFromBuffer(model.Bytes, model.GltfPath ?? string.Empty, state);
-        if (error != Error.Ok)
-        {
-            Log.Warn("world", $"HD model import failed ({error}): {file}");
-            return null;
-        }
-
         var nodes = state.GetNodes();
         var meshes = state.GetMeshes();
         var surfaces = new List<HdSurface>();
+        var visited = new HashSet<int>();
         int matched = path == null ? MatchedNode(nodes, nodeKey) : ScopedNode(nodes, nodeKey, path);
         if (matched >= 0)
         {
             // ⚠ Never apply the matched node's own transform. It is the gamez node's local
             // transform as exported, and the game places the node by it already.
-            Collect(nodes, meshes, matched, Transform3D.Identity, owned, surfaces);
+            Collect(nodes, meshes, matched, Transform3D.Identity, owned, surfaces, visited);
             return surfaces.ToArray();
         }
 
@@ -349,7 +389,7 @@ public sealed class HdModelMeshes
         {
             if (root >= 0 && root < nodes.Count && !owned.Contains(KeyOf(nodes[root])))
             {
-                Collect(nodes, meshes, root, nodes[root].Xform, owned, surfaces);
+                Collect(nodes, meshes, root, nodes[root].Xform, owned, surfaces, visited);
             }
         }
 
@@ -396,21 +436,57 @@ public sealed class HdModelMeshes
     // ⚠ Never throws: a broken pack file costs its own replacement, not the build that asked.
     private HdSurface[]? Load(string key, string nodeKey, string[]? path, ISet<string> owned)
     {
+        if (!_files.TryGetValue(key, out var parsed))
+        {
+            _files[key] = parsed = Parse(key);
+        }
+
+        if (parsed.State == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Import(parsed.State, nodeKey, path, parsed.File, owned);
+        }
+        catch (Exception e)
+        {
+            Log.Warn("world", $"HD model import failed ({e.GetType().Name}: {e.Message}): {parsed.File}");
+            return null;
+        }
+    }
+
+    // The pack file under `key`, parsed, or a null state when it fails, with the name messages give it.
+    private (GltfState? State, string File) Parse(string key)
+    {
         if (_models.Read(key) is not { } model)
         {
             Log.Warn("world", $"HD model import failed (unreadable): {key}");
-            return null;
+            return (null, key);
         }
 
         string file = model.GltfPath ?? key + (model.IsGlb ? ".glb" : ".gltf");
         try
         {
-            return Import(model, nodeKey, path, file, owned);
+            var state = new GltfState();
+            // The base path is the file itself: the reader resolves buffers against its folder.
+            var error = new GltfDocument().AppendFromBuffer(model.Bytes, model.GltfPath ?? string.Empty, state);
+            if (error != Error.Ok)
+            {
+                Log.Warn("world", $"HD model import failed ({error}): {file}");
+                return (null, file);
+            }
+
+            // The meshes and images are decoded by now; the raw buffers would only hold memory.
+            state.Buffers = new Godot.Collections.Array<byte[]>();
+            state.GlbData = Array.Empty<byte>();
+            return (state, file);
         }
         catch (Exception e)
         {
             Log.Warn("world", $"HD model import failed ({e.GetType().Name}: {e.Message}): {file}");
-            return null;
+            return (null, file);
         }
     }
 }

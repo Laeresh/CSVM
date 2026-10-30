@@ -4,17 +4,16 @@ Part of: [animation definitions](../anim-definitions.md).
 
 ## Compiled archive reference
 
-The binary archives upstream mech3ax does not support for CS. The project's mech3ax fork
-(`tools/mech3ax`) implements them in `crates/anim/src/cs/`: the container, the full semantic
-`AnimDef` + event decode, and the SI-script frame decode round-trip **byte-identically on
-all 61 archives of this install** with no raw regions left except the per-axis spline
-coefficient blocks (kept as bytes by upstream's own MW/PM convention; their semantics are
-decoded below). The CLI commands `unzbd cs anim <archive> <zip>` / `rezbd cs anim <zip> <archive>`
-extract to the same zip-of-JSON shape as MW/PM/RC (per-def JSONs + per-script `*.zan.json`
-+ `metadata.json`; the CS-only container data, the two base-file entries and the raw
-runtime pointers `defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`, which vary
-per archive and fit no PM-style mission table, ride in optional metadata fields).
-Everything below is byte-verified against this install.
+`cam_anim.zbd` and `mis_anim.zbd`, the compiled animation archives. CSVM reads them with
+`CSVM/src/Mech3/AnimZbd.cs` (the container, every `AnimDef` field and support array, the
+SI-script pool) and `AnimZbdEvents.cs` (the sequence events), straight into the
+`AnimDefinition` model `CompiledAnim` hands the runtime; the model diff against unzbd's
+zip-of-JSON output agrees on all 61 archives of this install. The per-axis spline coefficient
+blocks are carried as bytes, by the MW/PM convention; their semantics are decoded below. unzbd's
+output of these archives (per-def JSONs, per-script `*.zan.json` and a `metadata.json` holding
+the CS-only container data, the two base-file entries and the raw runtime pointers
+`defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`) is what the modding folder
+reads. Everything below is byte-verified against this install.
 
 **Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
 spline scripts that exist **nowhere as loose files**, they are compiled only into these
@@ -27,26 +26,24 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   the chapter-scope compiled anim archive, holding chapter + shared defs **including all
   vehicle SI scripts** (C1: the 4 train cars, 2 fueltrucks, mission-intro cameras,
   `cpilot_eject` body parts, 48 scripts total).
-- **Container** (same family as MW3/PM `anim.zbd`, which mech3ax fully supports, **PM is
-  the closest sibling**, verified against mech3ax's own structs): 16-byte header
+- **Container** (same family as MW3/PM `anim.zbd`, **PM is the closest sibling**): 16-byte header
   `{signature u32 = 0x08170616` (identical to MW3), `version u32 = 53` (RC 28 / MW 39 /
   PM 50), `nBase u32 = 2, nAnimFiles u32}` (byte order confirmed: C1 = `16 06 17 08 | 35 |
   02 | AA`); then nBase × `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the
   archive was built against, a CS-only list), then nAnimFiles × `{path char[80], mtime u32}`
-  (the `.zrd`/`.zan` sources; mtimes are year-2000 Unix timestamps; entry shape = mech3ax's
-  common `AnimDefFileC` exactly, though CS keeps the count in the header rather than before
+  (the `.zrd`/`.zan` sources; mtimes are year-2000 Unix timestamps; the entry shape is MW/PM's
+  anim-file entry exactly, though CS keeps the count in the header rather than before
   the entries). Then the anim-info block, **PM's 108-byte (0x6c) `AnimInfoC` layout
   verbatim**, decoded field-for-field on C1 cam_anim @0x38E0: `def_count u16` @10 (476),
   `defs_ptr` @12, `script_count u32` @16 (48, the SI-script pool count), `scripts_ptr` @20,
   `msg_count/msgs_ptr` @24/28 (0), `world_ptr` @32, `gravity f32` @36 (−9.8), `unk40` @40
   (1), `one60` @60 (1), zeros elsewhere; the three pointers are per-archive runtime garbage
-  (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C, mech3ax's
-  per-game `Mission` tables preserve these for byte-identical round-trip). Then `def_count`
+  (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C; a byte-identical
+  repack has to preserve them, and nothing that reads the archive uses them). Then `def_count`
   AnimDef records, then the SI-script pool, which runs byte-exactly to EOF.
-- **AnimDef records (semantic decode COMPLETE, fork plan item 4**, every field,
-  support array and sequence event is decoded into mech3ax's API types in
-  `crates/anim/src/cs/`; round-trip **byte-identical on all 61 archives**, and the decoded
-  `hangar3_doors` matches its reader-JSON source field-for-field, activation, SAVE_LOG,
+- **AnimDef records (semantic decode COMPLETE**, every field, support array and sequence
+  event is decoded by `AnimZbd.cs`/`AnimZbdEvents.cs`; the model diff agrees on **all 61
+  archives**, and the decoded `hangar3_doors` matches its reader-JSON source field-for-field, activation, SAVE_LOG,
   all five RESET_STATE ops, all four sequences with their door motions**)**: each record is
   a **272-byte** C struct, PM's 268-byte `AnimDefC` layout with one extra dword, with the
   same field offsets as PM (`anim_name`[32]@0, `name`[32]@40, `anim_root_name`[32]@76,
@@ -72,13 +69,14 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   OBJECT_MOTION_SI_SCRIPT events index into it. Object refs are PM's 92-byte shape (node
   *indices* where PM stores pointers, and live `root_idx`); node refs PM's 44-byte shape
   with live `flags`/`root_idx`/`ptr`; a def's node list can contain **duplicate names**
-  (same name, different pointers, the mech3ax fork disambiguates with a reversible `~N`
-  suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
+  (same name, different pointers; `AnimZbd.cs` suffixes a repeat `~2`, `~3`, as unzbd's
+  output spells it, since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
   static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
   byte 32); **activation prereqs (48 B) ARE used** (contra the survey note): object
   prereqs carry a two-bit state word (`active_raw` ∈ {0,1,2}: bit 0 ACTIVE_LIST 1 /
-  INACTIVE_LIST 0, bit 1 the def's LOCAL_NODES_ONLY scope, written by `FUN_0051d7b0`; mech3ax's
-  `active` reads 2 as true, which is wrong) and real pointers, `min_to_satisfy` up to the count;
+  INACTIVE_LIST 0, bit 1 the def's LOCAL_NODES_ONLY scope, written by `FUN_0051d7b0`; the
+  `active` flag unzbd writes, and `AnimZbd.cs` copies, reads 2 as true, which is wrong, so
+  `active_raw` carries the word) and real pointers, `min_to_satisfy` up to the count;
   anim refs 72 B, `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
   halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
   `Default_node_name` padding convention, with zero-padded and garbage exceptions.
@@ -205,3 +203,57 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   hangar-door motions; the train's steam `PUFFER_STATE` is fully inline in `train.json`
   (all emitter params + `smokestack` attach node). Firetrucks / fueltrucks / patrol boat
   are `ON_CALL` only (mission-event driven, nothing calls them in free flight).
+
+## C# reader
+
+`CSVM/src/Mech3/AnimZbd.cs` reads an archive from its bytes into the `AnimArchive` model;
+`AnimZbdEvents.cs` holds the event payloads. Both rebuild each definition, sequence and script as
+the property tree the model's own `Parse` members take (`AnimData`), and every payload field is
+present, an absent option null and a union a one-key bag. The model therefore cannot differ from
+the one built from the extraction's JSON, and the model diff (`CSVM.Tests/AnimZbdTests.cs`) holds
+that over all 61 archives. Every script is decoded on read.
+
+**Layout facts the reader relies on**, beyond the reference above:
+
+- **Placeholder records.** The objects, nodes, lights, puffers, dynamic-sound and static-sound
+  arrays each start with an empty record that their count includes, so events index them 1-based.
+  The NAME1 path, the activation prerequisites, the anim refs and the script-id list have none.
+- **Record layouts.** Object 92 B (`name[32]`, 0, `ptr` @36, `flags u16`, `root_idx u16`, affine);
+  node 44 B (`flags u16`, `root_idx u16`, `name[32]` @4, 0, `ptr` @40); light, puffer and
+  dynamic sound 44 B (`name[32]`, `flags`, `ptr` @36, 0); static sound 40 B, one name field;
+  activation prerequisite 48 B (`optional u32`, `type u32`: 1 animation `{name[32]}`, 2 object
+  and 3 parent `{active u32, name[32], ptr}`); anim ref 72 B (`name[64]`, `ref_ty` @64). Every
+  name field ends at its first NUL; what follows is padding or garbage.
+- **Repeated node names.** A def's node list can repeat a name with different pointers. The second
+  and later copies are spelled `name~2`, `name~3` in `NodeList` and in every event that names
+  them, since events reach nodes by index.
+- **Sequences.** A 64-byte header (`name[32]`, `seq_state u8` 0 Initial / 3 OnCall,
+  `reset_state u8`, event bytes `u32` @60) and its events. The reset sequence's header is named
+  `RESET_SEQUENCE`, and the model keeps only its events.
+- **Event start.** An event whose start offset is Animation (1) and whose time is zero has no
+  start: `AnimEvent.StartOffset` is null. Any other pair is kept.
+- **Script pool.** All 28-byte headers first (`script_name_len u8` @8, `object_name_len u8` @9,
+  `spline_interp` @12, `frame_count` @16, `script_data_len` @20), then each script's two
+  NUL-terminated names and frames. A script's pool name is its source path without `.zan` and
+  the leading `..\`, backslashes as hyphens, then `-<object>.zan`; a repeated def or script name
+  becomes `stem-N.ext` with the first free N.
+
+**Reader rules and edge cases.**
+
+- **A non-finite delta reads as zero.** Where any component of a frame channel's `delta` is not
+  finite, all three read `+0`, the value the model has always held. Only the degenerate frame of
+  C5/M02 `carneypkup_cam.zan;camera1` has one (six `0xFFC00000` NaNs, translate and rotate). Its
+  spline blocks keep their NaN bits.
+- **A non-finite payload float reads as null**, the form JSON gives it. No shipped event has one.
+- **`VAL FAIL`** in the extraction's log marks a stored value the compiler's formula does not
+  reproduce, kept beside the inputs. `DELTA VAL FAIL` is an OBJECT_OPACITY_FROM_TO or
+  FBFX_COLOR_FROM_TO whose stored rate is not `(to - from) / run_time` (`opacity_delta`,
+  `alpha_delta`; 8 alpha events over the 61 archives, no opacity event). `INTERVAL VAL FAIL` is a PUFFER_STATE whose
+  interval type and value flags are not both set; the payload carries `interval_garbage` in
+  place of `interval`. The OBJECT_MOTION_FROM_TO channel deltas follow the same rule without a log
+  line (`translate_delta`, `rotate_delta`, `scale_delta`).
+- **`anim def duplicate anim ref`** marks a def whose anim-ref list names the same animation twice
+  in the LOCAL_NAME form (171 repeats in 115 defs over the 61 archives, the plane defs among them). Nothing in the
+  model reads the anim-ref list: CALL_ANIMATION carries its slot as a raw index.
+- **Event types never shipped** (EFFECT 3, OBJECT_CONNECTOR 18, CALL_OBJECT_CONNECTOR 19,
+  CAMERA_FROM_TO 21, FBFX_CSINWAVE_FROM_TO 37, ANIM_VERBOSE 39) are refused rather than guessed.

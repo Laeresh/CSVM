@@ -1,4 +1,3 @@
-using System.IO;
 using CSVM.Utils;
 using Godot;
 
@@ -34,19 +33,17 @@ public sealed partial class ImpactReticle : Control
     /// <summary>The pipper picture, <c>impact_point.png</c>.</summary>
     public Texture2D Texture => _texture;
 
-    /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
-    /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
-    /// so no colour-keying is needed, unlike the HUD font atlas.</summary>
-    public static Texture2D? LoadTexture(string rimageDir, string file)
+    /// <summary>Loads one picture of the <c>rimage</c> UI set as a texture (the reticle pipper);
+    /// null (with one log line) when the set lacks it. These images carry their own alpha, so no
+    /// colour-keying is needed, unlike the HUD font atlas.</summary>
+    public static Texture2D? LoadTexture(Mech3.TextureSet rimage, string name)
     {
-        var path = Path.Combine(rimageDir, file);
-        if (!File.Exists(path))
+        var texture = Mech3.HdArt.Rimage(rimage, name);
+        if (texture == null)
         {
-            Log.Info("flight", $"[reticle] no {file} in {rimageDir}, gun reticle off (extract the game data again on the Extract screen)");
-            return null;
+            Log.Info("flight", $"[reticle] no {name} in rimage, gun reticle off (no game install found, or it lacks rimage.zbd)");
         }
-        var img = Image.LoadFromFile(path);
-        return img != null ? Mech3.HdArt.Texture(path, img) : null;
+        return texture;
     }
 
     /// <summary>Builds the reticle over the loaded pipper texture and this player's camera. Add it to

@@ -18,8 +18,8 @@ public static class MilitiaPaint
     /// ("Sacred Trust Hellhound" keys "Sacred Trust" to <c>sactrust</c>). A militia/aircraft pair the
     /// install ships no def for is reached all the same, which is what paints a Sacred Trust
     /// Warhawk.</summary>
-    public static Dictionary<string, string> PatternByMilitia(string zrdrPath, Messages messages) =>
-        PatternByMilitia(Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+    public static Dictionary<string, string> PatternByMilitia(ZrdrSet zrdr, Messages messages) =>
+        PatternByMilitia(zrdr.LoadFile("vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape"), messages);
 
     /// <summary><see cref="PatternByMilitia(string, Messages)"/> over an already-parsed

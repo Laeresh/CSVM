@@ -412,6 +412,19 @@ halted mission has no load for the propeller to turn for. The strips and their l
 buttons where an Instant Action pause does rather than in the campaign's two columns. The
 `--menu=pauseboard-mp` door composes one with no match behind it.
 
+**Remake-only rule: a Dogfight pause stacks the row its strips cover under the row above it.** The
+strips' top row stands at y 510, over the blackboard's last band, where the `c` and `z` dialogs
+write their sixth instruction row and its point value at y 525. The load screen fits that row in
+its own band by shrinking it ([`loading-screen.md`](loading-screen.md)), but here the authored
+point itself is under the strips, so no face size fits it there. `LoadScreens.OnBoard` moves a
+column's lowest row whose first line reaches the strips to one 13-pixel pitch under the next row
+up in its column: y 458, at full size, under the one-line "Shoot down enemy planes" row, which
+rises half a pitch from 445 to 438 so the two read as two rows.
+The other placement, the row's own band above the strips at a shrunk face, would stand it on the
+chalk rule at about y 493; the stack moves the row and keeps its size. `escape.zrd`'s copies of
+these dialogs author no `wrap` on `OBJ3` and `OBJ4` either, so they take the 400 their dialog's
+blurb authors, as on the load screen.
+
 **The three authored faces meet one of ours.** The extraction ships no menu typeface, so
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette
 inks rather than three faces, which is the same mapping every other composed board takes

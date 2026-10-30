@@ -5,13 +5,12 @@ Read out of the retail executable with Ghidra (static analysis of the shipped x8
 from. No decompiler output is reproduced; addresses are given so any claim can be re-checked at
 source.
 
-**The question this page answers.** The engine fires the player's guns *one selected slot at a
-time* at the authored `FIRE_RATE` (8.0 for `wep_40`), alternating its two muzzles. A clip of the
-original firing 40-cal slugs gave a counter-derived "~12–13 rounds/s", which raised the worry
-that the original either fires two gun groups at once or double-rate. This page decodes the true
-round-emission model from the binary. Answer up front: **the original fires exactly one round per
-fire-tick from a single selected gun group at the authored `FIRE_RATE`; the engine's model is
-correct and is not under-firing by rate.** The clip's higher number was a redraw-window artifact.
+**The question this page answers.** How many rounds per second the player's selected gun group
+emits. Answer up front: **one round per fire-tick from the single selected group, paced by the
+plane's `weapons` tuple refire and never by the weapon's `FIRE_RATE`, and a twin-mounted group
+fires at half that refire.** A twin `wep_40` therefore fires about 18 rounds/s and a single one
+about 9, never the 8.0 its `FIRE_RATE` says. "The refire comes from the weapon slot, and a twin
+halves it" below has the addresses.
 
 ## One selected gun group, per-plane weapon defs
 
@@ -67,7 +66,7 @@ The per-frame fire update `FUN_004897c0` (the main weapon/AI tick) calls, for th
 ```
 FUN_004881e0(plane)   // fire-tick: spawn a round if the group is ready
 FUN_004b34f0()        // auto-fire selection / cooldown gate
-FUN_004b3e50()        // muzzle-flash / recoil timers
+FUN_004b3e50()        // the aim assist's per-barrel slot update (aim-assist.md)
 ```
 
 `FUN_004881e0` reads the trigger (input slot `0x13`, fire bits `0x3/0x4`), reconciles the armed
@@ -75,12 +74,40 @@ def (`+0x950`) with the selected group's def (re-arming if they differ, `FUN_004
 spawns a round: a **single** `FUN_00498850` call (disassembly `00488440`) and a **single** pass
 through the fire routine `FUN_004b6820` (`0048837e`, and `00489c0e`/`00489c2d` for the arm the
 trigger half raises). There is **no loop over barrels and no salvofire**, so one round leaves per
-fire-tick. The interval is gated by the group's counter, decremented
-elsewhere until it drops below the fire threshold seen in `FUN_004b34f0`
-(`plane + (group·3 + 0x13e)·4 < 1`).
+fire-tick. The gate is the armed weapon slot's next-fire time: the shot routine runs only when
+`[slot+0x10] <= DAT_0071c470`, the game time. How far ahead the routine sets that time is the
+next section.
 
-Consequently the effective rounds per second equals the authored `FIRE_RATE`, the same data the
-engine already reads (8.0 for `wep_40`). The two muzzle slots are visual/aim, not a doubled rate.
+## The refire comes from the weapon slot, and a twin halves it
+
+`FUN_004b6820` walks the plane's weapon-slot vector at `plane+0x268`, `0x30` bytes per slot, which
+`FUN_004b59b0` builds from the vehicle def's `weapons` 5-tuples
+`[id, rounds, refire_s, min_range_m, max_range_m]`: slot `+0x08` is the rounds, `+0x10` the
+next-fire time, `+0x14` the refire. For the player that list is `player_airplane`'s, the one
+block every player def inherits:
+
+| Gun | Tuple refire | Twin mount | Single mount | `FIRE_RATE` |
+|---|---|---|---|---|
+| `wep_3x` | 0.100 s | 20 /s | 10 /s | 8 |
+| `wep_4x` | 0.110 s | 18.2 /s | 9.1 /s | 8 |
+| `wep_5x` | 0.125 s | 16 /s | 8 /s | 7.5 |
+| `wep_6x` | 0.143 s | 14 /s | 7 /s | 7 |
+| `wep_7x` | 0.166 s | 12 /s | 6 /s | 6 |
+
+After a shot the routine sets next-fire to `now + [slot+0x14]` (`0x004b6b2d`–`0x004b6b36`). If
+the group's other barrel slot (`plane+0x3a4 + (group·2 + toggle^1)·0x24`) has a live handle and
+its flag byte set, it takes `0.5 × [slot+0x14]` back off (`0x004b6d26`–`0x004b6d32`, the constant
+at `0x006032e0`), then flips the barrel toggle `+0x4c4`. `FIRE_RATE` is parsed into the weapon
+def's `+0x14` (`1/x` at `0x005adcc9`) and plays no part in this. Both rates are the limit at a high
+frame rate: the next-fire time is set from the current time and tested once per tick, so a
+twin `wep_4x` at 30 or 60 fps fires about 15 /s.
+
+**Which barrels are flagged is the hangar's twin choice.** `FUN_00443de0` copies bit `1 << group`
+of the plane record's byte `+0x84` into `DAT_0062ae58[group]`, and `FUN_004b24d0` hands it to
+`FUN_004b2550` as its last argument. Set, both barrels are flagged; clear, only one is, on the side
+the earlier groups use less, and the group's ammo is recomputed. CSVM paces a gun group by
+`GunGroup.RefireSeconds` (`Loadout.ApplyGunRefire`, from `PlaneStats.GunRefireSeconds`) and halves
+it when the group has two muzzles (`FireControl.StepGuns`).
 
 ## The firing sound plays from the aircraft's own position, not from a muzzle
 
@@ -166,27 +193,25 @@ The second play in the same block (`0x0041f741`) is the `cannon_sound` one: the 
 the weapon's `CANNON` flag. No shipped vehicle def authors `cannon_sound`, so it never fires here
 either.
 
-## The two barrels are muzzle-flash / assist, not a rate doubler
+## The two barrels alternate, one round per tick
 
-Each gun group still has two barrel slots:
-`FUN_004b3e50` iterates **4 groups × 2 barrels** at `plane + 0x3b8 + i·0x24` (the same
-`+0x3a4 + i·0x24` slot array the aim-assist half reads for its "two barrel slots",
-[`aim-assist.md`](aim-assist.md)). It updates muzzle-flash/recoil timers
-(`_DAT_0071c45c + counter < DAT_0071c470` → reset), visuals for a two-muzzle gun, matching the
-engine's alternating muzzles at the *same total* rate. They do not emit a second projectile.
+Each gun group has two barrel slots at `plane + 0x3a4 + i·0x24`, indexed `group·2 + toggle`. A
+tick emits one round from the barrel the toggle names, and the toggle flips after it, so a twin
+mount's two barrels each fire once per tuple refire while the group as a whole fires twice.
+`FUN_004b3e50`, which iterates the same 4 × 2 slots, is the aim assist's forget timer and catch-up
+([`aim-assist.md`](aim-assist.md)), not a muzzle-flash timer.
 
-## Why the clip read "~12–13/s" and why that is wrong
+## What the 40-cal clip's counter shows
 
-The clip's counter dropped **46 rounds** (2371→2325). At the true `FIRE_RATE` 8.0/s that is a
-~5.75 s burst. The motion-redraw window the earlier analysis used to time the burst only captured
-~4.5 s (frames 113–247 at 30 fps), the redraw detector under-bounds the firing, and dividing the
-46-counter by shorter windows inflates the rate (46/4.5 ≈ 10.2; the "12–13" figure came from an even
-narrower window). This is the same redraw-artifact trap `FINDINGS.md` already flagged. The engine's
-8.0/s is the correct rate; there is no rate shortfall to fix.
+The clip's counter dropped **46 rounds** (2371→2325) over a burst the motion-redraw window bounds
+from below at ~4.5 s (frames 113–247 at 30 fps), so the clip fired at most about 10 rounds/s. That
+fits a single-mounted `wep_40` (9.1 /s, about 7.5 /s at 30 fps) and not a twin one (about 15 /s at
+30 fps). Which mount the clip's plane carried is not recorded; the "12–13" figure came from an even
+narrower window and is the redraw artifact `FINDINGS.md` flags.
 
 ## Implication for the gun-rattle amplitude
 
-With rate ruled out, the remaining amplitude avenue, the "(B) 60 fps pose-interpolation"
+The remaining amplitude avenue, the "(B) 60 fps pose-interpolation"
 loss, is also ruled out and replaced by a **decode, clip-independent** finding: the shake pivot
 is written once per 60 Hz physics tick and Godot auto physics interpolation is OFF, so the 15 Hz
 sawtooth renders stepped with no smoothing loss. After that, what the engine renders is fully

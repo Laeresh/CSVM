@@ -48,10 +48,10 @@ internal static class ModeTargetTableSuites
         + "and the binding rule itself, which a campaign launch flying without a director passes")]
     internal static void ModeTargetTable(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
 
         var report = new StringBuilder();
         Mode(ctx, messages, report, "IA1", NoKeys, new[] { RadioTower });
@@ -100,9 +100,9 @@ internal static class ModeTargetTableSuites
     private static void Mode(TestContext ctx, Messages messages, StringBuilder report,
         string mission, IReadOnlyList<string> objectives, IReadOnlyList<string> others)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{mission} zrdr");
-        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter));
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(Chapter));
 
         ctx.WithWorld(Chapter, collision: false, mission, world =>
         {

@@ -71,8 +71,8 @@ internal static class MenuHangarSuites
         + "five, and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -85,12 +85,12 @@ internal static class MenuHangarSuites
         var registry = new PresentationRegistry();
         var store = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-hangar");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = store,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         string scratch = ScratchName();
         ctx.Check(store.List().Count == 0, $"the suite's scratch store starts empty ({store.List().Count})");

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using CSVM.Extraction;
 
 namespace CSVM.UI.Menu;
 
@@ -230,11 +231,10 @@ public sealed record MenuLayoutEdge(string From, string Widget, string To, strin
 public sealed record MenuLayoutAsset(string Path, string Kind, string Script, bool Present);
 
 /// <summary>
-/// The runtime reader of <c>extracted/rof/menu_layout.json</c>, the decoded menu layout the
-/// extractor emits: screens, widgets, navigation, script-named assets and the type table that
-/// says how each field reads. It parses the artifact and nothing else; the format analysis
-/// stays in the extractor, and a tree extracted before the decode existed is caught by the
-/// extraction stamp rather than read as an empty layout.
+/// The runtime reader of <c>menu_layout.json</c>, which <see cref="MenuLayoutDecoder"/> makes from
+/// the UI archive. It holds screens, widgets, navigation, script-named assets and the type table
+/// that says how each field reads. It parses the artifact and nothing else; the format analysis
+/// stays in the decoder.
 /// </summary>
 public sealed class MenuLayout
 {
@@ -285,29 +285,25 @@ public sealed class MenuLayout
     /// <summary>Art the layout names that the extraction does not carry.</summary>
     public IReadOnlyList<string> MissingArt { get; }
 
-    /// <summary>Where the artifact sits under a data root.</summary>
-    public static string PathUnder(string dataRoot) =>
-        Path.Combine(dataRoot, "extracted", "rof", "menu_layout.json");
-
-    /// <summary>Reads the artifact at <paramref name="path"/>. Null, with a reason, when the file
-    /// is absent or does not parse; a caller falls back on the reason rather than on an empty
-    /// layout.</summary>
-    public static MenuLayout? TryLoad(string path, out string? reason)
+    /// <summary>Reads the artifact in the game files bound to <paramref name="dataRoot"/>
+    /// (<see cref="RofFiles.MenuLayoutFile"/>). Null, with a reason, when it is absent or does not
+    /// parse; a caller falls back on the reason rather than on an empty layout.</summary>
+    public static MenuLayout? TryLoad(string dataRoot, out string? reason)
     {
         reason = null;
-        if (!File.Exists(path))
-        {
-            reason = $"no decoded menu layout at {path}";
-            return null;
-        }
-
         try
         {
-            return Parse(File.ReadAllText(path));
+            if (RofFiles.For(dataRoot).Text(RofFiles.MenuLayoutFile) is not { } json)
+            {
+                reason = $"no decoded menu layout ({RofFiles.MenuLayoutFile}) in the game files for {dataRoot}";
+                return null;
+            }
+
+            return Parse(json);
         }
         catch (Exception e) when (e is JsonException or IOException or InvalidDataException or FormatException)
         {
-            reason = $"menu layout unreadable at {path}: {e.GetType().Name}: {e.Message}";
+            reason = $"{RofFiles.MenuLayoutFile} unreadable for {dataRoot}: {e.GetType().Name}: {e.Message}";
             return null;
         }
     }

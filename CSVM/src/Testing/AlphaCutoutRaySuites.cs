@@ -47,8 +47,8 @@ internal static class AlphaCutoutRaySuites
         + "g482 run through the production cover ray down to each of hydrogentank1..4")]
     internal static void AlphaCutoutRayCensus(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
 
@@ -213,7 +213,7 @@ internal static class AlphaCutoutRaySuites
 
         // The pool is here only to run its own cover predicate; it is never added to the tree and
         // fires nothing, so the archive is the cheapest one that satisfies its constructor.
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(Chapter));
         var pool = new ProjectilePool(textures, null, null);
         try
         {
@@ -252,7 +252,7 @@ internal static class AlphaCutoutRaySuites
         PhysicsDirectSpaceState3D space, Vector3 burst, Vector3 normal,
         List<(string Name, Vector3 Centre, Aabb Box, Rid Rid)> tanks, StringBuilder report)
     {
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (!weapons.TryGet(Rocket, out var rocket) || rocket.ImpactProximity is not > 0f)
         {
             ctx.Check(false, $"{Rocket} carries an IMPACT_PROXIMITY to gather at");

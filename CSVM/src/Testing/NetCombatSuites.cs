@@ -104,7 +104,7 @@ internal static class NetCombatSuites
         // a broken rule. The lossy link is asserted on in net-aircraft-replication.
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(4211));
         var roster = Roster(2, spec);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f);
         if (gun == null)
         {
@@ -437,10 +437,10 @@ internal static class NetCombatSuites
     internal static SessionSpec MatchSpec(TestContext ctx, out IReadOnlyList<SpawnPoint> table,
         params string[] extraArgs)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         var args = new List<string> { "--vs" };
         args.AddRange(Arena(ctx));
         args.AddRange(new[] { "--players=1", "--mute", "--no-pads" });
@@ -462,8 +462,8 @@ internal static class NetCombatSuites
     // names the arena in the report. A mode with its own map names it, as Capture the Flag does MP2.
     internal static string[] Arena(TestContext ctx, bool gateChapterGamez = true, string mission = MpMission)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, mission);
-        if (!System.IO.File.Exists(missionZrdr) && !System.IO.Directory.Exists(missionZrdr))
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, mission);
+        if (!missionZrdr.Exists)
         {
             ctx.Note($"arena: --stage=empty and its spawn ring, the data root carries no {ctx.Chapter}/{mission}");
             return new[] { "--stage=empty" };
@@ -471,7 +471,7 @@ internal static class NetCombatSuites
 
         if (gateChapterGamez)
         {
-            ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+            ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         }
 
         ctx.Note($"arena: {ctx.Chapter}/{mission} and its net.zrd table");
@@ -536,7 +536,7 @@ internal static class NetCombatSuites
             pair.Under == null ? new[] { pair.Top } : new[] { pair.Top, pair.Under };
         var want = Lines(worded);
         // The victim's own crash notice is the ground impact's line, not the kill's, and is left out.
-        string crash = Messages.Load(ctx.MessagesPath).Get(HudMessages.CrashKey);
+        string crash = ctx.Data.Messages.Get(HudMessages.CrashKey);
         string[] Read(HudMessages? stack) => stack == null
             ? new[] { "no stack" }
             : Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt)
@@ -1450,7 +1450,7 @@ internal static class NetCombatSuites
         // Both machines score with the values player.zrd authors, which the shipped file sets apart
         // from the executable's fallbacks.
         var scores = host.Dogfight!.Match.Scores;
-        var authored = MatchScores.Load(ctx.ZrdrPath);
+        var authored = MatchScores.Load(ctx.Zrdr);
         ctx.Check(scores == authored && guest.Dogfight!.Match.Scores == authored,
             $"both sessions score with player.zrd's values ({scores})");
         ctx.Check(authored != MatchScores.Fallback,
@@ -1528,7 +1528,7 @@ internal static class NetCombatSuites
         rig.Damage!.WholeArmor + rig.Damage.WholeHealth;
 
     // Two kills' worth of player.zrd's score_kill, so one seat reaches it off two real deaths.
-    private static int HostKillTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.ZrdrPath).Kill;
+    private static int HostKillTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.Zrdr).Kill;
 
     private static bool Matches(VersusMatch match, int seat, (int Score, int Deaths, int Kills) want) =>
         match.ScoreOf(seat) == want.Score && match.DeathsOf(seat) == want.Deaths
@@ -1621,7 +1621,7 @@ internal static class NetCombatSuites
 
         private MatchWording(Messages rows) => _rows = rows;
 
-        internal static MatchWording Read(TestContext ctx) => new(Messages.Load(ctx.MessagesPath));
+        internal static MatchWording Read(TestContext ctx) => new(ctx.Data.Messages);
 
         internal string Row(string key) => _rows.Get(key);
 
@@ -1668,13 +1668,8 @@ internal static class NetCombatSuites
             ctx.Host.AddChild(pane);
             var paths = new BasePaths(
                 RepoRoot: ctx.RepoRoot,
-                DataRoot: ctx.DataRoot,
-                PlanesGamezPath: ctx.PlanesGamezPath,
-                ZrdrPath: ctx.ZrdrPath,
-                SoundsPath: ctx.SoundsPath,
-                InterpPath: ctx.InterpPath,
-                MessagesPath: ctx.MessagesPath,
-                RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                DataRoot: ctx.DataRoot)
+            { Game = ctx.Game, Data = ctx.Data };
             var session = new GameSession(spec, new LauncherContext
             {
                 Decode = ctx.Decode,

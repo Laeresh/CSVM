@@ -149,6 +149,7 @@ public sealed class StockLoadouts
                         Caliber = Int(g, "caliber"),
                         Ammo = Str(g, "ammo"),
                         Turret = g.TryGetProperty("turret", out var t) && t.ValueKind == JsonValueKind.True,
+                        Single = g.TryGetProperty("twin", out var tw) && tw.ValueKind == JsonValueKind.False,
                         // A weapon outside the caliber matrix is named outright (docs/formats/loadouts.md).
                         WeaponId = g.TryGetProperty("weapon", out var w) && w.ValueKind == JsonValueKind.String
                             ? w.GetString()
@@ -235,6 +236,12 @@ public sealed class GunSpec
     public List<string> Markers = new();
     public bool Turret;           // an AI turret slot, parsed but built inert
 
+    /// <summary>The hangar's twin bit clear: one barrel of the pair. The group carries half its
+    /// <c>CLUSTER_SIZE</c> (<c>FUN_004b2550</c>), and a turret fires at the whole refire, not half
+    /// (<c>FUN_004aab00</c>). Every stock fixed gun is twin; <c>stock_loadouts.json</c> marks the
+    /// single turrets <c>"twin": false</c>.</summary>
+    public bool Single;
+
     /// <summary>The weapon id outright, bypassing <see cref="Caliber"/> + <see cref="Ammo"/>. An AI
     /// def names its gun as a <c>wep_NN</c> and never as a caliber (<see cref="Loadout.BindAi"/>).</summary>
     public string? WeaponId;
@@ -281,6 +288,10 @@ public sealed class Loadout
     /// <summary>A wingman pylon's refire interval, seconds: the builder's ordnance literal, which
     /// stands in for the 30 s a militia def authors (docs/org/aiPilot/aiWeapons.md).</summary>
     public const float WingmanOrdnanceRefireS = 20f;
+
+    /// <summary>A wingman gun's refire, seconds: the same builder's cannon literal, doubled for a
+    /// single mount. The fire routine then halves it again for a gun with both barrels.</summary>
+    public const float WingmanGunRefireS = 0.5f;
 
     /// <summary>The original's hardpoint fill order, decoded from its stock loadout table: a fit
     /// of fewer than 8 pylons leaves physical gaps rather than filling pylon1..N contiguously.
@@ -411,7 +422,8 @@ public sealed class Loadout
             {
                 muzzles.Add(Resolve(markerNodes, name, def, $"slot {spec.Slot} ({spec.Mount})"));
             }
-            int capacity = spec.Rounds ?? weapon.ClusterSize ?? 0;
+            int cluster = weapon.ClusterSize ?? 0;
+            int capacity = spec.Rounds ?? (spec.Single ? (int)(cluster * 0.5f) : cluster);
             guns.Add(new GunGroup
             {
                 Slot = spec.Slot,
@@ -421,6 +433,7 @@ public sealed class Loadout
                 Capacity = capacity,
                 Ammo = capacity,
                 IsTurret = spec.Turret,
+                Single = spec.Single,
             });
         }
 
@@ -496,10 +509,11 @@ public sealed class Loadout
                     $"ai loadout {defName}: weapon '{slot.WeaponId}' not in weapons.json");
             if (weapon.IsGun)
             {
-                // One group over every firepoint the rig carries: the original's AI fires its
-                // airframe's gun mount, and the tuple counts rounds for the weapon, not per barrel.
+                // The original's AI fires gun group 0, whose barrels are firepoints 7 and 8
+                // (FUN_00476250 at 0x0047696b). A rig without firepoint 7 fires over every
+                // firepoint it carries. The tuple counts rounds for the weapon, not per barrel.
                 var markers = new List<string>();
-                foreach (int ord in firepoints)
+                foreach (int ord in firepoints.Contains(7) ? firepoints.Where(o => o >= 7) : firepoints)
                     markers.Add($"firepoint{ord}");
                 if (markers.Count == 0)
                     continue; // an airframe with no firepoints carries no gun to bind
@@ -565,6 +579,7 @@ public sealed class Loadout
         {
             gun.MinRangeM = WingmanMinRangeM;
             gun.MaxRangeM = WingmanMaxRangeM;
+            gun.RefireSeconds = gun.Single ? 2f * WingmanGunRefireS : WingmanGunRefireS;
         }
 
         foreach (var hardpoint in loadout.Hardpoints)
@@ -585,6 +600,20 @@ public sealed class Loadout
     /// difference. Binds through the same <see cref="Bind"/> every other loadout uses.</summary>
     public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock) =>
         Bind(RigDef(CollectMarkers(plane).Keys, stock), plane, weapons);
+
+    /// <summary>Paces each gun group by the player chain's <c>weapons</c> tuple for its weapon
+    /// (<see cref="PlaneStats.GunRefireSeconds"/>). The original's fire routine reads the refire
+    /// from that slot and never from the weapon's <c>FIRE_RATE</c> (docs/org/weaponFire.md).</summary>
+    public void ApplyGunRefire(IReadOnlyDictionary<string, float> refire)
+    {
+        foreach (var gun in Guns)
+        {
+            if (refire.TryGetValue(gun.Weapon.Id, out float seconds))
+            {
+                gun.RefireSeconds = seconds;
+            }
+        }
+    }
 
     /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
     /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
@@ -755,15 +784,19 @@ public sealed class GunGroup : IGunSlot
     public string Mount = "";
     public IReadOnlyList<Node3D> Muzzles = Array.Empty<Node3D>();
     public bool IsTurret;
+    public bool Single;           // GunSpec.Single: one barrel, half load, a turret's whole refire
 
-    /// <summary>The engagement window and refire interval this slot's AI def authored, metres and
-    /// seconds; all three 0 on a fit from <c>stock_loadouts.json</c>, which authors none and leaves
-    /// the AI gates on their own defaults (<see cref="Loadout.BindAi"/>).</summary>
+    /// <summary>The engagement window this slot's AI def authored, metres (<see cref="Loadout.BindAi"/>).
+    /// Both are 0 on a <c>stock_loadouts.json</c> fit, which leaves the AI gates on their defaults.</summary>
     public float MinRangeM;
 
     public float MaxRangeM;
 
-    public float RefireSeconds;
+    /// <summary>The slot's refire, seconds, which <see cref="FireControl"/> halves for two muzzles.
+    /// It is the AI def's tuple (<see cref="Loadout.BindAi"/>), the wingman builder's literal
+    /// (<see cref="Loadout.BindWingman"/>) or the player chain's tuple
+    /// (<see cref="Loadout.ApplyGunRefire"/>). A 0 falls back to the weapon's <c>FIRE_RATE</c>.</summary>
+    public float RefireSeconds { get; set; }
 
     public WeaponDef Weapon { get; set; } = null!;
 

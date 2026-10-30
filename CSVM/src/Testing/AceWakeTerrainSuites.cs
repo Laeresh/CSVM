@@ -45,10 +45,10 @@ internal static class AceWakeTerrainSuites
         "descent to the under-map backstop")]
     internal static void AceWakeTerrain(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
@@ -70,8 +70,8 @@ internal static class AceWakeTerrainSuites
         report.AppendLine($"{AceBlock} authored at ({ace.Pos.X:0.00}, {ace.Pos.Y:0.00}, {ace.Pos.Z:0.00}) yaw {ace.YawDeg:0}");
         report.AppendLine($"{PlayerBlock} authored at ({player.Pos.X:0}, {player.Pos.Y:0}, {player.Pos.Z:0}); wake range {wakeRangeM:0} m");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var planesGamez = ctx.Planes;
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         string plane = ctx.PlaneName;
         if (defs.DefForBlock(AceBlock) is { } aceDef && defs.AirframeFor(aceDef) is { } airframe)
             plane = airframe.PlaneNode;
@@ -84,12 +84,12 @@ internal static class AceWakeTerrainSuites
         ctx.Note($"{Chapter}/{Mission}: the ace is authored under the terrain sheet and flies out of it, the surface over it being solid from above alone");
     }
 
-    private static void Drive(TestContext ctx, GameZ planesGamez, string texturesPath, string plane,
+    private static void Drive(TestContext ctx, GameZ planesGamez, TextureSet texturesPath, string plane,
         (Vector3 Pos, float YawDeg) ace, (Vector3 Pos, float YawDeg) player, float wakeRangeM,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, plane);
+        var stats = PlaneStats.Load(ctx.Zrdr, plane);
         var humans = new List<Vector3> { player.Pos };
         FlightController? far = null;
         FlightController? near = null;

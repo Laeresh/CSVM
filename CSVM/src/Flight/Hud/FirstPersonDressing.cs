@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
 using Godot;
@@ -38,9 +37,9 @@ public sealed class FirstPersonDressing
     /// returned it, or a flat body cockpit's transplanted panel (<see cref="Body"/>).</summary>
     public Node3D? Interior { get; set; }
 
-    /// <summary>A flat body cockpit as the pass draws it: the eye (the <c>cockpit_camera</c> marker) and the body's
-    /// twins under the panel (<see cref="Mech3.PlaneBuilder.FlatBody"/>). Null for every other cockpit.</summary>
-    public (Vector3 Eye, IReadOnlyList<(MeshInstance3D Original, MeshInstance3D Twin)> Twins)? Body { get; set; }
+    /// <summary>A flat body cockpit as the pass draws it, its twins under the panel
+    /// (<see cref="Mech3.PlaneBuilder.FlatBody"/>). Null for every other cockpit.</summary>
+    public Mech3.FlatBodyTwins? Body { get; set; }
 
     /// <summary>The interior's own render pass, which takes <see cref="Interior"/> out of the plane
     /// model and draws it at the origin. Null under <c>--no-cockpit-pass</c>, when the interior

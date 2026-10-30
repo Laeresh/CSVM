@@ -114,7 +114,7 @@ public class PufferTimeIntervalTests
     {
         // The reader front-end's PUFFER_STATE normalizer dropped DISTANCE_INTERVAL, which left the
         // event with no interval at all; unauthored now means 1 s, so the metres have to survive.
-        var defs = AnimDefs.LoadArchive(TestData.Fixture("zrdr"));
+        var defs = AnimDefs.LoadArchive(TestZrdr.Fixture("zrdr"));
         var puffer = defs.Find(d => d.Name == "probe_tower")!
             .Sequences.Find(s => s.Name == "probe_spin")!
             .Events.Find(e => e.Kind == "PufferState")!.Data;

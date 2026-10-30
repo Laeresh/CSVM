@@ -12,7 +12,7 @@ namespace CSVM.Tests;
 /// The plane wobble as the original renders it (<c>docs/org/shakes.md</c>). Seven component
 /// blocks each take a random velocity kick (pitch and yaw ×1.2, roll ×2.5) and integrate it at a
 /// 1/150 s substep. Their sum turns the node as a rotation vector at twice its length, in YXZ.
-/// Input is <c>fixtures/zrdr/shakes.json</c>, probe values under the real source ids. Expected
+/// Input is <c>fixtures/zrdr/shakes.zrd.json</c>, probe values under the real source ids. Expected
 /// kicks replay the seeded <see cref="Random"/> the shake draws from, so each pin is hand-computed.
 /// </summary>
 public class PlaneShakeTests
@@ -378,7 +378,7 @@ public class PlaneShakeTests
     private static PlaneShake NewShake() => NewShake(seed: 1);
 
     private static PlaneShake NewShake(int seed) =>
-        new(ShakeDefs.Load(TestData.Fixture("zrdr")), new Random(seed));
+        new(ShakeDefs.Load(TestZrdr.Fixture("zrdr")), new Random(seed));
 
     // The velocity triple one kick of `step` adds, from the stream the shake was seeded with.
     // Three uniform draws: pitch and yaw weighted 1.2 and roll 2.5, in that order.

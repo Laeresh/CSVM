@@ -253,16 +253,10 @@ public class MenuLayoutDecoderTests
         Assert.Equal("art", button.Kinds[button.Fields.IndexOf("ArtPath")]);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheInstallsOwnLayoutDecodesToItsDocumentedCensus()
     {
-        var rof = Path.Combine(TestData.ExtractedRoot!, "rof");
-        if (!File.Exists(Path.Combine(rof, "ASSETS", "LAYOUT.CSV")))
-        {
-            return;
-        }
-
-        var doc = MenuLayoutDecoder.Decode(MenuLayoutDecoder.ReadTree(rof, new Dictionary<int, string>()));
+        var doc = MenuLayoutDecoder.Decode(MenuLayoutDecoder.ReadTree(RofFiles.Open(GameFilesData.Source), new Dictionary<int, string>()));
         var counts = doc.Counts.ToDictionary(c => c.Name, c => c.Value);
 
         Assert.Equal(34, counts["screens"]);
@@ -271,12 +265,9 @@ public class MenuLayoutDecoderTests
         Assert.Equal(0, counts["macrosUnresolved"]);
         Assert.Equal(46, counts["navigationEdges"]);
         Assert.Equal(124, counts["artReferences"]);
-        // The archive carries no backdrop movie: the two the layout names sit loose in the install
-        // and reach the tree only when the extraction copies them in, so this count is whichever
-        // of them is still absent, 2 before that step and 0 after it.
-        string mpg = Path.Combine(rof, "ASSETS", "GRAPHICS", "MPG");
-        string[] movies = { "CrimFlag.MPG", "Final.MPG" };
-        Assert.Equal(movies.Count(m => !File.Exists(Path.Combine(mpg, m))), counts["artMissing"]);
+        // The archive carries no backdrop movie; the two the layout names sit loose in the install,
+        // which the view holds beside the members.
+        Assert.Equal(0, counts["artMissing"]);
         Assert.Equal(152, counts["stringSymbols"]);
         Assert.Equal(461, counts["scrapbookEntries"]);
     }

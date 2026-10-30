@@ -142,15 +142,15 @@ internal static class CampaignRosterSuites
         + "the wingman-station leash")]
     internal static void CampaignRoster(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RosterChapter, RosterMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RosterChapter, RosterMission);
         ctx.RequireData(missionZrdr, $"{RosterChapter}/{RosterMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, RosterChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(RosterChapter);
         ctx.RequireData(texturesPath, $"{RosterChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(RosterChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(RosterMission, StringComparison.OrdinalIgnoreCase))
@@ -164,8 +164,8 @@ internal static class CampaignRosterSuites
         }
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         var report = new StringBuilder();
@@ -185,7 +185,7 @@ internal static class CampaignRosterSuites
                 // The human rig at the player block's own pose: a scripted leader, as the
                 // wingman-station suite's is.
                 var playerPose = PlayerPose(blocks);
-                var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var playerStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
                 var player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
                     playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
                     pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
@@ -194,9 +194,9 @@ internal static class CampaignRosterSuites
                 int shooterId = FlightRoster.ShooterIdBase + 1;
                 string what = director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, RosterChapter),
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = ctx.ChapterZrdr(RosterChapter),
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     Player = () => player,
                     NetTrailers = new NetTrailerTargets(
@@ -225,7 +225,7 @@ internal static class CampaignRosterSuites
                 report.AppendLine($"build summary suffix: '{what}'");
 
                 var roster = director.Roster;
-                var vehicleDefs = VehicleDefs.Load(ctx.ZrdrPath);
+                var vehicleDefs = VehicleDefs.Load(ctx.Zrdr);
                 int expectedRoster = 0;
                 int builtDead = 0;
                 foreach (var (name, fields) in blocks)
@@ -283,15 +283,15 @@ internal static class CampaignRosterSuites
         + "unattributed one reach neither")]
     internal static void CampaignKillCredit(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BomberChapter, BomberMission);
         ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BomberChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BomberChapter);
         ctx.RequireData(texturesPath, $"{BomberChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(BomberChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(BomberMission, StringComparison.OrdinalIgnoreCase))
@@ -305,8 +305,8 @@ internal static class CampaignRosterSuites
         }
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         var report = new StringBuilder();
@@ -325,7 +325,7 @@ internal static class CampaignRosterSuites
                 ctx.Host.AddChild(live);
 
                 var playerPose = PlayerPose(blocks);
-                var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var playerStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
                 player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
                     playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
                     pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
@@ -340,9 +340,9 @@ internal static class CampaignRosterSuites
                 int shooterId = FlightRoster.ShooterIdBase + 1;
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, BomberChapter),
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = ctx.ChapterZrdr(BomberChapter),
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     Player = () => human,
                     NetTrailers = new NetTrailerTargets(
@@ -429,17 +429,17 @@ internal static class CampaignRosterSuites
         + "role takes the human rig over a nearer aircraft")]
     internal static void RosterSpawnNames(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
         ctx.RequireData(texturesPath, $"{BiasChapter} textures");
 
         var plan = CampaignRosterPlan.Build(
             AiSkills.LoadRoster(missionZrdr),
-            VehicleDefs.Load(ctx.ZrdrPath),
-            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, BiasChapter)),
+            VehicleDefs.Load(ctx.Zrdr),
+            AiNets.Load(ctx.ChapterZrdr(BiasChapter)),
             netDraw: _ => 0);
         var excluding = PlanNamed(plan, ExcludingBlock);
         var excluded = PlanNamed(plan, ExcludedBlock);
@@ -482,7 +482,7 @@ internal static class CampaignRosterSuites
         var report = new StringBuilder();
         report.AppendLine($"{BiasChapter}/{BiasMission}: {plan.Spawns.Count} planned block(s)");
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? human = null;
@@ -524,7 +524,7 @@ internal static class CampaignRosterSuites
             // BL-493: the block's own pilot name (aiv slot 20) is what the original's readout
             // prints, and it outranks the airframe title. The plain block authors none, so the two
             // sources are told apart in one run rather than agreeing by accident.
-            var strings = Messages.Load(ctx.MessagesPath);
+            var strings = ctx.Data.Messages;
             string aceName = PlaneRoster.PlaneDisplayName(aceRig.Stats!);
             string plainName = PlaneRoster.PlaneDisplayName(plainRig.Stats!);
             string wingName = PlaneRoster.PlaneDisplayName(wingRig.Stats!);
@@ -602,7 +602,7 @@ internal static class CampaignRosterSuites
             // Arm two, the player role. bloodhawk_2's own always-target is authored against
             // "player", which no human rig is NAMED (HumanFlightAdapter builds player1), so only
             // the role resolution can carry it. The shooter changes sides to be that ace.
-            var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var playerStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             var humanPos = origin + (fwd * FarRingM);
             human = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName, humanPos,
                 humanPos + fwd, human: true, pilot: null, FlightRoster.ShooterIdBase + 50,
@@ -657,17 +657,17 @@ internal static class CampaignRosterSuites
         + "own side keeps its authored dead eye of 1")]
     internal static void RosterSkillDifficulty(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
         ctx.RequireData(texturesPath, $"{BiasChapter} textures");
 
         var plans = CampaignRosterPlan.Build(
             AiSkills.LoadRoster(missionZrdr),
-            VehicleDefs.Load(ctx.ZrdrPath),
-            AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, BiasChapter)),
+            VehicleDefs.Load(ctx.Zrdr),
+            AiNets.Load(ctx.ChapterZrdr(BiasChapter)),
             netDraw: _ => 0);
         var acePlan = PlanNamed(plans, SkillAceBlock);
         var plainPlan = PlanNamed(plans, SkillPlainBlock);
@@ -689,8 +689,8 @@ internal static class CampaignRosterSuites
             && friendPlan.Skills.DeadEye == FriendDeadEye,
             $"the three blocks author ace natural-touch/dead-eye, plain natural-touch/steady-hand and friendly dead-eye as {authored}");
 
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
@@ -752,16 +752,16 @@ internal static class CampaignRosterSuites
         + "authored rating on their own curve rather than the session's rating-5 fallback")]
     internal static void RosterVoiceRatings(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, VoiceChapter, VoiceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(VoiceChapter, VoiceMission);
         ctx.RequireData(missionZrdr, $"{VoiceChapter}/{VoiceMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(VoiceChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(VoiceMission, StringComparison.OrdinalIgnoreCase))
@@ -774,16 +774,16 @@ internal static class CampaignRosterSuites
             throw new SuiteSkippedException($"{VoiceChapter}/{VoiceMission} is not in cm_sequence");
         }
 
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        var planesGamez = ctx.Planes;
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
+        var soundGroups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.Zrdr));
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
@@ -826,9 +826,9 @@ internal static class CampaignRosterSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, VoiceChapter),
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = ctx.ChapterZrdr(VoiceChapter),
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 NetTrailers = new NetTrailerTargets(() => null, _ => null),
                 Spawn = (plan, pos, look, pilot) =>
@@ -892,16 +892,16 @@ internal static class CampaignRosterSuites
         + "mission radio's flat Voice-bus player, building no positional one-shot")]
     internal static void AiVoiceMission(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BiasChapter, BiasMission);
         ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BiasChapter);
         ctx.RequireData(texturesPath, $"{BiasChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(BiasChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(BiasMission, StringComparison.OrdinalIgnoreCase))
@@ -915,16 +915,16 @@ internal static class CampaignRosterSuites
         }
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        var planesGamez = ctx.Planes;
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
+        var soundGroups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.Zrdr));
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
@@ -946,7 +946,7 @@ internal static class CampaignRosterSuites
                 Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
             };
             ctx.Host.AddChild(sounds);
-            sounds.Prewarm(CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, soundDefs, soundGroups));
+            sounds.Prewarm(CombatVoice.SessionPrewarmNames(ctx.Zrdr, missionZrdr, soundDefs, soundGroups));
             sounds.Loader = null;
 
             radio = new MissionRadio(soundDefs, soundGroups, sounds.StreamFor);
@@ -955,7 +955,7 @@ internal static class CampaignRosterSuites
             ctx.Host.AddChild(runtime);
 
             var playerPose = PlayerPose(blocks);
-            var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var playerStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
                 playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
                 pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
@@ -975,9 +975,9 @@ internal static class CampaignRosterSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, BiasChapter),
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = ctx.ChapterZrdr(BiasChapter),
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(() => human.WorldPosition, _ => null),
@@ -1096,20 +1096,20 @@ internal static class CampaignRosterSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             // The string table the assembler resolves a spawn's authored name through. Without it
             // every rig falls back to the def-name derivation and the name checks pass vacuously.
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             null!, ctx.Host, resources,
             new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
             new HumanRosterBindings());
@@ -1159,15 +1159,15 @@ internal static class CampaignRosterSuites
     private static StringBuilder WithBomberRoster(TestContext ctx, bool collision,
         Action<CampaignDirector, List<FlightController>, ProjectilePool, StringBuilder> flight)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BomberChapter, BomberMission);
         ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BomberChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BomberChapter);
         ctx.RequireData(texturesPath, $"{BomberChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(BomberChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(BomberMission, StringComparison.OrdinalIgnoreCase))
@@ -1181,8 +1181,8 @@ internal static class CampaignRosterSuites
         }
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         var report = new StringBuilder();
@@ -1203,7 +1203,7 @@ internal static class CampaignRosterSuites
                 spawner = Spawner(ctx, planesGamez, textures, live);
 
                 var playerPose = PlayerPose(blocks);
-                var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var playerStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
                 player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
                     playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
                     pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
@@ -1211,9 +1211,9 @@ internal static class CampaignRosterSuites
                 var human = player;
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, BomberChapter),
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = ctx.ChapterZrdr(BomberChapter),
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     Player = () => human,
                     NetTrailers = new NetTrailerTargets(
@@ -1766,12 +1766,12 @@ internal static class CampaignRosterSuites
     {
         try
         {
-            return PlaneStats.LoadForAi(ctx.ZrdrPath, plan.PlaneNode, plan.AiDef);
+            return PlaneStats.LoadForAi(ctx.Zrdr, plan.PlaneNode, plan.AiDef);
         }
         catch (ArgumentException e)
         {
             report.AppendLine($"  {plan.Name}: '{plan.AiDef}' not loadable as a variant of {plan.PlaneNode} ({e.Message}); base def used");
-            return PlaneStats.LoadForAi(ctx.ZrdrPath, plan.PlaneNode);
+            return PlaneStats.LoadForAi(ctx.Zrdr, plan.PlaneNode);
         }
     }
 

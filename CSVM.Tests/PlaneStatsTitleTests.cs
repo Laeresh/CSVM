@@ -14,8 +14,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class PlaneStatsTitleTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     private static string MessagesPath =>
         Path.Combine(TestData.ExtractedRoot!, "messages.json");
@@ -27,7 +26,7 @@ public class PlaneStatsTitleTests
         var stats = PlaneStats.LoadForAi(ZrdrPath, "player_kestrel", "medkestrel");
 
         Assert.Equal("MSG_VEH_MEDUSA_KESTREL", stats.AiTitleKey);
-        Assert.Equal("Medusa Kestrel", Messages.Load(MessagesPath).Get(stats.AiTitleKey!));
+        Assert.Equal("Medusa Kestrel", Messages.FromExtracted(MessagesPath).Get(stats.AiTitleKey!));
     }
 
     // Resolved, it is what the marker prints; unresolved, the readout keeps the derivation rather
@@ -39,7 +38,7 @@ public class PlaneStatsTitleTests
 
         Assert.Equal("Kestrel", PlaneRoster.PlaneDisplayName(stats));
 
-        stats.AiTitle = Messages.Load(MessagesPath).Get(stats.AiTitleKey!);
+        stats.AiTitle = Messages.FromExtracted(MessagesPath).Get(stats.AiTitleKey!);
         Assert.Equal("Medusa Kestrel", PlaneRoster.PlaneDisplayName(stats));
     }
 
@@ -49,7 +48,7 @@ public class PlaneStatsTitleTests
     public void ADefWithoutOneInheritsTheAirframesTitle()
     {
         var stats = PlaneStats.LoadForAi(ZrdrPath, "player_kestrel");
-        stats.AiTitle = Messages.Load(MessagesPath).Get(stats.AiTitleKey!);
+        stats.AiTitle = Messages.FromExtracted(MessagesPath).Get(stats.AiTitleKey!);
 
         Assert.Equal("MSG_VEH_KESTREL", stats.AiTitleKey);
         Assert.Equal("Kestrel", PlaneRoster.PlaneDisplayName(stats));

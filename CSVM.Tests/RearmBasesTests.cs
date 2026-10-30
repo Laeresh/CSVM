@@ -96,7 +96,7 @@ public sealed class RearmBasesTests
         Assert.Equal(625f, RearmBases.ReadRadiusSquared(ZrdrDict.FromAlternating(new List<object?>())));
 
         string? why = null;
-        Assert.Equal(625f, RearmBases.LoadRadiusSquared(Path.Combine(TestData.TempRoot, "no-such-zrdr"), reason => why = reason));
+        Assert.Equal(625f, RearmBases.LoadRadiusSquared(ZrdrSet.None, reason => why = reason));
         Assert.NotNull(why);
     }
 
@@ -110,12 +110,12 @@ public sealed class RearmBasesTests
     [ExtractedDataFact]
     public void TheShippedPlayerZrdLeavesTheRadiusAtTwentyFiveMetres()
     {
-        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
         string? why = null;
         Assert.Equal(RearmBases.InitialRadiusSquared, RearmBases.LoadRadiusSquared(zrdr, reason => why = reason));
         Assert.Null(why);
 
-        var messages = Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        var messages = Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
         Assert.Equal("Rearmed!", messages.Get(HudMessages.RearmedKey));
     }
 }

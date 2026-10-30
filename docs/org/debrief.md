@@ -6,8 +6,8 @@ Every claim below names the function or address it came from. No decompiler outp
 the addresses are given so any claim can be re-checked at source. The screen's own layout and rows
 are additionally read off three screenshots (`OriginalScreenshots/Campaign Mission End screen
 CM01.png`, `Campaign Scrapbook CM01 Story Scraps.png`, `Campaign Scrapbook CM02 Mission select after
-another Mission.png`), the extracted langui table (`extracted/rof/ui_strings.json`), a census of
-`extracted/rof/ASSETS/GRAPHICS/SCRAPBOOK/`, and the navigation as reported at the controls; the
+another Mission.png`), the langui table (`ui_strings.json`, which `RofFiles` builds from
+`langui.dll`), a census of `crimson.rof`'s `ASSETS/GRAPHICS/SCRAPBOOK/`, and the navigation as reported at the controls; the
 lines that came from those say so.
 
 **Where the other halves live.** The record this pass writes is the mission-result array documented
@@ -214,7 +214,7 @@ are what settle it. Three linked lists live at `+0x64`, `+0x70` and `+0x7c`, app
 
 `FUN_0046fb60(0x0071d57c, …)` opens the **scrapbook**, not a screen of its own. The evidence is the
 screen's own strings: every label on it is an `IDS_SB_*` langui row, and the Instant Action wrap-up
-uses a separate `IDS_IAWU_*` set. `extracted/rof/ASSETS/SCRIPTS/` has a `SCRAPBOOK.SCRIPT` and no
+uses a separate `IDS_IAWU_*` set. `crimson.rof`'s `ASSETS/SCRIPTS/` has a `SCRAPBOOK.SCRIPT` and no
 debrief script. Measured off `OriginalScreenshots/Campaign Mission End screen CM01.png`, which is
 the screen as the original draws it at the end of CM01, and corroborated by
 `Campaign Scrapbook CM02 Mission select after another Mission.png`.
@@ -301,7 +301,7 @@ of 3.
 
 ### Navigation and page composition: a data file, not code
 
-**Which scrap sits where is authored in `extracted\rof\ASSETS\SCRAPBOOK.CSV`**, one `[SCRAPBOOK]`
+**Which scrap sits where is authored in `crimson.rof`'s `ASSETS\SCRAPBOOK.CSV`**, one `[SCRAPBOOK]`
 section keyed `<mission>_<spread>_<item>`. The full column semantics, the filename rules, the
 objective gate and the grime generator are in
 [`formats/campaign-screens.md`](../formats/campaign-screens.md), "The scrapbook", because they are a
@@ -539,8 +539,8 @@ merge, not its author, and the two run in the same mission-end pass.
   `PC_B_PREVIOUS`'s `ScriptToExe = ScrapBook_TOC` and where `$$SR$$` is set before the mission-end
   path opens the book are both unread; the `ghidra-mcp` bridge was not reachable in the session
   that wrote the entry-path decode. Nothing above depends on either address (A3).
-- **The wording of string 191.** `extracted/rof/ui_strings.json` jumps from id 136 to id 200, so
-  the skip offer's text is absent from the extraction. Its shape is known (a Yes/No message box
+- **The wording of string 191.** `langui.dll`'s table (`ui_strings.json`) jumps from id 136 to id 200,
+  so the skip offer's text is absent from the game files. Its shape is known (a Yes/No message box
   taking a string and the number 4 as its two format arguments) and its wording is not.
 - **The `0x0071b480` overlap.** The campaign object's base and the `PilotStatus` save section's
   destination are the same address, and the attempt counters this page reads sit inside the

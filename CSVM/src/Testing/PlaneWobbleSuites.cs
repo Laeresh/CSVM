@@ -35,12 +35,12 @@ internal static class PlaneWobbleSuites
         "engage swings the pivot on the decoded ramp law's own rate, moving the nose as well")]
     internal static void PlaneWobbleWalk(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? rig = null;
@@ -51,7 +51,7 @@ internal static class PlaneWobbleSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = SuiteConstants.AircraftResources(ctx, planesGamez, textures);
             // worldEffects null!: never dereferenced here, as in FlightTelemetrySuites, because
             // CrashProgram/WorldScene stay null and the spawner's crash-runtime block is skipped.
@@ -126,7 +126,7 @@ internal static class PlaneWobbleSuites
             // The ramp law's swing off the record's own nitro: (1+k)/(4·f·k) s, k = e^(-damp/2f),
             // with the substep and tick quantisation either side. A sawtooth wrapping at the
             // authored rate alternates one-tick and whole-period gaps instead.
-            var nitro = ShakeDefs.Load(ctx.ZrdrPath).Nitro;
+            var nitro = ShakeDefs.Load(ctx.Zrdr).Nitro;
             float k = nitro is { Frequency: > 0f } n ? Mathf.Exp(-n.Damp / (2f * n.Frequency)) : 0f;
             float swingTicks = nitro != null && k > 0f ? (1f + k) / (4f * nitro.Frequency * k) / Dt : 0f;
             ctx.Check(swingTicks > 0f && gaps.Count >= 4 && gaps.All(g => g >= swingTicks - 1.5f && g <= swingTicks + 2f),

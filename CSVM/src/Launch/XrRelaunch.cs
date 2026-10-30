@@ -51,7 +51,6 @@ public static class XrRelaunch
             : spec.Det ? "--det"
             : spec.IsScripted ? "a scripted run"
             : spec.XrSim != null ? "--xr-sim"
-            : spec.ExtractInstall != null ? "--extract"
             : spec.MovieName != null ? "--movie"
             : spec.NetHostPort != null || spec.NetJoin != null ? "--net-host or --net-join"
             : spec.Viewer ? "--viewer"

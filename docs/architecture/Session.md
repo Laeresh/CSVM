@@ -250,7 +250,6 @@ It decides every zone end's run once at build, against the built world, for ever
 It steers each bot for its next zone, starts the ribbon run, and starts a completed run again while
 the window is open. The run's own gate test counts every zone, so the race and a network host hear a
 bot as any seat. Each bot's approach is drawn on its seat's own seeded stream, apart from the fluffs.
-`Orders` keeps each seat's last order for a suite, and `LineSteering` off is a suite's control.
 `BotObjective` turns the objective off. Rule: [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots".
 
 ## src/Session/World/BotOrderLog.cs
@@ -593,12 +592,12 @@ bot field into seats: each bot a militia/airframe pair off the Instant Action mi
 torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
 unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
 `Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
-of a tier's effect. Only the host calls it; a guest reads the roster. Decodes:
+of a tier's effect. Under a lobby's outlaw list the draw passes over each airframe it refuses, asked as `AirframeAdmitted`, and each pair whose def it would strip, asked as `ArmsAdmitted`; a bot it leaves no airframe for is left out. `LegalFit` is the stock fit a bot flies under the list, each outlawed ammunition or rocket replaced by the first allowed one, never the torpedo. Only the host calls it; a guest reads the roster. Decodes:
 [../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 
 ## src/Session/Roster/HumanFlightAdapter.cs
 `FlightRoster`'s private seat path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
-the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. The cockpit bind hands `PlaneBuilder.Cockpit` and `CockpitPanel` to `CockpitVisibility.Bind` and skips `CockpitReseat` for a body cockpit; under the stereo path a body cockpit's panel is what `XrCockpit.Body` lifts, mirroring `PlaneBuilder.StereoBody`'s twins, whose originals leave the pilot's pane by `Reseat`; on the flat screen the dressing's `Interior` is that panel and its `Body` holds `PlaneBuilder.FlatBody`'s twins, made after the ghost stamp and before the stores hang, which the cockpit pass mirrors (`FirstPersonDressing.BuildPass`). A seat of the bindings' `NetSeats` without a pane
+the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. The cockpit bind hands `PlaneBuilder.Cockpit` and `CockpitPanel` to `CockpitVisibility.Bind` and skips `CockpitReseat` for a body cockpit; under the stereo path a body cockpit's panel is what `XrCockpit.Body` lifts, mirroring `PlaneBuilder.StereoBody`'s twins, whose originals leave the pilot's pane by `Reseat`; on the flat screen the dressing's `Interior` is that panel and its `Body` holds `PlaneBuilder.FlatBody`'s twins, made after the ghost stamp and before the stores hang, which the cockpit pass mirrors (`FirstPersonDressing.BuildPass`), so on the pilot's pane the body hides a store behind it, as the stereo body does. A seat of the bindings' `NetSeats` without a pane
 (flown elsewhere, or a host's bot) takes the aeroplane, paint, loadout, spawn slot and score row, only one flown elsewhere is built with the `RemotePoseBuffer` that IS its ownership, and
 both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. A bot seat is AI-piloted
 (`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, with `IsBotSeat` set so its contacts take a person's rule (it grazes and bounces where world AI dies outright), and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`

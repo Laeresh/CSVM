@@ -68,7 +68,7 @@ internal static class SurfaceVehicleSuites
         + "request advances it once through the shared session owner")]
     internal static void CampaignSurfaceVehicles(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         var report = new StringBuilder();
         RosterBoats(ctx, report);
         GeneratorBoat(ctx, report);
@@ -80,14 +80,14 @@ internal static class SurfaceVehicleSuites
     // are under test.
     private static void RosterBoats(TestContext ctx, StringBuilder report)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BoatChapter, BoatMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(BoatChapter);
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
         var mission = MissionOf(ctx, BoatChapter, BoatMission);
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
+        var skills = AiSkills.Load(ctx.Zrdr);
         ctx.Check(defs.ModeOf(BoatDef) == VehicleDefs.ShipMode && defs.AirframeFor(BoatDef) == null,
             $"'{BoatDef}' is a mode ship def with no player airframe");
         string startAnims = string.Join(", ", defs.StartAnimsOf(BoatDef));
@@ -104,15 +104,15 @@ internal static class SurfaceVehicleSuites
             var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
                 world.Runtime, defs, worldRoot)
             {
-                Strings = Messages.Load(ctx.MessagesPath),
+                Strings = ctx.Data.Messages,
             };
             worldRoot.AddChild(vessels);
             int aircraftAsked = 0;
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 FindNodes = name => world.Runtime.FindNodes(name),
                 Spawn = (_, _, _, _) =>
@@ -323,11 +323,11 @@ internal static class SurfaceVehicleSuites
     // take-off path and it runs that path; no aircraft, nothing at the origin.
     private static void GeneratorBoat(TestContext ctx, StringBuilder report)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, GenChapter, GenMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, GenChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(GenChapter, GenMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(GenChapter);
         ctx.RequireData(missionZrdr, $"{GenChapter}/{GenMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{GenChapter} zrdr");
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var nets = AiNets.Load(chapterZrdr);
         var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs, nets);
         EnemyGeneratorDef? def = null;
@@ -357,7 +357,7 @@ internal static class SurfaceVehicleSuites
             var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
                 world.Runtime, defs, worldRoot)
             {
-                Strings = Messages.Load(ctx.MessagesPath),
+                Strings = ctx.Data.Messages,
             };
             worldRoot.AddChild(vessels);
             int aircraftAsked = 0;
@@ -470,7 +470,7 @@ internal static class SurfaceVehicleSuites
 
     private static CampaignMission MissionOf(TestContext ctx, string chapter, string folder)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))

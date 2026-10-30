@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Xunit;
 
@@ -17,8 +18,7 @@ public class WeaponsDefsTests
 {
     private const int WeaponDefCount = 48;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     private static string MessagesPath =>
         Path.Combine(TestData.ExtractedRoot!, "messages.json");
@@ -26,7 +26,7 @@ public class WeaponsDefsTests
     [ExtractedDataFact]
     public void EveryBallisticsEntryReadsThroughTheTypedReader()
     {
-        var r = Probes.Weapons(ZrdrPath, MessagesPath, "");
+        var r = Probes.Weapons(ZrdrPath, Messages.FromExtracted(MessagesPath), "");
         Assert.True(r.Error == null, $"weapons.json loads error={r.Error ?? "-"}");
         Assert.Equal(WeaponDefCount, r.Total);
         Assert.Equal(0, r.UnhandledTotal);

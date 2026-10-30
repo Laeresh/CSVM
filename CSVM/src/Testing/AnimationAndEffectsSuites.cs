@@ -105,9 +105,9 @@ internal static class AnimationAndEffectsSuites
     // gamez; a root the closure asks for that the chapter cannot supply is the silent-miss failure.
     internal static void CrashStageRootTripwire(TestContext ctx, TestWorld world)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures(world.Chapter);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         try
         {

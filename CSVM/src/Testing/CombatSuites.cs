@@ -28,10 +28,10 @@ internal static class CombatSuites
     [Suite("loadout-bind", "every stock loadout binds to its model with every marker resolved")]
     internal static void LoadoutBind(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
-        var r = Probes.Loadouts(ctx.ZrdrPath, ctx.MessagesPath, ctx.PlanesGamezPath, ctx.DataRoot,
+        var r = Probes.Loadouts(ctx.Zrdr, ctx.Data.Messages, ctx.Data.Planes, ctx.ChapterTextures("C1"),
             "", ctx.LoadoutOverride);
         ctx.Check(r.Error == null, $"loadout inputs load error={r.Error ?? "-"}");
         if (r.Error != null)
@@ -52,10 +52,10 @@ internal static class CombatSuites
         // A partial stock fit takes the FILL ORDER's prefix (1,5,2,6,3,7,4,8), not
         // pylon1..pylonN, Hardpoint.Index must be the true pylon number so the weapon gauge's
         // belt lights land at the original's physical positions, gaps included.
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, ctx.Data.Messages);
         var stock = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
         try
@@ -177,7 +177,7 @@ internal static class CombatSuites
     internal static void AiLoadoutBind(TestContext ctx, GameZ planesGamez, TextureArchive textures,
         WeaponDefs weapons)
     {
-        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
+        var stats = PlaneStats.LoadForAi(ctx.Zrdr, "player_warhawk", "bhatwarhawk");
         ctx.Same(2, stats.AiWeapons.Count, $"bhatwarhawk authors two weapon entries");
         Node3D? plane = null;
         try
@@ -206,13 +206,13 @@ internal static class CombatSuites
     [Suite("weapons-fire", "all 48 weapons mount and fire from a built plane")]
     internal static void WeaponsFire(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, ctx.Data.Messages);
         // The pool holds the archive past construction (it bakes the tracer and impact stand-ins),
         // so it is disposed only after the self-test has run.
         var textures = new TextureArchive(texturesPath);
@@ -412,8 +412,8 @@ internal static class CombatSuites
     // shipped data deliberately turns off.
     internal static void AimAssistShippedData(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         // Each field against its own record. A reader that missed the key would hold the compiled
         // fallback, which shows wherever the record authors anything else.
         var fields = new (string Key, float Field)[]
@@ -425,7 +425,7 @@ internal static class CombatSuites
         };
         foreach (var (key, field) in fields)
         {
-            float? authored = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, key);
+            float? authored = SuiteConstants.PlayerGlobal(ctx.Zrdr, key);
             ctx.Check(authored is { } a && Mathf.IsEqualApprox(field, a, 1e-6f),
                 $"{key} parses as player.json authors it ({authored?.ToString("0.#####", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"}): got {field:0.#####}");
         }
@@ -441,7 +441,7 @@ internal static class CombatSuites
                 $"sticky_bullet_inaccuracy parses as the shipped 1.0 DEGREE, stored in radians as the original stores it");
         }
 
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.CannonSpread is > 0f);
         ctx.Check(gun != null, $"a gun ships CANNON_SPREAD, the assist's acceptance cone (BL-342 A1)");
         if (gun != null)
@@ -623,10 +623,10 @@ internal static class CombatSuites
     // be collected, since it carries no proximity fuse.
     internal static void AimAssistOrdnancePriority(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         // Data-driven, not hardcoded ids: the fuse test IS the list membership rule, so the fixture
         // asserts its two halves off the data before relying on them.
         var fused = weapons.All.FirstOrDefault(w => w.DetonationDistance is > AimAssist.MinFuseDistance);
@@ -800,14 +800,14 @@ internal static class CombatSuites
     [Suite("loadout-forrig", "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock")]
     internal static void LoadoutForRig(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, ctx.Data.Messages);
         var stock = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
         try
@@ -891,10 +891,10 @@ internal static class CombatSuites
         "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed")]
     internal static void TrailWorldAnchor(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "pufftrails.json");
         var textures = new TextureArchive(texturesPath);
         Node3D? carrier = null;
         try
@@ -908,7 +908,7 @@ internal static class CombatSuites
             ctx.Host.AddChild(carrier);
             carrier.GlobalTransform = pose;
 
-            var trail = Effects.Puffer.MakePuffer(ctx.ZrdrPath, textures, carrier, "pufftrails.json", "firepuffer");
+            var trail = Effects.Puffer.MakePuffer(ctx.Zrdr, textures, carrier, "pufftrails.json", "firepuffer");
             ctx.Check(trail != null, $"dense_firetrail firepuffer builds from pufftrails.json");
             if (trail == null)
                 return;
@@ -954,10 +954,10 @@ internal static class CombatSuites
         "the flash quads and the shot light sit on the firing muzzle on every drawn frame of their life while the aeroplane flies on, and the pool draws after the flight rigs rather than before them")]
     internal static void MuzzleFlashRidesMuzzle(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1037,10 +1037,10 @@ internal static class CombatSuites
         "a pilot flying the Cockpit view draws no muzzle flash quads from their own guns while the shot light still fires, and another shooter's flash is untouched")]
     internal static void MuzzleFlashCockpitHidden(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1080,10 +1080,10 @@ internal static class CombatSuites
         "in original mode a first-person shot's bigmuzzle_lt/muzzle_lt pair reaches the bound WorldLights set with its authored near/far and colour and lights no omni, while an unbound pool keeps the omni pair, each at its pair's half-weight range with no inverse-distance term")]
     internal static void MuzzleLightFirstPersonPointTerm(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var gun = WeaponDefs.Load(ctx.ZrdrPath, null).All.FirstOrDefault(w => w.IsGun);
+        var gun = WeaponDefs.Load(ctx.Zrdr, null).All.FirstOrDefault(w => w.IsGun);
         var textures = new TextureArchive(texturesPath);
         var pools = new List<ProjectilePool>();
         try
@@ -1154,10 +1154,10 @@ internal static class CombatSuites
         "a carried turret's death fire, anchored on TurretController.Site under a moving/rotating hull, follows the hull between ticks rather than freezing at the pose it started at (BL-514)")]
     internal static void TurretDeathEffectWorldAnchor(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         ProjectilePool? pool = null;
         Node3D? carrier = null;
         AnimRuntime? runtime = null;
@@ -1454,18 +1454,18 @@ internal static class CombatSuites
         + "first round while a Dogfight pair both spend it and ring the ricochet")]
     internal static void IncomingFireCues(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
+        var soundGroups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var stock = StockLoadouts.Load().All.Values.FirstOrDefault(d => d.Model == ctx.PlaneName);
         ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
         // Each cue is judged by the members of its own group as the loaded records name them. Two
@@ -1488,7 +1488,7 @@ internal static class CombatSuites
             return;
 
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         ProjectilePool? pool = null;
         FlightController? target = null;
         FlightController? wing = null;
@@ -1706,11 +1706,11 @@ internal static class CombatSuites
         + "exterior overlay only outside first person, where it poses at the rig's own camera1")]
     internal static void CanopyHoleDraws(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var planesGamez = ctx.Planes;
+            var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
             try
             {
                 // An AI rig must NOT take these names. Its airframe carries no cockpit1 interior, so
@@ -1832,14 +1832,14 @@ internal static class CombatSuites
         "no surface test anywhere in it")]
     internal static void GrazeBounce(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        float? authoredBounce = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "bounce_factor", "crash");
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        float? authoredBounce = SuiteConstants.PlayerGlobal(ctx.Zrdr, "bounce_factor", "crash");
         ctx.Check(authoredBounce is { } bounce && Mathf.IsEqualApprox(stats.BounceFactor, bounce),
             $"the airframe carries player.json's crash bounce_factor={authoredBounce?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"} got={stats.BounceFactor:0.###}");
         if (!ctx.SyntheticData)
@@ -1988,7 +1988,7 @@ internal static class CombatSuites
         "key and the rig, and a real spawn comes out damageable, zone-less and armed")]
     internal static void AiPlaneDefs(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         // node name, AI def, authored pair, def-level injure entries. The pools are vehicle.json's
@@ -2010,7 +2010,7 @@ internal static class CombatSuites
 
         foreach (var (node, aiDef, pool, injure) in airframes)
         {
-            var ai = PlaneStats.LoadForAi(ctx.ZrdrPath, node);
+            var ai = PlaneStats.LoadForAi(ctx.Zrdr, node);
             ctx.Check(ai.AiDefName == aiDef, $"{node} resolves the AI def '{ai.AiDefName}' (want '{aiDef}')");
             ctx.Check(ai.VehicleHealth is { } h && Mathf.IsEqualApprox(h, pool)
                       && ai.VehicleArmor is { } a && Mathf.IsEqualApprox(a, pool),
@@ -2022,7 +2022,7 @@ internal static class CombatSuites
 
             // The identity split: the damage model moved, nothing else did. DefName still keys the
             // stock-loadout table (eleven player defs) and still feeds PlaneRoster's display name.
-            var player = PlaneStats.Load(ctx.ZrdrPath, node);
+            var player = PlaneStats.Load(ctx.Zrdr, node);
             ctx.Check(ai.DefName == player.DefName && ai.AiDefName != ai.DefName,
                 $"{node} keeps the player def '{ai.DefName}' as its identity while damage reads '{ai.AiDefName}'");
             // The turrets move with the damage model: an AI def carries the thirdp mounts alone,
@@ -2043,8 +2043,8 @@ internal static class CombatSuites
 
         // The Fury worked through: 90/90 summed over the player's four zones against the AI def's
         // authored 72/72, the ~20 % the original's enemies were missing.
-        var furyAi = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
-        var furyPlayer = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
+        var furyAi = PlaneStats.LoadForAi(ctx.Zrdr, "player_fury");
+        var furyPlayer = PlaneStats.Load(ctx.Zrdr, "player_fury");
         float summed = 0f;
         foreach (var p in furyPlayer.DestroyableParts)
             summed += p.MaxHp;
@@ -2052,11 +2052,11 @@ internal static class CombatSuites
 
         // --- the spawn half: through the real spawner, the glue that can silently drop either the
         // damage ledger or the loadout.
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         FlightController? spawned = null;
         ProjectilePool? projectiles = null;
@@ -2067,18 +2067,18 @@ internal static class CombatSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
 
             var start = new Vector3(0f, 500f, 0f);
@@ -2131,12 +2131,12 @@ internal static class CombatSuites
         "every later spawn and every human rig reads come out unperturbed")]
     internal static void AiSpawnJitter(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         FlightController? flying = null;
         ProjectilePool? pool = null;
@@ -2147,9 +2147,9 @@ internal static class CombatSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             // The one cache the real session holds: every aircraft below is built from THIS object.
-            var shared = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var shared = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
@@ -2158,11 +2158,11 @@ internal static class CombatSuites
                 // a SHARED cache entry, so the AI flavour must not quietly become a second object.
                 AiStatsFor = (_, _) => shared,
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
 
             // One aircraft's flown displacement over a fixed window, straight and level on orders it never
@@ -2199,8 +2199,8 @@ internal static class CombatSuites
                 $"…by a 5 % spread, not a different aeroplane: {spread / first.Length() * 100f:0.0} % of the distance flown");
             ctx.Check(first.IsEqualApprox(replay),
                 $"the same spawn ordinal replays the same line: {(first - replay).Length():0.000} m apart");
-            ctx.Check(Mathf.IsEqualApprox(shared.FdSpeed, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).FdSpeed)
-                && Mathf.IsEqualApprox(shared.EnginePower, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).EnginePower),
+            ctx.Check(Mathf.IsEqualApprox(shared.FdSpeed, PlaneStats.Load(ctx.Zrdr, ctx.PlaneName).FdSpeed)
+                && Mathf.IsEqualApprox(shared.EnginePower, PlaneStats.Load(ctx.Zrdr, ctx.PlaneName).EnginePower),
                 $"the session's shared airframe stats came out unperturbed fd_speed={shared.FdSpeed:0.###} thrust={shared.EnginePower:0.###}");
             ctx.Note($"jitter spread: {first.Length():0.0} / {second.Length():0.0} m flown in 4 s, {spread:0.00} m apart");
         }
@@ -2231,10 +2231,10 @@ internal static class CombatSuites
         "transform origin (BL-239)")]
     internal static void BlastNeighborShape(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"weapon definitions");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         if (OrdnanceSuites.PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
         {
@@ -2328,9 +2328,9 @@ internal static class CombatSuites
         "silent a hair under it, full level at it and no louder a fifth of the way past")]
     internal static void EngineNote(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane("player_bhawk");
-        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var stats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
 
         // Everything below is quoted in PERCENT OF THE LEVEL BASELINE, so the shipped curve has to
         // be the one the decode assumes before any of it means anything.
@@ -2419,18 +2419,18 @@ internal static class CombatSuites
         "and a respawn both start the healthy loop at the curve's full level on their first frame")]
     internal static void EngineDamagePhases(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
+        var soundGroups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         ctx.Check(stats.DamagedEngineSound != null,
             $"{ctx.PlaneName} binds damaged_engine_sound={stats.DamagedEngineSound}");
         if (stats.DamagedEngineSound == null)
             return;
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var audio = new FlightAudio();
         audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
         ctx.Host.AddChild(audio);
@@ -2521,12 +2521,12 @@ internal static class CombatSuites
         "with the option on, since the option reaches the cockpit swap alone")]
     internal static void EngineCockpitPitch(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
+        var soundGroups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         ctx.Check(stats.CockpitEngineSound != null
                   && !EngineAudioCurves.SlotIsPitched(soundDefs, stats.CockpitEngineSound),
             $"{ctx.PlaneName} binds cockpit_engine_sound={stats.CockpitEngineSound}, which carries no FREQUENCY flag");
@@ -2534,7 +2534,7 @@ internal static class CombatSuites
             return;
 
         bool previous = FlightAudio.CockpitLoopPitched;
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var audio = new FlightAudio();
         audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
         ctx.Host.AddChild(audio);
@@ -2600,16 +2600,16 @@ internal static class CombatSuites
         "holds full level throughout")]
     internal static void EngineVoiceDuckSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
-        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
+        var soundGroups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         float limit = stats.VoiceoverVolumeLimiter;
         // The limit is the record's own, and one unlike the compiled 0.5, so a reader that missed
         // the key cannot pass. The install pins the shipped 0.4 too.
-        float? authoredLimit = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "voiceover_volume_limiter");
+        float? authoredLimit = SuiteConstants.PlayerGlobal(ctx.Zrdr, "voiceover_volume_limiter");
         ctx.Check(authoredLimit is { } authored && !Mathf.IsEqualApprox(authored, 0.5f) && Mathf.IsEqualApprox(limit, authored),
             $"player.zrd authors voiceover_volume_limiter={authoredLimit?.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"}, over the compiled 0.5, read as {limit:0.000}");
         if (!ctx.SyntheticData)
@@ -2618,7 +2618,7 @@ internal static class CombatSuites
                 $"player.zrd authors voiceover_volume_limiter={limit:0.000}, over the compiled 0.5");
         }
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         AudioStreamWav? Stream(string name) =>
             soundDefs.TryGetValue(name, out var d) ? archive.Find(d.WavName, d.Looped) : null;
         // A mission's own VO waits 45 s for the channel and a combat bark 0.5 s (docs/formats/sounds.md).
@@ -2796,13 +2796,13 @@ internal static class CombatSuites
         "correction), and a Fury dies to a few HE rockets")]
     internal static void AirToAir(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         // The first gun carrying both damage magnitudes, data-driven, not a hardcoded id.
         WeaponDef? gun = weapons.All.FirstOrDefault(w =>
             w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
@@ -2812,7 +2812,7 @@ internal static class CombatSuites
         float armorDmg = gun.ArmorDamage!.Value;
         float healthDmg = gun.HealthDamage!.Value;
 
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var nose = stats.DestroyableParts.FirstOrDefault(p =>
             p.Name.Equals("nose", System.StringComparison.OrdinalIgnoreCase));
         ctx.Check(nose is { Critical: true }, $"{ctx.PlaneName} carries a critical nose part");
@@ -3299,7 +3299,7 @@ internal static class CombatSuites
                 $"wep_06 carries the authored 40/60 damage pair");
             if (he == null)
                 return;
-            var furyStats = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
+            var furyStats = PlaneStats.Load(ctx.Zrdr, "player_fury");
             var furyPos = new Vector3(-900f, 500f, 0f);
             var furyModel = new PlaneBuilder(planesGamez, textures).Build("player_fury");
             fury = new FlightController
@@ -3363,19 +3363,19 @@ internal static class CombatSuites
         "gated, damage never is)")]
     internal static void TeamModel(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         WeaponDef? gun = weapons.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
         if (gun == null)
             return;
 
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? human = null;
@@ -3490,10 +3490,10 @@ internal static class CombatSuites
     private static void CheckRattleGate(TestContext ctx, PlaneStats stats)
     {
         float gate = stats.RattleSpeedGate;
-        float? authored = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "speed_range", "rattle");
+        float? authored = SuiteConstants.PlayerGlobal(ctx.Zrdr, "speed_range", "rattle");
         ctx.Check(authored is { } a && Mathf.IsEqualApprox(gate, a),
             $"the rattle gate is the rattle block's own speed_range floor, {gate:0.###}x fd_speed (authored {authored?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"})");
-        ctx.Check(stats.RattleSound is { } rattle && SoundDefs.Load(ctx.ZrdrPath).ContainsKey(rattle),
+        ctx.Check(stats.RattleSound is { } rattle && SoundDefs.Load(ctx.Zrdr).ContainsKey(rattle),
             $"…on a definition the sound library holds, {stats.RattleSound}");
         if (!ctx.SyntheticData)
         {

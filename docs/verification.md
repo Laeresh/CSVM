@@ -161,6 +161,9 @@ covers it.
   crop between the eyes, never by thresholded centroids.** On one capture the pipper's centroids
   read 0.18 px of disparity and a 0.43 px vertical offset; the shift search read 0.76 px and 0.00,
   matching its 463 m range, and gave the box the aircraft's own 2.5 px.
+- **SHOT-49**, **Before calling a line an Enhanced defect, threshold its pixels and read the same
+  pixels in the Original frame.** Of the 5,093 px a C5 shore band drew darker than its surroundings
+  under Enhanced, 99.6 % were dark in Original too (mean 2.0 against Enhanced's 13.8).
 
 ## GOLD, golden images
 
@@ -205,10 +208,11 @@ covers it.
   flown above that range; move it in a suite and photograph it from street level.** Raising C5's
   lamp glow 4.75 m left all 19 shots hash-identical.
 
-- **GOLD-20**, **Two blended surfaces of one mesh instance at one render priority draw in an order
-  taken from the whole scene's cull output; before blaming a change for a small move, check whether
-  the moved pixels sit on such a pair.** Seven invisible boxes parked 100 km below C1 moved
-  `c1-rocket-hit-enhanced` by 3 pixels at the radio tower's two alpha sheets, as
+- **GOLD-20**, **Two transparent-pass surfaces of one mesh instance at one render priority draw in
+  an order taken from the whole scene's cull output; before blaming a change for a small move,
+  check whether the moved pixels sit on such a pair.** Under Enhanced the pass holds the coverage
+  cutouts as well as the blends. Seven invisible boxes parked 100 km below C1 moved
+  `c1-rocket-hit-enhanced` by 3 pixels at the radio tower's cutouts, as
   `threading/worker_pool/max_threads=2` does (`analysis/goldens/README.md`).
 
 - **GOLD-21**, **A stereo golden that moves a few levels where the new code draws nothing is not yet
@@ -618,8 +622,8 @@ covers it.
   pass while both logs carried one.
 - **INSTR-45**, **A screenshot proves nothing about audio: read the `sound` log's pairing instead,
   one line per aircraft at build naming what each slot resolved to, then one per cull transition.**
-- **INSTR-46**, **An unpacked developer tree cannot reproduce a zip-only asset bug: verify a
-  release's asset shape with `--zip-assets`.**
+- **INSTR-46**, **An unpacked folder cannot reproduce a zip-only asset bug: check a reader of
+  unzbd's output on the `.zip` itself, not only on its unpacked sibling.**
 - **INSTR-47**, **A body's net world displacement is zero for as long as something is holding it in
   place, so it cannot answer "is this body still travelling"; read the velocity of the frame it is
   solved in.**
@@ -766,6 +770,9 @@ covers it.
 - **INSTR-105**, **When no ray reaches a pool whose colliders resolve to it, look for a hidden
   ancestor before calling it a collision defect: a mission's boot script switches whole areas
   off.** C3/M01's `m01.gw` hides C3's guard towers with `WorldPartitionSetActive`.
+- **INSTR-106**, **Bound a track's turn added up both ways as well as its signed net turn: alternating
+  U-turns net to nothing either way.** On a C1 field of eight Stunt Race bots a steering leg turns
+  231 degrees signed and 505 both ways, while a bot circling a lead-in point reads 1095 on both.
 
 ## SRC, sources and documents
 

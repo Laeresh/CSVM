@@ -58,15 +58,15 @@ internal static class CutsceneSkipSuites
         + "same key press and restores on it")]
     internal static void CutsceneSkip(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
@@ -138,12 +138,12 @@ internal static class CutsceneSkipSuites
     // cut that episode short and leave the pilot at the pose it flew in on.
     private static void CheckDropOffKeepsItsReplace(TestContext ctx, StringBuilder report)
     {
-        if (MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm01Seq) is not { } mission)
+        if (MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm01Seq) is not { } mission)
         {
             return;
         }
 
-        string path = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder.ToUpperInvariant(),
+        var path = ctx.MissionZrdr(mission.ChapterFolder.ToUpperInvariant(),
             mission.MissionFolder.ToUpperInvariant());
         ctx.RequireData(path, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
         var replacers = new List<string>();
@@ -387,7 +387,7 @@ internal static class CutsceneSkipSuites
     private static void WithStagedCapture(TestContext ctx, TestWorld world, string chapter,
         (string Anim, int Code, string Root) call, Action<Staged> leg)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();
@@ -458,29 +458,29 @@ internal static class CutsceneSkipSuites
         TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs)
     {
         var spec = SessionSpec.Parse(new[] { $"--plane={StartPlane}" });
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                ChapterZrdr = ctx.ChapterZrdr(chapter),
             },
             new HumanRosterBindings
             {
@@ -524,7 +524,7 @@ internal static class CutsceneSkipSuites
     private sealed class SkipFlightStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

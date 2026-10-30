@@ -18,6 +18,9 @@ internal static class OceanMaskRaster
     /// <summary>The zone byte of a texel every zone group's ocean draws: water the gate never splits.</summary>
     public const byte AnyZone = 255;
 
+    /// <summary>The zone byte of a texel on a seam between two zone groups, which no grid draws.</summary>
+    public const byte SeamZone = AnyZone - 1;
+
     /// <summary>The mask's red byte on a texel a ramp's open sea covers, where the open sea's is 255.
     /// The base sheet's hide clears a ramp up to <see cref="OceanMask.RampTop"/> where any texel its
     /// filter reads holds it (<c>csky_ocean.gdshaderinc</c> spells it as a literal). Coverage reads it
@@ -88,11 +91,12 @@ internal static class OceanMaskRaster
         }
         Parallel.For(0, count, b => Fill(tris, spans, grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mean, tint));
         Parallel.For(0, count, b => Dilate(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, tint));
+        Parallel.For(0, count, b => Seam(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1));
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
         Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.Zone, lift);
+        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift);
     }
 
     /// <summary>(byte)Math.Clamp(Math.Round(v * 255f), 0, 255), banker's rounding included, in float
@@ -176,6 +180,70 @@ internal static class OceanMaskRaster
                 tint[(3 * i) + 2] = (byte)((sb + (n / 2)) / n);
             }
         }
+    }
+
+    // Rows r0..r1 of the zone groups, with every texel on a seam between two groups taken from both.
+    // A seam texel's centre can fall on either side, so either grid would overhang the other group's
+    // culled sea. C5 lays an opaque fog gradient along each seam, which hides the gap this leaves.
+    // Reads only the filled zones, so the bytes do not depend on the band count.
+    private static void Seam(Grid g, int r0, int r1)
+    {
+        int w = g.W;
+        Array.Copy(g.Zone, r0 * w, g.DrawZone, r0 * w, (r1 - r0 + 1) * w);
+        for (int y = r0; y <= r1; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y * w) + x;
+                byte z = g.Zone[i];
+                if (g.Sea[i] == 0)
+                {
+                    g.DrawZone[i] = Shore(g, x, y);
+                    continue;
+                }
+                if (z >= SeamZone)
+                    continue;
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), ny = y + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= g.H)
+                        continue;
+                    int n = (ny * w) + nx;
+                    if (g.Sea[n] != 0 && g.Zone[n] < SeamZone && g.Zone[n] != z)
+                        g.DrawZone[i] = SeamZone;
+                }
+            }
+        }
+    }
+
+    // The zone of a land texel the filtered coverage reaches is the group of the sea beside it. The
+    // coast's last metres then draw and cull with that sea. Beside two groups it is a seam, beside
+    // surf water alone every grid's. ⚠ Do not leave it 0: group 0's grid would draw a sliver of
+    // shore around every other group's culled sea. The diagonals count: the filter reads them.
+    private static byte Shore(Grid g, int x, int y)
+    {
+        int group = -1;
+        bool surf = false;
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                int nx = x + dx, ny = y + dy;
+                if (nx < 0 || ny < 0 || nx >= g.W || ny >= g.H)
+                    continue;
+                int n = (ny * g.W) + nx;
+                if (g.Sea[n] == 0)
+                    continue;
+                byte z = g.Zone[n];
+                if (z >= SeamZone)
+                    surf = true;
+                else if (group < 0)
+                    group = z;
+                else if (group != z)
+                    return SeamZone;
+            }
+        }
+        return group >= 0 ? (byte)group : surf ? AnyZone : g.Zone[(y * g.W) + x];
     }
 
     // The barycentric test and the tint blend are spelled out in scalars. They keep the operation
@@ -399,7 +467,8 @@ internal static class OceanMaskRaster
 
     /// <summary>The texel bytes of the mask, tint, zone group and lift, and each pass's milliseconds
     /// over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore distance), the tint
-    /// RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on surf-ring water. The lift is R8, the ocean's
+    /// RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on surf-ring water and
+    /// <see cref="SeamZone"/> on a seam between two groups. The lift is R8, the ocean's
     /// height over a ramp over <see cref="OceanMask.RampTop"/>.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
         double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift);
@@ -416,6 +485,7 @@ internal static class OceanMaskRaster
             Sea = new byte[w * h];
             Solid = new bool[w * h];
             Zone = new byte[w * h];
+            DrawZone = new byte[w * h];
             Tinted = new bool[w * h];
             Ramp = new bool[w * h];
             Lift = new float[w * h];
@@ -436,6 +506,10 @@ internal static class OceanMaskRaster
 
         // The zone group of the base sheet a texel shows, AnyZone on surf-ring water.
         public byte[] Zone { get; }
+
+        // The zone byte the grids draw each texel by. A seam texel holds SeamZone, a coast texel the
+        // group of the sea beside it.
+        public byte[] DrawZone { get; }
 
         // Texels a base triangle gave a tint; the rest start as the mean.
         public bool[] Tinted { get; }

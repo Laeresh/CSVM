@@ -41,24 +41,24 @@ internal static class StuntCaptureSuites
         + "filled on landing, no strip without a camera or a shot)")]
     internal static void StuntCaptureRun(TestContext ctx)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        ctx.RequireData(gamezPath, $"{Chapter} gamez");
+        var chapterGamez = ctx.ChapterGamez(Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ctx.RequireData(chapterGamez, $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireMessages();
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
 
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath))
+        var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages)
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} ships no Danger Zones");
 
         // The sting has something to play: the definition is a data orphan no SOUND_GROUPS entry
         // and no world data names. Nothing else in the build would notice it going missing.
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        var defs = SoundDefs.Load(ctx.Zrdr);
         ctx.Check(defs.TryGetValue(StingDef, out var sting) && sting.WavName.Length > 0,
             $"the camera sting '{StingDef}' is a real sounds.json definition");
         if (defs.TryGetValue(StingDef, out var def))
         {
-            using var archive = new SoundArchive(ctx.SoundsPath);
+            using var archive = new SoundArchive(ctx.Sounds);
             ctx.Check(archive.Find(def.WavName, looped: false, warn: false) != null,
                 $"…and its '{def.WavName}' decodes out of the sound archive");
         }

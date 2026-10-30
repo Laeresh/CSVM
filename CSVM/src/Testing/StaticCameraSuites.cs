@@ -261,12 +261,12 @@ internal static class StaticCameraSuites
 
     // --- shared plumbing --------------------------------------------------------------------
 
-    private static (TextureArchive Textures, string ChapterZrdr) Inputs(TestContext ctx)
+    private static (TextureArchive Textures, ZrdrSet ChapterZrdr) Inputs(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
         return (new TextureArchive(texturesPath), chapterZrdr);
@@ -304,7 +304,7 @@ internal static class StaticCameraSuites
     // accumulator never ticks at all. Anything else about the kill is the same call.
     private static void Kill(TestContext ctx, FlightController plane)
     {
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         WeaponDef? round = null;
         foreach (var w in weapons.All)
         {
@@ -383,10 +383,10 @@ internal static class StaticCameraSuites
 
     // One built human rig on a level start at the named altitude, handed to the body with the
     // session camera it flies and the clock that steps it.
-    private static void Fly(TestContext ctx, TextureArchive textures, string chapterZrdr,
+    private static void Fly(TestContext ctx, TextureArchive textures, ZrdrSet chapterZrdr,
         string? pinnedView, float altitude, Action<FlightController, Camera3D, GameClock> body)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();
@@ -425,31 +425,31 @@ internal static class StaticCameraSuites
     }
 
     private static FlightRoster BuildRoster(TestContext ctx, SessionSpec spec, GameZ planesGamez,
-        TextureArchive textures, ProjectilePool pool, string chapterZrdr,
+        TextureArchive textures, ProjectilePool pool, ZrdrSet chapterZrdr,
         IReadOnlyList<PlayerRig> rigs, IFlightStarts starts)
     {
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = chapterZrdr,
+                ChapterZrdr = chapterZrdr,
             },
             new HumanRosterBindings
             {
@@ -468,7 +468,7 @@ internal static class StaticCameraSuites
         public LevelStart(float altitude) => _altitude = altitude;
 
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

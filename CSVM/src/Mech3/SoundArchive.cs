@@ -8,16 +8,18 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Sound lookup over a mech3ax sound extraction (soundsh/soundsl.zbd → WAVs),
-/// from a ZIP or a directory. Decodes via <see cref="WavFile"/> (the game's WAVs
-/// are MS ADPCM, which Godot can't load) into cached <see cref="AudioStreamWav"/>s.
+/// Sound lookup over the launch's <see cref="SoundZbd"/> (<c>soundsh.zbd</c>), or over a sound
+/// extraction from a ZIP or a directory (the modding path). Decodes via <see cref="WavFile"/> (the
+/// game's WAVs are MS ADPCM, which Godot can't load) into cached <see cref="AudioStreamWav"/>s.
 /// ⚠ <see cref="Dispose"/> releases the OS handle but does NOT end the archive's usable life:
 /// a later <see cref="Find"/> reopens the zip for that one read. See <see cref="Dispose"/>.
 /// </summary>
 public sealed class SoundArchive : IDisposable
 {
+    private readonly SoundZbd? _zbd;
     private readonly string? _zipPath;
     private readonly string? _dir;
+    private readonly Func<string, byte[]?>? _read;
 
     // Name -> in-zip path, built once and kept across Dispose: it is what lets a post-Dispose read
     // find its entry in a transient archive without reopening to rebuild the map first.
@@ -26,6 +28,10 @@ public sealed class SoundArchive : IDisposable
 
     private ZipArchive? _zip;
     private int _reopensLogged;
+
+    /// <summary>Over the launch's shared archive, which <see cref="Dispose"/> leaves open: the
+    /// game data owns it.</summary>
+    public SoundArchive(SoundZbd zbd) => _zbd = zbd;
 
     public SoundArchive(string path)
     {
@@ -42,6 +48,10 @@ public sealed class SoundArchive : IDisposable
                     _entryPaths[entry.Name] = entry.FullName;
         }
     }
+
+    /// <summary>An archive whose WAV bytes by name come from <paramref name="read"/>, null for an
+    /// absent one: the UI archive's menu sounds.</summary>
+    public SoundArchive(Func<string, byte[]?> read) => _read = read;
 
     /// <summary>Loads a WAV by file name (e.g. "bloodhawk.wav"); null if missing/undecodable.
     /// <paramref name="looped"/> marks the whole stream as a forward loop. <paramref name="warn"/>
@@ -98,8 +108,9 @@ public sealed class SoundArchive : IDisposable
     /// reopen-after-<see cref="Dispose"/> contract is asserted.</summary>
     public byte[]? ReadWavBytes(string wavName) => ReadBytes(wavName);
 
-    /// <summary>Releases the held zip handle. Idempotent, and NOT the end of the archive's usable
-    /// life: a later <see cref="Find"/> reopens the file for that one read.
+    /// <summary>Releases the held zip handle; a shared <see cref="SoundZbd"/> stays open. Idempotent,
+    /// and NOT the end of the archive's usable life: a later <see cref="Find"/> reopens the file
+    /// for that one read.
     /// ⚠ Do not restore a one-way close. The build-scoped handle rested on the prewarm being
     /// complete, it is not, and the throw that produced was invisible on an unpacked tree. The
     /// lifetime rule: this module's entry in docs/architecture.md.</summary>
@@ -120,25 +131,42 @@ public sealed class SoundArchive : IDisposable
 
     private byte[]? ReadBytes(string wavName)
     {
+        if (_read != null)
+        {
+            try
+            {
+                return _read(wavName);
+            }
+            catch (Exception e) when (e is IOException or InvalidDataException)
+            {
+                Log.Warn("sound", $"sound read failed name={wavName} error={e.GetType().Name}: {e.Message}");
+                return null;
+            }
+        }
         if (_dir != null)
         {
             var path = Path.Combine(_dir, wavName);
             return File.Exists(path) ? File.ReadAllBytes(path) : null;
         }
-        if (!_entryPaths.TryGetValue(wavName, out var entryPath))
+        string? entryPath = null;
+        if (_zbd == null && !_entryPaths.TryGetValue(wavName, out entryPath))
             return null;
         try
         {
+            if (_zbd != null)
+            {
+                return _zbd.ReadWavBytes(wavName);
+            }
             // Open-read-close per miss once the session's handle is gone, rather than holding a
             // reopened one: the entry map above is what makes that cheap, Find caches the decoded
             // stream, so each distinct sound pays this at most once.
             if (_zip != null)
             {
-                return Read(_zip, entryPath);
+                return Read(_zip, entryPath!);
             }
             ReportReopen(wavName);
             using var archive = ZipFile.OpenRead(_zipPath!);
-            return Read(archive, entryPath);
+            return Read(archive, entryPath!);
         }
         catch (Exception e) when (e is IOException or InvalidDataException or ObjectDisposedException
                                        or UnauthorizedAccessException)

@@ -51,9 +51,9 @@ internal static class NetEnetSessionSuites
         + "keep stepping each other over the real wall clock")]
     internal static void JoinOverEnetLoopback(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
         var spec = SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx))
             .Concat(new[] { "--players=1", "--mute" }).ToArray());
         var airframes = NetCombatSuites.AirframesFor(spec);
@@ -257,13 +257,8 @@ internal static class NetEnetSessionSuites
         ctx.Host.AddChild(pane);
         var paths = new BasePaths(
             RepoRoot: ctx.RepoRoot,
-            DataRoot: ctx.DataRoot,
-            PlanesGamezPath: ctx.PlanesGamezPath,
-            ZrdrPath: ctx.ZrdrPath,
-            SoundsPath: ctx.SoundsPath,
-            InterpPath: ctx.InterpPath,
-            MessagesPath: ctx.MessagesPath,
-            RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            DataRoot: ctx.DataRoot)
+        { Game = ctx.Game, Data = ctx.Data };
         var session = new GameSession(spec, new LauncherContext
         {
             Decode = ctx.Decode,

@@ -26,6 +26,7 @@ public sealed partial class OriginalPauseBoard : Control
     private Func<PauseReadout> _readout = null!;
     private PauseSheet _sheet = null!;
     private string _dataRoot = "";
+    private Mech3.TextureSet _rimage = Mech3.TextureSet.Empty;
     private ComposedBoardView? _view;
     private BoardMenu? _menu;
     private MenuInput? _input;
@@ -75,6 +76,7 @@ public sealed partial class OriginalPauseBoard : Control
         PauseState state,
         Func<int, MenuInput> inputFor,
         string dataRoot,
+        Mech3.TextureSet rimage,
         PauseSheet sheet,
         Func<PauseReadout> readout)
     {
@@ -83,6 +85,7 @@ public sealed partial class OriginalPauseBoard : Control
             _state = state,
             _inputFor = inputFor,
             _dataRoot = dataRoot,
+            _rimage = rimage,
             _sheet = sheet,
             _readout = readout,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -100,7 +103,7 @@ public sealed partial class OriginalPauseBoard : Control
     {
         // The view sizes itself off the viewport, so it cannot be populated before it is in the
         // tree; the first pause is what composes anything.
-        _view = ComposedBoardView.Build(_dataRoot);
+        _view = ComposedBoardView.Build(_dataRoot, _rimage);
         AddChild(_view);
     }
 

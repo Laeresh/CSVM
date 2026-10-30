@@ -15,7 +15,7 @@ public class WeaponAudioCuesTests
     [Fact]
     public void TheDryCueNameComesFromTheCatalogueNotALiteral()
     {
-        var weapons = WeaponDefs.Load(TestData.Fixture("zrdr"));
+        var weapons = WeaponDefs.Load(TestZrdr.Fixture("zrdr"));
 
         Assert.Equal("snd_probe_emptyclip", WeaponAudioCues.EmptyClipName(weapons));
         Assert.Equal(weapons.EmptyClipSound, WeaponAudioCues.EmptyClipName(weapons));

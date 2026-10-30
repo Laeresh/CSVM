@@ -55,15 +55,15 @@ internal static class ClutterCardDepthSuites
         + "and mid-fade, asserted on changed pixel counts against each pose's own occluder frame")]
     internal static void CardDepth(TestContext ctx)
     {
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
+        var chapterGamez = ctx.ChapterGamez(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        ctx.RequireData(gamezPath, $"{Chapter} gamez");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        ctx.RequireData(chapterGamez, $"{Chapter} gamez");
+        var interp = ctx.RequireInterp();
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var names = ClutterBuilder.TemplateNames(ctx.InterpPath, Chapter);
+        var names = ClutterBuilder.TemplateNames(interp, Chapter);
         ctx.Check(names.Count > 0, $"{Chapter} registers clutter templates count={names.Count}");
         if (names.Count == 0)
         {
@@ -72,7 +72,7 @@ internal static class ClutterCardDepthSuites
 
         var scene = new SceneBuilder(gamez, textures);
         var clutter = new ClutterBuilder(gamez, textures, scene,
-            ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter)));
+            ClutterTemplateSpec.Load(ctx.ChapterZrdr(Chapter)));
         var built = clutter.Build(names);
         ClutterBuilder.KindExport? card = null;
         foreach (var kind in clutter.ExportedKinds ?? Array.Empty<ClutterBuilder.KindExport>())

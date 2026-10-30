@@ -33,9 +33,9 @@ public static class Zeppelins
     /// file is <c>[null]</c>; throws <see cref="FileNotFoundException"/> when the mission scope
     /// carries no zeppelins file at all (unseen in this install: 50 of the 53 mission dirs have
     /// one, the other 3 are MP1/MP2 dirs without the file).</summary>
-    public static List<ZeppelinDef> Load(string missionZrdrPath)
+    public static List<ZeppelinDef> Load(ZrdrSet missionZrdr)
     {
-        var root = Zrdr.LoadFile(missionZrdrPath, "zeppelins.json");
+        var root = missionZrdr.LoadFile("zeppelins.json");
         var defs = new List<ZeppelinDef>();
         // The whole reader is one outer element: [[record0, record1, …]], or [null] for none.
         if (root.Count == 0 || root[0] is not List<object?> records)

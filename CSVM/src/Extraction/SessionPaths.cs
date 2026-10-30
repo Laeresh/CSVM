@@ -1,36 +1,23 @@
 using System;
 using System.IO;
+using System.Linq;
 
 namespace CSVM.Extraction;
 
 /// <summary>
-/// Resolves the per-chapter and per-mission extraction paths (gamez / texture / zrdr) under a
-/// data root, preferring an unpacked sibling folder over its <c>.zip</c>. Static and engine-free
-/// so every entry point, <c>--anim-lab</c> included, resolves the paths a normal session does.
-/// ⚠ The <c>--gamez=</c>/<c>--textures=</c>/<c>--zrdr=</c>/<c>--sounds=</c> overrides are the
-/// caller's policy and stay in <see cref="CSVM.Launch.GameSession"/>.
+/// Where each chapter and mission archive's unzbd output sits under a folder holding that tree:
+/// a modding folder, or the tests' oracle. An unpacked sibling folder beats its <c>.zip</c>.
+/// Every chapter path maps through <see cref="ZbdTree"/>. Static and engine-free.
+/// ⚠ The folder is the tree's own root, never a data root: nothing here implies an
+/// <c>extracted/</c>.
 /// </summary>
 public static class SessionPaths
 {
-    /// <summary><c>--zip-assets</c>: ignore every unpacked sibling folder and read the <c>.zip</c>,
-    /// the only shape an exported build ships. Process-wide, set once at startup, because the
-    /// asset shape is a property of the run rather than of one path.
-    /// ⚠ The two shapes do not fail alike, so an unpacked tree cannot reproduce a zip-only bug at
-    /// all. That is how one shipped: <see cref="Mech3.SoundArchive"/>'s entry in
-    /// docs/architecture.md.</summary>
-    public static bool ForceZipped { get; set; }
-
-    /// <summary>Prefer the unpacked sibling folder from <c>--extract-unzip</c> when it
-    /// exists, since loose files skip zip decompression at load. Else the <c>.zip</c> path
-    /// verbatim; the loaders read either shape. <see cref="ForceZipped"/> takes the zip whenever
-    /// there IS one. Otherwise it falls through, so a run asking for zips still starts where only
-    /// the folder was ever extracted.</summary>
+    /// <summary>The unpacked sibling folder a modder may expand a zip into, when it exists, since
+    /// loose files skip zip decompression at load. Else the <c>.zip</c> path verbatim; the loaders
+    /// read either shape.</summary>
     public static string PreferUnzipped(string zipPath)
     {
-        if (ForceZipped && File.Exists(zipPath))
-        {
-            return zipPath;
-        }
         var dir = Path.Combine(Path.GetDirectoryName(zipPath)!, Path.GetFileNameWithoutExtension(zipPath));
         return Directory.Exists(dir) ? dir : zipPath;
     }
@@ -41,9 +28,9 @@ public static class SessionPaths
     /// <c>texture.zip</c>: the tiers are what the original renders, and hundreds of same-name,
     /// same-size textures differ in content from the base archive, the gauge needles only carry
     /// their painted alpha silhouette there.</summary>
-    public static string ChapterTextures(string dataRoot, string chapter)
+    public static string ChapterTextures(string folder, string chapter)
     {
-        var dir = Extraction.ZbdTree.Folder(dataRoot, chapter);
+        var dir = ZbdTree.Folder(folder, chapter);
         string best = "texture";
         int bestN = -1;
         if (Directory.Exists(dir))
@@ -61,59 +48,35 @@ public static class SessionPaths
         return PreferUnzipped(Path.Combine(dir, best + ".zip"));
     }
 
-    /// <summary>The chapter's world GameZ (<c>extracted/&lt;chapter&gt;/gamez.zip</c>), the single
+    /// <summary>The chapter's world GameZ (<c>&lt;chapter&gt;/gamez.zip</c>), the single
     /// <c>world1</c> node and everything under it.</summary>
-    public static string ChapterGamez(string dataRoot, string chapter) =>
-        PreferUnzipped(Extraction.ZbdTree.Under(dataRoot, chapter + "/gamez.zip"));
+    public static string ChapterGamez(string folder, string chapter) =>
+        PreferUnzipped(ZbdTree.Under(folder, chapter + "/gamez.zip"));
 
-    /// <summary>The chapter's zrdr scope (<c>extracted/&lt;chapter&gt;/zrdr.zip</c>), zepstate,
+    /// <summary>The chapter's zrdr scope (<c>&lt;chapter&gt;/zrdr.zip</c>), zepstate,
     /// startanims, and the chapter-wide anim defs.</summary>
-    public static string ChapterZrdr(string dataRoot, string chapter) =>
-        PreferUnzipped(Extraction.ZbdTree.Under(dataRoot, chapter + "/zrdr.zip"));
+    public static string ChapterZrdr(string folder, string chapter) =>
+        PreferUnzipped(ZbdTree.Under(folder, chapter + "/zrdr.zip"));
 
-    /// <summary>Where the ten <c>.mpg</c> cinemas the extraction copies across sit. It is one
-    /// directory deeper than the bitmaps the same layout rows name, which is the base the original
-    /// resolves every movie name under (<c>docs/formats/cinemas.md</c>).</summary>
-    public static string CinemaFolder(string dataRoot) =>
-        Extraction.RofTree.Under(dataRoot, "ASSETS/GRAPHICS/MPG");
-
-    /// <summary>The cinema file a name means, with <c>.mpg</c> supplied when the name carries no
-    /// extension. ⚠ Every caller that names a cinema resolves through here. Four of the ten are
-    /// named in the data in a case the install's files do not have. The extraction writes each in
-    /// <see cref="Extraction.RofTree"/>'s case.</summary>
-    public static string Cinema(string dataRoot, string name)
-    {
-        string want = Path.GetExtension(name).Length == 0 ? name + ".mpg" : name;
-        return Extraction.RofTree.Member(CinemaFolder(dataRoot), want);
-    }
-
-    /// <summary>The mission's zrdr scope (<c>extracted/&lt;chapter&gt;/&lt;mission&gt;/zrdr.zip</c>)
-    ///, spawn points, danger zones, weather, objectives, and the mission's own anim defs.
+    /// <summary>The mission's zrdr scope (<c>&lt;chapter&gt;/&lt;mission&gt;/zrdr.zip</c>),
+    /// spawn points, danger zones, weather, objectives, and the mission's own anim defs.
     /// ⚠ The chapter and mission may come in either case, and the campaign sequence names
-    /// <c>c3</c>/<c>m01</c>. Every chapter path here maps through <see cref="Extraction.ZbdTree"/>.</summary>
-    public static string MissionZrdr(string dataRoot, string chapter, string mission) =>
-        PreferUnzipped(Extraction.ZbdTree.Under(dataRoot, $"{chapter}/{mission}/zrdr.zip"));
+    /// <c>c3</c>/<c>m01</c>.</summary>
+    public static string MissionZrdr(string folder, string chapter, string mission) =>
+        PreferUnzipped(ZbdTree.Under(folder, $"{chapter}/{mission}/zrdr.zip"));
 
-    /// <summary>Whether any chapter folder under <c>extracted/</c> holds its world GameZ, zipped or
-    /// unpacked. False for an extraction of a disc's contents, which carries the menus and no
-    /// chapter, so every flight fails to build.</summary>
-    public static bool HasAnyChapterWorld(string dataRoot)
-    {
-        string extracted = Path.Combine(dataRoot, ExtractionRun.ExtractedFolder);
-        if (!Directory.Exists(extracted))
-        {
-            return false;
-        }
+    /// <summary>The chapter's compiled anim archive (<c>&lt;chapter&gt;/cam_anim.zip</c>).</summary>
+    public static string ChapterAnim(string folder, string chapter) =>
+        PreferUnzipped(ZbdTree.Under(folder, chapter + "/cam_anim.zip"));
 
-        foreach (string chapter in Directory.EnumerateDirectories(extracted))
-        {
-            string gamez = Path.Combine(chapter, "gamez.zip");
-            if (File.Exists(gamez) || Directory.Exists(PreferUnzipped(gamez)))
-            {
-                return true;
-            }
-        }
+    /// <summary>The mission's compiled anim archive
+    /// (<c>&lt;chapter&gt;/&lt;mission&gt;/mis_anim.zip</c>).</summary>
+    public static string MissionAnim(string folder, string chapter, string mission) =>
+        PreferUnzipped(ZbdTree.Under(folder, $"{chapter}/{mission}/mis_anim.zip"));
 
-        return false;
-    }
+    /// <summary>Whether <paramref name="game"/> holds any chapter's world GameZ
+    /// (<c>ZBD/&lt;chapter&gt;/gamez.zbd</c>). False with no game files, and for a copy of a disc
+    /// without its chapters, so every flight fails to build.</summary>
+    public static bool HasAnyChapterWorld(IGameFileSource? game) =>
+        game != null && ZbdManifest.Expected.Any(path => path.EndsWith("/gamez.zbd", StringComparison.Ordinal) && game.Exists("ZBD/" + path));
 }

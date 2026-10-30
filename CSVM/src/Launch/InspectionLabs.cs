@@ -136,8 +136,8 @@ internal sealed class InspectionLabs
         // The spawn the mission would place the player at. The camera starts here, with the
         // interesting part of the map in view, and the optional parked plane sits on it.
         // Resolved once so the camera and plane agree.
-        var labSpawns = SpawnPoints.LoadIa(state.MissionZrdrPath, spec.Scenario);
-        var (spawnPos, spawnLook) = spawns.ChooseSpawn(labSpawns, state.MissionZrdrPath,
+        var labSpawns = SpawnPoints.LoadIa(state.MissionZrdr, spec.Scenario);
+        var (spawnPos, spawnLook) = spawns.ChooseSpawn(labSpawns, state.MissionZrdr,
             spawns.ChooseSpawnBase(labSpawns), 0, "");
 
         // Camera: the freecam SpectatorCamera (RMB look, WASD/QE move), like --freecam,
@@ -165,11 +165,11 @@ internal sealed class InspectionLabs
         if (spec.PlaneNames.Count > 0)
         {
             long mark = StartupProfile.Mark();
-            var planesGamez = GameZ.Load(state.PlanesGamezPath);
+            var planesGamez = state.Data.Planes ?? throw new System.IO.FileNotFoundException("the game data holds no planes.zbd");
             StartupProfile.Record("gamez", mark);
             mark = StartupProfile.Mark();
             var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,
-                scheme: livery.SchemeFor(0, state.ZrdrPath, livery.NewPaintRng(),
+                scheme: livery.SchemeFor(0, state.Zrdr, livery.NewPaintRng(),
                     livery.PatternsForPlane(planesGamez, spec.PlaneName)),
                 patterns: livery.Patterns, dockingHook: true);
             var parked = parkedBuilder.Build(spec.PlaneName);
@@ -221,7 +221,7 @@ internal sealed class InspectionLabs
         // wears rather than a second roll of --paint=random.
         long mark = StartupProfile.Mark();
         var staticPatterns = livery.PatternsForPlane(state.Gamez, spec.PlaneName);
-        var staticScheme = livery.SchemeFor(0, state.ZrdrPath, livery.NewPaintRng(), staticPatterns);
+        var staticScheme = livery.SchemeFor(0, state.Zrdr, livery.NewPaintRng(), staticPatterns);
         // In --viewer the LIVERY LAB owns the livery and applies it itself. The model is built
         // bare, so paint has one write path, its Repaint. cockpitInterior rides the same gate as
         // damagePanels, with pcdp4/pcdp6 hidden.
@@ -238,7 +238,7 @@ internal sealed class InspectionLabs
         if (spec.Viewer)
         {
             mark = StartupProfile.Mark();
-            var stats = PlaneStats.Load(state.ZrdrPath, spec.PlaneName);
+            var stats = PlaneStats.Load(state.Zrdr, spec.PlaneName);
             StartupProfile.Record("zrdr", mark);
             if (stats.DestroyableParts.Count == 0)
             {
@@ -248,17 +248,17 @@ internal sealed class InspectionLabs
             {
                 // Stand-in puffers: the parked plane travels no distance, so the authored
                 // distance-interval trail defs the flight lab plays would emit nothing here.
-                var smoke = Puffer.MakePuffer(state.ZrdrPath, state.Textures, worldRoot, "pufftrails.json", "smokepuffer", ambience: _in.Ambience);
-                var fire = Puffer.MakePuffer(state.ZrdrPath, state.Textures, worldRoot, "pufftrails.json", "firepuffer", ambience: _in.Ambience);
+                var smoke = Puffer.MakePuffer(state.Zrdr, state.Textures, worldRoot, "pufftrails.json", "smokepuffer", ambience: _in.Ambience);
+                var fire = Puffer.MakePuffer(state.Zrdr, state.Textures, worldRoot, "pufftrails.json", "firepuffer", ambience: _in.Ambience);
                 var panelTrails = new List<Puffer>();
                 for (int i = 0; i < 8; i++) // pool one per pdp panel, the lab can flip all of them
-                    if (Puffer.MakePuffer(state.ZrdrPath, state.Textures, worldRoot, "pufftrails.json", "firepuffer", ambience: _in.Ambience) is { } pt)
+                    if (Puffer.MakePuffer(state.Zrdr, state.Textures, worldRoot, "pufftrails.json", "firepuffer", ambience: _in.Ambience) is { } pt)
                         panelTrails.Add(pt);
                 // The healthy↔torn candidate sets from the authored defs, the viewer
                 // has no anim program, so the two reader files are loaded directly.
                 var pairingDefs = new List<AnimDefinition>();
-                pairingDefs.AddRange(AnimDefs.LoadFileDefs(state.ZrdrPath, "player_destruct_reset.json"));
-                pairingDefs.AddRange(AnimDefs.LoadFileDefs(state.ZrdrPath, "player-1.json"));
+                pairingDefs.AddRange(AnimDefs.LoadFileDefs(state.Zrdr, "player_destruct_reset.json"));
+                pairingDefs.AddRange(AnimDefs.LoadFileDefs(state.Zrdr, "player-1.json"));
                 var visuals = new DamageVisuals(builder.DamagePanels, plane, stats, smoke, fire, panelTrails,
                     DamageVisuals.PanelPairingSets(pairingDefs), cockpitPanels: builder.CockpitDamagePanels);
                 // the HUD gauge cluster as a lab toggle (user request): the damage
@@ -280,7 +280,7 @@ internal sealed class InspectionLabs
         // unadorned --viewer screenshot is unchanged.
         if (spec.Viewer && builder.SkinPrefix != null)
         {
-            var lab = new LiveryLab(builder, livery.PaintCatalog(state.ZrdrPath), state.Textures, staticScheme,
+            var lab = new LiveryLab(builder, livery.PaintCatalog(state.Zrdr), state.Textures, staticScheme,
                 livery.Patterns.PatternsFor(builder.SkinPrefix))
             {
                 DebugShow = spec.DebugLivery.HasValue,
@@ -355,8 +355,8 @@ internal sealed class InspectionLabs
         }
         else
         {
-            var freecamSpawns = SpawnPoints.LoadIa(state.MissionZrdrPath, spec.Scenario);
-            (camPos, camLookAt) = spawns.ChooseSpawn(freecamSpawns, state.MissionZrdrPath,
+            var freecamSpawns = SpawnPoints.LoadIa(state.MissionZrdr, spec.Scenario);
+            (camPos, camLookAt) = spawns.ChooseSpawn(freecamSpawns, state.MissionZrdr,
                 spawns.ChooseSpawnBase(freecamSpawns), 0, "");
         }
         if (spec.CamPos is { } cp) camPos = cp;
@@ -590,7 +590,7 @@ internal sealed class InspectionLabs
         Func<IReadOnlyList<FlightController>> aiPlanes, Func<NetTrailerTargets?> trailers)
     {
         var spec = _in.Spec;
-        plane.AddChild(new AiNetsOverlay(SessionPaths.ChapterZrdr(state.DataRoot, spec.Chapter), spec.Chapter)
+        plane.AddChild(new AiNetsOverlay(state.ChapterZrdr, spec.Chapter)
         {
             DebugShow = spec.DebugAiNets != null,
             Filter = spec.DebugAiNets ?? "",

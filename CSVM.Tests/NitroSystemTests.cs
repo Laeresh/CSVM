@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -17,8 +18,7 @@ public class NitroSystemTests
 {
     private const float Dt = 1f / 60f;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [Fact]
     public void ANitroEngineSpawnsWithAFullTankAndNoBoost()

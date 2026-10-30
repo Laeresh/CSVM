@@ -213,8 +213,8 @@ public class FogVolumeWhiteoutTests
     [InlineData("C5", "armed|17|16|16|101010")]
     public void OnlyC5ArmsTheInVolumeWhiteoutAndTheseAreItsAuthoredValues(string chapter, string expected)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
-        var spec = FogVolumeSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
+        var spec = FogVolumeSpec.Load(TestZrdr.Chapter(chapter));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
 
         var whiteout = FogVolumeWhiteout.From(spec, volumes);
@@ -237,8 +237,8 @@ public class FogVolumeWhiteoutTests
         // analysis/goldens/manifest.json, shot `c5-city-night`: --pos=-9256,178,-3155. C5's approach
         // ramp is 16 m long and this camera is nowhere near a street strip, so the density is
         // exactly 0 and the only golden in a fog_zone chapter must stay byte-identical.
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C5"));
-        var spec = FogVolumeSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C5"));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C5"));
+        var spec = FogVolumeSpec.Load(TestZrdr.Chapter("C5"));
         var volumes = FogVolumeSpec.VolumesOf(gamez);
         var whiteout = FogVolumeWhiteout.From(spec, volumes);
         var pose = new Vector3(-9256f, 178f, -3155f);

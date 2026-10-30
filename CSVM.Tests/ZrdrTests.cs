@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The alternating key/list convention every zrdr reader is built on
 /// (<c>docs/formats/README.md</c> "Shared conventions") plus the archive lookup's two shapes.
-/// Input is <c>fixtures/zrdr/shapes.json</c>, hand-authored to carry one instance of each shape
+/// Input is <c>fixtures/zrdr/shapes.zrd.json</c>, hand-authored to carry one instance of each shape
 /// the convention allows.
 /// </summary>
 [Trait("Tier", "Quick")]
@@ -116,7 +116,7 @@ public class ZrdrTests
     [Fact]
     public void TheForksZrdJsonNameIsAcceptedForTheSameRequest()
     {
-        // mech3ax v0.6.1 wrote "vehicle.json"; the fork writes "vehicle.zrd.json".
+        // The engine names a reader "vehicle.json"; the fork stores it as "vehicle.zrd.json".
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "probe.zrd.json"), "[[\"KEY\", [1]]]");
         var root = Zrdr.LoadFile(dir, "probe.json");
@@ -130,8 +130,8 @@ public class ZrdrTests
         var zipPath = Path.Combine(dir, "zrdr.archive");
         ZipFile.CreateFromDirectory(FixtureDir, zipPath);
 
-        var fromDir = WeaponDefs.Load(FixtureDir);
-        var fromZip = WeaponDefs.Load(zipPath);
+        var fromDir = WeaponDefs.Load(TestZrdr.Folder(FixtureDir));
+        var fromZip = WeaponDefs.Load(TestZrdr.Folder(zipPath));
         Assert.Equal(fromDir.All.Count, fromZip.All.Count);
         Assert.Equal(fromDir.EmptyClipSound, fromZip.EmptyClipSound);
     }
@@ -143,18 +143,18 @@ public class ZrdrTests
     }
 
     [Fact]
-    public void HasFileAnswersForAFolderUnderEitherStoredName()
+    public void HasFileAnswersForAFolderUnderTheForksNameOnly()
     {
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "plain.json"), "[]");
         File.WriteAllText(Path.Combine(dir, "forked.zrd.json"), "[]");
-        Assert.True(Zrdr.HasFile(dir, "plain.json"));
+        Assert.False(Zrdr.HasFile(dir, "plain.json"));
         Assert.True(Zrdr.HasFile(dir, "forked.json"));
         Assert.False(Zrdr.HasFile(dir, "absent.json"));
     }
 
     [Fact]
-    public void HasFileAnswersForAZipUnderEitherStoredName()
+    public void HasFileAnswersForAZipUnderTheForksNameOnly()
     {
         var dir = TestData.TempDir();
         var source = Path.Combine(dir, "source");
@@ -163,7 +163,7 @@ public class ZrdrTests
         File.WriteAllText(Path.Combine(source, "forked.zrd.json"), "[]");
         var zipPath = Path.Combine(dir, "zrdr.zip");
         ZipFile.CreateFromDirectory(source, zipPath);
-        Assert.True(Zrdr.HasFile(zipPath, "plain.json"));
+        Assert.False(Zrdr.HasFile(zipPath, "plain.json"));
         Assert.True(Zrdr.HasFile(zipPath, "forked.json"));
         Assert.False(Zrdr.HasFile(zipPath, "absent.json"));
     }
@@ -184,14 +184,14 @@ public class ZrdrTests
         {
             anim.Add(name);
         }
-        Assert.Equal(new[] { "demo_anims.json" }, anim);
+        Assert.Equal(new[] { "demo_anims.zrd.json" }, anim);
 
         var ballistics = new List<string>();
         foreach (var (name, _) in Zrdr.LoadMatchingFiles(FixtureDir, "BALLISTICS"))
         {
             ballistics.Add(name);
         }
-        Assert.Equal(new[] { "weapons.json" }, ballistics);
+        Assert.Equal(new[] { "weapons.zrd.json" }, ballistics);
     }
 
     private static ZrdrDict ProbeBlock()

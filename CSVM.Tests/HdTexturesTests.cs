@@ -25,21 +25,20 @@ public class HdTexturesTests
             ("world_textures/cloud1.png", "flat"),
             ("world_textures/C3/rtexture12/cloud1.png", "c3"),
             ("world_textures/readme.txt", "not art"));
-        var extracted = Path.Combine(root, "extracted");
-
         using var hd = HdTextures.Open(root, "HD");
 
-        Assert.Equal("c1m1", Text(hd.ForExtracted(Path.Combine(extracted, "rimage", "c1m1.png"))));
-        // The extraction upper-cases the rof tree and ships the scrapbook backdrops as .JPG.
-        Assert.Equal("scrap", Text(hd.ForExtracted(Path.Combine(extracted, "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK", "SB_BG_1.JPG"))));
-        Assert.Null(hd.ForExtracted(Path.Combine(extracted, "rimage", "c1m2.png")));
-        Assert.Null(hd.ForExtracted(Path.Combine(root, "rimage", "c1m1.png")));
+        Assert.Equal("c1m1", Text(hd.ForRimage("C1M1")));
+        // The UI archive's paths are upper case and its scrapbook backdrops are .JPG.
+        Assert.Equal("scrap", Text(hd.ForRof("ASSETS/GRAPHICS/SCRAPBOOK/SB_BG_1.JPG")));
+        Assert.Null(hd.ForRimage("c1m2"));
+        Assert.Null(hd.ForRof("ASSETS/GRAPHICS/SB_BG_1.JPG"));
 
         // A chapter's own entry beats the bare name, which every other archive takes.
-        Assert.Equal("c3", Text(hd.ForWorld(Path.Combine(extracted, "C3", "rtexture12.zip"), "cloud1")));
-        Assert.Equal("c3", Text(hd.ForWorld(Path.Combine(extracted, "C3", "rtexture12"), "Cloud1")));
-        Assert.Equal("flat", Text(hd.ForWorld(Path.Combine(extracted, "C5", "rtexture14.zip"), "cloud1")));
-        Assert.Null(hd.ForWorld(Path.Combine(extracted, "C5", "rtexture14.zip"), "readme"));
+        Assert.Equal("c3", Text(hd.ForWorld("c3/rtexture12", "cloud1")));
+        Assert.Equal("c3", Text(hd.ForWorld("C3/rtexture12", "Cloud1")));
+        Assert.Equal("flat", Text(hd.ForWorld("c5/rtexture14", "cloud1")));
+        Assert.Equal("flat", Text(hd.ForWorld("", "cloud1")));
+        Assert.Null(hd.ForWorld("c5/rtexture14", "readme"));
         Assert.Equal(4, hd.Count);
     }
 
@@ -54,9 +53,8 @@ public class HdTexturesTests
 
         using var hd = HdTextures.Open(root, "HD");
 
-        var rimage = Path.Combine(root, "extracted", "rimage");
-        Assert.Equal("fixed", Text(hd.ForExtracted(Path.Combine(rimage, "arrow.png"))));
-        Assert.Equal("kept", Text(hd.ForExtracted(Path.Combine(rimage, "darrow.png"))));
+        Assert.Equal("fixed", Text(hd.ForRimage("arrow")));
+        Assert.Equal("kept", Text(hd.ForRimage("darrow")));
     }
 
     [Fact]
@@ -72,11 +70,11 @@ public class HdTexturesTests
 
         using var hd = HdTextures.Open(root, "HD");
 
-        var scrapbook = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
-        Assert.Equal("thumb", Text(hd.ForExtracted(Path.Combine(scrapbook, "SB_03_01_BASE.PNG"))));
-        Assert.Equal("zoom", Text(hd.ForExtracted(Path.Combine(scrapbook, "SB_03_01_BASE.JPG"))));
+        const string Scrapbook = "ASSETS/GRAPHICS/SCRAPBOOK/";
+        Assert.Equal("thumb", Text(hd.ForRof(Scrapbook + "SB_03_01_BASE.PNG")));
+        Assert.Equal("zoom", Text(hd.ForRof(Scrapbook + "SB_03_01_BASE.JPG")));
         // An original whose format the pack does not ship takes the name's last entry.
-        Assert.Equal("thumb", Text(hd.ForExtracted(Path.Combine(scrapbook, "SB_03_01_BASE.TIF"))));
+        Assert.Equal("thumb", Text(hd.ForRof(Scrapbook + "SB_03_01_BASE.TIF")));
         Assert.Equal(1, hd.Count);
     }
 

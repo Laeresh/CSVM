@@ -15,12 +15,12 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class AnimDefs
 {
-    /// <summary>Loads every ANIMATION_DEFINITION from all reader files in a zrdr zip/dir.
+    /// <summary>Loads every ANIMATION_DEFINITION from all reader files of a scope.
     /// Missing archive → empty list (mission folders without anim readers are normal).</summary>
-    public static List<AnimDefinition> LoadArchive(string zrdrPath)
+    public static List<AnimDefinition> LoadArchive(ZrdrSet zrdr)
     {
         var defs = new List<AnimDefinition>();
-        foreach (var (name, root) in Zrdr.LoadMatchingFiles(zrdrPath, "ANIMATION_DEFINITIONS"))
+        foreach (var (name, root) in zrdr.LoadMatchingFiles("ANIMATION_DEFINITIONS"))
         {
             // Root shape: [["ANIMATION_DEFINITIONS", [ …, "ANIMATION_LIST", [
             //   "ANIMATION_DEFINITION", [def], … ] ] ]]
@@ -38,13 +38,13 @@ public static class AnimDefs
     /// specific family without paying for the whole archive (the parked viewer's panel-pairing
     /// derivation reads two files where <see cref="LoadArchive"/> parses hundreds). Missing file
     /// → empty list, same policy as the archive load.</summary>
-    public static List<AnimDefinition> LoadFileDefs(string zrdrPath, string fileName)
+    public static List<AnimDefinition> LoadFileDefs(ZrdrSet zrdr, string fileName)
     {
         var defs = new List<AnimDefinition>();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(zrdrPath, fileName);
+            root = zrdr.LoadFile(fileName);
         }
         catch (System.IO.FileNotFoundException)
         {

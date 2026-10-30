@@ -40,17 +40,17 @@ internal static class CampaignStuntMarkerSuites
         + "OBJECTIVE1, awake from mission start, is still open")]
     internal static void CampaignCm11StuntMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -69,7 +69,7 @@ internal static class CampaignStuntMarkerSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -102,11 +102,11 @@ internal static class CampaignStuntMarkerSuites
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        string missionZrdr, string chapterZrdr, string texturesPath,
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath,
         MissionTargets targets, Messages messages, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -123,10 +123,10 @@ internal static class CampaignStuntMarkerSuites
 
             string what = director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
-                MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
+                MinAiActiveDist = AiSkills.Load(ctx.Zrdr).MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
                     () => human.WorldPosition,
@@ -270,7 +270,7 @@ internal static class CampaignStuntMarkerSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {
@@ -300,18 +300,18 @@ internal static class CampaignStuntMarkerSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             null!, ctx.Host, resources,
             new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
             new HumanRosterBindings());

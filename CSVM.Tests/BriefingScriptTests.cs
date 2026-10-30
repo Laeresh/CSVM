@@ -173,9 +173,9 @@ public class BriefingScriptTests
     public void TheReaderTakesTheMapAndTheNarrationFromTheStateItself()
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "Briefing.json"), Dialog);
+        File.WriteAllText(Path.Combine(dir, "Briefing.zrd.json"), Dialog);
 
-        var state = BriefingDialog.Load(dir).Find(6, 1);
+        var state = BriefingDialog.Load(TestZrdr.Folder(dir)).Find(6, 1);
 
         Assert.NotNull(state);
         Assert.Equal("HA-m1MAP", state!.Background);
@@ -204,9 +204,9 @@ public class BriefingScriptTests
     public void TheLoadingStateIsNotAMissionState()
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "Briefing.json"), Dialog);
+        File.WriteAllText(Path.Combine(dir, "Briefing.zrd.json"), Dialog);
 
-        Assert.Single(BriefingDialog.Load(dir).States);
+        Assert.Single(BriefingDialog.Load(TestZrdr.Folder(dir)).States);
     }
 
     private static BriefingOp[] Ops(IReadOnlyList<BriefingStep> steps)

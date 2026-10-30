@@ -137,7 +137,7 @@ public sealed class VersusDirector
     /// <summary>The match of a <c>--vs</c> launch, built ahead of the rigs because every pane's
     /// HUD binds this one instance; null for any other launch. The score and respawn plumbing runs
     /// once every rig exists (<see cref="Wire"/>).</summary>
-    internal static VersusDirector? TryCreate(SessionSpec spec, Field field, string zrdrPath,
+    internal static VersusDirector? TryCreate(SessionSpec spec, Field field, ZrdrSet zrdr,
         IReadOnlyDictionary<int, string>? teamNames)
     {
         if (!spec.Versus)
@@ -146,7 +146,7 @@ public sealed class VersusDirector
         }
 
         var match = new VersusMatch(field.SeatRigs.Count, spec.VsKills, spec.VsTimeMinutes * 60f, spec.VsLives,
-            MatchScores.Load(zrdrPath, why => Log.Warn("flight", $"dogfight: player.zrd unreadable, scoring the executable's fallbacks: {why}")));
+            MatchScores.Load(zrdr, why => Log.Warn("flight", $"dogfight: player.zrd unreadable, scoring the executable's fallbacks: {why}")));
         if (SeatTeams(spec, field.NetSeats) is { } seatTeams)
         {
             match.AssignTeams(seatTeams, teamNames);
@@ -347,7 +347,7 @@ public sealed class VersusDirector
             return;
         }
 
-        var (radius, margin) = ZeppelinVersusRuntime.LoadRespawnRing(inputs.ZrdrPath);
+        var (radius, margin) = ZeppelinVersusRuntime.LoadRespawnRing(inputs.Zrdr);
         ZvzPlay = ZeppelinVersusRuntime.Open(new ZeppelinVersusInputs
         {
             Net = net,
@@ -370,7 +370,7 @@ public sealed class VersusDirector
     /// <summary>The rearm bases of any Dogfight, over the wire or split screen. Zeppelin vs Zeppelin
     /// rearms only at its hulls' own nodes, so a match that could not seat both hulls has no base
     /// at all. On the empty stage the bases stand in its match <paramref name="arena"/>.</summary>
-    internal void WireRearmBases(AnimRuntime? world, Node3D? arena, string zrdrPath, ZeppelinRuntime? hulls)
+    internal void WireRearmBases(AnimRuntime? world, Node3D? arena, ZrdrSet zrdr, ZeppelinRuntime? hulls)
     {
         if ((world == null && arena == null) || (_spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin && ZvzPlay == null))
         {
@@ -387,7 +387,7 @@ public sealed class VersusDirector
             CaptureTheFlag = _spec.MissionType == DogfightMissionType.CaptureTheFlag,
             Zeppelins = ZvzPlay,
             Hulls = hulls,
-            RadiusSquared = RearmBases.LoadRadiusSquared(zrdrPath, why => Log.Warn("flight", $"rearm: player.zrd unreadable, the radius keeps its initialised value: {why}")),
+            RadiusSquared = RearmBases.LoadRadiusSquared(zrdr, why => Log.Warn("flight", $"rearm: player.zrd unreadable, the radius keeps its initialised value: {why}")),
             Strings = _field.Strings,
         });
     }
@@ -1073,7 +1073,7 @@ public sealed class VersusDirector
     /// <summary>What Zeppelin vs Zeppelin seats its two hulls with.</summary>
     internal sealed class ZeppelinVersusWireInputs
     {
-        public string ZrdrPath = "";
+        public ZrdrSet Zrdr = ZrdrSet.None;
         public ZeppelinRuntime? Zeppelins;
         public Func<int, int> SeatOfShooter = null!;
         public MissionRadio? Radio;

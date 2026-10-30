@@ -37,14 +37,14 @@ internal static class VesselFuseSuites
         + "with no hull registry on the pool")]
     internal static void VesselFuse(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
 
         // The zeppelin-fuse suite's pick: a dumbfire, spread-free fused rocket with no dot cone.
         var rocket = weapons.All.FirstOrDefault(w =>
@@ -59,8 +59,8 @@ internal static class VesselFuseSuites
 
         var mission = MissionOf(ctx);
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Fuse"), null);
         var report = new StringBuilder();
         var textures = new TextureArchive(texturesPath);
@@ -76,9 +76,9 @@ internal static class VesselFuseSuites
                 worldRoot.AddChild(vessels);
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     FindNodes = name => runtime.FindNodes(name),
                     Spawn = (_, _, _, _) => null,   // the aircraft half stays unbuilt on purpose
@@ -224,7 +224,7 @@ internal static class VesselFuseSuites
 
     private static CampaignMission MissionOf(TestContext ctx)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))

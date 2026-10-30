@@ -144,7 +144,7 @@ internal sealed class LiveSettings
     /// <summary>The options file's writer for an Options apply, shared by the menu's apply and the
     /// pause leaf's. The display settings, the mix, the word settings and the graphics mode apply now.
     /// A headset pacing the frames (<paramref name="headsetPaces"/>) keeps its pacing over V-Sync.
-    /// ⚠ The opening view, the difficulty and VR mode are saved and no more, so do not rebuild
+    /// ⚠ The opening view, the difficulty, VR mode and the modding folder are saved and no more, so do not rebuild
     /// anything for them here. The pause leaf puts the head turn and targeting switch on the seats
     /// flying now (PausePreferences.FeedGameOptions).</summary>
     public void Persist(OptionsApplyExit applied, SessionSpec spec, GameSession? session, bool headsetPaces = false)
@@ -157,6 +157,9 @@ internal sealed class LiveSettings
         options.Rumble = applied.Rumble;
         options.DefaultView = applied.DefaultView;
         options.AutoHeadTurn = applied.AutoHeadTurn;
+        options.LeadingAimAssist = applied.LeadingAimAssist;
+        options.LeadMarker = applied.LeadMarker;
+        options.ThrottlePlate = applied.ThrottlePlate;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
@@ -170,6 +173,7 @@ internal sealed class LiveSettings
         options.VrMode = applied.VrMode;
         options.VrRenderScale = applied.VrRenderScale;
         options.VrVignette = applied.VrVignette;
+        options.ModFolder = applied.ModFolder;
         store.Save(options);
         // The display settings take effect now, through the calls the startup path makes. The order
         // is the window's: the screen it sits on, the mode, the size, then the pacing, which

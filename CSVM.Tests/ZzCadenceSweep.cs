@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Testing;
 using Godot;
 using Xunit;
@@ -50,8 +51,7 @@ public class ZzCadenceSweep
         (230, 0.037, true),
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void SweepThePitchCadences()

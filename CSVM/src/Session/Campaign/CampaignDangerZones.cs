@@ -34,7 +34,7 @@ internal sealed class CampaignDangerZones
     /// <summary>Builds the tracker from the mission's <c>DANGER_ZONES_COMPLETED</c> names, minus
     /// <c>dzones.zrd</c>'s <c>disable</c> list, resolved against the world's gate geometry. Null
     /// if the mission names no zone, or none resolve.</summary>
-    public static CampaignDangerZones? Load(ObjectiveScript script, GameZ gamez, string missionZrdrPath)
+    public static CampaignDangerZones? Load(ObjectiveScript script, GameZ gamez, ZrdrSet missionZrdr)
     {
         var names = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -45,7 +45,7 @@ internal sealed class CampaignDangerZones
         if (names.Count == 0)
             return null;
 
-        var overrides = ReadOverrides(missionZrdrPath);
+        var overrides = ReadOverrides(missionZrdr);
         var zones = new List<Zone>();
         var skipped = new List<string>();
         foreach (var name in names)
@@ -127,8 +127,8 @@ internal sealed class CampaignDangerZones
     /// a <c>dzpathN</c> named here is switched off for this mission, for the player's scoring and
     /// the AI's runs alike. Absent for most missions (no <c>dzones.zrd</c> at all), which reads as
     /// nothing disabled.</summary>
-    internal static HashSet<string> ReadDisabled(string missionZrdrPath) =>
-        ReadOverrides(missionZrdrPath).Disabled;
+    internal static HashSet<string> ReadDisabled(ZrdrSet missionZrdr) =>
+        ReadOverrides(missionZrdr).Disabled;
 
     /// <summary>One armed zone's scrapbook binding: the objective number its mission gives it, and
     /// whether it photographs at all. Answers false for a name this mission did not arm. An
@@ -171,15 +171,15 @@ internal sealed class CampaignDangerZones
 
     // The mission's own dzones.zrd, all three keys at once (docs/formats/missions.md, "Zone
     // overrides"). Absent for most missions, which reads as no override of any kind.
-    private static Overrides ReadOverrides(string missionZrdrPath)
+    private static Overrides ReadOverrides(ZrdrSet missionZrdr)
     {
         var overrides = new Overrides();
-        if (string.IsNullOrEmpty(missionZrdrPath))
+        if (!missionZrdr.Exists)
             return overrides;
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFileOrEmpty(missionZrdrPath, "dzones.json");
+            root = missionZrdr.LoadFileOrEmpty("dzones.json");
         }
         catch (System.IO.IOException)
         {

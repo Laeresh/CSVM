@@ -100,8 +100,6 @@ public sealed class GroundCoverTests
         Assert.Equal(mix, new GroundCover.Surface(rgba, 8, 8).At(0.3, 0.3)!.Value.X, 4);
     }
 
-    private static float Lin(byte c) => MathF.Pow(((c / 255f) + 0.055f) / 1.055f, 2.4f);
-
     [Fact]
     public void ABareTexelGrowsNothingAndAHedgeLineGrass()
     {
@@ -242,6 +240,8 @@ public sealed class GroundCoverTests
 
     // A right triangle 400 m on its legs from `at`, its corners white. U runs along world X and V along world Z at
     // 200 m a repeat, and it rises `rise` metres per 200 m of Z.
+    private static float Lin(byte c) => MathF.Pow(((c / 255f) + 0.055f) / 1.055f, 2.4f);
+
     private static GroundCover.Ground Ground(Cover pick, byte[] rgba, Vector3 at, float rise = 0f)
     {
         int side = (int)Math.Sqrt(rgba.Length / 4);

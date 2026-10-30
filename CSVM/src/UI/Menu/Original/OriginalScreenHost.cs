@@ -49,6 +49,10 @@ public interface IOriginalScreenHost
     /// <summary>The string table the menu reads its words from, empty where none is loaded.</summary>
     UiStrings MenuStrings { get; }
 
+    /// <summary>The launch's game data, the bot rows' pilot names among it; empty where none is
+    /// loaded.</summary>
+    Spec.GameData Data { get; }
+
     /// <summary>Whether a build can be made at all: a hangar feature and a build store together.</summary>
     bool CanBuildPlane { get; }
 

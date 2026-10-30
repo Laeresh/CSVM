@@ -113,11 +113,11 @@ internal static class AiAirframePoolSuites
         + "shown refilling on the quiet frames after the launches")]
     internal static void PoolClaimMatchesBuild(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -130,13 +130,13 @@ internal static class AiAirframePoolSuites
     // One roster, two launches off one block: the first claims, the second misses. Everything the
     // comparison needs is read off the two controllers, so nothing here models the assembly.
     private static void Compare(TestContext ctx, TestWorld world, IReadOnlyList<EnemyGeneratorDef> defs,
-        string missionZrdr, string chapterZrdr, string texturesPath)
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var nets = AiNets.Load(chapterZrdr);
         var templates = CampaignRosterPlan.GeneratorTemplates(
-            missionZrdr, VehicleDefs.Load(ctx.ZrdrPath), nets);
+            missionZrdr, VehicleDefs.Load(ctx.Zrdr), nets);
         var spec = SessionSpec.Parse(Array.Empty<string>());
         var positions = new List<Vector3>();
         ProjectilePool? pool = null;
@@ -148,18 +148,18 @@ internal static class AiAirframePoolSuites
             pool = live;
             ctx.Host.AddChild(live);
             var built = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
                 SuiteConstants.AircraftResources(ctx, planesGamez, textures,
-                    Messages.Load(ctx.MessagesPath)),
+                    ctx.Data.Messages),
                 new FlightWorldBindings
                 {
                     Projectiles = live,
                     Gamez = world.Gamez,
                     WorldScene = world.Session.Builder.Scene,
                     CrashProgram = world.Session.Program,
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
                     HumanPositions = () => positions,
                 },
                 new HumanRosterBindings { RigCount = 1 });

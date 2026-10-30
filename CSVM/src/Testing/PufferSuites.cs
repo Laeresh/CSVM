@@ -215,19 +215,19 @@ internal static class PufferSuites
         "every continuous emitter path through Emit/Stop (plus Burst), driven through a fake renderer with no GPU")]
     internal static void PufferModes(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "flame_ball.json");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
-        ctx.RequireZrdrEntry(SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json");
+        ctx.RequireData(ctx.Zrdr, $"zrdr effect readers");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "flame_ball.json");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "pufftrails.json");
+        ctx.RequireZrdrEntry(ctx.ChapterZrdr(ctx.Chapter), "speed_cue.json");
 
-        var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
-        var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
+        var burstState = PufferState.Load(ctx.Zrdr, "flame_ball.json", "fierypuffer");
+        var trailState = PufferState.Load(ctx.Zrdr, "pufftrails.json", "smokepuffer");
         var speedCueState = PufferState.Load(
-            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer1");
+            ctx.ChapterZrdr(ctx.Chapter), "speed_cue.json", "cuepuffer1");
         var speedCue2 = PufferState.Load(
-            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer2");
+            ctx.ChapterZrdr(ctx.Chapter), "speed_cue.json", "cuepuffer2");
         var speedCue3 = PufferState.Load(
-            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer3");
+            ctx.ChapterZrdr(ctx.Chapter), "speed_cue.json", "cuepuffer3");
         ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
         ctx.Check(trailState != null, $"pufftrails.json defines smokepuffer");
         ctx.Check(speedCueState != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer1");
@@ -920,7 +920,7 @@ internal static class PufferSuites
     {
         const float Wide = 16f / 9f;
         var fresh = PufferState.Load(
-            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer1");
+            ctx.ChapterZrdr(ctx.Chapter), "speed_cue.json", "cuepuffer1");
         ctx.Check(fresh != null, $"{ctx.Chapter} speed_cue.json still defines cuepuffer1");
         if (fresh == null)
             return;
@@ -1055,7 +1055,7 @@ internal static class PufferSuites
         };
         foreach (var chapter in expected)
         {
-            string path = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter.Chapter);
+            var path = ctx.ChapterZrdr(chapter.Chapter);
             for (int i = 0; i < 3; i++)
             {
                 var state = PufferState.Load(path, "speed_cue.json", $"cuepuffer{i + 1}");
@@ -1362,11 +1362,11 @@ internal static class PufferSuites
         + "which is what keeps a mission's pre-warmed field from costing the frame it is idle in")]
     internal static void PufferIdleProcessGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "flame_ball.json");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
-        var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
-        var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
+        ctx.RequireData(ctx.Zrdr, $"zrdr effect readers");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "flame_ball.json");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "pufftrails.json");
+        var burstState = PufferState.Load(ctx.Zrdr, "flame_ball.json", "fierypuffer");
+        var trailState = PufferState.Load(ctx.Zrdr, "pufftrails.json", "smokepuffer");
         ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
         ctx.Check(trailState != null, $"pufftrails.json defines smokepuffer");
         if (burstState == null || trailState == null)
@@ -1795,13 +1795,13 @@ internal static class PufferSuites
         + "shipped archive, and each blend's fog comes from the sky rather than from the material")]
     internal static void PufferBlendFlag(TestContext ctx)
     {
-        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        TextureSet texturePath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+        ctx.RequireData(ctx.Zrdr, $"zrdr effect readers");
         using var textures = new TextureArchive(texturePath);
         ctx.RequireTexture(textures, "fire101");
         ctx.RequireTexture(textures, "splashbase");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "missile_puffers.json");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "missile_puffers.json");
 
         // The flagged set is exactly the emissive elements, and the value is a bitfield: fire101
         // ships 7 (additive plus both stretch bits) and splashbase ships 3 (both stretch bits and no
@@ -1824,7 +1824,7 @@ internal static class PufferSuites
 
         // A rocket trail is where the two readings disagree: ramp-less and ending on a bright
         // sprite, so a sprite-darkness verdict would add it while the texture flag mixes it.
-        var trail = PufferState.Load(ctx.ZrdrPath, "missile_puffers.json", "trailpuffer");
+        var trail = PufferState.Load(ctx.Zrdr, "missile_puffers.json", "trailpuffer");
         ctx.Check(trail != null, $"missile_puffers.json defines trailpuffer");
         if (trail != null)
         {
@@ -1864,7 +1864,7 @@ internal static class PufferSuites
         + "have selected the fireball by blend")]
     internal static void PufferFireGlow(TestContext ctx)
     {
-        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        TextureSet texturePath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
         ctx.RequireTexture(textures, "fire_f01");
@@ -1913,7 +1913,7 @@ internal static class PufferSuites
         + "additive variant is never graded whichever columns it draws")]
     internal static void PufferSmokeSun(TestContext ctx)
     {
-        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        TextureSet texturePath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
         ctx.RequireTexture(textures, "smoke101");

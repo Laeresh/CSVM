@@ -33,11 +33,24 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             : launch.Versus ? "Dogfight" : "Free Flight";
     }
 
+    /// <summary>The chapter and mode letter a Dogfight door's <c>:chapter:letter</c> suffix names.
+    /// A suffix leaving either out names C1, or a Deathmatch with nobody on a team.</summary>
+    public static (string Chapter, char Letter) MultiplayerDoor(string aid)
+    {
+        System.ArgumentNullException.ThrowIfNull(aid);
+        var parts = aid.Split(':');
+        return (
+            parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1",
+            parts.Length > 2 && parts[2].Length > 0 ? parts[2][0] : 'd');
+    }
+
     /// <summary>The load screen for the launch the spec describes. A campaign launch takes the
     /// original's chart sheet for the mission at <paramref name="missionSeq"/>, the spec's own
     /// position by default. Everything else takes its blackboard (docs/org/loading-screen.md).
-    /// <paramref name="teamedLobby"/> picks a Dogfight's team dialog.</summary>
-    public UI.Screens.LoadBoard LoadScreen(bool campaign, string? missionType, int? missionSeq, bool teamedLobby)
+    /// <paramref name="teamedLobby"/> picks a Dogfight's team dialog, and a door's
+    /// <paramref name="briefingKey"/> names that dialog outright.</summary>
+    public UI.Screens.LoadBoard LoadScreen(
+        bool campaign, string? missionType, int? missionSeq, bool teamedLobby, string? briefingKey = null)
     {
         // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
         // describes the flight. The chart sheet writes no words of ours at all.
@@ -45,9 +58,10 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         var sheet = campaign
             ? CampaignLoadSheet(missionSeq ?? spec.CampaignMissionSeq ?? 0)
             : null;
-        string? briefing = campaign || missionType != null ? null : LaunchBriefing(teamedLobby);
+        string? briefing = briefingKey
+            ?? (campaign || missionType != null ? null : LaunchBriefing(teamedLobby));
         var board = UI.Screens.LoadBoard.Build(
-            paths.DataRoot, paths.ZrdrPath, paths.MessagesPath, campaign, subject, missionType, sheet, briefing);
+            paths.DataRoot, paths.Data.Rimage, paths.Data.Zrdr, paths.Data.Messages, campaign, subject, missionType, sheet, briefing);
         if (briefing != null)
         {
             Log.Info("ui", $"load screen: {spec.Chapter} Dogfight reads {briefing}");
@@ -60,7 +74,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     /// <paramref name="subject"/>.</summary>
     public UI.Screens.LoadBoard SwitchScreen(string subject)
     {
-        var board = UI.Screens.LoadBoard.Build(paths.DataRoot, paths.ZrdrPath, paths.MessagesPath, false, subject, null);
+        var board = UI.Screens.LoadBoard.Build(paths.DataRoot, paths.Data.Rimage, paths.Data.Zrdr, paths.Data.Messages, false, subject, null);
         board.CaptureDir = spec.DebugLoad ?? string.Empty;
         return board;
     }
@@ -83,8 +97,8 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         }
         else if (aid.StartsWith("pauseboard-mp", System.StringComparison.Ordinal))
         {
-            var parts = aid.Split(':');
-            ShowMultiplayerPauseSheet(parent, parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1");
+            var (chapter, letter) = MultiplayerDoor(aid);
+            ShowMultiplayerPauseSheet(parent, chapter, letter);
         }
         else if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
         {
@@ -115,8 +129,8 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 
         string key = UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission);
         var sheet = UI.Screens.LoadSheet.Load(
-            paths.ZrdrPath, paths.MessagesPath,
-            SessionPaths.MissionZrdr(paths.DataRoot, named.ChapterFolder, named.MissionFolder),
+            paths.Data.Zrdr, paths.Data.Messages,
+            paths.Data.LoadChapter(named.ChapterFolder, named.MissionFolder).MissionZrdr,
             key, SeatedMemento());
         if (sheet == null)
         {
@@ -137,7 +151,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     private CampaignMission? CampaignMissionAt(int seq)
     {
         CampaignMission? found = null;
-        foreach (var mission in Mech3.CampaignSequence.Load(paths.ZrdrPath))
+        foreach (var mission in Mech3.CampaignSequence.Load(paths.Data.Zrdr))
         {
             if (mission.Seq == seq)
             {
@@ -154,7 +168,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     // the zeppelin icon is absent (docs/org/pause-screen.md).
     private void ShowPauseSheet(Node parent, int ordinal, int completed)
     {
-        int last = System.Math.Max(0, Mech3.CampaignSequence.Load(paths.ZrdrPath).Count - 1);
+        int last = System.Math.Max(0, Mech3.CampaignSequence.Load(paths.Data.Zrdr).Count - 1);
         int seq = System.Math.Clamp(ordinal - 1, 0, last);
         if (CampaignMissionAt(seq) is not { } named)
         {
@@ -162,9 +176,9 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             return;
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(paths.DataRoot, named.ChapterFolder, named.MissionFolder);
+        ZrdrSet missionZrdr = paths.Data.LoadChapter(named.ChapterFolder, named.MissionFolder).MissionZrdr;
         var sheet = UI.Screens.PauseSheet.Load(
-            paths.ZrdrPath, paths.MessagesPath,
+            paths.Data.Zrdr, paths.Data.Messages,
             UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
         if (sheet == null)
         {
@@ -191,7 +205,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 
         string key = UI.Menu.EscapeDialog.InstantActionKey(
             Mech3.CampaignSequence.ChapterNumber(chapter), letter);
-        var sheet = UI.Screens.PauseSheet.Load(paths.ZrdrPath, paths.MessagesPath, key, instantAction: true);
+        var sheet = UI.Screens.PauseSheet.Load(paths.Data.Zrdr, paths.Data.Messages, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
@@ -202,17 +216,17 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
     }
 
-    // A Dogfight's pause sheet with no match behind it: a Deathmatch on that chapter's environment
-    // with nobody on a team. docs/org/pause-screen.md.
-    private void ShowMultiplayerPauseSheet(Node parent, string chapter)
+    // A Dogfight's pause sheet with no match behind it, for the mode the letter names on that
+    // chapter's environment. docs/org/pause-screen.md.
+    private void ShowMultiplayerPauseSheet(Node parent, string chapter, char letter)
     {
-        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, DogfightMissionType.Deathmatch, false) is not { } key)
+        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, letter) is not { } key)
         {
             Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
             return;
         }
 
-        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(paths.ZrdrPath, paths.MessagesPath, key);
+        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(paths.Data.Zrdr, paths.Data.Messages, key);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause aid: no escape.zrd or Loading.zrd sheet for {chapter} ({key})");
@@ -229,17 +243,17 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     {
         var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, paths.DataRoot, sheet, readout);
+            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, paths.DataRoot, paths.Data.Rimage, sheet, readout);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
         layer.AddChild(board);
         parent.AddChild(layer);
         pause.TryToggle(0);
     }
 
-    private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, string missionZrdr, int completed)
+    private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, ZrdrSet missionZrdr, int completed)
     {
         var objectives = UI.Menu.BriefingObjectives.Load(
-            Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(paths.MessagesPath));
+            missionZrdr.LoadFile("objectives.json"), paths.Data.Messages);
         var rows = new List<UI.Screens.PauseObjective>(objectives.Count);
         for (int i = 0; i < objectives.Count; i++)
         {

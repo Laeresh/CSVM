@@ -354,6 +354,15 @@ public partial class FlightController : Node3D
     /// else-branch), not "pane 1 only".</summary>
     public bool IsHumanPiloted = true;
 
+    /// <summary>The remake-only leading aim assist: each gun round leaves along this shot's own
+    /// intercept, then the shipped scatter (<see cref="AimAssist.FireDirection"/>). Off is the
+    /// original's lagging slot. Read per shot, so a pause apply takes effect on the next round.</summary>
+    public bool LeadingAimAssist;
+
+    /// <summary>The remake-only lead marker: this pane's <see cref="TargetHud"/> marks the tracked
+    /// hostile's intercept for the selected gun group (<see cref="LeadPointFor"/>). Read per frame.</summary>
+    public bool LeadMarker;
+
     /// <summary>A Dogfight's bot seat: AI-piloted (<see cref="IsHumanPiloted"/> false) but standing in
     /// a person's seat, so its contacts take a person's rule (<see cref="TakesPersonsContactRule"/>).
     /// Set by the seat assembler on every machine; world AI never sets it.</summary>
@@ -1874,6 +1883,20 @@ public partial class FlightController : Node3D
             range + margin, targetPos, targetVel);
     }
 
+    /// <summary>Where the lead marker stands for a target at <paramref name="targetPos"/>, the selected
+    /// gun group's intercept (<see cref="TargetHud.LeadPoint"/>). It is null with no gun group, with no
+    /// intercept, and with the intercept past the group's <c>RANGE</c>.</summary>
+    public Vector3? LeadPointFor(Vector3 targetPos, Vector3 targetVel)
+    {
+        if (SelectedGun() is not { } sel)
+        {
+            return null;
+        }
+
+        return TargetHud.LeadPoint(sel.MuzzleMidpoint(), WorldVelocity,
+            sel.Weapon.Velocity ?? ProjectilePool.DefaultVelocity, sel.Weapon.Range ?? 0f, targetPos, targetVel);
+    }
+
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision. No struck
     /// body by default, so the selection cascade takes its null-material arm and resolves slot 0
     /// (<c>player_crash_default</c>) however the plane is posed. <paramref name="killer"/> lets
@@ -2988,6 +3011,7 @@ public partial class FlightController : Node3D
             HeadingDeg = headingDeg,
             SpeedMps = _model.Speed,
             Throttle = _model.Throttle,
+            ThrottleCommand = _throttleSetting,
             Crashed = Crashed,
             Held = _held,
             Halted = halted,
@@ -3103,7 +3127,7 @@ public partial class FlightController : Node3D
             Self = this,
         };
         var dir = AimAssist.FireDirection(ref slots[mi], scan, _aimCandidates, planeBasis, now,
-            _model.Stats.StickyBulletInaccuracy, _aimRng, out var found);
+            _model.Stats.StickyBulletInaccuracy, _aimRng, out var found, LeadingAimAssist);
         if (found.Found && !_aimLoggedFirst)
         {
             _aimLoggedFirst = true; // verification breadcrumb: the assist found something, once

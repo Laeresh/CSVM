@@ -230,17 +230,17 @@ internal static class NetBotSuites
 
     private static void Run(TestContext ctx, LoopbackConditions conditions, int seed, string cell)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
         var spec = SessionSpec.Parse(new[]
         {
             "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute", "--no-pads",
         });
-        var gun = WeaponDefs.Load(ctx.ZrdrPath).All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f)
+        var gun = WeaponDefs.Load(ctx.Zrdr).All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f)
             ?? throw new SuiteSkippedException($"the weapon catalogue holds no cannon with health damage");
 
         var mesh = LoopbackTransport.Mesh(2, conditions, new Random(seed));

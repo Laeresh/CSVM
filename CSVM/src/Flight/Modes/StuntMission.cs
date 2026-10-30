@@ -100,13 +100,12 @@ public sealed class StuntGate
 }
 
 /// <summary>
-/// The Stunt Flying instant-action mode. A stunt run's objective is to
-/// fly through every Danger Zone by crossing both authored apertures, order-free within and
-/// between zones, and the run ends when all are done.
+/// The Stunt Flying instant-action mode: a run crosses both authored apertures of every Danger
+/// Zone, in any order, and ends when all are done.
 ///
-/// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs); each
-/// <c>dzN</c>'s world position comes straight from the chapter gamez (a point marker under the
-/// identity World root), and its display strings from targets.json → messages.json. Detection,
+/// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs). Each
+/// <c>dzN</c>'s world position is a point marker in the chapter gamez, under the identity World
+/// root. Its display strings come from targets.json through the message table. Detection,
 /// completion and the objective-target feed (<see cref="CollectTargets"/>); the run HUD and timed
 /// scoring build on this.
 /// </summary>
@@ -174,12 +173,12 @@ public sealed class StuntMission
     /// <c>dzN</c>'s world position from <paramref name="worldGamez"/> and its display strings from
     /// the mission's targets.json (keys resolved via <paramref name="messages"/>). Null if the
     /// mission has no dzones or none of them resolve to a world node (not a stunt mission).</summary>
-    public static StuntMission? Load(GameZ worldGamez, string missionZrdrPath, Messages messages)
+    public static StuntMission? Load(GameZ worldGamez, ZrdrSet missionZrdr, Messages messages)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "ia.json");
+            root = missionZrdr.LoadFile("ia.json");
         }
         catch (System.IO.IOException)
         {
@@ -190,7 +189,7 @@ public sealed class StuntMission
         if (dzones == null || dzones.Count == 0)
             return null;
 
-        var targets = MissionTargets.Load(missionZrdrPath);
+        var targets = MissionTargets.Load(missionZrdr);
         var zones = new List<StuntZone>();
         var unresolved = new List<string>();
         foreach (var pairObj in dzones)

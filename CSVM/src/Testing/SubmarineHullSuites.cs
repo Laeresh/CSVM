@@ -48,10 +48,10 @@ internal static class SubmarineHullSuites
         + "boat is untouchable, and the wreck answers on every mesh again")]
     internal static void DestructibleSubHull(TestContext ctx)
     {
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission),
+        ctx.RequireData(ctx.MissionZrdr(Chapter, Mission),
             $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var flak = WeaponDefs.Load(ctx.ZrdrPath, null).All
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        var flak = WeaponDefs.Load(ctx.Zrdr, null).All
             .FirstOrDefault(w => w.Id.Equals(Flak, StringComparison.OrdinalIgnoreCase));
         ctx.Check(flak?.HealthDamage is { } hd && Mathf.IsEqualApprox(hd, 35f)
             && flak.ImpactProximity is > 0f,

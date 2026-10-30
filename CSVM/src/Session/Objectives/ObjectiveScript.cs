@@ -283,11 +283,11 @@ public sealed class ObjectiveScript
     /// <summary>Loads <c>objectives.zrd</c> from a mission's zrdr scope. A mission with no file (or
     /// an unreadable one) yields an empty script, which is what every Instant Action and
     /// multiplayer stub amounts to anyway.</summary>
-    public static ObjectiveScript Load(string missionZrdrPath)
+    public static ObjectiveScript Load(ZrdrSet missionZrdr)
     {
         try
         {
-            return Parse(Zrdr.LoadFileOrEmpty(missionZrdrPath, "objectives.json"));
+            return Parse(missionZrdr.LoadFileOrEmpty("objectives.json"));
         }
         catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException
             or InvalidOperationException)

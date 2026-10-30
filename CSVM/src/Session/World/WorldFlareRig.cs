@@ -120,9 +120,9 @@ public sealed class WorldFlareRig
     /// <summary>Builds one flare per rig under <paramref name="worldRoot"/>, or nothing when either
     /// of <see cref="LensFlareRig"/>'s two chapter gates is closed or <c>--no-flare</c> asks.</summary>
     public void Build(IReadOnlyList<PlayerRig> rigs, TextureArchive textures,
-        string interpPath, string chapter, Node3D worldRoot)
+        InterpScripts? interp, string chapter, Node3D worldRoot)
     {
-        var names = LensFlareRig.FlareTextureNames(interpPath, chapter);
+        var names = LensFlareRig.FlareTextureNames(interp, chapter);
         bool anySun = false;
         foreach (var rig in rigs)
         {

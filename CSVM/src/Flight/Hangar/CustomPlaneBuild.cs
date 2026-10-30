@@ -151,7 +151,7 @@ public static class CustomPlaneBuild
     /// <summary>The picked engine's authored power scalar out of engines.json, or null when the
     /// pick is stock (id 6) so the airframe's own row stands. Ids 3-5 are the same tiers with
     /// nitrous (<see cref="HasNitrous"/>).</summary>
-    public static float? EnginePowerFor(string zrdrPath, CustomPlaneDef def)
+    public static float? EnginePowerFor(ZrdrSet zrdr, CustomPlaneDef def)
     {
         if (def.Engine is < 0 or >= CustomPlaneDef.EngineNone
             || def.Airframe < 0 || def.Airframe >= EngineRegistryBase.Length)
@@ -160,16 +160,16 @@ public static class CustomPlaneBuild
         }
 
         int rowId = EngineRegistryBase[def.Airframe] + (def.Engine % 3);
-        return EnginePowerForRow(zrdrPath, rowId);
+        return EnginePowerForRow(zrdr, rowId);
     }
 
     /// <summary>The engine pick's nitrous injector bit: ids 3-5 are the three tiers with it, and
     /// nothing else (the original's <c>FUN_00416ee0</c> decomposition, docs/org/hangar.md).</summary>
     public static bool HasNitrous(CustomPlaneDef def) => def.Engine is >= 3 and <= 5;
 
-    private static float? EnginePowerForRow(string zrdrPath, int rowId)
+    private static float? EnginePowerForRow(ZrdrSet zrdr, int rowId)
     {
-        foreach (var row in Zrdr.LoadFile(zrdrPath, "engines.json"))
+        foreach (var row in zrdr.LoadFile("engines.json"))
         {
             if (row is List<object?> { Count: >= 3 } r && r[0] is float id && (int)id == rowId
                 && r[2] is float power)
@@ -212,6 +212,7 @@ public static class CustomPlaneBuild
             Caliber = 30 + (10 * Math.Clamp(calibre, 0, CustomPlaneDef.MaxCalibre)),
             Ammo = "slug",
             Turret = stockSpec?.Turret ?? false,
+            Single = !choice.Twin,
         };
         spec.Markers.AddRange(Markers(stockSpec, slot, choice.Twin));
         return spec;

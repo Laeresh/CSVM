@@ -38,12 +38,12 @@ internal static class TurretStructureSuites
     {
         CheckSlotRule(ctx);
         CheckRegistryRule(ctx);
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ShipChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        TextureSet texturesPath = ctx.ChapterTextures(ShipChapter);
         ctx.RequireData(texturesPath, $"{ShipChapter} textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         int gunTeam = TurretDef.DefaultTeamId;
 
         var textures = new TextureArchive(texturesPath);

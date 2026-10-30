@@ -42,14 +42,13 @@ internal static class ObjectiveReadouts
     {
         var spec = inputs.Spec;
         var rigs = inputs.Rigs;
-        var chapterZrdr = SessionPaths.ChapterZrdr(state.DataRoot, spec.Chapter);
+        var chapterZrdr = state.ChapterZrdr;
         if (inputs.Campaign is { } campaign && inputs.CampaignStrings is { } objectiveStrings)
         {
             // One readout and one fade per rig, under that rig's own HudParent, so every pane
             // draws its own copy as every other per-rig HUD does. The completion
             // mark's art is loaded once and shared across them, as the HUD font is.
-            var objectiveMark = ObjectivesHud.LoadMark(
-                Path.Combine(state.DataRoot, "extracted", "rimage"));
+            var objectiveMark = ObjectivesHud.LoadMark(state.Data.Rimage);
             foreach (var rig in rigs)
             {
                 // ⚠ Not beside the Original pause sheet: that screen's own parchment already
@@ -79,7 +78,7 @@ internal static class ObjectiveReadouts
                 };
             }
             var sites = new ObjectiveSites(campaign, objectiveStrings,
-                MissionTargets.Load(state.MissionZrdrPath, chapterZrdr), state.WorldRuntime);
+                MissionTargets.Load(state.MissionZrdr, chapterZrdr), state.WorldRuntime);
             inputs.Roster.SetTargetObjectives(into => sites.Collect(into));
             // Verification breadcrumb: how many sites the mission starts with, split by the flag
             // that picks their cycle. A zero here and a populated objectives readout means the
@@ -95,8 +94,8 @@ internal static class ObjectiveReadouts
             // Instant Action, the multiplayer modes, and a campaign launch flying without a
             // director take the same site feed with no graph behind it. The table's own objective
             // and other_target keys are the whole answer (see BindsMissionTargetTable).
-            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
-                MissionTargets.Load(state.MissionZrdrPath, chapterZrdr), state.WorldRuntime);
+            var sites = new ObjectiveSites(state.Data.Messages,
+                MissionTargets.Load(state.MissionZrdr, chapterZrdr), state.WorldRuntime);
             // A team mode labels its flags and hulls by side over the table's own lines.
             var dogfight = inputs.Dogfight;
             sites.Sides = key => dogfight?.SideOf(key);
@@ -110,7 +109,7 @@ internal static class ObjectiveReadouts
         {
             // The empty stage's arena ships no targets.zrd and has no world index. It flags its own
             // flag markers and finds them among its own nodes. The flag runtime labels them.
-            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
+            var sites = new ObjectiveSites(state.Data.Messages,
                 MissionTargets.Objectives(EmptyStage.ArenaTargets), key => EmptyStage.ArenaNode(arena, key));
             var dogfight = inputs.Dogfight;
             sites.Sides = key => dogfight?.SideOf(key);

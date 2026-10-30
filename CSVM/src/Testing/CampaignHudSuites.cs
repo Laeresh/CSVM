@@ -48,19 +48,19 @@ internal static class CampaignHudSuites
         "the pause board and it never raises that screen in flight on its own")]
     internal static void CampaignObjectivesHud(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.MessagesPath, $"messages file");
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireMessages();
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         var report = new StringBuilder();
@@ -86,10 +86,9 @@ internal static class CampaignHudSuites
             // path only runs while the board is up, and this suite wants that path exercised.
             var pause = new CSVM.Flight.Modes.PauseState();
             pause.TryToggle(0);
-            var mark = ObjectivesHud.LoadMark(
-                System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage"));
+            var mark = ObjectivesHud.LoadMark(ctx.Data.Rimage);
             ctx.Check(mark != null,
-                $"the completion mark's own art is extracted ({ObjectivesHud.MarkFile})");
+                $"the completion mark's own art is in rimage ({ObjectivesHud.MarkFile})");
             var hud = ObjectivesHud.Build(director, messages, pause, mark);
             ctx.Host.AddChild(hud);
             // A second rig's own instance over the same director proves that "one per rig"
@@ -153,19 +152,19 @@ internal static class CampaignHudSuites
         + "for its length and nobody else")]
     internal static void MissionRadioCallouts(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
-        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var defs = SoundDefs.Load(ctx.Zrdr);
+        var groups = SoundDefs.LoadGroups(ctx.Zrdr);
         var report = new StringBuilder();
         report.AppendLine($"{mission.ChapterFolder}/{mission.MissionFolder} seq={mission.Seq}");
         CheckCueClasses(ctx, script, defs, groups, report);

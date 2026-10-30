@@ -60,7 +60,7 @@ internal static class MenuOriginalConnectionSuites
         + "other the host closed the game and puts it back on the Connection page")]
     internal static void TheConnectionPage(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -169,7 +169,7 @@ internal static class MenuOriginalConnectionSuites
         + "page, whose games list's Create Game opens a hosted lobby of its own")]
     internal static void TheLobby(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -265,7 +265,7 @@ internal static class MenuOriginalConnectionSuites
         + "opener, whose join names it both")]
     internal static void TheLobbysSeats(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -367,7 +367,7 @@ internal static class MenuOriginalConnectionSuites
         + "the guest's second seat's build off its pick, and the guest launches its second seat on its plane")]
     internal static void TheLobbysSeatsOnCustomPlanes(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -495,7 +495,7 @@ internal static class MenuOriginalConnectionSuites
         + "host's list is read-only, and the guest's View... opens it read-only with no Accept")]
     internal static void TheOutlawList(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -576,7 +576,7 @@ internal static class MenuOriginalConnectionSuites
         + "field carries each seat's team")]
     internal static void TheLobbyTeams(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -644,7 +644,8 @@ internal static class MenuOriginalConnectionSuites
         + "from the shipped pilot names after the guest, on both ends, with the guest's bot controls "
         + "greyed and its list holding no row it can pick. Fill to, its count stepped down to five, "
         + "fills the field to five pilots and then greys. A press on a bot's row opens Select Plane "
-        + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, and "
+        + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, its plane "
+        + "list greying an airframe the outlaw list refuses, and "
         + "Remove takes a row out. A full field outgrows the player list's eleven rows and its scroll "
         + "bar reaches every row below them. With the host, the guest and both bots on one team, LAUNCH! "
         + "raises langui 10519 and hands nothing out. With no team standing it launches, the "
@@ -652,9 +653,9 @@ internal static class MenuOriginalConnectionSuites
         + "the guest joins that match reading both bots on real stock planes")]
     internal static void TheLobbyBots(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireMessages();
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -699,7 +700,7 @@ internal static class MenuOriginalConnectionSuites
                 return;
             }
 
-            var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+            var pool = CSVM.Session.Roster.BotSeats.CallsignPool(ctx.Data.Messages);
             AddAndFillBots(ctx, host, guest, ends, pool);
             EditTheBots(ctx, host, guest, ends);
             ScrollTheList(ctx, host, ends);
@@ -730,7 +731,7 @@ internal static class MenuOriginalConnectionSuites
         + "team row, which drawn plain wraps onto the row below, is a marquee line inside its box")]
     internal static void TheLobbyPlanes(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -830,8 +831,8 @@ internal static class MenuOriginalConnectionSuites
         + "the menu's own spec turns into the chapter's IA1. Back on a Deathmatch every option is live again")]
     internal static void TheLobbyStuntRace(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -905,8 +906,8 @@ internal static class MenuOriginalConnectionSuites
         + "Dogfight's, onto the Connection page")]
     internal static void TheLobbyRaceEnd(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -987,7 +988,7 @@ internal static class MenuOriginalConnectionSuites
         + "guest a patch apart from the host joins it")]
     internal static void TheVersionCheck(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1083,8 +1084,8 @@ internal static class MenuOriginalConnectionSuites
         + "0:0:0:0:0:0:0:1 joins on the board's port with its last group left in the host")]
     internal static void AnIpv6AddressIsTypedAndJoined(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1152,8 +1153,8 @@ internal static class MenuOriginalConnectionSuites
         + "Enter lowers it and is the box's own Connect")]
     internal static void TheOnScreenKeyboard(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1235,8 +1236,8 @@ internal static class MenuOriginalConnectionSuites
         + "offers the plane and picks it, and the host's untick greys that tab again")]
     internal static void BuildCustomPlaneFromTheConnectionPage(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1382,7 +1383,7 @@ internal static class MenuOriginalConnectionSuites
         + "is refused while a guest from another machine joins")]
     internal static void TheBootAndThePassword(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1470,7 +1471,7 @@ internal static class MenuOriginalConnectionSuites
         + "NETWORK, after which a new session admits it")]
     internal static void TheCoopBoot(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1589,8 +1590,8 @@ internal static class MenuOriginalConnectionSuites
         + "the loopback")]
     internal static void TheMasterServersGames(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1688,8 +1689,8 @@ internal static class MenuOriginalConnectionSuites
         + "lands. None posts a chat note. The server is a canned list and the wire the loopback")]
     internal static void TheLobbysNetworkRows(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1765,8 +1766,8 @@ internal static class MenuOriginalConnectionSuites
         + "The listed carrier stands for the master server and the wire is the loopback")]
     internal static void TheCopyControl(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -1878,8 +1879,8 @@ internal static class MenuOriginalConnectionSuites
         + "more. A server serving this build's version lists the same game. The server is a canned list")]
     internal static void TheOutdatedMasterServer(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -3871,6 +3872,7 @@ internal static class MenuOriginalConnectionSuites
             $"a press on the bot's row opens Select Plane on that bot ({host.Shell.Lobby.Tab}, {host.Shell.Lobby.PickedBot})");
         ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey);
         ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey + ":8");
+        OutlawedPlaneGreys(ctx, host, ends);
         ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey);
         ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey + ":2");
         ClickRow(ctx, host, OriginalLobbyScreen.BotNameKey);
@@ -3894,6 +3896,23 @@ internal static class MenuOriginalConnectionSuites
         SettleEnds(ends);
         ctx.Check(lobby.Bots.Count == 2 && lobby.BotById(third) == null && guest.Door.Dogfight!.Players.Count == 4 && host.Shell.Lobby.PickedBot == -1,
             $"Remove takes the picked bot's row out on both ends ({lobby.Bots.Count}, {guest.Door.Dogfight!.Players.Count})");
+    }
+
+    // An airframe the outlaw list refuses greys in the picked bot's open plane list, so neither a
+    // sideways step nor a pick lands on it. Clearing the tick afterwards empties the list again.
+    private static void OutlawedPlaneGreys(TestContext ctx, End host, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        int outlawed = Enumerable.Range(0, 7).First(a => lobby.Players.All(p => p.Airframe != a));
+        string row = OriginalLobbyScreen.BotPlaneKey + ":" + (outlawed + 1).ToString(CultureInfo.InvariantCulture);
+        ctx.Check(lobby.SetOutlawComponents(true) && lobby.SetOutlawed(NetPlaneRules.AirframeFlag + outlawed, true),
+            $"the host outlaws stock airframe {outlawed}, which no pilot flies");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey);
+        ctx.Check(Row(host.Shell, row) is { Enabled: false } && Row(host.Shell, OriginalLobbyScreen.BotPlaneKey + ":8") is { Enabled: true },
+            $"the bot's open plane list greys the outlawed airframe and keeps the Fury ({Row(host.Shell, row)?.Enabled})");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey + ":8");
+        ctx.Check(lobby.SetOutlawComponents(false), $"clearing Outlaw Components empties the list");
+        SettleEnds(ends);
     }
 
     // A full field outgrows the list's eleven rows, and its scroll bar brings the last bot's row into
@@ -3967,7 +3986,7 @@ internal static class MenuOriginalConnectionSuites
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
-        var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+        var pool = CSVM.Session.Roster.BotSeats.CallsignPool(ctx.Data.Messages);
         var (roster, seatFits) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), lobby.Rules,
             lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
         string random = roster.Length == 4 ? roster[3].PlaneNode : string.Empty;
@@ -4331,13 +4350,13 @@ internal static class MenuOriginalConnectionSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = CampaignAidProfiles.Store(seeded: true, progressed: true),
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exit => exits?.Add(exit));
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, netDoor: door);
         host.AddSeat(seat);
         host.Select("original");
         host.Show(MenuReturnDestination.TopLevel);

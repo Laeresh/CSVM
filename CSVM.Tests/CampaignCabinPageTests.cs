@@ -162,11 +162,10 @@ public class CampaignCabinPageTests
     /// <summary>The scale and the tilt are read back from the shipped script's <c>pc_memento</c>
     /// pane. Its <c>GK</c>, <c>HK</c> and <c>JK</c> are what <c>CTL.SCRIPT</c> hands to
     /// <c>scale()</c> and <c>rotate()</c>.</summary>
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheMementosScaleAndTiltAreTheCabinScriptsOwn()
     {
-        var path = Extraction.RofTree.Under(TestData.DataRoot!, "ASSETS/SCRIPTS/PASSENGERCABIN.SCRIPT");
-        string script = File.ReadAllText(path);
+        string script = Extraction.RofFiles.Open(GameFilesData.Source).Text("ASSETS/SCRIPTS/PASSENGERCABIN.SCRIPT")!;
         var pane = Regex.Match(script, @"(\w+)\.YC\s*=\s*""pc_memento""");
         Assert.True(pane.Success, "the script names a pc_memento pane");
 

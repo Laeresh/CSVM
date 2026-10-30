@@ -47,17 +47,17 @@ internal static class GeneratorRosterSuites
         + "surface launch of the patrolboat hull")]
     internal static void GeneratorRosterParams(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var nets = AiNets.Load(chapterZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs, nets);
         string? parameter = null;
         foreach (var def in EnemyGenerators.Load(missionZrdr))
@@ -75,9 +75,9 @@ internal static class GeneratorRosterSuites
             $"the generator's '{parameter}' resolves to the roster block {NitroBlock}");
         ctx.Check(plan.Nitro, $"the block's slot 34 plans an installed nitro injector");
         CheckUnresolvedLabel(ctx, defs);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         FlightController? launched = null;
@@ -89,23 +89,23 @@ internal static class GeneratorRosterSuites
             var resources = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 null, ctx.Host, resources,
                 new FlightWorldBindings
                 {
                     Projectiles = pool,
                     Gamez = planesGamez,
-                    ChapterZrdrPath = chapterZrdr,
+                    ChapterZrdr = chapterZrdr,
                 },
                 new HumanRosterBindings());
 
@@ -153,8 +153,8 @@ internal static class GeneratorRosterSuites
     // generator keeps the CLI airframe, so the three launch shapes are seen apart.
     private static void CheckUnresolvedLabel(TestContext ctx, VehicleDefs defs)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, TypoChapter, TypoMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, TypoChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(TypoChapter, TypoMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(TypoChapter);
         ctx.RequireData(missionZrdr, $"{TypoChapter}/{TypoMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{TypoChapter} zrdr");
         var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs,
@@ -184,8 +184,8 @@ internal static class GeneratorRosterSuites
     // resolves the fourth launch shape, a hull, and never the airframe fallback.
     private static void CheckSurfaceLabel(TestContext ctx, VehicleDefs defs)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ShipChapter, ShipMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ShipChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ShipChapter, ShipMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(ShipChapter);
         ctx.RequireData(missionZrdr, $"{ShipChapter}/{ShipMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{ShipChapter} zrdr");
         var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs,

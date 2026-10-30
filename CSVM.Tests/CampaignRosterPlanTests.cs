@@ -358,12 +358,12 @@ public class CampaignRosterPlanTests
     [ExtractedDataFact]
     public void Cm04GeneratorParameterSelectsTheDisabledPeacemakerTemplate()
     {
-        string mission = SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M03");
+        var mission = TestZrdr.Mission("C3", "M03");
         var template = Assert.Single(AiSkills.LoadGeneratorRoster(mission),
             block => block.Parameter.Equals("BarracudaPlanes", System.StringComparison.OrdinalIgnoreCase));
-        string zrdr = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var zrdr = TestZrdr.Root;
         var plan = CampaignRosterPlan.BuildGeneratorTemplate(template.Name, template.Fields,
-            VehicleDefs.Load(zrdr), AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C3")));
+            VehicleDefs.Load(zrdr), AiNets.Load(TestZrdr.Chapter("C3")));
 
         Assert.NotNull(plan);
         Assert.Equal("britpeace_5", plan.Name);

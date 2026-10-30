@@ -35,17 +35,21 @@ public static class RofArchive
 
     /// <summary>The bytes of one file entry, inflated to its declared size. Throws when the
     /// payload does not inflate to exactly that size.</summary>
-    public static byte[] ReadMember(byte[] archive, RofEntry entry)
+    public static byte[] ReadMember(byte[] archive, RofEntry entry) => ReadHead(archive, entry, entry.Size);
+
+    /// <summary>The first <paramref name="count"/> bytes of one file entry (all of it when it is
+    /// shorter), inflating no further than that. Throws when the payload ends early.</summary>
+    public static byte[] ReadHead(byte[] archive, RofEntry entry, int count)
     {
         if (entry.IsDirectory)
         {
             throw new ArgumentException("a directory has no payload: " + entry.Path, nameof(entry));
         }
 
-        var data = new byte[entry.Size];
+        var data = new byte[Math.Min(count, entry.Size)];
         if (!entry.Deflated)
         {
-            Buffer.BlockCopy(archive, entry.Offset, data, 0, entry.Size);
+            Buffer.BlockCopy(archive, entry.Offset, data, 0, data.Length);
             return data;
         }
 

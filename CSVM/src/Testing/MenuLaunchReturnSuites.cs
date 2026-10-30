@@ -46,7 +46,7 @@ internal static class MenuLaunchReturnSuites
         + "re-showing the same presentation without re-selecting")]
     internal static void MenuLaunchReturn(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -89,7 +89,7 @@ internal static class MenuLaunchReturnSuites
         + "black, and a launch puts the sky back with the material the rig built still on it")]
     internal static void MenuBackdrop(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         var env = LiveEnvironment(ctx);
@@ -490,7 +490,7 @@ internal static class MenuLaunchReturnSuites
             _aid = aid;
             var registry = new PresentationRegistry();
             registry.Register(PresentationId.Original, () => new OriginalPresentation(
-                ctx.Host, ctx.DataRoot, layout, _aid ?? string.Empty, new MenuInput { Keyboard = true })
+                ctx.Host, ctx.DataRoot, layout, _aid ?? string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
             {
                 CampaignProfiles = store,
                 Planes = planes,
@@ -501,7 +501,7 @@ internal static class MenuLaunchReturnSuites
                 Exits.Add(exit);
                 _hidden.Add(Host is { Shown: false });
             });
-            MenuSuiteHost.AddFeatures(Host, ctx.DataRoot);
+            MenuSuiteHost.AddFeatures(Host, ctx.DataRoot, ctx.Data);
             Host.AddSeat(Seat);
         }
 

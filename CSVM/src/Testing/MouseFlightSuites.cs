@@ -37,10 +37,10 @@ internal static class MouseFlightSuites
         + "and a seat on the keyboard scheme reads no stick from the mouse at all")]
     internal static void FlightMouseScheme(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane("player_autogyro", "player_bhawk");
-        var gyroStats = PlaneStats.Load(ctx.ZrdrPath, "player_autogyro");
-        var planeStats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var gyroStats = PlaneStats.Load(ctx.Zrdr, "player_autogyro");
+        var planeStats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
         ctx.Check(gyroStats.IsAutogyro && !planeStats.IsAutogyro,
             $"ABLE-TO-FAIL CONTROL: the shipped defs author is_autogyro on the Hoplite alone (gyro {gyroStats.IsAutogyro}, aeroplane {planeStats.IsAutogyro})");
 
@@ -99,7 +99,7 @@ internal static class MouseFlightSuites
         + "draws one")]
     internal static void FlightMouseCapture(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         ctx.RequirePlane("player_bhawk");
         var scripted = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--run-tests" }));
         var interactive = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--fly" }));
@@ -122,7 +122,7 @@ internal static class MouseFlightSuites
         }
 
         var before = Godot.Input.MouseMode;
-        var seat = Rig(ctx, PlaneStats.Load(ctx.ZrdrPath, "player_bhawk"), "MouseCaptureSeat",
+        var seat = Rig(ctx, PlaneStats.Load(ctx.Zrdr, "player_bhawk"), "MouseCaptureSeat",
             human: true);
         try
         {
@@ -157,8 +157,8 @@ internal static class MouseFlightSuites
         + "later accept from the menu reaches no seat")]
     internal static void FlightMouseSchemeLive(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(UI.Menu.MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         ctx.RequirePlane("player_bhawk");
         var layout = UI.Menu.Original.OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -173,12 +173,12 @@ internal static class MouseFlightSuites
         string? previousDir = BindingStore.DirectoryOverride;
         BindingStore.DirectoryOverride = dir;
         var mode = Godot.Input.MouseMode;
-        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var stats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
         var one = Rig(ctx, stats, "LiveSchemeSeat1", human: true);
         var two = Rig(ctx, stats, "LiveSchemeSeat2", human: true);
         two.PlayerIndex = 1;
         var controls = new UI.Menu.ControlsFeature((player, profile) => BindingStore.UserBindings().Save(player, profile));
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, controls, _ => { });
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, controls, _ => { });
         try
         {
             ctx.Check(leaf != null, $"the leaf builds over the install's decoded layout");

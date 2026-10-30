@@ -68,8 +68,8 @@ public class SunlightEnergyTests
     [ExtractedDataFact]
     public void TheInstallsNightAndDayFogColoursFallOnOppositeSidesOfTheRule()
     {
-        var c5 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
-        var c4 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C4", "IA1"));
+        var c5 = WeatherState.Load(TestZrdr.Mission("C5", "IA1"));
+        var c4 = WeatherState.Load(TestZrdr.Mission("C4", "IA1"));
         Assert.NotNull(c5);
         Assert.NotNull(c4);
         Assert.True(WeatherRig.IsNightZone(c5!.Zone("zone1")));
@@ -86,7 +86,7 @@ public class SunlightEnergyTests
     [ExtractedDataFact]
     public void C1BsNightZoneCarriesItsAuthoredDiffuseAndAmbient()
     {
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1B", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C1B", "IA1"));
         Assert.NotNull(weather);
         var zone = weather!.Zone("zone1");
         Assert.Equal(0.6f, zone.SunDiffuse, 2);
@@ -100,7 +100,7 @@ public class SunlightEnergyTests
     [ExtractedDataFact]
     public void C4sZoneCarriesItsAuthoredSunlightColours()
     {
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C4", "IA1"));
+        var weather = WeatherState.Load(TestZrdr.Mission("C4", "IA1"));
         Assert.NotNull(weather);
         var zone = weather!.Zone("zone1");
         Assert.Equal(1.0f, zone.SunColorDiffuse.R, 2);
@@ -161,8 +161,8 @@ public class SunlightEnergyTests
     [ExtractedDataFact]
     public void C1BsNightMissionLightsThePlaneDimmerThanC1CsDayMission()
     {
-        var night = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1B", "IA1"));
-        var day = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1C", "M01"));
+        var night = WeatherState.Load(TestZrdr.Mission("C1B", "IA1"));
+        var day = WeatherState.Load(TestZrdr.Mission("C1C", "M01"));
         Assert.NotNull(night);
         Assert.NotNull(day);
         (float nightSun, float nightAmbient) = WeatherRig.FaithfulEnergies(night!.Zone("zone1"));
@@ -211,8 +211,8 @@ public class SunlightEnergyTests
     [ExtractedDataFact]
     public void TheBicoloredBitParsesOffTheInstallsZones()
     {
-        var c5 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
-        var c1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        var c5 = WeatherState.Load(TestZrdr.Mission("C5", "IA1"));
+        var c1 = WeatherState.Load(TestZrdr.Mission("C1", "IA1"));
         Assert.NotNull(c5);
         Assert.NotNull(c1);
         Assert.True(c5!.Zone("zone1").SunBicolored);

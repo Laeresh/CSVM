@@ -15,8 +15,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class CombatVoiceGoldenTests
 {
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void TheAccentTableHasThirtyFiveRowsPoolsThenSingles()
@@ -100,7 +99,7 @@ public class CombatVoiceGoldenTests
     [ExtractedDataFact]
     public void C1M04sRosterNamesItsSevenAccentsAndTheirPrewarmSet()
     {
-        string mission = SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04");
+        var mission = TestZrdr.Mission("C1", "M04");
         var accents = CombatVoice.MissionAccentIds(mission);
         Assert.Equal(new[] { 11, 12, 13, 14, 15, 16, 24 }, accents);
         var names = CombatVoice.SessionPrewarmNames(SharedZrdr, mission,

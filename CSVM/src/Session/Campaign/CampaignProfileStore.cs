@@ -233,9 +233,9 @@ public sealed class CampaignProfileStore
     public string? LastPlayedPilotName =>
         Load(LastPlayed) is { Name.Length: > 0 } profile ? profile.Name : null;
 
-    /// <summary>The production store, <c>user://Profiles/</c> resolved to its OS path.</summary>
+    /// <summary>The production store, <c>Profiles/</c> in <see cref="Utils.UserData.Root"/>.</summary>
     public static CampaignProfileStore UserProfiles() =>
-        new(Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "Profiles"));
+        new(Path.Combine(Utils.UserData.Root, "Profiles"));
 
     /// <summary>The store a session reads and writes: <paramref name="directory"/> when a launch
     /// named one (<c>--profiles=</c>), else <see cref="UserProfiles"/>. A relative directory

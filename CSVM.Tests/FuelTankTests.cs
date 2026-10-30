@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -17,8 +18,7 @@ public class FuelTankTests
 {
     private const float Dt = 1f / 60f;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The burn rate, at three lever settings over one second of ticks. Linear in the
     /// lever, so a half-open lever costs half as much, and a closed one costs nothing at all.</summary>

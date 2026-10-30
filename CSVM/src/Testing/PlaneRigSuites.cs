@@ -45,18 +45,20 @@ internal static class PlaneRigSuites
         "about its own plane-frame axis, an unclassified one included; a rig surface deflects about " +
         "its plane-frame hinge; a rig flare side replaces the original flare on that side by " +
         "position, and the fuel leak's wing_flare2 darkens the rig flare standing for it; the wing " +
-        "split and every pylon's side are unchanged; a rig naming a node the model lacks fails the " +
-        "build with an error naming the file and the entry; and on a player's launch the same rig " +
+        "split and every pylon's side are unchanged; a rig naming a node the model lacks, a non-marker " +
+        "under markers, a firepoint past the reach outside the model box, a blur on a node that is no " +
+        "prop or rotor, or a flare holding airframe fails the build with an error naming the file and " +
+        "the entry, while a firepoint just inside that reach builds; and on a player's launch the same rig " +
         "posts one notice and builds the original airframe, none of its entries applied")]
     internal static void PlaneRigSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string gunId = ctx.SyntheticData ? "wep_probe_gun" : weapons.All.First(w => w.IsGun).Id;
@@ -69,6 +71,7 @@ internal static class PlaneRigSuites
         Vector3 pylon1, firepoint1, firepoint2, camera;
         string surfaceName, spinName;
         Vector3 surfaceOrigin;
+        Aabb box;
         bool hasProp1;
         using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
         {
@@ -79,6 +82,7 @@ internal static class PlaneRigSuites
                 firepoint1 = MarkerAt(model, "firepoint1");
                 firepoint2 = MarkerAt(model, "firepoint2");
                 camera = builder.CockpitCameraOffset;
+                box = PlaneRigPatch.ModelBox(model) ?? default;
                 var meshes = PlainMeshNodes(model);
                 ctx.Check(meshes.Count >= 2, $"{plane} carries two plain mesh nodes to rig count={meshes.Count}");
                 if (meshes.Count < 2)
@@ -88,7 +92,7 @@ internal static class PlaneRigSuites
 
                 surfaceName = AnimRuntime.NameOf(meshes[^1]);
                 spinName = AnimRuntime.NameOf(meshes[^2]);
-                surfaceOrigin = PlaneRigPatch.PlaneFrame(meshes[^1], model).Origin;
+                surfaceOrigin = NodeFrame.Under(meshes[^1], model).Origin;
                 hasProp1 = Named(model, "prop1").Any(n => PropParts.Classify(n.Name) == PropParts.Kind.PropMain);
             }
             finally
@@ -146,11 +150,11 @@ internal static class PlaneRigSuites
                 };
                 var loadout = Loadout.Bind(def, model, weapons);
                 var hp = loadout.Hardpoints.Single();
-                var boundPylon = PlaneRigPatch.PlaneFrame(hp.Pylon, model).Origin;
+                var boundPylon = NodeFrame.Under(hp.Pylon, model).Origin;
                 ctx.Check(hp.Index == 1 && boundPylon.DistanceTo(rigPylon1) < PosTolerance,
                     $"the bound hardpoint is pylon{hp.Index}, at the moved position {boundPylon}");
                 var muzzles = loadout.Guns.Single().Muzzles;
-                var midpoint = muzzles.Aggregate(Vector3.Zero, (a, m) => a + PlaneRigPatch.PlaneFrame(m, model).Origin) / muzzles.Count;
+                var midpoint = muzzles.Aggregate(Vector3.Zero, (a, m) => a + NodeFrame.Under(m, model).Origin) / muzzles.Count;
                 var expected = (rigFirepoint1 + firepoint2) / 2f;
                 ctx.Check(midpoint.DistanceTo(expected) < PosTolerance && midpoint.DistanceTo((firepoint1 + firepoint2) / 2f) > 0.1f,
                     $"the gun group's muzzle midpoint follows the moved firepoint1 {midpoint} vs {expected}");
@@ -163,14 +167,14 @@ internal static class PlaneRigSuites
                     ctx.Host.AddChild(pool);
                     var ordnance = PylonOrdnance.Build(loadout, pool, infiniteAmmo: true);
                     var body = hp.Pylon.GetChildren().OfType<Node3D>().FirstOrDefault(n => n.Name.ToString() == "ordnance1");
-                    var at = body == null ? Vector3.Inf : PlaneRigPatch.PlaneFrame(body, model).Origin;
+                    var at = body == null ? Vector3.Inf : NodeFrame.Under(body, model).Origin;
                     ctx.Check(ordnance?.Count == 1 && at.DistanceTo(rigPylon1) < PosTolerance,
                         $"the mounted {ordnanceId} body sits at the moved pylon {at}");
                 });
 
                 var full = Loadout.ForRig(model, weapons, def);
                 ctx.Check(full.Hardpoints.Count == 8 && full.Hardpoints.All(h =>
-                        (h.Index % 2 == 1) == (PlaneRigPatch.PlaneFrame(h.Pylon, model).Origin.X < 0f)),
+                        (h.Index % 2 == 1) == (NodeFrame.Under(h.Pylon, model).Origin.X < 0f)),
                     $"all {full.Hardpoints.Count} pylons keep their side, odd to port");
                 ctx.Check(Loadout.WingPylons(fullFit, port: true).SequenceEqual(portBefore)
                           && Loadout.WingPylons(fullFit, port: false).SequenceEqual(starboardBefore),
@@ -188,7 +192,7 @@ internal static class PlaneRigSuites
 
         CheckFlares(ctx, planesGamez, textures, plane, pylon1);
         CheckLeakFlare(ctx, planesGamez, textures);
-        CheckRefused(ctx, planesGamez, textures, plane, spinName);
+        CheckRefused(ctx, planesGamez, textures, plane, spinName, box);
         CheckPlayerFallback(ctx, planesGamez, textures, plane, pylon1, camera);
     }
 
@@ -202,11 +206,11 @@ internal static class PlaneRigSuites
         "hidden through Visible, Nose still drops the body, and an external pose draws all of it")]
     internal static void PlaneRigCockpitBody(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
 
@@ -286,12 +290,12 @@ internal static class PlaneRigSuites
         "naming no gauge binds no panel")]
     internal static void PlaneRigCockpitGauges(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
 
@@ -308,13 +312,13 @@ internal static class PlaneRigSuites
                 var gauges = Named(interior, "gauges").First();
                 foreach (var assembly in gauges.GetChildren().OfType<Node3D>())
                 {
-                    poses[AnimRuntime.NameOf(assembly)] = PlaneRigPatch.PlaneFrame(assembly, bare);
+                    poses[AnimRuntime.NameOf(assembly)] = NodeFrame.Under(assembly, bare);
                 }
 
                 var speedo = Named(interior, "speedometer").First();
-                var carried = PlaneBuilder.InteriorToPlane(PlaneRigPatch.PlaneFrame(speedo, interior), bareBuilder.CockpitCameraOffset);
-                ctx.Check(carried.IsEqualApprox(PlaneRigPatch.PlaneFrame(speedo, bare)),
-                    $"InteriorToPlane carries the speedometer to where the built mount puts it {carried.Origin} vs {PlaneRigPatch.PlaneFrame(speedo, bare).Origin}");
+                var carried = PlaneBuilder.InteriorToPlane(NodeFrame.Under(speedo, interior), bareBuilder.CockpitCameraOffset);
+                ctx.Check(carried.IsEqualApprox(NodeFrame.Under(speedo, bare)),
+                    $"InteriorToPlane carries the speedometer to where the built mount puts it {carried.Origin} vs {NodeFrame.Under(speedo, bare).Origin}");
             }
             finally
             {
@@ -355,10 +359,10 @@ internal static class PlaneRigSuites
 
             ctx.Check(!Named(builder.CockpitInterior!, "speedometer").Any(), $"…which has left cockpit1");
             var want = CockpitTransplant.Posed(poses["speedometer"], speedPose);
-            ctx.Check(PlaneRigPatch.PlaneFrame(speedo, model).IsEqualApprox(want),
-                $"the speedometer stands at the rig's pose {PlaneRigPatch.PlaneFrame(speedo, model).Origin} scale={PlaneRigPatch.PlaneFrame(speedo, model).Basis.Scale.X:0.###}");
+            ctx.Check(NodeFrame.Under(speedo, model).IsEqualApprox(want),
+                $"the speedometer stands at the rig's pose {NodeFrame.Under(speedo, model).Origin} scale={NodeFrame.Under(speedo, model).Basis.Scale.X:0.###}");
             var other1 = poses.Keys.First(n => n is not ("speedometer" or "g730" or "g184"));
-            ctx.Check(Named(panel, other1).Select(n => PlaneRigPatch.PlaneFrame(n, model)).FirstOrDefault().IsEqualApprox(poses[other1]),
+            ctx.Check(Named(panel, other1).Select(n => NodeFrame.Under(n, model)).FirstOrDefault().IsEqualApprox(poses[other1]),
                 $"a position-only {other1} keeps the size and facing cockpit1 showed it at");
 
             var panelBind = CockpitGauges.Bind(builder);
@@ -403,15 +407,15 @@ internal static class PlaneRigSuites
         "it notes how far the stereo eye's mount puts each dial from the flat one")]
     internal static void PlaneRigCockpitTemplate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         // The CLI's own source, then the run's plane where the player airframe list leaves it out.
-        var templates = Tooling.Probes.Markers(ctx.PlanesGamezPath, string.Empty).RigTemplates.ToList();
+        var templates = Tooling.Probes.Markers(ctx.Data.Planes, string.Empty).RigTemplates.ToList();
         if (templates.All(t => t.Model != ctx.PlaneName) && MarkerRig.Extract(planesGamez, ctx.PlaneName) is { } own)
         {
             templates.Add((ctx.PlaneName, own.FormatRigTemplate()));
@@ -440,12 +444,12 @@ internal static class PlaneRigSuites
         "per readout character")]
     internal static void PlaneRigCockpitInside(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer", "gungauge");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string gungaugeFile = Path.Combine(PackRoot(ctx, "cockpit-inside-export"), "gungauge.glb");
@@ -463,7 +467,7 @@ internal static class PlaneRigSuites
                 var interior = bareBuilder.CockpitInterior!;
                 foreach (var assembly in Named(interior, "gauges").First().GetChildren().OfType<Node3D>())
                 {
-                    poses[AnimRuntime.NameOf(assembly)] = PlaneRigPatch.PlaneFrame(assembly, interior);
+                    poses[AnimRuntime.NameOf(assembly)] = NodeFrame.Under(assembly, interior);
                 }
 
                 (stockGlass, stockSurfaces) = GlassAndSurfaces(bareBuilder, interior);
@@ -498,11 +502,11 @@ internal static class PlaneRigSuites
                 var speedo = Named(interior, "speedometer").FirstOrDefault();
                 ctx.Check(builder.CockpitPanel == null && speedo != null && Named(interior, "gauges").First().IsAncestorOf(speedo),
                     $"no panel: the speedometer stays under cockpit1's gauges node");
-                var frame = speedo == null ? Transform3D.Identity : PlaneRigPatch.PlaneFrame(speedo, interior);
+                var frame = speedo == null ? Transform3D.Identity : NodeFrame.Under(speedo, interior);
                 ctx.Check(frame.IsEqualApprox(CockpitTransplant.Posed(poses["speedometer"], speedPose)),
                     $"the speedometer stands at the rig's pose in interior units {frame.Origin} scale={frame.Basis.Scale.X:0.###}");
                 var other = poses.Keys.First(n => n is not ("speedometer" or "g730" or "g184"));
-                ctx.Check(Named(interior, other).Select(n => PlaneRigPatch.PlaneFrame(n, interior)).FirstOrDefault().IsEqualApprox(poses[other]),
+                ctx.Check(Named(interior, other).Select(n => NodeFrame.Under(n, interior)).FirstOrDefault().IsEqualApprox(poses[other]),
                     $"the unnamed {other} stays where the original put it");
 
                 var bind = CockpitGauges.Bind(builder);
@@ -524,8 +528,8 @@ internal static class PlaneRigSuites
                 var glass = interior.GetChildren().OfType<Node3D>().FirstOrDefault(n => n.Name.ToString() == CockpitTransplant.GlassName);
                 var (glassSurfaces, surfaces) = GlassAndSurfaces(builder, interior);
                 int cut = glass?.GetChildren().OfType<MeshInstance3D>().Count() ?? 0;
-                ctx.Check(glass != null && PlaneRigPatch.PlaneFrame(glass, interior).Origin.DistanceTo(glassAt) < PosTolerance,
-                    $"the glass stands at the rig's position in interior units {(glass == null ? "none" : PlaneRigPatch.PlaneFrame(glass, interior).Origin)} vs {glassAt}");
+                ctx.Check(glass != null && NodeFrame.Under(glass, interior).Origin.DistanceTo(glassAt) < PosTolerance,
+                    $"the glass stands at the rig's position in interior units {(glass == null ? "none" : NodeFrame.Under(glass, interior).Origin)} vs {glassAt}");
                 ctx.Check(cut == stockGlass && glassSurfaces == stockGlass && surfaces == stockSurfaces,
                     $"the glass draws once: {cut} cut-loose and {glassSurfaces} glass surfaces in all against the stock {stockGlass}, and {surfaces}/{stockSurfaces} surfaces in the interior; glass on {string.Join(" ", GlassHolders(builder, interior))}");
             }
@@ -544,19 +548,19 @@ internal static class PlaneRigSuites
     // on the pilot's layer fails too, as does a twin that misses its original's turn or hide.
     [Suite("plane-rig-cockpit-pass",
         "a flat body cockpit's pass holds the transplanted panel and a hidden twin of every drawn body mesh outside the hide "
-        + "list and cockpit1, sharing its mesh on copies of its materials; at a rotated, wobbled pose 20 km from the origin "
+        + "list and cockpit1, sharing its mesh on copies of its materials, which a later repaint reaches; at a rotated, wobbled pose 20 km from the origin "
         + "each twin and the moved speedometer stand at their originals' offsets from the eye, from small numbers; the "
         + "pilot's pane drops the twinned originals and the hide node while a second pane draws them; a turned or hidden "
         + "original moves its twin on the next sync; the eye's light origin reaches the twins alone; an external pose "
         + "takes the pass off and gives the originals back")]
     internal static void PlaneRigCockpitPass(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         string? hide;
@@ -621,12 +625,12 @@ internal static class PlaneRigSuites
         + "lowers the panel back onto the airframe")]
     internal static void PlaneRigCockpitStereo(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("speedometer");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         string plane = ctx.PlaneName;
         // The stereo shader reads the eye feed's globals; declared without making the run stereo.
@@ -710,10 +714,10 @@ internal static class PlaneRigSuites
         SplitScreen.SeatAirframe(model, own, 0);
         var seat = new Vector3(0f, 0.02f, 0.06f);
         var stereo = XrCockpit.Body(panel, seat, builder.CockpitCameraOffset);
-        foreach (var (original, twin) in twins)
+        foreach (var pair in twins)
         {
-            stereo.Mirror(original, twin);
-            view.Reseat(original);
+            stereo.Mirror(pair);
+            view.Reseat(pair.Original);
         }
 
         var eye = stereo.EyeInAircraft;
@@ -725,9 +729,9 @@ internal static class PlaneRigSuites
         ctx.Check(panel.TopLevel, $"Cockpit lifts the panel to the XR origin's frame");
 
         // Each relative to the eye, from small numbers: what the stereo shader draws from.
-        Vector3 FromEye(Node3D node) => FarAttitude * ((model.Transform * PlaneRigPatch.PlaneFrame(node, model)).Origin - eye);
+        Vector3 FromEye(Node3D node) => FarAttitude * ((model.Transform * NodeFrame.Under(node, model)).Origin - eye);
         // A panel part's pose on the airframe is its pose in the panel, which is mounted at identity.
-        Vector3 PanelFromEye(Node3D node) => FarAttitude * ((model.Transform * PlaneRigPatch.PlaneFrame(node, panel)).Origin - eye);
+        Vector3 PanelFromEye(Node3D node) => FarAttitude * ((model.Transform * NodeFrame.Under(node, panel)).Origin - eye);
         float worst = 0f, reach = 0f;
         foreach (var (original, twin) in twins)
         {
@@ -739,11 +743,11 @@ internal static class PlaneRigSuites
         ctx.Check(worst < 1e-5f && reach < 50f, $"every twin stands at its original's offset from the eye, worst {worst * 1e6f:0.##} um, none past {reach:0.##} m");
         ctx.Note($"{twins.Count} twins of {drawn.Count} body meshes, worst offset error {worst * 1e6f:0.##} um, farthest {reach:0.##} m from the eye, {overlays} reticle overlay(s)");
         var speedo = Named(panel, "speedometer").FirstOrDefault();
-        ctx.Check(speedo != null && PlaneRigPatch.PlaneFrame(speedo, panel).IsEqualApprox(CockpitTransplant.Posed(Transform3D.Identity, speedPose))
-                && (panel.Transform * PlaneRigPatch.PlaneFrame(speedo, panel)).Origin.DistanceTo(PanelFromEye(speedo)) < 1e-5f,
+        ctx.Check(speedo != null && NodeFrame.Under(speedo, panel).IsEqualApprox(CockpitTransplant.Posed(Transform3D.Identity, speedPose))
+                && (panel.Transform * NodeFrame.Under(speedo, panel)).Origin.DistanceTo(PanelFromEye(speedo)) < 1e-5f,
             $"the speedometer stands at the rig's plane-frame pose, relative to the eye");
         var glass = Named(panel, CockpitTransplant.GlassName).FirstOrDefault();
-        ctx.Check(glass != null && PlaneRigPatch.PlaneFrame(glass, panel).Origin.DistanceTo(glassAt) < PosTolerance,
+        ctx.Check(glass != null && NodeFrame.Under(glass, panel).Origin.DistanceTo(glassAt) < PosTolerance,
             $"the glass stands at the rig's position");
 
         ctx.Check(twins.All(t => WorldAndToolSuites.DrawsNone(t.Original, own.CullMask) && WorldAndToolSuites.DrawsAll(t.Original, other.CullMask)),
@@ -765,7 +769,7 @@ internal static class PlaneRigSuites
         part.RotateObjectLocal(Vector3.Right, 0.3f);
         stereo.Follow(origin, aircraft);
         ctx.Check((panel.Transform * movedTwin.Transform).Origin.DistanceTo(FromEye(moved)) < 1e-5f
-                && (panel.Transform * movedTwin.Transform).Basis.IsEqualApprox(FarAttitude * (model.Transform * PlaneRigPatch.PlaneFrame(moved, model)).Basis),
+                && (panel.Transform * movedTwin.Transform).Basis.IsEqualApprox(FarAttitude * (model.Transform * NodeFrame.Under(moved, model)).Basis),
             $"a turned original turns its twin on the next placement");
         part.Visible = false;
         stereo.Follow(origin, aircraft);
@@ -794,7 +798,7 @@ internal static class PlaneRigSuites
             return null;
         }
 
-        var twins = PlaneBuilder.FlatBody(model, panel, builder.Cockpit!.Hide);
+        var twins = builder.FlatBody(model, panel, builder.Cockpit!.Hide);
         var drawn = BodyMeshes(model, hide);
         ctx.Check(twins.Count > 0 && twins.Select(t => t.Original).ToHashSet().SetEquals(drawn) && twins.All(t => t.Twin.GetParent() == panel),
             $"the panel holds a twin of every drawn body mesh outside cockpit1 and the hide list: {twins.Count} of {drawn.Count}");
@@ -807,6 +811,7 @@ internal static class PlaneRigSuites
                 && t.Twin.GetInstanceShaderParameter("node_bias").Equals(t.Original.GetInstanceShaderParameter("node_bias"))),
             $"each twin shares its original's mesh, shader and node bias, on copies of its materials");
         ctx.Check(twins.All(t => !t.Twin.Visible), $"every twin starts hidden, so a session without the pass draws no double");
+        CheckTwinRepaint(ctx, builder, twins);
 
         var view = CockpitVisibility.Bind(model, interior, 0, cockpit: builder.Cockpit, panel: panel)!;
         SplitScreen.SeatAirframe(model, own, 0);
@@ -836,7 +841,7 @@ internal static class PlaneRigSuites
             $"Cockpit shows the pass and its panel, which the pass camera draws on the pilot's flare band {WorldAndToolSuites.DrawnBy(panel, pass.Camera.CullMask)}");
 
         // Each relative to the eye, from small numbers: the pivot's wobble over the model root, less the eye.
-        Vector3 FromEye(Node3D node) => FarAttitude * ((pivot.Transform * model.Transform * PlaneRigPatch.PlaneFrame(node, model)).Origin - eye);
+        Vector3 FromEye(Node3D node) => FarAttitude * ((pivot.Transform * model.Transform * NodeFrame.Under(node, model)).Origin - eye);
         float worst = 0f, reach = 0f, world = 0f;
         foreach (var (original, twin) in twins.Where(t => t.Twin.Visible))
         {
@@ -850,7 +855,7 @@ internal static class PlaneRigSuites
             $"every twin stands at its original's offset from the eye, worst {worst * 1e6f:0.##} um ({world * 1000f:0.##} mm against the world's float32 globals), none past {reach:0.##} m");
         ctx.Note($"{twins.Count} twins of {drawn.Count} body meshes, worst offset error {worst * 1e6f:0.##} um, farthest {reach:0.##} m from the eye");
         var speedo = Named(panel, "speedometer").FirstOrDefault();
-        ctx.Check(speedo != null && (panel.Transform * PlaneRigPatch.PlaneFrame(speedo, panel)).Origin.DistanceTo(
+        ctx.Check(speedo != null && (panel.Transform * NodeFrame.Under(speedo, panel)).Origin.DistanceTo(
                 FarAttitude * ((pivot.Transform * model.Transform * CockpitTransplant.Posed(Transform3D.Identity, speedPose)).Origin - eye)) < 1e-5f,
             $"the speedometer stands at the rig's plane-frame pose, relative to the eye");
         var twinMaterial = twins[0].Twin.GetActiveMaterial(0) as ShaderMaterial;
@@ -873,7 +878,7 @@ internal static class PlaneRigSuites
             part.RotateObjectLocal(Vector3.Right, 0.3f);
             pass.Sync(FarAttitude, cam, shake);
             ctx.Check((panel.Transform * movedTwin.Transform).Origin.DistanceTo(FromEye(moved)) < 1e-5f
-                    && (panel.Transform * movedTwin.Transform).Basis.IsEqualApprox(FarAttitude * (pivot.Transform * model.Transform * PlaneRigPatch.PlaneFrame(moved, model)).Basis),
+                    && (panel.Transform * movedTwin.Transform).Basis.IsEqualApprox(FarAttitude * (pivot.Transform * model.Transform * NodeFrame.Under(moved, model)).Basis),
                 $"a turned original turns its twin on the next sync");
             part.Visible = false;
             pass.Sync(FarAttitude, cam, shake);
@@ -886,6 +891,29 @@ internal static class PlaneRigSuites
         ctx.Check(!pass.Visible && twins.All(t => WorldAndToolSuites.DrawsAll(t.Original, own.CullMask)),
             $"an external pose takes the pass off and gives the originals back to the pilot's pane");
         return pass;
+    }
+
+    // A repaint after the twins are made reaches their material copies. Each copy first wears a stale stand-in,
+    // so a repaint that left the copies alone fails whatever the livery changes.
+    private static void CheckTwinRepaint(TestContext ctx, PlaneBuilder builder, List<BodyTwin> twins)
+    {
+        var pairs = twins.SelectMany(t => Enumerable.Range(0, t.Twin.Mesh.GetSurfaceCount())
+                .Select(s => (Original: t.Original.GetActiveMaterial(s) as ShaderMaterial, Copy: t.Twin.GetActiveMaterial(s) as ShaderMaterial)))
+            .Where(p => p.Original != null && p.Copy != null && p.Original.GetShaderParameter("albedo_tex").VariantType == Variant.Type.Object)
+            .Distinct().ToList();
+        var shipped = pairs.ToDictionary(p => p.Original!, p => p.Original!.GetShaderParameter("albedo_tex").AsGodotObject());
+        var stale = CSVM.Utils.TextureUpload.Create(Image.CreateEmpty(4, 4, false, Image.Format.Rgba8));
+        foreach (var (_, copy) in pairs)
+        {
+            copy!.SetShaderParameter("albedo_tex", stale);
+        }
+
+        builder.Repaint(new PaintScheme { Pattern = "cccp", Color1 = PaintScheme.FromBytes(200, 10, 10) });
+        int changed = shipped.Count(s => !ReferenceEquals(s.Key.GetShaderParameter("albedo_tex").AsGodotObject(), s.Value));
+        ctx.Check(pairs.Count > 0 && pairs.All(p => ReferenceEquals(p.Copy!.GetShaderParameter("albedo_tex").AsGodotObject(),
+                p.Original!.GetShaderParameter("albedo_tex").AsGodotObject())),
+            $"a repaint after the twins are made gives each of {pairs.Count} twin material copies its original's albedo ({changed} originals repainted)");
+        builder.Repaint(null);
     }
 
     // Every drawn mesh of the body a stereo body cockpit lifts: outside cockpit*, the hide list and flares.
@@ -936,12 +964,12 @@ internal static class PlaneRigSuites
     {
         var glass = panel.GetChildren().OfType<Node3D>().FirstOrDefault(n => n.Name.ToString() == CockpitTransplant.GlassName);
         var meshes = glass?.GetChildren().OfType<MeshInstance3D>().ToList() ?? new List<MeshInstance3D>();
-        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
-        ctx.Check(glass != null && PlaneRigPatch.PlaneFrame(glass, model).Origin.DistanceTo(glassAt) < PosTolerance,
-            $"the glass stands at the rig's position {(glass == null ? "none" : PlaneRigPatch.PlaneFrame(glass, model).Origin)} vs {glassAt}");
+        var glassIds = GunsightReticle.GlassMaterials(builder.InteriorMaterials).Keys;
+        ctx.Check(glass != null && NodeFrame.Under(glass, model).Origin.DistanceTo(glassAt) < PosTolerance,
+            $"the glass stands at the rig's position {(glass == null ? "none" : NodeFrame.Under(glass, model).Origin)} vs {glassAt}");
         ctx.Check(meshes.Count > 0 && meshes.All(m => m.Mesh.GetSurfaceCount() == 1 && glassIds.Contains(m.Mesh.SurfaceGetMaterial(0).GetInstanceId())),
             $"…as {meshes.Count} cut-loose mesh(es), each one glass surface wearing the interior's glass material");
-        var box = meshes.Count == 0 ? new Aabb() : PlaneRigPatch.PlaneFrame(meshes[0], model) * meshes[0].GetAabb();
+        var box = meshes.Count == 0 ? new Aabb() : NodeFrame.Under(meshes[0], model) * meshes[0].GetAabb();
         ctx.Check(box.Grow(1e-3f).HasPoint(glassAt), $"…with the glass's centre at that position, box {box}");
     }
 
@@ -1021,8 +1049,8 @@ internal static class PlaneRigSuites
                 var stereo = PlaneBuilder.StereoMount(bareBuilder.CockpitCameraOffset, PlaneBuilder.InteriorScale);
                 foreach (var assembly in Named(interior, "gauges").First().GetChildren().OfType<Node3D>())
                 {
-                    poses[AnimRuntime.NameOf(assembly)] = PlaneRigPatch.PlaneFrame(assembly, bare);
-                    stereoGap.Add((stereo * PlaneRigPatch.PlaneFrame(assembly, interior)).Origin.DistanceTo(poses[AnimRuntime.NameOf(assembly)].Origin));
+                    poses[AnimRuntime.NameOf(assembly)] = NodeFrame.Under(assembly, bare);
+                    stereoGap.Add((stereo * NodeFrame.Under(assembly, interior)).Origin.DistanceTo(poses[AnimRuntime.NameOf(assembly)].Origin));
                 }
 
                 stockGlass = GlassVertices(interior, bare, bareBuilder);
@@ -1056,7 +1084,7 @@ internal static class PlaneRigSuites
             foreach (var assembly in moved)
             {
                 var want = poses[AnimRuntime.NameOf(assembly)];
-                var got = PlaneRigPatch.PlaneFrame(assembly, model);
+                var got = NodeFrame.Under(assembly, model);
                 worstPos = Mathf.Max(worstPos, got.Origin.DistanceTo(want.Origin));
                 worstBasis = Mathf.Max(worstBasis, new[] { got.Basis.X - want.Basis.X, got.Basis.Y - want.Basis.Y, got.Basis.Z - want.Basis.Z }.Max(d => d.Length()));
             }
@@ -1097,7 +1125,7 @@ internal static class PlaneRigSuites
                 .Where(n => n.HasMeta(AnimRuntime.NameMeta) && n.GetChildren().OfType<MeshInstance3D>().Any()).ToList();
             ctx.Check(meshed.Count > 0 && meshed.All(Replaced),
                 $"the gungauge's {meshed.Count} meshed nodes are drawn from the pack's copy; not: {string.Join(" ", meshed.Where(n => !Replaced(n)).Select(AnimRuntime.NameOf))}");
-            ctx.Check(gauge != null && PlaneRigPatch.PlaneFrame(gauge, interior).Origin.DistanceTo(at) < PosTolerance,
+            ctx.Check(gauge != null && NodeFrame.Under(gauge, interior).Origin.DistanceTo(at) < PosTolerance,
                 $"…and moved by the table to {at} in interior units");
             var bind = CockpitGauges.Bind(builder);
             ctx.Check(bind != null && bind.ReadoutCount == stock.ReadoutCount && Cells(interior) == stockCells,
@@ -1113,7 +1141,7 @@ internal static class PlaneRigSuites
     // Every glass surface's vertices in the plane frame, in tree and surface order, as CutGlass walks them.
     private static List<Vector3> GlassVertices(Node3D root, Node3D model, PlaneBuilder builder)
     {
-        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        var glassIds = GunsightReticle.GlassMaterials(builder.InteriorMaterials).Keys;
         var found = new List<Vector3>();
         foreach (var instance in root.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>())
         {
@@ -1121,7 +1149,7 @@ internal static class PlaneRigSuites
             {
                 if (instance.GetActiveMaterial(s) is { } material && glassIds.Contains(material.GetInstanceId()))
                 {
-                    var frame = PlaneRigPatch.PlaneFrame(instance, model);
+                    var frame = NodeFrame.Under(instance, model);
                     found.AddRange(instance.Mesh!.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Vertex].AsVector3Array().Select(v => frame * v));
                 }
             }
@@ -1133,7 +1161,7 @@ internal static class PlaneRigSuites
     // Glass-material surfaces and all surfaces drawn under the interior.
     private static (int Glass, int All) GlassAndSurfaces(PlaneBuilder builder, Node3D interior)
     {
-        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        var glassIds = GunsightReticle.GlassMaterials(builder.InteriorMaterials).Keys;
         var surfaces = interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
             .SelectMany(mi => Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0).Select(mi.GetActiveMaterial)).ToList();
         return (surfaces.Count(m => m != null && glassIds.Contains(m.GetInstanceId())), surfaces.Count);
@@ -1141,7 +1169,7 @@ internal static class PlaneRigSuites
 
     private static IEnumerable<string> GlassHolders(PlaneBuilder builder, Node3D interior)
     {
-        var glassIds = builder.InteriorMaterials.Where(m => GunsightReticle.IsGlass(m.TextureName)).Select(m => m.Material.GetInstanceId()).ToHashSet();
+        var glassIds = GunsightReticle.GlassMaterials(builder.InteriorMaterials).Keys;
         return interior.FindChildren("*", "MeshInstance3D", recursive: true, owned: false).OfType<MeshInstance3D>()
             .Where(mi => Enumerable.Range(0, mi.Mesh?.GetSurfaceCount() ?? 0).Any(s => mi.GetActiveMaterial(s) is { } m && glassIds.Contains(m.GetInstanceId())))
             .Select(mi => $"{mi.GetParent()?.Name}/{mi.Name}({mi.Mesh.GetSurfaceCount()})");
@@ -1161,7 +1189,8 @@ internal static class PlaneRigSuites
         $"needles {g?.NeedleCount} lamps {g?.LampCount} readouts {g?.ReadoutCount} belts {g?.BeltCount} zones {g?.DamageZoneCount}";
 
     // The fuel leak darkens wing_flare2 by name. A rig flare standing for it is the lamp that goes
-    // dark, and with no rig wing_flare2 itself is.
+    // dark, and with no rig wing_flare2 itself is. The stand-in is a meshless marker, since a rig
+    // flare may not hold airframe.
     private static void CheckLeakFlare(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
         string flarePlane = Tooling.SyntheticPlane.Fighter;
@@ -1170,21 +1199,15 @@ internal static class PlaneRigSuites
             return;
         }
 
-        string side, standIn;
+        string side;
+        const string standIn = "cockpit_camera";
         using (var none = HdModels.Open(ctx.ScratchDir, "plane-rig-no-pack"))
         {
             var bare = Build(ctx, planesGamez, textures, none, flarePlane, out var bareBuilder);
             try
             {
                 side = MarkerAt(bare, "wing_flare2").X < 0f ? "left" : "right";
-                var plain = PlainMeshNodes(bare);
-                ctx.Check(plain.Count > 0, $"{flarePlane} carries a plain mesh node to stand in for a flare");
-                if (plain.Count == 0)
-                {
-                    return;
-                }
-
-                standIn = AnimRuntime.NameOf(plain[0]);
+                ctx.Check(Named(bare, standIn).Any(), $"{flarePlane} carries {standIn} to stand in for a flare");
                 CheckLeak(ctx, bareBuilder, "wing_flare2", "with no rig");
             }
             finally
@@ -1264,17 +1287,17 @@ internal static class PlaneRigSuites
     {
         var spinNode = Named(model, spinName).First();
         var prop1 = hasProp1 ? Named(model, "prop1").First() : null;
-        var spinBefore = PlaneRigPatch.PlaneFrame(spinNode, model).Basis;
-        var propBefore = prop1 == null ? Basis.Identity : PlaneRigPatch.PlaneFrame(prop1, model).Basis;
+        var spinBefore = NodeFrame.Under(spinNode, model).Basis;
+        var propBefore = prop1 == null ? Basis.Identity : NodeFrame.Under(prop1, model).Basis;
         var props = PropAnimator.Build(model);
         props?.Advance(SpinSeconds, 1f);
 
-        var (spinKept, spinDeg) = Turn(spinBefore, PlaneRigPatch.PlaneFrame(spinNode, model).Basis, spinAxis);
+        var (spinKept, spinDeg) = Turn(spinBefore, NodeFrame.Under(spinNode, model).Basis, spinAxis);
         ctx.Check(spinKept && Mathf.Abs(spinDeg - (SpinDegPerSec * SpinSeconds)) < AngleToleranceDeg,
             $"the unclassified {spinName} spins about the rig's axis by {spinDeg:0.##} deg");
         if (prop1 != null)
         {
-            var (propKept, propDeg) = Turn(propBefore, PlaneRigPatch.PlaneFrame(prop1, model).Basis, Vector3.Up);
+            var (propKept, propDeg) = Turn(propBefore, NodeFrame.Under(prop1, model).Basis, Vector3.Up);
             float stock = PropParts.Spin(PropParts.Kind.PropMain, out _, out float rate) ? Mathf.Abs(rate * SpinSeconds) : 0f;
             ctx.Check(propKept && Mathf.Abs(propDeg - stock) < AngleToleranceDeg,
                 $"prop1 spins about the rig's vertical axis at its own rate, {propDeg:0.##} deg of {stock:0.##}");
@@ -1284,11 +1307,11 @@ internal static class PlaneRigSuites
     private static void CheckSurface(TestContext ctx, Node3D model, string surfaceName, Vector3 hingeOrigin, Vector3 hingeAxis)
     {
         var surface = Named(model, surfaceName).First();
-        var before = PlaneRigPatch.PlaneFrame(surface, model);
+        var before = NodeFrame.Under(surface, model);
         var pivot = before.AffineInverse() * hingeOrigin;
         var animator = ControlSurfaceAnimator.Build(model);
         animator?.Advance(5.0, new FlightInput { Yaw = 1f }, animate: true);
-        var after = PlaneRigPatch.PlaneFrame(surface, model);
+        var after = NodeFrame.Under(surface, model);
         var (axisKept, deg) = Turn(before.Basis, after.Basis, hingeAxis);
         ctx.Check(deg > 1f && axisKept, $"the rig's {surfaceName} rudder deflects {deg:0.##} deg about the rig's hinge axis");
         ctx.Check((after * pivot).DistanceTo(hingeOrigin) < PosTolerance && after.Origin.DistanceTo(before.Origin) > PosTolerance,
@@ -1313,7 +1336,7 @@ internal static class PlaneRigSuites
         {
             var all = model.FindChildren("*", "Node3D", recursive: true, owned: false).OfType<Node3D>()
                 .Where(n => WingLights.IsFlare(n.Name)).ToList();
-            var port = all.Where(n => PlaneRigPatch.PlaneFrame(n, model).Origin.X < 0f).ToList();
+            var port = all.Where(n => NodeFrame.Under(n, model).Origin.X < 0f).ToList();
             ctx.Note($"{flarePlane} port flares by position: {string.Join(",", port.Select(n => n.Name.ToString()))}");
             ctx.Check(builder.WingFlares.Any(f => f.Name.ToString() == "wing_flare2"), $"the rig's left flare wing_flare2 blinks");
             ctx.Check(port.Count > 0 && port.Where(n => n.Name.ToString() != "wing_flare2").All(n => !n.Visible && !builder.WingFlares.Contains(n)),
@@ -1330,11 +1353,13 @@ internal static class PlaneRigSuites
 
     // Each rig names one thing the model cannot honour, and the build must refuse it by file and entry.
     // A firepoint the model lacks is refused too, read on a copy of the airframe with one cut away.
-    private static void CheckRefused(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string spinName)
+    // A firepoint just inside the reach past the model box builds, one just past it is refused.
+    private static void CheckRefused(TestContext ctx, GameZ planesGamez, TextureArchive textures, string plane, string spinName, Aabb box)
     {
-        var cut = GameZ.Load(ctx.PlanesGamezPath);
+        var cut = ctx.PlanesCopy();
         string? lacking = CutFirepoint(cut, plane);
         ctx.Check(lacking != null, $"{plane} carries a firepoint to cut for the added-firepoint case");
+        Vector3 Aft(float past) => new(box.GetCenter().X, box.GetCenter().Y, box.End.Z + PlaneRigPatch.MarkerReach + past);
         var cases = new List<(string Label, string Json, string Entry, GameZ Gamez)>
         {
             ("unknown-prop", """{ "props": [ { "node": "no_such_node", "axis": [0, 0, 1], "deg_per_sec": 10 } ] }""", "props[0] (no_such_node)", planesGamez),
@@ -1342,6 +1367,10 @@ internal static class PlaneRigSuites
             ("unknown-flare", """{ "flares": { "right": "no_such_node" } }""", "flares.right", planesGamez),
             ("unknown-marker", """{ "markers": { "no_such_marker": [0, 0, 0] } }""", "markers.no_such_marker", planesGamez),
             ("spin-unspecified", $$"""{ "props": [ { "node": "{{spinName}}", "axis": [0, 0, 1] } ] }""", $"props[0] ({spinName})", planesGamez),
+            ("moved-mesh", $$"""{ "markers": { "{{spinName}}": [0, 0, -30] } }""", $"markers.{spinName}", planesGamez),
+            ("far-firepoint", $$"""{ "markers": { "firepoint1": {{Json(Aft(0.1f))}} } }""", "markers.firepoint1", planesGamez),
+            ("blur-unclassified", $$"""{ "props": [ { "node": "{{spinName}}", "axis": [0, 0, 1], "deg_per_sec": 10, "blur": true } ] }""", $"props[0] ({spinName}).blur", planesGamez),
+            ("mesh-flare", $$"""{ "flares": { "left": "{{spinName}}" } }""", "flares.left", planesGamez),
         };
         if (lacking != null)
         {
@@ -1364,6 +1393,19 @@ internal static class PlaneRigSuites
 
             ctx.Check(error != null && error.Contains(file, StringComparison.Ordinal) && error.Contains(entry, StringComparison.Ordinal),
                 $"a {label} rig fails the build naming the file and '{entry}': {error ?? "no error"}");
+        }
+
+        using var near = Pack(ctx, "near-firepoint", plane, $$"""{ "markers": { "firepoint1": {{Json(Aft(-0.1f))}} } }""");
+        try
+        {
+            var model = Build(ctx, planesGamez, textures, near, plane, out _);
+            ctx.Check(MarkerAt(model, "firepoint1").DistanceTo(Aft(-0.1f)) < PosTolerance,
+                $"a firepoint 0.1 m inside the {PlaneRigPatch.MarkerReach} m reach past the model box {box} builds there");
+            model.Free();
+        }
+        catch (InvalidDataException e)
+        {
+            ctx.Check(false, $"a firepoint 0.1 m inside the reach past the model box builds: {e.Message}");
         }
     }
 
@@ -1438,7 +1480,7 @@ internal static class PlaneRigSuites
     }
 
     private static Vector3 MarkerAt(Node3D model, string name) =>
-        Named(model, name).Select(n => PlaneRigPatch.PlaneFrame(n, model).Origin).DefaultIfEmpty(Vector3.Inf).First();
+        Named(model, name).Select(n => NodeFrame.Under(n, model).Origin).DefaultIfEmpty(Vector3.Inf).First();
 
     private static IEnumerable<Node3D> Named(Node3D model, string name) =>
         model.FindChildren("*", "Node3D", recursive: true, owned: false).OfType<Node3D>()

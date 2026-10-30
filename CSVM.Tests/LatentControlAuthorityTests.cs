@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -27,8 +28,7 @@ public class LatentControlAuthorityTests
         "player_peacemaker",
     };
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The fade's three regions on an airframe that authors it into reach: full authority
     /// up to the first speed, linear to zero at the second, zero beyond. The midpoint is what

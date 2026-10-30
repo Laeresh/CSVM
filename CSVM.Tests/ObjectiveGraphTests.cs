@@ -386,7 +386,7 @@ public class ObjectiveGraphTests
     [ExtractedDataFact]
     public void The_shipped_C1_M02_script_parses_to_its_censused_shape()
     {
-        var script = ObjectiveScript.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M02"));
+        var script = ObjectiveScript.Load(TestZrdr.Mission("C1", "M02"));
         Assert.Equal(50, script.Objectives.Count);
         Assert.Equal(0f, script.MissionTimer);
         var first = script.Objectives[0];
@@ -412,7 +412,7 @@ public class ObjectiveGraphTests
     {
         // 15 (tower down) kills 16 and naps 17, 17 naps 19, and 19's nap is HELD by
         // TICK_DEPENDS_ON_OBJ 29 until 28 wakes 29; then 19 wakes 3 s later and naps 20 for 90 s.
-        var script = ObjectiveScript.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04"));
+        var script = ObjectiveScript.Load(TestZrdr.Mission("C1", "M04"));
         var world = new FakeWorld();
         var graph = new ObjectiveGraph(script, world);
         var log = new List<ObjectiveTransition>();
@@ -574,8 +574,8 @@ public class ObjectiveGraphTests
     private static ObjectiveScript Script(string body)
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "objectives.json"), "[[" + body + "]]");
-        return ObjectiveScript.Load(dir);
+        File.WriteAllText(Path.Combine(dir, "objectives.zrd.json"), "[[" + body + "]]");
+        return ObjectiveScript.Load(TestZrdr.Folder(dir));
     }
 
     private static void Run(ObjectiveGraph graph, float seconds)

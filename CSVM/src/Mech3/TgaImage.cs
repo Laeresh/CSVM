@@ -4,11 +4,11 @@ using System.IO;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// A decoded TGA as raw top-down RGBA8 bytes, engine-free. Covers exactly what ships under
-/// <c>extracted/rof/ASSETS/GRAPHICS</c>: uncompressed (type 2) and RLE (type 10) truecolour at 24
-/// or 32 bits, both row orders (TGA rows are bottom-up unless descriptor bit 5 says otherwise).
-/// Anything else, colour-mapped, greyscale, right-to-left, truncated, decodes as null rather
-/// than throwing: hangar art is optional by design and a bad file must not take a menu down.
+/// A decoded TGA as raw top-down RGBA8 bytes, engine-free. It covers what the UI archive's
+/// <c>ASSETS/GRAPHICS</c> ships: uncompressed (type 2) and RLE (type 10) truecolour at 24 or 32
+/// bits, both row orders. TGA rows are bottom-up unless descriptor bit 5 says otherwise.
+/// Anything else (colour-mapped, greyscale, right-to-left, truncated) decodes as null rather than
+/// throwing. Hangar art is optional by design, and a bad file must not take a menu down.
 /// </summary>
 public sealed class TgaImage
 {

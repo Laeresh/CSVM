@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using CSVM;
 using CSVM.Extraction;
 using Xunit;
@@ -6,90 +7,94 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Extraction-path arithmetic: the per-chapter and per-mission layout, and the
+/// The unzbd output layout under a folder: the per-chapter and per-mission paths, and the
 /// unpacked-folder-beats-zip preference.
 /// </summary>
 public class SessionPathsTests
 {
     [Fact]
-    public void ChapterAndMissionPathsFollowTheExtractionLayout()
+    public void ChapterAndMissionPathsFollowTheOutputLayout()
     {
         var root = TestData.TempDir();
-        Assert.Equal(Path.Combine(root, "extracted", "C4", "texture.zip"),
+        Assert.Equal(Path.Combine(root, "C4", "texture.zip"),
             SessionPaths.ChapterTextures(root, "C4"));
-        Assert.Equal(Path.Combine(root, "extracted", "C4", "gamez.zip"),
+        Assert.Equal(Path.Combine(root, "C4", "gamez.zip"),
             SessionPaths.ChapterGamez(root, "C4"));
-        Assert.Equal(Path.Combine(root, "extracted", "C4", "zrdr.zip"),
+        Assert.Equal(Path.Combine(root, "C4", "zrdr.zip"),
             SessionPaths.ChapterZrdr(root, "C4"));
-        Assert.Equal(Path.Combine(root, "extracted", "C4", "IA1", "zrdr.zip"),
+        Assert.Equal(Path.Combine(root, "C4", "IA1", "zrdr.zip"),
             SessionPaths.MissionZrdr(root, "C4", "IA1"));
     }
 
-    /// <summary>An extraction of a disc's contents holds the root archives and no chapter world,
-    /// zipped or unpacked; one chapter's GameZ in either shape is enough.</summary>
+    /// <summary>A copy of a disc without its chapters holds the root archives and no chapter world.
+    /// One chapter's GameZ is enough; no game files hold none.</summary>
     [Fact]
-    public void AChapterWorldIsFoundZippedOrUnpackedAndNeverAtTheRoot()
+    public void AChapterWorldIsFoundInTheGameFilesAndNeverAtTheRoot()
     {
         var root = TestData.TempDir();
-        string extracted = Directory.CreateDirectory(Path.Combine(root, "extracted")).FullName;
-        File.WriteAllText(Path.Combine(extracted, "planes.zip"), "x");
-        Directory.CreateDirectory(Path.Combine(extracted, "rimage"));
-        Assert.False(SessionPaths.HasAnyChapterWorld(root));
-        Assert.False(SessionPaths.HasAnyChapterWorld(Path.Combine(root, "absent")));
+        Directory.CreateDirectory(Path.Combine(root, "ZBD"));
+        File.WriteAllText(Path.Combine(root, "ZBD", "planes.zbd"), "x");
+        var game = new InstallFolderSource(root);
+        Assert.False(SessionPaths.HasAnyChapterWorld(game));
+        Assert.False(SessionPaths.HasAnyChapterWorld(null));
 
-        Directory.CreateDirectory(Path.Combine(extracted, "C3", "gamez"));
-        Assert.True(SessionPaths.HasAnyChapterWorld(root));
-
-        var zipped = TestData.TempDir();
-        Directory.CreateDirectory(Path.Combine(zipped, "extracted", "C1"));
-        File.WriteAllText(Path.Combine(zipped, "extracted", "C1", "gamez.zip"), "x");
-        Assert.True(SessionPaths.HasAnyChapterWorld(zipped));
+        Directory.CreateDirectory(Path.Combine(root, "ZBD", "c3"));
+        File.WriteAllText(Path.Combine(root, "ZBD", "c3", "GAMEZ.ZBD"), "x");
+        Assert.True(SessionPaths.HasAnyChapterWorld(game));
     }
 
-    /// <summary>The campaign sequence names its folders <c>c3</c>/<c>m01</c>; the extraction
-    /// writes <c>C3/M01</c>. Compared as strings, since a Windows disk would find either.</summary>
+    /// <summary>The campaign sequence names its folders <c>c3</c>/<c>m01</c>; unzbd's tree spells
+    /// them <c>C3/M01</c>. Compared as strings, since a Windows disk would find either.</summary>
     [Fact]
-    public void ALowerCaseChapterAndMissionMapToTheCaseTheExtractionWrites()
+    public void ALowerCaseChapterAndMissionMapToTheCaseTheTreeSpells()
     {
         var root = TestData.TempDir();
-        Assert.Equal(Path.Combine(root, "extracted", "C3", "M01", "zrdr.zip"),
+        Assert.Equal(Path.Combine(root, "C3", "M01", "zrdr.zip"),
             SessionPaths.MissionZrdr(root, "c3", "m01"));
-        Assert.Equal(Path.Combine(root, "extracted", "C1B", "gamez.zip"),
+        Assert.Equal(Path.Combine(root, "C1B", "gamez.zip"),
             SessionPaths.ChapterGamez(root, "c1b"));
-        Assert.Equal(Path.Combine(root, "extracted", "C2B", "zrdr.zip"),
+        Assert.Equal(Path.Combine(root, "C2B", "zrdr.zip"),
             SessionPaths.ChapterZrdr(root, "c2b"));
-        Assert.Equal(Path.Combine(root, "extracted", "C5", "texture.zip"),
+        Assert.Equal(Path.Combine(root, "C5", "texture.zip"),
             SessionPaths.ChapterTextures(root, "c5"));
-        Assert.Equal(
-            (Path.Combine(root, "extracted", "C3", "cam_anim.zip"), Path.Combine(root, "extracted", "C3", "M01", "mis_anim.zip")),
-            Mech3.AnimProgram.ArchivePaths(root, "c3", "m01"));
+        Assert.Equal(Path.Combine(root, "C3", "cam_anim.zip"), SessionPaths.ChapterAnim(root, "c3"));
+        Assert.Equal(Path.Combine(root, "C3", "M01", "mis_anim.zip"), SessionPaths.MissionAnim(root, "c3", "m01"));
+        Assert.Equal("C3/M01/zrdr.zip", ZbdTree.Canonical(@"c3\m01\ZRDR.zip"));
     }
 
-    /// <summary>Every campaign mission's own folder names resolve to the path the extraction
-    /// writes for that mission's archive, whatever case the install spells it in.</summary>
+    /// <summary>Every campaign mission's own folder names resolve to the path the tree holds for
+    /// that mission's archive, whatever case the sequence spells it in.</summary>
     [Fact]
-    public void EveryCampaignMissionResolvesToWhereTheExtractionWritesIt()
+    public void EveryCampaignMissionResolvesToItsFolderInTheTree()
     {
         var root = TestData.TempDir();
-        var reader = Extraction.ZbdPlan.ModeFor("zrdr")!;
         for (int campaign = 1; campaign <= 8; campaign++)
         {
             for (int mission = 1; mission <= 5; mission++)
             {
                 var named = new Mech3.CampaignMission(0, "", campaign, mission, "", false);
-                string install = Path.Combine(named.ChapterFolder, named.MissionFolder.ToUpperInvariant(), "Zrdr.ZBD");
                 Assert.Equal(
-                    Path.Combine(root, "extracted", Extraction.ZbdPlan.OutputRelativePath(install, reader)),
+                    Path.Combine(root, named.ChapterFolder.ToUpperInvariant(), named.MissionFolder.ToUpperInvariant(), "zrdr.zip"),
                     SessionPaths.MissionZrdr(root, named.ChapterFolder, named.MissionFolder));
             }
         }
     }
 
     [Fact]
+    public void TheManifestHoldsEveryChaptersCoreAndMissionArchivesOnce()
+    {
+        Assert.Equal(184, ZbdManifest.Expected.Count);
+        Assert.Equal(ZbdManifest.Expected.Count, ZbdManifest.Expected.Distinct().Count());
+        Assert.Contains("C2B/rtexture9.zbd", ZbdManifest.Expected);
+        Assert.Contains("C1/M05/mis_anim.zbd", ZbdManifest.Expected);
+        Assert.All(ZbdManifest.Expected, p => Assert.Equal(ZbdTree.Canonical(p), p));
+    }
+
+    [Fact]
     public void AnUnpackedSiblingFolderWinsOverItsZip()
     {
         var root = TestData.TempDir();
-        var chapter = Path.Combine(root, "extracted", "C4");
+        var chapter = Path.Combine(root, "C4");
         Directory.CreateDirectory(Path.Combine(chapter, "gamez"));
         File.WriteAllText(Path.Combine(chapter, "gamez.zip"), "not really a zip");
 
@@ -106,47 +111,10 @@ public class SessionPathsTests
     }
 
     [Fact]
-    public void ForceZippedTakesTheZipEvenWhereTheUnpackedFolderExists()
-    {
-        var root = TestData.TempDir();
-        var chapter = Path.Combine(root, "extracted", "C4");
-        Directory.CreateDirectory(Path.Combine(chapter, "gamez"));
-        File.WriteAllText(Path.Combine(chapter, "gamez.zip"), "not really a zip");
-        try
-        {
-            SessionPaths.ForceZipped = true;
-            Assert.Equal(Path.Combine(chapter, "gamez.zip"), SessionPaths.ChapterGamez(root, "C4"));
-        }
-        finally
-        {
-            SessionPaths.ForceZipped = false;
-        }
-    }
-
-    [Fact]
-    public void ForceZippedStillTakesTheFolderWhereNoZipWasEverExtracted()
-    {
-        var root = TestData.TempDir();
-        var chapter = Path.Combine(root, "extracted", "C4");
-        Directory.CreateDirectory(Path.Combine(chapter, "gamez"));
-        try
-        {
-            // Asking for the export's asset shape must not refuse to start a tree that only ever
-            // had the folder, the flag narrows the choice, it does not add a requirement.
-            SessionPaths.ForceZipped = true;
-            Assert.Equal(Path.Combine(chapter, "gamez"), SessionPaths.ChapterGamez(root, "C4"));
-        }
-        finally
-        {
-            SessionPaths.ForceZipped = false;
-        }
-    }
-
-    [Fact]
     public void TheTopRtextureTierBeatsTheBaseTextureArchive()
     {
         var root = TestData.TempDir();
-        var chapter = Path.Combine(root, "extracted", "C1");
+        var chapter = Path.Combine(root, "C1");
         Directory.CreateDirectory(chapter);
         File.WriteAllText(Path.Combine(chapter, "texture.zip"), "x");
         File.WriteAllText(Path.Combine(chapter, "rtexture2.zip"), "x");

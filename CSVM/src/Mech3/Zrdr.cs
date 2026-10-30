@@ -7,13 +7,33 @@ using System.Text.Json;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Reader for mech3ax zrdr extractions (the game's "reader" config files → JSON).
+/// Reader for unzbd's zrdr output (the game's "reader" config files as JSON), the modding path.
+/// The engine reads a scope as a <see cref="ZrdrSet"/>; <see cref="ReadScope"/> builds one from a
+/// zip or folder. Only the fork's entry names are read (<c>vehicle.zrd.json</c>).
 /// Reader data is nested lists of strings and numbers. By convention most lists
 /// alternate key/value pairs: [key, [values...], key, [values...], ...], wrap those
 /// in <see cref="ZrdrDict"/>. vehicle.json defs additionally inherit via 'kind_of'.
 /// </summary>
 public static class Zrdr
 {
+    private const string EntrySuffix = ".zrd.json";
+
+    /// <summary>Every reader of a zrdr zip or folder as a <see cref="ZrdrFile"/>, in entry order,
+    /// an empty reader as an empty root; null when neither exists. Throws when an entry does not
+    /// parse.</summary>
+    public static IReadOnlyList<ZrdrFile>? ReadScope(string zrdrPath)
+    {
+        if (!Directory.Exists(zrdrPath) && !File.Exists(zrdrPath))
+            return null;
+        var files = new List<ZrdrFile>();
+        foreach (var (name, bytes) in Entries(zrdrPath))
+        {
+            using var doc = JsonDocument.Parse(bytes);
+            files.Add(new ZrdrFile(name[..^".json".Length], null, Convert(doc.RootElement) as List<object?> ?? new List<object?>()));
+        }
+        return files;
+    }
+
     /// <summary>Loads one reader file (e.g. "vehicle.json") from a zrdr ZIP or a directory of JSON files.</summary>
     public static List<object?> LoadFile(string zrdrPath, string fileName)
     {
@@ -46,41 +66,12 @@ public static class Zrdr
     public static IEnumerable<(string Name, List<object?> Root)> LoadMatchingFiles(
         string zrdrPath, string contentFilter)
     {
-        static (string, List<object?>)? TryParse(string name, byte[] bytes, string filter)
+        foreach (var (name, bytes) in Entries(zrdrPath))
         {
             // UTF-8 substring sniff: the filter keys are plain ASCII JSON strings.
-            if (System.Text.Encoding.UTF8.GetString(bytes).IndexOf(filter, StringComparison.Ordinal) < 0)
-                return null;
-            try
-            {
-                using var doc = JsonDocument.Parse(bytes);
-                return Convert(doc.RootElement) is List<object?> root ? (name, root) : null;
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
-
-        if (Directory.Exists(zrdrPath))
-        {
-            foreach (var file in Directory.EnumerateFiles(zrdrPath, "*.json"))
-                if (TryParse(Path.GetFileName(file), File.ReadAllBytes(file), contentFilter) is { } hit)
-                    yield return hit;
-        }
-        else if (File.Exists(zrdrPath))
-        {
-            using var zip = ZipFile.OpenRead(zrdrPath);
-            foreach (var entry in zip.Entries)
-            {
-                if (!entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                using var s = entry.Open();
-                using var ms = new MemoryStream();
-                s.CopyTo(ms);
-                if (TryParse(entry.Name, ms.ToArray(), contentFilter) is { } hit)
-                    yield return hit;
-            }
+            if (System.Text.Encoding.UTF8.GetString(bytes).IndexOf(contentFilter, StringComparison.Ordinal) >= 0
+                && TryParse(bytes) is { } root)
+                yield return (name, root);
         }
     }
 
@@ -91,113 +82,92 @@ public static class Zrdr
     public static IEnumerable<(string Name, List<object?> Root)> LoadFilesNamed(
         string zrdrPath, Func<string, bool> namePredicate)
     {
-        static (string, List<object?>)? TryParse(string name, byte[] bytes)
+        foreach (var (name, bytes) in Entries(zrdrPath))
         {
-            try
-            {
-                using var doc = JsonDocument.Parse(bytes);
-                return Convert(doc.RootElement) is List<object?> root ? (name, root) : null;
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
+            if (namePredicate(name) && TryParse(bytes) is { } root)
+                yield return (name, root);
         }
+    }
 
+    /// <summary>Whether a zrdr ZIP or directory carries <paramref name="fileName"/> under the name
+    /// <see cref="LoadFile"/> reads. It lets a caller tell an absent entry from a broken one
+    /// before reading; false when the archive itself is absent.</summary>
+    public static bool HasFile(string zrdrPath, string fileName)
+    {
+        string entry = EntryName(fileName);
+        if (Directory.Exists(zrdrPath))
+            return File.Exists(Path.Combine(zrdrPath, entry));
+        if (!File.Exists(zrdrPath))
+            return false;
+        using var zip = ZipFile.OpenRead(zrdrPath);
+        return zip.GetEntry(entry) != null;
+    }
+
+    // The fork's entries, a reader file per *.zrd.json in a folder or a zip, in stored order.
+    private static IEnumerable<(string Name, byte[] Bytes)> Entries(string zrdrPath)
+    {
         if (Directory.Exists(zrdrPath))
         {
-            foreach (var file in Directory.EnumerateFiles(zrdrPath, "*.json"))
-            {
-                var name = Path.GetFileName(file);
-                if (namePredicate(name) && TryParse(name, File.ReadAllBytes(file)) is { } hit)
-                    yield return hit;
-            }
+            foreach (var file in Directory.EnumerateFiles(zrdrPath, "*" + EntrySuffix))
+                yield return (Path.GetFileName(file), File.ReadAllBytes(file));
         }
         else if (File.Exists(zrdrPath))
         {
             using var zip = ZipFile.OpenRead(zrdrPath);
             foreach (var entry in zip.Entries)
             {
-                if (!namePredicate(entry.Name))
+                if (!entry.Name.EndsWith(EntrySuffix, StringComparison.OrdinalIgnoreCase))
                     continue;
                 using var s = entry.Open();
                 using var ms = new MemoryStream();
                 s.CopyTo(ms);
-                if (TryParse(entry.Name, ms.ToArray()) is { } hit)
-                    yield return hit;
+                yield return (entry.Name, ms.ToArray());
             }
         }
     }
 
-    /// <summary>Whether a zrdr ZIP or directory carries <paramref name="fileName"/> under either
-    /// name <see cref="LoadFile"/> accepts. It lets a caller tell an absent entry from a broken one
-    /// before reading; false when the archive itself is absent.</summary>
-    public static bool HasFile(string zrdrPath, string fileName)
+    private static List<object?>? TryParse(byte[] bytes)
     {
-        if (Directory.Exists(zrdrPath))
+        try
         {
-            foreach (var candidate in CandidateNames(fileName))
-            {
-                if (File.Exists(Path.Combine(zrdrPath, candidate)))
-                    return true;
-            }
-            return false;
+            using var doc = JsonDocument.Parse(bytes);
+            return Convert(doc.RootElement) as List<object?>;
         }
-        if (!File.Exists(zrdrPath))
-            return false;
-        using var zip = ZipFile.OpenRead(zrdrPath);
-        foreach (var candidate in CandidateNames(fileName))
+        catch (JsonException)
         {
-            if (zip.GetEntry(candidate) != null)
-                return true;
+            return null;
         }
-        return false;
     }
 
-    // The names a requested reader file may be stored under. mech3ax v0.6.1
-    // replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
-    // instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
-    // identical, all 222 readers verified semantically equal across the two, so only
-    // the lookup needs to accept both.
     private static byte[] ReadEntry(string zrdrPath, string fileName)
     {
-        byte[]? bytes = null;
+        string entryName = EntryName(fileName);
         if (Directory.Exists(zrdrPath))
         {
-            foreach (var candidate in CandidateNames(fileName))
-            {
-                var p = Path.Combine(zrdrPath, candidate);
-                if (File.Exists(p))
-                {
-                    bytes = File.ReadAllBytes(p);
-                    break;
-                }
-            }
+            var p = Path.Combine(zrdrPath, entryName);
+            if (File.Exists(p))
+                return File.ReadAllBytes(p);
         }
         else
         {
             using var zip = ZipFile.OpenRead(zrdrPath);
-            foreach (var candidate in CandidateNames(fileName))
+            if (zip.GetEntry(entryName) is { } entry)
             {
-                if (zip.GetEntry(candidate) is not { } entry)
-                    continue;
                 using var s = entry.Open();
                 using var ms = new MemoryStream();
                 s.CopyTo(ms);
-                bytes = ms.ToArray();
-                break;
+                return ms.ToArray();
             }
         }
-        return bytes ?? throw new FileNotFoundException($"'{fileName}' missing from '{zrdrPath}'");
+        throw new FileNotFoundException($"'{fileName}' missing from '{zrdrPath}'");
     }
 
-    private static IEnumerable<string> CandidateNames(string fileName)
-    {
-        yield return fileName;
-        var stem = Path.GetFileNameWithoutExtension(fileName);
-        if (fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            yield return stem + ".zrd.json";
-    }
+    // A request names the reader as the engine spells it (vehicle.json, vehicle.zrd.json); the
+    // fork stores it as vehicle.zrd.json.
+    private static string EntryName(string fileName) =>
+        fileName.EndsWith(EntrySuffix, StringComparison.OrdinalIgnoreCase)
+            ? fileName
+            : Path.GetFileNameWithoutExtension(fileName) + EntrySuffix;
 
     private static object? Convert(JsonElement e) => e.ValueKind switch
     {

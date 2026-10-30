@@ -37,13 +37,13 @@ internal static class CampaignScratchProfileSuites
         + "and the original's file stays byte-identical, with no third folder created")]
     internal static void CampaignScratchProfiles(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
-        var mission = CampaignSequence.Load(ctx.ZrdrPath).FirstOrDefault(m =>
+        var mission = CampaignSequence.Load(ctx.Zrdr).FirstOrDefault(m =>
             m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
             && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase));
         if (mission.ChapterFolder == null)
@@ -66,7 +66,7 @@ internal static class CampaignScratchProfileSuites
             string node = StockAirframes.Node(5);
             ctx.Check(seated.PlaneNames.Count > 0 && seated.PlaneNames[0] == node,
                 $"the seat is read off the copy in the named store, {node}");
-            var director = CampaignDirector.TryCreate(seated, ctx.ZrdrPath, missionZrdr);
+            var director = CampaignDirector.TryCreate(seated, ctx.Zrdr, missionZrdr);
             ctx.Check(director != null, $"the director loads '{Copy}' from the named store");
             if (director == null)
             {
@@ -125,10 +125,10 @@ internal static class CampaignScratchProfileSuites
     // The production death path, driven as campaign-player-death drives it. One step lets the
     // director subscribe, then a forced crash and steps until the lost ending is recorded.
     private static void Crash(TestContext ctx, TestWorld world, CampaignDirector director,
-        string texturesPath, StringBuilder report)
+        TextureSet texturesPath, StringBuilder report)
     {
         using var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var human = CampaignPlayerDeathSuites.HumanRig(ctx, planesGamez, textures, pool,

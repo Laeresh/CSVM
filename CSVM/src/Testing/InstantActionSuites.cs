@@ -44,9 +44,9 @@ internal static class InstantActionSuites
         "was seated on at its parking pose")]
     internal static void InstantActionAce(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         // The spawns fly the configured airframes on an install and the tree's own plane on the
         // synthetic tree, which carries none of them. The display-name table is code either way.
@@ -125,8 +125,8 @@ internal static class InstantActionSuites
         // The actual spawn integration: FlightRoster.SpawnAi given an authored scheme/team
         // (the C8 extension) wears them as-is, the ace lands on team 2 flying the configured
         // airframe, not a pilot-index-derived team.
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weaponDefs = WeaponDefs.Load(ctx.Zrdr, null);
         var stockLoadouts = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -140,18 +140,18 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = stockLoadouts,
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             // worldEffects null!: never dereferenced, Inputs.CrashProgram/WorldScene stay null,
             // so Spawn's crash-runtime block (the only reader) is skipped.
@@ -195,7 +195,7 @@ internal static class InstantActionSuites
             wingmen.Add(spawner.SpawnAi(new AiSpawn(wingmanNode, volPos, volPos + Vector3.Forward, volPilot,
                 Scheme: null, Team: AimAssist.PlayerTeam)));
             var vol = volPilot.Machine;
-            var gates = PlaneStats.Load(ctx.ZrdrPath, wingmanNode);
+            var gates = PlaneStats.Load(ctx.Zrdr, wingmanNode);
             (float attack, float back) = ctx.SyntheticData ? (gates.AiAttackRange, gates.AiReturnRange) : (2000f, 1200f);
             ctx.Check(Mathf.IsEqualApprox(vol.AttackRange, attack)
                 && Mathf.IsEqualApprox(vol.ReturnRange, back)
@@ -316,9 +316,9 @@ internal static class InstantActionSuites
         + "wingman slots only 14 reaches no voiced pilot, its row naming the clipless pilot id 5")]
     internal static void InstantActionVoice(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
 
         var shipped = InstantAction.Load(missionZrdr);
@@ -346,9 +346,9 @@ internal static class InstantActionSuites
         ctx.Check(waveAccents.SequenceEqual(new[] { 12, 13, 14, 15, 16 }),
             $"a wave on accent 12 joins its whole re-roll range, an empty wave nothing: [{string.Join(",", waveAccents)}]");
 
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
-        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        var defs = SoundDefs.Load(ctx.Zrdr);
+        var groups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.Zrdr));
         int? acePilot = voice.PilotFor(aceDef.AceAccentId, 0);
         if (acePilot is not { } vo)
         {
@@ -373,12 +373,12 @@ internal static class InstantActionSuites
         ctx.Check(voice.Pool(14).SequenceEqual(new[] { 5 }) && voice.ClipsFor(5, "DA").Count == 0,
             $"accent 14 is the single pilot id 5, which owns no clip def: [{string.Join(",", voice.Pool(14))}]");
 
-        var rosterOnly = CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, defs, groups);
+        var rosterOnly = CombatVoice.SessionPrewarmNames(ctx.Zrdr, missionZrdr, defs, groups);
         ctx.Check(!deClips.Any(rosterOnly.Contains),
             $"the mission roster alone prewarms none of them ({rosterOnly.Count} names)");
-        var joined = CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, defs, groups, aceAccents);
+        var joined = CombatVoice.SessionPrewarmNames(ctx.Zrdr, missionZrdr, defs, groups, aceAccents);
 
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
@@ -427,14 +427,14 @@ internal static class InstantActionSuites
         + "enemy_name and the wingmen read Jack, Tex, Buck, Big John and Betty in slot order")]
     internal static void InstantActionMarkerNames(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"string table");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireMessages();
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var strings = Messages.Load(ctx.MessagesPath);
+        var strings = ctx.Data.Messages;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         var built = new List<FlightController>();
@@ -449,7 +449,7 @@ internal static class InstantActionSuites
             // in build order (ace, wingmen, then waves 1 to 4).
             List<(AiSpawn Spawn, FlightController Actor)> Build(string chapter, InstantActionDef def)
             {
-                string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, "IA1");
+                ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, "IA1");
                 var spec = SessionSpec.FromMenu(SessionSpec.Parse(System.Array.Empty<string>()),
                     chapter, new[] { "player_bhawk" }, MenuMode.Free, def);
                 var director = InstantActionDirector.TryCreate(spec)!;
@@ -461,13 +461,13 @@ internal static class InstantActionSuites
                 director.BuildActors(new InstantActionDirector.ActorBuildInputs
                 {
                     Rigs = new List<PlayerRig> { new() { Controller = lead } },
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
-                    MessagesPath = ctx.MessagesPath,
+                    ChapterZrdr = ctx.ChapterZrdr(chapter),
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
+                    Messages = ctx.Data.Messages,
                     SpawnList = SpawnPoints.LoadIa(missionZrdr, def.MissionType),
                     SpawnBase = 0,
-                    LiveryResolver = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                    LiveryResolver = new LiveryResolver(spec, ctx.DataRoot),
                     NetTrailers = new NetTrailerTargets(null, null),
                     Spawn = spawn =>
                     {
@@ -485,7 +485,7 @@ internal static class InstantActionSuites
 
             foreach (string chapter in new[] { "C1", "C5" })
             {
-                string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, "IA1");
+                ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, "IA1");
                 ctx.RequireData(missionZrdr, $"{chapter}/IA1 zrdr");
                 var shipped = InstantAction.Load(missionZrdr);
                 var aceDef = InstantAction.BuildFromWizard(shipped, "dogfight_ace", shipped.PlayerPlane,
@@ -505,7 +505,7 @@ internal static class InstantActionSuites
                     $"…the pilot, not the airframe '{shipped.AcePlane}'");
             }
 
-            var c1 = InstantAction.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
+            var c1 = InstantAction.Load(ctx.MissionZrdr("C1", "IA1"));
             var oneEach = c1.Waves.Select(w => w with { NumEnemies = 1 }).ToList();
             var squadDef = InstantAction.BuildFromWizard(c1, "dogfight_squadron", c1.PlayerPlane,
                 numWingmen: 5, c1.WingmanPlane, oneEach, c1.Lives);
@@ -556,13 +556,13 @@ internal static class InstantActionSuites
         "(leaving off only the descendants that are themselves deactivated)")]
     internal static void InstantActionZeppelin(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
 
         // The objective selection, over the shipped file: C1 authors zeppelin_type cargo and
@@ -596,8 +596,8 @@ internal static class InstantActionSuites
         if (zepDefs.Count != 1)
             return;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weaponDefs = WeaponDefs.Load(ctx.Zrdr, null);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         Node3D? host = null;
@@ -612,18 +612,18 @@ internal static class InstantActionSuites
             pool = live;
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
@@ -875,13 +875,13 @@ internal static class InstantActionSuites
         "same seat under a solo scoreboard holds its finish pose")]
     internal static void InstantActionEnd(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
         // The stunt runs fly C1/IA1's markers in the host's one physics space. A cached collidable
         // C1 world's scenery would stand there too and crash them mid-hold.
         ctx.EvictCollidableWorlds();
@@ -890,8 +890,8 @@ internal static class InstantActionSuites
         // the host's one physics space. A cached collidable C1 world from an earlier suite crashes them there.
         ctx.EvictCollidableWorlds();
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weaponDefs = WeaponDefs.Load(ctx.Zrdr, null);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         var spawned = new List<FlightController>();
@@ -901,18 +901,18 @@ internal static class InstantActionSuites
             pool = live;
             ctx.Host.AddChild(live);
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
             string enemyNode = InstantAction.PlaneNodeFor("Warhawk")!;
@@ -1069,7 +1069,7 @@ internal static class InstantActionSuites
             // ---- the hold's input half -------------------------------------------------------
             // ⚠ Not a halt: the seat still steps and still carries the lever it was left on.
             // What the hold takes away is the command, which is why the stick is full deflection.
-            var seatStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var seatStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             var seatModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
             var seat = new FlightController();
             seat.Bind(new FlightControllerBuild
@@ -1207,7 +1207,7 @@ internal static class InstantActionSuites
         // ---- stunt_flying: the zone sets' all-finished rule over the authored zones ----------
         ctx.WithWorld("C1", collision: false, mission: "IA1", world =>
         {
-            var zones = StuntMission.Load(world.Gamez, missionZrdr, Messages.Load(ctx.MessagesPath));
+            var zones = StuntMission.Load(world.Gamez, missionZrdr, ctx.Data.Messages);
             ctx.Check(zones != null, $"C1/IA1 ships danger zones for a stunt_flying mission");
             if (zones == null)
             {
@@ -1260,7 +1260,7 @@ internal static class InstantActionSuites
         });
 
         // ---- zeppelin_run: the objective's real death ----------------------------------------
-        string m04Zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        var m04Zrdr = ctx.MissionZrdr("C1", "M04");
         ctx.RequireData(m04Zrdr, $"C1/M04 zrdr");
         var zepDefs = Zeppelins.Load(m04Zrdr);
         ctx.Check(zepDefs.Count == 1 && zepDefs[0].Node == "piratezep",
@@ -1269,7 +1269,7 @@ internal static class InstantActionSuites
         {
             return;
         }
-        var zepNets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
+        var zepNets = AiNets.Load(ctx.ChapterZrdr("C1"));
         ctx.WithWorld("C1", collision: true, mission: "M04", world =>
         {
             var runtime = world.Session.Runtime;
@@ -1390,13 +1390,13 @@ internal static class InstantActionSuites
         "Photo Mode, opens one full size and closes it on its cell, and refuses a pending one")]
     internal static void InstantActionWrapup(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weaponDefs = WeaponDefs.Load(ctx.Zrdr, null);
         WeaponDef? cannon = weaponDefs.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
         WeaponDef? rocket = weaponDefs.All.FirstOrDefault(w => w.IsRocket);
         ctx.Check(cannon != null && rocket != null,
@@ -1414,18 +1414,18 @@ internal static class InstantActionSuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
@@ -1470,11 +1470,11 @@ internal static class InstantActionSuites
             textures.Dispose();
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        if (StuntMission.Load(GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1")), missionZrdr,
-                Messages.Load(ctx.MessagesPath)) is { } run)
+        ctx.RequireMessages();
+        if (StuntMission.Load(ctx.ChapterGamez("C1")!, missionZrdr,
+                ctx.Data.Messages) is { } run)
         {
             StuntCaptureSuites.CheckShortRunWrapup(ctx, run, "C1");
         }
@@ -1498,15 +1498,15 @@ internal static class InstantActionSuites
     internal static void InstantActionStuntSummary(TestContext ctx)
     {
         string chapter = "C1", mission = "IA1";
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var chapterGamez = ctx.ChapterGamez(chapter);
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireMessages();
 
-        var gamez = GameZ.Load(gamezPath);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var gamez = chapterGamez!;
+        var messages = ctx.Data.Messages;
         StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
             ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
 
@@ -1578,13 +1578,13 @@ internal static class InstantActionSuites
     internal static void StuntScoresScripted(TestContext ctx)
     {
         string chapter = "C1", mission = "IA1";
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        var chapterGamez = ctx.ChapterGamez(chapter);
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var gamez = GameZ.Load(gamezPath);
-        var messages = Messages.Load(ctx.MessagesPath);
+        ctx.RequireMessages();
+        var gamez = chapterGamez!;
+        var messages = ctx.Data.Messages;
         StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
             ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
 
@@ -1740,11 +1740,11 @@ internal static class InstantActionSuites
     // sets CommandsOnly. The original flies on for the whole hold, and nothing is photographed
     // after the completing frame. The control hands the same seat a solo scoreboard, which holds
     // the finish pose.
-    private static void StuntRunFliesOn(TestContext ctx, FlightController seat, string missionZrdr)
+    private static void StuntRunFliesOn(TestContext ctx, FlightController seat, ZrdrSet missionZrdr)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
-        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
+        var run = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         ctx.Check(run is { TotalCount: >= 2 }, $"C1/IA1 ships at least two danger zones for the hold's stunt run");
         if (run is not { TotalCount: >= 2 })
         {

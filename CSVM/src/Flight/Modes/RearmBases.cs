@@ -72,13 +72,13 @@ public sealed class RearmBases
     }
 
     /// <summary><see cref="ReadRadiusSquared"/> of the <c>player.zrd</c> in
-    /// <paramref name="zrdrPath"/>, else the initial value with the reason handed to
+    /// <paramref name="zrdr"/>, else the initial value with the reason handed to
     /// <paramref name="warn"/>.</summary>
-    public static float LoadRadiusSquared(string zrdrPath, Action<string>? warn = null)
+    public static float LoadRadiusSquared(ZrdrSet zrdr, Action<string>? warn = null)
     {
         try
         {
-            if (Zrdr.LoadFile(zrdrPath, "player.json") is [List<object?> list, ..])
+            if (zrdr.LoadFile("player.json") is [List<object?> list, ..])
             {
                 return ReadRadiusSquared(ZrdrDict.FromAlternating(list));
             }

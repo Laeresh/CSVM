@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Utils;
 using Godot;
 using Xunit;
 
@@ -34,6 +38,8 @@ public class StuntBotObjectiveTests
         { "C4", 14 },
         { "C5", 17 },
     };
+
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>Per shipped course, the zone ends whose rail run needs a lead-in, and its metres.</summary>
     private static Dictionary<string, string> LeadIns => new()
@@ -330,6 +336,63 @@ public class StuntBotObjectiveTests
         Assert.Equal(0, open.Decide(zones, at, North, zoneRun: false).Zone);
     }
 
+    /// <summary>Flown on the shipped stats: a go-round's U-turn width is twice the widest turn radius under
+    /// the 90 degree order. That covers every stock plane at every tier's lever. The stick is the
+    /// weakest a rating gives. The width is rounded up to 5 m, no more.</summary>
+    [ExtractedDataFact]
+    public void TheUTurnWidthIsTheWidestPlanesUTurn()
+    {
+        var radii = new List<(string Plane, NetBotSkill Tier, float Radius)>();
+        foreach (string plane in StockAirframes.Nodes)
+        {
+            var stats = PlaneStats.Load(ZrdrPath, plane);
+            foreach (var tier in new[] { NetBotSkill.Novice, NetBotSkill.Veteran, NetBotSkill.Ace })
+            {
+                radii.Add((plane, tier, TurnRadius(stats, new StuntBotObjective(tier, new Random(1)).CruiseThrottle)));
+            }
+        }
+
+        var widest = radii.MaxBy(r => r.Radius);
+        Assert.True(2f * widest.Radius <= StuntBotObjective.UTurnWidthM && StuntBotObjective.UTurnWidthM - (2f * widest.Radius) < 5f,
+            string.Create(CultureInfo.InvariantCulture, $"widest U-turn {2f * widest.Radius:0.0} m ({widest.Plane} {widest.Tier}) against {StuntBotObjective.UTurnWidthM} m"));
+    }
+
+    /// <summary>Flown on the shipped stats: an ace bot of every stock plane goes round from beside or past
+    /// the entry. An ace's lever turns widest. Its lead-in is the shortest. It turns in once and reaches
+    /// the cone. ABLE-TO-FAIL CONTROL: allowing for no U-turn, it turns in at its lead-in. The same
+    /// flights then go round again, since the U-turn ends short of the fly-out.</summary>
+    [ExtractedDataFact]
+    public void ABotGoingRoundTurnsInOnceAndReachesTheCone()
+    {
+        var starts = new (float X, float Z, float HeadingDeg)[] { (0, 0, 180), (300, 0, 0), (-300, -300, 180), (0, -300, 0), (600, 0, 270), (0, 600, 90) };
+        var flown = new List<string>();
+        var control = new List<string>();
+        foreach (string plane in StockAirframes.Nodes)
+        {
+            var stats = PlaneStats.Load(ZrdrPath, plane);
+            foreach (float bearing in new[] { -StuntBotObjective.ApproachSpreadDeg, StuntBotObjective.ApproachSpreadDeg })
+            {
+                foreach (var (x, z, heading) in starts)
+                {
+                    var at = new Vector3(x, 250, z);
+                    var (outs, reached) = GoRound(stats, at, heading, bearing, StuntBotObjective.UTurnWidthM);
+                    if (outs > 0 || !reached)
+                    {
+                        flown.Add(string.Create(CultureInfo.InvariantCulture, $"{plane} {bearing} {at} {heading}: out again {outs}, reached {reached}"));
+                    }
+
+                    if (GoRound(stats, at, heading, bearing, 0f).OutAgain > 0)
+                    {
+                        control.Add(plane);
+                    }
+                }
+            }
+        }
+
+        Assert.True(flown.Count == 0, string.Join("; ", flown));
+        Assert.NotEmpty(control);
+    }
+
     /// <summary>On every shipped course each zone has an end the rail check passes, with the shortest
     /// lead-in that passes. The zones that need one are pinned; every other zone keeps its own entry.</summary>
     [ExtractedDataTheory]
@@ -372,12 +435,96 @@ public class StuntBotObjectiveTests
 
     private static StuntMission Load(string chapter)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
-        var course = StuntMission.Load(gamez, SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, "IA1"),
-            Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
+        var course = StuntMission.Load(gamez, TestZrdr.Mission(chapter, "IA1"),
+            Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.NotNull(course);
         return course!;
     }
+
+    // A pilot at `throttle` on the weakest stick any rating gives (sixth_sense_factor scales all three channels).
+    private static AiPilot Pilot(float heading, float altitude, float throttle)
+    {
+        var skills = AiSkills.Load(ZrdrPath);
+        float weakest = Math.Min(skills.At("sixth_sense_factor", 0f), skills.At("sixth_sense_factor", 9f));
+        return new AiPilot
+        {
+            TargetHeadingDeg = heading,
+            TargetAltitude = altitude,
+            CruiseThrottle = throttle,
+            Machine = new AiModeMachine(new Random(1)) { SixthSenseFactor = weakest },
+        };
+    }
+
+    // The steady radius under an order held 90 degrees off the track, metres. It is the path flown over
+    // the turn after its first quarter, from 20 s of level flight at `throttle`.
+    private static float TurnRadius(PlaneStats stats, float throttle)
+    {
+        var model = new FlightModel(stats);
+        model.Reset(new Vector3(0, 500, 0), Basis.Identity, 80f, throttle);
+        var pilot = Pilot(0f, 500f, throttle);
+        for (int i = 0; i < Steps(20f); i++)
+        {
+            model.Step(pilot.Next(model, GameClock.FixedDt), GameClock.FixedDt);
+        }
+
+        float turned = 0f;
+        float path = 0f;
+        float last = Track(model);
+        for (int i = 0; i < Steps(120f) && Mathf.Abs(turned) < 2f * Mathf.Tau; i++)
+        {
+            pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(new Basis(Vector3.Up, -Mathf.Pi / 2f) * model.VelocityDir);
+            model.Step(pilot.Next(model, GameClock.FixedDt), GameClock.FixedDt);
+            turned += Mathf.Wrap(Track(model) - last, -Mathf.Pi, Mathf.Pi);
+            last = Track(model);
+            path += Mathf.Abs(turned) > Mathf.Pi / 2f ? model.Speed * GameClock.FixedDt : 0f;
+        }
+
+        return path / (Mathf.Abs(turned) - (Mathf.Pi / 2f));
+    }
+
+    // An ace bot from `at` flying `heading` for Course()'s first zone, on the shortest lead-in and a line
+    // `bearing` off the ribbon's. It flies 2 minutes or until it hands the zone over. Answers how often it
+    // flew out again once it had turned in from going round, and whether it reached the cone.
+    private static (int OutAgain, bool Reached) GoRound(PlaneStats stats, Vector3 at, float heading, float bearing, float uTurn)
+    {
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99))
+        {
+            Approach = (bearing, StuntBotObjective.ShortestLeadInM),
+            UTurnWidth = uTurn,
+        };
+        var zones = Course();
+        var model = new FlightModel(stats);
+        model.Reset(at, Basis.LookingAt(new Basis(Vector3.Up, Mathf.DegToRad(heading)) * Vector3.Forward, Vector3.Up), 80f, bot.CruiseThrottle);
+        var pilot = Pilot(heading, at.Y, bot.CruiseThrottle);
+        bool turnedIn = false;
+        int outAgain = 0;
+        string? why = null;
+        for (int i = 0; i < Steps(120f); i++)
+        {
+            var order = bot.Decide(zones, model.Position, model.VelocityDir * model.Speed, zoneRun: false);
+            if (order.Leg == StuntBotLeg.Run)
+            {
+                return (outAgain, true);
+            }
+
+            bool steersIn = order.Why == StuntBotObjective.SteersIn;
+            bool steeredIn = why == StuntBotObjective.SteersIn;
+            bool turnsIn = steersIn && why != null && !steeredIn;
+            outAgain += turnedIn && steeredIn && !steersIn ? 1 : 0;
+            turnedIn |= turnsIn;
+            why = order.Why;
+            pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(order.Point - model.Position);
+            pilot.TargetAltitude = order.Point.Y;
+            model.Step(pilot.Next(model, GameClock.FixedDt), GameClock.FixedDt);
+        }
+
+        return (outAgain, false);
+    }
+
+    private static float Track(FlightModel model) => Mathf.Atan2(model.VelocityDir.X, model.VelocityDir.Z);
+
+    private static int Steps(float seconds) => Mathf.RoundToInt(seconds / GameClock.FixedDt);
 
     private static List<StuntZone> Course() => new()
     {

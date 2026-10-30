@@ -71,7 +71,7 @@ public sealed class VegetationSidecarTests
         var sidecar = VegetationSidecar.Parse(File.ReadAllText(ShippedPath));
         foreach (var chapter in VegetationSidecar.Chapters)
         {
-            var spec = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+            var spec = ClutterTemplateSpec.Load(TestZrdr.Chapter(chapter));
             Assert.NotNull(spec);
             Assert.All(sidecar.For(chapter).Kinds, k => Assert.True(spec!.Find(k.Model) != null, $"{chapter} {k.Model}"));
         }

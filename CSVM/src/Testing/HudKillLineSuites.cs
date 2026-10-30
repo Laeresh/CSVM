@@ -45,13 +45,13 @@ internal static class HudKillLineSuites
         "posts that notice alone with no kill line behind it")]
     internal static void HudKillLine(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireMessages();
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var strings = Messages.Load(ctx.MessagesPath);
+        var strings = ctx.Data.Messages;
         string shotDown = strings.Get(HudMessages.ShotDownKey);
         string wingman = strings.Get(HudMessages.WingmanKey);
         string destroyed = strings.Get(HudMessages.DestroyedKey);
@@ -69,7 +69,7 @@ internal static class HudKillLineSuites
         Colours(ctx);
         Geometry(ctx);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ai = null;
@@ -84,20 +84,20 @@ internal static class HudKillLineSuites
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
                 WeaponMessages = strings,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             // worldEffects null!: never dereferenced with no CrashProgram/WorldScene, so the
             // spawner's crash-runtime block is skipped.
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 null!, ctx.Host, inputs,
                 new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
                 new HumanRosterBindings());
@@ -339,7 +339,7 @@ internal static class HudKillLineSuites
     private static void GaugeBlinkClock(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
         const float WallFrame = 10f * GaugeCluster.DamageBlinkPeriod + GaugeCluster.DamageBlinkPeriod / 8f;
-        var parts = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).DestroyableParts;
+        var parts = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName).DestroyableParts;
         var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, parts);
         // A synthetic tree carries no cockpit art to build a cluster from.
         if (cluster == null)

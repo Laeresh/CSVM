@@ -45,18 +45,18 @@ public static class LandingApproaches
         ("sphere", ApproachShape.Sphere),
     };
 
-    /// <summary>The rows of <paramref name="chapterZrdrPath"/> this world can actually run:
-    /// <paramref name="carriesAnim"/> drops a row whose animation the mission does not carry,
-    /// which is the original's own load-time rejection and the reason an Instant Action mission
-    /// arms none of them. A missing or unreadable file resolves to nothing.</summary>
+    /// <summary>The rows of <paramref name="chapterZrdr"/> this world can actually run. The filter
+    /// <paramref name="carriesAnim"/> drops a row whose animation the mission does not carry. That
+    /// is the original's own load-time rejection, and why an Instant Action mission arms none of
+    /// them. A missing or unreadable file resolves to nothing.</summary>
     public static List<LandingApproach> Resolve(
-        string chapterZrdrPath, GameZ gamez, Func<string, bool> carriesAnim)
+        ZrdrSet chapterZrdr, GameZ gamez, Func<string, bool> carriesAnim)
     {
         var resolved = new List<LandingApproach>();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFileOrEmpty(chapterZrdrPath, FileName);
+            root = chapterZrdr.LoadFileOrEmpty(FileName);
         }
         catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException)
         {

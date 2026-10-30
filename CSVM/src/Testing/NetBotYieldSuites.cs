@@ -48,10 +48,10 @@ internal static class NetBotYieldSuites
     internal static void ALateJoinerTakesTheNewestBotsSeat(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, "--vs-time=1");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireMessages();
         // Fifteen Random bots draw from every stock airframe.
         ctx.RequirePlane(StockAirframes.Nodes.ToArray());
-        var pool = BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+        var pool = BotSeats.CallsignPool(ctx.Data.Messages);
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(5121));
         var gate = new ArrivalGate(mesh[0]);
         var hostDoor = new NetPlayFeature((_, _, _) => gate, (_, _) => throw new InvalidOperationException("the host does not join"));

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
+using CSVM.Mech3;
 using CSVM.Utils;
 
 namespace CSVM.Session.Roster;
@@ -18,10 +19,10 @@ public sealed class SharedSpawnStarts : IFlightStarts
     public SharedSpawnStarts(SpawnPicker picker) => _picker = picker;
 
     public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-        string missionZrdrPath, int spawnBase, int playerCount)
+        ZrdrSet missionZrdr, int spawnBase, int playerCount)
     {
-        var (pos, lookAt) = _picker.ChooseSpawn(spawns, missionZrdrPath, spawnBase, 0, "race start ");
-        var (throttle, speed) = _picker.StartState(spawns, missionZrdrPath);
+        var (pos, lookAt) = _picker.ChooseSpawn(spawns, missionZrdr, spawnBase, 0, "race start ");
+        var (throttle, speed) = _picker.StartState(spawns, missionZrdr);
         var start = new FlightStart(pos, lookAt, throttle, speed);
         var starts = new FlightStart[playerCount];
         for (int i = 0; i < playerCount; i++)

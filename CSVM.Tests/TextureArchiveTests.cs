@@ -1,22 +1,21 @@
-using System.IO;
 using CSVM.Mech3;
 using Xunit;
+using AlphaClass = CSVM.Mech3.TextureArchive.AlphaClass;
 
 namespace CSVM.Tests;
 
 /// <summary>
 /// The parts of the texture archive that are name arithmetic rather than pixels: the decal
-/// numbering (<c>docs/formats/paint.md</c>) and the known-absent list. Decoding a texture needs
+/// numbering (<c>docs/formats/paint.md</c>) and the known-absent list. Building an image needs
 /// Godot's <c>Image</c>, so alpha classification and the truncated-name resolution stay with the
-/// in-engine suites; only the index is exercised here, over a directory of empty files whose
-/// names are the whole input.
+/// in-engine suites. Only the index is exercised here, over records whose names are the whole input.
 /// </summary>
 public class TextureArchiveTests
 {
     [Fact]
     public void DecalIndexFindsTheZeroPaddedTwoDigitName()
     {
-        using var archive = new TextureArchive(DecalDir());
+        using var archive = new TextureArchive(DecalSet());
         Assert.Equal("21probe_star", archive.FindByDecalIndex(21));
         Assert.Equal("07probe_mark", archive.FindByDecalIndex(7));
         Assert.Equal("00probe_zero", archive.FindByDecalIndex(0));
@@ -25,7 +24,7 @@ public class TextureArchiveTests
     [Fact]
     public void AThirdDigitMeansItIsNotADecalAndTheLodTwinIsSkipped()
     {
-        using var archive = new TextureArchive(DecalDir());
+        using var archive = new TextureArchive(DecalSet());
         // "213probe_notadecal" begins with "21" but its third character is a digit.
         Assert.NotEqual("213probe_notadecal", archive.FindByDecalIndex(21));
         Assert.NotEqual("21probe_star_1", archive.FindByDecalIndex(21));
@@ -34,7 +33,7 @@ public class TextureArchiveTests
     [Fact]
     public void AnIndexWithNoDecalOrOutOfRangeGivesNull()
     {
-        using var archive = new TextureArchive(DecalDir());
+        using var archive = new TextureArchive(DecalSet());
         Assert.Null(archive.FindByDecalIndex(42));
         Assert.Null(archive.FindByDecalIndex(-1));
         Assert.Null(archive.FindByDecalIndex(100));
@@ -78,7 +77,7 @@ public class TextureArchiveTests
         // C3's skydome names cloud1/cloud2 and C3 ships neither, so its two cards draw nothing.
         // ⚠ The name alone must never be enough: the seven chapters that DO ship the pair keep
         // drawing it, and this archive stands in for one that has no copy.
-        using var archive = new TextureArchive(TestData.TempDir());
+        using var archive = new TextureArchive(TextureSet.Empty);
         Assert.True(archive.IsAbsentAndUndrawn("cloud1.tif"));
         Assert.True(archive.IsAbsentAndUndrawn("cloud2"));
         // Absent, but a name the original draws a neutral card for rather than nothing.
@@ -86,14 +85,13 @@ public class TextureArchiveTests
         Assert.False(archive.IsAbsentAndUndrawn("probe_plain"));
     }
 
-    // The blend rule is the texture header's own render-flags word, which the extractor spells as
-    // the `stretch` enum (docs/org/textures.md). Reading it is name-and-manifest arithmetic, so it
-    // belongs here; what the shipped chapters actually carry is the `puffer-blend-flag` suite.
+    // The blend rule is the texture header's own render-flags word (docs/org/textures.md). Reading it
+    // is name-and-record arithmetic, so it belongs here; what the shipped chapters actually carry is the `puffer-blend-flag` suite.
 
     [Fact]
     public void OnlyBitTwoOfTheRenderFlagsWordMeansAdditive()
     {
-        using var archive = new TextureArchive(FlagDir());
+        using var archive = new TextureArchive(FlagSet());
         // Every non-additive spelling, including "Both", whose word is non-zero for the stretch
         // bits alone: a reader testing the word for zero would call it additive.
         Assert.False(archive.IsAdditive("probe_none"));
@@ -111,7 +109,7 @@ public class TextureArchiveTests
     [Fact]
     public void AnUnknownTextureAlphaMixes()
     {
-        using var archive = new TextureArchive(FlagDir());
+        using var archive = new TextureArchive(FlagSet());
         // The engine's own terminal fallback is a flagless image, so an unresolvable name mixes
         // rather than adding, the answer that cannot make a sprite glow where nothing should.
         Assert.Equal(0, archive.RenderFlags("probe_absent"));
@@ -123,7 +121,7 @@ public class TextureArchiveTests
     [Fact]
     public void AFrameListCarriesOneVerdictPerFrame()
     {
-        using var archive = new TextureArchive(FlagDir());
+        using var archive = new TextureArchive(FlagSet());
         // Blend belongs to the texture, so a flipbook crossing from a flagged frame to an unflagged
         // one changes blend under the particle rather than picking one verdict for the emitter.
         var frames = new[] { "probe_unk7", "probe_unk4", "probe_none", "probe_both" };
@@ -159,7 +157,7 @@ public class TextureArchiveTests
     [Fact]
     public void OnlyAnAlphaPlaneTextureWithoutBitThreeUploadsFourBitAlpha()
     {
-        using var archive = new TextureArchive(UploadDir());
+        using var archive = new TextureArchive(UploadSet());
         Assert.True(archive.UploadsFourBitAlpha("probe_full"));
         Assert.True(archive.UploadsFourBitAlpha("probe_full_add.tif"));
         // Bit 3 takes ARGB8888 (cloud1, cloud2, rotorblur); Simple and None take no 4-bit alpha.
@@ -169,34 +167,22 @@ public class TextureArchiveTests
         Assert.False(archive.UploadsFourBitAlpha("probe_absent"));
     }
 
-    // A disposed archive refuses a read from a folder exactly as it does from a zip. The battery
-    // reads unpacked folders and a player's install reads zips, so any leniency in the folder shape
-    // hides a closed-archive read from every suite.
+    // A disposed archive refuses a read of a texture it holds, so a session reading its archive after
+    // the build closed it fails loudly.
 
     [Fact]
-    public void AFolderArchiveRefusesAReadAfterDisposeLikeAZip()
+    public void AnArchiveRefusesAReadAfterDispose()
     {
-        var folder = new TextureArchive(DecalDir());
-        Assert.NotNull(folder.ReadPngBytes("probe_plain"));
-        folder.Dispose();
-        Assert.Throws<System.ObjectDisposedException>(() => folder.ReadPngBytes("probe_plain"));
-    }
-
-    [Fact]
-    public void AZipArchiveRefusesAReadAfterDispose()
-    {
-        string zip = Path.Combine(TestData.TempDir(), "texture.zip");
-        System.IO.Compression.ZipFile.CreateFromDirectory(DecalDir(), zip);
-        var archive = new TextureArchive(zip);
-        Assert.NotNull(archive.ReadPngBytes("probe_plain"));
+        var archive = new TextureArchive(DecalSet());
+        Assert.NotNull(archive.Lookup("probe_plain"));
         archive.Dispose();
-        Assert.Throws<System.ObjectDisposedException>(() => archive.ReadPngBytes("probe_plain"));
+        Assert.Throws<System.ObjectDisposedException>(() => archive.Lookup("probe_plain"));
     }
 
     [Fact]
-    public void AnArchiveOverAnEmptyDirectoryHasNoMissesYet()
+    public void AnEmptyArchiveHasNoMissesYet()
     {
-        using var archive = new TextureArchive(TestData.TempDir());
+        using var archive = new TextureArchive(TextureSet.Empty);
         Assert.Empty(archive.MissingTextures);
     }
 
@@ -245,64 +231,36 @@ public class TextureArchiveTests
         Assert.True(seen.Count >= 985, $"only {seen.Count} distinct colours for 1000 names");
     }
 
-    private static string DecalDir()
-    {
-        var dir = TestData.TempDir();
-        foreach (var name in new[]
-                 {
-                     "00probe_zero.png",
-                     "07probe_mark.png",
-                     "21probe_star.png",
-                     "21probe_star_1.png",   // the half-size LOD twin, not the decal
-                     "213probe_notadecal.png",
-                     "probe_plain.png",
-                 })
-        {
-            File.WriteAllBytes(Path.Combine(dir, name), System.Array.Empty<byte>());
-        }
-        return dir;
-    }
+    private static TextureSet DecalSet() => Set(
+        ("00probe_zero", AlphaClass.None, 0),
+        ("07probe_mark", AlphaClass.None, 0),
+        ("21probe_star", AlphaClass.None, 0),
+        ("21probe_star_1", AlphaClass.None, 0),   // the half-size LOD twin, not the decal
+        ("213probe_notadecal", AlphaClass.None, 0),
+        ("probe_plain", AlphaClass.None, 0));
 
-    // A texture directory plus the extraction manifest's own shape, one texture per `stretch`
-    // spelling. The PNGs stay empty: nothing here decodes a pixel.
-    private static string FlagDir()
-    {
-        var dir = TestData.TempDir();
-        var infos = new System.Text.StringBuilder();
-        foreach (var spelling in new[] { "None", "Horizontal", "Vertical", "Both", "Unk4", "Unk7", "Unk8" })
-        {
-            var name = "probe_" + spelling.ToLowerInvariant();
-            File.WriteAllBytes(Path.Combine(dir, name + ".png"), System.Array.Empty<byte>());
-            if (infos.Length > 0)
-            {
-                infos.Append(',');
-            }
-            infos.Append($"{{\"name\":\"{name}\",\"alpha\":\"None\",\"stretch\":\"{spelling}\"}}");
-        }
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), $"{{\"texture_infos\":[{infos}]}}");
-        return dir;
-    }
+    // One texture per render-flags word the extraction spelled: None, Vertical (1), Horizontal (2),
+    // Both, and the raw 4, 7 and 8.
+    private static TextureSet FlagSet() => Set(
+        ("probe_none", AlphaClass.None, 0),
+        ("probe_vertical", AlphaClass.None, 1),
+        ("probe_horizontal", AlphaClass.None, 2),
+        ("probe_both", AlphaClass.None, 3),
+        ("probe_unk4", AlphaClass.None, 4),
+        ("probe_unk7", AlphaClass.None, 7),
+        ("probe_unk8", AlphaClass.None, 8));
 
     // One texture per alpha class and render-flags pairing the upload branches on.
-    private static string UploadDir()
-    {
-        var dir = TestData.TempDir();
-        var infos = new System.Collections.Generic.List<string>();
-        foreach (var (name, alpha, stretch) in new[]
-                 {
-                     ("probe_full", "Full", "None"),
-                     ("probe_full_add", "Full", "Unk4"),
-                     ("probe_full_unk8", "Full", "Unk8"),
-                     ("probe_simple", "Simple", "None"),
-                     ("probe_opaque", "None", "None"),
-                 })
-        {
-            File.WriteAllBytes(Path.Combine(dir, name + ".png"), System.Array.Empty<byte>());
-            infos.Add($"{{\"name\":\"{name}\",\"alpha\":\"{alpha}\",\"stretch\":\"{stretch}\"}}");
-        }
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), $"{{\"texture_infos\":[{string.Join(",", infos)}]}}");
-        return dir;
-    }
+    private static TextureSet UploadSet() => Set(
+        ("probe_full", AlphaClass.Full, 0),
+        ("probe_full_add", AlphaClass.Full, 4),
+        ("probe_full_unk8", AlphaClass.Full, 8),
+        ("probe_simple", AlphaClass.Simple, 0),
+        ("probe_opaque", AlphaClass.None, 0));
+
+    // One-texel records: nothing here builds an image.
+    private static TextureSet Set(params (string Name, AlphaClass Alpha, int Flags)[] textures) =>
+        new("probe", System.Array.ConvertAll(textures, t => new TextureImage(t.Name, null, 1, 1, t.Alpha, t.Flags, false, new byte[3])));
 
     private static string Hex(Godot.Color c) => $"{c.R8:x2}{c.G8:x2}{c.B8:x2}";
 }

@@ -64,24 +64,24 @@ internal static class AudioBusSuites
         + "engine players on a silent bus at once rather than at the next start")]
     internal static void AudioBusPlacement(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var report = new StringBuilder();
         CheckLayout(ctx, report);
         CheckMix(ctx, report);
 
-        var defs = SoundDefs.Load(ctx.ZrdrPath);
-        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var defs = SoundDefs.Load(ctx.Zrdr);
+        var groups = SoundDefs.LoadGroups(ctx.Zrdr);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         string? gunLoop = weapons.All
             .Select(w => w.LoopedSoundName)
             .FirstOrDefault(n => !string.IsNullOrEmpty(n));
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var textures = new TextureArchive(texturesPath);
 
         MusicPlayer? music = null;
@@ -109,7 +109,7 @@ internal static class AudioBusSuites
             // With previews on, so the two preview players are built and swept like every other
             // site; the launcher turns them off in exactly the runs this suite is one of.
             menu = new MenuAudioService(null, name => Stream(archive, defs, name),
-                Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS", "SOUNDS"), previews: true)
+                ctx.Data.Rof, previews: true)
             {
                 Name = "GuardMenuAudio",
             };
@@ -285,8 +285,7 @@ internal static class AudioBusSuites
 
             int fired = menu.MixPreviewStarts - starts;
             report.AppendLine($"preview clips started over twenty-one Effects changes: {fired}");
-            string clip = Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS", "SOUNDS", "SFX_LOOP.WAV");
-            if (File.Exists(clip))
+            if (ctx.Data.Rof.Exists("ASSETS/SOUNDS/SFX_LOOP.WAV"))
             {
                 ctx.Check(fired == 1,
                     $"a level moved twenty-one times over sounds one preview clip, neither none nor one per change (started={fired})");
@@ -294,7 +293,7 @@ internal static class AudioBusSuites
             else
             {
                 ctx.Check(fired == 0, $"a preview with no clip on disk sounds nothing (started={fired})");
-                ctx.Note($"no SFX_LOOP.WAV under the extracted rof tree, so this run could only see the silent half");
+                ctx.Note($"no SFX_LOOP.WAV in the game files' UI archive, so this run could only see the silent half");
             }
 
             ctx.Check(Math.Abs(AudioServer.GetBusVolumeDb(0) - developer) <= DbSlack,
@@ -336,7 +335,7 @@ internal static class AudioBusSuites
         OptionsApplyExit? applied = null;
         // The audio half of LiveSettings.Persist, which is what the launcher hands the leaf. The
         // options file it also writes is the pause-preferences suite's subject, not this one's.
-        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, exit =>
+        var leaf = PausePreferences.Build(ctx.DataRoot, ctx.Data.Rimage, layout, null, exit =>
         {
             applied = exit;
             AudioMix.Apply(exit.AudioMaster, exit.AudioMusic, exit.AudioEffects, exit.AudioVoice);

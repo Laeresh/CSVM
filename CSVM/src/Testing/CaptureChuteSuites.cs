@@ -50,15 +50,15 @@ internal static class CaptureChuteSuites
         + "origin, three hang in the air at once, and each stays drawn for its whole drift")]
     internal static void CaptureChutes(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var mission = WingWalkCameraSuites.MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var mission = WingWalkCameraSuites.MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
@@ -87,7 +87,7 @@ internal static class CaptureChuteSuites
             return;
         }
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();

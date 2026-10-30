@@ -109,9 +109,9 @@ internal static class CampaignSuites
         + "that could have wrecked them")]
     internal static void CampaignPersistence(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         var second = LastMissionOf(missions, ctx.Chapter);
         if (second is not { } later
             || CampaignSequence.PreviousInSameChapter(missions, later.Seq) is not { } earlier)
@@ -269,9 +269,9 @@ internal static class CampaignSuites
         + "same world built from the bootstrap alone has it whole")]
     internal static void PersistChainKill(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (MissionAt(missions, BridgeChapter, BridgeMission) is not { } dropped
             || MissionAt(missions, BridgeChapter, BridgeLaterMission) is not { } later)
         {
@@ -385,7 +385,7 @@ internal static class CampaignSuites
         + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective")]
     internal static void CampaignObjectives(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, GraphChapter, GraphMission);
+        ZrdrSet zrdr = ctx.MissionZrdr(GraphChapter, GraphMission);
         ctx.RequireData(zrdr, $"{GraphChapter}/{GraphMission} zrdr");
         var script = ObjectiveScript.Load(zrdr);
         var report = new StringBuilder();
@@ -460,15 +460,15 @@ internal static class CampaignSuites
         + "view")]
     internal static void CampaignMissionEnd(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
         if (script.Objectives.Count == 0)
@@ -542,16 +542,16 @@ internal static class CampaignSuites
         + "taken once rather than once per human")]
     internal static void CampaignCoopAttempt(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
         int winner = EndObjective(script);
@@ -561,12 +561,12 @@ internal static class CampaignSuites
                 $"{mission.ChapterFolder}/{mission.MissionFolder} authors no INSTANTWIN objective");
         }
 
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, mission.ChapterFolder);
+        TextureSet texturesPath = ctx.ChapterTextures(mission.ChapterFolder);
         ctx.RequireData(texturesPath, $"{mission.ChapterFolder} textures");
 
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weaponDefs = Flight.Weapons.WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weaponDefs = Flight.Weapons.WeaponDefs.Load(ctx.Zrdr, null);
         var cannon = weaponDefs.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
         ctx.Check(cannon != null, $"a CANNON gun exists in the data");
         if (cannon == null)
@@ -677,9 +677,9 @@ internal static class CampaignSuites
         + "both read it, and a replay of the same objective banks nothing")]
     internal static void CampaignMissionCash(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (MissionAt(missions, CashChapter, CashMission) is not { } mission)
         {
             throw new SuiteSkippedException($"{CashChapter}/{CashMission} is not in cm_sequence");
@@ -691,8 +691,8 @@ internal static class CampaignSuites
             throw new SuiteSkippedException($"{CashChapter}/{CashMission} carries no paying reward record");
         }
 
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder);
         ctx.RequireData(missionZrdr, $"{CashChapter}/{CashMission} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
 
@@ -707,10 +707,10 @@ internal static class CampaignSuites
             return;
         }
 
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, mission.ChapterFolder);
+        TextureSet texturesPath = ctx.ChapterTextures(mission.ChapterFolder);
         ctx.RequireData(texturesPath, $"{CashChapter} textures");
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var seatedPos = new Vector3(0f, 800f, 0f);
         var guestPos = new Vector3(0f, 800f, -2000f);
         var profile = CampaignProfileDef.NewProfile("Zachary");
@@ -768,17 +768,17 @@ internal static class CampaignSuites
         + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would")]
     internal static void CampaignDangerZoneObjectives(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (MissionAt(missions, DangerZoneChapter, DangerZoneMission) is not { } mission)
         {
             throw new SuiteSkippedException($"{DangerZoneChapter}/{DangerZoneMission} is not in cm_sequence");
         }
 
-        string missionZrdrPath = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
-        ctx.RequireData(missionZrdrPath, $"{DangerZoneChapter}/{DangerZoneMission} zrdr");
-        var script = ObjectiveScript.Load(missionZrdrPath);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdr, $"{DangerZoneChapter}/{DangerZoneMission} zrdr");
+        var script = ObjectiveScript.Load(missionZrdr);
         var secondary = script.Objectives.Find(d => d.DangerZones.Contains("dzpath1"));
         var worker = script.Objectives.Find(d => d.DangerZones.Contains("dzpath4"));
         ctx.Check(secondary?.Identity?.Class == ObjectiveClass.Secondary,
@@ -795,7 +795,7 @@ internal static class CampaignSuites
 
         ctx.WithWorld(DangerZoneChapter, collision: false, DangerZoneMission, world =>
         {
-            var zones = CampaignDangerZones.Load(script, world.Gamez, missionZrdrPath);
+            var zones = CampaignDangerZones.Load(script, world.Gamez, missionZrdr);
             ctx.Check(zones != null, $"the chapter world carries real dzpath1/dzpath4 gate geometry");
             if (zones == null)
             {
@@ -810,7 +810,7 @@ internal static class CampaignSuites
                 // A fresh tracker per zone: Update tests every armed gate on every call, so one
                 // shared instance's long "prime" jump between two zones' probe points can cross
                 // the OTHER zone's gate plane too, a test-construction risk, not an engine one.
-                var solo = CampaignDangerZones.Load(script, world.Gamez, missionZrdrPath)!;
+                var solo = CampaignDangerZones.Load(script, world.Gamez, missionZrdr)!;
                 ctx.Check(solo.TryGateProbe(name, out var gc, out var gn, out var rc, out var rn),
                     $"'{name}' resolved a green/red gate pair");
                 var half = new List<string>();
@@ -826,7 +826,7 @@ internal static class CampaignSuites
             report.AppendLine($"gate crossing completed: {string.Join(", ", completed)}");
 
             var profile = CampaignProfileDef.NewProfile("Zachary");
-            var director = CampaignDirector.Create(script, mission, profile, null, missionZrdrPath);
+            var director = CampaignDirector.Create(script, mission, profile, null, missionZrdr);
             director.Attach(new CampaignDirector.WorldInputs { Runtime = world.Runtime, Gamez = world.Gamez });
             ctx.Same(zones.Count, director.ArmedDangerZones,
                 $"Attach arms the same gate count off a real Gamez, the wiring BL-458 was missing");
@@ -1282,13 +1282,13 @@ internal static class CampaignSuites
     // drawn, for the whole episode. Driven at two seats, cockpit and chase, over both exits.
     private static void PresentingFramesTheAirframe(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, IntroChapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(IntroChapter);
         ctx.RequireData(texturesPath, $"{IntroChapter} textures");
 
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var host = new CutsceneController();
         var world = new Node3D { Name = "PresentationWorld" };
         var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
@@ -1379,14 +1379,14 @@ internal static class CampaignSuites
     // stops a mission's reminder fuses burning down behind the movie.
     private static void CutsceneHoldsObjectives(TestContext ctx)
     {
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         if (FirstMissionOf(missions, IntroChapter) is not { } mission)
         {
             return;
         }
 
         var script = ObjectiveScript.Load(
-            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+            ctx.MissionZrdr(mission.ChapterFolder, mission.MissionFolder));
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         director.Attach(new CampaignDirector.WorldInputs());
         director.HoldForCutscene(true);
@@ -1975,7 +1975,7 @@ internal static class CampaignSuites
         TestContext ctx, GameZ planesGamez, TextureArchive textures, Flight.Weapons.ProjectilePool live,
         int index, Vector3 at, int? team = null)
     {
-        var stats = Flight.Airframe.PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = Flight.Airframe.PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var pilot = new Flight.Airframe.FlightController
         {
@@ -2216,7 +2216,7 @@ internal static class CampaignSuites
                 pilot.Dressing.Pass = Flight.Hud.CockpitOverlay.Build(ctx.Host, interior, null, null);
             }
 
-            pilot.Setup(new Flight.Airframe.FlightModel(Flight.Airframe.PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName)),
+            pilot.Setup(new Flight.Airframe.FlightModel(Flight.Airframe.PlaneStats.Load(ctx.Zrdr, ctx.PlaneName)),
                 camera, new Flight.Camera.CamParams(), Vector3.Zero, Vector3.Forward);
             var rig = new Flight.Camera.PlayerRig
             {

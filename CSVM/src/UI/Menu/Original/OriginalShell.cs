@@ -403,6 +403,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Func<CSVM.Session.Campaign.CampaignProfileStore>? profiles = null,
         Func<CSVM.Flight.Weapons.StockLoadouts?>? stock = null,
         string? dataRoot = null,
+        // The launch's models, the message table among them; null reads none, as a test wants.
+        Spec.GameData? data = null,
         // Reads the saved options the Options screen shows back; null opens it on the defaults,
         // which is what an engine-free test wants. The shell never writes them.
         Func<CSVM.Utils.OptionsDef>? options = null,
@@ -439,11 +441,12 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _net = net;
         _netOptions = netOptions;
         _profiles = profiles;
+        Data = data ?? Spec.GameData.Empty;
         _campaignLayout = CampaignLayout.Over(layout);
         _box = new OriginalShellDialog(_campaignLayout, Measure, () => MenuStrings, FocusBox);
         NetInfo = new OriginalNetInfoBox(this, dataRoot, RememberNetInfo);
         InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
-        Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls);
+        Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls, () => Spec.ModdingFolder.Offered(dataRoot, Data.ModFolder));
         Campaign = new OriginalCampaignScreen(
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net, (hosting, then) => AskNetInfo(hosting, then));
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
@@ -628,6 +631,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     // The campaign's table where one is open, the hangar's otherwise, empty with neither: the words
     // the messagebox answers and the per-seat screen's ratings take. Either family may have loaded one.
+    /// <inheritdoc/>
+    public Spec.GameData Data { get; }
+
     private CSVM.Mech3.UiStrings MenuStrings =>
         Campaign.Strings ?? Hangar?.Strings ?? CSVM.Mech3.UiStrings.Empty;
 

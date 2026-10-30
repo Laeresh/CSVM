@@ -130,10 +130,10 @@ public sealed class TurretDefs
 
     public IReadOnlyList<TurretDef> All => _all;
 
-    /// <summary>Loads <c>ai.json</c> from a zrdr archive path (zip or unpacked directory).</summary>
-    public static TurretDefs Load(string zrdrPath)
+    /// <summary>Loads <c>ai.json</c> from the root reader scope.</summary>
+    public static TurretDefs Load(ZrdrSet zrdr)
     {
-        var root = Zrdr.LoadFile(zrdrPath, "ai.json");
+        var root = zrdr.LoadFile("ai.json");
         var defs = new TurretDefs();
         foreach (var section in root)
         {

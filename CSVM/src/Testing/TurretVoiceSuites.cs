@@ -59,19 +59,19 @@ internal static class TurretVoiceSuites
         + "zeppelin's twin cannon stay silent, which is what their own entries author")]
     internal static void TurretGunVoices(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures(VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
         // Every distance below is the cue's own authored one. This suite reads at 1, not at the
         // reach the session ships.
         using var authored = TestContext.AtAuthoredSoundRadii();
 
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var soundDefs = SoundDefs.Load(ctx.Zrdr);
         soundDefs.TryGetValue(TurretCue, out var cue);
         ctx.Check(cue is { Is3D: true, Looped: true },
             $"{TurretCue} is authored 3D and LOOPED, so a turret's voice is a point in the world");
@@ -80,9 +80,9 @@ internal static class TurretVoiceSuites
             return;
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        using var archive = new SoundArchive(ctx.Sounds);
         var ears = new List<Vector3> { Vector3.Zero };
         ProjectilePool? pool = null;
         TurretEmplacementRuntime? emplacements = null;
@@ -274,7 +274,7 @@ internal static class TurretVoiceSuites
                 carrier = BuildRig(ctx, planesGamez, textures, live, CarriedPlane,
                     at + new Vector3(600f, 0f, 0f), at);
                 var carried = TurretController.BuildCarried(turretDefs,
-                    PlaneStats.Load(ctx.ZrdrPath, CarriedPlane),
+                    PlaneStats.Load(ctx.Zrdr, CarriedPlane),
                     carrier.PlaneModel!, weapons, carrier, live,
                     new GunVoiceHome(carrier, archive, soundDefs, () => (IReadOnlyList<Vector3>)ears));
                 ctx.Check(carried.Length > 0 && carried.All(t => t.Voice != null),
@@ -360,7 +360,7 @@ internal static class TurretVoiceSuites
     private static FlightController BuildRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, string plane, Vector3 pos, Vector3 look)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, plane);
+        var stats = PlaneStats.Load(ctx.Zrdr, plane);
         var model = new PlaneBuilder(planesGamez, textures).Build(plane);
         var rig = new FlightController
         {

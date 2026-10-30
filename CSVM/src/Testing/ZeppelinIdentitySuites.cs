@@ -36,7 +36,7 @@ internal static class ZeppelinIdentitySuites
         + "round, and no ground emplacement")]
     internal static void ZeppelinIdentity(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         CheckBiasReach(ctx);
         CheckTurretFan(ctx);
     }
@@ -48,7 +48,7 @@ internal static class ZeppelinIdentitySuites
         + "the node name above it, while a pool standing elsewhere takes neither")]
     internal static void StructurePartBias(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "M03");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C4", "M03");
         ctx.RequireData(missionZrdr, $"C4/M03 zrdr");
         var escort = BlockBiases(missionZrdr, EscortBlock);
         var hunter = BlockBiases(missionZrdr, HunterBlock);
@@ -125,7 +125,7 @@ internal static class ZeppelinIdentitySuites
     // it, which is the only way an authored pattern naming the hull can reach a gasbag.
     private static void CheckBiasReach(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M03");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C5", "M03");
         ctx.RequireData(missionZrdr, $"C5/M03 zrdr");
         var biases = new List<AiRatingBias>();
         foreach (var (_, fields) in AiSkills.LoadRoster(missionZrdr))
@@ -160,17 +160,17 @@ internal static class ZeppelinIdentitySuites
     // the hull, and only those. The unauthored sibling is the control, its guns must not move.
     private static void CheckTurretFan(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "MP3");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "MP3");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(missionZrdr, $"C1/MP3 zrdr");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var defs = Zeppelins.Load(missionZrdr);
         var nets = AiNets.Load(chapterZrdr);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         ctx.Check(ZeppelinRuntime.AuthoredTeam(Record(defs, AllyZep)) == AimAssist.PlayerTeam
             && ZeppelinRuntime.AuthoredTeam(Record(defs, PlainZep)) == null,
             $"C1/MP3 authors 'ally' on '{AllyZep}' and nothing on '{PlainZep}', the pair this measures");
@@ -238,7 +238,7 @@ internal static class ZeppelinIdentitySuites
         });
     }
 
-    private static List<AiRatingBias> BlockBiases(string missionZrdr, string block)
+    private static List<AiRatingBias> BlockBiases(ZrdrSet missionZrdr, string block)
     {
         foreach (var (name, fields) in AiSkills.LoadRoster(missionZrdr))
         {

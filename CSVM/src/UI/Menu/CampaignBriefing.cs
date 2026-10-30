@@ -8,11 +8,11 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// One mission's briefing as the campaign feature holds it: the <c>cm_sequence</c> entry, the
-/// dialog state the <c>brief_c&lt;campaign&gt;&lt;mission&gt;</c> formula names, the narration wav
-/// its sound resolves to, the objectives note, and the running <see cref="BriefingReveal"/> whose
-/// progress is feature state. The clock is the presentation's: it calls <see cref="Advance"/> once
+/// dialog state its <c>brief_c&lt;campaign&gt;&lt;mission&gt;</c> formula names, the narration and
+/// the note. Its running <see cref="BriefingReveal"/> keeps its progress as feature
+/// state. The clock is the presentation's: it calls <see cref="Advance"/> once
 /// a frame while the briefing shows and <see cref="Restart"/> on REPLAY BRIEFING, and it decides
-/// when to draw. Every string a presentation labels the screen with comes from the same data root
+/// when to draw. Every string a presentation labels the screen with comes from the game data
 /// through <see cref="Messages"/>. A broken or absent extraction loads as a briefing with no
 /// state, which a presentation shows as its buttons alone rather than refusing to open.
 /// </summary>
@@ -47,14 +47,15 @@ public sealed class CampaignBriefing
     /// <summary>Whether every beat has run and every tween has landed; true with no reveal.</summary>
     public bool Complete => Reveal?.Complete ?? true;
 
-    /// <summary>Loads the briefing for story position <paramref name="seq"/> under
-    /// <paramref name="dataRoot"/>, or null when the sequence carries no such entry or cannot be
-    /// read at all. Everything is read once here, never per repaint.</summary>
-    public static CampaignBriefing? Load(string dataRoot, int seq)
+    /// <summary>Loads the briefing for story position <paramref name="seq"/> out of
+    /// <paramref name="data"/>, labelled from <paramref name="messages"/>. Null when the sequence
+    /// carries no such entry or cannot be read. The narration's cue points come from
+    /// <paramref name="sounds"/>. Everything is read once here, never per repaint.</summary>
+    public static CampaignBriefing? Load(Spec.GameData data, Messages messages, SoundZbd? sounds, int seq)
     {
         try
         {
-            string shared = SessionPaths.PreferUnzipped(Path.Combine(dataRoot, "extracted", "zrdr.zip"));
+            var shared = data.Zrdr;
             CampaignMission? found = null;
             foreach (var mission in CampaignSequence.Load(shared))
             {
@@ -69,8 +70,8 @@ public sealed class CampaignBriefing
                 return null;
             }
 
-            var briefing = new CampaignBriefing(entry);
-            briefing.Read(dataRoot, shared);
+            var briefing = new CampaignBriefing(entry) { Messages = messages };
+            briefing.Read(data, shared, sounds);
             return briefing;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException
@@ -88,23 +89,20 @@ public sealed class CampaignBriefing
 
     // The state, the note and the narration's cue points, each degrading on its own: a mission with
     // a state but no cue chunk still reveals, just with every marker released at once.
-    private void Read(string root, string shared)
+    private void Read(Spec.GameData data, ZrdrSet shared, SoundZbd? sounds)
     {
         try
         {
-            Messages = Messages.Load(Path.Combine(root, "extracted", "messages.json"));
             State = BriefingDialog.Load(shared).Find(Mission.Campaign, Mission.Mission);
             Objectives = BriefingObjectives.Load(
-                Zrdr.LoadFile(
-                    SessionPaths.MissionZrdr(root, Mission.ChapterFolder, Mission.MissionFolder),
-                    "objectives.json"),
+                data.LoadChapter(Mission.ChapterFolder, Mission.MissionFolder).MissionZrdr.LoadFile("objectives.json"),
                 Messages);
             if (State is { } state)
             {
                 NarrationWav = SoundDefs.Load(shared).TryGetValue(state.Sound, out var def)
                     ? def.WavName
                     : string.Empty;
-                Reveal = new BriefingReveal(state.Steps, Markers(root));
+                Reveal = new BriefingReveal(state.Steps, Markers(sounds));
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException
@@ -116,10 +114,8 @@ public sealed class CampaignBriefing
 
     // The narration's own cue points, which is where every WaitForMarker time comes from. No file
     // and no cue chunk means no markers, which BriefingReveal degrades on rather than inventing.
-    private IReadOnlyList<double> Markers(string root) =>
-        NarrationWav.Length == 0
-            ? Array.Empty<double>()
-            : WavCues.ReadFrom(
-                SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "soundsh.zip")),
-                NarrationWav);
+    private IReadOnlyList<double> Markers(SoundZbd? sounds) =>
+        NarrationWav.Length > 0 && sounds?.ReadWavBytes(NarrationWav) is { } wav
+            ? WavCues.Read(wav)
+            : Array.Empty<double>();
 }

@@ -2,6 +2,7 @@ using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Testing;
 using Godot;
 using Xunit;
@@ -33,8 +34,7 @@ public class BeeperTagsTests
     private static readonly Vector3 RoundPos = Vector3.Zero;
     private static readonly Vector3 Heading = Vector3.Forward;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>A tag ahead scores near -1, one behind near +1, one abeam 0: the dot is inverted
     /// from the intuitive sign because the vector runs from the tag toward the round.</summary>

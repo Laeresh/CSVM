@@ -28,6 +28,8 @@ internal sealed class LaunchAudio(Node host)
     private UI.Screens.CinemaScreen? _cinemaShown;
     // The data root the films are read from, settled by Build.
     private string _dataRoot = string.Empty;
+    private Mech3.Messages _messages = new();
+    private Mech3.TextureSet _rimage = Mech3.TextureSet.Empty;
     // The master gain ApplyMasterVolume resolved, which a cinema warns against when it is zero.
     private float _masterVolume = MasterVolume.Unattenuated;
 
@@ -96,10 +98,13 @@ internal sealed class LaunchAudio(Node host)
     public void Build(BasePaths paths, ulong masterSeed)
     {
         _dataRoot = paths.DataRoot;
+        _messages = paths.Data.Messages;
+        _rimage = paths.Data.Rimage;
         try
         {
-            _archive = new SoundArchive(paths.SoundsPath);
-            _music = new MusicPlayer(SoundDefs.Load(paths.ZrdrPath), SoundDefs.LoadGroups(paths.ZrdrPath))
+            _archive = new SoundArchive(paths.Data.Sounds
+                ?? throw new System.IO.FileNotFoundException($"{GameData.SoundsPath} is not in the game data"));
+            _music = new MusicPlayer(SoundDefs.Load(paths.Data.Zrdr), SoundDefs.LoadGroups(paths.Data.Zrdr))
             {
                 Loader = (def, looped) => _archive.Find(def.WavName, looped, warn: false),
             };
@@ -133,7 +138,7 @@ internal sealed class LaunchAudio(Node host)
     {
         if (UI.Screens.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
         {
-            Log.Warn("ui", $"cinema {name} not played; looked under {Extraction.SessionPaths.CinemaFolder(_dataRoot)}");
+            Log.Warn("ui", $"cinema {name} not played; the game files hold no readable {Extraction.RofFiles.Cinema(name)}");
             then();
             return;
         }
@@ -184,9 +189,9 @@ internal sealed class LaunchAudio(Node host)
     /// and the next begins. Whether the original abandoned the rest of the block instead is not
     /// decoded (docs/formats/cinemas.md).</summary>
     public void PlayBoot(System.Action then) =>
-        UI.Screens.BootCard.Play(host, _dataRoot, PlayCinema, then);
+        UI.Screens.BootCard.Play(host, _dataRoot, _rimage, _messages, PlayCinema, then);
 
-    /// <summary>Closes the score's archive on an ordinary quit.</summary>
+    /// <summary>Drops the score's archive on an ordinary quit; the game data's own stays open.</summary>
     public void Exit()
     {
         _archive?.Dispose();

@@ -39,13 +39,13 @@ internal static class FlightTelemetrySuites
         "step, in the invariant culture")]
     internal static void FlightTelemetryGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weaponDefs = WeaponDefs.Load(ctx.Zrdr, null);
         var textures = new TextureArchive(texturesPath);
         bool wasCollected = Log.ConsoleShows("flight", Log.Level.Debug);
         ProjectilePool? pool = null;
@@ -57,18 +57,18 @@ internal static class FlightTelemetrySuites
             ctx.Host.AddChild(live);
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
-            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var liveries = new LiveryResolver(spec, ctx.DataRoot);
             var inputs = new AircraftAssemblyResources
             {
                 PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
                 PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
+                Zrdr = ctx.Zrdr,
                 StockLoadouts = StockLoadouts.Load(),
                 WeaponDefs = weaponDefs,
                 Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                Shakes = ShakeDefs.Load(ctx.Zrdr),
             };
             // worldEffects null!: never dereferenced, CrashProgram/WorldScene stay null, so the
             // spawner's crash-runtime block (its only reader) is skipped.

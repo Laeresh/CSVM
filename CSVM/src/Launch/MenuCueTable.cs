@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace CSVM.Launch;
 
 /// <summary>
-/// The menu cue table: which wav under <c>extracted/rof/ASSETS/SOUNDS</c> a semantic cue name
-/// resolves to. The four files are the four the original's globals script binds; the scripts name
-/// raw wav files, so the indirection from a name to a file is the remake's and lives here, where
+/// The menu cue table: which wav under the UI archive's <c>ASSETS/SOUNDS</c> a semantic cue name
+/// resolves to. The four files are the four the original's globals script binds. The scripts name
+/// raw wav files, so the indirection from a name to a file is the remake's. It lives here, where
 /// the audio service owns lookup. Engine-free so the table is unit-tested against the names the
 /// presentations ask for.
 /// </summary>

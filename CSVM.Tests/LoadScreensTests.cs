@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM;
 using CSVM.Extraction;
+using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using Xunit;
@@ -36,7 +37,7 @@ public class LoadScreensTests
     [Fact]
     public void AModeOfOursWritesItsHeadingAloneAtTheAuthoredPlace()
     {
-        var lines = LoadScreens.Texts(null, "FREE FLIGHT", "no-zrdr", "no-messages");
+        var lines = LoadScreens.Texts(null, "FREE FLIGHT", ZrdrSet.None, new Messages());
 
         var only = Assert.Single(lines);
         Assert.Equal("FREE FLIGHT", only.Text);
@@ -163,9 +164,9 @@ public class LoadScreensTests
     [Fact]
     public void AnUnreadableSheetKeepsTheFrameAndTheBar()
     {
-        Assert.Null(LoadSheet.Load("no-zrdr", "no-messages", "no-mission", "loading_c61", "none"));
+        Assert.Null(LoadSheet.Load(ZrdrSet.None, new Messages(), ZrdrSet.None, "loading_c61", "none"));
 
-        var board = LoadScreens.For(true, "unused", null, "no-zrdr", "no-messages");
+        var board = LoadScreens.For(true, "unused", null, ZrdrSet.None, new Messages());
 
         Assert.Equal("loadframe", Assert.Single(board.Backdrop).Art.Name);
         Assert.Equal("prog_blkload", Assert.Single(board.Pictures).Art.Name);
@@ -180,8 +181,8 @@ public class LoadScreensTests
     public void TheBlackboardDrawsOnePropellerWhetherPumpedOrStill()
     {
         var motion = LoadScreens.MotionFor(false, null);
-        var pumped = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", "no-messages", pumped: true);
-        var still = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", "no-messages");
+        var pumped = LoadScreens.For(false, "FREE FLIGHT", null, ZrdrSet.None, new Messages(), pumped: true);
+        var still = LoadScreens.For(false, "FREE FLIGHT", null, ZrdrSet.None, new Messages());
 
         Assert.Equal(1, PropellerDraws(still, motion));
         Assert.Equal(0, PropellerDraws(pumped, motion));
@@ -219,7 +220,7 @@ public class LoadScreensTests
     [Fact]
     public void AMissingExtractionWritesNothingRatherThanThrowing()
     {
-        Assert.Empty(LoadScreens.Texts("stunt_flying", "unused", "no-zrdr", "no-messages"));
+        Assert.Empty(LoadScreens.Texts("stunt_flying", "unused", ZrdrSet.None, new Messages()));
     }
 
     /// <summary>A Dogfight's dialog name. It is the number the original's session setup writes for
@@ -344,6 +345,42 @@ public class LoadScreensTests
         Assert.Equal("loadframempt2", board.Pictures[0].Art.Name);
     }
 
+    /// <summary>On a multiplayer board an unwrapped body row takes the dialog's widest body wrap.
+    /// Each column's lowest row keeps its point and is boxed to the room above the furniture.</summary>
+    [Fact]
+    public void ALowestRowWithRoomKeepsItsPointAndIsBoxedToTheFurniture()
+    {
+        var set = LoadScreens.OnBoard(Rows(), 546f);
+
+        Assert.Equal(new[] { 0f, 0f, 400f, 400f, 400f, 400f }, set.Select(l => l.Width));
+        Assert.Equal(new[] { 35f, 525f, 445f, 445f, 525f, 525f }, set.Select(l => l.Y));
+        Assert.Equal(new[] { 0f, 0f, 0f, 0f, 21f, 21f }, set.Select(l => l.Height));
+    }
+
+    /// <summary>A lowest row whose first line is under the furniture stacks a pitch under the next
+    /// row up in its own column. That row rises half a pitch to leave a gap. A title at the same
+    /// height stays where it is.</summary>
+    [Fact]
+    public void ARowUnderTheFurnitureStacksUnderTheRowAboveInItsColumn()
+    {
+        var set = LoadScreens.OnBoard(Rows(), 510f);
+
+        Assert.Equal(new[] { 35f, 525f, 438f, 438f, 458f, 458f }, set.Select(l => l.Y));
+        Assert.Equal(52f, set[4].Height);
+    }
+
+    // A heading, a title level with the last row, then two rows of an instruction beside its
+    // points. The last row authors no wrap.
+    private static BoardLine[] Rows() => new[]
+    {
+        new BoardLine("HEAD", 60f, 35f, 0f, 17f, BoardInk.Heading),
+        new BoardLine("TITLE", 600f, 525f, 0f, 17f, BoardInk.Heading),
+        new BoardLine("row five", 360f, 445f, 400f, 13f, BoardInk.Row, Leading: 13f),
+        new BoardLine("2", 280f, 445f, 0f, 13f, BoardInk.Row, Leading: 13f),
+        new BoardLine("row six", 360f, 525f, 0f, 13f, BoardInk.Row, Leading: 13f),
+        new BoardLine("-2", 280f, 525f, 0f, 13f, BoardInk.Row, Leading: 13f),
+    };
+
     private static ComposedBoard Briefing(string key) =>
         LoadScreens.For(false, "DOGFIGHT", null, Zrdr(), MessagesPath(), briefing: key);
 
@@ -358,7 +395,7 @@ public class LoadScreensTests
     private static LoadSheet Filmed() =>
         LoadSheet.Load(
             Zrdr(), MessagesPath(),
-            SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M01"),
+            TestZrdr.Mission("C3", "M01"),
             "loading_c61", "ms_p_initialpinup1")!;
 
     // Every picture on the board, still layers and overlays alike, that is one of the cycle's
@@ -377,9 +414,8 @@ public class LoadScreensTests
         return (picture.X, picture.Y);
     }
 
-    private static string Zrdr() =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet Zrdr() => TestZrdr.Root;
 
-    private static string MessagesPath() =>
-        Path.Combine(TestData.ExtractedRoot!, "messages.json");
+    private static Messages MessagesPath() =>
+        Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
 }

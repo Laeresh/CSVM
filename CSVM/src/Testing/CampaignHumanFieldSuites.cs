@@ -48,15 +48,15 @@ internal static class CampaignHumanFieldSuites
         + "guest the red one, which neither half completes by itself")]
     internal static void CampaignCoopHumanField(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -115,11 +115,11 @@ internal static class CampaignHumanFieldSuites
     }
 
     private static void Drive(TestContext ctx, TestWorld world, ObjectiveScript script,
-        CampaignMission mission, string missionZrdr, string texturesPath, Vector3 where,
+        CampaignMission mission, ZrdrSet missionZrdr, TextureSet texturesPath, Vector3 where,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightController? p1 = null, guest = null;
         try
@@ -145,7 +145,7 @@ internal static class CampaignHumanFieldSuites
 
     // OBJECTIVE5 asks where "the player" is; with two humans flying, the human field answers.
     private static void CheckTravelers(TestContext ctx, TestWorld world, ObjectiveScript script,
-        CampaignMission mission, string missionZrdr, ProjectilePool live,
+        CampaignMission mission, ZrdrSet missionZrdr, ProjectilePool live,
         FlightController p1, FlightController guest, Vector3 where, StringBuilder report)
     {
         var director = CampaignDirector.Create(script, mission,
@@ -203,7 +203,7 @@ internal static class CampaignHumanFieldSuites
     // The human-field danger-zone rule over C3/M01's own gate geometry: crossed flags are per
     // zone, so the pair may be split between two humans.
     private static void CheckDangerZoneUnion(TestContext ctx, TestWorld world, ObjectiveScript script,
-        string missionZrdr, StringBuilder report)
+        ZrdrSet missionZrdr, StringBuilder report)
     {
         var zones = CampaignDangerZones.Load(script, world.Gamez, missionZrdr);
         if (zones == null || !zones.TryGateProbe("dzpath1", out var gc, out var gn, out var rc, out var rn))
@@ -244,7 +244,7 @@ internal static class CampaignHumanFieldSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, string name)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {

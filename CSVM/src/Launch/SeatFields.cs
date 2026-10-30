@@ -99,12 +99,13 @@ internal static class SeatFields
     /// A further seat is named as its lobby row is (<see cref="Net.NetSeats.FurtherSeatName"/>).
     /// ⚠ A guest with no pick on the wire, one whose lobby screen never stood, flies the host's first
     /// airframe on the stock fit. Each seat takes its machine's lobby team from
-    /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
+    /// <paramref name="teamOf"/>, by peer, else 0. A bot draws only a pair <paramref name="botArms"/> admits.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
         Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null,
         IReadOnlyList<VsBotEntry>? bots = null, IReadOnlyList<string>? callsignPool = null, System.Random? draws = null,
-        DogfightMissionType mission = DogfightMissionType.Deathmatch, IReadOnlyList<(int Peer, int Local)>? owners = null)
+        DogfightMissionType mission = DogfightMissionType.Deathmatch, IReadOnlyList<(int Peer, int Local)>? owners = null,
+        System.Func<byte, string, bool>? botArms = null)
     {
         teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
@@ -162,21 +163,26 @@ internal static class SeatFields
             seatFits.Add(pick != null ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
         }
 
-        // The lobby's bots follow every guest on the stock fit. Random planes and missing callsigns
-        // are drawn here, on the host alone, so a guest reads a real plane off the roster.
+        // The lobby's bots follow every guest on the stock fit the rules allow. Random planes and
+        // missing callsigns are drawn here, on the host alone, so a guest reads a real plane off the
+        // roster. The rules bind the bots as they bind the people.
         if (bots is { Count: > 0 })
         {
             var resolved = Session.Roster.BotSeats.Resolve(bots, System.Linq.Enumerable.Select(seats, seat => seat.Callsign),
                 callsignPool ?? System.Array.Empty<string>(), draws ?? new System.Random(Rng.IntSeedFor(Rng.BotField)),
-                oneTorpedoPerTeam: mission == DogfightMissionType.ZeppelinVsZeppelin);
+                oneTorpedoPerTeam: mission == DogfightMissionType.ZeppelinVsZeppelin, rules, botArms);
             int people = seats.Count;
             int left = Net.NetSeats.AddBots(seats, wire.LocalPeer, resolved);
             for (int seat = people; seat < seats.Count; seat++)
             {
-                seatFits.Add(default);
+                seatFits.Add(rules is { } outlaws ? Session.Roster.BotSeats.LegalFit(outlaws) : default);
             }
 
             WarnBotsLeftOut(left, "lobby bot(s)", "people");
+            if (resolved.Count < bots.Count)
+            {
+                Log.Warn("core", $"net: {bots.Count - resolved.Count} lobby bot(s) left out, the plane rules refuse every stock airframe");
+            }
         }
 
         Net.NetSeats.Validate(seats, wire.LocalPeer);
@@ -288,7 +294,7 @@ internal static class SeatFields
     /// first, then the spec's bots, the command line's or the join board's. Null without bots, so such a
     /// launch keeps its panes as its seats. Random planes and blank callsigns are drawn as a host draws
     /// them.</summary>
-    internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, string messagesPath)
+    internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, Messages messages)
     {
         if (spec.VsBots.Count == 0)
         {
@@ -296,7 +302,7 @@ internal static class SeatFields
         }
 
         var seats = Net.NetSeats.LocalPanes(spec.Players);
-        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messagesPath));
+        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages));
         Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         Log.Info("core", $"local roster of {seats.Count} seat(s), {seats.Count - spec.Players} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
@@ -307,7 +313,7 @@ internal static class SeatFields
     /// <summary>A command-line host's roster: this machine's own seats, then one per peer that got
     /// in, then the spec's bots. The remote seats fly the local pilot's airframe, the same limit a
     /// menu host has.</summary>
-    internal static Net.NetSeat[] CliHostField(SessionSpec spec, Net.INetTransport wire, string messagesPath)
+    internal static Net.NetSeat[] CliHostField(SessionSpec spec, Net.INetTransport wire, Messages messages)
     {
         var seats = new List<Net.NetSeat>();
         for (int i = 0; i < spec.Players && seats.Count < Net.NetSeats.MaxPlayers; i++)
@@ -342,7 +348,7 @@ internal static class SeatFields
 
         // The command line's bots, after every guest. Random planes and callsigns are drawn here,
         // on the host alone. The roster carries real ones to every guest, which seats no bot.
-        int left = Net.NetSeats.AddBots(seats, wire.LocalPeer, ResolveBots(spec, seats, messagesPath));
+        int left = Net.NetSeats.AddBots(seats, wire.LocalPeer, ResolveBots(spec, seats, messages));
         WarnBotsLeftOut(left, "bot(s)", "guests");
         Net.NetSeats.Validate(seats, wire.LocalPeer);
         Log.Info("core", $"net: host roster of {seats.Count} seat(s), {System.Linq.Enumerable.Count(seats, s => s.IsBot)} of them bots");
@@ -355,18 +361,55 @@ internal static class SeatFields
     /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
     /// a stream of their own, a function of the master seed alone.</summary>
     internal static IReadOnlyList<Net.SeatedBot> ResolveBots(
-        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, string messagesPath)
+        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages)
     {
         if (spec.VsBots.Count == 0)
         {
             return System.Array.Empty<Net.SeatedBot>();
         }
 
-        var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(messagesPath));
+        var pool = Session.Roster.BotSeats.CallsignPool(messages);
         return Session.Roster.BotSeats.Resolve(spec.VsBots,
             System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
             new System.Random(Rng.IntSeedFor(Rng.BotField)),
             oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin);
+    }
+
+    /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
+    /// The militia/airframe pairs whose def's weapons <paramref name="rules"/> allow whole
+    /// (<see cref="Session.Roster.BotSeats.ArmsAdmitted"/>), read once from the install. Null while
+    /// the outlaw list is not in force, which leaves the draw's candidates the whole table.</summary>
+    internal static System.Func<byte, string, bool>? BotArmsUnder(Net.NetPlaneRules? rules, ZrdrSet zrdr,
+        Messages messages, StockLoadouts stock)
+    {
+        if (rules is not { Outlawing: true } outlaws)
+        {
+            return null;
+        }
+
+        try
+        {
+            var militias = MilitiaFits.Load(zrdr, messages);
+            var weapons = WeaponDefs.Load(zrdr);
+            var admitted = new HashSet<(byte, string)>();
+            foreach (var (militia, plane) in Session.Roster.BotSeats.Pairs)
+            {
+                if (Session.Roster.BotSeats.ArmsAdmitted(outlaws, militias.WeaponsFor(InstantAction.Militias[militia].Name, plane),
+                        weapons, stock.Options.PylonOrdnance))
+                {
+                    admitted.Add((militia, plane));
+                }
+            }
+
+            return (militia, plane) => admitted.Contains((militia, plane));
+        }
+        catch (System.Exception e)
+        {
+            // Fails closed: no shipped def is titled for Fortune Hunter, so the flight's own reader
+            // finds it no def either, and its bots fly LegalFit.
+            Log.Warn("core", $"net: cannot read the militias' defs, so every bot flies for Fortune Hunter: {e.Message}");
+            return (militia, _) => InstantAction.Militias[militia].Name == InstantAction.PlayerMilitia;
+        }
     }
 
     // One line per bot seat of a roster just built, prefixed by where it was built.

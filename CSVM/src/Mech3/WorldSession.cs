@@ -98,10 +98,10 @@ public sealed class WorldSession
         }
         else
         {
-            missionSetup = MissionSetup.Load(o.InterpPath, o.Chapter, o.Mission);
+            missionSetup = MissionSetup.Load(o.Interp, o.Chapter, o.Mission);
             if (missionSetup == null)
             {
-                Log.Info("world", $"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
+                Log.Info("world", $"mission setup: no script for {o.Chapter}/{o.Mission} (boot scripts {(o.Interp == null ? "absent" : "read")})");
             }
         }
         StartupProfile.Record("zrdr", mark);
@@ -109,7 +109,7 @@ public sealed class WorldSession
         // The EFFECTS flipbooks (effects.zrd) are installed on their target materials BEFORE the
         // build, because a material's frame list is part of what SceneBuilder registers with the
         // TextureCycler as it builds. Same ordering the engine uses. See EffectCycles.
-        var effectCycles = EffectCycles.Apply(gamez, o.ZrdrPath);
+        var effectCycles = EffectCycles.Apply(gamez, o.Zrdr);
         if (effectCycles.Count > 0)
         {
             Log.Info("world", $"effect cycles: {effectCycles.Count} material(s): {string.Join(", ", effectCycles)}");
@@ -125,6 +125,8 @@ public sealed class WorldSession
         // to know which mission it is standing in before it stamps any team.
         builder.MissionSlot = GameZ.MissionSlotOf(o.Mission);
         builder.HdChapter = o.Chapter;
+        // The last chapter's replacement imports would otherwise stay for the rest of the run.
+        HdModelMeshes.Current.KeepChapter(o.Chapter);
         s.Builder = builder;
         // every chapter has exactly one world node; --node= replaces it with one named subtree
         var root = o.NodeSubtree is { } only
@@ -164,7 +166,7 @@ public sealed class WorldSession
             ? new List<string>()
             : o.ClutterTemplates is { } wanted
                 ? ClutterBuilder.OverrideTemplateNames(gamez, wanted)
-                : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
+                : ClutterBuilder.TemplateNames(o.Interp, o.Chapter);
         if (o.NoClutter)
         {
             Log.Info("world", $"clutter: skipped (--no-clutter)");
@@ -174,10 +176,10 @@ public sealed class WorldSession
             // templates.zrd drives `substitute` and `scale_range` (docs/formats/templates.md).
             // Null when the chapter ships no such file, every decoration then stands at its
             // authored model and size, which is also what an empty file (C1C/C2B) produces.
-            var clutterProps = ClutterTemplateSpec.Load(o.ChapterZrdrPath);
+            var clutterProps = ClutterTemplateSpec.Load(o.ChapterZrdr);
             // The armed volumes mark the stamps inside them by row. ⚠ The rows are VolumesOf's
             // order, a walk of gamez.Nodes, which SkyStage's census for WeatherRig repeats exactly.
-            var fogVolumes = FogVolumeSpec.Load(o.ChapterZrdrPath) is { FogZoneArmed: true }
+            var fogVolumes = FogVolumeSpec.Load(o.ChapterZrdr) is { FogZoneArmed: true }
                 ? FogVolumeSpec.VolumesOf(gamez) : null;
             // Read whatever the Vegetation Quality: the Rich variant is baked beside the Original
             // stamps so a live move recuts. A chapter with no ground to list bakes none.
@@ -205,7 +207,7 @@ public sealed class WorldSession
         }
         else if (o.NodeSubtree == null)
         {
-            Log.Info("world", $"clutter: no templates for {o.Chapter} ({o.InterpPath})");
+            Log.Info("world", $"clutter: no templates for {o.Chapter} (boot scripts {(o.Interp == null ? "absent" : "read")})");
         }
         StartupProfile.Record("clutter", mark);
         LoadProgress.Report(LoadStep.Clutter);
@@ -229,23 +231,19 @@ public sealed class WorldSession
         // at end state (hangar doors swing, the C1 train drives its loop). The program merges the
         // compiled cam_anim/mis_anim archives with the three zrdr scopes.
         mark = StartupProfile.Mark();
-        var chapterZrdrPath = o.ChapterZrdrPath;
-        var (chapterAnimPath, missionAnimPath) =
-            AnimProgram.ArchivePaths(o.DataRoot, o.Chapter, o.Mission);
-        var animProgram = o.Decode == null
-            ? AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
-                chapterAnimPath, missionAnimPath)
-            : o.Decode.Anim(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
-                chapterAnimPath, missionAnimPath);
+        var chapterZrdr = o.ChapterZrdr;
+        AnimProgram LoadAnim() => AnimProgram.Load(o.Zrdr, chapterZrdr, o.MissionZrdr,
+            o.ChapterAnim(), o.MissionAnim());
+        var animProgram = o.Decode == null ? LoadAnim() : o.Decode.Anim(o.Chapter, o.Mission, LoadAnim);
         StartupProfile.Record("anim", mark);
         LoadProgress.Report(LoadStep.AnimProgram);
         s.Program = animProgram;
         if (o.LandingTriggers)
         {
             s.Landings = LandingApproaches.Resolve(
-                chapterZrdrPath, gamez, name => animProgram.ByAnimName(name).Count > 0);
-            s.Pickups = CSVM.Mech3.Pickups.Load(o.MissionZrdrPath);
-            s.MissionCutsceneAnims = MissionCutscenes.AnimNames(o.MissionZrdrPath);
+                chapterZrdr, gamez, name => animProgram.ByAnimName(name).Count > 0);
+            s.Pickups = CSVM.Mech3.Pickups.Load(o.MissionZrdr);
+            s.MissionCutsceneAnims = MissionCutscenes.AnimNames(o.MissionZrdr);
             s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings, s.MissionCutsceneAnims);
         }
         // Puffer factory retirement: see Options.TexturesOutliveBuild. root is the caller's
@@ -328,9 +326,8 @@ public sealed class WorldSession
         // ⚠ Every cutscene, not an intro alone: a mid-mission definition poses the flown aeroplane
         // on the same `player` marker, and with no stage the pilot is held undrawn throughout.
         // Before the bind, like the roots above (docs/architecture.md).
-        if (o.Cutscenes != null && cutscenes && o.PlanesGamezPath is { Length: > 0 } planesPath)
+        if (o.Cutscenes != null && cutscenes && o.PlanesGamez is { } planesGamez)
         {
-            var planesGamez = o.Decode == null ? GameZ.Load(planesPath) : o.Decode.Gamez(planesPath);
             s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, planesGamez, textures);
         }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
@@ -681,28 +678,34 @@ public sealed class WorldSession
     /// <see cref="Build"/> separately.</summary>
     public sealed class Options
     {
-        public required string DataRoot { get; init; }
         public required string Chapter { get; init; }
         public required string Mission { get; init; }
-        public required string ZrdrPath { get; init; }
-        public required string InterpPath { get; init; }
-        public required string MissionZrdrPath { get; init; }
+        public required ZrdrSet Zrdr { get; init; }
+        public InterpScripts? Interp { get; init; }
+        public required ZrdrSet MissionZrdr { get; init; }
 
         /// <summary>The chapter's own zrdr scope, which <c>templates.zrd</c>, <c>landings.zrd</c>
         /// and the chapter animation layer are read from. The caller resolves it, since the data
         /// root's layout is the session's to know.</summary>
-        public required string ChapterZrdrPath { get; init; }
+        public required ZrdrSet ChapterZrdr { get; init; }
 
-        /// <summary>Where this build takes its <see cref="AnimProgram"/> and its aircraft archive
-        /// from, when the caller has one. Null (the default) loads both fresh, so a session that
+        /// <summary>The chapter's compiled anim archive, null for none. Read inside the <c>anim</c>
+        /// startup phase, and not at all when <see cref="Decode"/> already holds the program.</summary>
+        public required Func<AnimArchive?> ChapterAnim { get; init; }
+
+        /// <summary>The mission's compiled anim archive, null for none; read as
+        /// <see cref="ChapterAnim"/> is.</summary>
+        public required Func<AnimArchive?> MissionAnim { get; init; }
+
+        /// <summary>Where this build takes its <see cref="AnimProgram"/> from, when the caller has
+        /// one. Null (the default) loads it fresh, so a session that
         /// leaves a chapter retains nothing of it. See <see cref="DecodeCache"/> for what a
         /// non-null value makes shared, and the read-only contract that binds.</summary>
         public DecodeCache? Decode { get; init; }
 
-        /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Read only when
-        /// this mission bootstraps an intro; every other session leaves it unopened, so its node
-        /// census is exactly what it was.</summary>
-        public string? PlanesGamezPath { get; init; }
+        /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Staged only when
+        /// this mission bootstraps an intro, so every other session's node census is what it was.</summary>
+        public GameZ? PlanesGamez { get; init; }
 
         /// <summary>Parent for the effect siblings the bootstrap builds, the world's ambient
         /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session

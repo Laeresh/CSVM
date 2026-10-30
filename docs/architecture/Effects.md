@@ -114,8 +114,8 @@ Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
 
 ## src/Effects/OceanMaskRaster.cs
 The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint, R8 zone and R8 ramp lift bytes out, with no engine
-object touched. Owns the triangle fill, the shore distance pass and the off-sheet tint, and runs
-in row bands on the thread pool. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
+object touched. Owns the triangle fill, the shore distance pass, the off-sheet tint and the zone bytes (a seam
+between two groups, and a coast texel in the group of the sea beside it), and runs in row bands on the thread pool. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
 not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
 hold the banded bytes to a plain single pass.
 

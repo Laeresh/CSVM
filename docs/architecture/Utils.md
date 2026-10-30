@@ -88,6 +88,14 @@ reads the same key to name the zip, and refuses an export whose exe does not car
 `ProjectSettings`, so it resolves only inside a running engine, which is why `Log.Open` takes the
 version as an argument instead of reading it.
 
+## src/Utils/ReleaseCheck.cs
+One GET of GitHub's `releases/latest` per launch, on the thread pool with a timeout, answering a
+`Release` (tag and release page) when the tag parses above `BuildVersion.Current`. `Launcher`
+starts it only in an exported, non-`--det` run with the `updates.checkReleases` config key on (the
+default), so no editor run, suite or agent sends it. Every failure is one info line and a null
+answer. `UI/Screens/BuildStamp.cs` polls the task on the frame and shows the line. The check
+downloads nothing. Read `ReleaseCheckTests.cs` for the comparison and the answer's checks.
+
 ## src/Utils/ShaderTime.cs
 The GPU's view of the clock: the `csky_time` global shader uniform (seconds), registered once in
 `Launcher._Ready` and written once per rendered frame from `GameClock.Time`. Every animated
@@ -294,8 +302,8 @@ rig). `SlotsFor(root, players) = clamp(base + perExtraPlayer × (players − 1),
 `UnknownRoots` / `UnknownCrashRoots` name an authored root the derived stage set does not carry.
 
 ## src/Utils/Config.cs
-Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`,
-and the typed getters (`GetFloat` / `GetInt` / `GetBool` / `GetString`) return the file's value for
+Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`
+(beside the executable in an exported build, `ExportedPath`), and the typed getters (`GetFloat` / `GetInt` / `GetBool` / `GetString`) return the file's value for
 a present key, else the caller's in-code `const` default, read through at the point of use. Keys
 are `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to
 dot-keys. Nothing writes the file and `config.json` is git-ignored, so the consts stay canonical;
@@ -568,7 +576,7 @@ through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam
 `Available` starts as `SteamOs.InGameMode`; Desktop Mode would open it behind the window.
 One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
 tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
-`Original/OriginalShell.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
+`Original/OriginalShell.cs`, `Screens/SourceScreen.cs` and `Launch/SessionNet.cs`.
 
 ## src/Utils/ScreenKeyboardField.cs
 One field the on-screen keyboard can be raised for: its owner and id, the label and the live text
@@ -580,3 +588,12 @@ Whether the run is in SteamOS Game Mode: `InGameMode` is read once from the envi
 (`SteamDeck` or `SteamOS` set to 1, under `XDG_CURRENT_DESKTOP=gamescope`) and is settable, so a
 suite takes either branch. `ScreenKeyboard.cs` raises its keyboard only there, and
 `FolderOpener.cs` refuses to open a folder there.
+
+## src/Utils/UserData.cs
+The one answer to where the player's own files live. `UserData.Root` is Godot's user folder until
+`Settle`, called by the launcher right after the command line is parsed, turns portable mode on: a
+`portable.txt` in the run's root or `--portable` moves every store to `userdata/` beside the
+executable (`.scratch/userdata/` in a repo run). Every production store resolves through it:
+`OptionsStore`, `BindingStore`, `CampaignProfileStore`, `CustomPlaneStore`, `ScoreStore`,
+`StickProfiles`, `StuntCapture` and the UPnP router memories. Godot's own files (its log,
+`Launch/XrShaderCache.cs`'s shader cache) stay in Godot's folder.

@@ -63,8 +63,8 @@ internal static class GeminiGasbagBaySuites
         "deploy_gmzep_lbroadNN go INVALID and OBJECTIVE13's own ANIM_STATE count is met")]
     internal static void GeminiGasbagBays(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
 
@@ -92,8 +92,8 @@ internal static class GeminiGasbagBaySuites
         "hatch ladder at zero against it")]
     internal static void GeminiEnginesLeaveTheBays(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
 
@@ -207,7 +207,7 @@ internal static class GeminiGasbagBaySuites
         ctx.Note($"{Chapter}/{Mission}: {dead} engine(s) shot off a flying {Hull} leaves {invalid} of {LeftBays.Length} deploy_gmzep_lbroad definition(s) INVALID, so the hatch ladder does not move");
     }
 
-    private static void Leg(TestContext ctx, string missionZrdr, string chapterZrdr,
+    private static void Leg(TestContext ctx, ZrdrSet missionZrdr, ZrdrSet chapterZrdr,
         ObjectiveScript script, StringBuilder report, IReadOnlyList<int> killedBags,
         string? firstBay, string what)
     {

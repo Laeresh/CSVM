@@ -55,15 +55,15 @@ internal static class CampaignRacerSuites
         + "its net between them and never ramming anything")]
     internal static void CampaignRacers(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -77,8 +77,8 @@ internal static class CampaignRacerSuites
         }
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null, missionZrdr);
         var report = new StringBuilder();
@@ -96,7 +96,7 @@ internal static class CampaignRacerSuites
                 ctx.Host.AddChild(live);
 
                 var playerPose = PlayerPose(blocks);
-                var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var playerStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
                 var player = Rig(ctx, world.Runtime, planesGamez, textures, playerStats, live, ctx.PlaneName,
                     playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
                     pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
@@ -107,9 +107,9 @@ internal static class CampaignRacerSuites
                 int shooterId = FlightRoster.ShooterIdBase + 1;
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter),
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = ctx.ChapterZrdr(Chapter),
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     Player = () => player,
                     NetTrailers = new NetTrailerTargets(
@@ -282,11 +282,11 @@ internal static class CampaignRacerSuites
     {
         try
         {
-            return PlaneStats.LoadForAi(ctx.ZrdrPath, plan.PlaneNode, plan.AiDef);
+            return PlaneStats.LoadForAi(ctx.Zrdr, plan.PlaneNode, plan.AiDef);
         }
         catch (ArgumentException)
         {
-            return PlaneStats.LoadForAi(ctx.ZrdrPath, plan.PlaneNode);
+            return PlaneStats.LoadForAi(ctx.Zrdr, plan.PlaneNode);
         }
     }
 

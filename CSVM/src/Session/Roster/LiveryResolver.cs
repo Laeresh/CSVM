@@ -20,21 +20,22 @@ public sealed class LiveryResolver
     public const string DefaultPattern = "player_fortune";
 
     private readonly SessionSpec _spec;
-    private readonly string _rofPath;
+    private readonly string _dataRoot;
     private readonly Dictionary<string, PaintScheme?> _defSchemes = new(StringComparer.OrdinalIgnoreCase);
     private List<PaintScheme>? _paintCatalog;
     private PatternLibrary? _patternLibrary;
 
-    public LiveryResolver(SessionSpec spec, string rofPath)
+    /// <summary>A resolver over the game files bound to <paramref name="dataRoot"/>.</summary>
+    public LiveryResolver(SessionSpec spec, string dataRoot)
     {
         _spec = spec;
-        _rofPath = rofPath;
+        _dataRoot = dataRoot;
     }
 
     /// <summary>The original's per-pattern paint region masks, scanned once per session from
-    /// the extracted UI archive. Empty (and a one-line note) when the extraction holds no UI archive,
-    /// and aircraft then build unpainted rather than failing.</summary>
-    public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
+    /// the UI archive. Empty (and a one-line note) when the game files hold none, and aircraft
+    /// then build unpainted rather than failing.</summary>
+    public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(Extraction.RofFiles.For(_dataRoot));
 
     /// <summary>True when the launch asked for a livery by hand (<c>--paint=</c>,
     /// <c>--paint-color=</c>, <c>--paint-decal=</c>). An AI aircraft's own militia scheme yields to
@@ -44,13 +45,13 @@ public sealed class LiveryResolver
 
     /// <summary>The 12 named schemes shipped in vehicle.json, loaded once per session.
     /// Empty on a read failure, paint is cosmetic and must never block a build.</summary>
-    public List<PaintScheme> PaintCatalog(string zrdrPath)
+    public List<PaintScheme> PaintCatalog(ZrdrSet zrdr)
     {
         if (_paintCatalog != null)
             return _paintCatalog;
         try
         {
-            _paintCatalog = PaintScheme.LoadCatalog(zrdrPath);
+            _paintCatalog = PaintScheme.LoadCatalog(zrdr);
             Log.Info("world", $"[paint] {_paintCatalog.Count} shipped patterns: {string.Join(", ", _paintCatalog.ConvertAll(s => s.Pattern))}");
         }
         catch (Exception e)
@@ -63,21 +64,21 @@ public sealed class LiveryResolver
 
     /// <summary>The catalog's scheme for <paramref name="pattern"/>, the shipped colours a militia's
     /// pattern is worn in; null for a pattern no def authors.</summary>
-    public PaintScheme? CatalogScheme(string zrdrPath, string pattern) =>
-        PaintCatalog(zrdrPath).Find(s => string.Equals(s.Pattern, pattern, StringComparison.OrdinalIgnoreCase));
+    public PaintScheme? CatalogScheme(ZrdrSet zrdr, string pattern) =>
+        PaintCatalog(zrdr).Find(s => string.Equals(s.Pattern, pattern, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The livery a vehicle def authors for itself, cached per def name. This is what an AI
     /// aircraft wears in the original: the spawn resolves each paint field against the def and only
     /// an explicit override displaces it (docs/org/paint.md). Null when the def's chain authors no
     /// pattern, or when vehicle.json cannot be read, paint is cosmetic and never blocks a build.</summary>
-    public PaintScheme? DefScheme(string zrdrPath, string defName)
+    public PaintScheme? DefScheme(ZrdrSet zrdr, string defName)
     {
         if (_defSchemes.TryGetValue(defName, out var cached))
             return cached;
         PaintScheme? scheme = null;
         try
         {
-            scheme = PaintScheme.ForDef(zrdrPath, defName);
+            scheme = PaintScheme.ForDef(zrdr, defName);
         }
         catch (Exception e)
         {
@@ -101,7 +102,7 @@ public sealed class LiveryResolver
     /// --paint=none asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false
     /// drops that default for an enemy that must not wear the player militia's colours, which is
     /// the case for a wave whose own militia the file never named (docs/formats/instant-action.md).</summary>
-    public PaintScheme? SchemeFor(int index, string zrdrPath, RandomNumberGenerator rng,
+    public PaintScheme? SchemeFor(int index, ZrdrSet zrdr, RandomNumberGenerator rng,
         IReadOnlyList<string>? available = null, bool useDefaultPattern = true)
     {
         // --paint= takes one name per player like --plane=; the last covers any remainder.
@@ -116,7 +117,7 @@ public sealed class LiveryResolver
         if (name == null && !useDefaultPattern)
             return null;
 
-        var catalog = PaintCatalog(zrdrPath);
+        var catalog = PaintCatalog(zrdr);
 
         // The implicit default resolves against the catalog only: an unknown pattern warning
         // makes no sense for a name the caller never typed, and without vehicle.json there are

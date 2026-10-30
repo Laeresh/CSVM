@@ -37,8 +37,7 @@ public class ManeuversTests
         { "lag_pursuit_roll", 9 },
     };
 
-    private static string InstallZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet InstallZrdr => TestZrdr.Root;
 
     [Fact]
     public void ParsesBothStepShapesPreservingTheUndecodedExtras()
@@ -177,7 +176,7 @@ public class ManeuversTests
         Assert.Equal(5, lib.Count(m => m.AutogyroAllowed));
     }
 
-    private static List<Maneuver> Fixtures() => Maneuvers.Load(TestData.Fixture("zrdr"));
+    private static List<Maneuver> Fixtures() => Maneuvers.Load(TestZrdr.Fixture("zrdr"));
 
     private static List<Maneuver> Library() => Maneuvers.Load(InstallZrdr);
 }

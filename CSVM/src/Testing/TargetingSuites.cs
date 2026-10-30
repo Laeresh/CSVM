@@ -201,12 +201,12 @@ internal static class TargetingSuites
             $"and the next press taps again, so a hold leaves no state behind");
 
         // --- the attacker queue, wired through a real hit ------------------------------------
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
         ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
         if (gun == null)
@@ -214,7 +214,7 @@ internal static class TargetingSuites
             return;
         }
 
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? self = null;
@@ -763,12 +763,12 @@ internal static class TargetingSuites
             // C1's real emplacements through the same pool. ia1.gw switches all 74 sites off at
             // their roots, so the built world has no live emplacement; the five aagun sites go on
             // by the .gw's own switch reversed, and off again in the finally (shared world cache).
-            ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-            string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+            ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+            TextureSet texturesPath = ctx.ChapterTextures("C1");
             ctx.RequireData(texturesPath, $"C1 textures");
-            ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-            var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-            var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+            ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+            var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+            var turretDefs = TurretDefs.Load(ctx.Zrdr);
             // Private: the assertions read every site as ia1.gw leaves it and then the five aaguns
             // alive, and a suite earlier in the shard (the self-fire drill) kills one in the shared cache.
             ctx.WithPrivateWorld("C1", collision: false, world =>
@@ -919,9 +919,9 @@ internal static class TargetingSuites
         "below or 45 above the anchor")]
     internal static void HostileMarkerHud(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         // --- the pure selection, over a constructed candidate set (no tree, no pool) ---
@@ -1119,8 +1119,8 @@ internal static class TargetingSuites
             $"a source with no health model (enemyRef carries none) omits BOTH figures rather than printing H100 A100: '{noHealthTag}'");
 
         // --- the live tracker, against real AI planes registered in a real pool ---
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ai1 = null, ai2 = null;
@@ -1275,9 +1275,9 @@ internal static class TargetingSuites
         + "shaft starting on the rim, and the label 3 under the disc's bottom or 45 over its top")]
     internal static void SpyglassMarkerHud(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         // --- the placement rules, pure over a 1440p pane at scale 1 ------------------------------
@@ -1310,8 +1310,8 @@ internal static class TargetingSuites
             $"CONTROL: with no picture the same two anchors take the bare rule, 3 below and 45 above the marker itself ({TargetHud.EdgeLabelAnchor(high, pane.Y, 1f)} / {TargetHud.EdgeLabelAnchor(low, pane.Y, 1f)}), which is what the disc variant has to differ from");
 
         // --- the gate, against a real hud, a real SubViewport and a spawned plane ----------------
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? bogey = null;
@@ -1450,13 +1450,13 @@ internal static class TargetingSuites
         "path for it; nothing selected does not throw")]
     internal static void DebugKillTargetRouting(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? victim = null;

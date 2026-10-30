@@ -73,16 +73,16 @@ internal static class CampaignLoopSuites
         + "reads what the first one wrote")]
     internal static void CampaignLoop(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string missionFolder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, missionFolder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, missionFolder);
         ctx.RequireData(missionZrdr, $"{chapter}/{missionFolder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var report = new StringBuilder();
         string dir = ProfileDir();
@@ -97,7 +97,7 @@ internal static class CampaignLoopSuites
 
         var strings = UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty;
         var stock = StockLoadouts.Load();
-        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock);
+        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock, data: ctx.Data);
         var profile = WalkToTheFlightCheck(ctx, flow, store, report);
         int group = ChangeAmmo(ctx, flow, store, report);
         var fit = PressFlyMission(ctx, flow, store, profile, stock, group, report);
@@ -269,14 +269,14 @@ internal static class CampaignLoopSuites
     // The mission itself: the built world, the intro cutscene, the objectives director, the flown
     // approach that completes the primary, a mission-data music cue, and the authored end.
     private static void FlyTheMission(
-        TestContext ctx, CampaignMission mission, string chapter, string missionFolder, string missionZrdr,
+        TestContext ctx, CampaignMission mission, string chapter, string missionFolder, ZrdrSet missionZrdr,
         CampaignProfileDef profile, CampaignProfileStore store, LoadoutChoice fit, StockLoadouts stock,
         StringBuilder report)
     {
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, profile, store);
-        var music = new MusicPlayer(SoundDefs.Load(ctx.ZrdrPath), SoundDefs.LoadGroups(ctx.ZrdrPath));
-        using var archive = new SoundArchive(ctx.SoundsPath);
+        var music = new MusicPlayer(SoundDefs.Load(ctx.Zrdr), SoundDefs.LoadGroups(ctx.Zrdr));
+        using var archive = new SoundArchive(ctx.Sounds);
         music.Loader = (def, looped) => archive.Find(def.WavName, looped, warn: false);
         ctx.Host.AddChild(music);
         director.Music = music;
@@ -310,7 +310,7 @@ internal static class CampaignLoopSuites
             return;
         }
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         FlightController? rig = null;
         ctx.Host.AddChild(pool);
@@ -416,11 +416,11 @@ internal static class CampaignLoopSuites
         TestContext ctx, TestWorld world, string planeNode, Vector3 target, ProjectilePool pool,
         LoadoutChoice fit, StockLoadouts stock, StringBuilder report)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
-            var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
-            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures).Build(planeNode);
+            var stats = PlaneStats.Load(ctx.Zrdr, planeNode);
+            var model = new PlaneBuilder(ctx.Planes, textures).Build(planeNode);
             var rig = new FlightController
             {
                 PlaneModel = model,
@@ -464,7 +464,7 @@ internal static class CampaignLoopSuites
             return;
         }
 
-        var bound = Loadout.Bind(fit.ApplyTo(stockDef), model, WeaponDefs.Load(ctx.ZrdrPath, null));
+        var bound = Loadout.Bind(fit.ApplyTo(stockDef), model, WeaponDefs.Load(ctx.Zrdr, null));
         string ammo = CampaignLoadout.AmmoNames[ChosenAmmo];
         bool carries = false;
         foreach (var gun in bound.Guns)
@@ -654,7 +654,7 @@ internal static class CampaignLoopSuites
             return;
         }
 
-        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock);
+        var flow = new CampaignFlow(store, strings, ctx.DataRoot, planes: null, stock, data: ctx.Data);
         flow.SelectProfile(reread);
         ctx.Check(flow.Screen == CampaignScreen.Cabin, $"the return lands on the cabin, screen={flow.Screen}");
         ctx.Same(FirstSeq + 1, reread.MissionsCompleted, $"the profile file carries the flown mission");
@@ -698,7 +698,8 @@ internal static class CampaignLoopSuites
     {
         var recorder = new FilmRecorder();
         var feature = new CampaignFeature(
-            strings, StockAirframes.Node, closingCinema: new ClosingCinema(recorder.Play));
+            strings, StockAirframes.Node, closingCinema: new ClosingCinema(recorder.Play))
+        { Data = ctx.Data };
         feature.Open(new CampaignProfileStore(dir), null, null, ctx.DataRoot);
         var flow = new CampaignFlow(feature);
 

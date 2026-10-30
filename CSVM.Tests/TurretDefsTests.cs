@@ -4,6 +4,7 @@ using CSVM;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -11,11 +12,11 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The <c>ai.zrd</c> turret reader (docs/formats/turrets.md) on the hand-authored
-/// <c>fixtures/zrdr/ai.json</c>: the two structural families, the <c>PARTS</c> chain forms, the
-/// duty-cycle windows, the unauthored-but-accepted keys, and the by-title lookup's titleless
-/// short-circuit, plus the arc semantics that are the item's most likely visible failure:
-/// <c>YAW [0,0]</c> means unrestricted, and the yaw arc is a directed interval whose out-of-arc
-/// answer is the angularly nearer end stop.
+/// <c>fixtures/zrdr/ai.zrd.json</c>. It covers the two structural families, the <c>PARTS</c> chain
+/// forms, the duty-cycle windows, the unauthored-but-accepted keys and the by-title lookup's
+/// titleless short-circuit. It also covers the arc semantics, the most likely visible failure.
+/// <c>YAW [0,0]</c> means unrestricted. The yaw arc is a directed interval whose out-of-arc answer
+/// is the angularly nearer end stop.
 /// </summary>
 public class TurretDefsTests
 {
@@ -181,15 +182,14 @@ public class TurretDefsTests
         Assert.True(TurretController.LocalDir(180f, 0f).IsEqualApprox(Vector3.Back));
     }
 
-    private static TurretDefs Load() => TurretDefs.Load(TestData.Fixture("zrdr"));
+    private static TurretDefs Load() => TurretDefs.Load(TestZrdr.Fixture("zrdr"));
 }
 
 /// <summary>Golden counts against the retail extraction, skipped without extracted/ data.
 /// These pin the shipped censuses docs/formats/turrets.md records.</summary>
 public class TurretDefsGoldenTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void TheFortyTwoEntriesSplitSixteenCarried()

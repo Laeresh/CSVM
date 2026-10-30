@@ -243,8 +243,8 @@ public sealed class CampaignBriefingPage : CampaignPage
         return text.StartsWith("MSG_", StringComparison.Ordinal) ? fallback : text;
     }
 
-    // One rimage picture, decoded once and kept including a miss, so an absent extraction is
-    // probed once per bitmap rather than once per frame.
+    // One rimage picture, expanded once and kept including a miss, so an absent picture is
+    // looked up once per bitmap rather than once per frame.
     private HangarArt? Picture(string bitmap, string caption)
     {
         if (_art.TryGetValue(bitmap, out var art))
@@ -252,16 +252,7 @@ public sealed class CampaignBriefingPage : CampaignPage
             return art;
         }
 
-        art = null;
-        if (Flow.DataRoot is { } root)
-        {
-            var path = Path.Combine(root, "extracted", "rimage", bitmap.ToLowerInvariant() + ".png");
-            if (PngImage.TryLoad(path) is { } image)
-            {
-                art = new HangarArt(image, caption);
-            }
-        }
-
+        art = Flow.Feature.Data.Rimage.Rgba(bitmap) is { } image ? new HangarArt(image, caption) : null;
         _art[bitmap] = art;
         return art;
     }

@@ -294,10 +294,10 @@ public sealed partial class Puffer : Node3D
     /// emitter under <paramref name="parent"/>; null (logged by <see cref="PufferState.Load"/>) when
     /// the reader or its textures are missing. Shared by the flight assembly and the
     /// static damage lab.</summary>
-    public static Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
+    public static Puffer? MakePuffer(ZrdrSet zrdr, TextureArchive textures, Node parent,
         string file, string name, float duration = 0.3f, EffectAmbience? ambience = null)
     {
-        var state = PufferState.Load(zrdrPath, file, name);
+        var state = PufferState.Load(zrdr, file, name);
         var puffer = state != null ? Create(state, textures, duration, ambience: ambience) : null;
         if (puffer != null)
             parent.AddChild(puffer);

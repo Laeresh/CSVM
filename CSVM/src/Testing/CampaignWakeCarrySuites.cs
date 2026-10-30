@@ -35,17 +35,17 @@ internal static class CampaignWakeCarrySuites
         + "node's, the height kept), still flying the leg it was seated on")]
     internal static void CampaignWakeTrailerCarry(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -83,7 +83,7 @@ internal static class CampaignWakeCarrySuites
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
         {
             var textures = new TextureArchive(texturesPath);
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             ProjectilePool? pool = null;
             FlightRoster? roster = null;
             FlightController? human = null;
@@ -100,10 +100,10 @@ internal static class CampaignWakeCarrySuites
 
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
-                    MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
+                    MinAiActiveDist = AiSkills.Load(ctx.Zrdr).MinAiActiveDist,
                     Player = () => player,
                     NetTrailers = new NetTrailerTargets(
                         () => player.WorldPosition,

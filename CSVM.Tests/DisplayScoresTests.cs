@@ -208,7 +208,7 @@ public class DisplayScoresTests
     [Fact]
     public void TheHeaderWordsComeFromTheMessageTableAndFallBackWord()
     {
-        var table = Messages.Parse("{\"entries\": [{\"key\": \"MSG_MPHUD_PLAYER\", \"id\": 7008, \"value\": \"  Spieler\"}]}");
+        var table = Messages.ParseExtracted("{\"entries\": [{\"key\": \"MSG_MPHUD_PLAYER\", \"id\": 7008, \"value\": \"  Spieler\"}]}");
         var words = OriginalScoresWords.From(table);
         Assert.Equal("  Spieler", words.Player);
         Assert.Equal(OriginalScoresWords.Fallback.PlayerTeam, words.PlayerTeam);

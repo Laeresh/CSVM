@@ -130,8 +130,8 @@ internal static class XrPointerSuites
         "on the Original presentation over the install's decoded layout, hosted on the theater screen, the right hand's laser and trigger, read by seat 0's polled pointer as the launcher wires it, open PREFERENCES, its CONTROLS door, KEYS AND BUTTONS and the Other tab, whose Pause and Recenter Headset rows list the left menu button and the left stick click while a stereo session is live and read as flat play's without one; a capture the laser opens takes neither the pull that opened it nor a click, binds the right trigger on a fresh pull and the left trigger without moving the laser, and the left trigger still hands the laser over once no capture listens")]
     internal static void XrPointerOriginalMenu(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -156,13 +156,13 @@ internal static class XrPointerSuites
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "xr-pointer-original-menu");
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var exits = new List<MenuExit>();
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         // Seat 0's pointer exactly as the launcher builds it: the position and the button off the
         // one pointer source, which the laser overrides.
         host.AddSeat(new PointerSeat(new IdleSeat(),

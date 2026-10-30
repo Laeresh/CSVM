@@ -57,6 +57,16 @@ internal sealed class FlightRosterPolicy
     /// (<see cref="CSVM.Flight.Camera.SeatLook.AutoHeadTurn"/>), null where never set, which
     /// leaves the <c>headLook.autohead</c> config key deciding.</summary>
     public bool? AutoHeadTurn { get; init; }
+
+    /// <summary>The leading aim assist (<see cref="FlightController.LeadingAimAssist"/>), off by default.</summary>
+    public bool LeadingAimAssist { get; init; }
+
+    /// <summary>The lead marker (<see cref="FlightController.LeadMarker"/>), off by default.</summary>
+    public bool LeadMarker { get; init; }
+
+    /// <summary>The throttle plate beside the speedometer (<see cref="FlightHud.ThrottlePlate"/>),
+    /// off by default.</summary>
+    public bool ThrottlePlate { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
@@ -123,6 +133,9 @@ internal sealed class FlightRosterPolicy
         Difficulty = spec.Difficulty,
         NearestAfterKill = spec.NearestAfterKill,
         AutoHeadTurn = spec.AutoHeadTurn,
+        LeadingAimAssist = spec.LeadingAimAssist,
+        LeadMarker = spec.LeadMarker,
+        ThrottlePlate = spec.ThrottlePlate,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,
@@ -160,7 +173,7 @@ internal sealed class AircraftAssemblyResources
     public HudFont? HudFont { get; init; }
     public Texture2D? ReticleTex { get; init; }
     public RandomNumberGenerator PaintRng { get; init; } = null!;
-    public string ZrdrPath { get; init; } = "";
+    public ZrdrSet Zrdr { get; init; } = ZrdrSet.None;
 }
 
 internal sealed class FlightWorldBindings
@@ -182,8 +195,8 @@ internal sealed class FlightWorldBindings
     /// <summary>The session's one engine duck, handed to every engine voice the roster builds, own
     /// ship and AI alike. A radio line lowers them all through the same gain.</summary>
     public EngineVoiceDuck? VoiceDuck { get; init; }
-    public string ChapterZrdrPath { get; init; } = "";
-    public string MissionZrdrPath { get; init; } = "";
+    public ZrdrSet ChapterZrdr { get; init; } = ZrdrSet.None;
+    public ZrdrSet MissionZrdr { get; init; } = ZrdrSet.None;
     public bool DebugCollision { get; init; }
 
     /// <summary>The live fog band (near, far) the spyglass's range gate reads, for one pane by its

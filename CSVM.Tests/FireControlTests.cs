@@ -55,6 +55,26 @@ public class FireControlTests
         Assert.Equal(11, shots);
     }
 
+    /// <summary>The tuple refire paces the group in place of <c>FIRE_RATE</c>, and a twin mount
+    /// fires at half of it (FUN_004b6820, docs/org/weaponFire.md). A 0.2 s twin is the 10/s case
+    /// above, a 0.2 s single 5/s.</summary>
+    [Theory]
+    [InlineData(2, 11)]
+    [InlineData(1, 6)]
+    public void TheTupleRefirePacesTheGroupAndATwinMountHalvesIt(int muzzles, int expected)
+    {
+        var gun = Gun(fireRate: 1f, ammo: 1000, capacity: 1000, muzzleCount: muzzles, refire: 0.2f);
+        var fc = Make(new List<FakeGun> { gun }, new List<FakePylon>());
+
+        int shots = 0;
+        for (int i = 0; i < 61; i++)
+        {
+            shots += Step(fc, fire: true).GunShots.Count;
+        }
+
+        Assert.Equal(expected, shots);
+    }
+
     [Fact]
     public void MuzzlesAlternateWhileTheGroupStaysTheSelectedIndex()
     {
@@ -779,13 +799,14 @@ public class FireControlTests
         Gun(10f, 3, 3, id: "wep_g2"), Gun(10f, 3, 3, id: "wep_g3"),
     };
 
-    private static FakeGun Gun(float fireRate, int ammo, int capacity, int muzzleCount = 1, string? loopSound = null, string id = "wep_gun") =>
+    private static FakeGun Gun(float fireRate, int ammo, int capacity, int muzzleCount = 1, string? loopSound = null, string id = "wep_gun", float refire = 0f) =>
         new()
         {
             Weapon = new WeaponDef { Id = id, Name = id, FireRate = fireRate, LoopedSoundName = loopSound },
             Ammo = ammo,
             Capacity = capacity,
             MuzzleCount = muzzleCount,
+            RefireSeconds = refire,
         };
 
     private static FakePylon Pylon(float fireRate, int ammo, int capacity, string id = "wep_rocket") =>
@@ -834,6 +855,7 @@ public class FireControlTests
         public int Ammo { get; set; }
         public int Capacity { get; set; }
         public int MuzzleCount { get; set; } = 1;
+        public float RefireSeconds { get; set; }
     }
 
     private sealed class FakePylon : IPylonSlot

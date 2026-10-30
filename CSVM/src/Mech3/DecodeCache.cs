@@ -4,22 +4,20 @@ using System.Collections.Generic;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// A store of decoded world inputs, keyed by the absolute paths they were decoded from, so a
-/// process that builds the same chapter many times pays each decode once. Opt-in and instance
-/// scoped: a caller holding no instance loads exactly as before, which is why a game session
-/// never retains a chapter it has left.
+/// A store of decoded world inputs, keyed by chapter, or by chapter and mission. A
+/// process that builds one chapter many times pays each decode once. Opt-in and instance scoped:
+/// a caller holding no instance decodes afresh, so a game session retains no chapter it left.
 /// ⚠ Every object handed back here is SHARED, and read-only by contract. <see cref="GameZ"/> and
-/// <see cref="AnimProgram"/> are graphs of public mutable fields with nothing to enforce that, so
-/// one write reaches every later build of the same chapter. Who may hold one, and what the
+/// <see cref="AnimProgram"/> are graphs of public mutable fields with nothing to enforce that.
+/// One write reaches every later build of the same chapter. Who may hold one, and what the
 /// contract binds: this module's entry in docs/architecture.md.
 /// </summary>
 public sealed class DecodeCache
 {
-    // Illegal in a Windows path, so no five real paths can spell another combination's key. A
-    // space would not hold, since the paths here routinely contain one.
+    // Illegal in a game folder name, so no chapter and mission pair can spell another's key.
     private const char KeySeparator = '|';
 
-    private readonly Dictionary<string, GameZ> _gamez = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, GameZ?> _gamez = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AnimProgram> _anim = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many lookups were served from the store, and how many decoded. Reported so a
@@ -28,22 +26,16 @@ public sealed class DecodeCache
 
     public int Misses { get; private set; }
 
-    /// <summary>The chapter (or shared aircraft) gamez at <paramref name="path"/>. The path is the
-    /// whole key: it already carries the data root and the chapter, and no build option changes
-    /// what is decoded from it.</summary>
-    public GameZ Gamez(string path) => Get(_gamez, path, GameZ.Load);
+    /// <summary>The world of <paramref name="chapter"/>, from <paramref name="load"/> on a miss, null
+    /// where it has none. The chapter is the whole key: one store serves one launch's game data, and
+    /// no build option changes what is decoded.</summary>
+    public GameZ? Gamez(string chapter, Func<GameZ?> load) => Get(_gamez, chapter, _ => load());
 
-    /// <summary>The merged animation program for one chapter+mission. All five paths are in the
-    /// key because all five are inputs to the merge, and between them they carry the data root,
-    /// the chapter and the mission.</summary>
-    public AnimProgram Anim(string sharedZrdr, string chapterZrdr, string missionZrdr,
-        string chapterAnim, string missionAnim)
-    {
-        string key = string.Join(KeySeparator, sharedZrdr, chapterZrdr, missionZrdr,
-            chapterAnim, missionAnim);
-        return Get(_anim, key, _ => AnimProgram.Load(sharedZrdr, chapterZrdr, missionZrdr,
-            chapterAnim, missionAnim));
-    }
+    /// <summary>The merged animation program of <paramref name="chapter"/> and
+    /// <paramref name="mission"/>, from <paramref name="load"/> on a miss. The pair is the whole key,
+    /// as the chapter is for <see cref="Gamez"/>.</summary>
+    public AnimProgram Anim(string chapter, string mission, Func<AnimProgram> load) =>
+        Get(_anim, string.Join(KeySeparator, chapter, mission), _ => load());
 
     private T Get<T>(Dictionary<string, T> store, string key, Func<string, T> load)
     {

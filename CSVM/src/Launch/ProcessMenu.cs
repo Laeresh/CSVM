@@ -79,7 +79,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         var controls = Host != null && Host.Features.TryGet<ControlsFeature>(out var feature)
             ? feature
             : null;
-        return UI.Screens.PausePreferences.Build(paths().DataRoot, _originalLayout, controls, persist, _audio);
+        return UI.Screens.PausePreferences.Build(paths().DataRoot, paths().Data.Rimage, _originalLayout, controls, persist, _audio);
     }
 
     // The menu host: the presentation, the shared features, the audio service and the launcher's
@@ -92,7 +92,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // would make that run's mix a function of the walk. A --no-det run with a scripted flag is
         // still such a run, which is why both halves are read rather than Det alone.
         _audio = new MenuAudioService(audio.Music, audio.FindSound,
-            Extraction.RofTree.Member(at.RofPath, "ASSETS/SOUNDS"), previews: !spec.Det && spec.ScriptedBy.Length == 0);
+            at.Data.Rof, previews: !spec.Det && spec.ScriptedBy.Length == 0);
         parent.AddChild(_audio);
         var seatInput = new MenuInput { Keyboard = true };
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
@@ -108,7 +108,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // flag into the flight, and the profile the cabin seated must load there.
         var profiles = cli.ProfilesDir is { } profilesDir ? CampaignProfileStore.ForSession(profilesDir) : null;
         registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(parent, at.DataRoot, _originalLayout!, _aid ?? string.Empty, seatInput, spec.DebugJoin)
+            () => new OriginalPresentation(parent, at.DataRoot, _originalLayout!, _aid ?? string.Empty, seatInput, spec.DebugJoin, at.Data)
             {
                 DebugPointer = spec.DebugPointer,
                 CampaignProfiles = profiles,
@@ -117,7 +117,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Availability = OriginalAvailable;
         host.Held = () => stamp.DesktopModeNotice?.Visible == true;
         host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForDataRoot(at.DataRoot));
+        host.Features.Add(InstantActionFeature.ForGameData(at.Data));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature { SeatLimit = SeatLimit() });
@@ -129,13 +129,14 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
 
         host.Features.Add(notice);
         var strings = UiStrings.TryLoad(at.DataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.ZrdrPath));
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.Data.Zrdr));
         // The campaign feature carries both cinemas because the presentation reads it and cannot
         // reach this module to play a film through.
         _chapterCinema = new ChapterCinema(audio.PlayCinema, audio.StopCinema);
         _closingCinema = new ClosingCinema(audio.PlayCinema, audio.StopCinema);
         host.Features.Add(new CampaignFeature(
-            strings, StockAirframes.Node, _chapterCinema, _closingCinema));
+            strings, StockAirframes.Node, _chapterCinema, _closingCinema)
+        { Data = at.Data });
         // The keymap editor writes through the per-player binding store, with player 1's stick rows split
         // off to the profile files. A reset takes them from the stick defaults. Injected so the
         // feature stays engine-free for a suite.

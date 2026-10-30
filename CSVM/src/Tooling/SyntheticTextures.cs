@@ -1,44 +1,44 @@
+using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text.Json;
-using CSVM.Extraction;
+using CSVM.Mech3;
 
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The synthetic tree's chapter texture archive. The hand-authored extraction manifest in
-/// <c>fixtures/synthetic/C1/texture/</c> is copied as it stands, beside one generated PNG per
-/// <c>texture_infos</c> entry at that entry's size. The manifest is the record and the pixels
-/// are code, so a texture is added by adding a manifest entry. Its shape is the reader's in
-/// <c>TextureArchive</c> and the header fields in <c>docs/org/textures.md</c>.
+/// The synthetic run's chapter texture archive, built in memory. It holds one opaque record per
+/// entry of <see cref="Entries"/> at that size, its pixels a checker of the name's colour.
+/// A texture is added by adding an entry. Engine-free, so <c>CSVM.Tests</c> builds the same set.
 /// </summary>
 public static class SyntheticTextures
 {
-    /// <summary>The chapter the archive is written for, the one every plane-only path reads.</summary>
+    /// <summary>The chapter the archive is built for, the one every plane-only path reads.</summary>
     public const string Chapter = "C1";
 
-    // Where the manifest sits under the fixtures root, and where the archive lands under extracted/.
-    // The archive is the unpacked sibling of C1/texture.zip, which SessionPaths.ChapterTextures takes.
-    private const string ManifestFixture = "synthetic/" + ArchiveFolder + "/manifest.json";
-    private const string ArchiveFolder = Chapter + "/texture";
-
-    // The checker square's side in texels; every manifest size is a multiple of it.
-    private const int Square = 8;
-
-    /// <summary>Writes the archive under <paramref name="tree"/>.</summary>
-    public static void WriteChapter(SyntheticTree tree)
+    /// <summary>The invented textures by name and size: the probe plane's skin and panel, its
+    /// tracer, and the three smoke frames the invented effects name.</summary>
+    public static readonly IReadOnlyList<(string Name, int Width, int Height)> Entries = new[]
     {
-        string manifest = tree.CopyFixture(ManifestFixture, ArchiveFolder + "/manifest.json");
-        foreach (var (name, width, height) in Entries(manifest))
-        {
-            tree.WriteBytes($"{ArchiveFolder}/{name}.png", PngWriter.EncodeRgb(width, height, Checker(name, width, height)));
-        }
-    }
+        ("probe_skin", 64, 64),
+        ("probe_panel", 32, 32),
+        ("probe_tracer", 16, 8),
+        ("smoke101", 32, 32),
+        ("smoke102", 32, 32),
+        ("smoke103", 32, 32),
+    };
+
+    private static readonly Lazy<TextureSet> Set = new(Build);
+
+    /// <summary>The archive of <paramref name="chapter"/>: the invented set for <see cref="Chapter"/>,
+    /// empty for every other chapter, as the synthetic data carries no other.</summary>
+    public static TextureSet For(string chapter) =>
+        string.Equals(chapter, Chapter, StringComparison.OrdinalIgnoreCase) ? Set.Value : TextureSet.Empty;
 
     /// <summary>A checker of the name's own colour against mid grey, RGB with no padding. Distinct
     /// per name, so a capture shows which texture drew where.</summary>
     public static byte[] Checker(string name, int width, int height)
     {
+        // The checker square's side in texels; every entry's size is a multiple of it.
+        const int Square = 8;
         uint hash = 2166136261;
         foreach (char c in name)
         {
@@ -62,19 +62,14 @@ public static class SyntheticTextures
         return rgb;
     }
 
-    // Every texture_infos entry's name and size. A missing field is an error in the record, not a
-    // default, since the loader would read a guessed size as the authored one.
-    private static List<(string Name, int Width, int Height)> Entries(string manifestPath)
+    private static TextureSet Build()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
-        var entries = new List<(string, int, int)>();
-        foreach (var info in doc.RootElement.GetProperty("texture_infos").EnumerateArray())
+        var images = new List<TextureImage>();
+        foreach (var (name, width, height) in Entries)
         {
-            string name = info.GetProperty("name").GetString()
-                ?? throw new InvalidDataException($"{manifestPath}: a texture_infos entry has a null name");
-            entries.Add((name, info.GetProperty("width").GetInt32(), info.GetProperty("height").GetInt32()));
+            images.Add(new TextureImage(name, null, width, height, TextureArchive.AlphaClass.None, 0, false, Checker(name, width, height)));
         }
 
-        return entries;
+        return new TextureSet("c1/texture", images);
     }
 }

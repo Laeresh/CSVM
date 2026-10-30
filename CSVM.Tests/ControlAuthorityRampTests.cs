@@ -1,6 +1,7 @@
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -19,8 +20,7 @@ public class ControlAuthorityRampTests
     private const float Dt = 1f / 60f;
     private const float Mph = PhysicsConstants.MphToMs;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The curve's three regions and both knees, on the authored 10/50 mph pair. The
     /// midpoint is the one that separates a linear ramp from a step at either end.</summary>

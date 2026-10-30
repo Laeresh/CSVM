@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.IO.Compression;
 using System.Text;
-using System.Text.Json;
 using CSVM.Utils;
 using Godot;
 
@@ -181,7 +179,7 @@ public static class TextureDropIn
 
     /// <summary>Warns about an override naming a texture the archive does not hold. Checked per
     /// archive rather than once, because "not in this chapter" is itself the answer sometimes.</summary>
-    public static void CheckNames(string archivePath, IEnumerable<string> names)
+    public static void CheckNames(string archive, IEnumerable<string> names)
     {
         if (Overrides.Count == 0)
         {
@@ -192,7 +190,7 @@ public static class TextureDropIn
         {
             if (!have.Contains(name))
             {
-                Log.Warn("world", $"tex override names a texture this archive lacks texture={name} archive={Path.GetFileName(archivePath)}");
+                Log.Warn("world", $"tex override names a texture this archive lacks texture={name} archive={archive}");
             }
         }
         // Present in the archive but used by no material is the other half of the same lie, and it
@@ -632,8 +630,8 @@ public static class TextureDropIn
     }
 }
 
-/// <summary>Texture lookup over a mech3ax texture extraction, a ZIP (<c>texture.zbd</c> →
-/// PNGs) or a directory of the same PNGs. Absorbs the stored-name quirks (20-char truncation,
+/// <summary>Texture lookup over one decoded texture archive (<see cref="TextureSet"/>), building
+/// each image the first time a material asks. Absorbs the stored-name quirks (20-char truncation,
 /// legacy renames, docs/formats/gamez.md) so a truncated material name still resolves.
 /// Mip levels: <see cref="Mips"/>, docs/formats/gamez.md. Plumbing: this module's entry in
 /// docs/architecture.md.</summary>
@@ -723,48 +721,38 @@ public sealed class TextureArchive : IDisposable
     // to the pixel rule on its own; a name outside every list keeps that rule.
     private static readonly HashSet<string> SoftAlphaNamed = NamedSoftAlphaSet();
 
-    private readonly ZipArchive? _zip;
-    private readonly string? _dir;
-    // baseName (no extension) -> the PNG's retrieval name (a zip entry's FullName, or a file name under _dir).
-    private readonly Dictionary<string, string> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
+    // Lookup name (the record's Key, today's PNG base name) -> the record.
+    private readonly Dictionary<string, TextureImage> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasAlpha, bool Soft, AlphaClass Class)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
 
     // Every cached texture whose alpha depth depends on the graphics mode, by base name. A live
     // switch uploads each one again at the other depth (FollowAlphaDepth).
     private readonly Dictionary<string, ImageTexture> _depthFollowers = new(StringComparer.OrdinalIgnoreCase);
-    // Archive base name -> the extractor's own alpha class, off the extraction manifest. Empty when
-    // the tree ships PNGs alone, which is why every read of it falls back to the pixel test.
+    // Stored name -> the header's alpha class. Looked up by the resolved Key, so a renamed texture
+    // falls back to the pixel test (no shipped archive renames one).
     private readonly Dictionary<string, AlphaClass> _alphaClasses = new(StringComparer.OrdinalIgnoreCase);
-    // Archive base name -> the texture header's render-flags word, off the same manifest. Empty on a
-    // PNG-only tree, which reads as 0 and so alpha-mixes, the engine's own fallback value.
+    // Stored name -> the header's render-flags word, raw. An unknown name reads 0 and alpha-mixes.
     private readonly Dictionary<string, int> _renderFlags = new(StringComparer.OrdinalIgnoreCase);
     // Distinct texture names this archive failed to resolve, each already logged once.
     private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
     // Authored _N siblings whose dimensions disagreed with the level they claim, logged once each.
     private readonly HashSet<string> _reportedOddMips = new(StringComparer.OrdinalIgnoreCase);
-    // The archive's own folder or zip, which names its HD replacements' chapter entries.
-    private readonly string _path;
+    // The archive's HD pack name (TextureSet.Archive), which names its replacements' chapter entries.
+    private readonly string _archive;
     // Base name -> the original's size, for every texture an HD replacement took over. Its texture
     // reports that size, as HdArt's 2D art does: the compass tape draws archive art by pixel rects.
     private readonly Dictionary<string, Vector2I> _hdSizes = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
-    public TextureArchive(string path)
+    public TextureArchive(TextureSet textures)
     {
-        _path = path;
-        if (Directory.Exists(path))
+        _archive = textures.Archive;
+        foreach (var texture in textures.Images)
         {
-            _dir = path;
-            foreach (var file in Directory.EnumerateFiles(path, "*.png"))
-                _byBaseName[Path.GetFileNameWithoutExtension(file)] = Path.GetFileName(file);
-        }
-        else
-        {
-            _zip = ZipFile.OpenRead(path);
-            foreach (var entry in _zip.Entries)
-                if (entry.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-                    _byBaseName[Path.GetFileNameWithoutExtension(entry.Name)] = entry.FullName;
+            _byBaseName[texture.Key] = texture;
+            _alphaClasses[texture.Name] = texture.Alpha;
+            _renderFlags[texture.Name] = texture.RenderFlags;
         }
         // Every (base, level) pair the archive ships, counted once up front so the adoption log can
         // say "N of the M this chapter ships", a bare adopted count cannot show a level was missed.
@@ -778,10 +766,9 @@ public sealed class TextureArchive : IDisposable
             }
         }
         AuthoredMipBases = new List<string>(bases);
-        ReadTextureManifest();
         // An override naming a texture this archive does not hold would silently colour nothing,
         // which reads exactly like "the object is not drawing", the answer the flag exists to give.
-        TextureDropIn.CheckNames(path, _byBaseName.Keys);
+        TextureDropIn.CheckNames(_archive, _byBaseName.Keys);
     }
 
     /// <summary>Where a texture's upper mip levels come from.</summary>
@@ -798,11 +785,10 @@ public sealed class TextureArchive : IDisposable
         Generated,
     }
 
-    /// <summary>A texture's alpha class as the extractor read it out of the archive's own header
-    /// (storage flags at <c>+0x09</c>, docs/org/textures.md), not off the decoded pixels. The
-    /// original's hardware draw keys no lighting decision on it, only routing through the sorted
-    /// transparent queue (docs/org/vertexLighting.md); this reader is the one source that sees the
-    /// <see cref="Simple"/> textures at all.</summary>
+    /// <summary>A texture's alpha class as read out of the archive's own header (storage flags,
+    /// docs/formats/texture-archive.md), not off the decoded pixels. The original's hardware draw
+    /// keys only its routing through the sorted transparent queue on it (docs/org/vertexLighting.md).
+    /// The header is the one source that sees the <see cref="Simple"/> textures at all.</summary>
     public enum AlphaClass
     {
         /// <summary>No alpha channel: header bit <c>0x04</c>.</summary>
@@ -893,37 +879,21 @@ public sealed class TextureArchive : IDisposable
     public static bool IsNamedSoftAlpha(string materialTextureName) =>
         SoftAlphaNamed.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
 
-    /// <summary>The chapter's authored mip LOD bias, read from the interp extraction's
-    /// <c>MipBias</c> lines and clamped like the original's own command. 0 when the chapter authors
-    /// none, which is every chapter but C5 (docs/org/textures.md).
+    /// <summary>The chapter's authored mip LOD bias, read from the boot scripts'
+    /// <c>MipBias</c> lines and clamped like the original's own command. It is 0 without scripts or
+    /// when the chapter authors none, which is every chapter but C5 (docs/org/textures.md).
     /// ⚠ Read <c>adjust.gw</c> only. <c>load.gw</c> is the data-compile path, which a retail
     /// install cannot run: it sources the terrain <c>.flt</c> the install does not ship.</summary>
-    public static float MipBias(string interpPath, string chapter)
+    public static float MipBias(InterpScripts? interp, string chapter)
     {
         float bias = 0f;
-        if (!File.Exists(interpPath))
+        foreach (var line in interp?.Lines($"support\\{chapter.ToLowerInvariant()}\\adjust.gw") ?? [])
         {
-            return bias;
-        }
-
-        var wanted = $"support\\{chapter.ToLowerInvariant()}\\adjust.gw";
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(interpPath));
-        foreach (var script in doc.RootElement.EnumerateArray())
-        {
-            if (!script.TryGetProperty("name", out var n)
-                || !string.Equals(n.GetString(), wanted, StringComparison.OrdinalIgnoreCase))
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 && parts[0] == "MipBias"
+                && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
             {
-                continue;
-            }
-
-            foreach (var line in script.GetProperty("lines").EnumerateArray())
-            {
-                var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2 && parts[0] == "MipBias"
-                    && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
-                {
-                    bias = Math.Clamp(v, -MipBiasLimit, MipBiasLimit);
-                }
+                bias = Math.Clamp(v, -MipBiasLimit, MipBiasLimit);
             }
         }
 
@@ -961,6 +931,12 @@ public sealed class TextureArchive : IDisposable
         }
     }
 
+    /// <summary>A fresh <see cref="Image"/> of one record, RGBA8 or RGB8 as the record carries it,
+    /// the format a PNG decode of the same texture gave.</summary>
+    public static Image ImageOf(TextureImage texture) =>
+        Image.CreateFromData(texture.Width, texture.Height, false,
+            texture.HasAlphaChannel ? Image.Format.Rgba8 : Image.Format.Rgb8, texture.Pixels);
+
     /// <summary>True when the name is one the original draws nothing for (see AbsentAndUndrawn)
     /// AND this archive cannot resolve it, so the caller drops the polygon instead of surfacing it.
     /// ⚠ Both halves are required: the chapters that DO ship the texture must keep drawing it, so
@@ -969,17 +945,15 @@ public sealed class TextureArchive : IDisposable
         AbsentAndUndrawn.Contains(Path.GetFileNameWithoutExtension(materialTextureName))
         && Find(materialTextureName) == null;
 
-    /// <summary>The texture header's render-flags word as the extractor read it, 0 for a name this
-    /// archive does not hold and for a PNG-only tree with no manifest. Bit 2 is the blend flag;
-    /// bits 0, 1 and 3 are named by data correlation only (docs/org/textures.md).</summary>
+    /// <summary>The texture header's render-flags word, raw, 0 for a name this archive does not
+    /// hold. Bit 2 is the blend flag; bits 0, 1 and 3 are named by data correlation only
+    /// (docs/org/textures.md).</summary>
     public int RenderFlags(string materialTextureName)
     {
         // ⚠ Read the flags off the RESOLVED archive name, never the material's: a truncated or
-        // renamed material name is not a manifest key (see Resolve).
+        // renamed material name is not a stored name (see Resolve).
         var resolved = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));
-        return resolved != null
-            && _renderFlags.TryGetValue(Path.GetFileNameWithoutExtension(resolved), out int flags)
-            ? flags : 0;
+        return resolved != null && _renderFlags.TryGetValue(resolved.Key, out int flags) ? flags : 0;
     }
 
     /// <summary>True when the texture carries the additive-transparent bit, which is the whole of
@@ -998,8 +972,8 @@ public sealed class TextureArchive : IDisposable
             return false;
         }
 
-        // Without a manifest an image carrying no alpha passes too, which is harmless: 255 stays 255.
-        return AlphaClassOf(Path.GetFileNameWithoutExtension(resolved), hasPixelAlpha: true) == AlphaClass.Full
+        // A renamed texture falls back to the pixels and passes too, which is harmless: 255 stays 255.
+        return AlphaClassOf(resolved.Key, hasPixelAlpha: true) == AlphaClass.Full
             && (RenderFlags(materialTextureName) & FullAlphaUploadBit) == 0;
     }
 
@@ -1091,7 +1065,7 @@ public sealed class TextureArchive : IDisposable
     public Image? BuildMipped(string materialTextureName, out int authoredLevels) =>
         Build(Path.GetFileNameWithoutExtension(materialTextureName), out _, out authoredLevels);
 
-    /// <summary>The raw PNG as a fresh, un-mipmapped <see cref="Image"/>, the source
+    /// <summary>The texture as a fresh, un-mipmapped <see cref="Image"/>, the source
     /// <see cref="PlanePainter"/> recolours. Deliberately NOT the ImageTexture cache, which every
     /// plane and world instance shares and must never be mutated. Its images also carry mipmaps
     /// already. Each call returns a new Image. <paramref name="authored"/> skips an HD replacement
@@ -1101,14 +1075,10 @@ public sealed class TextureArchive : IDisposable
         // a synchronous decode on the frame path, PlanePainter calls this
         // per decal slot at AI spawn (players draw at build) and at livery repaint.
         using var _ = PerfSample.Scope(PerfSite.ResourceLoad);
-        var name = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));
-        var bytes = name != null ? ReadBytes(name) : null;
-        if (bytes == null)
+        if (Lookup(materialTextureName) is not { } texture)
             return null;
-        var img = new Image();
-        if (img.LoadPngFromBuffer(bytes) != Error.Ok)
-            return null;
-        if (authored || HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_path, Path.GetFileNameWithoutExtension(name!))) is not { } big)
+        var img = ImageOf(texture);
+        if (authored || HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_archive, texture.Key)) is not { } big)
             return img;
         if (big.GetFormat() != img.GetFormat())
             big.Convert(img.GetFormat());
@@ -1132,20 +1102,18 @@ public sealed class TextureArchive : IDisposable
         return null;
     }
 
-    /// <summary>The raw PNG bytes of one texture, or null when the archive lacks it. The read
+    /// <summary>The record a material name resolves to, or null when the archive lacks it. The read
     /// primitive under <see cref="Find"/>, public because <see cref="Find"/> returns a Godot resource
     /// a unit test cannot construct; the after-<see cref="Dispose"/> contract is asserted here.</summary>
-    public byte[]? ReadPngBytes(string materialTextureName) =>
-        Resolve(Path.GetFileNameWithoutExtension(materialTextureName)) is { } name ? ReadBytes(name) : null;
+    public TextureImage? Lookup(string materialTextureName) =>
+        Read(Path.GetFileNameWithoutExtension(materialTextureName));
 
-    /// <summary>Ends the archive's usable life in both shapes: a later uncached read throws
-    /// <see cref="ObjectDisposedException"/> from a folder exactly as the zip's own handle does.
-    /// ⚠ Do not let a folder read succeed after this. The battery reads unpacked folders and every
-    /// player reads zips, so a lenient folder hides a closed-archive read from the battery.</summary>
+    /// <summary>Ends the archive's usable life: a later uncached read throws
+    /// <see cref="ObjectDisposedException"/>. ⚠ Keep it strict. A session that reads its archive
+    /// after the build closed it is a lifetime bug, and a lenient read hides it.</summary>
     public void Dispose()
     {
         _disposed = true;
-        _zip?.Dispose();
     }
 
     // The level an archive name claims by its `_N` suffix, or 0 for a base texture. Only 1 and 2
@@ -1190,25 +1158,6 @@ public sealed class TextureArchive : IDisposable
         }
         // No ink at all draws nothing either way; call it soft.
         return opaque < ink * 0.45f || ink == 0;
-    }
-
-    // The extractor spells the render-flags word as an enum, which is why the additive bit hides
-    // behind an `Unk` name: None/Horizontal/Vertical/Both are bits 0 and 1, and `UnkN` is the raw
-    // value N. A number is accepted too, so a later extractor that stops spelling it still reads.
-    private static int RenderFlagsOf(JsonElement stretch)
-    {
-        if (stretch.ValueKind == JsonValueKind.Number)
-            return stretch.TryGetInt32(out int raw) ? raw : 0;
-        return stretch.GetString() switch
-        {
-            "None" => 0,
-            "Horizontal" => 1,
-            "Vertical" => 2,
-            "Both" => 3,
-            { } s when s.StartsWith("Unk", StringComparison.Ordinal)
-                && int.TryParse(s.AsSpan(3), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) => n,
-            _ => 0,
-        };
     }
 
     private static bool ImageHasAlpha(Image img) =>
@@ -1285,77 +1234,41 @@ public sealed class TextureArchive : IDisposable
         }
     }
 
-    // The extractor's class where the manifest ships, and the decoded pixels where it does not.
+    // The header's class, and the decoded pixels where the stored name is not the lookup name.
     // ⚠ The fallback is a degradation, not an equivalent: it cannot see the `Simple` textures,
-    // which carry the alpha bit with no PNG alpha channel (docs/org/vertexLighting.md).
+    // which carry the alpha bit with no alpha channel (docs/org/vertexLighting.md).
     private AlphaClass AlphaClassOf(string archiveBaseName, bool hasPixelAlpha) =>
         _alphaClasses.TryGetValue(archiveBaseName, out var stored)
             ? stored
             : hasPixelAlpha ? AlphaClass.Full : AlphaClass.None;
 
-    // The extraction manifest's per-texture `alpha` and `stretch` fields, and nothing else from it.
-    // Absent from a deployed PNG-only tree, which is not an error: AlphaClassOf falls back to the
-    // pixels there and the render flags fall back to 0.
-    private void ReadTextureManifest()
-    {
-        var bytes = ReadBytes("manifest.json");
-        if (bytes == null)
-            return;
-        try
-        {
-            using var doc = JsonDocument.Parse(bytes);
-            if (!doc.RootElement.TryGetProperty("texture_infos", out var infos)
-                || infos.ValueKind != JsonValueKind.Array)
-                return;
-            foreach (var info in infos.EnumerateArray())
-            {
-                if (!info.TryGetProperty("name", out var name) || name.GetString() is not { } texName)
-                    continue;
-                if (info.TryGetProperty("alpha", out var alpha)
-                    && Enum.TryParse(alpha.GetString(), out AlphaClass cls))
-                    _alphaClasses[texName] = cls;
-                if (info.TryGetProperty("stretch", out var stretch))
-                    _renderFlags[texName] = RenderFlagsOf(stretch);
-            }
-        }
-        catch (JsonException e)
-        {
-            Log.Warn("world", $"texture manifest would not parse: {e.Message}");
-        }
-    }
-
-    // Decodes one texture and builds its whole mip chain. `resolved` says whether the name found a
-    // PNG at all, so a decode failure is not reported as a missing texture.
+    // Builds one texture's image and its whole mip chain. `resolved` says whether the name found a
+    // record at all.
     private Image? Build(string baseName, out bool resolved, out int authoredLevels)
     {
         authoredLevels = 0;
         LastHadAlpha = false;
         LastAlphaIsSoft = false;
         LastAlphaClass = AlphaClass.None;
-        var name = Resolve(baseName);
-        var bytes = name != null ? ReadBytes(name) : null;
-        resolved = bytes != null;
-        if (bytes == null)
+        var texture = Read(baseName);
+        resolved = texture != null;
+        if (texture == null)
         {
             return null;
         }
-        var img = new Image();
-        if (img.LoadPngFromBuffer(bytes) != Error.Ok)
-        {
-            Log.Warn("world", $"texture png would not decode texture={name}");
-            return null;
-        }
+        var img = ImageOf(texture);
+        string name = texture.Key;
         LastHadAlpha = ImageHasAlpha(img);
         // ⚠ Read the class off the RESOLVED archive name, never the material's: a truncated or
-        // renamed material name is not a manifest key (see Resolve).
-        LastAlphaClass = AlphaClassOf(Path.GetFileNameWithoutExtension(name!), LastHadAlpha);
+        // renamed material name is not a stored name (see Resolve).
+        LastAlphaClass = AlphaClassOf(name, LastHadAlpha);
         // Before mipmaps: raw pixels only. A texture in the family table is soft whatever the pixel
         // rule says about it (see SoftAlphaNamed).
         LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaNamed.Contains(baseName) || baseName.Contains("trans"));
         // After the alpha reads, which stay the original's, so the blend/scissor choice is unchanged.
         // Converted to the original's format, so an opaque original stays opaque.
         bool hd = false;
-        if (HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_path, Path.GetFileNameWithoutExtension(name!))) is { } big)
+        if (HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_archive, name)) is { } big)
         {
             if (big.GetFormat() != img.GetFormat())
             {
@@ -1369,7 +1282,7 @@ public sealed class TextureArchive : IDisposable
         // The drop-in instruments repaint the RGB flat and keep everything else, size, format,
         // alpha channel, so the alpha class read just above (and with it the blend/scissor choice
         // and the cutout silhouette) is unchanged.
-        var flat = TextureDropIn.ColorFor(Path.GetFileNameWithoutExtension(name!), baseName);
+        var flat = TextureDropIn.ColorFor(name, baseName);
         if (flat is { } color)
         {
             TextureDropIn.Flatten(img, color);
@@ -1386,7 +1299,7 @@ public sealed class TextureArchive : IDisposable
         // A replacement's authored siblings are the original's size, a level it does not have.
         if (Mips == MipSource.Authored && !hd)
         {
-            authoredLevels = InstallAuthoredMips(img, Path.GetFileNameWithoutExtension(name!), flat);
+            authoredLevels = InstallAuthoredMips(img, name, flat);
             if (authoredLevels > 0)
             {
                 AuthoredMipsInstalled += authoredLevels;
@@ -1424,17 +1337,11 @@ public sealed class TextureArchive : IDisposable
         int installed = 0;
         for (int level = 1; level <= 2 && level <= mipCount; level++)
         {
-            if (!_byBaseName.TryGetValue($"{archiveBaseName}_{level}", out var retrieval))
+            if (!_byBaseName.TryGetValue($"{archiveBaseName}_{level}", out var authoredLevel))
             {
                 continue;
             }
-            var bytes = ReadBytes(retrieval);
-            var sibling = new Image();
-            if (bytes == null || sibling.LoadPngFromBuffer(bytes) != Error.Ok)
-            {
-                Refuse(level, "png would not decode");
-                continue;
-            }
+            var sibling = ImageOf(authoredLevel);
             // The name convention is a lead; the dimensions decide. A sibling that is not exactly
             // this level's size is some other texture that happens to be spelled like one.
             int wantW = Mathf.Max(1, baseW >> level), wantH = Mathf.Max(1, baseH >> level);
@@ -1482,7 +1389,15 @@ public sealed class TextureArchive : IDisposable
         }
     }
 
-    private string? Resolve(string baseName)
+    // Resolve, then the after-Dispose contract on a name that resolved.
+    private TextureImage? Read(string baseName)
+    {
+        var texture = Resolve(baseName);
+        ObjectDisposedException.ThrowIf(_disposed && texture != null, this);
+        return texture;
+    }
+
+    private TextureImage? Resolve(string baseName)
     {
         if (_byBaseName.TryGetValue(baseName, out var exact))
             return exact;
@@ -1497,34 +1412,16 @@ public sealed class TextureArchive : IDisposable
         if (trimmed.Length != baseName.Length && _byBaseName.TryGetValue(trimmed, out var undoubled))
             return undoubled;
         // fixed-width truncation fallback: unique prefix match
-        string? match = null;
-        foreach (var (name, retrieval) in _byBaseName)
+        TextureImage? match = null;
+        foreach (var (name, texture) in _byBaseName)
         {
             if (name.StartsWith(baseName, StringComparison.OrdinalIgnoreCase))
             {
                 if (match != null)
                     return null; // ambiguous
-                match = retrieval;
+                match = texture;
             }
         }
         return match;
     }
-
-    private byte[]? ReadBytes(string retrievalName)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_dir != null)
-        {
-            var p = Path.Combine(_dir, retrievalName);
-            return File.Exists(p) ? File.ReadAllBytes(p) : null;
-        }
-        var entry = _zip!.GetEntry(retrievalName);
-        if (entry == null)
-            return null;
-        using var s = entry.Open();
-        using var ms = new MemoryStream();
-        s.CopyTo(ms);
-        return ms.ToArray();
-    }
-
 }

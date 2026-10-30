@@ -43,11 +43,10 @@ internal static class ScrapbookFitSuites
         + "renderer has stepped its point size down to fit")]
     internal static void ScrapbookFit(TestContext ctx)
     {
-        string assets = Path.Combine(ctx.DataRoot, "extracted", "rof", "ASSETS");
-        ctx.RequireData(Path.Combine(assets, "SCRAPBOOK.CSV"), $"the shipped scrapbook table");
-        ctx.RequireData(Path.Combine(assets, "LAYOUT.CSV"), $"the shipped widget layout");
+        MenuSuiteHost.RequireRof(ctx, "ASSETS/SCRAPBOOK.CSV", $"the shipped scrapbook table");
+        MenuSuiteHost.RequireRof(ctx, "ASSETS/LAYOUT.CSV", $"the shipped widget layout");
         var probe = new Control();
-        var view = ComposedBoardView.Build(ctx.DataRoot);
+        var view = ComposedBoardView.Build(ctx.DataRoot, ctx.Data.Rimage);
         ctx.Host.AddChild(probe);
         try
         {
@@ -75,7 +74,8 @@ internal static class ScrapbookFitSuites
         var flow = new CampaignFlow(
             new CampaignProfileStore(Path.Combine(ctx.ScratchDir, "scrapbook-fit", "Profiles")),
             UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty,
-            ctx.DataRoot);
+            ctx.DataRoot,
+            data: ctx.Data);
         var page = new CampaignScrapbookZoomPage(flow);
         var report = new StringBuilder();
         var swollen = new List<string>();

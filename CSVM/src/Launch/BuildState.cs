@@ -10,10 +10,10 @@ namespace CSVM.Launch;
 /// ⚠ Nothing here may be cached across a rebuild.</summary>
 internal sealed class BuildState
 {
-    public string DataRoot = "", ZrdrPath = "", SoundsPath = "", InterpPath = "",
-        MessagesPath = "", PlanesGamezPath = "";
+    // The launch's game data, and this session's chapter part of it.
+    public Spec.GameData Data = Spec.GameData.Empty;
+    public Spec.ChapterData Chapter = null!;
     public bool Mute, DebugCollision;
-    public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
 
     public GameZ Gamez = null!;
     public TextureArchive Textures = null!;
@@ -59,4 +59,13 @@ internal sealed class BuildState
     public IReadOnlyList<LandingApproach>? Landings;
 
     public IReadOnlyList<PickupSpec>? Pickups;
+
+    /// <summary>The root reader scope, out of the game data.</summary>
+    public ZrdrSet Zrdr => Data.Zrdr;
+
+    /// <summary>The session chapter's reader scope.</summary>
+    public ZrdrSet ChapterZrdr => Chapter.ChapterZrdr;
+
+    /// <summary>The session mission's reader scope.</summary>
+    public ZrdrSet MissionZrdr => Chapter.MissionZrdr;
 }

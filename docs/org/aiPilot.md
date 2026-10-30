@@ -1689,17 +1689,29 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its own place along it, or as far short as it is off the line when that is more, so it meets the
    line at 45 degrees at most and settles onto it. When that point would lie past the entry it flies
    out instead, aiming at its line 400 m beyond its own place along it, and turns in once it is past
-   its lead-in, by as much again as it is more than 400 m off the line. A heading more than 90
+   its lead-in and at least 825 m from the end, and by as much again as it is more than 400 m off the
+   line. The 825 m is the shortest lead-in, 450 m, plus a U-turn's width, 375 m (`UTurnWidthM`): twice
+   the widest turn radius a bot flies under the 90 degree order below, the Brigand's 186 m at an ace's
+   full lever on the weakest stick a rating gives (`sixth_sense_factor` 0.994), measured on the
+   flight model over every stock plane and tier. The band between the fly-out and the turn-in is
+   then at least 425 m. Since every drawn lead-in is shorter than 825 m, a bot going round turns in
+   at 825 m whatever its own lead-in; its line's bearing stays its own. Turning in at the lead-in
+   alone, the band can be 50 m: the U-turn ends up to its width off the line, which lifts the 400 m
+   look-ahead by as much, so the bot reaches the fly-out point before the cone and goes round again.
+   At the shortest lead-in, every stock plane but the autogyro goes round more than once from some
+   start beside or past an entry, and some never reach the cone; a 775 m turn-in still leaves a few
+   second go-rounds. A heading more than 90
    degrees off its track is ordered as a 90 degree turn to one held side: the flight law barely
    rolls for an aim straight astern, and a bot so ordered flies about 800 m on before it turns. With the aim within 30 degrees of dead astern
    the turn goes against the try's last such turn, toward the entry for the first, so going out and
    coming back in is an S rather than a full circle. It cruises 150 m above the end's height while
    far and comes down to it over its lead-in's length to its lead-in point (`CruiseAboveM`).
    ⚠ A bot steered straight for a point circles it when it meets it from the side, and bots crowded
-   onto one path climb out of each other's way and so meet it from the side. The
-   `stunt-race-bot-field` suite flies eight bots over C1 and fails a turn of 300 degrees either way
-   over one leg of steering for a zone; its control steers for the ribbon's lead-in point
-   (`StuntBotObjective.OnLine` off) and circles.
+   onto one path climb out of each other's way and so meet it from the side. Eight bots on C1
+   steering for the ribbon's lead-in point circle there, where on their own lines no steering leg
+   turns 300 degrees either way or 630 both ways added up. A turn measure needs both bounds:
+   alternating U-turns net no turn either way (`docs/verification.md` INSTR-106). No suite flies the
+   field; the turn-in rule is held by `StuntBotObjectiveTests` on the flight model.
 3. Once it is short of the end by more than the 105 m lock range and at most 900 m (`ConeReachM`),
    within 30 degrees of the ribbon's line, and tracking within 30 degrees of the end
    (`ConeHalfAngleDeg`), the zone goes to `AiPilot.FlyDangerZone`: the decoded approach and rail

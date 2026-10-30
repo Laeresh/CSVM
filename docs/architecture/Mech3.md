@@ -1,14 +1,14 @@
 # Mech3
 
-Everything that turns the player's install into a live scene: the mech3ax extraction readers, the GameZ to Godot builders, and the animation runtime that drives the world (including its `Mech3/Anim/` subfolder).
+Everything that turns the player's install into a live scene: the game-file readers, the GameZ to Godot builders, and the animation runtime that drives the world (including its `Mech3/Anim/` subfolder).
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
 Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Mech3/GameZ.cs
-Loads a mech3ax GameZ extraction (zip or unpacked dir) into plain C# objects (nodes, models,
-materials, textures), reading both the v0.6.1 "legacy" and the fork "unified" shapes. It carries
+The GameZ model (nodes, models, materials, textures). `GameZZbd` builds it from the game files;
+`Load` reads unzbd's output (zip or unpacked dir) in the fork's shape, the modding path. It carries
 the fields the builders read: `IntersectSurface`, `Active`, `ZoneId`, `MissionTargetWord`,
 `SoilId`, `OverlayPasses`, `ZoneSet`, each model's `Lighting`/`Fog`, and the World node's partition
 grid as both a flat `PartitionNodes` and the per-cell `PartitionCellNodes` a `WorldPartitionGrid`
@@ -17,14 +17,12 @@ query needs. It also answers what the JSON cannot: `WorldTransformOf`, `IsMarker
 Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.md](../formats/world-structure.md); teams: [../org/targeting.md](../org/targeting.md). Read `SceneBuilder.cs` next.
 
 ## src/Mech3/TextureArchive.cs
-Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. It absorbs the
-stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
-doubled period) and classifies each texture's alpha twice, for two unrelated readers:
-`LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the extractor's
-manifest, the one reader that sees the `Simple` textures. That manifest also supplies
-`RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
+Texture lookup over one decoded archive, a `TextureSet` of `TextureZbd` records, building each image with `ImageOf` (RGB8 or RGBA8, the format the PNG decode gave) the first time it is asked for. It absorbs the
+stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing doubled period) and classifies each texture's alpha twice, for two unrelated readers:
+`LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the texture
+header, the one reader that sees the `Simple` textures. The header also supplies the raw `RenderFlags` word, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
 `Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
-bias for `Launcher`. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+bias for `Launcher`. HD replacements are looked up by the set's `Archive` name (`c1/rtexture15`) and the texture's, never a path. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
@@ -42,13 +40,13 @@ LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparen
 
 ## src/Mech3/HdModelMeshes.cs
 Imports a model pack replacement for a gamez node (`Extraction/HdModels.cs` finds the file), cached per pack key and the node's
-descendant names (a failure as null) and shared, read off the parsed `GltfState` with no scene. The first glTF node named like
+descendant names (a failure as null) and shared, read off the file's `GltfState` with no scene. Each file is parsed once, so the nodes it replaces share its materials and textures. The first glTF node named like
 the gamez node (else minus Blender's `.001`) gives every mesh at or below it, placed by the transforms below it but never its own,
 which is the exported gamez transform the game applies already; a subtree named after a gamez descendant is that node's to draw.
 A matched node with no mesh below it is an empty mesh (draw nothing); with no match the whole file merges from its roots. Surfaces
 stay separate with the file's materials, from the importer's uncompressed arrays, each triangle surface reversed back
 ([../formats/gotchas.md](../formats/gotchas.md)) except under a mirroring transform. `SurfacesOf` and `AlbedoOf` (a mip-mapped
-base-colour copy) feed `SceneBuilder.cs`, which draws its own copy; `Current` follows `HdModels.Current`. `Scoped` reads a node out of an ancestor's file: the glTF node of its name whose ancestors follow most of the gamez names between, with no whole-file fallback.
+base-colour copy) feed `SceneBuilder.cs`, which draws its own copy; `Current` follows `HdModels.Current`. `Scoped` reads a node out of an ancestor's file: the glTF node of its name whose ancestors follow most of the gamez names between, with no whole-file fallback. `KeepChapter`, called as a world session builds, drops other chapters' files and imports, keeping the airframe and bare keys.
 
 ## src/Mech3/ShaderTwins.cs
 The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites, `EmitterRenderer`'s
@@ -148,7 +146,20 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
 (`PropParts.cs`); `Build` and `BuildDestroyed` resolve model pack replacements under the airframe's model node (each logs how many drew), `Build` applies the model pack's `rig.json` to the built tree (`PlaneRigPatch.cs`; a bad rig throws, or with `PlaneRigPatch.PlayerNotice` set is logged, reported there and left out), exposes an applied rig's `cockpit` section as `Cockpit` (null for no rig or a rig left out), then reads `CockpitCameraOffset` off the `cockpit_camera` marker or the rig's position for it, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt (`FlatMount`; `InteriorToPlane` and `InteriorFromPlane` carry a pose through it, engine-free), or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), on a builder of its own that takes the airframe's model pack scope, so `planes/<model>/cockpit1.glb` and the airframe's files replace interior nodes with surfaces carrying the interior's depth bias (logged as a count of their own), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. A body cockpit (`Cockpit.FromBody`) then moves the rig's named assemblies and glass out of it onto the airframe through the flat mount on either path (`CockpitTransplant.cs`, exposed as `CockpitPanel`), on an interior builder keyed to receive no shadow at the unfactored `InteriorScale` bias; under the stereo path the panel also takes a twin of each drawn body mesh from a second, stereo-keyed airframe builder (`StereoBody`) and the moved glass's reticle, while for the flat cockpit pass `FlatBody` hangs a hidden twin of each on it, sharing the original's mesh on copies of its materials; any other build with a section naming gauges places them inside `cockpit1` in its own units (`CockpitTransplant.PoseInside`), on either path. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate outside a body cockpit (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`, and cut by shape from pack replacements, counted in `ReplacedPlateTriangles`) and draws the sight's reticle collimated on the glass where the build drew it, after any posing (`GunsightReticle.cs` `Drawn`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt (`FlatMount`; `InteriorToPlane` and `InteriorFromPlane` carry a pose through it, engine-free), or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), on a builder of its own that takes the airframe's own model pack keys, never a bare or chapter key (`SceneBuilder.HdAirframeKeysOnly`), so `planes/<model>/cockpit1.glb` and the airframe's files replace interior nodes with surfaces carrying the interior's depth bias (logged as a count of their own), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. A body cockpit (`Cockpit.FromBody`) then moves the rig's named assemblies and glass out of it onto the airframe through the flat mount on either path (`CockpitTransplant.cs`, exposed as `CockpitPanel`), on an interior builder keyed to receive no shadow at the unfactored `InteriorScale` bias; under the stereo path the panel also takes a twin of each drawn body mesh from a second, stereo-keyed airframe builder (`StereoBody`, paired by `BodyTwins.cs`) and the moved glass's reticle, while for the flat cockpit pass `FlatBody` hangs a hidden twin of each on it, sharing the original's mesh on copies of its materials, which `Repaint` keeps in step; any other build with a section naming gauges places them inside `cockpit1` in its own units (`CockpitTransplant.PoseInside`), on either path. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate outside a body cockpit (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`, and cut by shape from pack replacements, counted in `ReplacedPlateTriangles`) and draws the sight's reticle collimated on the glass where the build drew it, after any posing (`GunsightReticle.cs` `Drawn`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Mech3/BodyTwins.cs
+A body cockpit's airframe twins: each drawn body mesh paired (`BodyTwin`) with a hidden copy under
+the cockpit panel, left out under `cockpit*`, the rig's hide list and an override material (a flare).
+`Flat` shares the original's mesh on material copies for the flat cockpit pass; `Stereo` takes the
+same node's mesh from a second build through the stereo shader, where that builder placed it in the
+interior (`SceneBuilder.PlacesInInterior`). `Mirror` copies pose and visibility each frame for
+`Flight/Hud/CockpitOverlay.cs` and `Flight/Hud/XrCockpit.cs`. Read `PlaneBuilder.cs` next.
+
+## src/Mech3/NodeFrame.cs
+A built node's transform in an ancestor's frame from local transforms alone (`Under`): the plane frame
+below an airframe's model root that `PlaneRigPatch.cs`, `CockpitTransplant.cs`, `BodyTwins.cs`,
+`GunsightReticle.cs` and `Flight/Hud/XrCockpit.cs` work in.
 
 ## src/Mech3/CockpitTransplant.cs
 The rig's `cockpit.gauges` table on the built `cockpit1`. A body cockpit's `Build` re-parents the named
@@ -167,14 +178,14 @@ a colour material, priority 5. It faces aft, so the flat eye never sees its fron
 leaning past it does, which is why the stereo interior builder omits it. It shares its node with
 canopy structure, so the selection is by polygon; `Find` walks the interior in its own frame, and
 `CSVM.Tests/CockpitPlateTests.cs` pins the count per airframe (7 each, the Balmoral's 5). A model pack's replacement of that node has no gamez polygons, so `Kept` cuts its triangles by the rule's
-geometry alone (`IsPlateShape`) on its untextured surfaces: over the eleven interiors that takes exactly the plate's triangles, while textured ones of that shape stand on three. Engine-free. Read `PlaneBuilder.cs` next.
+geometry alone (`IsPlateShape`) on its untextured surfaces: over the eleven interiors that takes exactly the plate's triangles, while textured ones of that shape stand on three. `CutReplaced` applies that cut to a built interior; the rest is engine-free. Read `PlaneBuilder.cs` next.
 
 ## src/Mech3/GunsightReticle.cs
 The stereo interior's gunsight reticle, drawn collimated: each eye sees each line in the direction the
 authored eye sees it, so it reads at infinity. Every interior's sight glass is one polygon wearing one
 texture (`cockpit6`, the Warhawk's `crosshair`); `Split` lifts the reticle out of it, leaving the tint,
 the frame line and the sight body on the glass at its depth. `Overlay` builds the quad in the glass's
-plane that draws the reticle through `Look`, the authored eye's view of the glass. `Find` walks the gamez interior for the glass; `Drawn` reads it off the built meshes, one per surface wearing a glass
+plane that draws the reticle through `Look`, the authored eye's view of the glass. `Find` walks the gamez interior for the glass and `HoldsGlass` tests a gamez subtree for one; `Drawn` reads it off the built meshes, one per surface wearing a glass
 material, so the overlay follows a glass a rig's table moved or a pack replaced. The overlay carries `SortAfterGlassM` as its sorting offset, so it draws after
 the glass it shares a priority with. `CSVM.Tests/GunsightReticleTests.cs` pins the eleven glasses and the split.
 Measurements: [../org/cameraViews.md](../org/cameraViews.md). Read `PlaneBuilder.cs` next.
@@ -196,8 +207,8 @@ shipped patterns); `Random` draws a plausible livery when none is given. Read `P
 next. Authored side: [../formats/paint.md](../formats/paint.md); decode: [../org/paint.md](../org/paint.md).
 
 ## src/Mech3/PatternLibrary.cs
-Decodes the original's `.BM` paint patterns from `extracted/rof/ASSETS/GRAPHICS/<PATTERN>/`, which
-the extraction produces. `PatternsFor(prefix)` lists the patterns shipping skins for one
+Decodes the original's `.BM` paint patterns from the UI archive's `ASSETS/GRAPHICS/<PATTERN>/`
+(`Extraction/RofFiles.cs`), its folders in name order. `PatternsFor(prefix)` lists the patterns shipping skins for one
 aircraft, a pattern being per plane; `Skin()` caches per (pattern, skin) so several aircraft in one
 session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 
@@ -214,7 +225,7 @@ shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 The militia table read once against `vehicle.json`, both halves off one parse: `PatternFor` is a
 militia's paint pattern (`MilitiaPaint`) and `DefFor` the def it flies an airframe as
 (`VehicleDefs.MilitiaDefFor`), null for Fortune Hunter, Broadway Bomber and a pair the install
-ships no def for. A bot seat is painted and armed through it, on every machine, by
+ships no def for, and `WeaponsFor` that def's weapons block. A bot seat is painted and armed through it, on every machine, by
 `Session/Roster/HumanFlightAdapter.cs`. `Empty` stands in for an install whose file cannot be read.
 Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
@@ -378,10 +389,22 @@ The shader is the card's look on a mesh: unlit, the card's fog, no instance unif
 `ClutterInstances` draws it in `CellM` cells (256 m), one node per occupied cell and kind; `MapEdgeExtender` copies it. Every model node draws on `Layer`, the sun's, which no Enhanced spyglass disc draws; `ModelShare` reads past the band for a disc's camera, so the card draws whole there. C3's crown model over its painted canopy stands on no card: `ForMean` grades it to the crowns' mean colour, and its `canopy` material has no card fade, scales by its instance basis and hands over to the clumps (`CanopyClumps`). `VegetationModelsTests` pins the grade and the surface mean, and the `vegetation-models` suite the draw. Read `ClutterInstances.cs` next.
 
 ## src/Mech3/Zrdr.cs
-Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
-`LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
-`ne0*` nets), `HasFile` (whether an entry is there, under either stored name), and `ZrdrDict`, the
-key/[values…] view over a reader's alternating list.
+The reader of unzbd's zrdr output (zip or unpacked dir), kept as the modding path: `ReadScope`
+turns one into the `ZrdrFile` list `ZrdrSet.FromExtracted` wraps, and the path forms of `LoadFile`,
+`LoadFileOrEmpty`, content-sniffing `LoadMatchingFiles`, name-predicate `LoadFilesNamed` and
+`HasFile` serve the model diff and the units. Only the fork's entry names are read
+(`vehicle.zrd.json` for a request of `vehicle.json`); v0.6.1's `vehicle.json` entries are not.
+`ZrdrDict` is the key/[values…] view over a reader's alternating list.
+
+## src/Mech3/ZrdrSet.cs
+One reader scope (root, chapter or mission) as the `ZrdrFile`s every consumer reads in place of a
+path: `GameData.Zrdr`, `ChapterData.ChapterZrdr`/`MissionZrdr`, built by `Load` from a `zrdr.zbd`,
+by `Tooling/SyntheticZrdr.cs` in code, or by `FromExtracted` from a zip or folder. Its reads keep
+the path forms' contracts: `LoadFile` throws on an absent reader and on an empty one,
+`LoadFileOrEmpty` returns the empty root, `HasFile` asks `ZrdrZbd.Find`, `LoadMatchingFiles` walks
+for a string holding the filter, `LoadFilesNamed` sees `Key + ".json"`; both skip empty readers.
+Every read is a deep copy, so a consumer's edit (an anim def keeps reader sub-lists) reaches no
+other session. `None` is an absent scope; a suite skips on it through `TestContext.RequireData`.
 
 ## src/Mech3/GamePath.cs
 Splits a path the game's data names (`..\data\c1\m02\zrdr\cutscenes\cabpickup.zrd`) on `\` and `/`
@@ -510,14 +533,16 @@ one consumer; `FindMapSpanningSlab` the test for a chapter's map-edge-continuati
 halves pin off engine for all eight chapters (`CSVM.Tests/FogVolumeTests.cs`); schema in [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Mech3/Messages.cs
-The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
-(NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
-`Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format). `Parse`
-takes the JSON itself, so a unit with no file on disk reads the same rows; it is internal, since
-every shipped caller holds a path.
+The game's localized string table, a case-insensitive key→value map resolving the `MSG_*` keys
+missions reference. `Load(IGameFileSource?)` reads the install's `strings.dll` (`FromStringsDll`: the
+`.data` key table joined to the `STRINGTABLE` by id through `Extraction/PeStringTable.cs`), empty
+without a source. A launch loads it once into `Spec/GameData.cs`, and every consumer takes that one
+object. `Of` builds a table from pairs, for `Tooling/SyntheticMessages.cs`; `FromExtracted` and
+`ParseExtracted` read unzbd's `messages.json`, the modding path. `Fill`/`Format` substitute a
+template's `%1`…`%9` placeholders (the HUD strings' format).
 
 ## src/Mech3/UiStrings.cs
-The original's UI string table by id, read from `extracted/rof/ui_strings.json`. Only the `langui`
+The original's UI string table by id, read from `ui_strings.json` (`Extraction/RofFiles.cs`). Only the `langui`
 rows are kept, since ids repeat across the file's two merged tables and every menu range this
 remake reads sits in that one. `FormatMessage` positional placeholders (`%1!d!`) convert to
 composite format rather than going to printf, and a leading `[FONTID]` tag is stripped as a
@@ -527,7 +552,7 @@ test off engine; `Empty` is the fallback that lets a menu draw on a missing extr
 rows: [../formats/strings.md](../formats/strings.md).
 
 ## src/Mech3/TgaImage.cs
-The engine-free TGA decoder behind the hangar's art under `extracted/rof/ASSETS/GRAPHICS`, and the
+The engine-free TGA decoder behind the hangar's art under the UI archive's `ASSETS/GRAPHICS`, and the
 decoded-image type the whole menu art seam is written against: types 2 and 10 (RLE) truecolour at
 24 or 32 bits, both row orders, to top-down RGBA8. Anything else, or a malformed or absent file,
 decodes as null rather than throwing, because menu art is optional by design and a bad file must
@@ -544,7 +569,8 @@ the metadata half the runtime board renderer needs while retaining Godot's nativ
 ## src/Mech3/HdArt.cs
 The engine half of `Extraction/HdTextures.cs`. `Decode` reads a replacement and blackens every
 texel under alpha 0, where the pack leaves its green-screen key for filtering to bleed onto the
-edges. `Texture` uploads 2D art with `SetSizeOverride` at the original's size. Godot measures a
+edges. `Texture` uploads 2D art with `SetSizeOverride` at the original's size, and `Rimage` does it for one
+`rimage` record with its replacement (`HdTextures.ForRimage`). Godot measures a
 2D draw's source rect against that size, so every rect table, frame strip, crop and hitbox laid out
 in the original's pixels holds. `TextureArchive` does the same for world textures, which keep the
 original's alpha class and skip its authored mips. Loaders that read pixels themselves
@@ -590,7 +616,7 @@ picks the flare set by each original's plane-frame x, a rig flare stamped with t
 `PlayerNotice`, set by the launcher's menu entry, makes `Build` report it and build without the rig. Rigs come from `HdModels.RigFor`.
 
 ## src/Mech3/CompiledAnim.cs
-Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,
+Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir), the modding path beside `AnimZbd.cs`: typed definitions,
 events, and the SI-script pool, where `Script(index)` parses lazily in `metadata.json` order. The
 `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately off `Sequences`
 so bootstrap and the sequence-walking derivations never see it and only
@@ -608,8 +634,8 @@ Unit normalization happens HERE so handlers see one convention: reader rotations
 tokens (to numbers). See [../formats/anim-definitions.md](../formats/anim-definitions.md).
 
 ## src/Mech3/AnimProgram.cs
-Merges the compiled and reader front-ends for one mission plus `StartAnims`; `ScriptFor` resolves
-an event slot to its archive SI script. Two gates run first, both only with a compiled mission
+Merges the compiled and reader front-ends for one mission plus `StartAnims` (`Load`: zrdr scopes as
+paths, the two compiled archives as models); `ScriptFor` resolves an event slot to its archive SI script. Two gates run first, both only with a compiled mission
 manifest present so a reader-only extraction is untouched: the mission-scope gate against that
 manifest, and the shared-scope FILE gate (`ListedSharedFiles`, reported as `SharedFilesSkipped`).
 Whatever survives is deduplicated on the (`NAME`, `ANIMATION_NAME`) pair in `Add`, compiled winning
@@ -664,6 +690,59 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTransla
 `BindPartitions(gamez)` resolves its rectangles to gamez node indices through `WorldPartitionGrid`
 while the gamez is in hand, and `Apply`'s `setActiveByIndex` delegate switches them in the built
 world. Without the bind the verb is counted unapplied. Decode: [../formats/interp.md](../formats/interp.md).
+
+## src/Mech3/InterpScripts.cs
+The engine boot scripts, read from `ZBD/interp.zbd` through the session's game-file source
+(`BasePaths.Game`): every script's name and lines in file order, looked up by name without regard
+to case. `Load` returns null without a source or without the file, and each consumer reads that as
+"nothing authored": `MissionSetup.Load`, `ClutterBuilder.TemplateNames`,
+`LensFlareRig.FlareTextureNames` and `TextureArchive.MipBias`. It is read once per launch into
+`Spec/GameData.cs`, which every session (`BuildState.Data`), the launcher's mip bias, the probes
+and the suites (`TestContext.RequireInterp`) read it from. `Read` refuses a file whose table
+and bodies do not tile it; `FromExtracted` reads unzbd's `interp.json`, the modding path. Layout: [../formats/interp.md](../formats/interp.md).
+
+## src/Mech3/TextureZbd.cs
+The reader for the texture archives `texture.zbd`, `rtextureN.zbd` and `rimage.zbd`, engine-free:
+`Read` decodes a whole file into `TextureImage`s in file order (name, collision rename, size, the header's alpha class and render-flags word, and the pixels as RGB8 or RGBA8, the layout the extracted PNG had).
+`Load(game, path)` returns null without a source or without the file, and `Read` refuses a file whose textures do not tile it. `TextureSet` holds one archive's records by `Key` without case, with the `Archive` name an HD pack files them under;
+`TextureSet.ForChapter` picks a chapter's highest `rtextureN` tier, else `texture.zbd`, the set `Spec/GameData.cs` loads per chapter beside `rimage`, and `Rgba` expands a record for the menus' engine-free art. `ChapterArchive` names that tier's install path, and `FromExtracted`/`ReadExtracted` read unzbd's texture zip or folder (manifest plus PNGs), the modding path.
+Layout, pixel decode and the alpha class: [../formats/texture-archive.md](../formats/texture-archive.md).
+
+## src/Mech3/GameZZbd.cs
+The reader for a chapter's `gamez.zbd` and the root `planes.zbd`, engine-free: `Read` decodes a
+whole file into the same `GameZ` model `GameZ.Load` builds from the extraction (nodes, meshes,
+materials and the texture table behind `GameZ.TextureNames`), and `Load(game, path)` returns null
+without a source or without the file. A node's mesh index is its model's position among the live
+models, not the file's sparse slot. Nothing in the engine calls it yet; the switch hands its model
+to the session in place of the zip path. `Read` refuses a file whose regions do not meet where its
+header says. Layout and the matrix-or-rotation rule: [../formats/gamez-zbd.md](../formats/gamez-zbd.md).
+
+## src/Mech3/ZrdrZbd.cs
+The reader for the root, chapter and mission `zrdr.zbd`, engine-free: `Read` opens the container
+through `Extraction/ZbdArchive.cs` and decodes every entry into a `ZrdrFile` in table order (stored
+name, collision rename, and the root list in the shape `Zrdr.LoadFile` returns, every number a
+`float` with its stored bits). `Load(game, path)` returns null without a source or without the
+file. `Find` is the lookup a consumer's name goes through: the stored name or a repeat's rename,
+or today's zip spelling, case ignored, the first `player.zrd` for `player.json`. The engine reads
+its files through `ZrdrSet.Load`.
+Value encoding and lookup rule: [../formats/zrdr.md](../formats/zrdr.md#binary-encoding).
+
+## src/Mech3/AnimZbd.cs
+The reader for a chapter's `cam_anim.zbd` and a mission's `mis_anim.zbd`, engine-free: `Read`
+decodes a whole file into the same `AnimArchive` model `AnimArchive.Load` builds from the
+extraction, every SI script decoded up front, and `Load(game, path, label)` returns null without a
+source or without the file. It rebuilds each definition and script as the property tree the
+model's `Parse` members take, so the model is the same by construction; `AnimArchive.FromDecoded`
+is the one entry it adds to the model. `Spec/GameData.cs`'s chapter loader calls it for a session's
+two archives. `Read` refuses a file whose records do not tile it. Layout and rules:
+[../formats/anim-definitions/compiled-archives.md](../formats/anim-definitions/compiled-archives.md).
+
+## src/Mech3/AnimZbdEvents.cs
+The sequence events of a compiled anim archive for `AnimZbd`: each of the 35 shipped event types'
+payload, as the bag `AnimEvent.Data` holds, with node, light, puffer and sound indices resolved
+through the definition's support arrays (`AnimZbdNames`, repeated node names spelled `~2`, `~3`).
+An event type no archive ships is refused. Payload layouts:
+[../formats/anim-definitions/compiled-archives.md](../formats/anim-definitions/compiled-archives.md).
 
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
@@ -832,23 +911,32 @@ Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot
 Godot cannot load the game's WAV format (see docs/formats/sounds.md).
 
 ## src/Mech3/WavCues.cs
-The RIFF `cue ` chunk of a WAV as times in seconds, read from a sound extraction (zip or directory)
-or from bytes already in hand. The briefing narration is the one consumer: a reveal state's
+The RIFF `cue ` chunk of a WAV as times in seconds, read from bytes already in hand. The briefing narration is the one consumer, reading its bytes
+out of `GameData.Sounds`: a reveal state's
 `WaitForMarker n` blocks on cue point `n`, and the durations around it are authored constants, so
 these times are the only clock the script does not carry itself. Times come back ascending, which
 is what `n` indexes. A file with no cue chunk, a non-WAV or a truncated one yields an empty list
 rather than a failure. Kept apart from `SoundArchive.cs`, which decodes to a Godot stream, so a
 menu page needing only timings stays engine-free. Decode: docs/formats/briefing.md.
 
+## src/Mech3/SoundZbd.cs
+The reader for `soundsh.zbd` and `soundsl.zbd`, engine-free: `Load(game, path)` (null without a
+source or the file) or `Read(stream, name)` opens the table through `Extraction/ZbdArchive.cs`
+into `Sounds`, one `SoundFile` per entry in table order (the entry and its collision rename,
+`Key` being today's zip entry name). `ReadWavBytes(name)` reads one WAV on demand: the key, case
+ignored, the first in table order for the one case-only pair. The object owns the archive's
+stream, and `Dispose` ends it; reads lock the stream, so any thread may read. The launch opens
+`soundsh.zbd` once as `GameData.Sounds` (`Spec/GameData.cs`) and never closes it; every session,
+the score and the briefing read that one. `FromExtracted` stands unzbd's sound zip or folder in for the archive (the modding path, through `SoundArchive`, `Sounds` empty). Lookup rule: [../formats/sounds.md](../formats/sounds.md#the-sound-archives).
+
 ## src/Mech3/SoundArchive.cs
-WAV lookup over a soundsh/soundsl extraction (zip or directory), decoded through `WavFile` into
-cached `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked, and
-caches per `(wav, looped)` because the play site's flag wins over the definition's. A read that
-fails returns null rather than throwing, since callers run inside the session step. `Dispose`
-releases the OS handle without ending the archive's usable life: the entry map is built once and
-kept, so a later read reopens the zip for its one entry. Directory-backed and zip-backed archives
-therefore fail differently, which is what `--zip-assets` (docs/cli.md) exists to expose on a
-developer tree. Read `WorldSounds.cs` for the prewarm that fills the cache.
+WAV lookup over the launch's `SoundZbd`, or over a soundsh/soundsl extraction (zip or directory,
+the modding path, which nothing opens by default), decoded through `WavFile` into cached
+`AudioStreamWav`s; `Find(name, looped)` marks a forward loop when asked and caches per
+`(wav, looped)`, the play site's flag winning over the definition's. A failed read returns null,
+since callers run inside the session step. `Dispose` leaves a shared `SoundZbd` open, so each
+session wraps it in its own archive and cache. Over a zip it releases the handle, and a later read
+reopens the zip for its one entry, so zip and directory archives fail differently. Read `WorldSounds.cs` for the prewarm that fills the cache.
 
 ## src/Mech3/MusicPlayer.cs
 The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D
@@ -914,8 +1002,8 @@ Decode: docs/formats/campaign-sequence.md.
 Builds one chapter world and binds its `AnimProgram`, the world+anim half of a session build:
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights, and stops before
 the per-view steps the caller drives. `Options` is the whole seam, and everything above Mech3 comes
-in through it: the chapter zrdr path, the shared `DecodeCache`, the emitter factory a suite
-substitutes and the archive factory that builds the real one, the clutter debug switches, the
+in through it: the three reader scopes, the two compiled anim archives, the shared `DecodeCache`, the
+emitter factory a suite substitutes and the archive factory that builds the real one, the clutter debug switches, the
 sound-group prewarm names, the callback and trigger hosts, and `CutsceneNames` (the session's
 camera, bars and intro names), whose presence gates `camera1`, the letterbox bars, the composition
 frames and the `AircraftStage`. It stands up the staged props a definition reparents onto placed content, and `ResolveLibraryRoot` is the lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
@@ -943,23 +1031,23 @@ binds; `StageFlown` puts the one flown airframe in the node table and parks its 
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
-`OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
-archives one chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns
-the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair the intent implies:
-`Session` and `Lab` set the texture flag, only `Lab` the sound flag, `Suite` neither, though the
-harness's `TestWorld` owns its texture archive until the world is destroyed. One seam for
-`GameSession`, the anim lab and the harness, so none hand-sets those flags. `StartupProfile` calls
-are unconditional, a no-op with no session under measurement, so the harness drives the same code
-blind. The optional `decode` argument makes only the returned `Gamez` a shared read-only instance.
+`OpenFor(ArchiveIntent, gamez, textures, soundsZbd, zrdr, mute)` opens the five archives one
+chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns the
+`WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair the intent implies, so none of
+`GameSession`, the anim lab and the harness hand-sets them: `Session` and `Lab` set the texture flag,
+only `Lab` the sound flag, `Suite` neither (the harness's `TestWorld` owns its texture archive). The
+sound archive wraps the game data's `SoundZbd`, so closing it frees nothing; the sound flag still
+decides whether `WorldSounds` decodes names the prewarm missed. `StartupProfile` calls are
+unconditional, and `gamez` is read inside the `gamez` phase, so a chapter's first decode is timed.
 
 ## src/Mech3/DecodeCache.cs
-The decoded inputs a world build can reuse, keyed by the absolute paths they were decoded from:
-`Gamez(path)` and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`. The paths are
-the whole key because they already carry data root, chapter and mission; collision, mute, the
-emitter factory and the prewarm list all act after the decode, on objects this never holds. It owns
-nothing disposable and nothing Godot. **Everything handed back is shared and read-only by
-contract**, which is why `AnimProgram`'s three collections are `IReadOnlyList`; `GameZ` has no such
-enforcement, so its one in-place writer (`EffectCycles.Apply`) has to stay idempotent, which it is.
+The decoded inputs a world build can reuse: `Gamez(chapter, load)`, keyed by chapter since one store serves one launch's game
+data, and `Anim(chapter, mission, load)`, keyed by the pair for the same reason; collision, mute, the emitter factory and the
+prewarm list all act after the decode, on objects this never holds. It owns nothing disposable and nothing Godot. **Everything
+handed back is shared and read-only by contract**, which is why `AnimProgram`'s three collections are `IReadOnlyList`; `GameZ` has
+no such enforcement, so its one in-place writer (`EffectCycles.Apply`) has to stay idempotent, which it is. The anim archives' one
+writer, `AnimProgram.Load` ORing a reader def's `PersistLog` onto its compiled twin, is idempotent for one mission's inputs only,
+so `Spec/GameData.cs` holds an archive per mission; a suite that edits an anim model builds its own (`SyntheticEffects.Anims`).
 Callers are serial by construction. An instance lives as long as its holder.
 
 ## src/Mech3/EmptyStage.cs

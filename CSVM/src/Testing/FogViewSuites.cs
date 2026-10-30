@@ -82,7 +82,7 @@ internal static class FogViewSuites
         + "pane's, and one pane alone draws the very bytes it draws beside the other")]
     internal static void FogPerView(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet zrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(zrdr, $"{Chapter}/{Mission} mission zrdr");
         var weatherState = WeatherState.Load(zrdr);
         ctx.Check(weatherState != null, $"{Chapter}/{Mission} carries a weather.json");
@@ -188,10 +188,10 @@ internal static class FogViewSuites
         + "own pane's, and each pane draws the bytes it draws as the only view")]
     internal static void SunPerView(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, SunChapter, SunMission);
+        ZrdrSet zrdr = ctx.MissionZrdr(SunChapter, SunMission);
         ctx.RequireData(zrdr, $"{SunChapter}/{SunMission} mission zrdr");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, SunChapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures(SunChapter);
         ctx.RequireData(texturesPath, $"{SunChapter} textures");
         var weatherState = WeatherState.Load(zrdr);
         ctx.Check(weatherState is { HasCloudBand: true }, $"{SunChapter}/{SunMission} carries a weather.json with a cloud band");
@@ -207,7 +207,7 @@ internal static class FogViewSuites
         ctx.Check(below.SunOrientation != above.SunOrientation && below.SunAmbient != above.SunAmbient,
             $"the two zones author a different SUNLIGHT bearing and ambient");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var world = new World3D();
         var paneA = Pane(world, SunPaneEdge);

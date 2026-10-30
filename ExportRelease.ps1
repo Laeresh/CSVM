@@ -23,34 +23,26 @@
 
     Two of the zip's files are about the build rather than part of it.
     LICENSE-thirdparty.txt is copied like any other payload row, but it names the Godot
-    build, the .NET runtime version and pack, the unzbd crate target and the mech3ax commit
-    it was assembled for, and this script re-checks all of them against what it is
-    packaging. The tarball ships packaging\LICENSE-thirdparty-linux.txt under that name. BUILD-INFO.txt is the one
-    generated file: it records the CSVM and mech3ax commits the two shipped binaries were
-    built from, which is what lets a release page state the source each came from.
+    build and the .NET runtime version and pack it was assembled for, and this script
+    re-checks all of them against what it is packaging. The tarball ships
+    packaging\LICENSE-thirdparty-linux.txt under that name. BUILD-INFO.txt is the one
+    generated file: it records the CSVM commit the shipped executable was built from, which
+    is what lets a release page state the source it came from.
 
     Godot's export templates are user-global, not part of this repo, and there is no
     reliable way to install them unattended -- so this script checks for them first and
     throws a clear error naming the one-time setup step instead of letting Godot's own
-    export fail cryptically partway through. unzbd.exe is checked the same way: it is a
-    local fork build, not a repo artefact.
+    export fail cryptically partway through.
 
     -Linux is opt-in and leaves the Windows half untouched: the same run then exports the
     "Linux/X11" preset into .scratch\export-linux\, stages the Linux payload beside it and
     packs CSVM-v<version>-linux-x64.tar.gz inside WSL (Debian), because only a tar written
-    on Linux carries the executable bit that CSVM.x86_64 and tools/unzbd need. A zip made
-    here cannot, which is why the Linux download is a tarball.
+    on Linux carries the executable bit that CSVM.x86_64 needs. A zip made here cannot,
+    which is why the Linux download is a tarball.
 
 .PARAMETER Linux
     Also export the Linux build and package the .tar.gz. Needs the Linux export templates
-    and a WSL Debian distro with tar, plus, unless -LinuxUnzbd is given, the Rust musl
-    toolchain in that distro (docs/tooling.md, "-Linux").
-
-.PARAMETER LinuxUnzbd
-    An existing Linux unzbd binary to ship as tools/unzbd, skipping the build. Without it,
-    -Linux builds the mech3ax checkout for x86_64-unknown-linux-musl inside WSL (Debian;
-    the cargo target dir is ~/cargo-target/mech3ax in the distro) and copies the binary
-    to tools\mech3ax\target\x86_64-unknown-linux-musl\release\unzbd before shipping it.
+    and a WSL Debian distro with tar (docs/tooling.md, "-Linux").
 
 .EXAMPLE
     .\ExportRelease.ps1
@@ -62,19 +54,18 @@
 
 .EXAMPLE
     .\ExportRelease.ps1 -ToolsRoot Z:\CSVM
-    The same from a worktree, taking Godot, unzbd.exe, SDL2 and the mech3ax fork from the main
-    checkout's tools\, since tools\ is git-ignored and a worktree has none.
+    The same from a worktree, taking Godot and SDL2 from the main checkout's tools\, since
+    tools\ is git-ignored and a worktree has none.
 
 .PARAMETER ToolsRoot
-    The checkout whose tools\ folder holds Godot, SDL2 and the mech3ax fork. Defaults to this
+    The checkout whose tools\ folder holds Godot and SDL2. Defaults to this
     script's own folder, or to CSVM_DATA_ROOT when this folder has no tools\godot (a worktree),
     the same fallback RunTests.ps1 uses. Only the tools move: the build, the payload and the
     recorded CSVM commit stay this tree's own.
 #>
 param(
     [string] $ToolsRoot = "",
-    [switch] $Linux,
-    [string] $LinuxUnzbd = ""
+    [switch] $Linux
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,12 +85,10 @@ $GodotExe   = Join-Path $ToolsRoot "tools\godot\Godot_v4.7-stable_mono_win64\God
 $TemplateDir = Join-Path $env:APPDATA "Godot\export_templates\4.7.stable.mono"
 $ExportDir   = Join-Path $RepoRoot ".scratch\export"
 $ExportExe   = Join-Path $ExportDir "CSVM.exe"
-$UnzbdExe    = Join-Path $ToolsRoot "tools\mech3ax\target\release\unzbd.exe"
 $ProjectGodot = Join-Path $ProjectDir "project.godot"
-$Mech3axRepo  = Join-Path $ToolsRoot "tools\mech3ax"
 $ThirdPartyNotices = Join-Path $RepoRoot "packaging\LICENSE-thirdparty.txt"
-# The tarball's notice, shipped under the same name: its runtime pack, crate tree and musl
-# section are the Linux payload's own (packaging\BuildThirdPartyNotices.ps1 -Linux).
+# The tarball's notice, shipped under the same name: its runtime pack is the Linux payload's own
+# (packaging\BuildThirdPartyNotices.ps1 -Linux).
 $LinuxThirdPartyNotices = Join-Path $RepoRoot "packaging\LICENSE-thirdparty-linux.txt"
 $BuildInfo    = Join-Path $ExportDir "BUILD-INFO.txt"
 $Sdl2Dir      = Join-Path $ToolsRoot "tools\sdl2"
@@ -112,11 +101,6 @@ $WebRtcLicences = @("libdatachannel", "libjuice", "libsrtp", "mbedtls", "plog", 
 $LinuxExportDir = Join-Path $RepoRoot ".scratch\export-linux"
 $LinuxExportExe = Join-Path $LinuxExportDir "CSVM.x86_64"
 $LinuxDistro    = "Debian"
-# A named -LinuxUnzbd is shipped as given; without one the run builds the default path itself.
-$BuildLinuxUnzbd = -not $LinuxUnzbd
-if (-not $LinuxUnzbd) {
-    $LinuxUnzbd = Join-Path $ToolsRoot "tools\mech3ax\target\x86_64-unknown-linux-musl\release\unzbd"
-}
 # The Linux README, shipped as README.md at the tarball root like the zip's own. A separate
 # file because the Windows one describes SmartScreen and Direct3D 12.
 $LinuxReadme = Join-Path $RepoRoot "packaging\README-linux.md"
@@ -127,26 +111,21 @@ $ReleaseFiles = @(
     @{ Source = Join-Path $RepoRoot "packaging\README.md";      Dest = "README.md" },
     @{ Source = Join-Path $RepoRoot "packaging\CSVM-VR.cmd";    Dest = "CSVM-VR.cmd" },
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE";        Dest = "LICENSE" },
-    @{ Source = Join-Path $RepoRoot "packaging\LICENSE-unzbd";  Dest = "LICENSE-unzbd" },
     @{ Source = $ThirdPartyNotices;                             Dest = "LICENSE-thirdparty.txt" },
-    @{ Source = $UnzbdExe;                                      Dest = "tools\unzbd.exe" },
     @{ Source = Join-Path $Sdl2Dir "SDL2.dll";                  Dest = "SDL2.dll" },
     @{ Source = Join-Path $Sdl2Dir "README-SDL.txt";            Dest = "README-SDL.txt" },
     @{ Source = Join-Path $Sdl2Dir "LICENSE.txt";               Dest = "LICENSE-SDL2.txt" }
 ) + $WebRtcLicences
 
-# The tarball payload, packaging/MANIFEST.md's Linux table: the zip's list with the Linux README,
-# the Linux notices and the Linux unzbd. Both platforms extract from inside the game, so neither ships an
-# extraction script; the zip's VR launcher stays out, since VR is the Windows build's alone.
+# The tarball payload, packaging/MANIFEST.md's Linux table: the zip's list with the Linux README
+# and the Linux notices; the zip's VR launcher stays out, since VR is the Windows build's alone.
 # Lf rows are text: git stores them LF and this checkout's autocrlf hands them over CRLF, so they
 # are staged with the carriage returns taken out, which is the committed bytes. The zip keeps the
 # checkout's CRLF, the Windows convention, and no attribute changes what any tree checks out.
 $LinuxReleaseFiles = @(
     @{ Source = $LinuxReadme;                                   Dest = "README.md"; Lf = $true },
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE";        Dest = "LICENSE"; Lf = $true },
-    @{ Source = Join-Path $RepoRoot "packaging\LICENSE-unzbd";  Dest = "LICENSE-unzbd"; Lf = $true },
-    @{ Source = $LinuxThirdPartyNotices;                        Dest = "LICENSE-thirdparty.txt"; Lf = $true },
-    @{ Source = $LinuxUnzbd;                                  Dest = "tools\unzbd" }
+    @{ Source = $LinuxThirdPartyNotices;                        Dest = "LICENSE-thirdparty.txt"; Lf = $true }
 ) + $WebRtcLicences
 
 if (-not (Test-Path $Sln)) {
@@ -164,15 +143,6 @@ if (-not (Test-Path $TemplateDir)) {
     throw "Godot export templates not found at $TemplateDir -- one-time setup: extract the " +
         "inner templates\ files of tools\godot-4.7-mono-export-templates.tpz directly into " +
         "that folder (create the version dir; do not keep the templates\ folder level)."
-}
-
-# unzbd is built locally from the mech3ax fork (branch cs-anim, Decision 5) and is not a repo
-# artefact, so a fresh tree can reach the export step without having it. Check before the long
-# build rather than after, and never fall back to the pinned v0.6.1 binary: the fork's output is
-# what the engine reads.
-if (-not (Test-Path $UnzbdExe)) {
-    throw "unzbd.exe not found at $UnzbdExe -- build the mech3ax fork (branch cs-anim) first; " +
-        "see packaging\MANIFEST.md. The pinned v0.6.1 binary is not a substitute."
 }
 
 # SDL2.dll is the flight-stick reader (docs/tooling.md, "SDL2 for flight sticks"). A dev launch
@@ -193,17 +163,13 @@ foreach ($file in $ReleaseFiles) {
     }
 }
 
-# The Linux half's three prerequisites live outside the repo, like the templates and unzbd.exe
-# above, and each would otherwise surface only after the Windows export has spent its minutes.
+# The Linux half's two prerequisites live outside the repo, like the templates above, and each
+# would otherwise surface only after the Windows export has spent its minutes.
 if ($Linux) {
     $linuxTemplate = Join-Path $TemplateDir "linux_release.x86_64"
     if (-not (Test-Path $linuxTemplate)) {
         throw "Linux export template not found at $linuxTemplate -- the one-time template " +
             "install above must include the linux_release.x86_64 file of the .tpz."
-    }
-    if ((-not $BuildLinuxUnzbd) -and (-not (Test-Path $LinuxUnzbd))) {
-        throw "Linux unzbd not found at $LinuxUnzbd -- pass an existing file to -LinuxUnzbd, or " +
-            "leave it out to build the musl unzbd in WSL. unzbd.exe is not a substitute."
     }
     try {
         & wsl.exe -d $LinuxDistro --exec tar --version | Out-Null
@@ -235,67 +201,6 @@ function Write-WslScript([string] $Name, [string] $Text) {
     return $path
 }
 
-# The Linux unzbd is built from the same mech3ax checkout as unzbd.exe, so the two cannot drift
-# apart between releases. The build runs before the Windows export because a missing toolchain
-# would otherwise surface only after minutes of exporting. The cargo target dir sits in the
-# distro's own filesystem: a build through /mnt/z is slow and would leave a Linux target tree
-# inside the checkout. The toolchain checks exit with their own codes so each failure names the
-# setup step that fixes it; rust-toolchain.toml pins the Rust version, which is why the musl
-# target has to be added to that toolchain rather than to stable. cargo's stderr is folded into
-# stdout because a caller that redirects this script's streams turns every native stderr line
-# into a terminating error under "Stop", ending the run at cargo's first warning.
-if ($Linux -and $BuildLinuxUnzbd) {
-    $buildScript = Write-WslScript "build-unzbd" @'
-set -eu
-exec 2>&1
-repo="$1"; out="$2"
-target=x86_64-unknown-linux-musl
-cargo="$HOME/.cargo/bin/cargo"; rustup="$HOME/.cargo/bin/rustup"
-[ -x "$cargo" ] && [ -x "$rustup" ] || exit 10
-command -v cc >/dev/null 2>&1 && command -v musl-gcc >/dev/null 2>&1 || exit 11
-cd "$repo"
-"$rustup" target list --installed 2>/dev/null | grep -qx "$target" || exit 12
-export CARGO_TARGET_DIR="$HOME/cargo-target/mech3ax"
-"$cargo" build --release --locked --target "$target" --bin unzbd
-mkdir -p "$(dirname "$out")"
-cp -- "$CARGO_TARGET_DIR/$target/release/unzbd" "$out"
-"$out" --version
-'@
-    $pinnedRust = "the version tools\mech3ax\rust-toolchain.toml pins"
-    $pinMatch = Select-String -Path (Join-Path $Mech3axRepo "rust-toolchain.toml") `
-        -Pattern '^channel\s*=\s*"([^"]+)"' -ErrorAction SilentlyContinue
-    if ($pinMatch) {
-        $pinnedRust = $pinMatch.Matches[0].Groups[1].Value
-    }
-    Write-Host "Building the Linux unzbd in WSL ($LinuxDistro)..." -ForegroundColor Cyan
-    try {
-        & wsl.exe -d $LinuxDistro --exec sh (ConvertTo-WslPath $buildScript) `
-            (ConvertTo-WslPath $Mech3axRepo) (ConvertTo-WslPath $LinuxUnzbd)
-        $buildExit = $LASTEXITCODE
-    } finally {
-        Remove-Item $buildScript -Force -ErrorAction SilentlyContinue
-    }
-    $setup = "one-time setup in WSL $LinuxDistro, see docs/tooling.md '-Linux'"
-    switch ($buildExit) {
-        0 { }
-        10 {
-            throw "rustup/cargo not found in ~/.cargo/bin in WSL $LinuxDistro -- $setup`: " +
-                "install rustup from https://rustup.rs, or pass -LinuxUnzbd <path>."
-        }
-        11 {
-            throw "No C compiler or musl-gcc in WSL $LinuxDistro -- $setup`: " +
-                "'sudo apt install build-essential musl-tools'."
-        }
-        12 {
-            throw "Rust $pinnedRust has no x86_64-unknown-linux-musl target in WSL $LinuxDistro " +
-                "-- $setup`: 'rustup target add --toolchain $pinnedRust x86_64-unknown-linux-musl'."
-        }
-        default {
-            throw "cargo build of the Linux unzbd failed in WSL $LinuxDistro (exit $buildExit)."
-        }
-    }
-}
-
 if ($Linux) {
     foreach ($file in $LinuxReleaseFiles) {
         if (-not (Test-Path $file.Source)) {
@@ -306,15 +211,14 @@ if ($Linux) {
 
 # Each notice speaks for payloads whose versions it names in its own header
 # (packaging\BuildThirdPartyNotices.ps1 assembles both). A notice assembled for a different
-# engine, runtime or fork commit is worse than none: it states, in the archive, obligations that
-# belong to software the archive does not contain. So the header is read back and re-checked
-# against what this run is actually packaging. The runtime pack and crate target stamps, and the
-# other platform's names being absent, are what keep the zip's notice out of the tarball and the
-# tarball's out of the zip; sandbox\LinuxRelease.ps1 repeats the Linux half on the built tarball.
+# engine or runtime is worse than none: it states, in the archive, obligations that belong to
+# software the archive does not contain. So the header is read back and re-checked against what
+# this run is actually packaging. The runtime pack stamp, and the other platform's names being
+# absent, are what keep the zip's notice out of the tarball and the tarball's out of the zip;
+# sandbox\LinuxRelease.ps1 repeats the Linux half on the built tarball.
 # Read through ReadAllText because the file is BOM-less UTF-8 and 5.1's own readers would decode
 # it as ANSI (verification.md SHELL-7).
-function Read-Notice([string] $Path, [string] $Pack, [string] $Target, [string[]] $Foreign,
-        [string] $Regenerate) {
+function Read-Notice([string] $Path, [string] $Pack, [string[]] $Foreign, [string] $Regenerate) {
     $name = "packaging\" + (Split-Path $Path -Leaf)
     $text = [System.IO.File]::ReadAllText($Path)
     $stamp = {
@@ -331,12 +235,10 @@ function Read-Notice([string] $Path, [string] $Pack, [string] $Target, [string[]
         Godot      = & $stamp "Godot Engine build" 'Godot Engine build: (\S+)'
         Runtime    = & $stamp ".NET runtime version" '\.NET runtime version: (\S+)'
         Pack       = & $stamp ".NET runtime pack" '\.NET runtime pack: (\S+)'
-        Target     = & $stamp "unzbd crate target" 'unzbd crate target: (\S+)'
-        Fork       = & $stamp "mech3ax cs-anim commit" 'mech3ax cs-anim commit: ([0-9a-f]{40})'
     }
-    if ($notice.Pack -ne "Microsoft.NETCore.App.Runtime.$Pack" -or $notice.Target -ne $Target) {
-        throw "$name was assembled from $($notice.Pack) and the $($notice.Target) crate tree, " +
-            "not the $Pack pack and $Target -- regenerate it with $Regenerate."
+    if ($notice.Pack -ne "Microsoft.NETCore.App.Runtime.$Pack") {
+        throw "$name was assembled from $($notice.Pack), not the $Pack pack -- regenerate it " +
+            "with $Regenerate."
     }
     foreach ($marker in $Foreign) {
         if ($text.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
@@ -346,13 +248,13 @@ function Read-Notice([string] $Path, [string] $Pack, [string] $Target, [string[]
     }
     return $notice
 }
-$notices = @(Read-Notice $ThirdPartyNotices "win-x64" "x86_64-pc-windows-msvc" `
-    @("linux-x64", "x86_64-unknown-linux-musl", "data_CSVM_linuxbsd_x86_64", "CSVM.x86_64") `
+$notices = @(Read-Notice $ThirdPartyNotices "win-x64" `
+    @("linux-x64", "data_CSVM_linuxbsd_x86_64", "CSVM.x86_64") `
     "packaging\BuildThirdPartyNotices.ps1")
 $winNotice = $notices[0]
 if ($Linux) {
-    $linuxNotice = Read-Notice $LinuxThirdPartyNotices "linux-x64" "x86_64-unknown-linux-musl" `
-        @("win-x64", "x86_64-pc-windows-msvc", "data_CSVM_windows_x86_64", "unzbd.exe", "CSVM.exe") `
+    $linuxNotice = Read-Notice $LinuxThirdPartyNotices "linux-x64" `
+        @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe") `
         "packaging\BuildThirdPartyNotices.ps1 -Linux"
     $notices += $linuxNotice
 }
@@ -365,25 +267,6 @@ foreach ($notice in $notices) {
     }
 }
 
-# The fork commit is checked, not assumed, for the reason the notice exists: the crate list in
-# its section 6 is an enumeration of one commit's dependency tree, and a moved cs-anim can add
-# a crate the notice does not name. Whether that commit is PUSHED is a separate question, and
-# it is recorded rather than enforced here -- the fork is iterated on locally all the time and
-# an unpushed commit only becomes a false claim at publish time, where PublishRelease.ps1
-# refuses it.
-$forkCommit = (& git -C $Mech3axRepo rev-parse cs-anim 2>$null)
-if ($LASTEXITCODE -ne 0 -or $forkCommit -notmatch '^[0-9a-f]{40}$') {
-    throw "Could not resolve cs-anim in $Mech3axRepo -- the bundled unzbd.exe's source commit " +
-        "is part of the release, so the export will not guess it."
-}
-foreach ($notice in $notices) {
-    if ($forkCommit -ne $notice.Fork) {
-        throw "$($notice.Name) enumerates cs-anim $($notice.Fork) but the fork is at " +
-            "$forkCommit -- regenerate it with $($notice.Regenerate)."
-    }
-}
-$forkPushed = ((& git -C $Mech3axRepo rev-parse origin/cs-anim 2>$null) -eq $forkCommit)
-$forkDirty  = [bool] (& git -C $Mech3axRepo status --porcelain)
 $csvmCommit = (& git -C $RepoRoot rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or $csvmCommit -notmatch '^[0-9a-f]{40}$') {
     throw "Could not resolve HEAD in $RepoRoot -- the exe's source commit is part of the release."
@@ -556,7 +439,7 @@ function Copy-ReleaseFiles($Files, [string] $Dir) {
 
 # BUILD-INFO.txt is the one payload file that is GENERATED rather than copied from packaging\,
 # because the fact it states -- which commit each shipped binary was built from -- is different
-# on every run and has no repo home that could hold it. It states the two qualifiers honestly
+# on every run and has no repo home that could hold it. It states the worktree qualifier honestly
 # instead of refusing: an export off a dirty tree is the normal development case, and
 # PublishRelease.ps1 is where a qualifier becomes a refusal, since only a published binary
 # makes a false source-correspondence claim to anybody. UTF8Encoding($false) rather than
@@ -565,7 +448,7 @@ function Copy-ReleaseFiles($Files, [string] $Dir) {
 # platform's further binaries (SDL2.dll on Windows) and the licence line naming theirs.
 # PublishRelease.ps1 refuses any text matching 'MODIFIED' case-insensitively, so no other line
 # may contain the word "modified".
-function Write-BuildInfo([string] $Path, [string] $ExeLine, [string] $UnzbdName, [string] $Newline,
+function Write-BuildInfo([string] $Path, [string] $ExeLine, [string] $Newline,
         [string] $Extra = "", [string] $ExtraLicence = "") {
     $text = @"
 CSVM build provenance
@@ -578,23 +461,15 @@ $ExeLine
   source:   https://github.com/Laeresh/CSVM
   commit:   $script:csvmCommit
   worktree: $(if ($script:csvmDirty) { "MODIFIED -- this build does not match the commit above" } else { "clean" })
-
-$UnzbdName
-  source:   https://github.com/Laeresh/mech3ax  (branch cs-anim)
-  commit:   $script:forkCommit
-  pushed:   $(if ($script:forkPushed) { "yes, origin/cs-anim is at this commit" } else { "NO -- this commit is not on origin/cs-anim" })
-  worktree: $(if ($script:forkDirty) { "MODIFIED -- this build does not match the commit above" } else { "clean" })
 $Extra
-CSVM's own licence is LICENSE (GPL-3) and unzbd's is LICENSE-unzbd (EUPL-1.2).
-The notices for the third-party software inside both binaries, including the
-Godot engine and the .NET runtime, are in LICENSE-thirdparty.txt.$ExtraLicence
+CSVM's own licence is LICENSE (GPL-3). The notices for the third-party software
+inside the executable, including the Godot engine and the .NET runtime, are in
+LICENSE-thirdparty.txt.$ExtraLicence
 "@
     $text = ($text -replace "`r`n", "`n") -replace "`n", $Newline
     [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "  BUILD-INFO.txt (generated)"
     if ($script:csvmDirty)   { Write-Host "  ! CSVM worktree is dirty; BUILD-INFO.txt says so" -ForegroundColor Yellow }
-    if ($script:forkDirty)   { Write-Host "  ! mech3ax worktree is dirty; BUILD-INFO.txt says so" -ForegroundColor Yellow }
-    if (-not $script:forkPushed) { Write-Host "  ! cs-anim is not pushed; BUILD-INFO.txt says so" -ForegroundColor Yellow }
 }
 
 # The .NET publish leaves scanner shadow copies (name~RFxxxxxxx.TMP) in the data folder, and
@@ -625,7 +500,7 @@ $sdl2Info = "`nSDL2.dll`n" +
     "  commit:   $($Sdl2.Commit)`n" +
     "  sha256:   $($Sdl2.DllSha256)`n"
 $winWebRtc = Get-WebRtcInfo $ExportDir "libwebrtc_native.windows.template_release.x86_64.dll" "\"
-Write-BuildInfo $BuildInfo "CSVM.exe, and data_CSVM_windows_x86_64\ beside it" "tools\unzbd.exe" "`r`n" `
+Write-BuildInfo $BuildInfo "CSVM.exe, and data_CSVM_windows_x86_64\ beside it" "`r`n" `
     ($sdl2Info + $winWebRtc.Info) (" SDL2.dll is`nunder the zlib licence in LICENSE-SDL2.txt." + $winWebRtc.Licence)
 Remove-ExportJunk $ExportDir
 
@@ -666,13 +541,13 @@ Assert-ExportRuntime (Join-Path $LinuxExportDir "data_CSVM_linuxbsd_x86_64") $li
 Copy-ReleaseFiles $LinuxReleaseFiles $LinuxExportDir
 $linuxWebRtc = Get-WebRtcInfo $LinuxExportDir "libwebrtc_native.linux.template_release.x86_64.so" "/"
 Write-BuildInfo (Join-Path $LinuxExportDir "BUILD-INFO.txt") `
-    "CSVM.x86_64, and data_CSVM_linuxbsd_x86_64/ beside it" "tools/unzbd" "`n" `
+    "CSVM.x86_64, and data_CSVM_linuxbsd_x86_64/ beside it" "`n" `
     $linuxWebRtc.Info $linuxWebRtc.Licence
 Remove-ExportJunk $LinuxExportDir
 
 # Files on a Windows drive have no Unix mode of their own (WSL reports every one as 0777), so the
 # modes are set on a copy in the distro's own filesystem and the tar is written from there: 0755
-# for the two executables and every directory, 0644 for everything else, root-owned so an unpack
+# for the executable and every directory, 0644 for everything else, root-owned so an unpack
 # by any user does not try to restore this machine's uid. Entries sit at the archive root, as they
 # do in the zip.
 $packScript = Write-WslScript "pack-linux" @'
@@ -683,7 +558,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 cp -R -- "$src/." "$tmp/"
 find "$tmp" -type d -exec chmod 0755 {} +
 find "$tmp" -type f -exec chmod 0644 {} +
-chmod 0755 "$tmp/CSVM.x86_64" "$tmp/tools/unzbd"
+chmod 0755 "$tmp/CSVM.x86_64"
 rm -f -- "$out"
 cd "$tmp"
 tar --create --gzip --file="$out" --owner=0 --group=0 --numeric-owner --sort=name -- *
@@ -704,7 +579,7 @@ if ($packExit -ne 0 -or -not (Test-Path $TarPath)) {
 
 # Read the modes back out of the archive rather than trusting the chmod: a tarball whose
 # executable lost its bit unpacks without complaint and fails only when a player runs it.
-foreach ($exe in @("CSVM.x86_64", "tools/unzbd")) {
+foreach ($exe in @("CSVM.x86_64")) {
     $line = $listing | Where-Object { $_ -match "\s$([regex]::Escape($exe))$" }
     if (-not $line -or $line -notmatch '^-rwxr-xr-x ') {
         throw "$TarPath does not mark $exe executable (listing: '$line')."

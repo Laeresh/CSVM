@@ -99,10 +99,14 @@ public sealed class PlaneStats
     public int? AiAccentId;
 
     /// <summary>The AI def's own armament, nearest <c>weapons</c> block in the AI chain, empty on a
-    /// player load. Deliberately not read down the player chain: <c>player_airplane</c> authors a
-    /// <c>weapons</c> block too, but that one is the 39-id buyable catalogue rather than a fit, and
-    /// the player's own fit comes from <c>stock_loadouts.json</c>.</summary>
+    /// player load. Not read down the player chain: <c>player_airplane</c>'s block lists every
+    /// buyable weapon rather than a fit, which comes from <c>stock_loadouts.json</c>.</summary>
     public List<AiWeaponSlot> AiWeapons = new();
+
+    /// <summary>The player chain's <c>weapons</c> tuple refire per weapon id, seconds, empty on an
+    /// AI load. The player's guns fire at these, not at <c>FIRE_RATE</c>
+    /// (<see cref="Weapons.Loadout.ApplyGunRefire"/>).</summary>
+    public Dictionary<string, float> GunRefireSeconds = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The AI def the damage trio came from ("bloodhawk"), or null on a player load
     /// (<see cref="Load"/>). Set only by <see cref="LoadForAi"/>, and deliberately NOT used as
@@ -391,8 +395,8 @@ public sealed class PlaneStats
 
     /// <summary>The player airframe as flown by a person: every property, including the damage
     /// model, resolves down the <c>player_airplane</c> chain.</summary>
-    public static PlaneStats Load(string zrdrPath, string planeNodeName) =>
-        LoadCore(zrdrPath, planeNodeName, forAi: false);
+    public static PlaneStats Load(ZrdrSet zrdr, string planeNodeName) =>
+        LoadCore(zrdr, planeNodeName, forAi: false);
 
     /// <summary>The same airframe as flown by the AI: the damage model and the armament resolve
     /// down the AI def's own chain (an <c>armor</c>/<c>health</c> pair, no
@@ -400,8 +404,8 @@ public sealed class PlaneStats
     /// where <see cref="DefName"/>, <see cref="TurretMounts"/> and the built model must stay.
     /// <paramref name="aiDefName"/> names a militia variant and must derive from the base def.
     /// ⚠ The <c>r*</c> family carries parts but is the remote-player family; no roster spawns one.</summary>
-    public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName, string? aiDefName = null) =>
-        LoadCore(zrdrPath, planeNodeName, forAi: true, aiDefName);
+    public static PlaneStats LoadForAi(ZrdrSet zrdr, string planeNodeName, string? aiDefName = null) =>
+        LoadCore(zrdr, planeNodeName, forAi: true, aiDefName);
 
     /// <summary>The original's per-spawn dynamics jitter (docs/org/flightModel.md "The per-spawn
     /// jitter"), applied only to the two vehicle classes it reaches. Always returns a COPY: the
@@ -483,10 +487,10 @@ public sealed class PlaneStats
         return copy;
     }
 
-    private static PlaneStats LoadCore(string zrdrPath, string planeNodeName, bool forAi,
+    private static PlaneStats LoadCore(ZrdrSet zrdr, string planeNodeName, bool forAi,
         string? aiDefName = null)
     {
-        var vehicleRoot = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+        var vehicleRoot = zrdr.LoadFile("vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
 
         // defs alternate: name, property-list, name, property-list, ...
@@ -747,6 +751,17 @@ public sealed class PlaneStats
             }
         }
 
+        // The player chain's catalogue still carries each gun's refire in tuple element 2.
+        foreach (var d in aiChain == null ? chain : new List<ZrdrDict>())
+        {
+            if (d.List("weapons") is not { } catalogue)
+                continue;
+            foreach (var item in catalogue)
+                if (item is List<object?> { Count: >= 3 } w && w[0] is string weaponId && w[2] is float refire)
+                    stats.GunRefireSeconds[weaponId] = refire;
+            break;
+        }
+
         // weapons: the AI chain's own armament, 5-tuples in list order. Guarded on aiChain rather
         // than damageChain because the player chain's block is the buyable catalogue, not a fit.
         foreach (var d in aiChain ?? new List<ZrdrDict>())
@@ -866,12 +881,12 @@ public sealed class PlaneStats
 
         // stock engine power factor: 'engine' prop → engines.json row [id, name, power]
         int engineId = (int)Prop("engine", 0f);
-        foreach (var row in Zrdr.LoadFile(zrdrPath, "engines.json"))
+        foreach (var row in zrdr.LoadFile("engines.json"))
             if (row is List<object?> { Count: >= 3 } r && r[0] is float id && (int)id == engineId && r[2] is float power)
                 stats.EnginePower = power;
 
         // global flight constants + sound curves
-        if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is List<object?> playerList)
+        if (zrdr.LoadFile("player.json")[0] is List<object?> playerList)
         {
             var player = ZrdrDict.FromAlternating(playerList);
             stats.Gravity = player.Float("nom_gravity", stats.Gravity);

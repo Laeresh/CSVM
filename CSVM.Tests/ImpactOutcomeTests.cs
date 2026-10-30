@@ -30,8 +30,7 @@ public class ImpactOutcomeTests
         SurfaceRegistry.Buildings, 12, 13,
     };
 
-    private static string SharedZrdr =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet SharedZrdr => TestZrdr.Root;
 
     // ---- the stand-in ladder ------------------------------------------------------------------
 

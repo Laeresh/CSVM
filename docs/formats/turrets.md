@@ -436,6 +436,11 @@ All eight distinct `WEAPON.NAME` values are `BALLISTICS` ids resolving in `weapo
 | `wep_23` | 3 | turret gun (MP) | 1.0 / 1.5 | 1000 | 400 |
 | `wep_30` / `wep_60` / `wep_28` / `wep_06` | 1 each | 30-cal, 60-cal, cannonball, HE rocket | - | - | - |
 
+⚠ **The player's own carried gunner fires none of these.** `FUN_004aab00` replaces its weapon with
+the fit's turret slot (`wep_40` on the Kestrel, `wep_50` on the Hellhound) and its `FIRE_RATE`
+window with that weapon's player refire, halved for a twin slot
+([loadouts.md](loadouts.md), "Turrets"). The `wep_140` rows arm every AI aeroplane's gunner.
+
 ⚠ `WEAPON.NAME` is a `BALLISTICS` **id**, not a display name. `30slug` is the *inner* `NAME` field
 of a ballistics record and is a different thing.
 

@@ -82,8 +82,8 @@ internal static class CampaignMarkerSuites
     // The climb the balloon assembly is flown by, well past the 26 m the assembly is tall.
     private static readonly Vector3 Climb = new(0f, 300f, 0f);
 
-    // C1C/M01's three flown objective targets as the script authors them, with the label lines
-    // the chapter's targets.zrd and messages.json give each, and whether the action draws red.
+    // C1C/M01's three flown objective targets as the script authors them. Each carries the label
+    // lines its targets.zrd row and the message table give, and whether the action draws red.
     private static readonly (string Key, string Line1, string Line2, bool Red)[] LabelCases =
     {
         ("workersvoyagezep", "Zeppelin [Disable] -", "Worker's Voyage", true),
@@ -105,19 +105,19 @@ internal static class CampaignMarkerSuites
         + "and flying one site's own TRAVELERS approach retires that marker alone")]
     internal static void CampaignObjectiveMarkers(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
-        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(chapter));
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         report.AppendLine($"seq {FirstSeq} -> {chapter}/{folder}: " +
             $"{targets.Count} target entries, {script.Objectives.Count} objectives");
@@ -146,15 +146,15 @@ internal static class CampaignMarkerSuites
         + "carries the SET_HELP_LABEL written against the same path")]
     internal static void CampaignObjectiveTargetPath(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), PathSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), PathSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {PathSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var shipped = ObjectiveScript.Load(missionZrdr);
         ctx.Check(AuthorsPath(shipped), $"{chapter}/{folder} authors ADD_OBJECTIVE_TARGET [[{PathParent}, {PathChild}]]");
@@ -172,8 +172,8 @@ internal static class CampaignMarkerSuites
                 },
             },
         });
-        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(chapter));
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
@@ -196,17 +196,17 @@ internal static class CampaignMarkerSuites
         + "'[Dock] -' over each docking hook's proper name in blue, the node key kept as identity")]
     internal static void CampaignObjectiveLabels(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), LabelSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), LabelSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {LabelSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(chapter);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
         ctx.RequireData(chapterZrdr, $"{chapter} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var missionOnly = MissionTargets.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
@@ -227,7 +227,7 @@ internal static class CampaignMarkerSuites
         {
             new List<object?> { "OBJECTIVE1", new List<object?> { "ADD_OBJECTIVE_TARGET", adds } },
         });
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(chapter, collision: false, folder, world =>
@@ -257,19 +257,19 @@ internal static class CampaignMarkerSuites
         + "splash window, and climbs at the rise sequence's rate")]
     internal static void CampaignBalloonMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), BalloonSeq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), BalloonSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {BalloonSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var shipped = ObjectiveScript.Load(missionZrdr);
-        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
-        var messages = Messages.Load(ctx.MessagesPath);
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(chapter));
+        var messages = ctx.Data.Messages;
         var report = new StringBuilder();
         report.AppendLine($"seq {BalloonSeq} -> {chapter}/{folder}");
         CheckBalloonData(ctx, shipped, targets, report);

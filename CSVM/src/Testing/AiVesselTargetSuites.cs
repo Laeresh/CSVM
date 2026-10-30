@@ -52,24 +52,24 @@ internal static class AiVesselTargetSuites
         + "instead, which is what an authored -1.0 meaning NEVER looks like from outside")]
     internal static void AiVesselTargets(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BoatChapter);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BoatChapter, BoatMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(BoatChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(BoatChapter);
         ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
         ctx.RequireData(texturesPath, $"{BoatChapter} textures");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
 
         var mission = MissionOf(ctx, BoatChapter, BoatMission);
         var script = ObjectiveScript.Load(missionZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Vessels"), null);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
 
         // The authored lists, read off the same roster the director spawns from.
         var roster = CampaignRosterPlan.Build(AiSkills.LoadRoster(missionZrdr), defs,
@@ -118,9 +118,9 @@ internal static class AiVesselTargetSuites
                 worldRoot.AddChild(vessels);
                 director.BuildRoster(new CampaignDirector.RosterInputs
                 {
-                    ChapterZrdrPath = chapterZrdr,
-                    MissionZrdrPath = missionZrdr,
-                    ZrdrPath = ctx.ZrdrPath,
+                    ChapterZrdr = chapterZrdr,
+                    MissionZrdr = missionZrdr,
+                    Zrdr = ctx.Zrdr,
                     MinAiActiveDist = skills.MinAiActiveDist,
                     FindNodes = name => world.Runtime.FindNodes(name),
                     Spawn = (_, _, _, _) => null,   // the aircraft half stays unbuilt on purpose
@@ -291,7 +291,7 @@ internal static class AiVesselTargetSuites
 
     private static CampaignMission MissionOf(TestContext ctx, string chapter, string folder)
     {
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))

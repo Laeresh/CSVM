@@ -27,7 +27,7 @@ internal static class XrModeSuites
         + "second pad is refused a seat, and the Dogfight screen names VR as what holds a local match")]
     internal static void XrOneSeat(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         OriginalOneSeat(ctx);
     }
 
@@ -37,7 +37,7 @@ internal static class XrModeSuites
         + "once, so a later show is clean")]
     internal static void XrFallbackNotice(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
         OriginalNotice(ctx);
     }
 
@@ -170,12 +170,12 @@ internal static class XrModeSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, suite);
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new UI.Boards.MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new UI.Boards.MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(new MenuIdleSource());
         return host;
     }

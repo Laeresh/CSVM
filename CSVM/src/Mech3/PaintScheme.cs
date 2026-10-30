@@ -65,9 +65,9 @@ public sealed class PaintScheme
     /// on <c>devastator</c>/<c>wingman</c>, whose colours live engine-side, are given the
     /// Fortune Hunters red/white/white seen in the original's paint UI so the catalog entry
     /// is usable. Ordered by first appearance in the file.</summary>
-    public static List<PaintScheme> LoadCatalog(string zrdrPath)
+    public static List<PaintScheme> LoadCatalog(ZrdrSet zrdr)
     {
-        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+        var root = zrdr.LoadFile("vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
 
         var byPattern = new Dictionary<string, PaintScheme>(StringComparer.OrdinalIgnoreCase);
@@ -141,9 +141,9 @@ public sealed class PaintScheme
     /// the chain authors <c>paint_pattern</c> at all, which is a plane with no scheme of its own
     /// rather than a parse failure. Each field falls back independently, as the original's spawn
     /// does (docs/org/paint.md).</summary>
-    public static PaintScheme? ForDef(string zrdrPath, string defName)
+    public static PaintScheme? ForDef(ZrdrSet zrdr, string defName)
     {
-        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+        var root = zrdr.LoadFile("vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
 
         var defs = new Dictionary<string, ZrdrDict>(StringComparer.OrdinalIgnoreCase);

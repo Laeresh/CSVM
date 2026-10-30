@@ -91,7 +91,7 @@ public class AiNetsTests
     {
         // The fixture index opens with 9 over 5 pairs, mirroring the install (C1: 46 over 29).
         // An implementation that trusts it as a count truncates or over-reads the list.
-        var names = AiNets.LoadIndex(TestData.Fixture("ainets"));
+        var names = AiNets.LoadIndex(TestZrdr.Fixture("ainets"));
         Assert.Equal(5, names.Count);
         Assert.Equal("TestIndexOnly", names[11]);
     }
@@ -102,9 +102,9 @@ public class AiNetsTests
         // The fixture's pairs are deliberately not in ascending id (11 first, lowest 5), the
         // shape C1B and C1C ship. "The chapter's first net" is the engine's table order, which
         // is this order, and a sorted-by-id read would answer 5.
-        var pairs = AiNets.LoadIndexPairs(TestData.Fixture("ainets"));
+        var pairs = AiNets.LoadIndexPairs(TestZrdr.Fixture("ainets"));
         Assert.Equal(new[] { 11, 5, 7, 9, 13 }, pairs.ConvertAll(p => p.Id));
-        Assert.Equal("TestIndexOnly", AiNets.ChapterFirst(Fixtures(), TestData.Fixture("ainets"))?.Name);
+        Assert.Equal("TestIndexOnly", AiNets.ChapterFirst(Fixtures(), TestZrdr.Fixture("ainets"))?.Name);
     }
 
     // ---- Goldens over the install ---------------------------------------------------------------
@@ -113,10 +113,10 @@ public class AiNetsTests
     [MemberData(nameof(ChapterNetCounts))]
     public void EachChapterShipsItsNetsAndEveryOneResolvesAnIndexName(string chapter, int expected)
     {
-        var nets = AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+        var nets = AiNets.Load(TestZrdr.Chapter(chapter));
         Assert.Equal(expected, nets.Count);
         // The 1:1 both ways: every file has a name, every index id a file.
-        Assert.Equal(expected, AiNets.LoadIndex(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)).Count);
+        Assert.Equal(expected, AiNets.LoadIndex(TestZrdr.Chapter(chapter)).Count);
         foreach (var net in nets)
         {
             Assert.NotEqual("", net.Name);
@@ -128,7 +128,7 @@ public class AiNetsTests
     public void EachChapterHandsItsInstantActionActorsTheFirstNetOfItsIndex(
         string chapter, int expectedId, string expectedName)
     {
-        string zrdr = SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter);
+        var zrdr = TestZrdr.Chapter(chapter);
         var first = AiNets.ChapterFirst(AiNets.Load(zrdr), zrdr);
         Assert.NotNull(first);
         Assert.Equal(expectedId, first!.Id);
@@ -143,7 +143,7 @@ public class AiNetsTests
         int anchoredTrailers = 0, unanchoredTrailers = 0, indexOnlyTrailers = 0;
         foreach (var chapter in Chapters)
         {
-            foreach (var net in AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)))
+            foreach (var net in AiNets.Load(TestZrdr.Chapter(chapter)))
             {
                 nets++;
                 nodes += net.Nodes.Count;
@@ -182,7 +182,7 @@ public class AiNetsTests
     {
         // C1 net 10 = M4ReinfAce: 11 nodes at y=400, 10 edges closing a loop over nodes 0–9,
         // node 10 off the ring as the trailer's attach point, trailer [10, "player"].
-        var nets = AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C1"));
+        var nets = AiNets.Load(TestZrdr.Chapter("C1"));
         var net = nets.Find(n => n.Id == 10)!;
         Assert.Equal("M4ReinfAce", net.Name);
         Assert.Equal(11, net.Nodes.Count);
@@ -195,5 +195,5 @@ public class AiNetsTests
         Assert.Equal(new AiNetTrailer(10, "player"), net.Trailer);
     }
 
-    private static List<AiNet> Fixtures() => AiNets.Load(TestData.Fixture("ainets"));
+    private static List<AiNet> Fixtures() => AiNets.Load(TestZrdr.Fixture("ainets"));
 }

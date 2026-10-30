@@ -43,7 +43,7 @@ internal static class MenuOriginalCoopFlowSuites
         + "untouched")]
     internal static void TheCoopFlow(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -133,8 +133,8 @@ internal static class MenuOriginalCoopFlowSuites
         + "guest launches one seat per player on the host's opener")]
     internal static void TheGuestsTwoPlayers(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -564,12 +564,12 @@ internal static class MenuOriginalCoopFlowSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             CampaignProfiles = profiles,
         });
         var menu = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(menu, ctx.DataRoot, netDoor: door);
+        MenuSuiteHost.AddFeatures(menu, ctx.DataRoot, ctx.Data, netDoor: door);
         menu.AddSeat(seat);
         menu.Select("original");
         menu.Show(MenuReturnDestination.TopLevel);

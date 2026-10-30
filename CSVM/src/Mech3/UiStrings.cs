@@ -8,9 +8,10 @@ using System.Text.Json;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The original's UI string table, read by id from <c>extracted/rof/ui_strings.json</c>. Only the
-/// <c>langui</c> rows are kept: ids are not unique across the file's two merged tables (9-35 exist
-/// in both) and every menu range this remake reads, docs/formats/strings.md.
+/// The original's UI string table, read by id from <c>ui_strings.json</c>
+/// (<c>Extraction.RofFiles</c>). Only the <c>langui</c> rows are kept. Ids are not unique across
+/// the two merged tables (9-35 exist in both), and every menu range read here is langui's
+/// (docs/formats/strings.md).
 /// Placeholders are Win32 <c>FormatMessage</c> positional specifiers (<c>%1!d!</c>), converted to
 /// composite format by <see cref="ToCompositeFormat"/> rather than handed to printf. A leading
 /// <c>[FONTID]</c> tag the extractor left in a multi-line row is stripped, being a renderer
@@ -38,15 +39,14 @@ public sealed class UiStrings
     /// missing extraction still draws.</summary>
     public static UiStrings Empty { get; } = new(new Dictionary<int, string>(), new Dictionary<int, string>());
 
-    /// <summary>Reads the table under <paramref name="dataRoot"/>, or null when the file is
-    /// absent or unreadable. The caller decides what a missing table means; the menus fall back to
-    /// <see cref="Empty"/> rather than refusing to open.</summary>
+    /// <summary>Reads the table in the game files bound to <paramref name="dataRoot"/>, or null
+    /// when it is absent or unreadable. The caller decides what a missing table means; the menus
+    /// fall back to <see cref="Empty"/> rather than refusing to open.</summary>
     public static UiStrings? TryLoad(string dataRoot)
     {
-        var path = Path.Combine(dataRoot, "extracted", "rof", "ui_strings.json");
         try
         {
-            return File.Exists(path) ? Parse(File.ReadAllText(path, Encoding.UTF8)) : null;
+            return Extraction.RofFiles.For(dataRoot).Text(Extraction.RofFiles.UiStringsFile) is { } json ? Parse(json) : null;
         }
         catch (IOException)
         {

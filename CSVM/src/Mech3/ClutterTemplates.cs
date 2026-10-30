@@ -192,11 +192,11 @@ public sealed class ClutterTemplateSpec
     /// <summary>Loads a chapter's <c>templates.zrd</c>. Null when the chapter's zrdr scope has no
     /// such file, degrades rather than throwing, like every other optional reader here. An EMPTY
     /// file is not that case: C1C and C2B ship one, and both come back as a spec with no kinds.</summary>
-    public static ClutterTemplateSpec? Load(string chapterZrdrPath)
+    public static ClutterTemplateSpec? Load(ZrdrSet chapterZrdr)
     {
         try
         {
-            return Parse(Zrdr.LoadFileOrEmpty(chapterZrdrPath, "templates.json"));
+            return Parse(chapterZrdr.LoadFileOrEmpty("templates.json"));
         }
         catch (Exception e) when (e is System.IO.FileNotFoundException
                                       or System.IO.DirectoryNotFoundException

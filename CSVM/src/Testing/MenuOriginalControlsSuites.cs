@@ -36,7 +36,7 @@ internal static class MenuOriginalControlsSuites
         + "screen")]
     internal static void MenuOriginalControls(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -57,12 +57,12 @@ internal static class MenuOriginalControlsSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-controls");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, (player, profile) =>
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, (player, profile) =>
         {
             written.Add(player);
             BindingStore.UserBindings().Save(player, profile);
@@ -105,7 +105,7 @@ internal static class MenuOriginalControlsSuites
     internal static void MenuOriginalControlsSeats(TestContext ctx)
     {
         const string Suite = "menu-original-controls-seats";
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -128,12 +128,12 @@ internal static class MenuOriginalControlsSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = MenuSuiteHost.ScratchPlanes(ctx, Suite),
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, (player, profile) =>
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, (player, profile) =>
         {
             written.Add(player);
             BindingStore.UserBindings().Save(player, profile);

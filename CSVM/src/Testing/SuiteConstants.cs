@@ -119,25 +119,25 @@ internal static class SuiteConstants
         new()
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = camParamsFor!,
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
             WeaponMessages = weaponMessages!,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
 
     /// <summary>One float read raw off the zrdr scope's <c>player.json</c>, inside
     /// <paramref name="block"/> when one is named. Null when the record does not author it. A
     /// check compares it with the typed loader's field, so the field answers to its record on any
     /// tree rather than to one install's figure.</summary>
-    internal static float? PlayerGlobal(string zrdrPath, string key, string? block = null)
+    internal static float? PlayerGlobal(ZrdrSet zrdr, string key, string? block = null)
     {
-        if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is not List<object?> list)
+        if (zrdr.LoadFile("player.json")[0] is not List<object?> list)
             return null;
         var player = ZrdrDict.FromAlternating(list);
         var scope = block == null ? player : player.Dict(block);

@@ -63,17 +63,17 @@ internal static class CampaignRosterObjectiveMarkerSuites
         + "one Objective-ranked target named Tex once OBJECTIVE21 wakes it, nothing after it dies")]
     internal static void CampaignCm15RosterObjectiveMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -93,7 +93,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -113,17 +113,17 @@ internal static class CampaignRosterObjectiveMarkerSuites
         + "Cabbie once it wakes, coloured blue rather than red or green, and none after it is shot down")]
     internal static void CampaignCm21CabbieMarker(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, CabbieChapter, CabbieMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, CabbieChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, CabbieChapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(CabbieChapter, CabbieMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(CabbieChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(CabbieChapter);
         ctx.RequireData(missionZrdr, $"{CabbieChapter}/{CabbieMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{CabbieChapter} zrdr");
         ctx.RequireData(texturesPath, $"{CabbieChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(CabbieChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(CabbieMission, StringComparison.OrdinalIgnoreCase))
@@ -148,7 +148,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(CabbieChapter, collision: false, CabbieMission, world =>
@@ -169,17 +169,17 @@ internal static class CampaignRosterObjectiveMarkerSuites
         + "throughout")]
     internal static void CampaignCm02RosterMarkerRelabel(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RelabelChapter, RelabelMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, RelabelChapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, RelabelChapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RelabelChapter, RelabelMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(RelabelChapter);
+        TextureSet texturesPath = ctx.ChapterTextures(RelabelChapter);
         ctx.RequireData(missionZrdr, $"{RelabelChapter}/{RelabelMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{RelabelChapter} zrdr");
         ctx.RequireData(texturesPath, $"{RelabelChapter} textures");
 
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(RelabelChapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(RelabelMission, StringComparison.OrdinalIgnoreCase))
@@ -196,7 +196,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
         var report = new StringBuilder();
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
+        var messages = ctx.Data.Messages;
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(RelabelChapter, collision: false, RelabelMission, world =>
@@ -239,12 +239,12 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        string missionZrdr, string chapterZrdr, string texturesPath,
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath,
         MissionTargets targets, Messages messages, StringBuilder report,
         string block, string pilotName, string? typeLabel, string category, int wakeObjective)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -261,10 +261,10 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
-                MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
+                MinAiActiveDist = AiSkills.Load(ctx.Zrdr).MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
                     () => human.WorldPosition,
@@ -348,11 +348,11 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
     private static void DriveRelabel(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        string missionZrdr, string chapterZrdr, string texturesPath,
+        ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath,
         MissionTargets targets, Messages messages, ObjectiveScript script, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -369,10 +369,10 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
-                MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
+                MinAiActiveDist = AiSkills.Load(ctx.Zrdr).MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
                     () => human.WorldPosition,
@@ -528,7 +528,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {
@@ -558,18 +558,18 @@ internal static class CampaignRosterObjectiveMarkerSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             null!, ctx.Host, resources,
             new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
             new HumanRosterBindings());

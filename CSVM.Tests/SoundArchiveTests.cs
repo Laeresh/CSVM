@@ -8,9 +8,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The archive's lifetime contract. A zip-backed archive is closed at the end of the world build
-/// (<c>SoundsOutliveBuild = false</c>) while the session keeps it and keeps asking; a
-/// directory-backed one is immune, which is why the shipped failure never appeared in development.
-/// These pin the zip half.
+/// (<c>SoundsOutliveBuild = false</c>) while the session keeps it and keeps asking. A
+/// directory-backed one is immune, so the shipped failure never appeared in development.
+/// These pin the zip half, and that an archive over the launch's shared sounds never closes them.
 /// </summary>
 public sealed class SoundArchiveTests
 {
@@ -61,6 +61,22 @@ public sealed class SoundArchiveTests
         using var archive = new SoundArchive(temp.Path);
 
         Assert.Null(archive.ReadWavBytes("absent.wav"));
+    }
+
+    /// <summary>The launch's archive serves every session, so one session's dispose must leave it
+    /// readable for the next.</summary>
+    [Fact]
+    public void DisposingAnArchiveOverTheSharedSoundsLeavesThemOpen()
+    {
+        using var shared = Tooling.SyntheticSounds.Zbd();
+        string name = Tooling.SyntheticSounds.Wavs[0].Name;
+        var first = new SoundArchive(shared);
+        Assert.NotNull(first.ReadWavBytes(name));
+        first.Dispose();
+
+        Assert.NotNull(first.ReadWavBytes(name));
+        Assert.Equal(shared.ReadWavBytes(name), new SoundArchive(shared).ReadWavBytes(name));
+        Assert.Null(first.ReadWavBytes("absent.wav"));
     }
 
     private static string? Text(byte[]? bytes) => bytes == null ? null : Encoding.UTF8.GetString(bytes);

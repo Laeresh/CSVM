@@ -289,9 +289,9 @@ public sealed record SessionSpec
 
     /// <summary><c>--movie=</c>: play that one cinema and quit, with no world and no menu behind
     /// it. Null when the flag is absent. The name is resolved without regard to case
-    /// (<see cref="SessionPaths.Cinema"/>) and needs no <c>.mpg</c>. ⚠ It does not imply the
-    /// determinism bundle, unlike the other flags that end a run by themselves: the clock a cinema
-    /// runs on is the audio device's, so a fixed-step sim clock would say nothing about it.</summary>
+    /// (<see cref="Extraction.RofFiles.Cinema"/>) and needs no <c>.mpg</c>. ⚠ It does not imply the
+    /// determinism bundle, unlike the other flags that end a run by themselves. A cinema runs on
+    /// the audio device's clock, so a fixed-step sim clock would say nothing about it.</summary>
     public string? MovieName { get; private set; }
 
     /// <summary><c>--presentation=</c>: the menu presentation for this run, never persisted.
@@ -334,10 +334,10 @@ public sealed record SessionSpec
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
     /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
     public string ModeName =>
-        ExtractInstall != null ? "extract"
+        CopyGameFiles != null ? "extract"
         : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -351,9 +351,9 @@ public sealed record SessionSpec
     /// a drift, not a decision, the same omission as <see cref="ModeName"/>'s, and it means a
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
-        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || ExtractInstall != null
+        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || CopyGameFiles != null
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
-        || DumpSticks || DamageTest || EffectsTest || WeaponTest;
+        || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
     public bool WorldMode { get; private set; }
@@ -634,6 +634,29 @@ public sealed record SessionSpec
     /// rather than by the cycle's head. No flag names it, an Options screen is its only source.</summary>
     public bool NearestAfterKill { get; private set; }
 
+    /// <summary><c>--leading-assist</c>, or the saved switch (<see cref="WithSavedLeadingAimAssist"/>).
+    /// Every human seat fires along this shot's own intercept, not the original's lagging slot
+    /// (<see cref="Flight.Airframe.FlightController.LeadingAimAssist"/>). Off by default.</summary>
+    public bool LeadingAimAssist { get; private set; }
+
+    /// <summary><c>--lead-marker</c>, or the saved switch (<see cref="WithSavedLeadMarker"/>): every human
+    /// pane marks the tracked hostile's intercept point (<see cref="Flight.Hud.TargetHud"/>). Off by default.</summary>
+    public bool LeadMarker { get; private set; }
+
+    /// <summary>True when <c>--leading-assist</c> was given, which outranks the saved value.</summary>
+    public bool LeadingAimAssistExplicit { get; private set; }
+
+    /// <summary>True when <c>--lead-marker</c> was given, which outranks the saved value.</summary>
+    public bool LeadMarkerExplicit { get; private set; }
+
+    /// <summary><c>--throttle-plate</c>, or the saved switch (<see cref="WithSavedThrottlePlate"/>):
+    /// every human pane draws the commanded lever beside the speedometer
+    /// (<see cref="Flight.Hud.ThrottlePlate"/>). Off by default.</summary>
+    public bool ThrottlePlate { get; private set; }
+
+    /// <summary>True when <c>--throttle-plate</c> was given, which outranks the saved value.</summary>
+    public bool ThrottlePlateExplicit { get; private set; }
+
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist, every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -852,6 +875,11 @@ public sealed record SessionSpec
     public bool DumpConfig { get; private set; }
     public bool DumpMips { get; private set; }
     public string DumpMipsFilter { get; private set; } = "";
+
+    /// <summary><c>--dump[=folder]</c>: where <c>Tooling/DumpGameFiles.cs</c> writes the game
+    /// files' models, relative to the run tree. Empty for its default folder, null without the
+    /// flag.</summary>
+    public string? DumpPath { get; private set; }
 
     /// <summary><c>--dump-ai</c>: a pure-data report over the five AI data families (patrol
     /// nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators), no world, no
@@ -1081,37 +1109,14 @@ public sealed record SessionSpec
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
 
-    /// <summary><c>--synthetic-data</c>: write an invented extraction tree into the scratch folder
-    /// and read it in place of the data root. Off unless given, and dropped with a note beside
-    /// <c>--extract</c>, which would otherwise write an extraction into that tree. See
+    /// <summary><c>--synthetic-data</c>: write an invented data tree into the scratch folder and
+    /// read it in place of the data root. Off unless given. See
     /// <see cref="Tooling.SyntheticData"/>.</summary>
     public bool SyntheticData { get; private set; }
 
-    /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
-    /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
-    /// the install check refuses; null when the flag was absent.</summary>
-    public string? ExtractInstall { get; private set; }
-
-    /// <summary><c>--extract-force</c>: redo every output however new.</summary>
-    public bool ExtractForce { get; private set; }
-
-    /// <summary><c>--extract-unzip</c>: also expand every produced zip into its sibling folder.</summary>
-    public bool ExtractUnzip { get; private set; }
-
-    /// <summary><c>--extract-allow-missing</c>: extract an install that lacks some expected
-    /// archives, warning about each instead of failing.</summary>
-    public bool ExtractAllowMissing { get; private set; }
-
-    /// <summary><c>--unzbd=</c> verbatim: the unzbd an extraction runs instead of the default.</summary>
-    public string? UnzbdPath { get; private set; }
-
-    public string? Gamez { get; private set; }
-    public string? Textures { get; private set; }
-    public string? Zrdr { get; private set; }
-    public string? Sounds { get; private set; }
-    public string? Interp { get; private set; }
-    public string? Messages { get; private set; }
-    public string? Rof { get; private set; }
+    /// <summary><c>--copy-game-files=&lt;source&gt;</c> verbatim: copy that source's game files
+    /// into the data root (<c>Extraction/GameFileCopy.cs</c>) and quit. Null without the flag.</summary>
+    public string? CopyGameFiles { get; private set; }
 
     // ---- Texture drop-in (applied to statics by the caller, not here) --------------------------
 
@@ -1185,12 +1190,6 @@ public sealed record SessionSpec
     public bool DebugMem { get; private set; }
 
     public bool NoFocus { get; private set; }
-
-    /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
-    /// folder exists, so a development machine runs the asset shape an export ships. See
-    /// <see cref="SessionPaths.ForceZipped"/> for why the two shapes fail differently.</summary>
-    public bool ZipAssets { get; private set; }
-
     /// <summary><c>--hd=</c>: the HD texture pack folder, under the data root unless rooted. Empty
     /// reads no pack. Null when absent, which leaves config.json's <c>textures.hd</c>.</summary>
     public string? Hd { get; private set; }
@@ -1202,6 +1201,10 @@ public sealed record SessionSpec
     /// <summary><c>--no-hd-models</c>: read no model pack, whatever <see cref="HdModels"/> or
     /// config.json names.</summary>
     public bool NoHdModels { get; private set; }
+
+    /// <summary><c>--mod-folder=</c>: the modding folder of unzbd output this launch reads
+    /// (<see cref="ModdingFolder"/>), beating the saved one. Empty names none. Null when absent.</summary>
+    public string? ModFolder { get; private set; }
 
     /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
@@ -1360,7 +1363,6 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
             else if (arg.StartsWith("--paint-decal=")) { s.PaintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]); }
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
-            else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
             else if (arg == "--debug-scores") { s.DebugScores = true; }
             else if (arg == "--debug-race-ghost") { s.DebugRaceGhost = true; }
@@ -1620,6 +1622,9 @@ public sealed record SessionSpec
             else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
             else if (arg == "--wake-generators") { s.WakeGenerators = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
+            else if (arg == "--leading-assist") { s.LeadingAimAssist = s.LeadingAimAssistExplicit = true; }
+            else if (arg == "--lead-marker") { s.LeadMarker = s.LeadMarkerExplicit = true; }
+            else if (arg == "--throttle-plate") { s.ThrottlePlate = s.ThrottlePlateExplicit = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }
             else if (arg.StartsWith("--target=")) { s.TargetSelect = arg["--target=".Length..].Trim(); }
@@ -1712,18 +1717,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
             else if (arg == "--synthetic-data") { s.SyntheticData = true; }
-            else if (arg == "--extract") { s.ExtractInstall = ""; }
-            else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
-            else if (arg == "--extract-force") { s.ExtractForce = true; }
-            else if (arg == "--extract-unzip") { s.ExtractUnzip = true; }
-            else if (arg == "--extract-allow-missing") { s.ExtractAllowMissing = true; }
-            else if (arg.StartsWith("--unzbd=")) { s.UnzbdPath = arg["--unzbd=".Length..]; }
-            else if (arg.StartsWith("--gamez=")) { s.Gamez = arg["--gamez=".Length..]; }
-            else if (arg.StartsWith("--textures=")) { s.Textures = arg["--textures=".Length..]; }
-            else if (arg.StartsWith("--zrdr=")) { s.Zrdr = arg["--zrdr=".Length..]; }
-            else if (arg.StartsWith("--interp=")) { s.Interp = arg["--interp=".Length..]; }
-            else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
-            else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
+            else if (arg.StartsWith("--copy-game-files=")) { s.CopyGameFiles = arg["--copy-game-files=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
             else if (arg == "--no-cockpit-pass") { s.CockpitPass = false; }
             else if (arg == "--no-clutter") { s.NoClutter = true; }
@@ -1754,6 +1748,8 @@ public sealed record SessionSpec
             {
                 s.WordFlags[wordSetting] = flagWord ?? s.WordFlags[wordSetting];
             }
+            else if (arg == "--dump") { s.DumpPath = ""; }
+            else if (arg.StartsWith("--dump=")) { s.DumpPath = arg["--dump=".Length..]; }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
@@ -1779,10 +1775,10 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
             else if (arg == "--no-focus") { s.NoFocus = true; }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
-            else if (arg == "--zip-assets") { s.ZipAssets = true; }
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
+            else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
             else if (arg.StartsWith("--hitch-inject="))
             {
                 (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =
@@ -1928,24 +1924,6 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", problem));
                 }
             }
-        }
-
-        // The development options mean nothing to a session, so a stray one is named rather than
-        // silently dropped. The unzbd path is not one, since the extraction screen runs that tool.
-        if (s.ExtractInstall == null)
-        {
-            foreach (var (given, name) in new[] { (s.ExtractForce, "--extract-force"), (s.ExtractUnzip, "--extract-unzip"), (s.ExtractAllowMissing, "--extract-allow-missing") })
-            {
-                if (given)
-                {
-                    notes.Add(new Note("core", $"{name} does nothing without --extract=<install>, ignoring it"));
-                }
-            }
-        }
-        else if (s.SyntheticData)
-        {
-            notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
-            s.SyntheticData = false;
         }
 
         if (s.SyntheticData && s.PlaneNames.Count == 0)
@@ -2152,6 +2130,21 @@ public sealed record SessionSpec
     /// run reads no saved option.</summary>
     public SessionSpec WithSavedAutoHeadTurn(bool? saved) =>
         Det || saved is not { } on ? this : this with { AutoHeadTurn = on };
+
+    /// <summary>The saved leading aim assist folded in, on <see cref="WithSavedDifficulty"/>'s rules:
+    /// <c>--leading-assist</c> beats the saved value, and a <c>--det</c> run reads no saved option.</summary>
+    public SessionSpec WithSavedLeadingAimAssist(bool? saved) =>
+        LeadingAimAssistExplicit || Det || saved is not { } on ? this : this with { LeadingAimAssist = on };
+
+    /// <summary>The saved lead marker folded in, on <see cref="WithSavedLeadingAimAssist"/>'s rules with
+    /// <c>--lead-marker</c> as the flag.</summary>
+    public SessionSpec WithSavedLeadMarker(bool? saved) =>
+        LeadMarkerExplicit || Det || saved is not { } on ? this : this with { LeadMarker = on };
+
+    /// <summary>The saved throttle plate folded in, on <see cref="WithSavedLeadingAimAssist"/>'s rules
+    /// with <c>--throttle-plate</c> as the flag. A <c>--det</c> run, and so every golden, draws none.</summary>
+    public SessionSpec WithSavedThrottlePlate(bool? saved) =>
+        ThrottlePlateExplicit || Det || saved is not { } on ? this : this with { ThrottlePlate = on };
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>

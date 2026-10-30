@@ -103,6 +103,7 @@ public sealed partial class ComposedBoardView : Control
 
     private ComposedBoard? _board;
     private string _dataRoot = string.Empty;
+    private TextureSet _rimage = TextureSet.Empty;
     private string _detail = string.Empty;
     private string _footer = string.Empty;
     private BoardPalette _palette = BoardPalette.Paper;
@@ -115,12 +116,14 @@ public sealed partial class ComposedBoardView : Control
     /// layer holds over that board.</summary>
     public IReadOnlyList<BoardPicture> Moving => _moving;
 
-    /// <summary>Builds the view over the extraction root its art loads from.</summary>
-    public static ComposedBoardView Build(string dataRoot)
+    /// <summary>Builds the view over the extraction root its rof art and movies load from, and the
+    /// <c>rimage</c> art its mission pictures are.</summary>
+    public static ComposedBoardView Build(string dataRoot, TextureSet rimage)
     {
         var view = new ComposedBoardView
         {
             _dataRoot = dataRoot,
+            _rimage = rimage,
             MouseFilter = MouseFilterEnum.Ignore,
             TextureFilter = TextureFilterEnum.Nearest,
         };
@@ -170,6 +173,33 @@ public sealed partial class ComposedBoardView : Control
         }
 
         return rows * pitch;
+    }
+
+    /// <summary>The box each of a line's wrapped lines draws in, in authored pixels. Each is its
+    /// own width, from the face's ascent above the baseline to its descent below. A pitched or
+    /// unwrapped line is broken and spaced as the draw breaks and spaces it.</summary>
+    public static IReadOnlyList<Rect2> LineBoxes(BoardFit fit, Font font, BoardLine line)
+    {
+        ArgumentNullException.ThrowIfNull(fit);
+        ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(line);
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
+        float pitch = line.Leading > 0f ? line.Leading : font.GetHeight(points) / fit.Scale;
+        IEnumerable<string> parts = line.Width > 0f
+            ? Wrap(font, line.Text, points, fit.Length(line.Width))
+            : new[] { line.Text };
+        float baseline = line.Y + (points / fit.Scale);
+        float ascent = font.GetAscent(points) / fit.Scale;
+        float tall = ascent + (font.GetDescent(points) / fit.Scale);
+        var boxes = new List<Rect2>();
+        foreach (var part in parts)
+        {
+            float wide = font.GetStringSize(part, HorizontalAlignment.Left, -1f, points).X / fit.Scale;
+            boxes.Add(new Rect2(line.X, baseline - ascent, wide, tall));
+            baseline += pitch;
+        }
+
+        return boxes;
     }
 
     /// <summary>The line at the largest whole point size, its own or smaller, whose wrapped block
@@ -237,6 +267,23 @@ public sealed partial class ComposedBoardView : Control
         }
 
         return note with { Size = MinNoteFont };
+    }
+
+    /// <summary>A picture's bytes decoded by the loader <c>Image.LoadFromFile</c> picks for the
+    /// extension of <paramref name="path"/>, or null when none takes them.</summary>
+    public static Image? DecodeArt(byte[] bytes, string path)
+    {
+        var image = new Image();
+        var read = Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".png" => image.LoadPngFromBuffer(bytes),
+            ".jpg" or ".jpeg" => image.LoadJpgFromBuffer(bytes),
+            ".tga" => image.LoadTgaFromBuffer(bytes),
+            ".bmp" => image.LoadBmpFromBuffer(bytes),
+            ".webp" => image.LoadWebpFromBuffer(bytes),
+            _ => Error.FileUnrecognized,
+        };
+        return read == Error.Ok && !image.IsEmpty() ? image : null;
     }
 
     /// <summary>Advances every movie this view has opened by that many seconds, answering whether
@@ -1086,13 +1133,16 @@ public sealed partial class ComposedBoardView : Control
             return Held(art.Pixels);
         }
 
+        if (art.Library == BoardArtLibrary.Rimage)
+        {
+            return Rimage(art.Name);
+        }
+
         string path = art.Library switch
         {
-            BoardArtLibrary.Rimage =>
-                Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png"),
             BoardArtLibrary.Loose => art.Name,
-            BoardArtLibrary.Movie => SessionPaths.Cinema(_dataRoot, art.Name),
-            _ => Extraction.RofTree.Under(_dataRoot, "ASSETS/GRAPHICS/" + art.Name),
+            BoardArtLibrary.Movie => RofFiles.Cinema(art.Name),
+            _ => RofTree.Canonical("ASSETS/GRAPHICS/" + art.Name),
         };
         if (_textures.TryGetValue(path, out var cached))
         {
@@ -1100,22 +1150,26 @@ public sealed partial class ComposedBoardView : Control
         }
 
         Texture2D? texture = null;
+        var rof = RofFiles.For(_dataRoot);
+        byte[]? bytes = art.Library == BoardArtLibrary.Movie ? null
+            : art.Library == BoardArtLibrary.Loose ? (File.Exists(path) ? File.ReadAllBytes(path) : null)
+            : rof.Read(path);
         if (art.Library == BoardArtLibrary.Movie)
         {
             // The surface rewrites this one texture in place for the life of the view. The cache
             // above needs no invalidation, and the picture animates with nothing else done to it.
-            var movie = MovieSurface.Open(path, EndlessPlays);
+            var movie = MovieSurface.Open(rof, path, EndlessPlays);
             _movies[path] = movie;
             texture = movie?.Texture;
         }
-        else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
+        else if (bytes != null && DecodeArt(bytes, path) is { } image)
         {
             // ⚠ Each file by its own gAMA, never the original's on its replacement. The pack's PNGs
             // carry none, and the original's normalisation turned their raw samples pale.
-            byte[]? hdBytes = art.Library == BoardArtLibrary.Loose ? null : HdTextures.Current.ForExtracted(path);
+            byte[]? hdBytes = art.Library == BoardArtLibrary.Loose ? null : HdTextures.Current.ForRof(path);
             var hd = HdArt.Decode(hdBytes);
             uint? gamma = hd != null ? PngImage.ReadGamma(hdBytes!)
-                : Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase) ? PngImage.TryReadGamma(path) : null;
+                : Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase) ? PngImage.ReadGamma(bytes) : null;
             if (gamma is { } g && g != PngImage.UiGamma)
             {
                 NormalizeGamma(hd ?? image, g);
@@ -1124,6 +1178,33 @@ public sealed partial class ComposedBoardView : Control
         }
 
         _textures[path] = texture;
+        return texture;
+    }
+
+    // One rimage picture, cached like a file, a miss included. The original carries no gAMA, so
+    // only a replacement's own is normalised.
+    private Texture2D? Rimage(string name)
+    {
+        string key = "rimage/" + name.ToLowerInvariant();
+        if (_textures.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        Texture2D? texture = null;
+        if (_rimage.Find(name) is { } art)
+        {
+            byte[]? hdBytes = HdTextures.Current.ForRimage(name);
+            var hd = HdArt.Decode(hdBytes);
+            if (hd != null && PngImage.ReadGamma(hdBytes!) is { } g && g != PngImage.UiGamma)
+            {
+                NormalizeGamma(hd, g);
+            }
+
+            texture = HdArt.Texture(hd, TextureArchive.ImageOf(art));
+        }
+
+        _textures[key] = texture;
         return texture;
     }
 

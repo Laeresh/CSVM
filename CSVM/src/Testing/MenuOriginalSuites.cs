@@ -57,7 +57,7 @@ internal static class MenuOriginalSuites
         + "and the pointer back once the presentation hides")]
     internal static void MenuOriginalTracer(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -69,12 +69,12 @@ internal static class MenuOriginalSuites
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new RecordingAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -123,9 +123,9 @@ internal static class MenuOriginalSuites
         + "frames pick a map on Mission Options and an aircraft on Select Plane and FLY leaves as one "
         + "LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
-        + "to hold them where each row stands wholly inside one band and one band carries the pair "
-        + "the canvas leaves no band for and each checkbox row's title stands on its own box's "
+        + "seven rows scroll four at a time through a window and take every choice, none of them the menu presentation, on a plate grown a band "
+        + "to hold them where each row stands wholly inside a band of its own "
+        + "and each checkbox row's title stands on its own box's "
         + "centre line at the dropdown rows' column, and whose CANCEL CHANGES "
         + "drops them, a wheel step over "
         + "Instant Action's contents window moves it one row and clamps "
@@ -152,8 +152,8 @@ internal static class MenuOriginalSuites
         + "missing layout keeps Original selected with the request kept")]
     internal static void MenuOriginalTracerCore(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -172,13 +172,13 @@ internal static class MenuOriginalSuites
         string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer-core", "Profiles");
         var player1 = new MenuInput { Keyboard = true };
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1, data: ctx.Data)
         {
             CampaignProfiles = new CSVM.Session.Campaign.CampaignProfileStore(profiles),
             Planes = planes,
         });
         var host = new MenuHost(registry, audio, exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -229,7 +229,7 @@ internal static class MenuOriginalSuites
         + "longer inviting a pad's START")]
     internal static void MenuJoinBoard(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -242,12 +242,12 @@ internal static class MenuOriginalSuites
         var player1 = new MenuInput { Keyboard = true };
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-join-board");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1, data: ctx.Data)
         {
             Planes = planes,
         });
         var host = new MenuHost(registry, new RecordingAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat);
         try
         {
@@ -704,12 +704,12 @@ internal static class MenuOriginalSuites
         foreach (var line in board.Lines)
         {
             titles += line.Text == tab || line.Text is "Difficulty" or "Default View" or "Auto Head Turn"
-                or "Next Target" or "Rumble" ? 1 : 0;
+                or "Next Target" ? 1 : 0;
             menuTitles += line.Text is "Menu" ? 1 : 0;
         }
 
-        ctx.Check(tab.Length > 0 && titles == 6 && menuTitles == 0,
-            $"drawing the section's own tab title over the five row titles and no Menu row ({titles} of 6, {menuTitles} Menu)");
+        ctx.Check(tab.Length > 0 && titles == 5 && menuTitles == 0,
+            $"drawing the section's own tab title over the window's four row titles and no Menu row ({titles} of 5, {menuTitles} Menu)");
         OriginalGameOptionsPlate(ctx, shell, board, layout.Screen("GameOptions"));
         Press(host, seat, Accept);
         ctx.Check(shell.Options.GameOptions.OpenOption == OriginalGameOptionsPage.DifficultyKey && shell.Rows.Count == 3
@@ -739,6 +739,12 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Options.GameOptions.NearestAfterKillChoice == true,
             $"Accept on the Next Target checkbox turns the targeting setting on ({shell.Options.GameOptions.NearestAfterKillChoice})");
+        // A walk off the window's last row scrolls Rumble, then the gun aids under it, into view.
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        bool leadingShown = shell.Rows.FirstOrDefault(r => r.Key == OriginalGameOptionsPage.LeadingAimAssistKey) is { Visible: true };
+        ctx.Check(shell.FocusedKey == OriginalGameOptionsPage.LeadingAimAssistKey && leadingShown && shell.Options.GameOptions.Top == 2,
+            $"the walk off Next Target scrolls the window a row at a time onto Leading Aim ({shell.FocusedKey}, shown {leadingShown}, top {shell.Options.GameOptions.Top})");
         WalkTo(host, seat, shell, OriginalGameOptionsPage.CancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options
@@ -755,8 +761,8 @@ internal static class MenuOriginalSuites
     // The grown plate and what stands on it. The page carries more rows than the section's three.
     // The plate is drawn as a head, the repeated row band and a tail rather than one picture. It
     // reaches a whole band further down than the art it is cut from. The two plaques stand that
-    // same band below their authored line. Every row stands wholly inside one band, a single band
-    // carries two of them, and no row's own reach crosses the moved plaque line.
+    // same band below their authored line. Every row in the window stands wholly inside a band of
+    // its own, and no row's own reach crosses the moved plaque line.
     private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board, MenuLayoutScreen? section)
     {
         string art = section?.Widget("GO_BACKGROUND")?.Art.FirstOrDefault() ?? string.Empty;
@@ -806,7 +812,9 @@ internal static class MenuOriginalSuites
         float lowest = 0f;
         foreach (var row in shell.Rows)
         {
-            if (row.Key is OriginalGameOptionsPage.AcceptKey or OriginalGameOptionsPage.CancelKey)
+            // The plaques, the window's scroll arrows and the rows scrolled out of it stand on no band.
+            if (row.Key is OriginalGameOptionsPage.AcceptKey or OriginalGameOptionsPage.CancelKey || !row.Visible
+                || row.Key.StartsWith(OriginalGameOptionsPage.WindowKey + ":", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -824,8 +832,8 @@ internal static class MenuOriginalSuites
             shared += count > 1 ? 1 : 0;
         }
 
-        ctx.Check(banded && shared == 1,
-            $"every option row standing wholly inside one band, one band carrying the pair the canvas leaves no band for ({banded}, {shared} shared, bands from {first}: {string.Join(" ", shell.Rows.Select(r => $"{r.Key}@{r.Y}+{r.Height}"))})");
+        ctx.Check(banded && shared == 0,
+            $"every option row standing wholly inside a band of its own, none carrying two ({banded}, {shared} shared, bands from {first}: {string.Join(" ", shell.Rows.Select(r => $"{r.Key}@{r.Y}+{r.Height}"))})");
         ctx.Check(lowest > 0f && lowest <= accept,
             $"and no option row reaching past that line, which would take one press for two rows ({lowest} of {accept})");
 
@@ -840,21 +848,21 @@ internal static class MenuOriginalSuites
         int aligned = 0;
         foreach (var row in shell.Rows)
         {
-            if (row.Kind != OriginalRowKind.Radio)
+            if (row.Kind != OriginalRowKind.Radio || !row.Visible)
             {
                 continue;
             }
 
             foreach (var line in board.Lines)
             {
-                aligned += line.Text is "Auto Head Turn" or "Next Target" or "Rumble"
+                aligned += line.Text is "Auto Head Turn" or "Next Target"
                     && line.X == column && line.Justify == BoardJustify.Left
                     && Math.Abs(line.Y + (line.Size / 2f) - row.Y - (row.Height / 2f)) <= 1f ? 1 : 0;
             }
         }
 
-        ctx.Check(column > 0f && aligned == 3,
-            $"each checkbox row's title on its own box's centre line at the dropdown rows' column ({aligned} of 3 at {column})");
+        ctx.Check(column > 0f && aligned == 2,
+            $"each checkbox row's title on its own box's centre line at the dropdown rows' column ({aligned} of 2 at {column})");
     }
 
     // A text widget's words, read off the layout so a check holds over the invented tree too.

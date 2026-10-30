@@ -180,9 +180,10 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
             return false;
         }
 
-        // A shipped scrap keeps the data's spelling on the desktop, not the extraction's upper case.
-        string? name = Scrap() is { IsCapture: false } scrap ? scrap.ZoomFileName : null;
-        var (saved, detail) = ScrapbookExport.ToDesktop(source, _exportFolder, name);
+        // A shipped scrap keeps the data's spelling on the desktop, not the archive's upper case.
+        var (saved, detail) = Scrap() is { IsCapture: false } scrap && Flow.DataRoot is { } root
+            ? ScrapbookExport.ToDesktop(() => Extraction.RofFiles.For(root).Read(source) ?? throw new FileNotFoundException(source), scrap.ZoomFileName, _exportFolder)
+            : ScrapbookExport.ToDesktop(source, _exportFolder);
         Flow.SetMessage(saved
             ? Message(705, $"This image has been saved to your desktop as {detail}.", detail)
             : Message(706, $"This asset could not be saved to your desktop.  Reason:  {detail}", detail));
@@ -227,8 +228,8 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
     private string Message(int id, string fallback, string argument) =>
         Flow.Strings.Has(id) ? Flow.Strings.Format(id, argument) : fallback;
 
-    // The file EXPORT TO DESKTOP copies: a capture out of the profile directory, a shipped scrap
-    // out of the extraction. Null when neither resolves, which is what deactivates the button.
+    // The file EXPORT TO DESKTOP copies: a capture's path in the profile directory, a shipped scrap's
+    // path in the game files. Null when neither resolves, which is what deactivates the button.
     private string? Source()
     {
         if (Scrap() is not { } scrap)
@@ -246,8 +247,8 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
             return null;
         }
 
-        string path = Extraction.RofTree.Under(root, "ASSETS/GRAPHICS/SCRAPBOOK/" + scrap.ZoomFileName);
-        return File.Exists(path) ? path : null;
+        string path = "ASSETS/GRAPHICS/SCRAPBOOK/" + scrap.ZoomFileName;
+        return Extraction.RofFiles.For(root).Exists(path) ? path : null;
     }
 
     private ScrapbookScrap? Scrap()

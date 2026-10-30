@@ -28,13 +28,12 @@ public class NamedAceTests
     // the index the format table documents rather than borrowing one.
     private const int AceSlot = 67;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
-    private static string Cm02 => SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M05");
+    private static ZrdrSet Cm02 => TestZrdr.Mission("C3", "M05");
 
     private static Messages Strings =>
-        Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
+        Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json"));
 
     /// <summary>The ace flag is a flag, not an inference from a full skill vector. 29 blocks carry
     /// the complete nine-value vector and only 26 of those are flagged; the three that are not are
@@ -47,7 +46,7 @@ public class NamedAceTests
         var fullVector = new List<string>();
         foreach (var (chapter, mission) in Missions())
         {
-            foreach (var (name, fields) in AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission)))
+            foreach (var (name, fields) in AiSkills.LoadRoster(TestZrdr.Mission(chapter, mission)))
             {
                 if (fields.Count > 30 && Enumerable.Range(22, 9).All(i => fields[i] is float f && f > 0f))
                 {
@@ -78,7 +77,7 @@ public class NamedAceTests
         int checked_ = 0;
         foreach (var (chapter, mission) in Missions())
         {
-            foreach (var (name, fields) in AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission)))
+            foreach (var (name, fields) in AiSkills.LoadRoster(TestZrdr.Mission(chapter, mission)))
             {
                 if (!IsAce(fields))
                 {
@@ -209,7 +208,7 @@ public class NamedAceTests
         var plan = CampaignRosterPlan.Build(
             AiSkills.LoadRoster(Cm02),
             VehicleDefs.Load(ZrdrPath),
-            AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C3")),
+            AiNets.Load(TestZrdr.Chapter("C3")),
             netDraw: _ => 0);
         var ace = plan.Spawns.Single(s => s.Name == "britpeace_7");
         Assert.Equal("MSG_SIRWINTHROP_NAME", ace.Title);

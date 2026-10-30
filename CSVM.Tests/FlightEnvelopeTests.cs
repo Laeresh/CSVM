@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Xunit;
 
@@ -47,8 +48,7 @@ public class FlightEnvelopeTests
     private const double DragQuad = 0.5;
     private const double AttitudeThrustBoth = 0.24;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void TheFlownEnvelopeStillMatchesItsDecodedTargets()

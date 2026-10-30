@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The typed <c>shakes.json</c> oscillator-source reader (<c>docs/formats/shakes.md</c>): scalar
 /// typing, the per-source magnitude-term variants, and the unhandled-key tripwire. Input is
-/// <c>fixtures/zrdr/shakes.json</c>; the golden asserts the six real sources on the install.
+/// <c>fixtures/zrdr/shakes.zrd.json</c>; the golden asserts the six real sources on the install.
 /// </summary>
 public class ShakeDefsTests
 {
@@ -72,7 +72,7 @@ public class ShakeDefsTests
     public void TheInstallCarriesTheSixSourcesTheRuntimeWires()
     {
         var defs = ShakeDefs.Load(
-            SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip")));
+            TestZrdr.Root);
         Assert.Equal(6, defs.All.Count);
         Assert.NotNull(defs.FireBullet!.MagnitudeFactor);
         Assert.True(defs.FireBullet.Sawtooth);
@@ -89,5 +89,5 @@ public class ShakeDefsTests
         }
     }
 
-    private static ShakeDefs Load() => ShakeDefs.Load(TestData.Fixture("zrdr"));
+    private static ShakeDefs Load() => ShakeDefs.Load(TestZrdr.Fixture("zrdr"));
 }

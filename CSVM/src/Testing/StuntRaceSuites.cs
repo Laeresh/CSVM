@@ -59,22 +59,22 @@ internal static class StuntRaceSuites
         + "a new window hands P1's pane back")]
     internal static void StuntRaceTimeAttack(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var zones = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         if (zones is not { TotalCount: >= 4 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than four danger zones");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
@@ -89,14 +89,14 @@ internal static class StuntRaceSuites
         var pause = new PauseState();
         var spec = SessionSpec.Parse(new[] { "--no-pads" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
             },
             new HumanRosterBindings
             {
@@ -353,22 +353,22 @@ internal static class StuntRaceSuites
         + "on the ending itself, and the hand-back returns every pane")]
     internal static void ARaceWatcherFollowsTheRacersStillInARun(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var zones = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         if (zones is not { TotalCount: >= 2 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads fewer than two danger zones");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
@@ -383,14 +383,14 @@ internal static class StuntRaceSuites
         var race = new StuntRace(WindowSeconds, zones.TotalCount);
         var spec = SessionSpec.Parse(new[] { "--no-pads" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
             },
             new HumanRosterBindings { RigCount = rigs.Length, Rigs = rigs, PauseState = new PauseState(), StuntZones = zones, Race = race },
             new ApartStarts());
@@ -564,8 +564,8 @@ internal static class StuntRaceSuites
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
-        ctx.RequireData(RofTree.Under(ctx.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt), $"the lobby's scores page art");
-        ctx.RequireData(Path.Combine(ctx.DataRoot, "extracted", "rof", "ui_strings.json"), $"ui_strings.json");
+        MenuSuiteHost.RequireRof(ctx, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt, $"the lobby's scores page art");
+        MenuSuiteHost.RequireRof(ctx, RofFiles.UiStringsFile, $"ui_strings.json");
         string[] zoneNames = { "Pier", "Bridge", "Tower" };
         var built = new List<Node>();
 
@@ -748,16 +748,16 @@ internal static class StuntRaceSuites
         + "spectate and hands the wrap-up to the menu once after the hold")]
     internal static void StuntRaceSpendsNoLives(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.RequireMessages();
+        var zones = StuntMission.Load(chapterGamez!, missionZrdr, ctx.Data.Messages);
         if (zones is not { TotalCount: >= 1 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads no danger zone");
@@ -765,7 +765,7 @@ internal static class StuntRaceSuites
 
         const float RespawnDelay = 0.5f;
         int respawnFrames = Mathf.CeilToInt(RespawnDelay / Dt) + 30;
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
@@ -782,14 +782,14 @@ internal static class StuntRaceSuites
         var pause = new PauseState();
         var spec = SessionSpec.Parse(new[] { "--no-pads" });
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                ChapterZrdr = ctx.ChapterZrdr("C1"),
             },
             new HumanRosterBindings
             {
@@ -1044,7 +1044,7 @@ internal static class StuntRaceSuites
     internal sealed class ApartStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

@@ -74,6 +74,8 @@ internal abstract class OriginalTestHost<TModule> : IOriginalScreenHost
 
     public virtual UiStrings MenuStrings => UiStrings.Empty;
 
+    public virtual CSVM.Spec.GameData Data => CSVM.Spec.GameData.Empty;
+
     public IReadOnlyList<OriginalRow> Rows
     {
         get

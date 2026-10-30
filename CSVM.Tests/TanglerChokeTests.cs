@@ -3,6 +3,7 @@ using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Testing;
 using Godot;
 using Xunit;
@@ -30,8 +31,7 @@ public class TanglerChokeTests
     private const float Wep12Min = 5f;
     private const float Wep12Max = 13f;
 
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>A dead-centre hit gets the whole authored maximum, with nothing scaling it.</summary>
     [Fact]

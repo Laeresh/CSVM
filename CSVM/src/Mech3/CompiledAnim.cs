@@ -41,7 +41,7 @@ public readonly struct SiCubic
     }
 }
 
-/// <summary>Reader for the mech3ax fork's compiled-anim extraction (<c>unzbd cs anim</c> on
+/// <summary>Reader for unzbd's compiled-anim output (its <c>anim</c> mode on
 /// <c>cam_anim.zbd</c>/<c>mis_anim.zbd</c> → per-def JSON + per-script <c>*.zan.json</c> +
 /// <c>metadata.json</c>). Accepts a zip or an unpacked directory. Keeps event payloads as a
 /// generic property bag (<see cref="AnimData"/>) rather than one DTO per event kind, so a new
@@ -115,6 +115,26 @@ public sealed class AnimArchive
         return _scriptCache[index] = script;
     }
 
+    /// <summary>An archive decoded in memory by <see cref="AnimZbd"/>: its definitions, and every
+    /// script already built under its pool name, so <see cref="Script"/> reads no file.</summary>
+    internal static AnimArchive FromDecoded(string label, List<AnimDefinition> defs, List<(string Name, SiScript Script)> scripts)
+    {
+        var archive = new AnimArchive("", isDir: false) { Label = label };
+        for (int i = 0; i < scripts.Count; i++)
+        {
+            archive._scriptNames.Add(scripts[i].Name);
+            archive._scriptCache[i] = scripts[i].Script;
+        }
+
+        foreach (var def in defs)
+        {
+            def.Archive = archive;
+            archive.Defs.Add(def);
+        }
+
+        return archive;
+    }
+
     private static AnimData ParseObject(byte[] bytes)
     {
         using var doc = JsonDocument.Parse(bytes);
@@ -146,8 +166,8 @@ public sealed class AnimArchive
             var p = Path.Combine(_path, name);
             return File.Exists(p) ? File.ReadAllBytes(p) : null;
         }
-        // Zip: reopened per read. Only the (rare) zipped-tree case pays this, --extract-unzip
-        // produces the loose directories the viewer prefers, and defs are read once.
+        // Zip: reopened per read. Only a zipped tree pays this, an unpacked one reads loose files,
+        // and defs are read once.
         using var zip = ZipFile.OpenRead(_path);
         if (zip.GetEntry(name) is not { } entry)
             return null;
@@ -589,12 +609,11 @@ public sealed class SiVectorChannel
 }
 
 /// <summary>
-/// Rotate channel. Two decode facts, both load-bearing (see docs/formats/anim-definitions.md):
-/// the cubics are HALF-ANGLE radians RELATIVE to the frame's base (constant term 0) and
-/// compose as <c>q(t) = exp(f(t)) ⊗ base</c>; and the JSON quaternion's field labels are
-/// shifted, because mech3ax reads the file's (w,x,y,z) order into a repr(C) {x,y,z,w}
-/// struct, so real w = json x, real x = json y, real y = json z, real z = json w.
-/// <see cref="Parse"/> undoes that shift, so nothing downstream has to know.
+/// Rotate channel, two decode facts (docs/formats/anim-definitions.md). The cubics are
+/// HALF-ANGLE radians RELATIVE to the frame's base (constant term 0), composed as
+/// <c>q(t) = exp(f(t)) ⊗ base</c>. The JSON quaternion's labels are shifted: unzbd reads the
+/// file's (w,x,y,z) order into an {x,y,z,w} quaternion, so real w = json x, and so on.
+/// Nothing downstream has to know, since <see cref="Parse"/> undoes that shift.
 /// </summary>
 public sealed class SiRotateChannel
 {
@@ -660,6 +679,9 @@ public sealed class AnimData
     private readonly Dictionary<string, object?> _props;
 
     public AnimData(Dictionary<string, object?> props) => _props = props;
+
+    /// <summary>The whole bag, for a tool that writes it out.</summary>
+    public IReadOnlyDictionary<string, object?> Props => _props;
 
     public static float? AsNum(object? v) => v switch
     {

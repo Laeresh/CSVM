@@ -21,24 +21,38 @@ internal static class MenuSuiteHost
     /// the seat: the host lends the setup feature's seat list once the feature is in, so seat 0
     /// has to be joined through it.</summary>
     internal static void AddFeatures(
-        MenuHost host, string dataRoot, Action<int, BindingProfile>? saveBindings = null,
+        MenuHost host, string dataRoot, Spec.GameData data, Action<int, BindingProfile>? saveBindings = null,
         ChapterCinema? chapterCinema = null, ClosingCinema? closingCinema = null,
         NetPlayFeature? netDoor = null)
     {
         host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForDataRoot(dataRoot));
+        host.Features.Add(InstantActionFeature.ForGameData(data));
         host.Features.Add(new PlayerSetupFeature());
-        // The hangar reads its labels and stock defaults the way the launcher wires them: the langui
-        // table, the stock fits on first need and the zrdr scope the data root carries.
-        string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(dataRoot, "extracted", "zrdr.zip"));
+        // The hangar reads its labels and stock defaults as the launcher wires them: the langui
+        // table, the stock fits and the root reader scope.
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), zrdr));
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), data.Zrdr));
         host.Features.Add(new CampaignFeature(
-            strings, StockAirframes.Node, chapterCinema, closingCinema));
+            strings, StockAirframes.Node, chapterCinema, closingCinema)
+        { Data = data });
         // No save by default: a suite must never write over the keymap saved at this machine's
         // controls, and only a suite holding the store's directory override may pass one.
         host.Features.Add(new ControlsFeature(saveBindings));
         host.Features.Add(netDoor ?? NetDoor());
+    }
+
+    /// <summary>Ends the suite as SKIP when the run's game files carry no decoded menu layout. That
+    /// is no install, or a synthetic tree without the Original shell.</summary>
+    internal static void RequireLayout(TestContext ctx) => RequireRof(ctx, RofFiles.MenuLayoutFile, $"decoded menu layout");
+
+    /// <summary>Ends the suite as SKIP when the run's game files lack the UI archive file
+    /// <paramref name="relative"/>, the way <c>RequireData</c> does for a missing file.</summary>
+    internal static void RequireRof(TestContext ctx, string relative, FormattableString what)
+    {
+        if (!ctx.Data.Rof.Exists(relative))
+        {
+            throw new SuiteSkippedException($"{CSVM.Utils.Log.Format(what)} not found: no {relative} in the game files for {ctx.DataRoot}");
+        }
     }
 
     /// <summary>The multiplayer door as a suite gets it: the real ENet carrier, bound to the

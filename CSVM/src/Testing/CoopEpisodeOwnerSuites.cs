@@ -82,15 +82,15 @@ internal static class CoopEpisodeOwnerSuites
         + "untouched, and the same capture claimed by nobody swaps the scripted player")]
     internal static void CampaignCoopEpisodeOwner(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm02Seq} -> {chapter}/{folder}");
@@ -128,15 +128,15 @@ internal static class CoopEpisodeOwnerSuites
         + "same claim and call outside the trigger's bracket hand it to P1")]
     internal static void CampaignCoopHangarOwner(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm07Seq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm07Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm07Seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
 
         var report = new StringBuilder();
         report.AppendLine($"seq {Cm07Seq} -> {chapter}/{folder}");
@@ -179,8 +179,8 @@ internal static class CoopEpisodeOwnerSuites
         + "opening alone")]
     internal static void CampaignCoopBlackeOwner(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, BlackeChapter, BlackeMission), $"{BlackeChapter}/{BlackeMission} zrdr");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.MissionZrdr(BlackeChapter, BlackeMission), $"{BlackeChapter}/{BlackeMission} zrdr");
         var report = new StringBuilder();
         ctx.CutsceneRoots = true;
         try
@@ -248,29 +248,29 @@ internal static class CoopEpisodeOwnerSuites
         Node3D? worldRoot = null, string planes = CapturePlanes)
     {
         var spec = SessionSpec.Parse(new[] { $"--plane={planes}" });
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             CamParamsFor = _ => new CamParams(),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), worldRoot ?? ctx.Host, resources,
             new FlightWorldBindings
             {
                 Projectiles = pool,
                 Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                ChapterZrdr = ctx.ChapterZrdr(chapter),
             },
             new HumanRosterBindings
             {
@@ -1021,7 +1021,7 @@ internal static class CoopEpisodeOwnerSuites
     private static void WithTwoHumans(TestContext ctx, string chapter, string planes,
         Action<FlightRoster, IReadOnlyList<FlightController>>? stage, Action<Staged> leg)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var pane = new SubViewport();
@@ -1218,7 +1218,7 @@ internal static class CoopEpisodeOwnerSuites
     private sealed class CoopStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
+            ZrdrSet missionZrdr, int spawnBase, int playerCount)
         {
             var starts = new FlightStart[playerCount];
             for (int i = 0; i < playerCount; i++)

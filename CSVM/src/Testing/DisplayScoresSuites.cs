@@ -32,13 +32,13 @@ internal static class DisplayScoresSuites
         + "the release takes both back; a seat in no race shows nothing however long it holds")]
     internal static void StuntRaceDisplayScores(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
-        ctx.RequireData(gamezPath, $"C1 gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
+        var chapterGamez = ctx.ChapterGamez("C1");
+        ctx.RequireData(chapterGamez, $"C1 gamez");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var messages = Messages.Load(ctx.MessagesPath);
-        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, messages);
+        ctx.RequireMessages();
+        var messages = ctx.Data.Messages;
+        var zones = StuntMission.Load(chapterGamez!, missionZrdr, messages);
         if (zones is not { TotalCount: >= 1 })
         {
             throw new SuiteSkippedException($"C1/IA1 loads no danger zone");
@@ -82,8 +82,8 @@ internal static class DisplayScoresSuites
         + "P1's stay; the release takes both back")]
     internal static void DogfightDisplayScores(TestContext ctx)
     {
-        ctx.RequireData(ctx.MessagesPath, $"messages.json");
-        var messages = Messages.Load(ctx.MessagesPath);
+        ctx.RequireMessages();
+        var messages = ctx.Data.Messages;
         var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
         match.RegisterKill(1, 0);
         var source = new ScoresSource { Match = match, Words = OriginalScoresWords.From(messages) };
@@ -167,11 +167,11 @@ internal static class DisplayScoresSuites
 
         public static TwoSeats Build(TestContext ctx, HumanRosterBindings human)
         {
-            ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-            ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-            string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+            ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+            ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+            TextureSet texturesPath = ctx.ChapterTextures("C1");
             ctx.RequireData(texturesPath, $"C1 textures");
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var planesGamez = ctx.Planes;
             var textures = new TextureArchive(texturesPath);
             var pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);
@@ -185,14 +185,14 @@ internal static class DisplayScoresSuites
 
             var spec = SessionSpec.Parse(new[] { "--no-pads" });
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-                SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+                SuiteConstants.AircraftResources(ctx, planesGamez, textures, ctx.Data.Messages, _ => new CamParams()),
                 new FlightWorldBindings
                 {
                     Projectiles = pool,
                     Gamez = planesGamez,
-                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+                    ChapterZrdr = ctx.ChapterZrdr("C1"),
                 },
                 new HumanRosterBindings
                 {

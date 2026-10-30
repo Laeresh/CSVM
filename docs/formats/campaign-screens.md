@@ -10,8 +10,8 @@ screen (`ORDINANCELAYOUT.SCRIPT`), and of the three that drive the scrapbook (`S
 each list is filled, which engine callback each screen makes, and where every screen transition
 goes.
 
-The sources are the scripts in `extracted\rof\ASSETS\SCRIPTS\`, the widget table
-`extracted\rof\ASSETS\LAYOUT.CSV`, the `langui` string table
+The sources are the scripts in `crimson.rof`'s `ASSETS\SCRIPTS\`, the widget table
+`ASSETS\LAYOUT.CSV` beside them, the `langui` string table
 ([strings.md](strings.md)), and the `crimson.exe` callback handlers.
 [rof.md](rof.md) holds the archive container and the script language's shape;
 [instant-action.md](instant-action.md) is the sibling decode of the same machinery for
@@ -629,7 +629,7 @@ is [`org/debrief.md`](../org/debrief.md); the record itself is [saved-games.md](
 
 **None of the composition is in the scripts.** `SCRAPBOOK.SCRIPT` creates 32 empty pane slots, 32
 empty text slots and 11 kill-stamp slots, then asks the engine, item by item, what to put in them.
-What each page holds is a fourth data file, `extracted\rof\ASSETS\SCRAPBOOK.CSV`, and the widget
+What each page holds is a fourth data file, `crimson.rof`'s `ASSETS\SCRAPBOOK.CSV`, and the widget
 geometry is `LAYOUT.CSV` as for every other screen.
 
 ### `SCRAPBOOK.CSV`

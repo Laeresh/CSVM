@@ -20,7 +20,7 @@ public sealed class OriginalArtSizes
     private readonly string _dataRoot;
     private readonly string _who;
 
-    /// <summary>A measurer over <paramref name="dataRoot"/>'s extraction, naming itself
+    /// <summary>A measurer over the game files bound to <paramref name="dataRoot"/>, naming itself
     /// <paramref name="who"/> in the line it logs for art it cannot read.</summary>
     public OriginalArtSizes(string dataRoot, string who)
     {
@@ -37,12 +37,13 @@ public sealed class OriginalArtSizes
         }
 
         (int Width, int Height)? size = null;
-        string path = OriginalAvailability.ArtPath(_dataRoot, art);
-        if (OriginalAvailability.IsMovie(art))
+        string path = OriginalAvailability.RelativeArtPath(art);
+        byte[]? bytes = Extraction.RofFiles.For(_dataRoot).Read(path);
+        if (bytes != null && OriginalAvailability.IsMovie(art))
         {
-            size = MovieSize(path);
+            size = MovieSize(bytes);
         }
-        else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
+        else if (bytes != null && UI.Boards.ComposedBoardView.DecodeArt(bytes, path) is { } image)
         {
             size = (image.GetWidth(), image.GetHeight());
         }
@@ -61,16 +62,11 @@ public sealed class OriginalArtSizes
     // A movie's picture size, which its sequence header carries and no bitmap loader can read.
     // Opened for the header alone and dropped; the surface the board draws from opens it again,
     // once, and that copy is the one that decodes.
-    private static (int Width, int Height)? MovieSize(string path)
+    private static (int Width, int Height)? MovieSize(byte[] bytes)
     {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
         try
         {
-            var movie = CSVM.Video.MpegMovie.FromFile(path);
+            var movie = CSVM.Video.MpegMovie.FromBytes(bytes);
             return (movie.Width, movie.Height);
         }
         catch (Exception e)

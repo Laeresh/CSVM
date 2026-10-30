@@ -45,11 +45,11 @@ internal static class WorldAndToolSuites
     [Suite("gltf-export", "the viewer plane exports to glTF textured and wound the right way out")]
     internal static void GltfExport(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
         string path = Path.Combine(ctx.ScratchDir, $"gltf-export-{ctx.PlaneName}.glb");
@@ -165,7 +165,7 @@ internal static class WorldAndToolSuites
     {
         foreach (var chapter in AlphaClassChapters)
         {
-            string path = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            var path = ctx.ChapterTextures(chapter);
             ctx.RequireData(path, $"{chapter} textures");
             using var textures = new TextureArchive(path);
             ctx.Check(textures.ManifestTextureCount > 0,
@@ -174,7 +174,7 @@ internal static class WorldAndToolSuites
                 $"{chapter} classifies textures as alpha-bearing count={textures.ManifestAlphaCount} of {textures.ManifestTextureCount}");
         }
 
-        using var c5 = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"));
+        using var c5 = new TextureArchive(ctx.ChapterTextures("C5"));
         foreach (var (name, carriesAlphaBit) in AlphaClassExpectations)
         {
             c5.Find(name);
@@ -222,7 +222,7 @@ internal static class WorldAndToolSuites
     {
         foreach (var (chapter, name) in new[] { ("C4", "moon1.tif"), ("C5", "star1.tif") })
         {
-            string path = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            var path = ctx.ChapterTextures(chapter);
             ctx.RequireData(path, $"{chapter} textures");
             using var textures = new TextureArchive(path);
             var tex = textures.Find(name);
@@ -266,7 +266,7 @@ internal static class WorldAndToolSuites
         + "enhanced graphics leaves flare_green's alpha whole")]
     internal static void TextureAlphaNibble(TestContext ctx)
     {
-        string path = SessionPaths.ChapterTextures(ctx.DataRoot, "C5");
+        var path = ctx.ChapterTextures("C5");
         ctx.RequireData(path, $"C5 textures");
         bool wasEnhanced = GraphicsMode.Enhanced;
         try
@@ -303,11 +303,11 @@ internal static class WorldAndToolSuites
         "a second aircraft build reuses the first's Shader resources instead of generating its own copies of the same text, which is what keeps a mid-flight generator launch off Godot's per-shader compile")]
     internal static void PlaneShaderReuse(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? first = null, second = null;
         try
@@ -344,11 +344,11 @@ internal static class WorldAndToolSuites
         "a subtree build that throws below a meshed node frees that node and its mesh instance before the exception leaves, so no render instance outlives the renderer and crashes the process at exit")]
     internal static void SceneBuildThrowFrees(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         var scene = new SceneBuilder(gamez, textures, cullBackfaces: true);
         GameZNode? parent = null;
@@ -448,11 +448,11 @@ internal static class WorldAndToolSuites
         "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11) in that pilot's own pane alone, while another pane and the Danger Zone photograph still draw the whole airframe")]
     internal static void CockpitInterior(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? exterior = null, withInterior = null;
         try
@@ -634,11 +634,11 @@ internal static class WorldAndToolSuites
         "the Danger Zone photograph's frame raises its own pilot's aircraft to the decoded fill ambient for its eye alone: the pane on the same frame is out of reach, another plane is never armed, and the next frame is disarmed")]
     internal static void DangerZonePhotographFill(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireZrdrEntry(missionZrdr, "weather.json");
 
         var weather = WeatherState.Load(missionZrdr);
@@ -655,7 +655,7 @@ internal static class WorldAndToolSuites
                 $"the fill lights brighter than the zone's ambient half ambient={ambient} fill={fill}");
         }
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var controller = new Node3D { Name = "photo_fill_pilot" };
         var stranger = new Node3D { Name = "photo_fill_stranger", Position = new Vector3(40f, 0f, 0f) };
@@ -722,11 +722,11 @@ internal static class WorldAndToolSuites
         "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform")]
     internal static void CockpitOverlayPass(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
         Node? host = null;
@@ -1366,12 +1366,12 @@ internal static class WorldAndToolSuites
     [Suite("tex-dropin", "the census/override flatten repaints RGB and changes nothing else")]
     internal static void TexDropIn(TestContext ctx)
     {
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         using var textures = new TextureArchive(texturesPath);
         // The synthetic archive carries none of the shipped samples, so it flattens every texture
-        // its own manifest lists, all of them without alpha.
-        IReadOnlyList<string> samples = ctx.SyntheticData ? ManifestTextureNames(texturesPath) : DropInSamples;
+        // it holds, all of them without alpha.
+        IReadOnlyList<string> samples = ctx.SyntheticData ? TextureNames(texturesPath) : DropInSamples;
         ctx.Check(samples.Count > 0, $"the archive has sample textures count={samples.Count}");
 
         var colors = new Dictionary<string, Color>();
@@ -1433,16 +1433,8 @@ internal static class WorldAndToolSuites
         ctx.Note($"{colors.Count} sample textures flattened, {seen.Count} distinct colours");
     }
 
-    // Every texture an unpacked archive's extraction manifest lists, empty when it lists none.
-    internal static List<string> ManifestTextureNames(string archive)
-    {
-        string manifest = Path.Combine(archive, "manifest.json");
-        if (!File.Exists(manifest))
-            return new List<string>();
-        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest));
-        return doc.RootElement.GetProperty("texture_infos").EnumerateArray()
-            .Select(info => info.GetProperty("name").GetString() ?? "").ToList();
-    }
+    // Every texture name the archive holds.
+    internal static List<string> TextureNames(TextureSet archive) => archive.Images.Select(t => t.Key).ToList();
 
     // templates.zrd's substitute and scale_range, asserted as an A/B against the build that does not
     // read the spec at all: the same ClutterBuilder over the same gamez, differing only in whether a
@@ -1455,16 +1447,16 @@ internal static class WorldAndToolSuites
     internal static void ClutterDeterminism(TestContext ctx)
     {
         const string chapter = "C1";
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
+        var interp = ctx.RequireInterp();
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var names = ClutterBuilder.TemplateNames(ctx.InterpPath, chapter);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var names = ClutterBuilder.TemplateNames(interp, chapter);
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
         ctx.Check(props != null && props.Kinds.Count > 0, $"{chapter} templates.zrd read");
 
         // Each build's kinds as (label → placements), plus the flat transform list in kind order.
@@ -1548,16 +1540,16 @@ internal static class WorldAndToolSuites
     internal static void ClutterRichVariation(TestContext ctx)
     {
         const string chapter = "C1";
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
+        var interp = ctx.RequireInterp();
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var names = ClutterBuilder.TemplateNames(ctx.InterpPath, chapter);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var names = ClutterBuilder.TemplateNames(interp, chapter);
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
         var shipped = VegetationSidecar.Load().For(chapter);
         ctx.Check(shipped.Kinds.Count > 0, $"the shipped sidecar lists {chapter}'s vegetation ({shipped.Kinds.Count} kinds)");
         var turned = new VegetationEntry
@@ -1650,24 +1642,24 @@ internal static class WorldAndToolSuites
     {
         foreach (var chapter in new[] { "C1", "C3" })
         {
-            ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
-            ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+            ctx.RequireData(ctx.ChapterGamez(chapter), $"{chapter} gamez");
+            ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
         }
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var interp = ctx.RequireInterp();
         // Each build's root and textures live to the end, since a brush re-bake recuts the drawn nodes.
         var held = new List<TextureArchive>();
         var roots = new List<Node3D>();
 
         CanopyMask? Bake(string chapter, VegetationEntry? entry, out ClutterBuilder builder, out GameZ gamez, out GameZNode world)
         {
-            gamez = GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, chapter));
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+            gamez = ctx.ChapterGamez(chapter)!;
+            var textures = new TextureArchive(ctx.ChapterTextures(chapter));
             held.Add(textures);
             world = gamez.FindByName("world1")!;
             var mask = VegetationMask.Neutral(world.AreaLeft, world.AreaTop, world.AreaRight, world.AreaBottom);
-            builder = new ClutterBuilder(gamez, textures, null, ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter)),
+            builder = new ClutterBuilder(gamez, textures, null, ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter)),
                 null, entry, entry != null ? mask : null);
-            if (builder.Build(ClutterBuilder.TemplateNames(ctx.InterpPath, chapter)) is { } root)
+            if (builder.Build(ClutterBuilder.TemplateNames(interp, chapter)) is { } root)
                 roots.Add(root);
             return builder.Canopy();
         }
@@ -1779,14 +1771,14 @@ internal static class WorldAndToolSuites
     {
         const string chapter = "C5";
         const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
 
         var root = ClutterBuilder.FindTemplateRoot(gamez, template);
         ctx.Check(root != null, $"{chapter} carries the {template} template");
@@ -1834,14 +1826,22 @@ internal static class WorldAndToolSuites
         }
 
         var lifted = Take(new ClutterBuilder(gamez, textures, null, props), template);
-        foreach (var (node, _, _) in chains)
+        Dictionary<string, List<Transform3D>> dropped;
+        // ⚠ The chapter gamez is the run's shared one: every cleared chain is put back, even on a throw.
+        try
         {
-            node.Local = Transform3D.Identity;
+            foreach (var (node, _, _) in chains)
+            {
+                node.Local = Transform3D.Identity;
+            }
+            dropped = Take(new ClutterBuilder(gamez, textures, null, props), template);
         }
-        var dropped = Take(new ClutterBuilder(gamez, textures, null, props), template);
-        foreach (var (node, local, _) in chains)
+        finally
         {
-            node.Local = local;
+            foreach (var (node, local, _) in chains)
+            {
+                node.Local = local;
+            }
         }
 
         ctx.Same(dropped.Count, lifted.Count, $"both builds export the same kinds");
@@ -1897,14 +1897,14 @@ internal static class WorldAndToolSuites
     {
         const string chapter = "C5";
         const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
 
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = chapterGamez!;
         using var textures = new TextureArchive(texturesPath);
-        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var props = ClutterTemplateSpec.Load(ctx.ChapterZrdr(chapter));
         var clutter = new ClutterBuilder(gamez, textures, null, props);
         var built = clutter.Build(new[] { template });
 
@@ -1961,12 +1961,12 @@ internal static class WorldAndToolSuites
         const string plane = "player_pfighter";
         const int paneEdge = 64;
         const float range = 6f;
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(plane);
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
         var built = builder.Build(plane);
@@ -2069,13 +2069,13 @@ internal static class WorldAndToolSuites
         const string chapter = "C1";
         const int paneEdge = 64;
         const float range = 3f;
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(chapter);
+        var chapterGamez = ctx.ChapterGamez(chapter);
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
 
         using var textures = new TextureArchive(texturesPath);
-        var builder = new WorldBuilder(GameZ.Load(gamezPath), textures);
+        var builder = new WorldBuilder(chapterGamez!, textures);
         var dome = builder.BuildHorizon();
         builder.Cycler.Free();
         var moon = (dome?.FindChild("moon", true, false)?.GetChildren() ?? new Godot.Collections.Array<Node>())
@@ -2199,11 +2199,11 @@ internal static class WorldAndToolSuites
         const float onMount = 0.1f;
         const float aftShift = 0.5f;
         string[] judged = { "player_warhawk", "player_pfighter" };
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane(judged);
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
         {
@@ -2333,11 +2333,11 @@ internal static class WorldAndToolSuites
         "in the Cockpit view the Warhawk's pilot lights sit on its interior fin peaks and its side props on its interior nacelles, the Firebrand's and Devastator's open-air lights are hidden, the Brigand's stay as built, the originals leave only the pilot's own pane, and each copy follows its original's visibility and spin")]
     internal static void CockpitReseatSuite(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk", "player_fbrand", "player_pfighter", "player_brigand");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
         {
@@ -2366,11 +2366,11 @@ internal static class WorldAndToolSuites
         "at full roll, pitch and yaw every cockpit interior's ailerons, elevators and rudders deflect about their leading edge in place in the wing, each one's origin offset noted, except the Hellhound's and Balmoral's interior ailerons, which hold still past the gap in their numbering, while the outside surfaces still turn about their own origin")]
     internal static void CockpitSurfaceHinges(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk", "player_avenger", "player_balmoral");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         using var textures = new TextureArchive(texturesPath);
         // Past a gap in the plane's numbering, so the original never finds them: neither plane has
         // an l/r_aileron2 (docs/org/cameraViews.md's interior table).
@@ -2556,7 +2556,7 @@ internal static class WorldAndToolSuites
     internal static void SunOrientation(TestContext ctx)
     {
         var (chapter, mission) = WeatherMission(ctx, "C2", "MP2");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ZrdrSet zrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
         var zone1 = AuthoredBearing(ctx, zrdr, "zone1", -65f, 90f);
         var zone2 = AuthoredBearing(ctx, zrdr, "zone2", -25f, 90f);
@@ -2624,7 +2624,7 @@ internal static class WorldAndToolSuites
 
     // A zone's sun bearing in degrees: the shipped literal on an install, the record's own on the
     // synthetic tree. The CSVM.Tests units pin the reader, so the suite's question stays the wiring.
-    internal static (float Pitch, float Yaw) AuthoredBearing(TestContext ctx, string zrdr, string zone,
+    internal static (float Pitch, float Yaw) AuthoredBearing(TestContext ctx, ZrdrSet zrdr, string zone,
         float pitch, float yaw)
     {
         if (!ctx.SyntheticData)
@@ -2642,9 +2642,9 @@ internal static class WorldAndToolSuites
         "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission gets a dimmer scene sun than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
     internal static void SunEnergy(TestContext ctx)
     {
-        string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");
-        string dayZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1C", "M01");
-        string edgeZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1C", "MP1");
+        ZrdrSet nightZrdr = ctx.MissionZrdr("C1B", "IA1");
+        ZrdrSet dayZrdr = ctx.MissionZrdr("C1C", "M01");
+        ZrdrSet edgeZrdr = ctx.MissionZrdr("C1C", "MP1");
         ctx.RequireData(nightZrdr, $"C1B/IA1 mission zrdr");
         ctx.RequireData(dayZrdr, $"C1C/M01 mission zrdr");
         ctx.RequireData(edgeZrdr, $"C1C/MP1 mission zrdr");
@@ -2711,8 +2711,8 @@ internal static class WorldAndToolSuites
     {
         var lit = WeatherMission(ctx, "C1", "IA1");
         var cross = WeatherMission(ctx, "C2", "MP2");
-        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, lit.Chapter, lit.Mission);
-        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, cross.Chapter, cross.Mission);
+        ZrdrSet litZrdr = ctx.MissionZrdr(lit.Chapter, lit.Mission);
+        ZrdrSet crossZrdr = ctx.MissionZrdr(cross.Chapter, cross.Mission);
         ctx.RequireData(litZrdr, $"{lit.Chapter}/{lit.Mission} mission zrdr");
         ctx.RequireData(crossZrdr, $"{cross.Chapter}/{cross.Mission} mission zrdr");
         var litBearing = AuthoredBearing(ctx, litZrdr, "zone1", -25f, 90f);
@@ -2808,7 +2808,7 @@ internal static class WorldAndToolSuites
     internal static void WeatherCockpitWhiteout(TestContext ctx)
     {
         var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ZrdrSet zrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
         // C1/IA1's band is 970-1124 m, so its centre is 1047 m.
         float core = ctx.SyntheticData ? WeatherState.Load(zrdr)?.CloudBandCentre ?? 0f : 1047f;
@@ -2925,18 +2925,18 @@ internal static class WorldAndToolSuites
         "the sun's lens flare is gated on chapter data alone, and its two independent gates (the gamez `sun` node and init.gw's LensFlareTexture slots) agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
     internal static void LensFlareGates(TestContext ctx)
     {
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var interp = ctx.RequireInterp();
         int withFlare = 0;
         foreach (var (chapter, _, _) in Census)
         {
             bool expected = chapter is "C2" or "C3";
 
-            var slots = LensFlareRig.FlareTextureNames(ctx.InterpPath, chapter);
+            var slots = LensFlareRig.FlareTextureNames(interp, chapter);
             ctx.Same(expected ? 4 : 0, slots.Count, $"{chapter} LensFlareTexture slots");
 
-            string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-            ctx.RequireData(gamezPath, $"{chapter} gamez");
-            var gamez = GameZ.Load(gamezPath);
+            var chapterGamez = ctx.ChapterGamez(chapter);
+            ctx.RequireData(chapterGamez, $"{chapter} gamez");
+            var gamez = chapterGamez!;
             int sunNodes = 0;
             foreach (var n in gamez.Nodes)
             {
@@ -3322,11 +3322,11 @@ internal static class WorldAndToolSuites
         "with two pilots in the cockpit each pane's camera leaves out its own pilot's body and draws the other pilot's, each spyglass disc likewise, and Nose takes markers/dontmove out of the own pane alone; one pilot on the main camera hides the body as before")]
     internal static void SplitscreenCockpitBody(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         var made = new List<Node>();
         try
@@ -3882,14 +3882,14 @@ internal static class WorldAndToolSuites
     // without the stamped decorations, so their shaders are not under its stage to read.
     private static List<(string Code, bool Sprite)> ClutterShaderText(TestContext ctx, string chapter)
     {
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
-        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        var chapterGamez = ctx.ChapterGamez(chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(chapter);
+        ctx.RequireData(chapterGamez, $"{chapter} gamez");
         ctx.RequireData(texturesPath, $"{chapter} textures");
-        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var interp = ctx.RequireInterp();
         using var textures = new TextureArchive(texturesPath);
-        var builder = new ClutterBuilder(GameZ.Load(gamezPath), textures);
-        var root = builder.Build(ClutterBuilder.TemplateNames(ctx.InterpPath, chapter));
+        var builder = new ClutterBuilder(chapterGamez!, textures);
+        var root = builder.Build(ClutterBuilder.TemplateNames(interp, chapter));
         try
         {
             return root == null ? new List<(string, bool)>() : ShaderTextUnder(root);
@@ -4034,7 +4034,7 @@ internal static class WorldAndToolSuites
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
     // comparing two missions' cloud tops is not the night-against-day question.
     private static (float Sun, float Ambient, Godot.Environment.AmbientSource Source, Color Color, Color Authored) ZoneEnergies(
-        TestContext ctx, string chapter, string mission, string zrdr)
+        TestContext ctx, string chapter, string mission, ZrdrSet zrdr)
     {
         var sun = new DirectionalLight3D { Name = $"sun-energy-{chapter}-{mission}" };
         var env = new Godot.Environment();

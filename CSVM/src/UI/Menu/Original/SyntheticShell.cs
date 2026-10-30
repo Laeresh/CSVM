@@ -10,30 +10,31 @@ using CSVM.Tooling;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The synthetic tree's Original shell: the <c>extracted/rof/</c> files its availability check and
-/// its screens read. The hand-authored <c>fixtures/menu-layout-original/LAYOUT.CSV</c> goes through
-/// the extraction's own decoder into <c>menu_layout.json</c>, joined to the invented string rows of
+/// The synthetic tree's Original shell: the UI archive files its availability check and its
+/// screens read. They are held in memory and bound to the tree's data root.
+/// The hand-authored <c>fixtures/menu-layout-original/LAYOUT.CSV</c> goes through the game's own
+/// decoder into <c>menu_layout.json</c>, joined to the invented rows of
 /// <c>fixtures/synthetic/rof/ui_strings.json</c>. A row with a symbol is a layout string; one
 /// without is a row the code reads by id. Every art file is generated at the size
-/// <c>fixtures/synthetic/rof/art.json</c> gives it, so a widget's size is a record and its pixels
-/// are code. A file the manifest requires and the record does not size stops the build.
+/// <c>fixtures/synthetic/rof/art.json</c> gives it. A file the manifest requires and the record
+/// does not size stops the build.
 /// </summary>
 public static class SyntheticShell
 {
-    /// <summary>Every family of the synthetic tree, the tooling ones and then this one. A tooling
-    /// family may not name a UI type, so the whole list is composed here, the lowest family that
-    /// names both. Every caller of <see cref="SyntheticData.Build"/> hands it in.</summary>
+    /// <summary>Every family of the synthetic tree, this one alone: every other synthetic model is
+    /// built in memory (<c>SyntheticGameData</c>). Every caller of <see cref="SyntheticData.Build"/>
+    /// hands it in.</summary>
     public static readonly IReadOnlyList<SyntheticFamily> TreeFamilies =
-        SyntheticData.Families.Append(new SyntheticFamily("original-shell", WriteShell)).ToArray();
+        new[] { new SyntheticFamily("original-shell", WriteShell) };
 
     private const string LayoutFixture = "menu-layout-original/LAYOUT.CSV";
     private const string StringsFixture = "synthetic/rof/ui_strings.json";
     private const string ArtFixture = "synthetic/rof/art.json";
 
-    /// <summary>Writes the shell's files under <paramref name="tree"/>.</summary>
+    /// <summary>Builds the shell's files and binds them to <paramref name="tree"/>'s data root.</summary>
     public static void WriteShell(SyntheticTree tree)
     {
-        string strings = tree.CopyFixture(StringsFixture, ExtractionRun.RofFolder + "/ui_strings.json");
+        byte[] strings = File.ReadAllBytes(tree.Fixture(StringsFixture));
         var rows = Rows(strings);
         var art = Art(tree.Fixture(ArtFixture));
         var input = new MenuLayoutInput
@@ -44,7 +45,11 @@ public static class SyntheticShell
             ArchiveFiles = art.Keys.Select(name => "GRAPHICS/" + name).ToList(),
         };
         string json = MenuLayoutDecoder.ToJson(MenuLayoutDecoder.Decode(input));
-        File.WriteAllText(tree.Under(ExtractionRun.RofFolder + "/menu_layout.json"), json, new UTF8Encoding(false));
+        var files = new Dictionary<string, byte[]>
+        {
+            [RofFiles.UiStringsFile] = strings,
+            [RofFiles.MenuLayoutFile] = new UTF8Encoding(false).GetBytes(json),
+        };
 
         // A required file with no size would pass the build and refuse Original at run time, far
         // from the record that lacks it.
@@ -59,8 +64,10 @@ public static class SyntheticShell
 
         foreach (var (name, (width, height)) in art)
         {
-            tree.WriteBytes(ExtractionRun.RofFolder + "/" + OriginalAvailability.RelativeArtPath(name), Encode(name, width, height));
+            files[OriginalAvailability.RelativeArtPath(name)] = Encode(name, width, height);
         }
+
+        RofFiles.Bind(tree.DataRoot, RofFiles.Of(files));
     }
 
     // The picture in the format its extension names, since a loader picks its decoder that way.
@@ -73,9 +80,9 @@ public static class SyntheticShell
             _ => throw new InvalidDataException($"{ArtFixture}: {name} is not a picture this tree can write"),
         };
 
-    private static List<UiStringRow> Rows(string path)
+    private static List<UiStringRow> Rows(byte[] json)
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(path, Encoding.UTF8));
+        using var doc = JsonDocument.Parse(json);
         var rows = new List<UiStringRow>();
         foreach (var row in doc.RootElement.EnumerateArray())
         {

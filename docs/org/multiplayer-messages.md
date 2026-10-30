@@ -1304,6 +1304,24 @@ ammunition or rocket refuses Ready once and resets the fit, as the original does
 counts are kept, since the pylons stay empty either way. A co-op launch sends the host's own custom
 planes, and its guests fly stock.
 
+The original seats no bot in a multiplayer match, so how the outlaw list binds a host's bots is a
+remake-only rule: it binds them as it binds the people. A bot's hand-set airframe is refused when
+the rules refuse a person's stock pick of it (airframe, stock engine, stock gun calibres), and a
+rules change puts a bot standing on one back on Random. The launch draws a Random bot only on an
+admitted airframe and only from the militia/airframe pairs whose militia def the list allows whole.
+An AI gun is a slug round of its calibre, and an ordnance id is the rocket-table row it sits on. The
+rocket rows cover the aerial torpedo: the list's rows are named by langui 3380+i, the rocket table's
+own index, and row 10 is 3390 "Aerial Torpedoes", the Black Hat Warhawk's `wep_14`. Fortune Hunter
+flies every airframe on no def, so an admitted airframe always has a pair. Rules that refuse all
+eleven stock airframes, which a host on an admitted custom plane can launch under, leave the bots
+out of the field, as a full field leaves them out. A bot on its airframe's
+stock arms flies the stock fit with each outlawed ammunition or rocket replaced by the first one the
+list allows, where the original's reset to none would leave it no gun. The torpedo row is never
+that replacement, since only the Black Hat Warhawk carries torpedoes under the one-per-team cap: a
+list that allows no other rocket leaves the pylons empty. The nitro row needs no bot
+rule: a bot is seated no custom build, so it flies its airframe's stock engine
+(`NetPlaneBuild.StockEngine`), never an injector, which `LobbyBotOutlawTests` pins over a real lobby.
+
 **Compatibility of the seat bytes.** The previous layout knew only `0xFF`, a guest's one pick, and
 read every other byte as a launch seat. A host of that layout files `0xFE` to `0xFC` as launch-seat
 builds it never reads, so it flies a newer guest's further seat on the stock airframe while that

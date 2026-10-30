@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Xunit;
 
@@ -16,8 +17,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class AiSpawnJitterTests
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     /// <summary>The five dynamics slots the decode names, each inside the ±5 % band and each
     /// actually moved: <c>fd_speed</c>, <c>ThrustFactor</c>, <c>drag_factor</c>,

@@ -54,7 +54,7 @@ internal static class NetChatSuites
 
             var peers = ends.Select(e => e.Session).ToArray();
             Lockstep(SettleSteps, peers);
-            var strings = Messages.Load(ctx.MessagesPath);
+            var strings = ctx.Data.Messages;
             Panes(ctx, peers);
             Entry(ctx, peers, strings);
             TeamLine(ctx, peers, strings);

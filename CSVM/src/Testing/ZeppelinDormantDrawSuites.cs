@@ -26,11 +26,11 @@ internal static class ZeppelinDormantDrawSuites
         "it may still draw at opacity 0")]
     internal static void ZeppelinDormantDrawsNothing(TestContext ctx)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter), $"{Chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(Chapter), $"{Chapter} textures");
 
         ZeppelinDef? def = null;
         foreach (var d in Zeppelins.Load(missionZrdr))

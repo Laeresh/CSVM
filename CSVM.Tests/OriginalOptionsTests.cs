@@ -109,9 +109,36 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.True(host.Module.GameOptions.RumbleChoice);
 
+        // The two remake-only gun aids, each off while nothing is saved.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.LeadingAimAssistKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.LeadingAimAssistChoice);
+        Accept(host);
+        Assert.True(host.Module.GameOptions.LeadingAimAssistChoice);
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.LeadMarkerKey, host.FocusedKey);
+        Accept(host);
+        Assert.True(host.Module.GameOptions.LeadMarkerChoice);
+
+        // The remake-only throttle plate, off while nothing is saved.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.ThrottlePlateKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.ThrottlePlateChoice);
+        Accept(host);
+        Assert.True(host.Module.GameOptions.ThrottlePlateChoice);
+
+        // The remake-only Modding Folder row, Off while nothing is saved and nothing is offered.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.ModFolderKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal("Off", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
+
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
+        Assert.True(exit.LeadingAimAssist);
+        Assert.True(exit.LeadMarker);
+        Assert.True(exit.ThrottlePlate);
         Assert.True(exit.NearestAfterKill);
         Assert.True(exit.Rumble);
         Assert.Equal("cockpit", exit.DefaultView);
@@ -120,6 +147,69 @@ public class OriginalOptionsTests
         // apply carries every saved choice whichever page sends it.
         Assert.Equal(GraphicsMode.Default, exit.Graphics);
         Assert.Equal("hard", exit.Difficulty);
+        Assert.Null(exit.ModFolder);
+    }
+
+    [Fact]
+    public void TheModdingFolderRowOffersTheSavedAndOfferedFoldersAndItsPickRidesTheExit()
+    {
+        string saved = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "mods"));
+        string extracted = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "extracted"));
+        var host = new OptionsHost(Measure);
+        host.Module = new OriginalOptionsScreen(
+            MenuLayoutReaderTests.OriginalLayout(), host, () => new OptionsDef { ModFolder = saved }, modFolders: () => new[] { extracted, saved });
+        host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+
+        Assert.Equal(saved, host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal("mods", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
+        Accept(host);
+        Assert.Equal(new[] { "Off", "mods", "extracted", OriginalGameOptionsPage.ChooseFolderWord }, host.Rows.Select(r => r.Label));
+        Down(host);
+        Accept(host);
+        Assert.Equal(extracted, host.Module.GameOptions.ModFolderChoice);
+        // A sideways step wraps past the picker's item, which only the open list offers.
+        StepX(host, 1);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        StepX(host, -1);
+        Assert.Equal(extracted, host.Module.GameOptions.ModFolderChoice);
+        Assert.False(host.Module.GameOptions.TakeFolderRequest());
+        Assert.Equal(extracted, ((IOriginalOptionsForm)host.Module).Apply().ModFolder);
+    }
+
+    [Fact]
+    public void ChooseFolderAsksForTheDialogAndAPickedFolderIsStagedOfferedAndApplied()
+    {
+        string empty = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "newmod"));
+        System.IO.Directory.CreateDirectory(empty);
+        string filled = System.IO.Path.GetFullPath(System.IO.Path.Combine(TestData.TempDir(), "filled"));
+        System.IO.Directory.CreateDirectory(filled);
+        System.IO.File.WriteAllText(System.IO.Path.Combine(filled, "messages.json"), "{}");
+        var host = new OptionsHost(Measure);
+        host.Module = new OriginalOptionsScreen(MenuLayoutReaderTests.OriginalLayout(), host, () => new OptionsDef());
+        host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+
+        Accept(host);
+        Assert.Equal(new[] { "Off", OriginalGameOptionsPage.ChooseFolderWord }, host.Rows.Select(r => r.Label));
+        Down(host);
+        Accept(host);
+        Assert.Null(host.Module.GameOptions.OpenOption);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        Assert.True(host.Module.GameOptions.TakeFolderRequest());
+        Assert.False(host.Module.GameOptions.TakeFolderRequest());
+
+        // An empty folder warns and is taken all the same; a folder of output does not warn.
+        Assert.Contains("holds no unzbd output", host.Module.GameOptions.TakeFolder(empty + System.IO.Path.DirectorySeparatorChar));
+        Assert.Equal(empty, host.Module.GameOptions.ModFolderChoice);
+        Assert.Equal("newmod", Row(host, OriginalGameOptionsPage.ModFolderKey).Label);
+        Assert.Null(host.Module.GameOptions.TakeFolder(filled));
+        Assert.Equal(filled, ((IOriginalOptionsForm)host.Module).Apply().ModFolder);
+
+        // Both stay offered once Off is staged and once the page reopens on the saved options.
+        StepX(host, -2);
+        Assert.Null(host.Module.GameOptions.ModFolderChoice);
+        host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.ModFolderKey);
+        Accept(host);
+        Assert.Equal(new[] { "Off", "newmod", "filled", OriginalGameOptionsPage.ChooseFolderWord }, host.Rows.Select(r => r.Label));
     }
 
     [Fact]
@@ -875,13 +965,17 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // Five option rows, none of them a menu presentation: the command line alone picks one.
+        // Nine option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey, OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
+                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
+                OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
+                OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
             },
             host.Rows.Select(r => r.Key));
         Assert.Equal("Hardest", Row(host, OriginalGameOptionsPage.DifficultyKey).Label);
@@ -968,31 +1062,32 @@ public class OriginalOptionsTests
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_GoBack.png");
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        // Five rows over a three-row section, so the plate grows one band and each row stands on a
-        // band of its own bar the two checkboxes sharing the third. The descriptions are spread
-        // evenly down their own window, so this one stands above its row rather than under it.
+        // The descriptions stop short of the window's scroll column, as the VIDEO page's do.
+        float descWidth = board.Lines.Single(l => l.Text == "Select the difficulty level for a solo campaign.").Width;
+        Assert.InRange(descWidth, 280f, 300f);
+        Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f);
+        // Four rows of the seven stand in the window over a three-row section, and the plate grows one
+        // band. Each row stands on a band of its own, its description on its own row's line.
         Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 340f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 335f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 350f && l.Width == descWidth);
         // A checkbox row takes the narrower title box the head-turn row carries, in the dropdown
-        // rows' own column and left-aligned there. The pair opens at its band's top and steps by
-        // one 16-pixel checkbox. Each title stands on its box's centre line, a pixel under the row.
-        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 375f
+        // rows' own column and left-aligned there. It keeps a band of its own, and each title stands on its
+        // box's centre line, a pixel under the row.
+        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 401f
             && l.Width == 112f && l.Justify == BoardJustify.Left);
         // No row offers the menu presentation: the command line alone chooses it.
         Assert.DoesNotContain(board.Lines, l => l.Text is "Menu" or "Select the menu presentation.");
-        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 391f
+        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 461f
             && l.Width == 112f && l.Justify == BoardJustify.Left);
         Assert.Contains(board.Lines,
             l => l.Text == "Take the nearest target after a kill instead of the first of the list."
-                && l.X == 340f && l.Y == 425f && l.Width == 310f);
-        // The bottom band keeps one row, so Rumble's own description clears the moved plaques.
-        Assert.Contains(board.Lines, l => l.Text == "Rumble" && l.X == 130f && l.Y == 461f
-            && l.Width == 112f && l.Justify == BoardJustify.Left);
-        Assert.Contains(board.Lines,
-            l => l.Text.StartsWith("Rumble the gamepad", StringComparison.Ordinal) && l.Y == 470f);
-        // Five titles, five descriptions and the page's own tab title.
-        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
+                && l.X == 340f && l.Y == 470f && l.Width == descWidth);
+        // Four titles, four descriptions and the page's own tab title. Rumble and the two gun aids wait below.
+        Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
+        Assert.DoesNotContain(board.Lines, l => l.Text is "Rumble" or "Leading Aim" or "Lead Marker");
+        // The scroll column's two arrows on the window's right edge, the up one dead at the top.
+        Assert.False(Row(host, OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix).Enabled);
+        Assert.True(Row(host, OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix).Enabled);
 
         // The box is this page's focus mark, not standing chrome, so exactly one row carries it and
         // it is the focused one.
@@ -1437,7 +1532,7 @@ public class OriginalOptionsTests
         GameOptionRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         GameOptionRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1449,7 +1544,7 @@ public class OriginalOptionsTests
         AudioRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheAudioRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         AudioRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1461,7 +1556,7 @@ public class OriginalOptionsTests
         VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheVideoRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         VideoRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
@@ -1473,7 +1568,7 @@ public class OriginalOptionsTests
         VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure, headset: true);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheVideoRowsUnderAHeadsetClearEachOtherAndTheirWordsOverTheInstall()
     {
         VideoRowsAreClearOfEachOther(InstallLayout(out var measure), measure, headset: true);
@@ -1485,15 +1580,15 @@ public class OriginalOptionsTests
         ControlsRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
     }
 
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void TheControlsRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
     }
 
     // The Game Options page's seven rows share one plate, so no two of them may overlap. No control
-    // may sit over a title or a description. The first three are the original's own, in its order;
-    // the two under them are this port's.
+    // may sit over a title or a description, at either end of the window's scroll. The first three
+    // are the original's own, in its order; the four under them are this port's.
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1505,10 +1600,22 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey,
                 OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
+                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
+                OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
+                OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "GAME OPTIONS", 10);
+        // Four rows stand in the window at a time, one to a frame, the five below it unseen until it scrolls.
+        RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
+        for (int i = 0; i < 4; i++)
+        {
+            Click(host, OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix);
+        }
+
+        Assert.Equal(4, host.Module.GameOptions.Top);
+        RowsAreClearOfEachOther(host, host.Rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
     }
 
     // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of
@@ -1641,10 +1748,10 @@ public class OriginalOptionsTests
     // as well as the fixture. The authored rectangles there are the original's, not this repo's.
     private static MenuLayout InstallLayout(out Func<string, (int Width, int Height)?> measure)
     {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
+        string dataRoot = TestRof.InstallRoot;
+        var layout = MenuLayout.TryLoad(dataRoot, out var reason);
         Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        measure = art => OriginalCoverageTests.PngSize(OriginalAvailability.ArtPath(dataRoot, art));
+        measure = art => OriginalCoverageTests.PngSize(dataRoot, art);
         return layout!;
     }
 

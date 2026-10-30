@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The per-plane camera reader (<see cref="CamParams"/>), against
-/// <c>fixtures/zrdr/camparam.json</c>, hand-authored from
+/// <c>fixtures/zrdr/camparam.zrd.json</c>, hand-authored from
 /// <c>docs/formats/camparam.md</c>, so its numbers are deliberately NOT the shipped ones. The
 /// real values are asserted separately, against a live extraction, in
 /// <see cref="ExtractedGoldenTests"/>.
@@ -73,7 +73,7 @@ public class CamParamsTests
     {
         // A partial extraction must still fly. FromData is how the session knows to report it,
         // and is the difference between "the data says 13" and "we guessed 13".
-        var cam = CamParams.Load(TestData.TempDir(), "player_bhawk");
+        var cam = CamParams.Load(TestZrdr.Folder(TestData.TempDir()), "player_bhawk");
         Assert.False(cam.FromData);
         Assert.Equal(13f, cam.Dist);
     }
@@ -84,12 +84,12 @@ public class CamParamsTests
         // Not a fixture property, a claim about the real file, pinned here so the anomaly that
         // blocks the dynamic-distance decode cannot be quietly "fixed" by a future reader. The
         // hard-coded fallbacks carry the shipped default block verbatim.
-        var cam = CamParams.Load(TestData.TempDir(), "player_bhawk");
+        var cam = CamParams.Load(TestZrdr.Folder(TestData.TempDir()), "player_bhawk");
         Assert.Equal(13f, cam.Dist);
         Assert.Equal(15.7f, cam.DistMin);
         Assert.True(cam.DistMin > cam.Dist);
     }
 
     private static CamParams Load(string planeNodeName) =>
-        CamParams.Load(TestData.Fixture("zrdr"), planeNodeName);
+        CamParams.Load(TestZrdr.Fixture("zrdr"), planeNodeName);
 }

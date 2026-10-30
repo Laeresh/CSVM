@@ -152,7 +152,7 @@ with the preset's name as its heading, so there is no per-preset prose to find i
 
 ## Option strings
 
-From the `langui` table, read out of `extracted/rof/ui_strings.json`.
+From the `langui` table, read out of `ui_strings.json` (`RofFiles`).
 
 | Block | Base id | Values |
 |---|---|---|

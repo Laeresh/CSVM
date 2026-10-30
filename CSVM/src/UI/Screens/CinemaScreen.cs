@@ -67,16 +67,17 @@ public sealed partial class CinemaScreen : Node
     /// <summary>How many pictures have reached the screen.</summary>
     public int FramesShown => _cinema.FramesShown;
 
-    /// <summary>Opens the cinema a name means under <paramref name="dataRoot"/>. Returns null when
-    /// the file is not there or will not decode. A flow that cannot show a cinema still has to
-    /// reach the screen after it. The name resolves without regard to case
-    /// (<see cref="CSVM.Extraction.SessionPaths.Cinema"/>).</summary>
+    /// <summary>Opens the cinema a name means in the game files bound to <paramref name="dataRoot"/>.
+    /// Returns null when the file is not there or will not decode. A flow that cannot show a cinema
+    /// still has to reach the screen after it. The name resolves without regard to case
+    /// (<see cref="RofFiles.Cinema"/>).</summary>
     public static CinemaScreen? Open(string dataRoot, string name, CinemaSkip skip)
     {
-        string path = SessionPaths.Cinema(dataRoot, name);
         try
         {
-            return new CinemaScreen(MpegMovie.FromFile(path), skip);
+            return RofFiles.For(dataRoot).Read(RofFiles.Cinema(name)) is { } bytes
+                ? new CinemaScreen(MpegMovie.FromBytes(bytes), skip)
+                : null;
         }
         catch (Exception e)
             when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException)

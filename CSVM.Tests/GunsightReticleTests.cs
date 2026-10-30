@@ -176,7 +176,7 @@ public class GunsightReticleTests
     // The sight glass texture from C1's archive as the game reads it (SessionPaths.ChapterTextures).
     private static byte[] ReadTexture(string name)
     {
-        string archive = SessionPaths.ChapterTextures(TestData.DataRoot!, "C1");
+        string archive = SessionPaths.ChapterTextures(TestData.ExtractedRoot!, "C1");
         if (Directory.Exists(archive))
         {
             return File.ReadAllBytes(Path.Combine(archive, name));

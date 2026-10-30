@@ -33,13 +33,13 @@ internal static class CampaignZeppelinSuites
         + "place live once the flag is on")]
     internal static void CampaignZeppelins(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         var mission = MissionOf(missions, ZepChapter, ZepMission)
             ?? throw new SuiteSkippedException($"{ZepChapter}/{ZepMission} is not in cm_sequence");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ZepChapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ZepChapter, ZepMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(ZepChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ZepChapter, ZepMission);
         ctx.RequireData(chapterZrdr, $"{ZepChapter} zrdr");
         ctx.RequireData(missionZrdr, $"{ZepChapter}/{ZepMission} zrdr");
 
@@ -49,12 +49,12 @@ internal static class CampaignZeppelinSuites
         ctx.Check(!campaignSpec.Zeppelins && !campaignSpec.Generators,
             $"FromCampaign itself sets neither flag, BL-451's own bug, guarded so it cannot come back unnoticed");
 
-        var resolved = CampaignDirector.ResolveSpec(campaignSpec, ctx.ZrdrPath);
+        var resolved = CampaignDirector.ResolveSpec(campaignSpec, ctx.Zrdr);
         ctx.Check(resolved.Chapter.Equals(ZepChapter, System.StringComparison.OrdinalIgnoreCase)
             && resolved.Mission.Equals(ZepMission, System.StringComparison.OrdinalIgnoreCase),
             $"seq {mission.Seq} resolves to {ZepChapter}/{ZepMission}, got {resolved.Chapter}/{resolved.Mission}");
 
-        var final = GameSession.ResolveCampaignZeppelins(resolved, ctx.DataRoot);
+        var final = GameSession.ResolveCampaignZeppelins(resolved, ctx.Data);
         report.AppendLine($"seq {mission.Seq} -> {resolved.Chapter}/{resolved.Mission}: "
             + $"Zeppelins={final.Zeppelins} Generators={final.Generators}");
         ctx.Check(final.Zeppelins,
@@ -71,7 +71,7 @@ internal static class CampaignZeppelinSuites
     // The same load-and-place BuildWorldStage's --zeppelins gate performs (GameSession.cs
     // ~2311-2325): proves the flag landing "on" is not academic, the mission's zeppelins are
     // actually live once it does.
-    private static void PlaceTheZeppelins(TestContext ctx, string chapterZrdr, string missionZrdr, StringBuilder report)
+    private static void PlaceTheZeppelins(TestContext ctx, ZrdrSet chapterZrdr, ZrdrSet missionZrdr, StringBuilder report)
     {
         var defs = Zeppelins.Load(missionZrdr);
         ctx.Check(defs.Count > 0, $"{ZepChapter}/{ZepMission}'s zeppelin records are non-empty, count={defs.Count}");

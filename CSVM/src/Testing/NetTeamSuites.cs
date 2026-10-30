@@ -54,11 +54,11 @@ internal static class NetTeamSuites
         + "team, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
     internal static void ATeamMatchAcrossThreeMachines(TestContext ctx)
     {
-        var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.ZrdrPath))}");
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.Zrdr))}");
         // The whole table the sessions' own pickers read for these teams: MP1's net.zrd, or the
         // empty stage's team blocks.
         var table = new SpawnPicker(spec) { SeatTeams = Teams }
-            .LoadSpawnList(SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission), spec.Scenario);
+            .LoadSpawnList(ctx.MissionZrdr(ctx.Chapter, MpMission), spec.Scenario);
         if (table is not { Count: > 2 * SpawnPoints.NetBlock })
         {
             throw new SuiteSkippedException($"{NetCombatSuites.ArenaTable(ctx, spec)} authors no second team block");
@@ -143,7 +143,7 @@ internal static class NetTeamSuites
     /// <summary>The name line <paramref name="seat"/>'s aeroplane should read on another pane: its
     /// callsign, or the messages table's "Unknown" for a nameless player.</summary>
     internal static string MarkerNameOf(TestContext ctx, NetSeat seat) =>
-        seat.Unnamed ? Mech3.Messages.Load(ctx.MessagesPath).Get(HudMessages.UnknownKey) : seat.Callsign;
+        seat.Unnamed ? ctx.Data.Messages.Get(HudMessages.UnknownKey) : seat.Callsign;
 
     // The opening placement, read before any step. Each seat stands on its team's block, walked by
     // its place in the team, on the same entry on every machine.

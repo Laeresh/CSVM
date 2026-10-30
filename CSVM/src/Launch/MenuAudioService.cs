@@ -29,7 +29,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
 
     private readonly MusicPlayer? _music;
     private readonly Func<string, AudioStreamWav?> _sounds;
-    private readonly string? _cueDir;
+    private readonly Extraction.RofFiles? _cueFiles;
     private readonly bool _previews;
     private readonly Dictionary<string, AudioStreamWav?> _cues = new(StringComparer.Ordinal);
     // Decoded preview clips by file name, cached like a cue: a null is cached like a hit, so a
@@ -48,16 +48,16 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     private int _starts;
 
     /// <summary>A service over <paramref name="music"/> (null for a silent install) resolving
-    /// narration WAVs through <paramref name="sounds"/> and menu cues under <paramref name="cueDir"/>
-    /// (the extracted rof tree's <c>ASSETS/SOUNDS</c>; null leaves every cue silent).
+    /// narration WAVs through <paramref name="sounds"/> and menu cues under <paramref name="cues"/>'
+    /// <c>ASSETS/SOUNDS</c> (null leaves every cue silent).
     /// ⚠ <paramref name="previews"/> is whether a mix page's live preview may apply and sound, and
-    /// defaults to off: a run that drives itself must not have its mix become a function of which
-    /// menu page a walk opened (<c>docs/menu-presentations.md</c>).</summary>
-    public MenuAudioService(MusicPlayer? music, Func<string, AudioStreamWav?> sounds, string? cueDir = null, bool previews = false)
+    /// defaults to off. A run that drives itself must not have its mix depend on which menu page a
+    /// walk opened (<c>docs/menu-presentations.md</c>).</summary>
+    public MenuAudioService(MusicPlayer? music, Func<string, AudioStreamWav?> sounds, Extraction.RofFiles? cues = null, bool previews = false)
     {
         _music = music;
         _sounds = sounds ?? throw new ArgumentNullException(nameof(sounds));
-        _cueDir = cueDir;
+        _cueFiles = cues;
         _previews = previews;
     }
 
@@ -236,14 +236,14 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     // file reads the same whether a cue or a preview wanted it.
     private AudioStreamWav? LoadWav(string file, string what)
     {
-        if (_cueDir == null)
+        if (_cueFiles == null)
         {
             Log.Debug("sound", $"{what} file={file} silent: no cue directory");
             return null;
         }
 
-        string path = Extraction.RofTree.Member(_cueDir, file);
-        if (!File.Exists(path))
+        string path = "ASSETS/SOUNDS/" + file;
+        if (!_cueFiles.Exists(path))
         {
             Log.Debug("sound", $"{what} file={file} silent: not at {path}");
             return null;
@@ -251,7 +251,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
 
         try
         {
-            var wav = WavFile.Parse(File.ReadAllBytes(path));
+            var wav = WavFile.Parse(_cueFiles.Read(path) ?? throw new FileNotFoundException(path));
             var data = new byte[wav.Samples.Length * 2];
             Buffer.BlockCopy(wav.Samples, 0, data, 0, data.Length);
             return new AudioStreamWav

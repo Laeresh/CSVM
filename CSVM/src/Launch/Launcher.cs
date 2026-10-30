@@ -168,7 +168,7 @@ public partial class Launcher : Node3D
     // --destroy= probe wrapper delegates to it (see src/Tooling/ProbeRunner.cs).
     private Tooling.ProbeRunner _probeRunner = null!;
     // The screen a menu launch stops at over missing or stale data, null once it hands back.
-    private UI.Screens.NoGameDataScreen? _extractionScreen;
+    private UI.Screens.SourceScreen? _sourceScreen;
 
     // The flight's two exits are this node's, so the network state is built over them here. The
     // sound is built with the node, since a focus change can arrive before _Ready settles anything.
@@ -232,8 +232,8 @@ public partial class Launcher : Node3D
         }
         else
         {
-            // Exported build: res:// lives inside the pck, so the root is the exe's own folder,
-            // extracted/ ships beside the exe, and logs/ and .scratch/ output land there too.
+            // Exported build: res:// lives inside the pck, so the root is the exe's own folder. A
+            // CrimsonSkiesGame copy sits beside the exe, and logs/ and .scratch/ output land there too.
             _exported = true;
             repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
         }
@@ -243,6 +243,8 @@ public partial class Launcher : Node3D
         // effects, and the warnings below, emitted before the log so they read in launch order.
         _cli = SessionSpec.Parse(OS.GetCmdlineUserArgs());
         _spec = _cli;
+        // Before anything opens a store: every one of them resolves against this folder.
+        UserData.Settle(repoRoot, _exported, OS.GetCmdlineUserArgs());
         Tooling.ShaderDiagnostics.Enabled = _spec.DebugShaders;
         MouseCapture.ScriptedLaunch = _cli.IsScripted || _cli.Det;
         foreach (var note in _spec.Warnings)
@@ -259,7 +261,7 @@ public partial class Launcher : Node3D
 
         // Every base path derives from the data root, so it is settled first. Precedence:
         // --data-root= beats CSVM_DATA_ROOT beats the repo root. The overrides exist because a git
-        // worktree has no extracted/, which is git-ignored, and cannot otherwise build or verify.
+        // worktree has no CrimsonSkiesGame/, which is git-ignored, and cannot otherwise build or verify.
         string dataRoot = repoRoot;
         var dataRootEnv = OS.GetEnvironment("CSVM_DATA_ROOT");
         if (!string.IsNullOrEmpty(dataRootEnv)) dataRoot = Path.GetFullPath(dataRootEnv);
@@ -267,14 +269,6 @@ public partial class Launcher : Node3D
         if (dataRoot != repoRoot)
             Log.Info("core", $"data root: {dataRoot} (repo root {repoRoot})");
         dataRoot = ResolveSyntheticData(repoRoot, dataRoot);
-
-        // The extraction tree's provenance check, at most one warning line, never a block. An
-        // --extract run is about to write that tree, and a missing one has no stamp to read. A
-        // warning about either would only mislead.
-        if (_spec.ExtractInstall == null && !UI.Screens.NoGameDataScreen.Missing(dataRoot))
-        {
-            ExtractionStamp.Check(dataRoot);
-        }
 
         // The drop-in writes statics every material built afterwards reads, so it is applied here
         // rather than carried as a session value.
@@ -362,9 +356,9 @@ public partial class Launcher : Node3D
         // console additionally shows.
         Log.Open(repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
         // Every persisted store resolves against this root (profiles, hangar planes, bindings,
-        // options), and it is derived from the project name alone, so a worktree run shares it with
-        // the main checkout. Printed so a "not found" against a file on disk is answered, not guessed.
-        Log.Info("core", $"user={ProjectSettings.GlobalizePath("user://")}");
+        // options). Outside portable mode it derives from the project name alone, so a worktree run
+        // shares it with the main checkout. Printed so a "not found" is answered, not guessed.
+        Log.Info("core", $"user={UserData.Root}{(UserData.Portable ? " (portable)" : "")}");
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
         Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
@@ -400,16 +394,16 @@ public partial class Launcher : Node3D
         }
 
         // VR mode at boot, before anything heavy runs: a restart into the headset leaves from here
-        // in the state the --extract branch below runs in.
+        // in the state the --copy-game-files branch below runs in.
         if (StartXrMode())
         {
             return;
         }
 
-        // --extract builds no world and no menu: it writes the data root's extracted/ and quits.
-        if (_spec.ExtractInstall is { } extractInstall)
+        // --copy-game-files: the source's game files into the data root's install folder, then quit.
+        if (_spec.CopyGameFiles is { } copySource)
         {
-            StartHeadlessExtraction(extractInstall, repoRoot, dataRoot);
+            GetTree().Quit(Extraction.GameFileCopy.RunToLog(copySource, dataRoot) ? 0 : 1);
             return;
         }
 
@@ -481,13 +475,6 @@ public partial class Launcher : Node3D
         bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;
         Flight.Audio.FlightAudio.CockpitLoopPitched = savedCockpitPitch ?? Flight.Audio.FlightAudio.CockpitLoopPitchedDefault;
         Log.Info("sound", $"cockpit engine pitch: pitched={Flight.Audio.FlightAudio.CockpitLoopPitched} via={(savedCockpitPitch.HasValue ? "options.json" : "default")}");
-        // Before the first PreferUnzipped call and process-wide, so every later resolution (the
-        // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
-        SessionPaths.ForceZipped = _spec.ZipAssets;
-        if (_spec.ZipAssets)
-        {
-            Log.Info("core", $"assets: --zip-assets, reading .zip archives, ignoring unpacked folders");
-        }
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.
         if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)
@@ -501,8 +488,17 @@ public partial class Launcher : Node3D
         }
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
-        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec);
+        // A synthetic tree's build bound the Original shell's view to its root; its game data takes that view.
+        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, () => Tooling.SyntheticGameData.Build(Extraction.RofFiles.For(dataRoot)));
+        BindRofFiles();
         _probeRunner = new Tooling.ProbeRunner(_paths);
+        // --dump: the game files' models into a folder for analysis scripts, then quit.
+        if (_spec.DumpPath is { } dumpFolder)
+        {
+            string dumpDir = Path.GetFullPath(Path.Combine(repoRoot, dumpFolder.Length > 0 ? dumpFolder : Tooling.DumpGameFiles.DefaultFolder));
+            GetTree().Quit(Tooling.DumpGameFiles.Run(_paths.Game, dumpDir, _spec.ChapterGiven ? _spec.Chapter : null) ? 0 : 1);
+            return;
+        }
 
         // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
         // no-op until --fly's weather.json overrides them.
@@ -747,6 +743,12 @@ public partial class Launcher : Node3D
         AddChild(_buildStamp);
         // A Game Mode refusal stands in the Original menu's own warning box, the stamp's dialog elsewhere.
         _buildStamp.Messagebox = words => _menu.Host?.Active is UI.Menu.Original.OriginalPresentation original && original.RaiseWarning(words);
+        // Exported only, so an editor run, a worktree, the suites and agents never ask GitHub. A
+        // --det capture of an export does not either, or the stamp would depend on the network.
+        if (_exported && !_spec.Det && Config.GetBool(ReleaseCheck.Key, ReleaseCheck.DefaultEnabled))
+        {
+            _buildStamp.Watch(ReleaseCheck.Start(BuildVersion.Current));
+        }
 
         // The strip over Steam's on-screen keyboard, process-wide because the menus, the extraction
         // screen and the flight chat all raise it. It draws nothing on any other machine.
@@ -763,21 +765,12 @@ public partial class Launcher : Node3D
             AddChild(_netReadout);
         }
 
-        // Only on the path a recipient takes. Every other entry carries a content arg, which is a
-        // developer's launch, and the log is where that reader already looks. ⚠ Keep this ahead of
-        // the music's build: a stale tree is rewritten by the screen, and an open sound archive would hold it.
+        // Only on the path a recipient takes; a content arg is a developer's, who reads the log.
+        // ⚠ Keep this ahead of the music's build. A copy may replace the data root's copy, which an
+        // open sound archive would hold. The source-notes aid asks the questions in a scripted run.
         if (_spec.ShowsMenu && _spec.MovieName == null
-            && UI.Screens.ExtractionFlow.ProblemAt(dataRoot) is var problem && problem != UI.Screens.DataProblem.None)
+            && ShowSourceScreen(ask: (!_spec.Det && !_spec.IsScripted) || _cli.MenuStartScreen == "source-notes"))
         {
-            ShowExtractionScreen(problem);
-            return;
-        }
-
-        // A current tree the Original menus cannot read stops at the same screen, naming the fault.
-        if (_spec.ShowsMenu && _spec.MovieName == null
-            && UI.Menu.Original.OriginalAvailability.Load(dataRoot, out string? unusable) == null)
-        {
-            ShowExtractionScreen(UI.Screens.DataProblem.Unusable, unusable);
             return;
         }
 
@@ -812,8 +805,8 @@ public partial class Launcher : Node3D
         }
 
         // Before the build, because the session reads its wire in its own constructor.
-        _net.OpenCli(_spec, _paths.MessagesPath);
-        _net.SeatLocalField(_spec, _paths.MessagesPath);
+        _net.OpenCli(_spec, _paths.Data.Messages);
+        _net.SeatLocalField(_spec, _paths.Data.Messages);
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -962,7 +955,7 @@ public partial class Launcher : Node3D
         // The main menu only: deeper screens have plaques along the bottom edge that the stamp
         // overlaps at a Steam Deck's aspect. The
         // extraction screen too, since a player whose extraction failed needs the logs icon most.
-        _buildStamp?.Tick(_menu.Host is { OnMainMenu: true } || _extractionScreen != null);
+        _buildStamp?.Tick(_menu.Host is { OnMainMenu: true } || _sourceScreen != null);
         TickNetReadout(delta);
         _instruments.EndFrame(delta, ClockNow);
         // Wall time, like the instruments above: the score is not part of the simulation, and a
@@ -970,7 +963,7 @@ public partial class Launcher : Node3D
         _audio.Tick((float)delta);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null || _spec.MovieName != null);
+            _session?.Plane, _menu.Host is { Shown: true } || _sourceScreen != null || _spec.MovieName != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
@@ -1056,7 +1049,7 @@ public partial class Launcher : Node3D
             return dataRoot;
         }
         string replaced = dataRoot;
-        bool installThere = !UI.Screens.NoGameDataScreen.Missing(replaced);
+        bool installThere = UI.Screens.SourceFlow.HasExtracted(replaced);
         string synthetic = Tooling.SyntheticData.ScratchRoot(repoRoot);
         try
         {
@@ -1074,34 +1067,6 @@ public partial class Launcher : Node3D
         string families = string.Join(",", System.Linq.Enumerable.Select(UI.Menu.Original.SyntheticShell.TreeFamilies, f => f.Name));
         Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {synthetic} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
         return synthetic;
-    }
-
-    // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame
-    // callbacks are switched off until the quit, because _Ready returned before building what they read.
-    private void StartHeadlessExtraction(string install, string repoRoot, string dataRoot)
-    {
-        SetProcess(false);
-        SetPhysicsProcess(false);
-        SetProcessInput(false);
-        SetProcessUnhandledInput(false);
-        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(repoRoot, _exported);
-        var request = new Extraction.ExtractionRequest(install, dataRoot, unzbd, _spec.ExtractForce, _spec.ExtractUnzip, _spec.ExtractAllowMissing);
-        System.Threading.Tasks.Task.Run(() =>
-        {
-            int code;
-            try
-            {
-                code = Extraction.ExtractionRun.RunToConsole(request, Log.Raw, line => Log.Error("core", $"{line}"));
-            }
-            catch (System.Exception e)
-            {
-                // Anything unforeseen still ends the process with a verdict, never a hang.
-                Log.Error("core", $"extraction crashed", e);
-                code = 1;
-            }
-
-            Callable.From(() => GetTree().Quit(code)).CallDeferred();
-        });
     }
 
     /// <summary>Empties the worker pool's low-priority queue before the engine's exit asks every
@@ -1262,12 +1227,12 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The words of Original's failed-build box. An extraction with no chapter world fails every
-    // flight the same way, so it names the fix; anything else is the log's to explain.
-    private string FailedBuildWarning() => SessionPaths.HasAnyChapterWorld(_paths.DataRoot)
+    // The words of Original's failed-build box. Game files with no chapter world fail every flight
+    // the same way, so it names the fix; anything else is the log's to explain.
+    private string FailedBuildWarning() => _spec.SyntheticData || SessionPaths.HasAnyChapterWorld(_paths.Game)
         ? $"The mission could not be loaded. The log says why: open it with the \"{UI.Screens.BuildStamp.LogsTooltip}\" icon beside the version number."
-        : "The extracted game data holds no chapter worlds, so no mission can be flown. "
-            + $"Extract again from a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}.";
+        : $"The game files at '{_paths.Game?.Location}' hold no chapter worlds, so no mission can be flown. "
+            + $"Point CSVM at a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}, or at the game disc.";
 
     // A build that throws counts as one that failed. The caller's own failure path then takes the
     // load screen down and returns a menu launch to the menu. An escaped exception would leave the
@@ -1327,9 +1292,9 @@ public partial class Launcher : Node3D
     }
 
     // The load screen over the whole window, on the board layer; what it draws is LaunchBoards'.
-    private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
+    private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null, string? briefing = null)
     {
-        var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight);
+        var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight, briefing);
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
@@ -1360,11 +1325,13 @@ public partial class Launcher : Node3D
         var saved = OptionsStore.UserOptions().Load();
         _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill)
             .WithSavedDefaultView(saved.DefaultView).WithSavedAutoHeadTurn(saved.AutoHeadTurn)
+            .WithSavedLeadingAimAssist(saved.LeadingAimAssist).WithSavedLeadMarker(saved.LeadMarker)
+            .WithSavedThrottlePlate(saved.ThrottlePlate)
             .WithHeadsetView(_xr != null);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
-        float mipBias = Mech3.TextureArchive.MipBias(_paths.InterpPath, _spec.Chapter);
+        float mipBias = Mech3.TextureArchive.MipBias(_paths.Data.Interp, _spec.Chapter);
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         LoadProgress.Report(LoadStep.ChapterPaths);
@@ -1479,103 +1446,91 @@ public partial class Launcher : Node3D
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
-    // The screen a menu launch stops at when the data root holds no extraction, or one stamped under
-    // another schema. Nothing that reads the tree is built yet. Esc leaves through _UnhandledInput,
-    // which quits with neither a menu nor a session up; the screen keeps Esc while a run is going.
-    private void ShowExtractionScreen(UI.Screens.DataProblem problem, string? detail = null)
+    // The screen a menu launch stops at, before any sound archive opens. It is the picker when no
+    // game files were found or the menus cannot read them, else the questions still owed once.
+    // False when there is nothing to show. Esc leaves through _UnhandledInput, which quits.
+    // ⚠ Only a player at the controls is asked a question; a scripted run never saves an answer.
+    private bool ShowSourceScreen(bool ask)
     {
-        string extracted = Path.Combine(_paths.DataRoot, Extraction.ExtractionRun.ExtractedFolder);
-        if (problem == UI.Screens.DataProblem.Missing)
+        bool readable = UI.Menu.Original.OriginalAvailability.Load(_paths.DataRoot, out string? fault) != null;
+        if (_spec.SyntheticData && readable)
         {
-            Log.Error("core", $"no extracted game data path={extracted}, {UI.Screens.NoGameDataScreen.Instruction}");
+            return false;
         }
-        else if (problem == UI.Screens.DataProblem.Unusable)
+
+        string? refused = readable ? null : _paths.Game is { } game ? $"'{game.Location}' ({fault})" : _spec.SyntheticData ? fault : null;
+        var store = _spec.IsScripted ? null : OptionsStore.UserOptions();
+        string? remembered = _spec.Det ? null : Extraction.RememberedInstall.Get();
+        var roots = Extraction.InstallSearchRoots.ForThisMachine() with { Beside = _paths.RepoRoot };
+        var candidates = Extraction.InstallLocator.Candidates(roots, remembered);
+        string preFill = candidates.Count > 0 ? candidates[0] : remembered ?? string.Empty;
+        var flow = new UI.Screens.SourceFlow(_paths.DataRoot, readable ? _paths.Game : null, preFill, store, ask) { Refused = refused };
+        if (flow.View == UI.Screens.SourceView.Done)
         {
-            Log.Error("core", $"the menus cannot read the game data ({detail}) path={extracted}, asking to extract again");
+            return false;
         }
-        else if (problem == UI.Screens.DataProblem.Incomplete)
+
+        if (flow.View == UI.Screens.SourceView.Asking)
         {
-            Log.Warn("core", $"the last extraction did not finish path={extracted}, asking to extract again");
+            Log.Error("core", $"no game files: {(refused == null ? "none found" : "the menus cannot read " + refused)}, showing the picker remembered={remembered ?? "none"} candidates={candidates.Count} prefill={(preFill.Length == 0 ? "none" : preFill)}");
         }
         else
         {
-            ExtractionStamp.Standing(_paths.DataRoot, out int? found);
-            Log.Warn("core", $"extraction stamp schema={found} but this build reads schema={ExtractionStamp.Schema} path={extracted}, asking to re-extract ({problem})");
+            Log.Info("core", $"game files: {_paths.Game?.Location}, asking {flow.View} once");
         }
 
-        // The screen honours --unzbd= as --extract does, which is how a worktree names a tool.
-        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(_paths.RepoRoot, _exported);
-        string? remembered = Extraction.RememberedInstall.Get();
-        var candidates = Extraction.InstallLocator.Candidates(Extraction.InstallSearchRoots.ForThisMachine(), remembered);
-        string preFill = UI.Screens.ExtractionFlow.PreFill(remembered, candidates);
-        Log.Info("core", $"extraction screen: problem={problem} remembered={remembered ?? "none"} candidates={candidates.Count} prefill={(preFill.Length == 0 ? "none" : preFill)} unzbd={unzbd}");
-
-        // ⚠ A run that drives itself never writes the player's options, the rule --run-tests keeps.
-        System.Action<string> remember = _spec.IsScripted
-            ? _ => { }
-        : Extraction.RememberedInstall.Set;
-        var flow = new UI.Screens.ExtractionFlow(problem, _paths.DataRoot, unzbd, preFill,
-            (request, progress, cancel) => RunExtraction(request, progress, cancel), remember)
-        {
-            Detail = detail,
-        };
-        _extractionScreen = UI.Screens.NoGameDataScreen.Build(flow, LeaveExtractionScreen, BlankAndQuit);
-        AddChild(_extractionScreen);
-        Callable.From(() => ApplyExtractionAid(_cli.MenuStartScreen)).CallDeferred();
+        _sourceScreen = UI.Screens.SourceScreen.Build(flow, LeaveSourceScreen, BlankAndQuit);
+        AddChild(_sourceScreen);
+        Callable.From(() => ApplySourceAid(_cli.MenuStartScreen)).CallDeferred();
+        return true;
     }
 
-    // The worker's side of the screen: the one pipeline, with its console lines in the log.
-    private Extraction.ExtractionResult RunExtraction(Extraction.ExtractionRequest request,
-        System.Action<Extraction.ExtractionProgress> progress, System.Threading.CancellationToken cancel)
+    // The screen's hand-back. A pick or a copy rebinds the game files, their models and the UI
+    // archive's view, as the launch bound them after BasePaths.Resolve. Nothing rebinds itself.
+    private void LeaveSourceScreen()
     {
-        foreach (string line in Extraction.ExtractionRun.Header(request))
+        var flow = _sourceScreen!.Flow;
+        RemoveChild(_sourceScreen);
+        _sourceScreen.QueueFree();
+        _sourceScreen = null;
+        if (flow.Picked && flow.Source is { } source)
         {
-            Log.Raw(line);
-        }
-
-        var result = Extraction.ExtractionRun.Run(request, report =>
-        {
-            foreach (string line in report.Lines)
+            foreach (string missing in flow.Missing)
             {
-                Log.Raw(line);
+                Log.Warn("core", $"game files: the copy found no {missing} in the source");
             }
 
-            progress(report);
-        }, cancel);
-        foreach (string line in result.Summary(request.Unzip))
-        {
-            Log.Raw(line);
-        }
+            Log.Info("core", $"game files: {source.Location}, picked");
+            _paths = _paths with { Game = source, Data = GameData.Load(source, _paths.Data.ModFolder) };
+            BindRofFiles();
+            _probeRunner = new Tooling.ProbeRunner(_paths);
 
-        return result;
-    }
-
-    // The screen's hand-back, after a run or the stale screen's Play anyway. The base paths were
-    // resolved against a tree that has since changed, so they and the music are resolved again.
-    private void LeaveExtractionScreen()
-    {
-        if (_extractionScreen is { } screen)
-        {
-            foreach (string warning in screen.Flow.Warnings)
+            // The pick's own menus may not read either, which asks again with the fault named.
+            if (ShowSourceScreen(ask: false))
             {
-                Log.Warn("core", $"extraction: {warning}");
+                return;
             }
-
-            RemoveChild(screen);
-            screen.QueueFree();
-            _extractionScreen = null;
         }
 
-        _paths = BasePaths.Resolve(_paths.RepoRoot, _paths.DataRoot, _spec);
         _audio.Build(_paths, _masterSeed);
         EnterMenu();
     }
 
-    // The screen's screenshot doors, through --menu= like the menu's own: extract-picker[:<folder>]
-    // opens the picker, and extract-run:<install> fills the field and presses Extract.
-    private void ApplyExtractionAid(string aid)
+    // The game data's UI archive view, bound to the data root for the consumers that hold only a
+    // root. A synthetic tree bound its own while it was built, and has no game files to read.
+    private void BindRofFiles()
     {
-        if (_extractionScreen is not { } screen)
+        if (!_spec.SyntheticData)
+        {
+            Extraction.RofFiles.Bind(_paths.DataRoot, _paths.Data.Rof);
+        }
+    }
+
+    // The screen's screenshot doors, through --menu= like the menu's own: source-picker[:<folder>]
+    // opens the picker, and source-pick:<path> fills the field and presses Use these files.
+    private void ApplySourceAid(string aid)
+    {
+        if (_sourceScreen is not { } screen)
         {
             return;
         }
@@ -1585,16 +1540,12 @@ public partial class Launcher : Node3D
         string? argument = colon < 0 ? null : aid[(colon + 1)..];
         switch (name)
         {
-            case "extract-picker":
+            case "source-picker":
                 screen.OpenPicker(argument);
                 break;
-            case "extract-run":
-                if (argument != null)
-                {
-                    screen.Flow.InstallPath = argument;
-                }
-
-                screen.Extract();
+            case "source-pick" when argument != null && screen.Flow.View == UI.Screens.SourceView.Asking:
+                screen.Flow.InstallPath = argument;
+                screen.Press(screen.DefaultButton.Text);
                 break;
         }
     }
@@ -1610,10 +1561,15 @@ public partial class Launcher : Node3D
         // first show until a launch takes it back (Utils/WorldBackdrop.cs).
         WorldBackdrop.Black(_env);
         string aid = _menu.Show(_cli, _spec, _buildStamp, destination);
-        // The load screen is up for two frames during a build and torn down before anything
-        // renders, so a shot of it needs a door of its own that leaves it standing. The campaign
-        // door's argument names the mission, the blackboard's the Instant Action mission type.
-        if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
+        // A build tears the load screen down before anything renders, so a shot needs a door that
+        // leaves it standing. The arguments: a campaign mission, an Instant Action mission type,
+        // or a Dogfight's chapter and mode letter.
+        if (aid.StartsWith("loadboard-mp", System.StringComparison.Ordinal))
+        {
+            var (chapter, letter) = LaunchBoards.MultiplayerDoor(aid);
+            ShowLoadScreen(false, null, briefing: UI.Screens.LoadScreens.MultiplayerKey(chapter, letter));
+        }
+        else if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
         {
             var parts = aid.Split(':');
             ShowLoadScreen(
@@ -1805,7 +1761,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.MessagesPath);
+        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.Data.Messages, _paths.Data.Zrdr);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
@@ -1816,7 +1772,7 @@ public partial class Launcher : Node3D
         StepSortieSeed();
         // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
         // one does. It follows the seed step, since its draws read the master.
-        _net.SeatLocalField(_spec, _paths.MessagesPath);
+        _net.SeatLocalField(_spec, _paths.Data.Messages);
         BindMenuPads(pads);
         BeginLaunch();
     }

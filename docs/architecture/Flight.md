@@ -324,7 +324,7 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
 lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does, through `FirstPersonDressing.BuildPass`; `Sync` follows
-the interior `Visible` and sets each material's `light_origin` to the eye for the point lights. `BuildBody` takes a flat body cockpit's panel instead, placed from its model root's pose less the `cockpit_camera` eye and turned about the shake pivot, and each `Mech3/PlaneBuilder.cs` `FlatBody` twin takes its original's plane-frame pose and visibility per `Sync`, the original joining `CockpitVisibility.Reseat`.
+the interior `Visible` and sets each material's `light_origin` to the eye for the point lights. `BuildBody` takes a flat body cockpit's panel instead, placed from its model root's pose less the `cockpit_camera` eye and turned about the shake pivot, and each `Mech3/PlaneBuilder.cs` `FlatBody` twin takes its original's plane-frame pose and visibility per `Sync` (`Mech3/BodyTwins.cs` `Mirror`), the original joining `CockpitVisibility.Reseat`.
 
 ## src/Flight/Hud/XrCockpit.cs
 The cockpit interior under the stereo path, drawn in the main world the cockpit pass's way: while it
@@ -333,7 +333,7 @@ origin as the airframe holds it (`InOrigin`, engine-free), so every transform Go
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
 its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it, and a sorting offset that puts it after the world's transparents on top of the one it was built with (the reticle overlay's). Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
 plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
-seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset`, `SetMountScale` and `PlaceStores` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose placed by the plane's store fields (`Placed`: the lateral distance times the spread, then the offset, in the aircraft's frame; `InInterior`; both engine-free). It keeps each part's airframe pose, so a store change or a rescale re-places them where a rebuild would. It reads only the mount and the eye, so a pack's replaced `cockpit1` and a rig's interior-unit gauge poses take the plane's scale and eye offset as the stock interior does. `Body` follows a body cockpit's panel instead (`Mech3/PlaneBuilder.cs` `CockpitPanel`), at real scale with the eye on `cockpit_camera`, where scale and store fields do nothing; `Mirror` gives each airframe twin its original's pose and visibility on every `Follow`.
+seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset`, `SetMountScale` and `PlaceStores` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose placed by the plane's store fields (`Placed`: the lateral distance times the spread, then the offset, in the aircraft's frame; `InInterior`; both engine-free). It keeps each part's airframe pose, so a store change or a rescale re-places them where a rebuild would. It reads only the mount and the eye, so a pack's replaced `cockpit1` and a rig's interior-unit gauge poses take the plane's scale and eye offset as the stock interior does. `Body` follows a body cockpit's panel instead (`Mech3/PlaneBuilder.cs` `CockpitPanel`), at real scale with the eye on `cockpit_camera`, where scale and store fields do nothing; `Mirror` gives each airframe twin its original's pose and visibility on every `Follow`, through `Mech3/BodyTwins.cs` `Mirror`.
 
 ## src/Flight/Hud/VrCockpits.cs
 The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
@@ -706,7 +706,7 @@ fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host.
 ## src/Flight/Ai/StuntBotObjective.cs
 One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
 nearest open zone first, a steer onto the bot's own line into its nearer ribbon end (`Approach`,
-drawn by `Spread`; `OnLine` off is a suite control), and in the approach cone the zone handed to
+drawn by `Spread`), and in the approach cone the zone handed to
 `AiPilot.FlyDangerZone`, the campaign racers' approach and rail. Where the rail misses the gates
 (`RailClears`) the route gains a straight lead-in (`LeadInFor`), refused where the world blocks
 it; `RunsFrom` decides every zone end once for the session's bots. Its tier sets `CruiseThrottle`
@@ -841,8 +841,8 @@ pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a m
 (`XrHudPanel.cs`) for a HUD drawn on it, else the root window.
 
 ## src/Flight/Hud/HudFont.cs
-The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
-`5pointhudbrite.png` highlight variant: a proportional five-pixel font covering printable ASCII.
+The game's own HUD bitmap font, rebuilt from the `rimage` records `5pointhud` and the brighter
+`5pointhudbrite` highlight variant (`GameData.Rimage`): a proportional five-pixel font covering printable ASCII.
 `Load` returns null with one log line where the atlas is absent, and `Draw`/`Measure` render onto
 any caller's canvas at a scale `HudMetrics` supplies. Layout and colours:
 [../formats/hud.md](../formats/hud.md); `HudFontTest` is the overlay that proves the renderer.
@@ -1504,6 +1504,16 @@ the borders on a pane narrower than the reference frame. `HeadingDeg` carries th
 `CompassTape` and `CockpitGauges` both read; `DamageZoneColor` bands the damage dial off combined
 armour and health against thresholds mined from the data's own `injure_anims`. The sweep and lamp
 structs need no `Control`, so `CSVM.Tests` drives them. [../formats/hud.md](../formats/hud.md).
+
+## src/Flight/Hud/ThrottlePlate.cs
+A remake-only readout: the commanded lever as a 1930s lever plate, as tall as the speedometer and
+standing inboard of it. Plate and knob are SVGs in `CSVM/data/hud`, written by
+`render_throttle_plate.py` beside them as shapes and stroked glyphs, since Godot's SVG rasteriser
+reads no filters or text. `Image.LoadSvgFromString` re-rasterises both whenever the drawn size
+moves, so the plate stays sharp at any resolution. `KnobY` maps the lever onto the IDLE to MAX
+ticks. Every pilot pane builds one hidden; the Game Options **Throttle Plate** box or
+`--throttle-plate` shows it through `FlightHud.SetThrottlePlateShown`, and `--det` reads no saved
+box, so no golden draws it.
 
 ## src/Flight/Hangar/CustomPlaneDef.cs
 A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields

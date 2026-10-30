@@ -89,9 +89,9 @@ public class StuntReturnTests
     internal static StuntMission Load()
     {
         var mission = StuntMission.Load(
-            GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1")),
-            SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"),
-            Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+            GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, "C1")),
+            TestZrdr.Mission("C1", "IA1"),
+            Messages.FromExtracted(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.True(mission is { TotalCount: 5 }, "C1/IA1 loads its five danger zones");
         return mission!;
     }

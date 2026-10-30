@@ -36,8 +36,8 @@ internal static class CloudBandObjectGateSuites
         + "ungated")]
     internal static void CloudBandObjectGate(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BandChapter, BandMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BandChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BandChapter, BandMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(BandChapter);
         ctx.RequireData(missionZrdr, $"{BandChapter}/{BandMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{BandChapter} zrdr");
 

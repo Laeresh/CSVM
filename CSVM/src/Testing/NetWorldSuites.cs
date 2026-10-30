@@ -81,18 +81,18 @@ internal static class NetWorldSuites
         + "a host burst that crosses no stage reaches the guest's pool as one sample")]
     internal static void TheHostOwnsTheWorld(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
         var spec = SessionSpec.Parse(new[]
         {
             "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
             "--no-pads", AiField,
         });
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f)
             ?? throw new SuiteSkippedException($"the weapon catalogue holds no cannon with health damage");
 
@@ -161,12 +161,12 @@ internal static class NetWorldSuites
         + "nothing of its own for its replicated copies")]
     internal static void TheHostVoicesItsAi(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
         // ⚠ Not --mute: a muted session loads no sound defs and so builds no combat voice at all.
         var spec = SessionSpec.Parse(new[]
@@ -634,13 +634,8 @@ internal static class NetWorldSuites
             ctx.Host.AddChild(pane);
             var paths = new BasePaths(
                 RepoRoot: ctx.RepoRoot,
-                DataRoot: ctx.DataRoot,
-                PlanesGamezPath: ctx.PlanesGamezPath,
-                ZrdrPath: ctx.ZrdrPath,
-                SoundsPath: ctx.SoundsPath,
-                InterpPath: ctx.InterpPath,
-                MessagesPath: ctx.MessagesPath,
-                RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                DataRoot: ctx.DataRoot)
+            { Game = ctx.Game, Data = ctx.Data };
             var session = new GameSession(spec, new LauncherContext
             {
                 Decode = ctx.Decode,

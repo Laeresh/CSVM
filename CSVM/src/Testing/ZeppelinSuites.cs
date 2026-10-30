@@ -27,9 +27,9 @@ internal static class ZeppelinSuites
         "is placed but held")]
     internal static void ZeppelinMotionSuite(TestContext ctx)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
 
         var defs = Zeppelins.Load(missionZrdr);
@@ -222,9 +222,9 @@ internal static class ZeppelinSuites
         "and the pitch never rings up on the way")]
     internal static void ZeppelinPandoraDeadEndSuite(TestContext ctx)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1B");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1B");
         ctx.RequireData(chapterZrdr, $"C1B zrdr");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "M03");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1B", "M03");
         ctx.RequireData(missionZrdr, $"C1B/M03 zrdr");
 
         var defs = Zeppelins.Load(missionZrdr);
@@ -343,11 +343,11 @@ internal static class ZeppelinSuites
         "follower resumes from the script's last frame and holds node 0's armed stop point")]
     internal static void ZeppelinScriptedPoseSuite(TestContext ctx)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C3");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C3");
         ctx.RequireData(chapterZrdr, $"C3 zrdr");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C3", "M03");
         ctx.RequireData(missionZrdr, $"C3/M03 zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"), $"C3 textures");
+        ctx.RequireData(ctx.ChapterTextures("C3"), $"C3 textures");
 
         ZeppelinDef? def = null;
         foreach (var d in Zeppelins.Load(missionZrdr))
@@ -381,13 +381,13 @@ internal static class ZeppelinSuites
         "clone stops after one live spawn")]
     internal static void ZeppelinLaunch(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr("C1");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
 
         // The authored generator: the decoded zeppelin-launch shape, doors named explicitly.
@@ -408,8 +408,7 @@ internal static class ZeppelinSuites
 
         // What the model ships for doors: the compiled mis_anim carries both OnCall defs,
         // each moving the hull's door_left/door_right nodes (this is the visual F20 wires).
-        var (_, missionAnim) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
-        var archive = AnimArchive.Load(missionAnim, "mis_anim");
+        var archive = ctx.Data.LoadChapter("C1", "IA1").MissionAnim;
         ctx.Check(archive != null, $"C1/IA1's compiled mis_anim archive loads");
         if (archive == null)
             return;
@@ -443,8 +442,8 @@ internal static class ZeppelinSuites
         if (zepDefs.Count != 1)
             return;
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var textures = new TextureArchive(texturesPath);
         var spawned = new List<FlightController>();
         var spawnPositions = new List<Vector3>();
@@ -617,9 +616,9 @@ internal static class ZeppelinSuites
         "playing the authored all_pzep_gasbags death and stopping the motion")]
     internal static void ZeppelinDamageSuite(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         // Data-driven picks: the first flagged weapon (wep_14/wep_28 ship the flag), a
         // blast-less one preferred so its damage lands on exactly the struck pool, and the
         // first unflagged gun.
@@ -656,7 +655,7 @@ internal static class ZeppelinSuites
                 return;
             var builtBagPos = bagNode.GlobalPosition;
 
-            var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
+            var nets = AiNets.Load(ctx.ChapterZrdr("C1"));
             ZeppelinRuntime? zeps = null;
             ProjectilePool? pool = null;
             TextureArchive? textures = null;
@@ -683,7 +682,7 @@ internal static class ZeppelinSuites
 
                 // A live pool with the gate wired, damage routed exactly as flight wires it.
                 int gateRefusals = 0;
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                textures = new TextureArchive(ctx.ChapterTextures("C1"));
                 pool = new ProjectilePool(textures, null, null)
                 {
                     DamageSink = runtime.DamageAt,
@@ -770,12 +769,12 @@ internal static class ZeppelinSuites
         + "where the next step puts it, and the target pool and the gun assist read that value")]
     internal static void ZeppelinPartVelocitySuite(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, Spec.SessionSpec.ZvzMission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, Spec.SessionSpec.ZvzMission);
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{Spec.SessionSpec.ZvzMission} zrdr");
         ctx.WithWorld(ctx.Chapter, collision: false, Spec.SessionSpec.ZvzMission, world =>
         {
             var runtime = world.Session.Runtime;
-            var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter));
+            var nets = AiNets.Load(ctx.ChapterZrdr(ctx.Chapter));
             var zeps = new ZeppelinRuntime(Zeppelins.Load(missionZrdr),
                 name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
             try
@@ -841,12 +840,12 @@ internal static class ZeppelinSuites
         "and thins the same way once one cannon is destroyed")]
     internal static void ZeppelinBroadsideSuite(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"), $"C3/M03 zrdr");
-        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"), $"C5/M04 zrdr");
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        ctx.RequireData(ctx.MissionZrdr("C3", "M03"), $"C3/M03 zrdr");
+        ctx.RequireData(ctx.MissionZrdr("C5", "M04"), $"C5/M04 zrdr");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var wep28 = weapons.Get(ZeppelinRuntime.BroadsideWeaponId);
         ctx.Check(wep28 is { Velocity: not null },
             $"the hardcoded {ZeppelinRuntime.BroadsideWeaponId} resolves in weapons.zrd v={wep28?.Velocity ?? 0f:0}");
@@ -867,9 +866,9 @@ internal static class ZeppelinSuites
             if (host == null)
                 return;
 
-            var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
-            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var nets = AiNets.Load(ctx.ChapterZrdr("C1"));
+            var planesGamez = ctx.Planes;
+            var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
             TextureArchive? textures = null;
             ProjectilePool? pool = null;
             ZeppelinRuntime? zeps = null;
@@ -881,7 +880,7 @@ internal static class ZeppelinSuites
             var started = new List<string>();
             try
             {
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                textures = new TextureArchive(ctx.ChapterTextures("C1"));
                 var live = new ProjectilePool(textures, null, null);
                 pool = live;
                 ctx.Host.AddChild(live);
@@ -1092,7 +1091,7 @@ internal static class ZeppelinSuites
     internal static void DestroyedDanteCannon(TestContext ctx, TestWorld world, WeaponDefs weapons)
     {
         var runtime = world.Session.Runtime;
-        var defs = Zeppelins.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"));
+        var defs = Zeppelins.Load(ctx.MissionZrdr("C5", "M04"));
         var dante = defs.FirstOrDefault(d => d.Node.Equals("dantezep", System.StringComparison.OrdinalIgnoreCase));
         var pirate = defs.FirstOrDefault(d => d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase));
         var danteHost = runtime.FindNodes("dantezep").FirstOrDefault();
@@ -1103,13 +1102,13 @@ internal static class ZeppelinSuites
         if (dante == null || pirate == null || danteHost == null || pirateHost == null)
             return;
 
-        var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C5"));
+        var nets = AiNets.Load(ctx.ChapterZrdr("C5"));
         TextureArchive? textures = null;
         ProjectilePool? pool = null;
         ZeppelinRuntime? zeps = null;
         try
         {
-            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"));
+            textures = new TextureArchive(ctx.ChapterTextures("C5"));
             var live = new ProjectilePool(textures, null, null);
             pool = live;
             ctx.Host.AddChild(live);
@@ -1218,21 +1217,21 @@ internal static class ZeppelinSuites
     internal static void DisengagedPandora(TestContext ctx, TestWorld world, WeaponDefs weapons)
     {
         var runtime = world.Session.Runtime;
-        var defs = Zeppelins.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"));
+        var defs = Zeppelins.Load(ctx.MissionZrdr("C3", "M03"));
         var def = defs.FirstOrDefault(d => d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase));
         var host = runtime.FindNodes("piratezep").FirstOrDefault();
         ctx.Check(def != null && host != null && def.Targets.Count == 1
                   && ZeppelinBroadside.IsPlayerTarget(def.Targets[0]) && def.CannonFireRange == 500f,
             $"C3/M03 authors piratezep with targets [player], range 500 m, and its node resolves");
-        var objectives = ObjectiveScript.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03")).Objectives;
+        var objectives = ObjectiveScript.Load(ctx.MissionZrdr("C3", "M03")).Objectives;
         ctx.Check(objectives.Count > 0 && objectives.All(o => o.CompletedZepcannons.Count == 0),
             $"no C3/M03 objective runs COMPLETED_ZEPCANNONS over {objectives.Count} objectives");
         if (def == null || host == null)
             return;
 
-        var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"));
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var nets = AiNets.Load(ctx.ChapterZrdr("C3"));
+        var planesGamez = ctx.Planes;
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         TextureArchive? textures = null;
         ProjectilePool? pool = null;
         ZeppelinRuntime? zeps = null;
@@ -1240,7 +1239,7 @@ internal static class ZeppelinSuites
         var started = new List<string>();
         try
         {
-            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"));
+            textures = new TextureArchive(ctx.ChapterTextures("C3"));
             var live = new ProjectilePool(textures, null, null);
             pool = live;
             ctx.Host.AddChild(live);

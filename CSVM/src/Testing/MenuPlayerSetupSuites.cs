@@ -38,7 +38,7 @@ internal static class MenuPlayerSetupSuites
     // and is polled by the presentation's Tick like a pad would be.
     private static void OriginalSeats(TestContext ctx)
     {
-        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        MenuSuiteHost.RequireLayout(ctx);
         var layout = CSVM.UI.Menu.Original.OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -56,7 +56,7 @@ internal static class MenuPlayerSetupSuites
             Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
         host.AddSeat(seat0);
         var setup = host.Features.Get<PlayerSetupFeature>();
         const string Fly = CSVM.UI.Menu.Original.OriginalShell.FlyKey;

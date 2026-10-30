@@ -90,10 +90,10 @@ public class TgaImageTests
 
     /// <summary>A real shipped blueprint (24-bit RLE, type 10) decodes at the catalogued
     /// 358x335, fully opaque.</summary>
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void RealBlueprint_DecodesAtItsCataloguedShape()
     {
-        var image = TgaImage.TryLoad(Graphics("PX_0_BLUEPRINT.TGA"));
+        var image = TgaImage.Decode(Graphics("PX_0_BLUEPRINT.TGA"));
 
         Assert.NotNull(image);
         Assert.Equal(BlueprintWidth, image!.Width);
@@ -107,18 +107,18 @@ public class TgaImageTests
 
     /// <summary>A real shipped icon (32-bit RLE) decodes on the same 358x335 canvas as the
     /// blueprints, which is what lets the two overlay.</summary>
-    [ExtractedDataFact]
+    [GameFilesFact]
     public void RealIcon_DecodesOnTheBlueprintCanvas()
     {
-        var image = TgaImage.TryLoad(Graphics("PX_ICON_0_4_0.TGA"));
+        var image = TgaImage.Decode(Graphics("PX_ICON_0_4_0.TGA"));
 
         Assert.NotNull(image);
         Assert.Equal(BlueprintWidth, image!.Width);
         Assert.Equal(BlueprintHeight, image.Height);
     }
 
-    private static string Graphics(string file) =>
-        Path.Combine(TestData.DataRoot!, "extracted", "rof", "ASSETS", "GRAPHICS", file);
+    private static byte[] Graphics(string file) =>
+        CSVM.Extraction.RofFiles.Open(GameFilesData.Source).Read("ASSETS/GRAPHICS/" + file)!;
 
     private static byte[] Header(byte type, int width, int height, byte bpp, byte descriptor) =>
         new byte[]

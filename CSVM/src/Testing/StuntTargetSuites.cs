@@ -35,13 +35,13 @@ internal static class StuntTargetSuites
         + "pilot's cycle and nobody else's")]
     internal static void StuntTargetCycle(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireMessages();
 
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
         {
-            var mine = StuntMission.Load(world.Gamez, missionZrdr, Messages.Load(ctx.MessagesPath));
+            var mine = StuntMission.Load(world.Gamez, missionZrdr, ctx.Data.Messages);
             ctx.Check(mine != null, $"{Chapter}/{Mission} ships danger zones for a stunt run");
             if (mine is not { } p1Run)
             {

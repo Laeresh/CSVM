@@ -40,8 +40,8 @@ internal static class CampaignBriefingNoteSuites
         + "parchment's authored 240 px box")]
     internal static void CampaignBriefingNote(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         var probe = new Control();
         ctx.Host.AddChild(probe);
         try
@@ -67,7 +67,7 @@ internal static class CampaignBriefingNoteSuites
         string dir = Path.Combine(ctx.ScratchDir, "BriefingNote");
         var flow = new CampaignFlow(
             new CampaignProfileStore(dir), UiStrings.TryLoad(ctx.DataRoot) ?? UiStrings.Empty,
-            ctx.DataRoot);
+            ctx.DataRoot, data: ctx.Data);
         flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
         var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
         var report = new StringBuilder();

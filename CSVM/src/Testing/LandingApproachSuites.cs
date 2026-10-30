@@ -182,10 +182,10 @@ internal static class LandingApproachSuites
     private static readonly string[] MotionChannels = { "rotate", "scale", "translate" };
 
     // What a landings suite does with the built world: the harness owns the build, the suite owns
-    // the drive. The mission's own zrdr path comes with it, for the readers that are not the
+    // the drive. The mission's own reader scope comes with it, for the readers that are not the
     // objective script.
     private delegate void MissionDrive(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report);
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report);
 
     /// <summary>Drives the campaign's first mission's approach triggers against its BUILT world:
     /// the chapter's rows resolve to real cone/half-cone/sphere volumes, a mission carrying none of
@@ -456,15 +456,15 @@ internal static class LandingApproachSuites
         string artifactPrefix,
         MissionDrive drive)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
-        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), seq)
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
         string folder = mission.MissionFolder.ToUpperInvariant();
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, folder);
         ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.ChapterTextures(chapter), $"{chapter} textures");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var report = new StringBuilder();
@@ -491,9 +491,9 @@ internal static class LandingApproachSuites
     }
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var armed = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         foreach (var approach in armed)
@@ -516,9 +516,9 @@ internal static class LandingApproachSuites
     }
 
     private static void DriveAutoLand(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var armed = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         if (AutoFor(armed) is not { } auto)
@@ -543,9 +543,9 @@ internal static class LandingApproachSuites
     }
 
     private static void DriveCoopApproachRow(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var armed = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         if (AutoFor(armed) is not { } auto)
@@ -559,9 +559,9 @@ internal static class LandingApproachSuites
     }
 
     private static void DriveCoopHookupSeat(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var armed = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         if (AutoFor(armed) is not { } auto)
@@ -834,7 +834,7 @@ internal static class LandingApproachSuites
     // Parks one human where it is asked, stopped: every gate this leg drives is a position and an
     // attitude, so a flown approach would only add a speed the row's band has to be re-checked for.
     private static void Park(TestContext ctx, PlayerRig rig, Vector3 at, Vector3 lookAt) =>
-        rig.Controller!.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+        rig.Controller!.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null,
             new CamParams(), at, lookAt, ApproachThrottle, ApproachSpeedMps);
 
     private static void Step(TestWorld world, LandingApproachRuntime trigger,
@@ -871,7 +871,7 @@ internal static class LandingApproachSuites
         var centre = frame * auto.Apex;
         report.AppendLine($"'{auto.Node}' sphere centre world pos=({centre.X:0},{centre.Y:0}," +
             $"{centre.Z:0}) r={auto.Radius:0.#}");
-        rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null, new CamParams(),
+        rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null, new CamParams(),
             frame * Lerp(auto, AxisFraction), frame * auto.Apex, ApproachThrottle, ApproachSpeedMps);
 
         bool offered = false;
@@ -910,10 +910,10 @@ internal static class LandingApproachSuites
         report.AppendLine($"drawn on a realtime frame: DrawsTextBlock={rig.PilotHud.DrawsTextBlock}, " +
             $"text='{rig.PilotHud.DrawnText}', prompt='{rig.PilotHud.AutoDock?.Line}'");
         ctx.Check(rig.PilotHud.DrawsTextBlock, $"the flown pane still holds a text block to draw into");
-        // The shipped wording out of messages.json, not a stand-in: this rig reads no keyboard, so
+        // The shipped wording out of the message table, not a stand-in: this rig reads no keyboard, so
         // MSG_PRESS_AUTOLAND's %1 carries its pad control. It lands on the prompt's own centred
         // line, never in the text block.
-        string wanted = Messages.Load(ctx.MessagesPath).Format("MSG_PRESS_AUTOLAND", "Pad Left Stick");
+        string wanted = ctx.Data.Messages.Format("MSG_PRESS_AUTOLAND", "Pad Left Stick");
         ctx.Check(rig.PilotHud.AutoDock?.Line == wanted,
             $"…and a realtime frame actually puts '{wanted}' on the prompt's own line");
         ctx.Check(rig.PilotHud.DrawnText is { Length: > 0 } drawn && !drawn.Contains(wanted),
@@ -952,9 +952,9 @@ internal static class LandingApproachSuites
     // definition, and one more inside the hookup's own move_player sequence for the airframes that
     // fold their wings. Every name below is read out of those definitions.
     private static void DriveHookupAirframe(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var armed = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         if (AutoFor(armed) is not { } auto)
@@ -1155,7 +1155,7 @@ internal static class LandingApproachSuites
         report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
         ArmRow(ctx, world, graph, script, auto, report);
         var frame = world.Runtime.FindNodes(auto.Node)[0].GlobalTransform;
-        rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, planeNode)),
+        rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, planeNode)),
             null, new CamParams(), frame * Lerp(auto, AxisFraction), frame * auto.Apex,
             ApproachThrottle, ApproachSpeedMps);
         rig.AutoLand = true;
@@ -1185,9 +1185,9 @@ internal static class LandingApproachSuites
     // sequence branches on which airframe is active and only this one calls a fold, so the branch
     // is decidable at all only because the flown airframe is in the runtime's node table.
     private static void DriveBalmoralDock(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var dock = RowFor(rows, DockAnim);
@@ -1465,9 +1465,9 @@ internal static class LandingApproachSuites
     // first and the last. The hookup raises the first code and ends with the aeroplane still on the
     // hook; the unhook raises the handoff and the re-placement at its own end.
     private static void DriveDockingHold(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var dock = SilentRowOf(world, rows);
@@ -1904,7 +1904,7 @@ internal static class LandingApproachSuites
     {
         var planes = BranchPlanes(world);
         ctx.Check(planes.Count > 0, $"'{ExtendHookAnim}' authors the airframe branches this reads");
-        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        var gamez = ctx.Planes;
         int read = 0;
         foreach (string plane in planes)
         {
@@ -2138,7 +2138,7 @@ internal static class LandingApproachSuites
         var trigger = new LandingApproachRuntime();
         ctx.Host.AddChild(trigger);
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         FlightController? rig = null;
         ctx.Host.AddChild(pool);
@@ -2222,7 +2222,7 @@ internal static class LandingApproachSuites
         var trigger = new LandingApproachRuntime();
         ctx.Host.AddChild(trigger);
 
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         var pool = new ProjectilePool(textures, null, null);
         ctx.Host.AddChild(pool);
         var built = new List<FlightController>();
@@ -2289,9 +2289,9 @@ internal static class LandingApproachSuites
     // Each row's approach node is a child of that plane's gamez node, so the volume follows the
     // aircraft it belongs to.
     private static void DriveWingWalk(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var blocks = AiSkills.LoadRoster(missionZrdr);
@@ -2325,9 +2325,9 @@ internal static class LandingApproachSuites
     }
 
     private static void DriveTrainPickup(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var pickup = RowFor(rows, "lookat_copilotpkup")
@@ -2354,7 +2354,7 @@ internal static class LandingApproachSuites
                 $"the pickup approach starts outside the world as library content");
             int armedBefore = trigger.Armed;
             world.Runtime.PlayerPositions = () => new[] { caboose.GlobalPosition };
-            rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+            rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null,
                 new CamParams(), caboose.GlobalPosition, caboose.GlobalPosition + Vector3.Forward,
                 0f, 0f);
             world.Runtime.Advance(StepDt);
@@ -2447,9 +2447,9 @@ internal static class LandingApproachSuites
     // while the caboose itself moves; the ladder switch is the session's own runtime, bound here
     // the way GameSession binds it, and driven by the rig's attitude and position.
     private static void DriveTrainPickupRide(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var pickup = RowFor(rows, "lookat_copilotpkup")
@@ -2483,7 +2483,7 @@ internal static class LandingApproachSuites
                 var field = new[] { new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = ctx.Host, Controller = rig } };
                 ladder.Bind(world.Runtime, cutscene, () => field, pickups);
                 world.Runtime.PlayerPositions = () => new[] { caboose.GlobalPosition };
-                rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+                rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null,
                     new CamParams(), caboose.GlobalPosition, caboose.GlobalPosition + Vector3.Forward,
                     0f, 0f);
                 world.Runtime.Advance(StepDt);
@@ -2623,7 +2623,7 @@ internal static class LandingApproachSuites
                 if (sensors.Count > 0)
                 {
                     var beside = sensors[0].GlobalPosition + Vector3.Up * 10f;
-                    rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+                    rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null,
                         new CamParams(), beside, beside + Vector3.Forward, 0f, 0f);
                 }
                 ladder.Tick();
@@ -2785,9 +2785,9 @@ internal static class LandingApproachSuites
     // than a range-triggered call, so this is the director's own trigger path. The staging
     // definition and the objective that wakes it are read out of the mission's data.
     private static void DriveTrailerPickup(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var pickup = RowFor(rows, "lookat_pickfordpkup")
@@ -2835,7 +2835,7 @@ internal static class LandingApproachSuites
             // definition, whose authored hatch time runs before it raises the actor the pickup's
             // prerequisite requires. The parked wait is the one the train drive gives its timing.
             var site = approaches[0].GlobalPosition;
-            rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+            rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null,
                 new CamParams(), site, site + Vector3.Forward, 0f, 0f);
             for (float t = 0f; t < TrailerApproachS; t += StepDt)
             {
@@ -2878,9 +2878,9 @@ internal static class LandingApproachSuites
     // approach cone, the three car guns going down and the fighters-destroyed actor let the waving
     // passenger stand up, and only then does the row's own prerequisite read met.
     private static void DriveCarPickup(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(world.Chapter);
         var rows = LandingApproaches.Resolve(
             chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
         var pickup = RowFor(rows, CarPickupAnim)
@@ -3054,7 +3054,7 @@ internal static class LandingApproachSuites
     // definition it range-gates, whatever calls that, and the objective node the drop's own reset
     // block flips through its CALL_ANIMATION.
     private static void DriveHangarDrop(TestContext ctx, TestWorld world, CampaignDirector director,
-        ObjectiveScript script, string missionZrdr, StringBuilder report)
+        ObjectiveScript script, ZrdrSet missionZrdr, StringBuilder report)
     {
         var cutscenes = MissionCutscenes.AnimNames(missionZrdr);
         report.AppendLine($"cutscene definitions: {string.Join(", ", cutscenes)}");
@@ -3547,19 +3547,19 @@ internal static class LandingApproachSuites
     // The mission's roster, spawned through the session's own spawner and the director's own
     // roster phase, with the marker graft wired exactly as GameSession wires it.
     private static void SpawnRoster(TestContext ctx, TestWorld world, CampaignDirector director,
-        string missionZrdr, ProjectilePool pool, StringBuilder report)
+        ZrdrSet missionZrdr, ProjectilePool pool, StringBuilder report)
     {
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var planesGamez = ctx.Planes;
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
             var spawner = CampaignRosterSuites.Spawner(ctx, planesGamez, textures, pool);
             int grafted = 0;
             string what = director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter),
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = ctx.ChapterZrdr(world.Chapter),
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 FindNodes = name => world.Runtime.FindNodes(name),
                 Spawn = (plan, pos, look, pilot) =>
                     spawner.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
@@ -3803,7 +3803,7 @@ internal static class LandingApproachSuites
 
         var frame = nodes[0].GlobalTransform;
         string? before = trigger.LastStarted;
-        rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null, new CamParams(),
+        rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null, new CamParams(),
             frame * Lerp(approach, AxisFraction), frame * approach.Apex,
             ApproachThrottle, ApproachSpeedMps);
         for (float t = 0f; t < ApproachBudgetS; t += StepDt)
@@ -3837,7 +3837,7 @@ internal static class LandingApproachSuites
     {
         var node = world.Runtime.FindNodes(cone.Node)[0];
         var site = node.GlobalTransform * cone.Apex;
-        rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+        rig.Setup(new FlightModel(PlaneStats.Load(ctx.Zrdr, PlaneNode)), null,
             new CamParams(), site, site + Vector3.Forward, 0f, 0f);
         for (float t = 0f; t < ArmBudgetS; t += StepDt)
         {
@@ -3895,11 +3895,11 @@ internal static class LandingApproachSuites
     private static FlightController BuildRig(TestContext ctx, TestWorld world, ProjectilePool pool,
         string planeNode = PlaneNode)
     {
-        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
-            var stats = PlaneStats.Load(ctx.ZrdrPath, planeNode);
-            var model = new PlaneBuilder(GameZ.Load(ctx.PlanesGamezPath), textures,
+            var stats = PlaneStats.Load(ctx.Zrdr, planeNode);
+            var model = new PlaneBuilder(ctx.Planes, textures,
                 dockingHook: true).Build(planeNode);
             var rig = new FlightController
             {
@@ -3920,7 +3920,7 @@ internal static class LandingApproachSuites
                 Vector3.Forward, ApproachThrottle, ApproachSpeedMps);
             // What FlightControllerBuild.Bind does for a session rig; this suite builds the
             // controller by hand, so the prompt would otherwise stay at its data-less stand-in.
-            rig.UseMessages(Messages.Load(ctx.MessagesPath));
+            rig.UseMessages(ctx.Data.Messages);
             return rig;
         }
         finally

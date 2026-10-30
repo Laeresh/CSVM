@@ -236,8 +236,9 @@ values) can't read them, it treats a bare-scalar key as a valueless flag and dro
 value. `Weather.cs` walks the raw `inner` list instead (`StringAfter`/`ScalarAfter`/
 `ListAfter`/`Vec2After`). The keys are unique at `inner`'s top level (the zone sub-lists'
 `FOG_COLOR`/`SUNLIGHT_*` are nested one level down, which the flat walkers never descend
-into), so first-match is always the right one. Note all numbers arrive as `float` via
-mech3ax's `GetSingle()`, so `PARTICLES 100` is `100.0f`, read with `ScalarAfter` and cast.
+into), so first-match is always the right one. Note all numbers arrive as `float`, since
+`ZrdrZbd` turns both number tags into one ([zrdr.md](../zrdr.md)), so `PARTICLES 100` is `100.0f`,
+read with `ScalarAfter` and cast.
 
 `COLOR` is dual-encoded like the other colour triples (here always the integer form) and
 normalized by `ParseColor`; it's a DX7 sRGB framebuffer value, so the renderer converts it

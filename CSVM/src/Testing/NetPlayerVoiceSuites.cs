@@ -5,6 +5,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Roster;
@@ -51,12 +52,12 @@ internal static class NetPlayerVoiceSuites
         + "and not from 2000 m; and the DI tiers speak only for a player on the local side")]
     internal static void EachPlayerSpeaksInItsOwnVoice(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Sounds, $"sound archive (soundsh)");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, MpMission);
+        ctx.RequireData(ctx.ChapterTextures(ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
         // ⚠ Not --mute: a muted session loads no sound defs and so builds no combat voice at all.
         var spec = SessionSpec.Parse(new[]

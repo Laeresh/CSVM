@@ -31,12 +31,12 @@ internal static class TurretMountSightlineSuites
         + "gun's own rig and nothing wider")]
     internal static void OwnMountIsNotCover(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         var aagunDef = turretDefs.All.FirstOrDefault(d => !d.Carried
             && d.NodePatterns.Any(p => p.Count == 1 && p[0] == "aagun**"));
         ctx.Check(aagunDef != null, $"ai.zrd carries the standalone aagun** entry");
@@ -110,12 +110,12 @@ internal static class TurretMountSightlineSuites
         + "same line reads blocked although the group is this gunner's platform")]
     internal static void GroupedSiteExcludesItsOwnRigOnly(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
 
         var textures = new TextureArchive(texturesPath);
         var root = new Node3D { Name = "grouped_sightline_root" };

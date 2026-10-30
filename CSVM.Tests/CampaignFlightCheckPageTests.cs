@@ -415,13 +415,13 @@ public class CampaignFlightCheckPageTests
         Assert.Equal("2)", lines[1].Split("    ")[0]);
     }
 
-    // Real-data checks: the wingman flag reads from cm_sequence.zrd (not a test override) and the
-    // objectives note reads from the mission's own objectives.zrd, both through Flow.DataRoot.
+    // Real-data checks: the wingman flag reads cm_sequence.zrd (not a test override) and the
+    // objectives note the mission's own objectives.zrd, both through the feature's game data.
     [ExtractedDataFact]
     public void TheWingmanFlagAgreesWithCampaignSequenceForARealMission()
     {
         var missions = CampaignSequence.Load(
-            SessionPaths.PreferUnzipped(Path.Combine(TestData.DataRoot!, "extracted", "zrdr.zip")));
+            TestZrdr.Root);
         int withWingman = -1;
         int withoutWingman = -1;
         foreach (var m in missions)
@@ -453,7 +453,7 @@ public class CampaignFlightCheckPageTests
         var def = CampaignProfileDef.NewProfile("Zachary");
         store.Save(def);
 
-        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot);
+        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot, data: TestZrdr.Readers(TestExtracted.Data(TestData.DataRoot)));
         flow.SelectProfile(store.Load("Zachary")!);
         flow.SetMission(0);
         var planes = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "Planes"));
@@ -496,7 +496,7 @@ public class CampaignFlightCheckPageTests
         var def = CampaignProfileDef.NewProfile("Zachary");
         store.Save(def);
 
-        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot);
+        var flow = new CampaignFlow(store, UiStrings.Empty, TestData.DataRoot, data: TestZrdr.Readers(TestExtracted.Data(TestData.DataRoot)));
         flow.SelectProfile(store.Load("Zachary")!);
         flow.SetMission(seq);
         var planes = new CustomPlaneStore(Path.Combine(TestData.TempDir(), "Planes"));

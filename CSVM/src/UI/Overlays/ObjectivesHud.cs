@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Text;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
@@ -36,8 +35,8 @@ public readonly record struct ObjectivesHudRow(
 /// </summary>
 public sealed partial class ObjectivesHud : Node
 {
-    /// <summary>The completion mark's art in an extracted <c>rimage</c> set.</summary>
-    public const string MarkFile = "obj_check1.png";
+    /// <summary>The completion mark's art in the <c>rimage</c> set.</summary>
+    public const string MarkFile = "obj_check1";
 
     private const float RefFontSize = 20f;      // TUNE: the reference frame fixes no type size
     private const float RefHeadingSize = 24f;   // TUNE
@@ -80,20 +79,18 @@ public sealed partial class ObjectivesHud : Node
         CampaignDirector director, Messages messages, PauseState pause, Texture2D? mark) =>
         new(director, messages, pause, mark);
 
-    /// <summary>Loads the completion mark from an extracted <c>rimage</c> directory. Null (with one
-    /// log line) when the file is absent, which leaves a completed row unmarked; the art carries its
-    /// own alpha, so no colour-keying is needed.</summary>
-    public static Texture2D? LoadMark(string rimageDir)
+    /// <summary>Loads the completion mark from the <c>rimage</c> art. Null (with one log line) when
+    /// the set lacks it, which leaves a completed row unmarked. The art carries its own alpha, so no
+    /// colour-keying is needed.</summary>
+    public static Texture2D? LoadMark(Mech3.TextureSet rimage)
     {
-        var path = Path.Combine(rimageDir, MarkFile);
-        if (!File.Exists(path))
+        var mark = Mech3.HdArt.Rimage(rimage, MarkFile);
+        if (mark == null)
         {
-            Log.Warn("ui", $"no {MarkFile} in {rimageDir}, completion marks off (extract the game data again on the Extract screen)");
-            return null;
+            Log.Warn("ui", $"no {MarkFile} in rimage, completion marks off (no game install found, or it lacks rimage.zbd)");
         }
 
-        var img = Image.LoadFromFile(path);
-        return img != null ? Mech3.HdArt.Texture(path, img) : null;
+        return mark;
     }
 
     /// <summary>The current display lines: one per <see cref="ObjectiveGraph.Rows"/> row, in the

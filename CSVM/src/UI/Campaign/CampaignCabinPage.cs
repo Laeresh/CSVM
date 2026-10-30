@@ -278,8 +278,8 @@ public sealed class CampaignCabinPage : CampaignPage
         _sceneProbed = true;
         if (Flow.DataRoot is { } root)
         {
-            var path = Extraction.RofTree.Under(root, "ASSETS/GRAPHICS/PC_BACKGROUND.PNG");
-            _scene = PngImage.TryLoad(path) is { } image
+            _scene = Extraction.RofFiles.For(root).Read("ASSETS/GRAPHICS/PC_BACKGROUND.PNG") is { } bytes
+                && PngImage.Decode(bytes) is { } image
                 ? new HangarArt(image, Flow.Profile?.Name ?? "Cabin")
                 : null;
         }

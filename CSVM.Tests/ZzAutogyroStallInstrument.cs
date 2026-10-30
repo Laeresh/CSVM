@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using CSVM.Extraction;
+using CSVM.Mech3;
 using CSVM.Tooling;
 using Xunit;
 
@@ -14,8 +15,7 @@ namespace CSVM.Tests;
 /// doc section owns the reading.</summary>
 public class ZzAutogyroStallInstrument
 {
-    private static string ZrdrPath =>
-        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+    private static ZrdrSet ZrdrPath => TestZrdr.Root;
 
     [ExtractedDataFact]
     public void DumpTheAutogyroAndBloodhawkStalls()

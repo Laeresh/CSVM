@@ -39,11 +39,12 @@ if (-not $runs[0].success) {
 }
 
 # Whether the machine renders the menu says nothing about whether it can fly, so a mapped
-# extraction tree buys the second question an answer: the flight's own [perf] rate lines.
+# CrimsonSkiesGame install buys the second question an answer: the flight's own [perf] rate lines.
 # A flight-mode run does not exit inside the sandbox, so it is watched and then closed like
 # any other; the frame rate is read from the log, not from how it ended.
-if (Test-Path (Join-Path $Root 'extracted')) {
-    Write-Step 'an extraction tree is mapped; flying a chapter to measure the frame rate'
+# --data-root=$Root makes the locator take the mapped <root>/CrimsonSkiesGame as the install.
+if (Test-Path (Join-Path $Root 'CrimsonSkiesGame\ZBD')) {
+    Write-Step 'an install is mapped; flying a chapter to measure the frame rate'
     # The engine reads its own flags out of the user args, so they go after the bare `--`;
     # passed before it they reach Godot, which ignores them, and the run silently becomes a
     # plain menu launch. --no-vsync is what makes the rate mean anything: the sandbox

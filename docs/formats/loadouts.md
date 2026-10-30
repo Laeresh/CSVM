@@ -98,15 +98,20 @@ faithfully. The odd counts are unbalanced of necessity. Do not "correct" this on
 
 W4 (and the Balmoral's W3) is a **turret** on the five turret airframes (`pavenger`, `pbalmoral`,
 `pbrigand`, `pfirebrand`, `pkestrel`, the Balmoral is the only two-turret airframe: Nose + Rear).
-Those slots carry `"turret": true` and the loader parses them but constructs them inert, and
-**they stay inert even now that the gunner is live**: the running turret is built from
-the vehicle def's `turrets` block against `ai.zrd` (`TurretController`,
-[turrets.md](turrets.md)), so its weapon is the `ai.zrd` row's `WEAPON.NAME` (`wep_140` on every
-carried entry), **not** this file's caliber. The slot rows here remain the configurator-facing
-record of the mount, note the caliber the original's Ammo Selection UI shows (50/30/40 by
-plane) differs from the `wep_140` the gunner actually fires, an unreconciled original-data
-tension. A turret's binding-rule firepoints are nominal (fp1,2 is a forward/wing point, not a
-rear one); its real barrels are the `fgun`/`rgun`/`bgun*` gun nodes.
+Those slots carry `"turret": true` and the loader parses them but constructs them inert: the
+running gunner is built from the vehicle def's `turrets` block against `ai.zrd`
+(`TurretController`, [turrets.md](turrets.md)). On the player's aeroplane the slot then arms it.
+`FUN_00443de0` hands each turret slot, in slot order, to `FUN_004aab00`, which replaces the
+gunner's weapon with this slot's `wep_NN` (`+0x160`) and its refire window with the player's
+`weapons` tuple refire for that weapon, halved under the slot's twin bit
+(`0x004aab3f`–`0x004aab96`). An AI aeroplane's gunner keeps the `ai.zrd` row's `wep_140` and its
+`FIRE_RATE` window. CSVM does the same in `TurretController.ArmFromLoadout`.
+
+`"twin": false` marks a single-mounted slot, the hangar record's twin bit (`+0x84`, bit
+`1 << group`) clear: the Hellhound's turret and both of the Balmoral's. Every other stock slot,
+fixed or turret, is twin. A single fixed gun carries half its `CLUSTER_SIZE` (`FUN_004b2550`).
+A turret's binding-rule firepoints are nominal (fp1,2 is a forward/wing point, not a rear one);
+its real barrels are the `fgun`/`rgun`/`bgun*` gun nodes.
 
 ## Stock table
 

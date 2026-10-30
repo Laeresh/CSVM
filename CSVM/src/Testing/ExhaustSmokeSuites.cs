@@ -32,19 +32,20 @@ internal static class ExhaustSmokeSuites
         "the exhaust smoke on the human throttle path: a single one-eighth digit from idle peaks "
         + "far too faint to see, closing the lever charges nothing, and an idle-to-full digit slam "
         + "lights the trail at the decoded strength and puts it out again within four seconds, "
-        + "which a scheduled capture press reaches the same way")]
+        + "which a scheduled capture press reaches the same way; a quarter pad trigger stays clean "
+        + "and a full pull from idle lights it")]
     internal static void ExhaustSmokeCharge(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
         var textures = new TextureArchive(texturesPath);
         FlightController? pilot = null;
         try
         {
-            pilot = IdlingRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures);
+            pilot = IdlingRig(ctx, ctx.Planes, textures);
             if (pilot.ExhaustSmoke is not { } smoke)
             {
                 ctx.Check(false, $"{ctx.PlaneName}: the flown airframe carries the exhaust markers the smoke needs");
@@ -88,7 +89,20 @@ internal static class ExhaustSmokeSuites
             var scheduled = Run(pilot, smoke, 360);
             ctx.Check(scheduled.FirstOn >= 60 && scheduled.Peak is > 0.33f and < 0.38f,
                 $"…and a scheduled press one second out slams it the same way, lit from step {scheduled.FirstOn}, peak {scheduled.Peak:0.000}");
-            ctx.Note($"{ctx.PlaneName}: one-eighth peak {eighth.Peak:0.0000}, slam peak {slam.Peak:0.000} lit steps {slam.FirstOn}..{slam.LastOn}, scheduled peak {scheduled.Peak:0.000}");
+
+            // The pad's trigger is a rate, not a step. A quarter squeeze moves the commanded lever at
+            // the slew's own 0.5/s and stays clean; a full one runs ahead of it (SeatControls.PadLeverRate).
+            BackToIdle(pilot, smoke);
+            pilot.ObserveDeviceForTest(new Trigger(0f), new Trigger(0.25f));
+            var squeeze = Run(pilot, smoke, 240);
+            ctx.Check(squeeze.Peak < InvisibleOpacity,
+                $"{ctx.PlaneName}: a quarter trigger keeps pace with the live lever, peak {squeeze.Peak:0.0000} (under {InvisibleOpacity})");
+            BackToIdle(pilot, smoke);
+            pilot.ObserveDeviceForTest(new Trigger(0f), new Trigger(1f));
+            var pull = Run(pilot, smoke, 360);
+            ctx.Check(pull.EverStreamed && pull.Peak is > 0.27f and < 0.31f && pilot.Throttle >= 0.999f,
+                $"…and a full pull from idle lights the trail at peak {pull.Peak:0.000} (2/s against the 0.5/s slew: 0.289), lever={pilot.Throttle:0.000}");
+            ctx.Note($"{ctx.PlaneName}: one-eighth peak {eighth.Peak:0.0000}, slam peak {slam.Peak:0.000} lit steps {slam.FirstOn}..{slam.LastOn}, scheduled peak {scheduled.Peak:0.000}, pad quarter {squeeze.Peak:0.0000}, pad full {pull.Peak:0.000}");
         }
         finally
         {
@@ -103,12 +117,12 @@ internal static class ExhaustSmokeSuites
         + "plume on its own step once the desired lever runs ahead of the live one")]
     internal static void ExhaustSmokeAi(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ai = null;
@@ -118,7 +132,7 @@ internal static class ExhaustSmokeSuites
             ctx.Host.AddChild(pool);
             var spec = SessionSpec.Parse(Array.Empty<string>());
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-                new LiveryResolver(spec, System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                new LiveryResolver(spec, ctx.DataRoot),
                 null, ctx.Host,
                 SuiteConstants.AircraftResources(ctx, planesGamez, textures),
                 new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },
@@ -189,12 +203,21 @@ internal static class ExhaustSmokeSuites
         return (peak, charged, first >= 0, first, last);
     }
 
+    // Lets go of every control, closes the lever on the idle digit and lets the charge die out.
+    private static void BackToIdle(FlightController pilot, ExhaustSmoke smoke)
+    {
+        pilot.ObserveDeviceForTest(new Trigger(0f), new Trigger(0f));
+        pilot.HoldActionForTest(InputAction.ThrottleSet0, true);
+        Run(pilot, smoke, 360);
+        pilot.HoldActionForTest(InputAction.ThrottleSet0, false);
+    }
+
     // A human rig parked at idle with its exhaust smoke built, assembled the way the flight
     // adapter assembles the flown aircraft: the smoke resolves the airframe's own exhaust markers,
     // so it exists only once the plane model is under the controller.
     private static FlightController IdlingRig(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var pos = new Vector3(0f, SpawnAltitudeM, 0f);
         var rig = new FlightController
@@ -214,5 +237,21 @@ internal static class ExhaustSmokeSuites
         ctx.Host.AddChild(rig);
         rig.ExhaustSmoke = ExhaustSmoke.Build(model, textures, rig);
         return rig;
+    }
+
+    // One side of a tick holding nothing but the right trigger, at that pull, on the placeholder
+    // identity a seat's pad rows sit on.
+    private sealed class Trigger(float pull) : IDeviceState
+    {
+        public bool IsKeyDown(DeviceId device, int keyCode) => false;
+
+        public bool IsButtonDown(DeviceId device, int button) => false;
+
+        public bool IsMouseButtonDown(DeviceId device, int button) => false;
+
+        public float AxisValue(DeviceId device, int axis) =>
+            device == DefaultBindings.AnyPad && axis == (int)JoyAxis.TriggerRight ? pull : 0f;
+
+        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
     }
 }

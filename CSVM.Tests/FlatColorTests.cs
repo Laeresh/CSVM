@@ -91,7 +91,7 @@ public class FlatColorTests
     [MemberData(nameof(ChapterRestatedCounts))]
     public void TheRestatedFlatColoursAreTheSkydomeSkirtsAndNothingElse(string chapter, string expected)
     {
-        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.ExtractedRoot!, chapter));
 
         int white = 0;
         int coloured = 0;

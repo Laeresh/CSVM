@@ -217,6 +217,27 @@ public class InstallLocatorTests
         Assert.Equal(new[] { wine, proton }, InstallLocator.Candidates(roots, null));
     }
 
+    /// <summary>A launcher's install script leaves the disc copy or its ISO beside CSVM. Those come
+    /// before the machine's installs, a disc counts there, and a stray file or empty folder does not.</summary>
+    [Fact]
+    public void ADiscOrIsoBesideCsvmComesBeforeTheMachinesInstalls()
+    {
+        string machine = TestData.TempDir();
+        string installer = OddlySpelledInstall(Path.Combine(machine, "PF", "Microsoft Games", "Crimson Skies"));
+        string beside = TestData.TempDir();
+        string game = Path.Combine(beside, "Game");
+        Directory.CreateDirectory(Path.Combine(game, "ZBD"));
+        File.WriteAllBytes(Path.Combine(game, "ZBD", "C1.CAB"), new byte[] { 0 });
+        string iso = Path.Combine(beside, "CRIMSON01.iso");
+        File.WriteAllBytes(iso, new byte[] { 0 });
+        File.WriteAllBytes(Path.Combine(beside, "notes.txt"), new byte[] { 0 });
+        Directory.CreateDirectory(Path.Combine(beside, "logs"));
+        var roots = new InstallSearchRoots(true, null, new[] { Path.Combine(machine, "PF") }, Array.Empty<string>()) { Beside = beside };
+
+        Assert.Equal(new[] { game, iso, installer }, InstallLocator.Candidates(roots, null));
+        Assert.Equal(new[] { installer }, InstallLocator.Candidates(roots with { Beside = TestData.TempDir() }, null));
+    }
+
     [Fact]
     public void LinuxCandidatesIgnoreTheWindowsRoots()
     {

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Utils;
@@ -48,39 +49,38 @@ public sealed class SessionArchives
     /// <summary>See <see cref="WorldSession.Options.SoundsOutliveBuild"/>.</summary>
     public required bool SoundsOutliveBuild { get; init; }
 
-    /// <summary>Opens gamez, textures, sounds, sound defs and sound groups for one chapter build,
-    /// timing each into <see cref="StartupProfile"/> exactly as <c>WorldSession.Build</c>'s own
-    /// phases do, unconditionally even under the test harness's no-op <c>Record</c>.
+    /// <summary>Opens the five for one chapter build, each timed into <see cref="StartupProfile"/>
+    /// as <c>WorldSession.Build</c>'s phases are. The world comes from <paramref name="gamez"/>
+    /// inside the <c>gamez</c> phase, which times a first decode; a null world fails the build.
     /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
-    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match. A non-null
-    /// <paramref name="decode"/> shares the <see cref="Gamez"/> alone (<see cref="DecodeCache"/>).</summary>
-    public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, string texturesPath,
-        string soundsPath, string zrdrPath, bool mute, DecodeCache? decode = null)
+    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
+    public static SessionArchives OpenFor(ArchiveIntent intent, Func<GameZ?> gamez, TextureSet texturesSet,
+        SoundZbd? soundsZbd, ZrdrSet zrdr, bool mute)
     {
         long mark = StartupProfile.Mark();
-        var gamez = decode == null ? GameZ.Load(gamezPath) : decode.Gamez(gamezPath);
+        var world = gamez() ?? throw new FileNotFoundException("the game data holds no world for this build");
         StartupProfile.Record("gamez", mark);
 
         mark = StartupProfile.Mark();
-        var textures = new TextureArchive(texturesPath);
+        var textures = new TextureArchive(texturesSet);
         StartupProfile.Record("textures", mark);
 
-        bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
+        bool haveSounds = !mute && soundsZbd != null;
         mark = StartupProfile.Mark();
-        var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+        var sounds = haveSounds ? new SoundArchive(soundsZbd!) : null;
         StartupProfile.Record("sounds", mark);
 
         mark = StartupProfile.Mark();
-        var loadedSoundDefs = haveSounds ? Mech3.SoundDefs.Load(zrdrPath) : null;
-        var loadedSoundGroups = haveSounds ? Mech3.SoundDefs.LoadGroups(zrdrPath) : null;
+        var loadedSoundDefs = haveSounds ? Mech3.SoundDefs.Load(zrdr) : null;
+        var loadedSoundGroups = haveSounds ? Mech3.SoundDefs.LoadGroups(zrdr) : null;
         StartupProfile.Record("zrdr", mark);
 
         if (!mute && !haveSounds)
-            Log.Warn("sound", $"sound archive not found, flying silent: {soundsPath}");
+            Log.Warn("sound", $"sound archive not in the game data, flying silent: soundsh.zbd");
 
         return new SessionArchives
         {
-            Gamez = gamez,
+            Gamez = world,
             Textures = textures,
             Sounds = sounds,
             SoundDefs = loadedSoundDefs,

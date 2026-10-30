@@ -74,10 +74,10 @@ internal static class CampaignTargetListSuites
         + "pilot and not one of them reaches a cycle")]
     internal static void CampaignTargetList(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
         var report = new StringBuilder();
-        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var missions = CampaignSequence.Load(ctx.Zrdr);
         ctx.Same(CampaignSequence.MissionCount, missions.Count,
             $"the campaign sequence carries all {CampaignSequence.MissionCount} missions");
         CheckEveryMissionsTable(ctx, missions, report);
@@ -104,8 +104,8 @@ internal static class CampaignTargetListSuites
             string chapter = mission.ChapterFolder;
             string folder = mission.MissionFolder;
             var targets = MissionTargets.Load(
-                SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder),
-                SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+                ctx.MissionZrdr(chapter, folder),
+                ctx.ChapterZrdr(chapter));
             var flagged = new List<string>();
             ObjectiveSites.CollectFlagged(TargetFlag.OtherTarget, null, null, targets, flagged);
             string[] expected = StartingOtherTargets[mission.Ordinal];
@@ -122,16 +122,16 @@ internal static class CampaignTargetListSuites
     private static bool FlyOne(TestContext ctx, (int Ordinal, string Chapter, string Mission) flown,
         StringBuilder report)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, flown.Chapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, flown.Chapter, flown.Mission);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, flown.Chapter);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(flown.Chapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(flown.Chapter, flown.Mission);
+        TextureSet texturesPath = ctx.ChapterTextures(flown.Chapter);
         ctx.RequireData(chapterZrdr, $"{flown.Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{flown.Chapter} textures");
 
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
-        var messages = Messages.Load(ctx.MessagesPath);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var messages = ctx.Data.Messages;
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         bool control = false;
         ctx.WithWorld(flown.Chapter, collision: false, flown.Mission, world =>
         {

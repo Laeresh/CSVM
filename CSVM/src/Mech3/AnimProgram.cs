@@ -69,22 +69,23 @@ public sealed class AnimProgram
     public int ScriptPoolCount { get; private set; }
 
     /// <summary>Loads one mission's animation program from the three zrdr scopes (shared,
-    /// chapter, mission) and the <c>cam_anim</c> and <c>mis_anim</c> extractions. Any of them
-    /// may be missing: a tree without the anim archives gets reader-only behaviour.</summary>
-    public static AnimProgram Load(string sharedZrdr, string chapterZrdr, string missionZrdr,
-        string chapterAnimPath, string missionAnimPath)
+    /// chapter, mission) and the chapter's <c>cam_anim</c> and the mission's <c>mis_anim</c>
+    /// archive. Any of them may be missing: a mission without the anim archives gets reader-only
+    /// behaviour. The archives' defs become this program's, so a caller hands each archive to the
+    /// one mission it belongs to (see <see cref="Add"/>).</summary>
+    public static AnimProgram Load(ZrdrSet sharedZrdr, ZrdrSet chapterZrdr, ZrdrSet missionZrdr,
+        AnimArchive? chapterAnim, AnimArchive? missionAnim)
     {
         var program = new AnimProgram();
 
         // Compiled first, so it wins every collision.
         var missionManifest = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool haveMissionManifest = false;
-        foreach (var (path, label) in new[] { (chapterAnimPath, "cam_anim"), (missionAnimPath, "mis_anim") })
+        foreach (var (loaded, isMission) in new[] { (chapterAnim, false), (missionAnim, true) })
         {
-            if (AnimArchive.Load(path, label) is not { } archive)
+            if (loaded is not { } archive)
                 continue;
             program.ScriptPoolCount += archive.ScriptCount;
-            bool isMission = label == "mis_anim";
             if (isMission)
                 haveMissionManifest = true;
             foreach (var def in archive.Defs)
@@ -104,17 +105,17 @@ public sealed class AnimProgram
         var listedChapter = haveMissionManifest
             ? ListedChapterFiles(chapterZrdr, missionZrdr)
             : null;
-        foreach (var zrdr in new[] { sharedZrdr, chapterZrdr })
+        foreach (var (zrdr, shared) in new[] { (sharedZrdr, true), (chapterZrdr, false) })
         {
             foreach (var def in AnimDefs.LoadArchive(zrdr))
             {
-                if (listedShared != null && zrdr == sharedZrdr
+                if (listedShared != null && shared
                     && !listedShared.Contains(StemOf(def.SourceFile)))
                 {
                     program._sharedFilesSkipped.Add(StemOf(def.SourceFile));
                     continue;
                 }
-                if (listedChapter != null && zrdr == chapterZrdr
+                if (listedChapter != null && !shared
                     && !listedChapter.Contains(StemOf(def.SourceFile)))
                 {
                     program._chapterFilesSkipped.Add(StemOf(def.SourceFile));
@@ -145,21 +146,6 @@ public sealed class AnimProgram
 
         program.LoadStartAnims(missionZrdr);
         return program;
-    }
-
-    /// <summary>The chapter/mission compiled-archive paths for a session. Like every other
-    /// loader, it prefers the unpacked sibling directory <c>--extract-unzip</c> leaves next to
-    /// each zip, since loose JSON needs no decompression per def.</summary>
-    public static (string Chapter, string Mission) ArchivePaths(string repoRoot, string chapter, string mission)
-    {
-        static string Prefer(string zipPath)
-        {
-            var dir = Path.Combine(Path.GetDirectoryName(zipPath) ?? "",
-                Path.GetFileNameWithoutExtension(zipPath));
-            return Directory.Exists(dir) ? dir : zipPath;
-        }
-        return (Prefer(Extraction.ZbdTree.Under(repoRoot, chapter + "/cam_anim.zip")),
-                Prefer(Extraction.ZbdTree.Under(repoRoot, $"{chapter}/{mission}/mis_anim.zip")));
     }
 
     /// <summary>Definitions an ANIMATION_NAME refers to (startanims entries, CALL_ANIMATION
@@ -269,8 +255,8 @@ public sealed class AnimProgram
     /// <c>anim.zrd</c> index plus the shared entries of the chapter's <c>cam_anim.zrd</c> and the
     /// mission's <c>mis_anim.zrd</c>. Null when the index is absent, which leaves the scope
     /// ungated rather than empty.</summary>
-    private static HashSet<string>? ListedSharedFiles(string sharedZrdr, string chapterZrdr,
-        string missionZrdr)
+    private static HashSet<string>? ListedSharedFiles(ZrdrSet sharedZrdr, ZrdrSet chapterZrdr,
+        ZrdrSet missionZrdr)
     {
         var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<string>();
@@ -298,7 +284,7 @@ public sealed class AnimProgram
     /// directly (C2's <c>game_targets</c>/<c>police_*</c>/<c>security_destroy</c>, two at a time
     /// per mission). No index closure to walk, unlike the shared scope: empty means neither list
     /// names a chapter file, which gates the scope shut rather than leaving it ungated.</summary>
-    private static HashSet<string> ListedChapterFiles(string chapterZrdr, string missionZrdr)
+    private static HashSet<string> ListedChapterFiles(ZrdrSet chapterZrdr, ZrdrSet missionZrdr)
     {
         var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (zrdr, index) in new[] { (chapterZrdr, "cam_anim"), (missionZrdr, "mis_anim") })
@@ -308,12 +294,12 @@ public sealed class AnimProgram
         return listed;
     }
 
-    private static IEnumerable<string> ListedPaths(string zrdr, string stem)
+    private static IEnumerable<string> ListedPaths(ZrdrSet zrdr, string stem)
     {
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFileOrEmpty(zrdr, $"{stem}.zrd.json");
+            root = zrdr.LoadFileOrEmpty($"{stem}.zrd.json");
         }
         catch (Exception e) when (e is IOException or System.Text.Json.JsonException)
         {
@@ -401,11 +387,11 @@ public sealed class AnimProgram
     }
 
     // startanims.json: [["NEW_GAME_START", [[name], [name], …], "LOAD_GAME_START", …]]
-    private void LoadStartAnims(string missionZrdr)
+    private void LoadStartAnims(ZrdrSet missionZrdr)
     {
         try
         {
-            var root = Zrdr.LoadFile(missionZrdr, "startanims.json");
+            var root = missionZrdr.LoadFile("startanims.json");
             if (root.Count > 0 && root[0] is List<object?> outer)
                 for (int i = 0; i + 1 < outer.Count; i++)
                     if (outer[i] is string k && k.Equals("NEW_GAME_START", StringComparison.OrdinalIgnoreCase)

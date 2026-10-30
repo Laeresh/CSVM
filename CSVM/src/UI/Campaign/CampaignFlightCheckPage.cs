@@ -165,7 +165,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private CustomPlaneStore? _planes;
     private StockLoadouts? _stock;
-    private Messages? _messages;
 
     // The objectives note, read once per mission rather than once per repaint: it reads files, and
     // the flow keeps one page instance across every screen it draws. -2 is "not yet read for any
@@ -697,16 +696,16 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private string ReadObjectivesNote()
     {
-        if (Flow.DataRoot is not { } root || Flow.Mission is not { } mission)
+        if (Flow.Mission is not { } mission)
         {
             return string.Empty;
         }
 
         try
         {
-            var script = ObjectiveScript.Load(
-                SessionPaths.MissionZrdr(root, mission.ChapterFolder, mission.MissionFolder));
-            var messages = MessagesFor(root);
+            var data = Flow.Feature.Data;
+            var script = ObjectiveScript.Load(data.LoadChapter(mission.ChapterFolder, mission.MissionFolder).MissionZrdr);
+            var messages = data.Messages;
             var lines = new List<string>();
             foreach (var identity in script.DisplayIdentities())
             {
@@ -735,12 +734,9 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         _objectives = ReadObjectivesNote();
     }
 
-    private Messages MessagesFor(string root) =>
-        _messages ??= Messages.Load(Path.Combine(root, "extracted", "messages.json"));
-
     // One airframe's blueprint TGA, the hangar's own plane preview path
-    // (extracted/rof/ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA, HangarAirframePage), reused rather
-    // than authoring new silhouette art. Decoded once and kept, including a miss.
+    // (ASSETS/GRAPHICS/PX_<n>_BLUEPRINT.TGA, HangarAirframePage), reused rather than authoring
+    // new silhouette art. Decoded once and kept, including a miss.
     private HangarArt? SilhouetteFor(int airframe)
     {
         if (_silhouettes.TryGetValue(airframe, out var art))
@@ -751,8 +747,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         art = null;
         if (Flow.DataRoot is { } root)
         {
-            string path = Extraction.RofTree.Under(root, $"ASSETS/GRAPHICS/PX_{airframe}_BLUEPRINT.TGA");
-            if (TgaImage.TryLoad(path) is { } image)
+            if (Extraction.RofFiles.For(root).Read($"ASSETS/GRAPHICS/PX_{airframe}_BLUEPRINT.TGA") is { } bytes
+                && TgaImage.Decode(bytes) is { } image)
             {
                 art = new HangarArt(image, AirframeTitle(airframe));
             }

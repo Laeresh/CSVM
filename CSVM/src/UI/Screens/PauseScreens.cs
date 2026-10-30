@@ -44,17 +44,15 @@ public sealed record PauseSheet(
     /// table. An Instant Action dialog also takes the four texts its own script writes, which no
     /// campaign dialog carries.</summary>
     public static PauseSheet? Load(
-        string zrdrPath, string messagesPath, string dialogKey, bool instantAction)
+        ZrdrSet zrdr, Messages messages, string dialogKey, bool instantAction)
     {
         EscapeDialog dialog;
-        Messages messages;
         string file = instantAction
             ? EscapeDialog.InstantActionFile
             : EscapeDialog.CampaignFile;
         try
         {
-            dialog = EscapeDialog.Load(zrdrPath, file);
-            messages = Messages.Load(messagesPath);
+            dialog = EscapeDialog.Load(zrdr, file);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -77,7 +75,7 @@ public sealed record PauseSheet(
             labels,
             instantAction,
             instantAction
-                ? LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages)
+                ? LoadScreens.DialogTexts(zrdr, file, state.Key, messages)
                 : Array.Empty<BoardLine>(),
             strips);
     }
@@ -87,18 +85,16 @@ public sealed record PauseSheet(
     /// that name, <c>Loading.zrd</c>'s own stands in. Null when neither file carries it, which leaves
     /// the chrome board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
     /// <c>escape.zrd</c>'s block lays the campaign's two columns under a blackboard.</summary>
-    public static PauseSheet? LoadMultiplayer(string zrdrPath, string messagesPath, string dialogKey)
+    public static PauseSheet? LoadMultiplayer(ZrdrSet zrdr, Messages messages, string dialogKey)
     {
         EscapeDialog escape;
         EscapeDialog loading;
         EscapeDialog blackboard;
-        Messages messages;
         try
         {
-            escape = EscapeDialog.Load(zrdrPath, EscapeDialog.CampaignFile);
-            loading = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
-            blackboard = EscapeDialog.Load(zrdrPath, EscapeDialog.InstantActionFile);
-            messages = Messages.Load(messagesPath);
+            escape = EscapeDialog.Load(zrdr, EscapeDialog.CampaignFile);
+            loading = EscapeDialog.Load(zrdr, EscapeDialog.LoadingFile);
+            blackboard = EscapeDialog.Load(zrdr, EscapeDialog.InstantActionFile);
         }
         catch (Exception e) when (e is IOException or JsonException)
         {
@@ -122,7 +118,8 @@ public sealed record PauseSheet(
             EscapeDialog.Label(messages, shared.Objectives?.TitleKey ?? string.Empty),
             labels,
             true,
-            LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages),
+            LoadScreens.OnBoard(
+                LoadScreens.DialogTexts(zrdr, file, state.Key, messages), StripsTop(strips)),
             strips);
     }
 
@@ -131,12 +128,12 @@ public sealed record PauseSheet(
     /// alone, as the mode's load screen is. Every <c>ia_escape.zrd</c>
     /// dialog shares that frame and differs only in words, so <see cref="OwnModeKey"/> names one.
     /// Null when the file does not read, which leaves the chrome board.</summary>
-    public static PauseSheet? LoadOwnMode(string zrdrPath, string messagesPath, string heading) =>
-        Load(zrdrPath, messagesPath, OwnModeKey, instantAction: true) is { } sheet
+    public static PauseSheet? LoadOwnMode(ZrdrSet zrdr, Messages messages, string heading) =>
+        Load(zrdr, messages, OwnModeKey, instantAction: true) is { } sheet
             ? sheet with
             {
                 Reveal = EscapeDialog.Settled(Array.Empty<BriefingStep>()),
-                Texts = LoadScreens.Texts(null, heading, zrdrPath, messagesPath),
+                Texts = LoadScreens.Texts(null, heading, zrdr, messages),
             }
             : null;
 
@@ -155,6 +152,18 @@ public sealed record PauseSheet(
         strips.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoStrip(shared));
         labels.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoLabel);
         return (strips, labels);
+    }
+
+    // The strips' top edge, which no row of a multiplayer sheet may reach.
+    private static float StripsTop(IReadOnlyList<EscapeButton?> strips)
+    {
+        float top = float.PositiveInfinity;
+        foreach (var strip in strips)
+        {
+            top = strip is { } placed ? Math.Min(top, placed.At.Y) : top;
+        }
+
+        return top;
     }
 }
 

@@ -183,10 +183,10 @@ internal static class NetRearmSuites
                   && hostSpec is { Versus: true, MissionType: DogfightMissionType.Deathmatch },
             $"both machines' menu launches fly {ctx.Chapter}'s MP1 as a Deathmatch whatever their command lines name ({hostSpec.Mission}, {guestSpec.Mission})");
 
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.DeathmatchMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, SessionSpec.DeathmatchMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.DeathmatchMission} zrdr");
         var block = SpawnPoints.LoadNetFreeForAll(missionZrdr);
         if (block is not { Count: >= 2 })
@@ -217,10 +217,10 @@ internal static class NetRearmSuites
 
     private static SessionSpec ZvzSpec(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.ZvzMission);
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ctx.Chapter, SessionSpec.ZvzMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(ctx.Chapter), $"{ctx.Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.ZvzMission} zrdr");
         return SessionSpec.Parse(new[]
         {
@@ -337,7 +337,7 @@ internal static class NetRearmSuites
         string? own = guest.MessageStack?.LineAt(0);
         string? hosts = peers[0].SeatRigs[0].Controller!.MessageStack?.LineAt(0);
         // Read off the run's own table; a missing row reads as its key, which the pane would match.
-        string rearmed = Messages.Load(ctx.MessagesPath).Get(HudMessages.RearmedKey);
+        string rearmed = ctx.Data.Messages.Get(HudMessages.RearmedKey);
         ctx.Check(rearmed != HudMessages.RearmedKey && own == rearmed && hosts != rearmed,
             $"its own pane posts the message table's \"{rearmed}\" and the host's pane does not ('{own}' / '{hosts}')");
         if (!ctx.SyntheticData)

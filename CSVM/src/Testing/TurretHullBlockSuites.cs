@@ -34,15 +34,15 @@ internal static class TurretHullBlockSuites
         "own hull blocks, then probed live at that direction on a stepping clock")]
     internal static void TurretHullBlocksOwnFire(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
         var report = new StringBuilder();
 
         ctx.WithWorld("C1", collision: true, mission: "M04", world =>
@@ -89,7 +89,7 @@ internal static class TurretHullBlockSuites
                 // ring rather than the several it claims (docs/verification.md INSTR-49).
                 Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.FixedStep };
 
-                var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var st = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
                 var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
                 var rig = new FlightController
                 {

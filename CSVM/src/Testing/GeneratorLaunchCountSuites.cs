@@ -78,11 +78,11 @@ internal static class GeneratorLaunchCountSuites
         + "flies, and completes once he is shot down, napping OBJECTIVE39 awake")]
     internal static void GeneratorLaunchDedg(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -91,7 +91,7 @@ internal static class GeneratorLaunchCountSuites
         var script = ObjectiveScript.Load(missionZrdr);
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var nets = AiNets.Load(chapterZrdr);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs, nets);
         var report = new StringBuilder();
         var def = CheckAuthored(ctx, script, blocks, templates, missionZrdr, report);
@@ -100,7 +100,7 @@ internal static class GeneratorLaunchCountSuites
             return;
         }
 
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var director = CampaignDirector.Create(script, mission,
             CampaignProfileDef.NewProfile("Zachary"), null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
@@ -120,11 +120,11 @@ internal static class GeneratorLaunchCountSuites
         + "tagged node on a generator's net is this one")]
     internal static void GeneratorLaunchDangerZone(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, Mission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(Chapter);
+        TextureSet texturesPath = ctx.ChapterTextures(Chapter);
         ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
         ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
         ctx.RequireData(texturesPath, $"{Chapter} textures");
@@ -132,8 +132,8 @@ internal static class GeneratorLaunchCountSuites
         var mission = MissionOrSkip(ctx);
         var script = ObjectiveScript.Load(missionZrdr);
         var nets = AiNets.Load(chapterZrdr);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var defs = VehicleDefs.Load(ctx.Zrdr);
         var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs, nets);
         var report = new StringBuilder();
 
@@ -200,8 +200,8 @@ internal static class GeneratorLaunchCountSuites
         + "elapses, however much further credit follows")]
     internal static void GeneratorSubKillDisablesBay(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, SubChapter, SubMission);
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, SubChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(SubChapter, SubMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(SubChapter);
         ctx.RequireData(missionZrdr, $"{SubChapter}/{SubMission} zrdr");
         ctx.RequireData(chapterZrdr, $"{SubChapter} zrdr");
 
@@ -233,7 +233,7 @@ internal static class GeneratorLaunchCountSuites
     // group-5 template, no enabled block shares that group, and 38/39 are the fuse and the loss.
     private static EnemyGeneratorDef? CheckAuthored(TestContext ctx, ObjectiveScript script,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
-        IReadOnlyDictionary<string, RosterSpawnPlan> templates, string missionZrdr,
+        IReadOnlyDictionary<string, RosterSpawnPlan> templates, ZrdrSet missionZrdr,
         StringBuilder report)
     {
         EnemyGeneratorDef? def = null;
@@ -276,11 +276,11 @@ internal static class GeneratorLaunchCountSuites
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         EnemyGeneratorDef def, IReadOnlyDictionary<string, RosterSpawnPlan> templates,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks, AiSkills skills,
-        IReadOnlyList<AiNet> nets, string missionZrdr, string chapterZrdr, string texturesPath,
+        IReadOnlyList<AiNet> nets, ZrdrSet missionZrdr, ZrdrSet chapterZrdr, TextureSet texturesPath,
         StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         FlightController? player = null;
@@ -299,9 +299,9 @@ internal static class GeneratorLaunchCountSuites
 
             director.BuildRoster(new CampaignDirector.RosterInputs
             {
-                ChapterZrdrPath = chapterZrdr,
-                MissionZrdrPath = missionZrdr,
-                ZrdrPath = ctx.ZrdrPath,
+                ChapterZrdr = chapterZrdr,
+                MissionZrdr = missionZrdr,
+                Zrdr = ctx.Zrdr,
                 MinAiActiveDist = skills.MinAiActiveDist,
                 Player = () => human,
                 NetTrailers = new NetTrailerTargets(
@@ -451,11 +451,11 @@ internal static class GeneratorLaunchCountSuites
     // makes seats him on the tagged net, and he flies the leg into the tagged node himself.
     private static void DriveZone(TestContext ctx, TestWorld world, CampaignDirector director,
         EnemyGeneratorDef def, IReadOnlyDictionary<string, RosterSpawnPlan> templates,
-        AiSkills skills, IReadOnlyList<AiNet> nets, AiNet run, string missionZrdr,
-        string texturesPath, StringBuilder report)
+        AiSkills skills, IReadOnlyList<AiNet> nets, AiNet run, ZrdrSet missionZrdr,
+        TextureSet texturesPath, StringBuilder report)
     {
         var textures = new TextureArchive(texturesPath);
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var planesGamez = ctx.Planes;
         ProjectilePool? pool = null;
         FlightRoster? roster = null;
         AiGeneratorRuntime? generators = null;
@@ -578,7 +578,7 @@ internal static class GeneratorLaunchCountSuites
     private static CampaignMission MissionOrSkip(TestContext ctx)
     {
         CampaignMission? found = null;
-        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        foreach (var m in CampaignSequence.Load(ctx.Zrdr))
         {
             if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
                 && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
@@ -620,7 +620,7 @@ internal static class GeneratorLaunchCountSuites
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool live, Vector3 pos, Vector3 lookAt)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
         var rig = new FlightController
         {
@@ -651,18 +651,18 @@ internal static class GeneratorLaunchCountSuites
         var resources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            StatsFor = plane => PlaneStats.Load(ctx.Zrdr, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.Zrdr, plane, aiDef),
             PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
+            Zrdr = ctx.Zrdr,
             StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            WeaponDefs = WeaponDefs.Load(ctx.Zrdr, null),
+            WeaponMessages = ctx.Data.Messages,
             Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            Shakes = ShakeDefs.Load(ctx.Zrdr),
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new LiveryResolver(spec, ctx.DataRoot),
             null!, ctx.Host, resources,
             new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
             new HumanRosterBindings());

@@ -29,15 +29,15 @@ internal static class TargetingCandidateSuites
         "at all")]
     internal static void TargetingCandidates(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.Zrdr);
         LoadoutDef? stock = null;
         foreach (var def in StockLoadouts.Load().All.Values)
         {
@@ -176,15 +176,15 @@ internal static class TargetingCandidateSuites
         "on the structure, the flight law closes the range on it and the gunner opens fire")]
     internal static void AiPursuesStructure(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var stats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.Zrdr);
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == ctx.PlaneName);
 
         var textures = new TextureArchive(texturesPath);
@@ -301,18 +301,18 @@ internal static class TargetingCandidateSuites
         "spent is back to the engine")]
     internal static void GasbagOrdnanceGate(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_warhawk");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var skills = AiSkills.Load(ctx.ZrdrPath);
-        var gunStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var skills = AiSkills.Load(ctx.Zrdr);
+        var gunStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == ctx.PlaneName);
-        var warhawkStats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
+        var warhawkStats = PlaneStats.LoadForAi(ctx.Zrdr, "player_warhawk", "bhatwarhawk");
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -452,19 +452,19 @@ internal static class TargetingCandidateSuites
         "target_bias and struct_bias ranking it about 100 m ahead of the aeroplane")]
     internal static void AircraftFirstTargeting(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         const string PlaneNode = "player_bhawk";
         const string WingmanDef = "wbloodhawk";
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        var allyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
-        var enemyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var allyStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode, WingmanDef);
+        var enemyStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode);
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == allyStats.NodeName);
 
         // Read off vehicle.json, never typed in: the remake-only rule only means anything against
@@ -657,18 +657,18 @@ internal static class TargetingCandidateSuites
         "nothing further (BL-789)")]
     internal static void AiTargetRescore(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequirePlane("player_bhawk");
 
         const string PlaneNode = "player_bhawk";
         const string WingmanDef = "wbloodhawk";
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var allyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
-        var enemyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var allyStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode, WingmanDef);
+        var enemyStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode);
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == allyStats.NodeName);
 
         var textures = new TextureArchive(texturesPath);
@@ -826,20 +826,20 @@ internal static class TargetingCandidateSuites
         "turret, while a world emplacement in the same scene still reaches the pool")]
     internal static void RankedPoolCarriedTurretDedup(TestContext ctx)
     {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
-        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, "ai.json");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        var planesGamez = ctx.Planes;
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
 
         // The Kestrel: one thirdp rear mount (see the carried-turrets suite for the decoded arc).
         const string HostPlane = "player_kestrel";
-        var hostStats = PlaneStats.Load(ctx.ZrdrPath, HostPlane);
-        var aiStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var hostStats = PlaneStats.Load(ctx.Zrdr, HostPlane);
+        var aiStats = PlaneStats.Load(ctx.Zrdr, ctx.PlaneName);
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;

@@ -12,7 +12,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The synthetic tree's sound archive and the WAV encoder behind it. Every definition the stand-in's
+/// The synthetic run's in-memory sound archive and the WAV encoder behind it. Every definition the stand-in's
 /// records name resolves. Every WAV decodes through the engine's reader as the MS ADPCM shape
 /// <c>docs/formats/sounds.md</c> describes. The encoder round-trips a signal through that reader.
 /// Playback needs Godot, so the in-engine run covers that half.
@@ -22,11 +22,13 @@ public class SyntheticSoundsTests
     [Fact]
     public void EveryDefinitionDecodesAsMonoAdpcmAtTheArchiveRate()
     {
-        string extracted = Path.Combine(Built(), "extracted");
-        var defs = SoundDefs.Load(Path.Combine(extracted, "zrdr"));
-        using var archive = new SoundArchive(Path.Combine(extracted, "soundsh"));
+        string root = Built();
+        var defs = SoundDefs.Load(SyntheticZrdr.Root());
+        using var zbd = SyntheticSounds.Zbd();
+        using var archive = new SoundArchive(zbd);
 
         Assert.NotEmpty(defs);
+        Assert.False(Directory.Exists(Path.Combine(root, "extracted", "soundsh")));
         foreach (var def in defs.Values)
         {
             byte[]? bytes = archive.ReadWavBytes(def.WavName);
@@ -42,7 +44,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void EveryGroupMemberIsADefinition()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var defs = SoundDefs.Load(zrdr);
         var groups = SoundDefs.LoadGroups(zrdr);
 
@@ -53,7 +55,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void ThePlaneAndItsWeaponsNameSoundsTheArchiveHolds()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var defs = SoundDefs.Load(zrdr);
         var groups = SoundDefs.LoadGroups(zrdr);
         var stats = PlaneStats.Load(zrdr, SyntheticPlane.Plane);
@@ -82,7 +84,7 @@ public class SyntheticSoundsTests
     [Fact]
     public void EveryAccentDealsAPilotWhoseWholeSetResolves()
     {
-        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var zrdr = SyntheticZrdr.Root();
         var defs = SoundDefs.Load(zrdr);
         var voice = new CombatVoice(defs, SoundDefs.LoadGroups(zrdr), CombatVoice.LoadAccents(zrdr));
 
@@ -107,20 +109,19 @@ public class SyntheticSoundsTests
         Assert.Contains(pilots, p => voice.PlayableForTrigger(p, 6) != null);
     }
 
+    /// <summary>The in-memory archive holds exactly the WAVs the definitions name, in list order,
+    /// so the two records cannot drift.</summary>
     [Fact]
-    public void AManifestMissingAWavTheDefinitionsNameFailsTheBuild()
+    public void TheArchiveHoldsExactlyTheWavsTheDefinitionsName()
     {
-        string fixtures = TestData.TempDir();
-        string sounds = Path.Combine(fixtures, "synthetic", "zrdr", "sounds.json");
-        string manifest = Path.Combine(fixtures, "synthetic", "soundsh", "manifest.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(sounds)!);
-        Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
-        File.Copy(TestData.Fixture("synthetic", "zrdr", "sounds.json"), sounds);
-        File.WriteAllText(manifest, "{ \"wavs\": [ { \"name\": \"probe_engine.wav\", \"seconds\": 0.1, \"hz\": 110 } ] }");
+        var defs = SoundDefs.Load(SyntheticZrdr.Root());
+        using var zbd = SyntheticSounds.Zbd();
 
-        var tree = new SyntheticTree(fixtures, Path.Combine(TestData.TempDir(), "root"));
-        var thrown = Assert.Throws<InvalidDataException>(() => SyntheticSounds.WriteArchive(tree));
-        Assert.Contains("probe_gunloop.wav", thrown.Message);
+        Assert.Equal(SyntheticSounds.Wavs.Select(w => w.Name), zbd.Sounds.Select(s => s.Key));
+        Assert.Equal(
+            defs.Values.Select(d => d.WavName).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase),
+            zbd.Sounds.Select(s => s.Key).Order(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]

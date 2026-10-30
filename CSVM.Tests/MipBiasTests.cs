@@ -1,4 +1,3 @@
-using System.IO;
 using CSVM.Mech3;
 using Xunit;
 
@@ -27,11 +26,11 @@ public class MipBiasTests
         { "C5", -0.8f },
     };
 
-    [ExtractedDataTheory]
+    [GameFilesTheory]
     [MemberData(nameof(ChapterBias))]
     public void EveryChaptersBiasIsTheOneItsAdjustScriptAuthors(string chapter, float expected)
     {
-        Assert.Equal((double)expected, TextureArchive.MipBias(InterpPath(), chapter), 4);
+        Assert.Equal((double)expected, TextureArchive.MipBias(InterpScripts.Load(GameFilesData.Source), chapter), 4);
     }
 
     [Fact]
@@ -60,30 +59,21 @@ public class MipBiasTests
     [Fact]
     public void TheCompileOnlyLoadScriptIsNotRead()
     {
-        string dir = TestData.TempDir();
-        string path = Path.Combine(dir, "interp.json");
-        File.WriteAllText(path,
-            "[{\"name\":\"support\\\\c9\\\\load.gw\",\"lines\":[\"MipBias -1.0\"]},"
-            + "{\"name\":\"support\\\\c9\\\\adjust.gw\",\"lines\":[\"AddClutterTemplates x\"]}]");
-        Assert.Equal(0f, TextureArchive.MipBias(path, "C9"));
+        var interp = new InterpScripts(new()
+        {
+            new InterpScript("support\\c9\\load.gw", new[] { "MipBias -1.0" }),
+            new InterpScript("support\\c9\\adjust.gw", new[] { "AddClutterTemplates x" }),
+        });
+        Assert.Equal(0f, TextureArchive.MipBias(interp, "C9"));
     }
 
     [Fact]
-    public void AnAbsentExtractionReadsAsNoBiasRatherThanThrowing()
+    public void AnAbsentInstallReadsAsNoBiasRatherThanThrowing()
     {
-        Assert.Equal(0f, TextureArchive.MipBias(Path.Combine(TestData.TempDir(), "gone.json"), "C5"));
+        Assert.Equal(0f, TextureArchive.MipBias(null, "C5"));
     }
-
-    private static string InterpPath() =>
-        Path.Combine(TestData.DataRoot ?? TestData.RepoRoot, "extracted", "interp.json");
 
     // One adjust.gw for the named chapter, holding exactly the lines the case is about.
-    private static string Interp(string chapter, params string[] lines)
-    {
-        string path = Path.Combine(TestData.TempDir(), "interp.json");
-        File.WriteAllText(path,
-            $"[{{\"name\":\"support\\\\{chapter}\\\\adjust.gw\",\"lines\":[\""
-            + string.Join("\",\"", lines) + "\"]}]");
-        return path;
-    }
+    private static InterpScripts Interp(string chapter, params string[] lines) =>
+        new(new() { new InterpScript($"support\\{chapter}\\adjust.gw", lines) });
 }

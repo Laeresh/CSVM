@@ -56,11 +56,11 @@ public static class AiNets
 
     /// <summary>Loads every patrol net of a chapter, sorted by id. An empty list when the
     /// chapter ships none (no such chapter in this install, all 8 carry 18–40).</summary>
-    public static List<AiNet> Load(string chapterZrdrPath)
+    public static List<AiNet> Load(ZrdrSet chapterZrdr)
     {
-        var names = LoadIndex(chapterZrdrPath);
+        var names = LoadIndex(chapterZrdr);
         var nets = new List<AiNet>();
-        foreach (var (fileName, root) in Zrdr.LoadFilesNamed(chapterZrdrPath, IsNetFileName))
+        foreach (var (fileName, root) in chapterZrdr.LoadFilesNamed(IsNetFileName))
         {
             if (root.Count == 0 || root[0] is not List<object?> record)
                 throw new InvalidDataException($"'{fileName}': not a one-record net reader");
@@ -74,10 +74,10 @@ public static class AiNets
     /// <summary>The chapter's id → name map from <c>neindex.zrd.json</c>. Order is lost here;
     /// <see cref="LoadIndexPairs"/> is the ordered read and the one the engine's own table
     /// follows. Empty when the chapter has no index.</summary>
-    public static Dictionary<int, string> LoadIndex(string chapterZrdrPath)
+    public static Dictionary<int, string> LoadIndex(ZrdrSet chapterZrdr)
     {
         var names = new Dictionary<int, string>();
-        foreach (var (id, name) in LoadIndexPairs(chapterZrdrPath))
+        foreach (var (id, name) in LoadIndexPairs(chapterZrdr))
             names[id] = name;
         return names;
     }
@@ -87,13 +87,13 @@ public static class AiNets
     /// allocation-figure first element.
     /// ⚠ Do not sort by id: "the first net" means entry 0 of this order, not the lowest id.
     /// <see cref="Load"/>'s sorted list picks the wrong graph on two of the eight chapters.</summary>
-    public static List<(int Id, string Name)> LoadIndexPairs(string chapterZrdrPath)
+    public static List<(int Id, string Name)> LoadIndexPairs(ZrdrSet chapterZrdr)
     {
         var pairs = new List<(int, string)>();
         List<object?> root;
         try
         {
-            root = Zrdr.LoadFile(chapterZrdrPath, "neindex.json");
+            root = chapterZrdr.LoadFile("neindex.json");
         }
         catch (IOException)
         {
@@ -114,9 +114,9 @@ public static class AiNets
     /// Instant Action actor is handed: <c>FUN_0045a390</c> writes a one-entry <c>netids</c> list
     /// holding entry 0 of the engine's table in all three of its branches (the wingmen, the ace
     /// and the waves alike; docs/formats/instant-action.md).</summary>
-    public static AiNet? ChapterFirst(IReadOnlyList<AiNet> nets, string chapterZrdrPath)
+    public static AiNet? ChapterFirst(IReadOnlyList<AiNet> nets, ZrdrSet chapterZrdr)
     {
-        var pairs = LoadIndexPairs(chapterZrdrPath);
+        var pairs = LoadIndexPairs(chapterZrdr);
         return pairs.Count == 0 ? null : ById(nets, pairs[0].Id);
     }
 

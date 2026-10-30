@@ -54,8 +54,8 @@ internal static class NetZeppelinSuites
         + "slack) of the host's in every cell, and a replicated guest never fed exceeds that bar")]
     internal static void ZeppelinPathsFollowTheHost(TestContext ctx)
     {
-        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ZepChapter);
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ZepChapter, ZepMission);
+        ZrdrSet chapterZrdr = ctx.ChapterZrdr(ZepChapter);
+        ZrdrSet missionZrdr = ctx.MissionZrdr(ZepChapter, ZepMission);
         ctx.RequireData(chapterZrdr, $"{ZepChapter} zrdr");
         ctx.RequireData(missionZrdr, $"{ZepChapter}/{ZepMission} zrdr");
         var defs = Zeppelins.Load(missionZrdr);

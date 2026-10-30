@@ -29,9 +29,9 @@ internal static class ZeppelinCannonStowedSuites
         "swings the hatch and activates gunback the same rounds destroy the cannon")]
     internal static void ZeppelinCannonStowed(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2B", "M04");
+        ZrdrSet missionZrdr = ctx.MissionZrdr("C2B", "M04");
         ctx.RequireData(missionZrdr, $"C2B/M04 zrdr");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f && w.ImpactProximity is not > 0f)
             ?? weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f);
         ctx.Check(gun != null, $"a gun with HEALTH_DAMAGE ships");
@@ -110,7 +110,7 @@ internal static class ZeppelinCannonStowedSuites
             TextureArchive? textures = null;
             try
             {
-                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C2B"));
+                textures = new TextureArchive(ctx.ChapterTextures("C2B"));
                 rounds = new ProjectilePool(textures, null, null) { DamageSink = runtime.DamageAt };
                 ctx.Host.AddChild(rounds);
 
