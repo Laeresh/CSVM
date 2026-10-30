@@ -61,10 +61,6 @@ image need not stay in place. **Play** goes straight to the menu without a copy.
 
 **2. Fly.** Pick a mode, chapter and plane in the menu.
 
-The game's disc does not hold `crimptch.rof`, the archive the official patch installs. When
-your copy lacks it, CSVM says so once, plays the game as the disc shipped it, and names the
-folder the archive goes in.
-
 ## An `extracted` folder from an older CSVM
 
 Earlier versions extracted the game into an `extracted` folder next to `CSVM.exe`. This

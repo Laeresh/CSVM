@@ -36,9 +36,6 @@ public enum SourceView
     /// <summary>The old <c>extracted</c> folder is being deleted.</summary>
     Deleting,
 
-    /// <summary>The game files hold no patch archive; the game runs unpatched.</summary>
-    Patch,
-
     /// <summary>Nothing more to ask; the launcher takes over.</summary>
     Done,
 }
@@ -48,7 +45,7 @@ public sealed record SourceChoice(string Label, Action Press);
 
 /// <summary>
 /// The game-file screen's state, engine-free so a unit drives it from pick to copy to the upgrade
-/// and patch questions. The copy and the delete run on a worker; their progress and outcome cross
+/// question. The copy and the delete run on a worker; their progress and outcome cross
 /// to the main thread only through <see cref="Tick"/>. Every answer the screen remembers goes to
 /// the options store it was given, and to none when it was given none (a scripted run). Rules:
 /// <c>docs/architecture/UI.md</c>.
@@ -69,7 +66,6 @@ public sealed class SourceFlow
 
     private CancellationTokenSource? _cancel;
     private bool _upgradeAnswered;
-    private bool _patchNoted;
 
     /// <summary>Builds the flow over <paramref name="dataRoot"/>. With <paramref name="located"/>
     /// it starts at the first question owed; without, at the field, which starts as
@@ -146,7 +142,6 @@ public sealed class SourceFlow
         SourceView.Upgrade => "Old extracted game data found",
         SourceView.ConfirmDelete => "Delete the old game data?",
         SourceView.Deleting => "Deleting the old game data",
-        SourceView.Patch => "The game's patch is not in these files",
         _ => string.Empty,
     };
 
@@ -171,9 +166,6 @@ public sealed class SourceFlow
         SourceView.ConfirmDelete =>
             $"This deletes '{Extracted}' and everything in it, and cannot be undone. A linked folder inside it is unlinked, never emptied. Nothing outside it is touched.",
         SourceView.Deleting => $"Deleting '{Extracted}'.",
-        SourceView.Patch =>
-            "These game files hold no crimptch.rof, the archive the official Crimson Skies patch installs, so CSVM plays the game as the disc shipped it. To play it patched, "
-            + PatchWhere(),
         _ => string.Empty,
     };
 
@@ -188,9 +180,6 @@ public sealed class SourceFlow
         SourceView.CopyFailed => new[] { new SourceChoice("Try again", Copy), new SourceChoice("Play without copying", Advance) },
         SourceView.Upgrade => new[] { new SourceChoice("Keep it", KeepExtracted), new SourceChoice("Delete it...", () => Show(SourceView.ConfirmDelete)) },
         SourceView.ConfirmDelete => new[] { new SourceChoice("Back", () => Show(SourceView.Upgrade)), new SourceChoice("Delete", StartDelete) },
-        SourceView.Patch when CopyOffered && Source is CabinetSource =>
-            new[] { new SourceChoice("OK", NotePatch), new SourceChoice("Copy the game files", Copy) },
-        SourceView.Patch => new[] { new SourceChoice("OK", NotePatch) },
         _ => Array.Empty<SourceChoice>(),
     };
 
@@ -386,19 +375,6 @@ public sealed class SourceFlow
         return $"'{path}' is a disc image, but not of Crimson Skies: it holds no ZBD and GOSDATA{Path.DirectorySeparatorChar}ASSETS folders.";
     }
 
-    // Where the patch archive goes for the source in hand. A disc or an image cannot take a file,
-    // so the answer for one is a copy first.
-    private string PatchWhere()
-    {
-        if (Source is InstallFolderSource folder)
-        {
-            string assets = InstallLocator.ResolveDirectory(folder.Location, "GOSDATA/ASSETS") ?? Path.Combine(folder.Location, "GOSDATA", "ASSETS");
-            return $"put crimptch.rof into '{assets}' and start CSVM again.";
-        }
-
-        return $"copy the game files into '{CopyTarget}', then put crimptch.rof into its GOSDATA{Path.DirectorySeparatorChar}ASSETS folder and start CSVM again. A disc or a disc image cannot take the file.";
-    }
-
     private OptionsDef Saved() => _store?.Load() ?? new OptionsDef();
 
     private void Save(Action<OptionsDef> change)
@@ -438,10 +414,6 @@ public sealed class SourceFlow
         {
             View = SourceView.Upgrade;
         }
-        else if (_ask && !_patchNoted && saved.PatchNoteShown != true && Source != null && !Source.Exists(RofFiles.PatchPath))
-        {
-            View = SourceView.Patch;
-        }
         else
         {
             View = SourceView.Done;
@@ -452,13 +424,6 @@ public sealed class SourceFlow
     {
         _upgradeAnswered = true;
         Save(options => options.ExtractedPromptAnswered = true);
-        Advance();
-    }
-
-    private void NotePatch()
-    {
-        _patchNoted = true;
-        Save(options => options.PatchNoteShown = true);
         Advance();
     }
 
