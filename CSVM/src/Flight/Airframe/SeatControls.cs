@@ -16,6 +16,11 @@ namespace CSVM.Flight.Airframe;
 /// <see cref="FlightController"/>, which passes what it decides per call.</summary>
 internal sealed class SeatControls
 {
+    /// <summary>How fast a full trigger moves the commanded lever, per second. A remake rule: the
+    /// original has no pad, and at the keys' 0.5/s the live lever keeps pace and the exhaust smoke
+    /// never charges. A hard squeeze runs ahead of the 0.5/s slew, as a digit press does.</summary>
+    internal const float PadLeverRate = 2f;
+
     private readonly Func<int[]?> _padDevices;
     private readonly Func<int> _localPlayer;
     private readonly Func<int> _playerIndex;
@@ -197,8 +202,10 @@ internal sealed class SeatControls
         // The commanded lever, as FUN_00487460 writes it. The up and down keys move it at 0.5/s,
         // and a digit puts it on its eighth. It stays there once the key is up. The handler never
         // reads the tank, so a dry engine still takes the command.
-        float rate = _keyActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown) + pad.ThrottleRate + stick.ThrottleRate;
-        leverSetting = Mathf.Clamp(leverSetting + (rate * FlightController.ThrottleRate * dt), 0f, 1f);
+        float keyRate = _keyActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown) + stick.ThrottleRate;
+        float rate = keyRate + pad.ThrottleRate;
+        leverSetting = Mathf.Clamp(
+            leverSetting + (((keyRate * FlightController.ThrottleRate) + (pad.ThrottleRate * PadLeverRate)) * dt), 0f, 1f);
         float? scheduled = ScheduledThrottle(dt);
         float? requested = RequestedThrottle();
         // An absolute lever writes over the rate step and under the schedule and the digits. That is
