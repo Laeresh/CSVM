@@ -130,6 +130,16 @@ global uniform vec3 csky_sun_ambient_rgb;
 global uniform vec3 csky_sun_diffuse_rgb;
 global uniform vec3 csky_sun_fill_rgb;
 
+// The SUNLIGHT_AMBIENT and SUNLIGHT_DIFFUSE pair of the view drawing from `camera_world`, as
+// csky_world_light_at: what csky_sun_vertex_light_at scales a normal's term by.
+vec2 csky_sun_light_at(vec3 camera_world) {
+    if (csky_view_count > 1) {
+        mat4 sun = csky_view_sun(csky_view_index(camera_world));
+        return vec2(sun[0].w, sun[1].w);
+    }
+    return csky_sun_light;
+}
+
 // The original's per-vertex directional term on one world-space normal, under the light of the
 // view drawing from `camera_world`. The caller multiplies it onto the AUTHORED vertex colour and
 // clamps the PRODUCT, which is where the original clamps and the collapse does not.
@@ -137,12 +147,10 @@ global uniform vec3 csky_sun_fill_rgb;
 // card writes white for both SUNLIGHT colours, so the triples the binary multiplies are identity.
 float csky_sun_vertex_light_at(vec3 world_normal, vec3 camera_world) {
     vec3 sun_dir = csky_sun_dir;
-    vec2 sun_light = csky_sun_light;
     if (csky_view_count > 1) {
-        mat4 sun = csky_view_sun(csky_view_index(camera_world));
-        sun_dir = sun[0].xyz;
-        sun_light = vec2(sun[0].w, sun[1].w);
+        sun_dir = csky_view_sun(csky_view_index(camera_world))[0].xyz;
     }
+    vec2 sun_light = csky_sun_light_at(camera_world);
     return sun_light.x + sun_light.y * max(dot(normalize(world_normal), sun_dir), 0.0);
 }
 

@@ -36,20 +36,14 @@ public static class CanopyClumps
     /// <summary>TUNE. How far the clumps over painted canopy rise above the painted treetops, in metres.</summary>
     public const float PaintedRiseM = 16f;
 
-    /// <summary>TUNE. The crowns a fully painted cell carries: about 14 m crowns packed edge to edge.</summary>
-    public const float PaintedTreesPerCell = 6f;
-
     /// <summary>TUNE. The near crown models' band over painted canopy: they alone draw inside
     /// <see cref="ModelNearM"/>, then dither over to the crowns by <see cref="ModelFarM"/>. Fixed, whatever the 3D
     /// Vegetation word. A thin band: over a wide one a dithered hole shows painted ground, not a crown.</summary>
     public const float ModelNearM = 950f, ModelFarM = 1000f;
 
-    /// <summary>TUNE. How far a near crown model's top stands above the painted treetops, in metres at scale 1.</summary>
+    /// <summary>TUNE. How far a near crown model's top stands above the painted treetops, in metres at scale 1.
+    /// The crown clump strip is rendered with its crowns sunk the same (canopytree.py).</summary>
     public const float ModelRiseM = 6f;
-
-    /// <summary>TUNE. While the crown models draw, how high a crown clump's tile top stands over the painted
-    /// treetops at every distance, in metres. Its crowns then meet the models' height, and nothing rises or sinks.</summary>
-    public const float HeldTopM = 13f;
 
     /// <summary>TUNE. The crown model's grade target over the crowns' mean colour. The grade meets the texture's
     /// mean, and at that the model drew darker on screen than the crowns.</summary>
@@ -58,16 +52,23 @@ public static class CanopyClumps
     /// <summary>The near crown model's name under the chapter's vegetation models.</summary>
     public const string CrownModel = "canopytree";
 
-    /// <summary>TUNE. The near crowns a fully painted cell carries over <see cref="CrownSlots"/> squared slots:
-    /// small fillers under a few large emergents, so the painted floor is covered. The clumps keep
-    /// <see cref="PaintedTreesPerCell"/>.</summary>
+    /// <summary>TUNE. The crowns a fully painted cell carries, near and far. Near, the models stand over
+    /// <see cref="CrownSlots"/> squared slots, small fillers under a few large emergents, so the painted floor is
+    /// covered. Far, the clumps' tiles, rendered from the same models at the same mix, carry as many times
+    /// <see cref="FarCrownGain"/>.</summary>
     public const float CrownsPerCell = 14f;
 
-    /// <summary>TUNE. The share of near crowns that are emergents (scale 1 to 1.5); the rest are fillers (0.45 to 0.8).</summary>
+    /// <summary>TUNE. The share of near crowns that are emergents (scale 1 to 1.5); the rest are fillers (0.45 to 0.8).
+    /// The crown clump strip stands the same mix (canopytree.py).</summary>
     public const float EmergentShare = 0.3f;
 
+    /// <summary>TUNE. How many more crowns a far cell carries than <see cref="CrownsPerCell"/>. A tile's crowns
+    /// overlap inside it and its fillers shrink through the mips, so the far hill needs more to read as dense.</summary>
+    public const float FarCrownGain = 1.6f;
+
     /// <summary>TUNE. The near crowns' colour spread: brightness, and a tint along the yellow-green to blue-green
-    /// axis. Wider than the cards', so neighbouring crowns differ in hue; on that axis none leaves the greens.</summary>
+    /// axis. Wider than the cards', so neighbouring crowns differ in hue; on that axis none leaves the greens.
+    /// The crown clump strip bakes the same spread per crown (canopytree.py).</summary>
     public const float CrownBrightness = 0.3f, CrownTint = 0.2f;
 
     /// <summary>The fixed seed of the placement and layout hash, so every launch draws the same clumps.</summary>
@@ -76,7 +77,9 @@ public static class CanopyClumps
     /// <summary>The shader parameter both the clumps and the listed cards' Rich material read the band from.</summary>
     public const string HandoverParam = "canopy_handover";
 
-    /// <summary>The clumps' shader parameter holding them at a share of their height at every distance; zero rises them.</summary>
+    /// <summary>The clumps' shader parameter holding them at their full height at every distance while the crown
+    /// models draw. The tile's ground line then sits on the canopy, and nothing rises or sinks. Zero rises them
+    /// over their band.</summary>
     public const string HeldParam = "held";
 
     /// <summary>Where the shipped clump tiles sit, beside the vegetation models: <c>&lt;chapter&gt;/&lt;card&gt;.clump.*</c>.</summary>
@@ -340,15 +343,19 @@ public static class CanopyClumps
         float tileHeight = used.Select(t => t.HeightM).Append(TileHeight(sizes)).Max();
         float cardHeight = cards.Sum(c => c.Weight * c.Size.Y) / stamps;
         float meanTrees = MeanTrees(slots, strips.Select(t => t?.Tile.Trees).ToList(), weights, sizes);
-        var rate = painted ? Rate(mask, PaintedTreesPerCell, meanTrees) : Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f && k.Mass)
+        var rate = painted ? Rate(mask, CrownsPerCell * FarCrownGain, meanTrees) : Rate(mask, kinds.Where(k => k.Rich != null && !k.Solid && k.Height > 0f && k.Mass)
             .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Y.LengthSquared() > 0f).Select(p => p.Origin)), meanTrees);
-        float brightness = cards.Sum(c => c.Weight * (c.Look?.Brightness ?? 0f)) / stamps;
-        float tint = cards.Sum(c => c.Weight * (c.Look?.Tint ?? 0f)) / stamps;
+        // The crown strip bakes the near crowns' spread per crown: one tint over a clump's crowns would patch the hill.
+        float brightness = painted ? 0f : cards.Sum(c => c.Weight * (c.Look?.Brightness ?? 0f)) / stamps;
+        float tint = painted ? 0f : cards.Sum(c => c.Weight * (c.Look?.Tint ?? 0f)) / stamps;
         // A crown model is graded per channel to the crowns it hands over to, which are cut from the painted canopy.
-        var crownMean = Mean(cards.Select(c => c.Image!)) * ModelGain;
+        var crownMean = painted ? Mean(cards.Select(c => c.Image!)) * ModelGain : null;
         var crownModels = painted && chapter != null
             ? CrownModelNames.Select(name => VegetationModels.ForMean(chapter, name, crownMean, float.PositiveInfinity)).OfType<VegetationModels.Model>().ToList()
             : new List<VegetationModels.Model>();
+        // The crown tile is a lit render of the crown models' tops, every solid texel a crown seen from above.
+        // Its mean over all of them meets the models' target per channel.
+        var grade = painted && used.Count > 0 ? VegetationModels.Grade(crownMean, Mean(new[] { used[0].Image }, 1f), float.PositiveInfinity) : Vector3.One;
         var (atlas, side) = Compose(cards.Select(c => c.Image!).ToList(), sizes, weights, tileHeight, slots, strips);
         var tiles = used.Select(t => $"{species[strips.IndexOf(t)]} in {slots.Count(s => s >= 0 && strips[s] == t)} slots from {t.Tile.Source}").ToList();
         var clumps = Place(mask, rate, cardHeight, tileHeight, brightness, tint, rise: painted ? PaintedRiseM : 0f);
@@ -358,6 +365,7 @@ public static class CanopyClumps
         material.SetShaderParameter("albedo_tex", TextureUpload.Create(atlas));
         material.SetShaderParameter("side_tex", TextureUpload.Create(side));
         material.SetShaderParameter("variants", (float)Variants);
+        material.SetShaderParameter("grade", grade);
         material.SetShaderParameter(HandoverParam, band);
         material.SetShaderParameter("grow", painted ? 1f : 0f);
         var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f) { Tiles = tiles, TreesPerClump = meanTrees };
@@ -372,7 +380,7 @@ public static class CanopyClumps
             Handover(kinds, true);
 
         Log.Info("world",
-            $"canopy clumps: {clumps.Count} over {chunks} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, tiles: {(tiles.Count == 0 ? "all composed" : string.Join("; ", tiles))}, {watch.ElapsedMilliseconds} ms");
+            $"canopy clumps: {clumps.Count} over {chunks} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, tiles: {(tiles.Count == 0 ? "all composed" : string.Join("; ", tiles))}, {watch.ElapsedMilliseconds} ms");
         return field;
     }
 
@@ -409,17 +417,17 @@ public static class CanopyClumps
         image.SetData(image.GetWidth(), image.GetHeight(), false, Image.Format.Rgba8, px);
     }
 
-    // The mean linear colour of the images' solid texels in their top half, the near model grade's target.
-    private static Vector3? Mean(IEnumerable<Image> images)
+    // The mean linear colour of the images' solid texels in their top crownShare, the near model grade's target.
+    private static Vector3? Mean(IEnumerable<Image> images, float crownShare = VegetationModels.CrownShare)
     {
-        var means = images.Select(i => VegetationModels.MeanLinear(i.GetData(), i.GetWidth(), i.GetHeight(), VegetationModels.CrownShare))
+        var means = images.Select(i => VegetationModels.MeanLinear(i.GetData(), i.GetWidth(), i.GetHeight(), crownShare))
             .OfType<Vector3>().ToList();
         return means.Count == 0 ? null : means.Aggregate((a, b) => a + b) / means.Count;
     }
 
     // Crown cards cut from the painted canopy's own textures, CrownShapes silhouettes each. The volume then
-    // wears the colour and grain the ground shows from above. Equal weights; the spread is the listed kinds' mean.
-    // A tile replaces a texture's crowns under its name (C3/forest1).
+    // wears the colour and grain the ground shows from above. Equal weights. They are one species, the crown
+    // model's, so the tile rendered from the crown models (C3/canopytree) replaces every texture's crowns.
     private static List<(string Texture, Vector2 Size, float Weight, VegetationKind? Look, Image? Image, string Species)> Crowns(
         VegetationEntry entry, TextureArchive textures)
     {
@@ -434,7 +442,7 @@ public static class CanopyClumps
             image.Decompress();
             image.Convert(Image.Format.Rgba8);
             for (int k = 0; k < CrownShapes; k++)
-                cards.Add((pick.Texture, size, 1f, look, Crown(image, k), System.IO.Path.GetFileNameWithoutExtension(pick.Texture).ToLowerInvariant()));
+                cards.Add((pick.Texture, size, 1f, look, Crown(image, k), CrownModel));
             image.Dispose();
         }
 
@@ -613,11 +621,12 @@ public static class CanopyClumps
     // A symmetric draw in [-1, 1), the spread the Rich cards' tint takes.
     private static float S(int seed, int cell, int draw) => (2f * U(seed, cell, draw)) - 1f;
 
-    // The Rich card's look on a clump: the same face, sun side, fog and tint lines. The fade is the card's
-    // handover turned round, in past the band. Over painted canopy (grow) a clump sinks below the canopy by its
-    // unfaded share instead: a part-clear clump shows as a ghost on the skyline. While the crown models draw it stands
-    // at its held share. The tile comes off the custom data's first channel, and each tree's sun side off the side map,
-    // swapped for a mirrored clump. Over the models' band a clump keeps the dither cells they give up.
+    // The Rich card's look on a clump: the same face, sun side, fog and tint lines, the fade the card's handover
+    // turned round. Over painted canopy (grow) a clump sinks below the canopy by its unfaded share instead: a
+    // part-clear clump shows as a ghost on the skyline. While the crown models draw it stands at its full height
+    // (held), and over their band keeps the dither cells they give up. The tile comes off the custom data's first
+    // channel, and each tree's sun side off the side map, swapped for a mirrored clump. The grade is the crown
+    // tile's, to the crown models' target, and one on an atlas of several species' tiles.
     private static string ShaderCode() => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled, blend_mix, depth_prepass_alpha;
@@ -625,6 +634,7 @@ public static class CanopyClumps
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
         uniform sampler2D side_tex : filter_linear_mipmap, repeat_disable;
         uniform float variants = 1.0;
+        uniform vec3 grade = vec3(1.0);
         uniform float grow = 0.0;
         uniform float {{HeldParam}} = 0.0;
         uniform vec2 {{HandoverParam}};
@@ -663,7 +673,7 @@ public static class CanopyClumps
                 discard;
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
-            ALBEDO = col.rgb;
+            ALBEDO = col.rgb * grade;
             vec2 halves = v_mirror < 0.0 ? texture(side_tex, UV).gr : texture(side_tex, UV).rg;
             float v_side = (v_sun >= 0.0 ? halves.x : -halves.y) / 3.0;
         {{ClutterBuilder.RichFragmentLines}}{{ClutterBuilder.FogLines}}{{SceneBuilder.TintLine}}
@@ -741,7 +751,7 @@ public static class CanopyClumps
 
         /// <summary>The crown models and the clumps' band follow the 3D Vegetation word, with no rebuild. Off hides
         /// the models, and the clumps rise over their own band as with no models. Near and Far both draw over
-        /// <see cref="ModelBand"/>, the clumps held at <see cref="HeldTopM"/>.</summary>
+        /// <see cref="ModelBand"/>, the clumps held at their full height (<see cref="HeldParam"/>).</summary>
         public void FollowModels()
         {
             if (Models == null)
@@ -749,7 +759,7 @@ public static class CanopyClumps
             bool on = VegetationModels.On;
             Models.Visible = on;
             _material.SetShaderParameter(VegetationModels.BandParam, on ? ModelBand : Vector2.Zero);
-            _material.SetShaderParameter(HeldParam, on && _clumps.Count > 0 ? Math.Min(HeldTopM / _clumps.Max(c => c.Height), 1f) : 0f);
+            _material.SetShaderParameter(HeldParam, on ? 1f : 0f);
         }
 
         // Stands the crown models in cells of VegetationModels.CellM, one MultiMesh per cell and shape, each ranged
@@ -803,7 +813,7 @@ public static class CanopyClumps
             }
             Root.AddChild(Models);
             FollowModels();
-            Log.Info("world", $"canopy models: {crowns.Count} crowns over {Models.GetChildCount()} cells from {string.Join(", ", models.Select(m => m.Source))}, sun-lit, top {ModelRiseM:0.#} m over the painted canopy, alone to {ModelNearM:0} m, dithered over to the crowns to {ModelFarM:0} m, the crowns held at a {HeldTopM:0.#} m top");
+            Log.Info("world", $"canopy models: {crowns.Count} crowns over {Models.GetChildCount()} cells from {string.Join(", ", models.Select(m => m.Source))}, sun-lit, top {ModelRiseM:0.#} m over the painted canopy, alone to {ModelNearM:0} m, dithered over to the crowns to {ModelFarM:0} m, the crowns held at their full height");
         }
 
         internal MultiMeshInstance3D Draw(List<Clump> list, Transform3D moved, string name, ShaderMaterial? material = null)

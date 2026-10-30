@@ -767,7 +767,7 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   crown shades as a volume. The chapter folder exists because one model name carries different
   cards per chapter (`firtree1` is 10 x 18 m on C1 and 10 x 13 m on C4).
 - **The clump tiles** (`veg_blender.clump_render`), for a species that draws as forest mass (the
-  firs and `spruce`; the palms, bushes and brushes do not, and write none), sit beside the model: `<species>.clump.png.bin`,
+  firs, `spruce` and `canopytree`; the palms, bushes and brushes do not, and write none), sit beside the model: `<species>.clump.png.bin`,
   `<species>.clump.side.png.bin` and `<species>.clump.json`, the far forest's tiles for that card
   ([formats/model-packs.md](formats/model-packs.md), "Clump tiles"). Each tile is a group of the
   generator's `clump_trees` count of the model's trees (2 to 4), laid out as `CanopyClumps` composes
@@ -779,6 +779,15 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   The generator's `clump_grade`, one per chapter, scales the colour per channel so the tiles' mean
   sits on that chapter's card's, which draws unlit to 1 km before the clumps take over. The PNGs are written by the script's own
   encoder with no time chunk, and a rerun writes all three files byte for byte the same.
+  `canopytree.py` writes one strip for its three shapes through `clump_render`'s `stand` hook: each
+  tree a shape by a draw, a filler or an emergent at the near crowns' scales, spread by its own
+  width, sunk so its top stands `ModelRiseM` over a holdout ground plane, which cuts the sunk parts
+  and hides a deeper row's foot, and tinted per crown as the game tints a near crown (its object
+  colour multiplied onto the texture for the strip render alone). Its `elevation` tilts the camera
+  30 degrees down over a footprint 4 m behind the tile's foot and stretches the frame vertically by
+  1/cos through the pixel aspect, so a vertical card shows the crowns' tops as a camera at that
+  pitch sees them (a fir's tile is a side view; a crown's side is a sliver). Its grade is one: the
+  game grades the strip to the crowns' mean at load, as it grades the models.
 - **Nothing traced from the original's textures goes into a model.** The original card appears
   only in the comparison render: its texture on a quad at its real size beside the model, unlit
   as the game draws it, under the same orthographic camera and sun, from eye level (`_side`) and

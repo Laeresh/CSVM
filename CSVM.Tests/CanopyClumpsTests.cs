@@ -185,10 +185,10 @@ public sealed class CanopyClumpsTests
     {
         var mask = Painted();
         const float trees = 3f;
-        var rate = CanopyClumps.Rate(mask, CanopyClumps.PaintedTreesPerCell, trees);
-        Assert.All(Enumerable.Range(0, rate.Length), c => Assert.Equal(mask.Density[c] * CanopyClumps.PaintedTreesPerCell / trees, rate[c], 5));
+        var rate = CanopyClumps.Rate(mask, CanopyClumps.CrownsPerCell, trees);
+        Assert.All(Enumerable.Range(0, rate.Length), c => Assert.Equal(mask.Density[c] * CanopyClumps.CrownsPerCell / trees, rate[c], 5));
         var clumps = CanopyClumps.Place(mask, rate, CanopyClumps.PaintedRiseM, TileHeight, rise: CanopyClumps.PaintedRiseM);
-        float expected = mask.Density.Sum() * CanopyClumps.PaintedTreesPerCell;
+        float expected = mask.Density.Sum() * CanopyClumps.CrownsPerCell;
         Assert.InRange(clumps.Count * trees, expected * 0.9f, expected * 1.1f);
         Assert.All(clumps, c => Assert.True(mask.Density[mask.CellAt(c.Base.X, c.Base.Z)] > 0f, $"a clump at x {c.Base.X} stands off the painted canopy"));
         Assert.Contains(clumps, c => mask.Density[mask.CellAt(c.Base.X, c.Base.Z)] < 1f);
@@ -200,7 +200,7 @@ public sealed class CanopyClumpsTests
     public void PaintedClumpsTakeTheGivenRise()
     {
         var mask = Painted();
-        var rate = CanopyClumps.Rate(mask, CanopyClumps.PaintedTreesPerCell, 3f);
+        var rate = CanopyClumps.Rate(mask, CanopyClumps.CrownsPerCell, 3f);
         Assert.Empty(CanopyClumps.Place(mask, rate, CardHeight, TileHeight));
         var clumps = CanopyClumps.Place(mask, rate, CardHeight, TileHeight, rise: CanopyClumps.PaintedRiseM);
         Assert.NotEmpty(clumps);
@@ -233,7 +233,7 @@ public sealed class CanopyClumpsTests
         var mask = Painted();
         var crowns = CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, CanopyClumps.CrownBrightness, CanopyClumps.CrownTint, shapes: 3);
         Assert.Equal(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, CanopyClumps.CrownBrightness, CanopyClumps.CrownTint, shapes: 3));
-        Assert.NotEqual(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, seed: CanopyClumps.Seed + 1, shapes: 3));
+        Assert.NotEqual(crowns, CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell, CanopyClumps.CrownBrightness, CanopyClumps.CrownTint, CanopyClumps.Seed + 1, 3));
         Assert.All(crowns, c =>
         {
             Assert.True(mask.IsPainted(c.At.X, c.At.Z), $"a crown at x {c.At.X} stands off the painted canopy");
@@ -255,8 +255,7 @@ public sealed class CanopyClumpsTests
     }
 
     /// <summary>The crown models alone fill the near view past the clumps' own near edge. They hand over to the
-    /// clumps over a thin band inside the clumps' band. The held clumps stand taller than a model by about the tile's back row,
-    /// and no taller than a full clump.</summary>
+    /// clumps over a thin band inside the clumps' band. A model's top stands inside the clumps' rise.</summary>
     [Fact]
     public void CrownModelsHandOverInsideTheClumpsRise()
     {
@@ -265,8 +264,7 @@ public sealed class CanopyClumpsTests
         Assert.InRange(band.X, CanopyClumps.PaintedNearM, band.Y - 1f);
         Assert.InRange(band.Y - band.X, 1f, 100f);
         Assert.InRange(band.Y, band.X + 1f, CanopyClumps.PaintedFarM - 1f);
-        Assert.InRange(CanopyClumps.ModelRiseM, 1f, CanopyClumps.HeldTopM);
-        Assert.InRange(CanopyClumps.HeldTopM, CanopyClumps.ModelRiseM, CanopyClumps.PaintedRiseM);
+        Assert.InRange(CanopyClumps.ModelRiseM, 1f, CanopyClumps.PaintedRiseM);
     }
 
     // A 10 x 10 cell area at 7 m. Its left four columns are painted canopy, the fifth half covered, the rest bare.

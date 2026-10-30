@@ -495,7 +495,7 @@ internal static class GraphicsSwitchSuites
         + "them and back builds them; a lab re-bake builds new ones; the C1 clumps take the tiles shipped beside their models, "
         + "firtree1's among them, compose from the cards without them, and take a model pack's firtree1 tile under the same key "
         + "with its own tree count while the other species keep theirs, and stand no crown model; "
-        + "a rich C3 flight builds them over its painted canopy alone, "
+        + "a rich C3 flight builds them over its painted canopy alone from the canopytree tile in every slot, "
         + "fading in over their own band while the beach palms keep every distance; --canopy-clumps=off, or a session at original, builds none")]
     internal static void CanopyClumpsFollowRich(TestContext ctx)
     {
@@ -586,8 +586,9 @@ internal static class GraphicsSwitchSuites
                 var mask = c3.Session.Clutter?.Canopy();
                 var band = (painted.Node?.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial)
                     ?.GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2();
-                ctx.Check(c3.Built && painted.Count > 0 && mask != null && c3.Session.CanopyClumpField!.Tiles.Count == 0,
-                    $"a rich C3 flight builds clumps over its painted canopy, all composed with no tile shipped ({painted.Count})");
+                string crownTile = $"{Mech3.CanopyClumps.CrownModel} in {Mech3.CanopyClumps.Variants} slots from {Mech3.CanopyClumps.ShippedRoot}/C3/{Mech3.CanopyClumps.CrownModel}.clump.png.bin";
+                ctx.Check(c3.Built && painted.Count > 0 && mask != null && c3.Session.CanopyClumpField!.Tiles.SequenceEqual(new[] { crownTile }),
+                    $"a rich C3 flight builds clumps over its painted canopy from the crown tile in every slot ({painted.Count}; {string.Join("; ", c3.Session.CanopyClumpField!.Tiles)})");
                 ctx.Check(band == new Vector2(Mech3.CanopyClumps.PaintedNearM, Mech3.CanopyClumps.PaintedFarM) && Handover(c3) == "off",
                     $"they fade in over the painted band ({band}) and the beach palms keep every distance ({Handover(c3)})");
                 int stray = painted.Node!.GetChildren().OfType<MultiMeshInstance3D>().Sum(m => Enumerable.Range(0, m.Multimesh.InstanceCount)
@@ -981,9 +982,7 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(cells.All(m => m.Layers == Mech3.VegetationModels.Layer),
                     $"every crown cell draws on the models' layer alone, which no spyglass disc draws, where the clumps keep every cell (ClutterBuilder.ModelShare)");
                 float Held(ShaderMaterial m) => m.GetShaderParameter(Mech3.CanopyClumps.HeldParam).AsSingle();
-                float heldShare = Mech3.CanopyClumps.HeldTopM / field.Clumps.Max(c => c.Height);
-                ctx.Check(MathF.Abs(Held(clumps) - heldShare) < 1e-4f,
-                    $"the clumps stand held at a {Mech3.CanopyClumps.HeldTopM:0.#} m top at every distance (share {Held(clumps):0.###} of {heldShare:0.###})");
+                ctx.Check(Held(clumps) == 1f, $"the clumps stand held at their full height at every distance (share {Held(clumps):0.###})");
                 ctx.Check(clumps.Shader.Code.Contains($"float hold = {Mech3.SceneBuilder.FlatSeaEye} ? 0.0 : {Mech3.CanopyClumps.HeldParam};", StringComparison.Ordinal),
                     $"a spyglass disc, which draws no crown, reads no hold, so its clumps rise as with 3D Vegetation off");
 

@@ -225,10 +225,12 @@ def compare_render(model_obj, card, out_dir, stem, atlas, views=(("side", 4.0), 
 
 # The tile convention CanopyClumps composes by: 24 m wide at 10 px a metre, the trees spread across it in
 # even strata at 0.85 to 1.1 of the card, a tree up to 16 m deeper raised up to 8 m (a row seen from about
-# 30 degrees above). Rendered at CLUMP_SS times that per axis and averaged down.
+# 30 degrees above). Rendered at CLUMP_SS times that per axis and averaged down. A strip rendered from an
+# elevation stands its trees CLUMP_FRONT_M behind the foot, so the front row's near side is not cut.
 CLUMP_WIDTH_M = 24.0
 CLUMP_PX_PER_M = 10
 CLUMP_RISE_M = 8.0
+CLUMP_FRONT_M = 4.0
 CLUMP_SS = 4
 
 
@@ -297,6 +299,25 @@ def _side_material(atlas):
     return mat
 
 
+def _tint_by_object(mat):
+    """Multiplies mat's base colour by each object's own colour, so a strip's trees each take their own tint
+    off one material. Returns the function that takes it out again."""
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    src = next(l for l in nt.links if l.to_socket == bsdf.inputs["Base Color"]).from_socket
+    info, mul = nt.nodes.new("ShaderNodeObjectInfo"), nt.nodes.new("ShaderNodeVectorMath")
+    mul.operation = "MULTIPLY"
+    nt.links.new(src, mul.inputs[0])
+    nt.links.new(info.outputs["Color"], mul.inputs[1])
+    nt.links.new(mul.outputs[0], bsdf.inputs["Base Color"])
+
+    def undo():
+        nt.nodes.remove(mul)
+        nt.nodes.remove(info)
+        nt.links.new(src, bsdf.inputs["Base Color"])
+    return undo
+
+
 def _render_exr(path):
     """Renders the scene to a float EXR and returns its premultiplied RGBA, row 0 at the bottom."""
     bpy.context.scene.render.filepath = path
@@ -319,16 +340,28 @@ def _srgb(lin):
     return np.where(lin <= 0.0031308, lin * 12.92, 1.055 * np.power(lin, 1 / 2.4) - 0.055)
 
 
-def clump_render(obj, card_w, card_h, out_dir, chapter, model, trees, seed, grade, scratch=None):
-    """Renders the clump tiles of obj's species, one tile of trees[i] trees each, side by side, the colour
-    scaled by grade (linear, per channel).
+def clump_render(objs, card_w, card_h, out_dir, chapter, model, trees, seed, grade, scratch=None, stand=None, elevation=0.0):
+    """Renders the clump tiles of objs' species (one object, or a list of them for one strip), one tile of
+    trees[i] trees each, side by side, the colour scaled by grade (linear, per channel).
 
     Orthographic from the side, the sky and a sun from above the camera lighting it evenly left and right
-    (the game adds the sun side from the side map). Writes the three files beside the model and returns
-    their paths; with scratch, also a preview of the strip on grey there.
+    (the game adds the sun side from the side map). A tree stands on the ground at 0.85 to 1.1 of its size;
+    stand(rng), given, returns (object, scale, sink) for each instead, the sink in the object's metres below
+    the ground (C3's crowns, sunk in the painted canopy), and (r, g, b, 1) its colour, multiplied onto its
+    texture (the near crowns' per-crown spread); it is spread by its own width, not card_w. With an elevation
+    in degrees the camera looks down from it over a footprint CLUMP_FRONT_M behind the tile's foot, and the
+    frame is stretched vertically by 1/cos, so a vertical card shows the view a camera at that elevation sees
+    (crowns seen from above, not from the side); the deeper rows then rise by the view itself and not by
+    CLUMP_RISE_M. Writes the three files beside the model and returns their paths; with scratch, also a
+    preview of the strip on grey there.
     """
     scene = bpy.context.scene
-    tile_w, tile_h = int(CLUMP_WIDTH_M * CLUMP_PX_PER_M), math.ceil((CLUMP_RISE_M + card_h * 1.1) * CLUMP_PX_PER_M)
+    objs = list(objs) if isinstance(objs, (list, tuple)) else [objs]
+    e = math.radians(elevation)
+    front = CLUMP_FRONT_M if elevation else 0.0
+    # Seen from above, the back row's far rim stands half a crown deeper than the row itself.
+    rise = (front + 16 + card_w / 2) * math.tan(e) if elevation else CLUMP_RISE_M
+    tile_w, tile_h = int(CLUMP_WIDTH_M * CLUMP_PX_PER_M), math.ceil((rise + card_h * 1.1) * CLUMP_PX_PER_M)
     folder = os.path.join(out_dir, chapter)
     os.makedirs(folder, exist_ok=True)
     tmp = os.path.join(folder, model + ".clump.tmp.exr")
@@ -347,10 +380,16 @@ def clump_render(obj, card_w, card_h, out_dir, chapter, model, trees, seed, grad
     cam = bpy.data.objects.new("clump_cam", bpy.data.cameras.new("clump_cam"))
     cam.data.type = "ORTHO"
     cam.data.sensor_fit = "VERTICAL"
-    cam.data.ortho_scale = tile_h / CLUMP_PX_PER_M
+    # The frame's foot is the ground line at the tile's front; its height is the tile's in the view's own
+    # metres, which a vertical card then stretches back by 1/cos. The camera sits 300 m back along the view.
+    # The pixel aspect keeps the frame CLUMP_WIDTH_M across while the height shrinks: a vertical fit alone
+    # would shrink both axes, drawing every crown wider and cutting the outer ones.
+    frame = tile_h / CLUMP_PX_PER_M * math.cos(e)
+    cam.data.ortho_scale = frame
+    scene.render.pixel_aspect_x = 1 / math.cos(e)
     cam.data.clip_end = 1000
-    cam.location = (0, -300, tile_h / CLUMP_PX_PER_M / 2)
-    cam.rotation_euler = (math.pi / 2, 0, 0)
+    cam.location = (0, math.sin(e) * frame / 2 - 300 * math.cos(e), math.cos(e) * frame / 2 + 300 * math.sin(e))
+    cam.rotation_euler = (math.pi / 2 - e, 0, 0)
     scene.collection.objects.link(cam)
     made += [sun, cam]
     scene.camera = cam
@@ -366,34 +405,52 @@ def clump_render(obj, card_w, card_h, out_dir, chapter, model, trees, seed, grad
     fmt.file_format, fmt.color_depth, fmt.color_mode = "OPEN_EXR", "32", "RGBA"
 
     rng = np.random.default_rng(seed)
-    colour_mat = obj.data.materials[0]
-    side_mat = _side_material(next(n for n in colour_mat.node_tree.nodes if n.type == "TEX_IMAGE").image)
-    obj.hide_render = True
+    colour_mats = [o.data.materials[0] for o in objs]
+    side_mats = [_side_material(next(n for n in m.node_tree.nodes if n.type == "TEX_IMAGE").image) for m in colour_mats]
+
+    def wear(mats):
+        for o, m in zip(objs, mats):
+            o.data.materials[0] = m
+
+    untint = [_tint_by_object(m) for m in colour_mats] if stand else []
+    for o in objs:
+        o.hide_render = True
     colour, side = [], []
     for t, n in enumerate(trees):
         group = []
         for i in range(n):
             depth, scale, jitter, yaw = rng.uniform(), 0.85 + 0.25 * rng.uniform(), rng.uniform(), rng.uniform(0, 2 * math.pi)
-            half = min(CLUMP_WIDTH_M / 2, card_w * scale / 2)
-            o = bpy.data.objects.new("clump_%d_%d" % (t, i), obj.data)
-            o.location = (half + (CLUMP_WIDTH_M - 2 * half) * (i + jitter) / n - CLUMP_WIDTH_M / 2, 16 * depth, CLUMP_RISE_M * depth)
+            tree, sink, w, tint = objs[0], 0.0, card_w, None
+            if stand:
+                tree, scale, sink, tint = stand(rng)
+                w = max(tree.dimensions.x, tree.dimensions.y)
+            half = min(CLUMP_WIDTH_M / 2, w * scale / 2)
+            o = bpy.data.objects.new("clump_%d_%d" % (t, i), tree.data)
+            o.location = (half + (CLUMP_WIDTH_M - 2 * half) * (i + jitter) / n - CLUMP_WIDTH_M / 2, front + 16 * depth,
+                          (0.0 if elevation else CLUMP_RISE_M) * depth - sink * scale)
             o.rotation_euler = (0, 0, yaw)
             o.scale = (scale, scale, scale)
-            o["side_w"] = card_w * scale / 6
+            if tint:
+                o.color = tint
+            o["side_w"] = w * scale / 6
             scene.collection.objects.link(o)
             group.append(o)
-        obj.data.materials[0] = colour_mat
+        wear(colour_mats)
         colour.append(_down(_render_exr(tmp)))
-        obj.data.materials[0] = side_mat
+        wear(side_mats)
         side.append(_down(_render_exr(tmp)))
         for o in group:
             bpy.data.objects.remove(o)
-    obj.data.materials[0] = colour_mat
-    obj.hide_render = False
+    wear(colour_mats)
+    for undo in untint:
+        undo()
+    for o in objs:
+        o.hide_render = False
     os.remove(tmp)
     for o in made:
         bpy.data.objects.remove(o)
     scene.render.film_transparent = False
+    scene.render.pixel_aspect_x = 1.0
     fmt.file_format, fmt.color_depth = "PNG", "8"
 
     # Premultiplied: a texel's colour is its covered mean. Clear texels are written black; the game bleeds them.

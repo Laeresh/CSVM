@@ -51,10 +51,11 @@ public static class VegetationModels
     // The grade's bounds: a model whose colours are that far off the card is a bad file, not a grade.
     private const float MinGrade = 0.25f, MaxGrade = 4f;
 
-    // The sun on a canopy crown: the world's vertex term on the crown's normal over its value at a half-lit
-    // normal. The crowns keep their graded brightness and gain a lit and a shaded side.
-    private const string CrownLitLines = "    float sun_mean = max(csky_sun_light.x + 0.5 * csky_sun_light.y, 1e-3);\n"
-        + "    ALBEDO *= csky_sun_vertex_light_at(v_normal, CAMERA_POSITION_WORLD) / sun_mean;\n";
+    // The sun on a canopy crown: the view's vertex term on the crown's normal over its value at a half-lit
+    // normal. Both read the view drawing it. The crowns keep their graded brightness and gain a lit and a
+    // shaded side.
+    private const string CrownLitLines = "    vec2 sun_pair = csky_sun_light_at(CAMERA_POSITION_WORLD);\n"
+        + "    ALBEDO *= csky_sun_vertex_light_at(v_normal, CAMERA_POSITION_WORLD) / max(sun_pair.x + 0.5 * sun_pair.y, 1e-3);\n";
 
     private static readonly Dictionary<(bool Lit, bool Fogged, bool Canopy), Shader> Shaders = new();
 

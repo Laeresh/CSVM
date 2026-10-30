@@ -192,7 +192,7 @@ replaces it under the same key.
 
 | Item | Rule |
 |---|---|
-| Key | `<chapter>/<card>.clump.png`, the chapter spelt as its `extracted/` folder. `<card>` is the listed card's model without `.flt` (`C1/firtree1.clump.png`); over painted canopy (C3) it is the canopy texture without its extension (`C3/forest1.clump.png`, the crowns cut from `forest1.tif`). A chapter key only: one card name is a different size per chapter. |
+| Key | `<chapter>/<card>.clump.png`, the chapter spelt as its `extracted/` folder. `<card>` is the listed card's model without `.flt` (`C1/firtree1.clump.png`); over painted canopy (C3) it is the crown model's name (`C3/canopytree.clump.png`), one tile for every canopy texture, rendered from the three crown shapes and graded at load to the crowns' mean as the models are. A chapter key only: one card name is a different size per chapter. |
 | Files | The image `<card>.clump.png`, its sidecar `<card>.clump.json`, and an optional side map `<card>.clump.side.png`, all in one pack. Shipped, the images are `.png.bin` so Godot imports nothing. |
 | Precedence | A pack's tile, then the shipped one, then the tiles composed from the cards. All the files come from the one source that holds the image and its sidecar: a pack holding only one of the two, or a bad sidecar, logs a warning and keeps the shipped tile. |
 | Image | A PNG strip of equal tiles side by side, RGBA, cut to clear and solid at alpha 0.5. A tile is `width_m` wide and as tall as its pixels make it at that width, with the trees standing on its bottom row. The game draws it at 10 px a metre, so a larger image is scaled down. The atlas slot is 24 m wide and as tall as the tallest of the listed cards' composed tiles and the tiles in it, a tile centred on its floor. |
