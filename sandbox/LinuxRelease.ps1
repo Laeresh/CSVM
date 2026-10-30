@@ -111,7 +111,7 @@ if (-not $Tarball) {
     $Tarball = Join-Path $RepoRoot ".scratch\CSVM-v$($Matches[1])-linux-x64.tar.gz"
 }
 if (-not (Test-Path $Tarball)) {
-    throw "Tarball not found at $Tarball -- build it with .\ExportRelease.ps1 -Linux, or pass -Tarball."
+    throw "Tarball not found at $Tarball -- build it with .\scripts\ExportRelease.ps1 -Linux, or pass -Tarball."
 }
 $Tarball = (Resolve-Path $Tarball).Path
 

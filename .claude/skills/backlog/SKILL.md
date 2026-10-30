@@ -13,7 +13,7 @@ The explanation phase is **read-only**: never edit an issue, never build, never 
 holds for the whole of §1–§4, and for §5's decode, which runs only after the user picks the decode
 handoff and whose every write is offered and approved first. The restriction lifts wholesale the
 moment the user picks *work it here* (§6), because that is the work: edits, a build and
-`.\RunTests.ps1` all belong to it.
+`.\scripts\RunTests.ps1` all belong to it.
 
 ⚠ **Output rule: text written between tool calls is not shown in chat.** What this skill produces,
 the explanation and the decode's findings alike, must be the **final message after the last tool
@@ -249,11 +249,11 @@ decode's write-ups, in one commit window.
   number is the failure §3's provenance flags exist to catch, and it is no better for having arrived
   during the fix instead of during the write-up.
 - Land it complete: the code change, whatever `docs/architecture` or `docs/formats` entry the change
-  requires, and `.\RunTests.ps1` green. That runner is the landing gate for anything under `CSVM/`.
+  requires, and `.\scripts\RunTests.ps1` green. That runner is the landing gate for anything under `CSVM/`.
 - The verification record goes in the commit message, not into the issue body and not into the
   docs.
 
-When it is done, say in one line what `.\RunTests.ps1` reported, a failure included. Then:
+When it is done, say in one line what `.\scripts\RunTests.ps1` reported, a failure included. Then:
 
 - **offer the commit, do not make it.** One line, then stop. Commits happen when the user asks.
   The commit message body must name `#N` so `git log --grep='#N'` finds it.

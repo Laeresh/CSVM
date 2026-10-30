@@ -12,7 +12,7 @@
 
         dotnet build CSVM/CSVM.sln
         <godot> --headless --path CSVM --import
-        ./RunCiSuites.ps1 -Godot <godot>
+        ./scripts/RunCiSuites.ps1 -Godot <godot>
 
     The Godot process gets CSVM_DATA_ROOT at a fresh empty folder, so no suite reads an extraction,
     this tree's own extracted/ included. It also gets --synthetic-data, so the harness writes the
@@ -55,10 +55,10 @@
     its plane suites then skip; it is for reading what the rest of a selection does with no data.
 
 .EXAMPLE
-    ./RunCiSuites.ps1 -Godot ~/godot/Godot_v4.7-stable_mono_linux_x86_64/Godot_v4.7-stable_mono_linux.x86_64
+    ./scripts/RunCiSuites.ps1 -Godot ~/godot/Godot_v4.7-stable_mono_linux_x86_64/Godot_v4.7-stable_mono_linux.x86_64
 
 .EXAMPLE
-    ./RunCiSuites.ps1 -Godot $godot -Selector suite:menu-host-address
+    ./scripts/RunCiSuites.ps1 -Godot $godot -Selector suite:menu-host-address
 #>
 #Requires -Version 7.0
 param(
@@ -72,7 +72,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Inv = [Globalization.CultureInfo]::InvariantCulture
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
-$RepoRoot = $PSScriptRoot
+$RepoRoot = Split-Path $PSScriptRoot -Parent
 $Scratch = Join-Path $RepoRoot ".scratch"
 $OutDir = Join-Path $Scratch "ci-suites"
 $DataRoot = Join-Path $OutDir "empty-data-root"

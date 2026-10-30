@@ -13,15 +13,15 @@
 # Exit code 1 on a duplicate, so a caller can gate a commit on it.
 #
 # Usage:
-#   ./CheckItemIds.ps1                  this tree
-#   ./CheckItemIds.ps1 -Root <path>     another worktree
+#   ./scripts/CheckItemIds.ps1                  this tree
+#   ./scripts/CheckItemIds.ps1 -Root <path>     another worktree
 [CmdletBinding()]
 param(
     [string]$Root,
     [switch]$Quiet
 )
 
-if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 if (-not $Root) { $Root = (Get-Location).Path }
 
 $sources = @(
@@ -50,7 +50,7 @@ if (-not $Quiet) {
     if (@($dupes | Where-Object { $_.Name -match '^(PT|CAP)-' }).Count -gt 0) {
         Write-Output ''
         Write-Output 'playtest.md defines the same ID twice - mint a fresh ID with'
-        Write-Output './New-ItemId.ps1 and renumber the later mint before committing.'
+        Write-Output './scripts/New-ItemId.ps1 and renumber the later mint before committing.'
     }
     if (@($dupes | Where-Object { $_.Name -notmatch '^(PT|CAP)-' }).Count -gt 0) {
         Write-Output ''

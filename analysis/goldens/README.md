@@ -15,10 +15,10 @@ picture is a function of.
 ## How to run it
 
 ```
-.\RunTests.ps1                              # goldens are a stage of the normal run
-.\RunTests.ps1 -SkipUnits -SkipEngine       # the goldens alone
-.\RunTests.ps1 -RegenGoldens                # re-render and rewrite the hashes
-.\RunTests.ps1 -SkipGoldens                 # skip the stage (it is the slow one)
+.\scripts\RunTests.ps1                              # goldens are a stage of the normal run
+.\scripts\RunTests.ps1 -SkipUnits -SkipEngine       # the goldens alone
+.\scripts\RunTests.ps1 -RegenGoldens                # re-render and rewrite the hashes
+.\scripts\RunTests.ps1 -SkipGoldens                 # skip the stage (it is the slow one)
 ```
 
 Reproducing one shot by hand is the manifest entry verbatim plus an absolute `--screenshot=`:
@@ -107,7 +107,7 @@ shading and normals. The saved `.scratch/goldens/<shot>.png` is for eyeballing *
 you know which instrument to reach for. The next run deletes it, so a moved shot's PNG and logs are
 also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL or FLAKE line names.
 Every moved shot, Faithful or Enhanced, and every run, clean or not, is also recorded in the goldens
-ledger, which outlives the run tree; `.\GoldenLedger.ps1` prints which shots move, how often and
+ledger, which outlives the run tree; `.\scripts\GoldenLedger.ps1` prints which shots move, how often and
 when last, against how many runs were clean (`docs/tooling.md`).
 
 ## What the set does and does not cover

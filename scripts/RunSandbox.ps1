@@ -35,12 +35,12 @@
     Leave the sandbox running after the driver finishes, to look at the screen yourself.
 
 .EXAMPLE
-    .\RunSandbox.ps1 -NoVGpu
+    .\scripts\RunSandbox.ps1 -NoVGpu
 #>
 [CmdletBinding()]
 param(
     [string]$Zip,
-    [string]$Driver = (Join-Path $PSScriptRoot 'sandbox\RendererFloor.ps1'),
+    [string]$Driver = (Join-Path (Split-Path $PSScriptRoot -Parent) 'sandbox\RendererFloor.ps1'),
     [string[]]$MapReadOnly = @(),
     [switch]$NoVGpu,
     [switch]$Networking,
@@ -64,15 +64,15 @@ if (Get-Process -Name $sandboxProcesses -ErrorAction SilentlyContinue) {
 if (-not (Test-Path $Driver)) { throw "Driver script not found: $Driver" }
 
 if (-not $Zip) {
-    $Zip = (Get-ChildItem (Join-Path $PSScriptRoot '.scratch') -Filter 'CSVM-v*-win64.zip' -ErrorAction SilentlyContinue |
+    $Zip = (Get-ChildItem (Join-Path (Split-Path $PSScriptRoot -Parent) '.scratch') -Filter 'CSVM-v*-win64.zip' -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime | Select-Object -Last 1).FullName
-    if (-not $Zip) { throw 'No release zip found in .scratch\. Run .\ExportRelease.ps1 first, or pass -Zip.' }
+    if (-not $Zip) { throw 'No release zip found in .scratch\. Run .\scripts\ExportRelease.ps1 first, or pass -Zip.' }
 }
 $Zip = (Resolve-Path $Zip).Path
 
 $vGpu = if ($NoVGpu) { 'Disable' } else { 'Enable' }
 $runName = '{0:yyyyMMdd-HHmmss}-{1}' -f (Get-Date), $(if ($NoVGpu) { 'novgpu' } else { 'vgpu' })
-$runDir = Join-Path $PSScriptRoot ".scratch\sandbox\$runName"
+$runDir = Join-Path (Split-Path $PSScriptRoot -Parent) ".scratch\sandbox\$runName"
 $inDir = Join-Path $runDir 'input'
 $outDir = Join-Path $runDir 'output'
 New-Item -ItemType Directory -Path $inDir, $outDir -Force | Out-Null
@@ -86,7 +86,7 @@ Write-Host "  network $network"
 Copy-Item $Zip -Destination $inDir
 Copy-Item $Driver -Destination (Join-Path $inDir 'Driver.ps1')
 # The drivers share their helpers through a file beside them, dot-sourced by name.
-Copy-Item (Join-Path $PSScriptRoot 'sandbox\SandboxCommon.ps1') -Destination $inDir
+Copy-Item (Join-Path (Split-Path $PSScriptRoot -Parent) 'sandbox\SandboxCommon.ps1') -Destination $inDir
 $spec = [ordered]@{
     vGpu              = $vGpu
     zip               = [IO.Path]::GetFileName($Zip)

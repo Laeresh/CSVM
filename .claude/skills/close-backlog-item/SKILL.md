@@ -111,7 +111,7 @@ evidence, which gets the treatment of §2. (Retirements live only in commit mess
 
 - Touched a code comment → `dotnet build CSVM/CSVM.sln`. Clean build, zero warnings (StyleCop is
   hook-enforced anyway).
-- Touched code, not just comments → `.\RunTests.ps1`, and quote the real result.
+- Touched code, not just comments → `.\scripts\RunTests.ps1`, and quote the real result.
 - Docs only → no build, and say so rather than implying one ran.
 
 Report: the closure kind and what settled it, the files touched with a one-line why each, the

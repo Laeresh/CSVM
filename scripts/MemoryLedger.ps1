@@ -1,8 +1,8 @@
 # The memory ledger's command line. The code is MemoryLedgerCore.ps1, which the runners dot-source;
 # see docs/tooling.md.
 #
-#   .\MemoryLedger.ps1 status      live reservations, waiters, the learned estimate per kind
-#   .\MemoryLedger.ps1 -SelfTest   the admission rule, handle-held liveness, the empty-ledger
+#   .\scripts\MemoryLedger.ps1 status      live reservations, waiters, the learned estimate per kind
+#   .\scripts\MemoryLedger.ps1 -SelfTest   the admission rule, handle-held liveness, the empty-ledger
 #                                  progress rule, the estimate update and the quiet census
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md).

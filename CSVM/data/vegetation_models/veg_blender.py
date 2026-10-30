@@ -10,7 +10,7 @@ and one texture atlas, so an instanced draw takes one surface. The model is writ
 <chapter>/<model>.glb.bin: GLB bytes under an extension Godot does not import, packed by the
 export's data/*.bin filter, as the cloud puffs ship.
 
-Run through MakeVegetationModel.ps1 at the repository root, or headless by hand:
+Run through scripts/MakeVegetationModel.ps1, or headless by hand:
 
   blender -b --factory-startup --python CSVM/data/vegetation_models/<species>.py --
       [--chapter C1] [--out DIR] [--render DIR] [--data-root DIR]

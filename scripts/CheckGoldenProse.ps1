@@ -9,15 +9,15 @@
 # Exit code 1 on a violation, so a caller can gate a commit on it.
 #
 # Usage:
-#   ./CheckGoldenProse.ps1                  this tree
-#   ./CheckGoldenProse.ps1 -Root <path>     another worktree
+#   ./scripts/CheckGoldenProse.ps1                  this tree
+#   ./scripts/CheckGoldenProse.ps1 -Root <path>     another worktree
 [CmdletBinding()]
 param(
     [string]$Root,
     [switch]$Quiet
 )
 
-if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 if (-not $Root) { $Root = (Get-Location).Path }
 
 $cap = 250

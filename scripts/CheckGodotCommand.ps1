@@ -13,9 +13,9 @@
 # needs.
 #
 # Usage:
-#   <hook payload on stdin> | ./CheckGodotCommand.ps1
-#   ./CheckGodotCommand.ps1 -Command '& tools\godot\Godot_v4.7-stable_mono_win64.exe --path CSVM'
-#   ./CheckGodotCommand.ps1 -SelfTest
+#   <hook payload on stdin> | ./scripts/CheckGodotCommand.ps1
+#   ./scripts/CheckGodotCommand.ps1 -Command '& tools\godot\Godot_v4.7-stable_mono_win64.exe --path CSVM'
+#   ./scripts/CheckGodotCommand.ps1 -SelfTest
 [CmdletBinding()]
 param(
     [string]$Command,
@@ -69,7 +69,7 @@ if ($SelfTest) {
         @("& '$($exe -replace 'win64\.exe$', 'win64_console.exe')' --path ""Z:\CSVM\CSVM"" --headless --import", $false),
         @(("@('" + $exe + "')"), $false),
         @(("`$paths = @('" + $exe + "', 'x')"), $false),
-        @('.\RunProbe.ps1 --det --frames=420 --screenshot=Z:\CSVM\.scratch\a.png', $false)
+        @('.\scripts\RunProbe.ps1 --det --frames=420 --screenshot=Z:\CSVM\.scratch\a.png', $false)
     )
     foreach ($c in $cases) {
         $got = Test-GodotInvocation -CommandLine $c[0]
@@ -90,7 +90,7 @@ if (-not $Command -and [Console]::IsInputRedirected) {
 }
 if (-not $Command) { exit 0 }
 if (-not (Test-GodotInvocation -CommandLine $Command)) { exit 0 }
-[Console]::Error.WriteLine('BLOCKED: this command runs the Godot binary directly. Launch it through .\RunProbe.ps1 <user args>')
-[Console]::Error.WriteLine('(or .\RunTests.ps1), which admits it against the machine-wide memory ledger, runs it on the')
+[Console]::Error.WriteLine('BLOCKED: this command runs the Godot binary directly. Launch it through .\scripts\RunProbe.ps1 <user args>')
+[Console]::Error.WriteLine('(or .\scripts\RunTests.ps1), which admits it against the machine-wide memory ledger, runs it on the')
 [Console]::Error.WriteLine('hidden desktop and joins it to the run job. See docs/tooling.md, "The memory ledger".')
 exit 2

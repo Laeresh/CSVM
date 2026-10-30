@@ -11,7 +11,7 @@
 
 param([string]$Action = "", [double]$Hours = 4, [switch]$Forever, [switch]$SelfTest)
 
-. (Join-Path $PSScriptRoot "GamingModeCore.ps1")
+. (Join-Path $PSScriptRoot "scripts\GamingModeCore.ps1")
 if ($Action -or $SelfTest) {
     if (-not $GamingOnWindows) { Write-Host "gaming mode is a no-op off Windows; nothing to do"; exit 0 }
 }
@@ -82,7 +82,7 @@ if ($SelfTest) {
         Assert-Gaming (((Get-GamingDotnetArgs $d -Build) -join " ") -eq "-m:2 -nodeReuse:false -p:UseSharedCompilation=false" -and @(Get-GamingDotnetArgs $null).Count -eq 0) "dotnet takes its throttle arguments only while on"
         Assert-Gaming ((Get-GamingTimeoutSec $d 300) -eq 900 -and (Get-GamingTimeoutSec $null 300) -eq 300 -and (Get-GamingTimeoutSec $d 0) -eq 0) "the watchdog scales by its factor only while on, and none stays none"
         $Hours = 99; $Action = "kept"
-        . (Join-Path $PSScriptRoot "GamingModeCore.ps1")
+        . (Join-Path $PSScriptRoot "scripts\GamingModeCore.ps1")
         Assert-Gaming ($Hours -eq 99 -and $Action -eq "kept") "dot-sourcing the core binds nothing in the caller's scope"
         $script:GamingMarker = $env:CSVM_GAMING_MARKER
         $script:GamingLock = "$GamingMarker.lock"
@@ -93,7 +93,7 @@ if ($SelfTest) {
         $me = New-GamingRun -Worktree "selftest-holder"
         Sync-GamingStage $me
         Assert-Gaming ([bool]$me.Lock -and $me.Throttled) "gaming on: the first run takes the lock"
-        $self = Join-Path $PSScriptRoot "GamingModeCore.ps1"
+        $self = Join-Path $PSScriptRoot "scripts\GamingModeCore.ps1"
         function Start-GamingChild {
             param([string]$Script)
             $psi = New-Object System.Diagnostics.ProcessStartInfo

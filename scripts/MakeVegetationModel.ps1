@@ -10,8 +10,8 @@
 # Pure ASCII on purpose (CLAUDE.md): PowerShell 5.1 mangles a BOM-less non-ASCII script.
 #
 # Usage:
-#   .\MakeVegetationModel.ps1 -Species firtree1                  the generator's first chapter
-#   .\MakeVegetationModel.ps1 -Species firtree1 -Chapter C1 -NoRender
+#   .\scripts\MakeVegetationModel.ps1 -Species firtree1                  the generator's first chapter
+#   .\scripts\MakeVegetationModel.ps1 -Species firtree1 -Chapter C1 -NoRender
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Species,
@@ -20,7 +20,7 @@ param(
     [string]$Blender = 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
 )
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
+$root = Split-Path $PSScriptRoot -Parent
 $script = Join-Path $root "CSVM\data\vegetation_models\$Species.py"
 if (-not (Test-Path -LiteralPath $script)) { throw "No generator at $script" }
 if (-not (Test-Path -LiteralPath $Blender)) { throw "Blender 5.2 not found at $Blender (pass -Blender)" }

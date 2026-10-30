@@ -17,8 +17,8 @@ the next call hands the same number out again and the duplicate-id pre-commit ho
 commit (often someone else's). Use -Count to reserve a block when you need several at once.
 
 .EXAMPLE
-./New-ItemId.ps1 -Kind PT           # -> PT-38
-./New-ItemId.ps1 -Kind CAP -Count 3 # -> CAP-28  CAP-29  CAP-30 (reserve a block up front)
+./scripts/New-ItemId.ps1 -Kind PT           # -> PT-38
+./scripts/New-ItemId.ps1 -Kind CAP -Count 3 # -> CAP-28  CAP-29  CAP-30 (reserve a block up front)
 #>
 param(
     [Parameter(Mandatory = $true)]

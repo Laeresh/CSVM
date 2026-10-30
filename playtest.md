@@ -12,7 +12,7 @@ Cite them from issues and in conversation by that ID. A `BL-NNN` an item cites i
 of the retired backlog file (`git log --grep=BL-NNN`). IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below, run
-**`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
+**`./scripts/New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
 `.git/item-id-counters.json` and is safe under concurrent sessions. ⚠ **Run it for EVERY id, every
 time**: it is not a once-per-session lookup, and deriving the next id by adding 1 leaves the counter
 behind the file, so the number you invented gets handed out again later. `-Count n` reserves a block
@@ -627,7 +627,7 @@ is a judgement on our own remake.
 ### The exported package · a recipient's first run, no arguments
 
 ```powershell
-./ExportRelease.ps1   # then unzip .scratch\CSVM-v<version>-win64.zip into a bare folder
+./scripts/ExportRelease.ps1   # then unzip .scratch\CSVM-v<version>-win64.zip into a bare folder
 ```
 
 - `PT-131` `[Own]` **An exported build started by double-clicking `CSVM.exe` sounds, and with no

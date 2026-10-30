@@ -82,7 +82,7 @@ Every step in order, for one agent at a time:
    branch's HEAD without the change) and write the waiver. A waiver reported with `#NEW` as its
    owner comes with a `new-issue-*.md`: file that issue now (step 9's command) and add the line to
    the message with its number. Run
-   `.\CheckWaiver.ps1 -MessageFile <message>` for the form. A waiver is a record,
+   `.\scripts\CheckWaiver.ps1 -MessageFile <message>` for the form. A waiver is a record,
    not a way past the owner: never waive a failure the item itself caused.
 2. Check the message's trailer names the model the agent ran as, per `PROJECT_CONTEXT.md`'s
    AI-assistance rule (e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`); never
@@ -126,9 +126,9 @@ Every step in order, for one agent at a time:
    - `analysis/goldens/manifest.json` hashes against a sibling's re-pin: take HEAD's hashes and
      re-pin on the merged tree (step 7);
    - INSTR/PERF/WORLD rule numbers minted twice: renumber the later one and say so in the message.
-7. `git -C <run> add -A`, then `.\CheckCommitContent.ps1 -Root <run>` from the run worktree, exit 0
+7. `git -C <run> add -A`, then `.\scripts\CheckCommitContent.ps1 -Root <run>` from the run worktree, exit 0
    required. Then, in the background with `$env:CSVM_DATA_ROOT='Z:\CSVM'`:
-   `.\RunTests.ps1 -Filter <touched suites> -GoldenWorkers 2` (units, the touched suites and the
+   `.\scripts\RunTests.ps1 -Filter <touched suites> -GoldenWorkers 2` (units, the touched suites and the
    goldens; `-Suite <name>` for one; "selector matched nothing" is a FAIL). Read the log's tail.
    - A moved golden the agent re-pinned is fine when the agent proved confinement (pixel diff
      inside the mechanism's footprint) and the manifest carries the new hash.
@@ -186,7 +186,7 @@ word: a finding they want fixed goes to an item agent and lands through section 
 is" merges.
 
 The merge itself: `git -C Z:\CSVM merge --ff-only <run>`
-after the run branch contains main, then `.\CheckItemIds.ps1` on main. "Not possible to
+after the run branch contains main, then `.\scripts\CheckItemIds.ps1` on main. "Not possible to
 fast-forward" means main moved again: merge it in first. Never push. Then post every close in the
 log's `## Closes pending` section: `gh issue comment N --body-file <close.txt>` with the landing
 commit's hash added, then `gh issue close N` (it takes no comment file), and move each to the
@@ -194,7 +194,7 @@ item's log line.
 
 ## 6. Batteries
 
-After each wave (every slot's item landed, or at a pause) run the full `.\RunTests.ps1
+After each wave (every slot's item landed, or at a pause) run the full `.\scripts\RunTests.ps1
 -GoldenWorkers 2` on the run branch in the background and log it as "Battery N on <sha> (items):
 <the four PASS/FAIL lines>". A FAIL line names the failing suite and the item that owns it; a
 red battery is reported to the user before any merge to main, since a fast-forward carries no

@@ -20,10 +20,10 @@
 # before it runs. Files are READ only; nothing here writes.
 #
 # Usage:
-#   ./CheckDocEntries.ps1                              the whole scope
-#   ./CheckDocEntries.ps1 -Summary                      one line per file, worst first
-#   ./CheckDocEntries.ps1 -Root <path>                  another worktree, with this copy's rules
-#   ./CheckDocEntries.ps1 docs/architecture/Effects.md  just this file's findings
+#   ./scripts/CheckDocEntries.ps1                              the whole scope
+#   ./scripts/CheckDocEntries.ps1 -Summary                      one line per file, worst first
+#   ./scripts/CheckDocEntries.ps1 -Root <path>                  another worktree, with this copy's rules
+#   ./scripts/CheckDocEntries.ps1 docs/architecture/Effects.md  just this file's findings
 [CmdletBinding()]
 param(
     [switch]$Summary,
@@ -42,7 +42,7 @@ $bigCapFiles = @(
 )
 
 # See CheckCommentCaps.ps1 for why $PSScriptRoot (not a cwd-derived root) is the default.
-if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 if (-not $Root) { $Root = git rev-parse --show-toplevel 2>$null }
 if (-not $Root) { $Root = (Get-Location).Path }
 $root = $Root

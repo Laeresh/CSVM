@@ -279,7 +279,7 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
     {
         if (!Available)
         {
-            throw new InvalidOperationException("this build has no WebRTC library: run InstallWebRtc.ps1, then open the project once to import it");
+            throw new InvalidOperationException("this build has no WebRTC library: run scripts\\InstallWebRtc.ps1, then open the project once to import it");
         }
     }
 

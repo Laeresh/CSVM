@@ -29,7 +29,7 @@ internal static class WebRtcTransportSuites
         if (!WebRtcTransport.Available)
         {
             throw new SuiteSkippedException(
-                $"the webrtc-native extension is not loaded ({WebRtcTransport.ExtensionClass} is not a class); run InstallWebRtc.ps1");
+                $"the webrtc-native extension is not loaded ({WebRtcTransport.ExtensionClass} is not a class); run scripts\\InstallWebRtc.ps1");
         }
 
         var master = new LoopbackMaster();
@@ -118,7 +118,7 @@ internal static class WebRtcTransportSuites
         if (!WebRtcTransport.Available)
         {
             throw new SuiteSkippedException(
-                $"the webrtc-native extension is not loaded ({WebRtcTransport.ExtensionClass} is not a class); run InstallWebRtc.ps1");
+                $"the webrtc-native extension is not loaded ({WebRtcTransport.ExtensionClass} is not a class); run scripts\\InstallWebRtc.ps1");
         }
 
         var master = new LoopbackMaster();

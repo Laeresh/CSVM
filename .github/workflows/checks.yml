@@ -44,9 +44,9 @@ jobs:
           # The self-tests commit into throwaway fixture repos.
           git config --global user.name 'CI'
           git config --global user.email 'ci@invalid'
-          ./CheckCommitContent.ps1 -SelfTest
+          ./scripts/CheckCommitContent.ps1 -SelfTest
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          ./FormatBeforeTests.ps1 -SelfTest
+          ./scripts/FormatBeforeTests.ps1 -SelfTest
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Content checks
@@ -57,7 +57,7 @@ jobs:
           $base = $env:BASE
           if (-not $base -or -not (git rev-parse -q --verify "$base^{commit}")) { $base = 'HEAD^' }
           Write-Host "comment-cap sentence scope: changes since $base"
-          ./CheckCommitContent.ps1 -Root (Get-Location).Path -Against $base
+          ./scripts/CheckCommitContent.ps1 -Root (Get-Location).Path -Against $base
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Write-Host 'content checks clean'
 
@@ -153,7 +153,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Engine suites
-        run: ./RunCiSuites.ps1 -Godot $env:GODOT
+        run: ./scripts/RunCiSuites.ps1 -Godot $env:GODOT
 
       - name: Upload report and logs
         if: always()

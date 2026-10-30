@@ -1,11 +1,11 @@
 # The goldens ledger's command line. The code is GoldenLedgerCore.ps1, which RunTests.ps1
 # dot-sources; see docs/tooling.md.
 #
-#   .\GoldenLedger.ps1             the ledger grouped by shot: flakes, moves that stayed, re-renders
+#   .\scripts\GoldenLedger.ps1             the ledger grouped by shot: flakes, moves that stayed, re-renders
 #                                  with no hash, Faithful reds, re-renders a deferral stopped, and
 #                                  each shot's recent moves with their run's load
-#   .\GoldenLedger.ps1 -Recent N   N recent moves per shot (default 5)
-#   .\GoldenLedger.ps1 -SelfTest   the path, the append from concurrent writers, the mutex timeout,
+#   .\scripts\GoldenLedger.ps1 -Recent N   N recent moves per shot (default 5)
+#   .\scripts\GoldenLedger.ps1 -SelfTest   the path, the append from concurrent writers, the mutex timeout,
 #                                  the shot lines, the diff fields and the summary, against a
 #                                  private file, without Godot
 #

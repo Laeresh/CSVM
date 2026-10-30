@@ -36,7 +36,7 @@ can actually verify:
 - typo, spelling and broken-link fixes anywhere
 
 **A change under `CSVM/src` needs an issue first**, and the reason is verification rather
-than territory. Every change to the engine lands through `.\RunTests.ps1`: a build, the unit
+than territory. Every change to the engine lands through `.\scripts\RunTests.ps1`: a build, the unit
 tests, the in-engine suites, and golden-image hashes rendered by the pinned Godot 4.7 .NET
 editor against an extracted retail install. A contributor has neither that rig nor the
 reference captures the goldens were pinned from, so a patch cannot be shown to be safe from
@@ -69,7 +69,7 @@ root, with `-Against` naming the commit your branch starts from (`upstream/main`
 whose `upstream` remote is this repository):
 
 ```powershell
-./CheckCommitContent.ps1 -Root (Get-Location).Path -Against upstream/main # the content gate
+./scripts/CheckCommitContent.ps1 -Root (Get-Location).Path -Against upstream/main # the content gate
 dotnet format CSVM/CSVM.csproj --verify-no-changes                        # formatting
 dotnet build CSVM/CSVM.csproj -t:Rebuild                                  # StyleCop, read the SA warnings
 dotnet test CSVM/CSVM.sln                                                 # unit tests

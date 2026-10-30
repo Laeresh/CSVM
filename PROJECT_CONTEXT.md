@@ -62,7 +62,7 @@ previews, debug dumps, golden-test captures, etc., always write them into
 ## Coding conventions
 - Comments state what and why, briefly, never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
 - **Use the terms in [`CONTEXT.md`](CONTEXT.md)**, and never a word that file lists under `_Avoid_`.
-- **Comment length is capped, in `CSVM/src` and `CSVM.Tests`.** A comment block over its cap fails the commit; [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) is what the hook runs, and what you run yourself while editing.
+- **Comment length is capped, in `CSVM/src` and `CSVM.Tests`.** A comment block over its cap fails the commit; [`CheckCommentCaps.ps1`](scripts/CheckCommentCaps.ps1) is what the hook runs, and what you run yourself while editing.
 
   | comment | cap |
   |---|---|
@@ -103,6 +103,7 @@ One line each, **the game files, the launch scripts and the release scripts are 
 - `CrimsonSkiesGame/`, the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/`, a developer's unzbd output (git-ignored), the model diffs' oracle and an example modding folder; nothing reads it unless named. Layout: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1`, play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
+- `scripts/`, every other tooling script below; the root keeps only `RunGame.ps1`, `RunDev.ps1` and `GamingMode.ps1`. Run them as `.\scripts\<name>.ps1` from the repo root.
 - `RunTests.ps1`, one command, one exit code: build → `dotnet test` → `--run-tests` (`-Shards`, default 6 shared shards, plus one per alone suite) → goldens (`-GoldenWorkers`, default 4) → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`) → hitch (`-Hitch`, opt-in and last). Details: `docs/tooling.md`.
 - `RunCiSuites.ps1`, CI's engine stage, runnable on Linux or macOS: `--run-tests=tier:ci` headless over the `--synthetic-data` tree, judged from the report. Details: `docs/tooling.md`.
 - `ExportRelease.ps1`, builds, headless-imports, and exports the "Windows Desktop" release preset to `.scratch/export/CSVM.exe`; checks the export templates are installed and creates `.scratch/export/` if missing before starting. Details: `docs/tooling.md`.
@@ -141,17 +142,17 @@ One line each, **the game files, the launch scripts and the release scripts are 
 ### Development verification loop
 
 - **During an edit, run the smallest red/green surface.** For one engine suite use
-  `.\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens` (exact name; `-Filter` is still the
+  `.\scripts\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens` (exact name; `-Filter` is still the
   substring form); for a unit use
   `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~<test>"`, or
-  `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine -SkipGoldens` for the same
+  `.\scripts\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine -SkipGoldens` for the same
   filter with the summary block. Both loops measure about 3 seconds warm. The hitch check is opt-in
   (`-Hitch`), so nothing has to be passed to keep it out of them.
-- **Broad development confidence is `.\RunTests.ps1 -Quick`:** build, the checked-in quick unit
+- **Broad development confidence is `.\scripts\RunTests.ps1 -Quick`:** build, the checked-in quick unit
   tier and quick engine tier, no goldens and no hitch, with every omitted surface printed as a
   `not checked:` line. A selector or filter matching nothing fails its stage rather than passing
   empty.
-- **Before landing any change under `CSVM/`, run the complete `.\RunTests.ps1`.** Targeted and quick
+- **Before landing any change under `CSVM/`, run the complete `.\scripts\RunTests.ps1`.** Targeted and quick
   runs are partial by design and never satisfy that landing gate. `CSVM.Tests/`-only,
   documentation, and tooling changes do not require the full run.
 - **A landing over a red battery carries a waiver in its own commit body**, one line per failing
@@ -241,7 +242,7 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 **Active plans:** none.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
-**`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
+**`.\scripts\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
 
 The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 

@@ -108,7 +108,7 @@ async function runPowerShellBashGuard(cwd: string, event: any): Promise<HookResu
   // Which commands Bash may run is the guard's decision, made once in CheckBashCommand.ps1.
   const here = await getGitRoot(cwd);
   if (!here) return NOT_BLOCKED;
-  const guard = `${here}/CheckBashCommand.ps1`;
+  const guard = `${here}/scripts/CheckBashCommand.ps1`;
 
   try {
     await pExecFile(
@@ -137,7 +137,7 @@ async function runGodotGuard(cwd: string, event: any): Promise<HookResult> {
   // CheckGodotCommand.ps1.
   const here = await getGitRoot(cwd);
   if (!here) return NOT_BLOCKED;
-  const guard = `${here}/CheckGodotCommand.ps1`;
+  const guard = `${here}/scripts/CheckGodotCommand.ps1`;
 
   try {
     await pExecFile(
@@ -149,7 +149,7 @@ async function runGodotGuard(cwd: string, event: any): Promise<HookResult> {
     if (error.code === 2) {
       return {
         blocked: true,
-        message: error.stderr || error.message || "Launch Godot through RunProbe.ps1",
+        message: error.stderr || error.message || "Launch Godot through scripts/RunProbe.ps1",
         reason: "direct Godot launch"
       };
     }
@@ -167,7 +167,7 @@ async function runPowerShellDotnetFormat(cwd: string, event: any): Promise<HookR
   // every harness fires on the same commands and formats the same tree.
   const here = await getGitRoot(cwd);
   if (!here) return NOT_BLOCKED;
-  const gate = `${here}/FormatBeforeTests.ps1`;
+  const gate = `${here}/scripts/FormatBeforeTests.ps1`;
 
   try {
     // A nonzero exit REJECTS with error.code; the resolved value carries only stdout/stderr, so
@@ -202,7 +202,7 @@ async function runContentGate(cwd: string, event: any): Promise<HookResult> {
   // Only to LOCATE the gate; the gate works out which tree to check for itself.
   const here = await getGitRoot(cwd);
   if (!here) return NOT_BLOCKED;
-  const gate = `${here}/CheckCommitContent.ps1`;
+  const gate = `${here}/scripts/CheckCommitContent.ps1`;
 
   try {
     // execFile, not exec: the command is passed as an argument vector, so nothing in it needs

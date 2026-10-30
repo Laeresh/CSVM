@@ -24,10 +24,10 @@
 # Exit code 1 when anything is corrupt, so a caller can gate a commit on it.
 #
 # Usage:
-#   ./CheckEncoding.ps1                    this tree
-#   ./CheckEncoding.ps1 -Root <path>       another worktree
-#   ./CheckEncoding.ps1 -Quiet             exit code only
-#   <hook payload on stdin> | ./CheckEncoding.ps1 -Hook
+#   ./scripts/CheckEncoding.ps1                    this tree
+#   ./scripts/CheckEncoding.ps1 -Root <path>       another worktree
+#   ./scripts/CheckEncoding.ps1 -Quiet             exit code only
+#   <hook payload on stdin> | ./scripts/CheckEncoding.ps1 -Hook
 #                                          the .ps1 an Edit/Write touched, anywhere: exit 2 when
 #                                          it holds non-ASCII without a UTF-8 BOM
 [CmdletBinding()]
@@ -61,7 +61,7 @@ if ($Hook) {
     exit 0
 }
 
-if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 if (-not $Root) { $Root = (Get-Location).Path }
 
 $textExtensions = '\.(cs|md|json|ps1|gdshader|gdshaderinc|txt|csproj|sln|tscn|tres|cfg|godot|yml|yaml)$'

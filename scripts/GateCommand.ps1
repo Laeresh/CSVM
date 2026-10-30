@@ -81,7 +81,7 @@ function Resolve-Toplevel {
 }
 
 # The tree the command names through git: -C, else --work-tree, else --git-dir, anywhere in the
-# command, so "git -C <tree> rev-parse; .\RunTests.ps1" names a tree for the runner too. Empty when
+# command, so "git -C <tree> rev-parse; .\scripts\RunTests.ps1" names a tree for the runner too. Empty when
 # it names none. The -C is case-sensitive: "git -c k=v" is a config key, not a path.
 function Get-NamedTree {
     param([string]$CommandLine)

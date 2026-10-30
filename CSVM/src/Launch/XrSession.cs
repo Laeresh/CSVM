@@ -221,7 +221,7 @@ public partial class XrSession : Node
         // variants to draw with, and Godot compiles them only at engine start.
         if (!OS.HasFeature(XrLaunch.SimFeature))
         {
-            Log.Error("core", $"xr: --xr-sim needs Godot's multiview shader variants, which only the {XrLaunch.SimFeature} feature tag turns on at engine start; launch through RunTests.ps1, RunProbe.ps1 or RunGame.ps1, which set {XrLaunch.FeatureVariable} for it. Flying flat");
+            Log.Error("core", $"xr: --xr-sim needs Godot's multiview shader variants, which only the {XrLaunch.SimFeature} feature tag turns on at engine start; launch through scripts\\RunTests.ps1, scripts\\RunProbe.ps1 or RunGame.ps1, which set {XrLaunch.FeatureVariable} for it. Flying flat");
             return null;
         }
 

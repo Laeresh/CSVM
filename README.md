@@ -93,7 +93,7 @@ godot --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 
 First time only, run Godot once with `--headless --import` before running scenes. `RunGame.ps1`
 wraps the build step and launches the in-game menu with no args; `RunDev.ps1` is the same with
-interactive console prompts. Verify a change with `.\RunTests.ps1` — one command, one exit code
+interactive console prompts. Verify a change with `.\scripts\RunTests.ps1` — one command, one exit code
 (build → unit tests → in-engine suites → golden-image hashes).
 
 ### Package a release build
@@ -103,7 +103,7 @@ Godot export templates are user-global, not part of the repo. One-time setup: ex
 `%APPDATA%\Godot\export_templates\4.7.stable.mono\`.
 
 ```
-.\ExportRelease.ps1
+.\scripts\ExportRelease.ps1
 ```
 
 `ExportRelease.ps1` builds, imports, and exports the release preset to `.scratch\export\CSVM.exe`,
@@ -118,7 +118,7 @@ first line of every log state as well. See [`packaging/MANIFEST.md`](packaging/M
 the layout and [`docs/tooling.md`](docs/tooling.md) for the full export and packaging detail.
 
 ```
-.\PublishRelease.ps1 -NotesFile <file>
+.\scripts\PublishRelease.ps1 -NotesFile <file>
 ```
 
 `PublishRelease.ps1` is the publish itself, in one run: it reads the same version, runs

@@ -233,44 +233,44 @@
     without building or launching Godot.
 
 .EXAMPLE
-    .\RunTests.ps1
+    .\scripts\RunTests.ps1
     Build, the unit tests, the in-engine suites, one summary block, one exit code.
 
 .EXAMPLE
-    .\RunTests.ps1 -Filter weapons -SkipUnits
+    .\scripts\RunTests.ps1 -Filter weapons -SkipUnits
     Build, then only the in-engine suites whose name contains "weapons".
 
 .EXAMPLE
-    .\RunTests.ps1 -Suite weapons-fire -SkipUnits -SkipGoldens
+    .\scripts\RunTests.ps1 -Suite weapons-fire -SkipUnits -SkipGoldens
     Build, then that one suite exactly -- the targeted engine loop. Hitch is already off by
     default, so nothing extra is needed to keep it out of this loop.
 
 .EXAMPLE
-    .\RunTests.ps1 -Hitch -SkipUnits -SkipEngine -SkipGoldens
+    .\scripts\RunTests.ps1 -Hitch -SkipUnits -SkipEngine -SkipGoldens
     Build, then only the hitch-detector check -- the isolated loop for a change to
     HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launch/FrameInstruments.cs.
 
 .EXAMPLE
-    .\RunTests.ps1 -Shards 1
+    .\scripts\RunTests.ps1 -Shards 1
     The same run with the catalog in one shared shard beside the alone shard -- the reference path
     an A/B compares against.
 
 .EXAMPLE
-    .\RunTests.ps1 -Quick
+    .\scripts\RunTests.ps1 -Quick
     The broad partial gate: build, the quick unit tier, the quick engine tier, and a summary
     naming every surface it did not check.
 
 .EXAMPLE
-    .\RunTests.ps1 -Perf -PerfLabel base -SkipUnits -SkipEngine -SkipGoldens
+    .\scripts\RunTests.ps1 -Perf -PerfLabel base -SkipUnits -SkipEngine -SkipGoldens
     Measure the perf scenario set and file it under the label "base". Flip the one line under
     test, then repeat with -PerfLabel change -PerfCompare base for the paired verdict.
 
 .EXAMPLE
-    $env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'; .\RunTests.ps1
+    $env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'; .\scripts\RunTests.ps1
     The same run from a git worktree, reading the primary tree's data and Godot.
 
 .EXAMPLE
-    .\RunTests.ps1 -GoldenWorkers 1 -SkipUnits -SkipEngine
+    .\scripts\RunTests.ps1 -GoldenWorkers 1 -SkipUnits -SkipEngine
     The golden stage serial -- the reference path an A/B compares against.
 #>
 
@@ -332,7 +332,7 @@ $GraphicsArgs = if ($Graphics -eq "enhanced") { @("--graphics=enhanced") } else 
 # The hitch stage's own opt-in gate ($RunHitchNow) is computed where the stage runs, after perf --
 # it is the one stage whose default is off rather than on, so it is not part of this shared block.
 
-$RepoRoot   = $PSScriptRoot
+$RepoRoot   = Split-Path $PSScriptRoot -Parent
 $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
@@ -1253,8 +1253,8 @@ if ($Quick) {
     Write-Host "== quick: a PARTIAL gate ==" -ForegroundColor Cyan
     Write-Host "  units:  dotnet test --filter `"$UnitFilter`"" -ForegroundColor DarkGray
     Write-Host "  engine: --run-tests=$EngineSelector" -ForegroundColor DarkGray
-    Write-Host "  goldens and hitch do not run; the landing gate is the complete .\RunTests.ps1" -ForegroundColor DarkGray
-    Add-Unchecked "-Quick ran two checked-in tiers and is partial by construction: a PASS here is development confidence, and only the complete .\RunTests.ps1 satisfies the landing rule"
+    Write-Host "  goldens and hitch do not run; the landing gate is the complete .\scripts\RunTests.ps1" -ForegroundColor DarkGray
+    Add-Unchecked "-Quick ran two checked-in tiers and is partial by construction: a PASS here is development confidence, and only the complete .\scripts\RunTests.ps1 satisfies the landing rule"
 }
 
 Write-Stage-Banner "build"

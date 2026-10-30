@@ -32,12 +32,12 @@
 # Exit code 2 on a violation, which is what a PreToolUse hook needs in order to block.
 #
 # Usage:
-#   <hook payload on stdin> | ./CheckCommitContent.ps1
-#   ./CheckCommitContent.ps1 -Command 'git -C ../wt commit -m x'
-#   ./CheckCommitContent.ps1 -Root <path>      check one tree, no derivation
-#   ./CheckCommitContent.ps1 -Root . -Against <base>   CI: the comment caps' sentence scope is the PR
-#   ./CheckCommitContent.ps1 -ShowRoots -Command '...'   which tree that command would check
-#   ./CheckCommitContent.ps1 -SelfTest         exercise the whole gate against fixtures
+#   <hook payload on stdin> | ./scripts/CheckCommitContent.ps1
+#   ./scripts/CheckCommitContent.ps1 -Command 'git -C ../wt commit -m x'
+#   ./scripts/CheckCommitContent.ps1 -Root <path>      check one tree, no derivation
+#   ./scripts/CheckCommitContent.ps1 -Root . -Against <base>   CI: the comment caps' sentence scope is the PR
+#   ./scripts/CheckCommitContent.ps1 -ShowRoots -Command '...'   which tree that command would check
+#   ./scripts/CheckCommitContent.ps1 -SelfTest         exercise the whole gate against fixtures
 [CmdletBinding()]
 param(
     [string]$Command,
@@ -596,7 +596,7 @@ function Invoke-SelfTest {
         Assert-Trigger 'trigger  a commit quoted inside a message is not an invocation' (
             'Write-Host "git commit -m x"') $false
         Assert-Trigger 'trigger  a path merely naming the runner is not a commit' (
-            'Get-Content Z:\CSVM\CheckCommitContent.ps1') $false
+            'Get-Content Z:\CSVM\scripts\CheckCommitContent.ps1') $false
         Assert-Trigger 'trigger  commit-tree is a different subcommand' (
             'git commit-tree HEAD -m x') $false
         Assert-Trigger 'trigger  a non-global token before commit is not a commit' (

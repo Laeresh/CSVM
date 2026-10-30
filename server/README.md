@@ -169,7 +169,7 @@ two ways:
   search and direct IP work as before.
 
 A release build carries the WebRTC library, so a player only unpacks it and starts the game. A
-checkout does not, since the library is not in the repository: run `.\InstallWebRtc.ps1` once in
+checkout does not, since the library is not in the repository: run `.\scripts\InstallWebRtc.ps1` once in
 the checkout the game runs from. Without it the games list still shows
 the master server's games, but hosting for internet guests and joining by code are refused with a
 message saying so: a host reads `No internet code: WebRTC is missing or failed to start` where its

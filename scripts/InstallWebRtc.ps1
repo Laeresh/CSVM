@@ -37,13 +37,13 @@
     Re-download even when the installed files already match the pins.
 
 .EXAMPLE
-    .\InstallWebRtc.ps1
+    .\scripts\InstallWebRtc.ps1
     Fetch webrtc-native 1.2.2 into CSVM\addons\webrtc_native\ of this tree.
 #>
 
 [CmdletBinding()]
 param(
-    [string]$Root = $PSScriptRoot,
+    [string]$Root = (Split-Path $PSScriptRoot -Parent),
     [switch]$Force,
     [switch]$Verify
 )
@@ -113,7 +113,7 @@ function Register-Extension {
 if ($Verify) {
     $bad = Get-Mismatches
     if ($bad.Count -gt 0) {
-        throw "webrtc-native $Version is not installed at $AddonDir ($($bad -join ', ')) -- run .\InstallWebRtc.ps1 -Root $Root."
+        throw "webrtc-native $Version is not installed at $AddonDir ($($bad -join ', ')) -- run .\scripts\InstallWebRtc.ps1 -Root $Root."
     }
     return [pscustomobject]@{ Version = $Version; Directory = $AddonDir; ZipUrl = $ZipUrl; ZipSha256 = $ZipSha256 }
 }

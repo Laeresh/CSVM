@@ -18,8 +18,8 @@
 # Exit code 1 on a malformed waiver, so a caller can gate a commit on it.
 #
 # Usage:
-#   ./CheckWaiver.ps1 -MessageFile <path>
-#   ./CheckWaiver.ps1 -Message <text>
+#   ./scripts/CheckWaiver.ps1 -MessageFile <path>
+#   ./scripts/CheckWaiver.ps1 -Message <text>
 [CmdletBinding()]
 param(
     [string]$Message,

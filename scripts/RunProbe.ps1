@@ -51,10 +51,10 @@
     it hung.
 
 .EXAMPLE
-    .\RunProbe.ps1 --stage=empty --plane=player_bhawk --screenshot=Z:\CSVM\.scratch\probe.png
+    .\scripts\RunProbe.ps1 --stage=empty --plane=player_bhawk --screenshot=Z:\CSVM\.scratch\probe.png
 
 .EXAMPLE
-    .\RunProbe.ps1 -TimeoutSec 60 --run-tests=weapons-fire
+    .\scripts\RunProbe.ps1 -TimeoutSec 60 --run-tests=weapons-fire
 #>
 
 # PositionalBinding=$false, or the first Godot flag would bind positionally to -TimeoutSec.
@@ -71,7 +71,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot   = $PSScriptRoot
+$RepoRoot   = Split-Path $PSScriptRoot -Parent
 $ProjectDir = Join-Path $RepoRoot "CSVM"
 
 # Same resolution as RunDev.ps1: tools/ is git-ignored, so a git worktree checkout has no

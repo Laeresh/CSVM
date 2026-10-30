@@ -45,15 +45,15 @@
     and a WSL Debian distro with tar (docs/tooling.md, "-Linux").
 
 .EXAMPLE
-    .\ExportRelease.ps1
+    .\scripts\ExportRelease.ps1
     Build, import, export to .scratch\export\CSVM.exe, and stage the release files.
 
 .EXAMPLE
-    .\ExportRelease.ps1 -Linux
+    .\scripts\ExportRelease.ps1 -Linux
     The same, then the Linux export in .scratch\export-linux\ and its tarball.
 
 .EXAMPLE
-    .\ExportRelease.ps1 -ToolsRoot Z:\CSVM
+    .\scripts\ExportRelease.ps1 -ToolsRoot Z:\CSVM
     The same from a worktree, taking Godot and SDL2 from the main checkout's tools\, since
     tools\ is git-ignored and a worktree has none.
 
@@ -70,7 +70,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot   = $PSScriptRoot
+$RepoRoot   = Split-Path $PSScriptRoot -Parent
 if (-not $ToolsRoot) {
     $ToolsRoot = $RepoRoot
     if ((-not (Test-Path (Join-Path $RepoRoot "tools\godot"))) -and $env:CSVM_DATA_ROOT) {
@@ -148,14 +148,14 @@ if (-not (Test-Path $TemplateDir)) {
 # SDL2.dll is the flight-stick reader (docs/tooling.md, "SDL2 for flight sticks"). A dev launch
 # without it only loses sticks, but a release without it ships a build that cannot see them, so
 # the export requires the pinned files. InstallSdl2.ps1 holds the pins and throws naming itself.
-$Sdl2 = & (Join-Path $RepoRoot "InstallSdl2.ps1") -Root $ToolsRoot -Verify
+$Sdl2 = & (Join-Path $PSScriptRoot "InstallSdl2.ps1") -Root $ToolsRoot -Verify
 
 # webrtc-native carries internet play (docs/tooling.md, "The WebRTC library and the master
 # server"). A build exported without it lists the master server's games but can neither host nor
 # join one, and nothing at export time would say so, so the export installs the pinned release into
 # this tree itself rather than only checking for it. InstallWebRtc.ps1 holds the pin and the hash.
-& (Join-Path $RepoRoot "InstallWebRtc.ps1") -Root $RepoRoot
-$WebRtc = & (Join-Path $RepoRoot "InstallWebRtc.ps1") -Root $RepoRoot -Verify
+& (Join-Path $PSScriptRoot "InstallWebRtc.ps1") -Root $RepoRoot
+$WebRtc = & (Join-Path $PSScriptRoot "InstallWebRtc.ps1") -Root $RepoRoot -Verify
 
 foreach ($file in $ReleaseFiles) {
     if (-not (Test-Path $file.Source)) {

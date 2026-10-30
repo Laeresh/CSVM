@@ -135,7 +135,7 @@ any verification recorded in an earlier commit message as describing a tree that
 
 Once main is folded in (merged or rebased onto, with or without conflicts to resolve), this
 combination has never been tested together. Run the project's full verification battery on the
-worktree — `dotnet build CSVM/CSVM.sln` and `.\RunTests.ps1` (or the narrower check that fits what
+worktree — `dotnet build CSVM/CSVM.sln` and `.\scripts\RunTests.ps1` (or the narrower check that fits what
 the sync brought in, per CLAUDE.md's own hook logic) — and treat this as **mandatory**, not
 optional.
 

@@ -99,7 +99,7 @@ public static class NetCarrier
         ArgumentNullException.ThrowIfNull(master);
         if (!WebRtcTransport.Available)
         {
-            throw new InvalidOperationException("joining by code needs the WebRTC library, which this build lacks (run InstallWebRtc.ps1)");
+            throw new InvalidOperationException("joining by code needs the WebRTC library, which this build lacks (run scripts\\InstallWebRtc.ps1)");
         }
 
         return WebRtcTransport.Join(master(), code, version);

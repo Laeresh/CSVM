@@ -845,7 +845,7 @@ not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs
 
 ## The standing checklist
 
-- [ ] `.\RunTests.ps1` exits 0; every `SKIP` is understood as not checked.
+- [ ] `.\scripts\RunTests.ps1` exits 0; every `SKIP` is understood as not checked.
 - [ ] The check can fail and the case exercises the changed mechanism.
 - [ ] Inputs, pose, clock mode, binary, and output files are confirmed.
 - [ ] Same-build noise and a current baseline were measured where relevant.

@@ -4,7 +4,7 @@ Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first, it has the project descri
 architecture decisions, repo layout, the Godot project + CLI reference, coding conventions, and
 the "Current status" pointer. This file holds only what's specific to Claude Code as a tool.
 
-Follow PROJECT_CONTEXT.md's "Development verification loop"; the complete `.\RunTests.ps1` is the
+Follow PROJECT_CONTEXT.md's "Development verification loop"; the complete `.\scripts\RunTests.ps1` is the
 landing gate for any change under `CSVM/`.
 
 ## Claude Code specifics
@@ -19,15 +19,15 @@ landing gate for any change under `CSVM/`.
   (`~/godot/`), so the gates, unit tests and `RunCiSuites.ps1` run there; locally it does nothing.
   Before a shell command: (1) a shell-syntax guard (a
   PowerShell here-string sent to Bash, a heredoc or `/dev/null` sent to PowerShell); (2) the Bash
-  guard, [`CheckBashCommand.ps1`](CheckBashCommand.ps1): on Windows, Bash runs only `git` and
+  guard, [`CheckBashCommand.ps1`](scripts/CheckBashCommand.ps1): on Windows, Bash runs only `git` and
   `gh`, optionally piped into `head`, `tail`, `grep`, `wc`, `sort` or `uniq`, and everything else
   goes to PowerShell. Bash is the shell for a `gh --jq` filter with embedded double quotes, which
-  PowerShell 5.1 strips; (3) the Godot guard, [`CheckGodotCommand.ps1`](CheckGodotCommand.ps1):
+  PowerShell 5.1 strips; (3) the Godot guard, [`CheckGodotCommand.ps1`](scripts/CheckGodotCommand.ps1):
   a command that runs `Godot_v4*.exe` directly is blocked, launch through `RunProbe.ps1`, which
   admits it against the memory ledger (`MemoryLedger.ps1 status`); (4) the format gate,
-  [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1): `dotnet format` and a `-t:Rebuild` that blocks
+  [`FormatBeforeTests.ps1`](scripts/FormatBeforeTests.ps1): `dotnet format` and a `-t:Rebuild` that blocks
   on StyleCop warnings, before an invocation of `RunTests.ps1`, `dotnet test` or `git commit`;
-  (5) the content gate, [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit. After
+  (5) the content gate, [`CheckCommitContent.ps1`](scripts/CheckCommitContent.ps1), before a commit. After
   an Edit or Write,
   `CheckCommentCaps.ps1 -Hook` reports an over-cap comment in a `.cs` file and
   `CheckEncoding.ps1 -Hook` rejects a `.ps1` holding non-ASCII without a BOM.
@@ -35,7 +35,7 @@ landing gate for any change under `CSVM/`.
   runner path, a `git -C`/`--work-tree`, or a `Set-Location` earlier in the same command.
   `-ShowRoot`/`-ShowRoots -Command '…'` says which tree a command would hit, and `-SelfTest`
   exercises a gate. How the gates read a command, and why they check one tree rather than every
-  worktree, is in their script headers and [`GateCommand.ps1`](GateCommand.ps1).
+  worktree, is in their script headers and [`GateCommand.ps1`](scripts/GateCommand.ps1).
 - **The content gate's checks** are scripts you can run by hand while editing:
   `CheckEncoding.ps1` (double-encoded UTF-8), `CheckItemIds.ps1` (an item or verification-rule ID
   defined twice), `CheckGoldenProse.ps1` (the golden

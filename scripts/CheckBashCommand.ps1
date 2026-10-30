@@ -12,9 +12,9 @@
 # needs.
 #
 # Usage:
-#   <hook payload on stdin> | ./CheckBashCommand.ps1
-#   ./CheckBashCommand.ps1 -Command 'git log | head -5'
-#   ./CheckBashCommand.ps1 -SelfTest
+#   <hook payload on stdin> | ./scripts/CheckBashCommand.ps1
+#   ./scripts/CheckBashCommand.ps1 -Command 'git log | head -5'
+#   ./scripts/CheckBashCommand.ps1 -SelfTest
 [CmdletBinding()]
 param(
     [string]$Command,

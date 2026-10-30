@@ -670,7 +670,7 @@ In order. Each step names the file it touches and the test that proves it.
 11. **Document it.** Its `##` entries in `architecture/UI.md` with their index lines in
     `architecture.md`, its remake-only readings where they belong, `cli.md`'s aids, and this
     page's registration paragraph.
-12. **Run the landing gate.** The complete `.\RunTests.ps1`, then the at-the-controls pass: each
+12. **Run the landing gate.** The complete `.\scripts\RunTests.ps1`, then the at-the-controls pass: each
     mode to FLY and back through the pause board's Exit, a campaign mission to its end and back to
     the scrapbook, a real pad's join and walk, the sounds, the pointer, a cold start on an aid, a
     cold start under `--presentation=<token>` and one without it.

@@ -23,7 +23,7 @@ $here = git rev-parse --show-toplevel 2>$null
 if (-not $here) { exit 0 }
 
 # No direct Godot launch from an agent command; the decision is CheckGodotCommand.ps1's.
-$godot = Join-Path $here 'CheckGodotCommand.ps1'
+$godot = Join-Path $here 'scripts/CheckGodotCommand.ps1'
 if (Test-Path -LiteralPath $godot -PathType Leaf) {
     & $godot -Command $command
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -31,7 +31,7 @@ if (Test-Path -LiteralPath $godot -PathType Leaf) {
 
 # Format and StyleCop-check before a test run or a commit. The trigger (an invocation, never a
 # mention) and the tree resolution live in FormatBeforeTests.ps1, shared with the other harnesses.
-$format = Join-Path $here 'FormatBeforeTests.ps1'
+$format = Join-Path $here 'scripts/FormatBeforeTests.ps1'
 if (Test-Path -LiteralPath $format -PathType Leaf) {
     & $format -Command $command
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -41,7 +41,7 @@ if (Test-Path -LiteralPath $format -PathType Leaf) {
 # CheckCommitContent.ps1 and covered by its self-test. The three harnesses each used to test for
 # 'git\s+commit' here, which required the two words to be adjacent and so skipped the gate
 # entirely for 'git -C <tree> commit', the form CLAUDE.md prescribes for naming a tree.
-$gate = Join-Path $here 'CheckCommitContent.ps1'
+$gate = Join-Path $here 'scripts/CheckCommitContent.ps1'
 if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) { exit 0 }
 & $gate -Command $command
 exit $LASTEXITCODE

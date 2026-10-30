@@ -57,10 +57,10 @@
     at which the tag and the upload can still be called off.
 
 .EXAMPLE
-    .\PublishRelease.ps1 -NotesFile docs\release-notes-v0.2.0.md
+    .\scripts\PublishRelease.ps1 -NotesFile docs\release-notes-v0.2.0.md
 
 .EXAMPLE
-    .\PublishRelease.ps1 -TagSuffix rehearsal -Yes
+    .\scripts\PublishRelease.ps1 -TagSuffix rehearsal -Yes
     A full publish under v<version>-rehearsal, to be deleted afterwards with the command
     the run prints.
 #>
@@ -75,8 +75,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot      = $PSScriptRoot
-$ExportScript  = Join-Path $RepoRoot 'ExportRelease.ps1'
+$RepoRoot      = Split-Path $PSScriptRoot -Parent
+$ExportScript  = Join-Path $PSScriptRoot 'ExportRelease.ps1'
 $ProjectGodot  = Join-Path $RepoRoot 'CSVM\project.godot'
 $ExportDir     = Join-Path $RepoRoot '.scratch\export'
 $BuildInfoPath = Join-Path $ExportDir 'BUILD-INFO.txt'

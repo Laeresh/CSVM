@@ -28,13 +28,13 @@ do may wait on them.
   and the condition it applies under. Decoded knowledge goes into `docs/org/<topic>.md` (existing
   page's topic) or `analysis/<slug>/FINDINGS.md`, never into the Ghidra database.
 - Take every value from the extracted data or the decode, never from a guess.
-- Comments: caps in `PROJECT_CONTEXT.md` (run `.\CheckCommentCaps.ps1` from your worktree); no item
+- Comments: caps in `PROJECT_CONTEXT.md` (run `.\scripts\CheckCommentCaps.ps1` from your worktree); no item
   ids, dates or plan references in code comments or live docs; no em dashes anywhere you write;
   the writing-style rules in `CLAUDE.md` bind you.
 - Docs: a changed module updates its `docs/architecture/<Namespace>.md` entry (run
-  `.\CheckDocEntries.ps1`); a new verification rule goes in `docs/verification.md` (mint the next
+  `.\scripts\CheckDocEntries.ps1`); a new verification rule goes in `docs/verification.md` (mint the next
   number from your tree; the orchestrator renumbers collisions); a new CLI flag updates
-  `docs/cli.md`. Run `.\CheckEncoding.ps1`, `.\CheckItemIds.ps1` and `.\CheckUidSidecars.ps1`
+  `docs/cli.md`. Run `.\scripts\CheckEncoding.ps1`, `.\scripts\CheckItemIds.ps1` and `.\scripts\CheckUidSidecars.ps1`
   before you finish; the last prints the import that writes a missing `.uid`.
 - NEVER write to the tracker: no `gh issue create`, `comment`, `edit` or `close`. `gh issue view`
   and `gh issue list` are fine. Anything you would post is written to a file beside your commit
@@ -53,13 +53,13 @@ time, and a queued, throttled run can then pass the 10-minute foreground cap. Ne
 while a run is live: a run still going when you report is orphaned, and nobody reads its result.
 Short commands (`dotnet build`, a self-test) stay in the foreground. Minimum before
 you report: `dotnet build CSVM/CSVM.sln` clean with zero warnings, `dotnet test` (or
-`.\RunTests.ps1 -UnitFilter ... -SkipEngine -SkipGoldens`), every engine suite you added or
-touched via `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens`, and `.\RunTests.ps1 -Quick`.
+`.\scripts\RunTests.ps1 -UnitFilter ... -SkipEngine -SkipGoldens`), every engine suite you added or
+touched via `.\scripts\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens`, and `.\scripts\RunTests.ps1 -Quick`.
 If your change can move a pinned golden (anything under `CSVM/src` that draws, spawns effects,
-changes pools or seeds), also run `.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only) and
+changes pools or seeds), also run `.\scripts\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only) and
 report which shots moved and why; re-pin with `-RegenGoldens` ONLY when the move is the intended
 effect, prove it by differencing against a render from HEAD's sources, and name the shots and the
-mechanism in your report. Do NOT run the complete `.\RunTests.ps1` battery; the orchestrator runs
+mechanism in your report. Do NOT run the complete `.\scripts\RunTests.ps1` battery; the orchestrator runs
 it on the merged tree.
 
 A red result is fixed, or proved not yours (red on your base commit without your change) and
@@ -67,7 +67,7 @@ waived: one line per failing suite in `commit.txt`,
 `Waiver: <suite> (owned by #N): <why the landing does not wait for it>`, naming the
 open item that owns the failure. When nothing owns it, write a `new-issue-*.md` for it, leave the
 waiver out of `commit.txt` and give the line in your report with `#NEW` as the owner; the
-orchestrator files the issue and writes the line with its number. Check the form with `.\CheckWaiver.ps1 -MessageFile <commit.txt>
+orchestrator files the issue and writes the line with its number. Check the form with `.\scripts\CheckWaiver.ps1 -MessageFile <commit.txt>
 -Root <your worktree>`. The orchestrator refuses a red result without one, and a waiver never
 covers a failure your change caused.
 
@@ -83,7 +83,7 @@ and its waiver names the owner listed there.
 
 Never launch Godot or the game so that a window appears on the user's screen, and never
 `Start-Process` anything. Every engine run, capture and golden render goes through
-`.\RunTests.ps1` (hidden desktop `csvm-tests`) or `.\RunProbe.ps1`, or a launcher flag that renders
+`.\scripts\RunTests.ps1` (hidden desktop `csvm-tests`) or `.\scripts\RunProbe.ps1`, or a launcher flag that renders
 headless or on that desktop. A one-off capture those cannot take is described in your report, not
 taken. Every `--campaign=` probe also passes `--profiles=<dir>`, the ABSOLUTE path of a store inside
 your worktree's `.scratch\` (seed it with `CampaignProfileStore.Save`, or copy a profile folder into it;

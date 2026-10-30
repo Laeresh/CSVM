@@ -1,7 +1,7 @@
 # The job object's self-test. The code is JobObjectCore.ps1, which the runners dot-source (through
 # HiddenDesktop.ps1); see docs/tooling.md.
 #
-#   .\JobObject.ps1 -SelfTest   closing the job kills a member and the member's own child
+#   .\scripts\JobObject.ps1 -SelfTest   closing the job kills a member and the member's own child
 
 param([switch]$SelfTest)
 

@@ -13,12 +13,12 @@
 # Pure ASCII on purpose (PROJECT_CONTEXT.md). Files are READ only; nothing here writes.
 #
 # Usage:
-#   ./CheckUidSidecars.ps1                 this tree
-#   ./CheckUidSidecars.ps1 -Root <path>    another worktree
+#   ./scripts/CheckUidSidecars.ps1                 this tree
+#   ./scripts/CheckUidSidecars.ps1 -Root <path>    another worktree
 [CmdletBinding()]
 param([string]$Root)
 
-if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 if (-not $Root) { $Root = (Get-Location).Path }
 
 # Tracked plus untracked-not-ignored: the files a commit from this tree could carry. A tracked file

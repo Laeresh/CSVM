@@ -30,17 +30,17 @@
     Re-download even when the installed files already match the pins.
 
 .EXAMPLE
-    .\InstallSdl2.ps1
+    .\scripts\InstallSdl2.ps1
     Fetch SDL2 2.32.10 into tools\sdl2\ of this tree, or report that it is already there.
 
 .EXAMPLE
-    .\InstallSdl2.ps1 -Root Z:\CSVM -Verify
+    .\scripts\InstallSdl2.ps1 -Root Z:\CSVM -Verify
     Throw unless Z:\CSVM\tools\sdl2\ holds the pinned files.
 #>
 
 [CmdletBinding()]
 param(
-    [string]$Root = $PSScriptRoot,
+    [string]$Root = (Split-Path $PSScriptRoot -Parent),
     [switch]$Force,
     [switch]$Verify
 )
@@ -98,7 +98,7 @@ if ($Verify) {
     $bad = Get-Mismatches
     if ($bad.Count -gt 0) {
         throw "SDL2 $Version is not installed at $Sdl2Dir ($($bad -join ', ')) -- run " +
-            ".\InstallSdl2.ps1 -Root $Root."
+            ".\scripts\InstallSdl2.ps1 -Root $Root."
     }
     return Get-ReleaseFacts
 }

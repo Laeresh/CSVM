@@ -30,7 +30,7 @@ public static class TestData
     /// instead of ten whole cinemas says so rather than reading as the stronger check.</summary>
     public const string NoFullWalkReason =
         "the whole-file video walk is opt-in and costs about a minute: run "
-        + "$env:CSVM_MOVIE_WALK=1; .\\RunTests.ps1";
+        + "$env:CSVM_MOVIE_WALK=1; .\\scripts\\RunTests.ps1";
 
     // The one folder under the OS temp tree this suite ever writes to, so a sweep from outside
     // (CleanScratch.ps1) has a single name to look for.
@@ -75,11 +75,10 @@ public static class TestData
     public static string TempRoot { get; }
 
     /// <summary>Whether the whole-file video walk was asked for. Decoding all ten cinemas to the
-    /// last frame costs about a minute of the unit stage's 30 second budget, which is why it is
-    /// opt-in rather than on by default; what runs every time is the per-file header and prefix
-    /// check, which is what catches a file whose profile is not what this project thinks it is.
-    /// The opt-in is an environment variable rather than a test filter so that the ordinary
-    /// <c>.\RunTests.ps1</c> command still runs it once the caller has set the variable.</summary>
+    /// last frame costs about a minute of the unit stage's 30 second budget, so it is opt-in.
+    /// Every run still checks each file's header and prefix, which catches a file whose profile
+    /// is not what this project thinks it is. The opt-in is an environment variable, not a test
+    /// filter, so the ordinary <c>.\scripts\RunTests.ps1</c> runs it once the variable is set.</summary>
     public static bool FullMovieWalk { get; }
 
     /// <summary>Path of a committed fixture, e.g. <c>Fixture("zrdr")</c>.</summary>

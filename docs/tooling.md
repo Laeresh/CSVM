@@ -97,7 +97,7 @@ script`, the line a launch that met a swapped assembly prints before it sits unt
 Either one prints `DEFERRED: rebuild, <cause> ...`, closes the run's job, which kills every launch
 at once, and ends the run DEFERRED, exit 3: a stopped launch counts as never started, what finished
 before it is still judged, and later Godot stages are skipped. The shard-hash compare (METHOD-6)
-remains the proof after the fact. `.\RunTests.ps1 -SelfTest` checks the trigger against a scratch
+remains the proof after the fact. `.\scripts\RunTests.ps1 -SelfTest` checks the trigger against a scratch
 DLL and log without building. A red summary names `docs/verification.md`'s known environmental
 reds.
 
@@ -119,7 +119,7 @@ it finishes, and under another run's load it slows but keeps printing, where a h
 golden shot keeps a 300 s wall-time watchdog (`$GoldenWatchdogSec`), since it logs nothing while
 it renders its frames; the perf and hitch launches carry none. Gaming mode's `watchdogFactor`
 scales all three numbers alike. `Invoke-GodotPool` polls the log's length
-beside its rebuild check, and `.\RunTests.ps1 -SelfTest` drives the rule through the pool with
+beside its rebuild check, and `.\scripts\RunTests.ps1 -SelfTest` drives the rule through the pool with
 stand-in launches: one whose log keeps growing outlives the stall time, one that never writes is
 killed at it, and one that never stops writing is killed at the ceiling.
 
@@ -158,7 +158,7 @@ makes, so a decode that garbles the shipped value still goes red on the install.
 `engine` job in `.github/workflows/checks.yml` runs it on `ubuntu-latest` after `dotnet build
 CSVM/CSVM.sln` and one `<godot> --headless --path CSVM --import`, with Godot 4.7 .NET downloaded
 from the official release, checked against the release's `SHA512-SUMS.txt` and cached per release.
-A contributor runs those two commands and then `./RunCiSuites.ps1 -Godot <path to the mono build>`
+A contributor runs those two commands and then `./scripts/RunCiSuites.ps1 -Godot <path to the mono build>`
 (`-Selector` for another selector than `tier:ci`, `-NetPortBase`, `-TimeoutSec`). It starts one
 headless Godot with `CSVM_DATA_ROOT` at a fresh empty folder, `--synthetic-data` (so the run reads
 the invented tree written for its process id, and the report must name that root and
@@ -278,10 +278,10 @@ about 0.5 KB without it and 5.7 KB with it), so it is read only for a run that r
 clean run's load is its gaming mode, live reservations and CSVM Godots. At one battery an hour
 that is about 4 MB a year. Each line is written whole under a machine-wide mutex, so two batteries
 finishing at once neither lose nor interleave a line; an append that fails, or waits 30 s for the
-mutex, prints a warning and never decides the stage. **`.\GoldenLedger.ps1`** prints the ledger's
+mutex, prints a warning and never decides the stage. **`.\scripts\GoldenLedger.ps1`** prints the ledger's
 move, run and clean-run counts, then the moves grouped by shot, most recent first, with its counts
 per verdict, then its last moves (`-Recent N`, default 5), each with its region and its run's load
-(gaming mode, live reservations, CSVM Godots, GPU processes). `.\GoldenLedger.ps1 -SelfTest`
+(gaming mode, live reservations, CSVM Godots, GPU processes). `.\scripts\GoldenLedger.ps1 -SelfTest`
 checks the path and its fallback, the append from four concurrent writers, the mutex timeout, the
 shot lines and diff fields of every verdict, the clean-run count and the summary against a private
 file named by `CSVM_GOLDEN_LEDGER` (test-only). The code is `GoldenLedgerCore.ps1`, which takes no
@@ -328,7 +328,7 @@ dependency and `-SkipUnits`/`-SkipEngine` report `SKIP` at 0 with a `not checked
 data was not there" never reads as "the check held". `-RegenGoldens` reports `REGEN`, never `PASS`.
 
 **Worktrees.** Extracted data and Godot are both found through `CSVM_DATA_ROOT`, so
-`$env:CSVM_DATA_ROOT = 'Z:\CSVM'; .\RunTests.ps1` from a worktree behaves identically to the
+`$env:CSVM_DATA_ROOT = 'Z:\CSVM'; .\scripts\RunTests.ps1` from a worktree behaves identically to the
 primary tree; without it the engine stage reports `SKIP` with the path it looked at. The unit tests
 fall back to their own checkout, so a root holding no extraction skips the engine suites but *not*
 the data-dependent units. The original's own files are found the same way, as
@@ -793,7 +793,7 @@ window and never with the blender-mcp tools, which drive the user's live Blender
   draws the texture takes (a highlight's odds, a leaflet count) also moves the geometry, which shares
   the generator's random stream; check the printed size against the committed one.
 
-`.\MakeVegetationModel.ps1 -Species firtree1 [-Chapter C1] [-NoRender]` regenerates one species
+`.\scripts\MakeVegetationModel.ps1 -Species firtree1 [-Chapter C1] [-NoRender]` regenerates one species
 and its clump tiles, prints its triangle count, size, output paths and, with the renders, the
 tiles' mean colour, and leaves Blender's log in
 `.scratch/vegetation/<species>.log`. The card is read from `extracted/` under `CSVM_DATA_ROOT`,
@@ -947,7 +947,7 @@ via `EnumWindows` (SHELL-13). Every `RunTests.ps1` stage launches through its pr
 **`RunProbe.ps1`, the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
 both the window flash and the console scribble a bare `& $GodotExe …` sprays over the calling
 terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run, go through
-`.\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build
+`.\scripts\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build
 first), runs on its own hidden desktop (`csvm-probe`, falling back to a visible but still
 redirected run if the OS refuses one), parks the streams beside the run's `--log-file` or in
 `.scratch/logs/probe-<stamp>.out/.err`, and exits with Godot's code. **`-TimeoutSec`** (default
@@ -1000,7 +1000,7 @@ run on beside the next run.
   member, testhosts included. A limit is read, modified and written back, as `SetBreakaway` and
   `SetThrottle` (gaming mode's priority and affinity) do, because a plain write replaces every
   flag, the kill on close among them.
-- `.\JobObject.ps1 -SelfTest` toggles breakaway on and off, starts a child that starts a
+- `.\scripts\JobObject.ps1 -SelfTest` toggles breakaway on and off, starts a child that starts a
   grandchild, closes the job, and checks both are gone.
 
 ### The memory ledger: scripted launches queue instead of exhausting RAM
@@ -1076,13 +1076,13 @@ enough free.
   agent shell command that invokes `Godot_v4*.exe` directly and points at `RunProbe.ps1`. A
   mention of the name (`Get-Process`, `Test-Path`, a grep) passes, and so does an editor
   `--import`, which builds no session (`CheckUidSidecars.ps1`'s fix). `-SelfTest` runs its cases.
-- **`.\MemoryLedger.ps1 status`** prints the live reservations (pid, kind, current private bytes
+- **`.\scripts\MemoryLedger.ps1 status`** prints the live reservations (pid, kind, current private bytes
   against the estimate, worktree), the waiters, and the estimate per kind. A waiting launch prints
-  the same table once, then one line every 30 s. `.\MemoryLedger.ps1 -SelfTest` checks the
+  the same table once, then one line every 30 s. `.\scripts\MemoryLedger.ps1 -SelfTest` checks the
   admission rule, handle-held liveness across a killed holder, the empty-ledger progress rule and
   its floor, the estimate update and its seed floor, and that an `engine-shard` peak is recorded
   only when the caller marks the launch a full shard (`-LearnShardPeak`), against a private ledger
-  directory. `.\RunTests.ps1 -SelfTest` checks which shards of which plans are so marked.
+  directory. `.\scripts\RunTests.ps1 -SelfTest` checks which shards of which plans are so marked.
 - **Test-only overrides**, for proving admission on a shared machine: `CSVM_MEM_AVAILABLE_GB`
   replaces the machine's available memory with a simulated figure, less the private bytes of
   every live reservation, so the simulated machine fills as launches grow (the engine's floor

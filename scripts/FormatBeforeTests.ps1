@@ -27,10 +27,10 @@
 # Pure ASCII on purpose (PROJECT_CONTEXT.md). Exit code 2 blocks the tool call.
 #
 # Usage:
-#   <hook payload on stdin> | ./FormatBeforeTests.ps1
-#   ./FormatBeforeTests.ps1 -Command '.\RunTests.ps1 -Quick'
-#   ./FormatBeforeTests.ps1 -ShowRoot -Command '...'   which tree that command would build, if any
-#   ./FormatBeforeTests.ps1 -SelfTest                  exercise the trigger and tree resolution
+#   <hook payload on stdin> | ./scripts/FormatBeforeTests.ps1
+#   ./scripts/FormatBeforeTests.ps1 -Command '.\scripts\RunTests.ps1 -Quick'
+#   ./scripts/FormatBeforeTests.ps1 -ShowRoot -Command '...'   which tree that command would build
+#   ./scripts/FormatBeforeTests.ps1 -SelfTest                  exercise the trigger and tree resolution
 [CmdletBinding()]
 param(
     [string]$Command,
@@ -134,6 +134,8 @@ function Invoke-SelfTest {
             New-Item -ItemType Directory -Path $d -Force | Out-Null
             git -C $d init -q 2>&1 | Out-Null
             [IO.File]::WriteAllText((Join-Path $d 'RunTests.ps1'), 'exit 0', (New-Object System.Text.UTF8Encoding($false)))
+            New-Item -ItemType Directory -Path (Join-Path $d 'scripts') -Force | Out-Null
+            [IO.File]::WriteAllText((Join-Path $d 'scripts/RunTests.ps1'), 'exit 0', (New-Object System.Text.UTF8Encoding($false)))
         }
         # macOS's temp folder sits behind the /var -> /private/var link and git reports the
         # physical path, so the expected trees are taken from git's own spelling.
@@ -160,6 +162,12 @@ function Invoke-SelfTest {
         Assert-Fires 'runner   after an unrelated first segment' 'Get-Date; .\RunTests.ps1 -Suite c1' 'runner'
         Assert-Fires 'runner   an absolute path' ($other + '\RunTests.ps1 -Quick') 'runner'
         Assert-Fires 'runner   with -SkipUnits' '.\RunTests.ps1 -Suite c1 -SkipUnits -SkipGoldens' 'runner'
+        # The runner lives in scripts\; a tree branched before the move still has it at its root.
+        Assert-Fires 'runner   .\scripts\RunTests.ps1 -Quick' '.\scripts\RunTests.ps1 -Quick' 'runner'
+        Assert-Fires 'runner   scripts\RunTests.ps1' 'scripts\RunTests.ps1' 'runner'
+        Assert-Fires 'runner   ./scripts/RunTests.ps1' './scripts/RunTests.ps1 -Quick' 'runner'
+        Assert-Fires 'runner   an absolute scripts\ path' ($other + '\scripts\RunTests.ps1 -Quick') 'runner'
+        Assert-Fires 'mention  Get-Content .\scripts\RunTests.ps1' 'Get-Content .\scripts\RunTests.ps1' ''
         Assert-Fires 'test     dotnet test CSVM.Tests' 'dotnet test CSVM.Tests' 'test'
         Assert-Fires 'commit   git commit -m x' 'git commit -m x' 'commit'
         Assert-Fires 'commit   git -C wt commit -F msg.txt' ('git -C ' + $other + ' commit -F msg.txt') 'commit'
@@ -195,6 +203,12 @@ function Invoke-SelfTest {
         # the invocation names it, the process directory is last.
         $r1 = Get-TargetRoot -CommandLine ($other + '\RunTests.ps1 -Quick') -From $main
         Assert-Row 'tree     an absolute runner path names its own tree' ($r1 -ieq $other)
+        $r1b = Get-TargetRoot -CommandLine ($other + '\scripts\RunTests.ps1 -Quick') -From $main
+        Assert-Row 'tree     an absolute scripts\ runner names the tree above scripts\' ($r1b -ieq $other)
+        $r1c = Get-TargetRoot -CommandLine '.\scripts\RunTests.ps1 -Quick' -From $main
+        Assert-Row 'tree     a relative scripts\ runner names the process directory' ($r1c -ieq $main)
+        $r1d = Get-TargetRoot -CommandLine ('Set-Location ' + $other + '; .\scripts\RunTests.ps1 -Quick') -From $main
+        Assert-Row 'tree     a scripts\ runner after a Set-Location names the tree moved to' ($r1d -ieq $other)
         $r2 = Get-TargetRoot -CommandLine ('git -C ' + $other + ' commit -m x') -From $main
         Assert-Row 'tree     git -C names the commit tree' ($r2 -ieq $other)
         $r3 = Get-TargetRoot -CommandLine ('git -C "' + $other + '" rev-parse --show-toplevel; .\RunTests.ps1 -Quick') -From $main
@@ -261,15 +275,16 @@ function Invoke-SelfTest {
         Assert-Row 'entry    an unresolved variable on a non-invocation passes' ($LASTEXITCODE -eq 0)
 
         # Each harness states the hook's timeout; .claude/settings.json is the one the others follow.
-        $claude = @((Get-Content -Raw -LiteralPath (Join-Path $scriptRoot '.claude/settings.json') | ConvertFrom-Json).hooks.PreToolUse.hooks)
+        $repoRoot = Split-Path $scriptRoot -Parent
+        $claude = @((Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.claude/settings.json') | ConvertFrom-Json).hooks.PreToolUse.hooks)
         $formatSec = [int]@($claude | Where-Object { $_.command -like '*FormatBeforeTests.ps1*' })[0].timeout
         $contentSec = [int]@($claude | Where-Object { $_.command -like '*CheckCommitContent.ps1*' })[0].timeout
-        $piText = Get-Content -Raw -LiteralPath (Join-Path $scriptRoot '.pi/extensions/hooks.ts')
+        $piText = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.pi/extensions/hooks.ts')
         $pi = [regex]::Match($piText, '/FormatBeforeTests\.ps1`[\s\S]*?timeout:\s*(\d+)')
         Assert-Row ('timeout  .pi gives the format gate the Claude hook''s ' + $formatSec + ' s') ($formatSec -gt 0 -and $pi.Success -and [int64]$pi.Groups[1].Value -eq $formatSec * 1000)
         $pi = [regex]::Match($piText, '/CheckCommitContent\.ps1`[\s\S]*?timeout:\s*(\d+)')
         Assert-Row ('timeout  .pi gives the content gate the Claude hook''s ' + $contentSec + ' s') ($contentSec -gt 0 -and $pi.Success -and [int64]$pi.Groups[1].Value -eq $contentSec * 1000)
-        $codexSec = [int](Get-Content -Raw -LiteralPath (Join-Path $scriptRoot '.codex/hooks.json') | ConvertFrom-Json).hooks.PreToolUse[0].hooks[0].timeout
+        $codexSec = [int](Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.codex/hooks.json') | ConvertFrom-Json).hooks.PreToolUse[0].hooks[0].timeout
         Assert-Row ('timeout  .codex''s one hook (' + $codexSec + ' s) covers the format and content gates') ($contentSec -gt 0 -and $codexSec -ge $formatSec + $contentSec)
     }
     finally {

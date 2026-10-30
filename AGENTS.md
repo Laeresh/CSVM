@@ -5,7 +5,7 @@ architecture decisions, repo layout, the Godot project + CLI reference, coding c
 the "Current status" pointer. This file holds only what's specific to agent tooling that isn't
 Claude Code (see [`CLAUDE.md`](CLAUDE.md) for that).
 
-Follow PROJECT_CONTEXT.md's "Development verification loop"; the complete `.\RunTests.ps1` is the
+Follow PROJECT_CONTEXT.md's "Development verification loop"; the complete `.\scripts\RunTests.ps1` is the
 landing gate for any change under `CSVM/`.
 
 ## Agent tooling specifics

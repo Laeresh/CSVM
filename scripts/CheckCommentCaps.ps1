@@ -22,14 +22,14 @@
 # script before it runs. Files are READ only; nothing here writes.
 #
 # Usage:
-#   ./CheckCommentCaps.ps1                 the whole scope
-#   ./CheckCommentCaps.ps1 -Summary        one line per file, worst first
-#   ./CheckCommentCaps.ps1 -Root <path>    another worktree, with this copy's rules
-#   ./CheckCommentCaps.ps1 -Against <ref>  sentence scope is what changed since <ref> (CI: the PR base)
-#   ./CheckCommentCaps.ps1 a.cs b.cs       just these files
-#   ./CheckCommentCaps.ps1 -Edited a.cs    the gate's verdict on just these files: sentence caps
+#   ./scripts/CheckCommentCaps.ps1                 the whole scope
+#   ./scripts/CheckCommentCaps.ps1 -Summary        one line per file, worst first
+#   ./scripts/CheckCommentCaps.ps1 -Root <path>    another worktree, with this copy's rules
+#   ./scripts/CheckCommentCaps.ps1 -Against <ref>  sentence scope is what changed since <ref> (CI: the PR base)
+#   ./scripts/CheckCommentCaps.ps1 a.cs b.cs       just these files
+#   ./scripts/CheckCommentCaps.ps1 -Edited a.cs    the gate's verdict on just these files: sentence caps
 #                                          on their changed blocks only
-#   <hook payload on stdin> | ./CheckCommentCaps.ps1 -Hook
+#   <hook payload on stdin> | ./scripts/CheckCommentCaps.ps1 -Hook
 #                                          -Edited on the file an Edit/Write touched, in that
 #                                          file's own tree; exit 2 with the findings on stderr
 # PositionalBinding off: with it on, a bare file argument binds to -Root, the scan then finds no
@@ -74,7 +74,7 @@ $labels = @{
 # copy's rules apply to all of them. Without it, $PSScriptRoot names the worktree this file lives
 # in regardless of the caller's cwd; a git-rev-parse-on-cwd root scanned whatever worktree the
 # caller happened to be sitting in.
-if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 if (-not $Root) { $Root = git rev-parse --show-toplevel 2>$null }
 if (-not $Root) { $Root = (Get-Location).Path }
 # A git path joined with a hardcoded backslash names nothing on macOS or Linux, and a file that is

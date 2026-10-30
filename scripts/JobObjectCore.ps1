@@ -1,6 +1,6 @@
 # Holds every child a runner starts in one Windows job object that kills its members when its last
 # handle closes. Dot-sourced by RunTests.ps1 and RunProbe.ps1 (through HiddenDesktop.ps1); it takes
-# no parameters, so dot-sourcing binds nothing in the caller. `.\JobObject.ps1 -SelfTest` checks the
+# no parameters, so dot-sourcing binds nothing in the caller. `.\scripts\JobObject.ps1 -SelfTest` checks the
 # kill on close end to end; see docs/tooling.md.
 #
 # Why this exists: the runner's PowerShell is the only thing that waits on its children, so without

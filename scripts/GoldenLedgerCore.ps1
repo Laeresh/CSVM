@@ -21,7 +21,7 @@
 # private file with it. A tree git cannot resolve falls back to its own root, which goes with a
 # worktree, so the fallback warns.
 function Get-GoldenLedgerPath {
-    param([string]$Root = $PSScriptRoot)
+    param([string]$Root = (Split-Path $PSScriptRoot -Parent))
     if ($env:CSVM_GOLDEN_LEDGER) { return $env:CSVM_GOLDEN_LEDGER }
     $common = $null
     $saved = $ErrorActionPreference

@@ -101,24 +101,24 @@
     Skip the confirmation prompt.
 
 .EXAMPLE
-    .\CleanScratch.ps1 -WhatIf
+    .\scripts\CleanScratch.ps1 -WhatIf
     List exactly what would be deleted, delete nothing.
 
 .EXAMPLE
-    .\CleanScratch.ps1
+    .\scripts\CleanScratch.ps1
     Sweep probe artifacts and finished worktrees, keep backups, ask once first.
 
 .EXAMPLE
-    .\CleanScratch.ps1 -OlderThanDays 7 -Force
+    .\scripts\CleanScratch.ps1 -OlderThanDays 7 -Force
     Unattended weekly sweep: drop artifacts older than a week, no prompt.
 
 .EXAMPLE
-    .\CleanScratch.ps1 -PruneBranches -Force
+    .\scripts\CleanScratch.ps1 -PruneBranches -Force
     Full tidy after a finished plan: artifacts, worktrees, and the merged
     branches they leave behind.
 
 .EXAMPLE
-    .\CleanScratch.ps1 -SkipWorktrees -Keep 'reference_*.png' -Force
+    .\scripts\CleanScratch.ps1 -SkipWorktrees -Keep 'reference_*.png' -Force
     Sweep only .scratch/, except probe captures you are still comparing against.
 #>
 
@@ -139,8 +139,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$ScratchDir   = Join-Path $PSScriptRoot ".scratch"
-$WorktreeRoot = Join-Path $PSScriptRoot ".claude\worktrees"
+$RepoRoot     = Split-Path $PSScriptRoot -Parent
+$ScratchDir   = Join-Path $RepoRoot ".scratch"
+$WorktreeRoot = Join-Path $RepoRoot ".claude\worktrees"
 $TestTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-tests"
 
 # Backups parked in .scratch/ are safety nets, not probe output. Protected unless asked for.
@@ -297,12 +298,12 @@ $wtSpared  = [System.Collections.Generic.List[object]]::new()
 $isGitRepo = $false
 
 if (-not $SkipWorktrees) {
-    $null = & git -C $PSScriptRoot rev-parse --git-dir 2>$null
+    $null = & git -C $RepoRoot rev-parse --git-dir 2>$null
     $isGitRepo = ($LASTEXITCODE -eq 0)
 }
 
 if ($isGitRepo) {
-    $porcelain = @(& git -C $PSScriptRoot worktree list --porcelain)
+    $porcelain = @(& git -C $RepoRoot worktree list --porcelain)
     $wtAll     = [System.Collections.Generic.List[object]]::new()
     $current   = $null
     foreach ($line in $porcelain) {
@@ -326,7 +327,7 @@ if ($isGitRepo) {
         # Only ever the agent worktrees. Never the main checkout, never the one
         # this script is running from.
         if ($full -notlike "$WorktreeRoot*") { continue }
-        if ($full -eq [System.IO.Path]::GetFullPath($PSScriptRoot)) { continue }
+        if ($full -eq [System.IO.Path]::GetFullPath($RepoRoot)) { continue }
 
         $exists = Test-Path $w.Path
         $dirty  = $false
@@ -401,8 +402,8 @@ if ($PruneBranches -and $isGitRepo) {
         if ($s.WT.Branch) { $heldByKept[$s.WT.Branch] = $true }
     }
 
-    $currentBranch = (& git -C $PSScriptRoot rev-parse --abbrev-ref HEAD)
-    foreach ($line in @(& git -C $PSScriptRoot branch --merged main)) {
+    $currentBranch = (& git -C $RepoRoot rev-parse --abbrev-ref HEAD)
+    foreach ($line in @(& git -C $RepoRoot branch --merged main)) {
         $b = $line.TrimStart('*', '+', ' ').Trim()
         if (-not $b)                     { continue }
         if ($b -eq 'main')               { continue }
@@ -605,7 +606,7 @@ foreach ($d in $wtDoomed) {
             Write-Warning "Skipping worktree ${name}: junction(s) still in place."
             continue
         }
-        $args = @('-C', $PSScriptRoot, 'worktree', 'remove', $d.WT.Path)
+        $args = @('-C', $RepoRoot, 'worktree', 'remove', $d.WT.Path)
         if ($d.Dirty) { $args += '--force' }
         $out = & git @args
         if ($LASTEXITCODE -ne 0) {
@@ -618,7 +619,7 @@ foreach ($d in $wtDoomed) {
 }
 
 if ($isGitRepo -and -not $WhatIfPreference) {
-    $null = & git -C $PSScriptRoot worktree prune
+    $null = & git -C $RepoRoot worktree prune
 }
 
 # --- Delete the merged branches --------------------------------------------
@@ -628,10 +629,10 @@ $brDeleted = 0
 $brKept    = [System.Collections.Generic.List[string]]::new()
 
 foreach ($b in $brDoomed) {
-    $null = & git -C $PSScriptRoot rev-parse --verify --quiet "refs/heads/$b"
+    $null = & git -C $RepoRoot rev-parse --verify --quiet "refs/heads/$b"
     if ($LASTEXITCODE -ne 0) { continue }
     if (-not $PSCmdlet.ShouldProcess($b, "Delete branch")) { continue }
-    $out = & git -C $PSScriptRoot branch -d $b
+    $out = & git -C $RepoRoot branch -d $b
     if ($LASTEXITCODE -eq 0) {
         $brDeleted++
     } else {
@@ -644,7 +645,7 @@ foreach ($b in $brDoomed) {
 # asked for -- reported so they do not accumulate unnoticed.
 if (-not $PruneBranches -and $wtBranches.Count -gt 0) {
     foreach ($b in $wtBranches) {
-        $null = & git -C $PSScriptRoot rev-parse --verify --quiet "refs/heads/$b"
+        $null = & git -C $RepoRoot rev-parse --verify --quiet "refs/heads/$b"
         if ($LASTEXITCODE -eq 0) { $brKept.Add($b) }
     }
 }

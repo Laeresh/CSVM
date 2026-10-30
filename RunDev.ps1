@@ -237,7 +237,7 @@ $OutFile = Join-Path $LogDir "game-$Stamp.out"
 $ErrFile = Join-Path $LogDir "game-$Stamp.err"
 # A launch that drives and ends itself is admitted against the machine-wide memory ledger first;
 # interactive play neither waits nor registers (MemoryLedgerCore.ps1).
-. (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
+. (Join-Path $PSScriptRoot "scripts\MemoryLedgerCore.ps1")
 $Reservation = Request-MemLaunch -GodotArgs $UserArgs -Label "game" -Worktree $RepoRoot
 $proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
     -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
