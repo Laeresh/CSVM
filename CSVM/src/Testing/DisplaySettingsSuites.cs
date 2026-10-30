@@ -44,6 +44,7 @@ internal static class DisplaySettingsSuites
         ("AutoHeadTurn", true, false),
         ("LeadingAimAssist", true, false),
         ("LeadMarker", true, false),
+        ("ThrottlePlate", true, false),
         ("RocketCraters", true, false),
         ("CockpitEnginePitch", false, false),
         ("FlightTextBlock", true, false),

@@ -3011,6 +3011,7 @@ public partial class FlightController : Node3D
             HeadingDeg = headingDeg,
             SpeedMps = _model.Speed,
             Throttle = _model.Throttle,
+            ThrottleCommand = _throttleSetting,
             Crashed = Crashed,
             Held = _held,
             Halted = halted,

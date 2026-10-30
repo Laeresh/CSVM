@@ -178,6 +178,10 @@ public sealed class OptionsDef
     /// (<c>TargetHud</c>'s lead marker). Null is never set, which reads as off.</summary>
     public bool? LeadMarker { get; set; }
 
+    /// <summary>Whether the flight HUD draws the throttle plate beside the speedometer
+    /// (<c>ThrottlePlate</c>). Null is never set, which reads as off.</summary>
+    public bool? ThrottlePlate { get; set; }
+
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
     /// screen with that index is plugged in can only be answered by a caller holding an engine,
@@ -381,6 +385,7 @@ public sealed class OptionsStore
             WriteFlag(w, "autoHeadTurn", def.AutoHeadTurn);
             WriteFlag(w, "leadingAimAssist", def.LeadingAimAssist);
             WriteFlag(w, "leadMarker", def.LeadMarker);
+            WriteFlag(w, "throttlePlate", def.ThrottlePlate);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -466,6 +471,7 @@ public sealed class OptionsStore
                 AutoHeadTurn = ReadFlag(root, "autoHeadTurn"),
                 LeadingAimAssist = ReadFlag(root, "leadingAimAssist"),
                 LeadMarker = ReadFlag(root, "leadMarker"),
+                ThrottlePlate = ReadFlag(root, "throttlePlate"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),

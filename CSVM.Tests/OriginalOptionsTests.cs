@@ -120,6 +120,13 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.True(host.Module.GameOptions.LeadMarkerChoice);
 
+        // The remake-only throttle plate, off while nothing is saved.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.ThrottlePlateKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.ThrottlePlateChoice);
+        Accept(host);
+        Assert.True(host.Module.GameOptions.ThrottlePlateChoice);
+
         // The remake-only Modding Folder row, Off while nothing is saved and nothing is offered.
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.ModFolderKey, host.FocusedKey);
@@ -131,6 +138,7 @@ public class OriginalOptionsTests
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.True(exit.LeadingAimAssist);
         Assert.True(exit.LeadMarker);
+        Assert.True(exit.ThrottlePlate);
         Assert.True(exit.NearestAfterKill);
         Assert.True(exit.Rumble);
         Assert.Equal("cockpit", exit.DefaultView);
@@ -951,13 +959,14 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // Eight option rows, none of them a menu presentation: the command line alone picks one.
+        // Nine option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey, OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
-                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey, OriginalGameOptionsPage.ModFolderKey,
+                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
@@ -1579,13 +1588,14 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey,
                 OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
-                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey, OriginalGameOptionsPage.ModFolderKey,
+                OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
             },
             rows.Select(r => r.Key));
-        // Four rows stand in the window at a time, one to a frame, the four below it unseen until it scrolls.
+        // Four rows stand in the window at a time, one to a frame, the five below it unseen until it scrolls.
         RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
         for (int i = 0; i < 4; i++)
         {

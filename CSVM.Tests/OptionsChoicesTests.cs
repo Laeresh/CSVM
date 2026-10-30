@@ -83,6 +83,7 @@ public class OptionsChoicesTests
             VrVignette = VrVignetteSetting.Words[^1],
             LeadingAimAssist = true,
             LeadMarker = false,
+            ThrottlePlate = true,
         };
         foreach (var setting in WordSettings.All)
         {
@@ -96,7 +97,7 @@ public class OptionsChoicesTests
                 saved.DisplayMode, saved.VSync, saved.AudioMaster, saved.AudioMusic, saved.AudioEffects,
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
                 saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette,
-                saved.LeadingAimAssist, saved.LeadMarker),
+                saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate),
             choices.ToExit());
 
         choices.Load(null);

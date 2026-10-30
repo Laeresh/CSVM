@@ -342,6 +342,7 @@ public sealed partial class PausePreferences : Control
                 seat.AutoHeadTurn = applied.AutoHeadTurn;
                 seat.LeadingAimAssist = applied.LeadingAimAssist == true;
                 seat.LeadMarker = applied.LeadMarker == true;
+                seat.PilotHud.SetThrottlePlateShown(applied.ThrottlePlate == true);
                 if (seat.Targeting is { } targeting)
                 {
                     targeting.NearestAfterKill = applied.NearestAfterKill == true;

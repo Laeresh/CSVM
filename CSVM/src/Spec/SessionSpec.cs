@@ -644,6 +644,14 @@ public sealed record SessionSpec
     /// <summary>True when <c>--lead-marker</c> was given, which outranks the saved value.</summary>
     public bool LeadMarkerExplicit { get; private set; }
 
+    /// <summary><c>--throttle-plate</c>, or the saved switch (<see cref="WithSavedThrottlePlate"/>):
+    /// every human pane draws the commanded lever beside the speedometer
+    /// (<see cref="Flight.Hud.ThrottlePlate"/>). Off by default.</summary>
+    public bool ThrottlePlate { get; private set; }
+
+    /// <summary>True when <c>--throttle-plate</c> was given, which outranks the saved value.</summary>
+    public bool ThrottlePlateExplicit { get; private set; }
+
     /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist, every spawned AI mode
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
@@ -1611,6 +1619,7 @@ public sealed record SessionSpec
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--leading-assist") { s.LeadingAimAssist = s.LeadingAimAssistExplicit = true; }
             else if (arg == "--lead-marker") { s.LeadMarker = s.LeadMarkerExplicit = true; }
+            else if (arg == "--throttle-plate") { s.ThrottlePlate = s.ThrottlePlateExplicit = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }
             else if (arg.StartsWith("--target=")) { s.TargetSelect = arg["--target=".Length..].Trim(); }
@@ -2125,6 +2134,11 @@ public sealed record SessionSpec
     /// <c>--lead-marker</c> as the flag.</summary>
     public SessionSpec WithSavedLeadMarker(bool? saved) =>
         LeadMarkerExplicit || Det || saved is not { } on ? this : this with { LeadMarker = on };
+
+    /// <summary>The saved throttle plate folded in, on <see cref="WithSavedLeadingAimAssist"/>'s rules
+    /// with <c>--throttle-plate</c> as the flag. A <c>--det</c> run, and so every golden, draws none.</summary>
+    public SessionSpec WithSavedThrottlePlate(bool? saved) =>
+        ThrottlePlateExplicit || Det || saved is not { } on ? this : this with { ThrottlePlate = on };
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>

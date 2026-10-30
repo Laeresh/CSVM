@@ -46,6 +46,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The page's lead marker checkbox, a remake-only row.</summary>
     public const string LeadMarkerKey = "LEADMARKER";
 
+    /// <summary>The page's throttle plate checkbox, a remake-only row.</summary>
+    public const string ThrottlePlateKey = "THROTTLEPLATE";
+
     /// <summary>The page's Modding Folder dropdown, a remake-only row: Off, or a folder of unzbd
     /// output read from the next start (<c>Spec.ModdingFolder</c>).</summary>
     public const string ModFolderKey = "MODFOLDER";
@@ -170,6 +173,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Radio, _ => SwitchWords,
             c => c.LeadMarkerOn ? 1 : 0,
             (c, i) => c.LeadMarker = i == 1),
+        new(ThrottlePlateKey, "Throttle Plate",
+            _ => "Show the throttle lever beside the speedometer.",
+            OriginalRowKind.Radio, _ => SwitchWords,
+            c => c.ThrottlePlateOn ? 1 : 0,
+            (c, i) => c.ThrottlePlate = i == 1),
         new(ModFolderKey, "Modding Folder", ModFolderDescription,
             OriginalRowKind.Dropdown, ModFolderWords,
             c => c.ModFolder is { } folder ? 1 + IndexOfFolder(c.ModFolders, folder) : 0,
@@ -232,6 +240,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The lead marker the page would apply, null while never set.</summary>
     public bool? LeadMarkerChoice => _choices.LeadMarker;
+
+    /// <summary>The throttle plate the page would apply, null while never set.</summary>
+    public bool? ThrottlePlateChoice => _choices.ThrottlePlate;
 
     /// <summary>The modding folder the page would apply, null for none.</summary>
     public string? ModFolderChoice => _choices.ModFolder;

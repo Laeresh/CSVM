@@ -514,6 +514,10 @@ internal sealed class HumanFlightAdapter
                     Log.Info("flight", $"gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
             }
 
+            // Built for every pilot pane so the Game Options box can show it mid-flight.
+            pilotHud.ThrottlePlate = ThrottlePlate.Build();
+            pilotHud.SetThrottlePlateShown(_policy.ThrottlePlate);
+
             // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
             // and a 4P pane can be compared (--hud-font-test). Set before the controller
             // enters the tree, its _Ready adds this to the HUD canvas.

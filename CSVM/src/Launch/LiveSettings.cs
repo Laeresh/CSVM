@@ -159,6 +159,7 @@ internal sealed class LiveSettings
         options.AutoHeadTurn = applied.AutoHeadTurn;
         options.LeadingAimAssist = applied.LeadingAimAssist;
         options.LeadMarker = applied.LeadMarker;
+        options.ThrottlePlate = applied.ThrottlePlate;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;

@@ -63,6 +63,10 @@ internal sealed class FlightRosterPolicy
 
     /// <summary>The lead marker (<see cref="FlightController.LeadMarker"/>), off by default.</summary>
     public bool LeadMarker { get; init; }
+
+    /// <summary>The throttle plate beside the speedometer (<see cref="FlightHud.ThrottlePlate"/>),
+    /// off by default.</summary>
+    public bool ThrottlePlate { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
@@ -131,6 +135,7 @@ internal sealed class FlightRosterPolicy
         AutoHeadTurn = spec.AutoHeadTurn,
         LeadingAimAssist = spec.LeadingAimAssist,
         LeadMarker = spec.LeadMarker,
+        ThrottlePlate = spec.ThrottlePlate,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,
