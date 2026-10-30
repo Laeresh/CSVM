@@ -232,10 +232,6 @@ public sealed class OptionsDef
     /// keeping or deleting it, so it is asked once (<c>UI.Screens.SourceFlow</c>).</summary>
     public bool? ExtractedPromptAnswered { get; set; }
 
-    /// <summary>Whether the player was told that the game files hold no patch archive, which is
-    /// said once (<c>UI.Screens.SourceFlow</c>).</summary>
-    public bool? PatchNoteShown { get; set; }
-
     /// <summary>The modding folder of unzbd output a launch reads (<c>Spec.ModdingFolder</c>), fully
     /// qualified; null reads none. Game Options' Modding Folder row sets it and
     /// <c>--mod-folder=</c> beats it. Never read under <c>--det</c>.</summary>
@@ -401,7 +397,6 @@ public sealed class OptionsStore
             WriteLevel(w, "audioVoice", def.AudioVoice);
             Write(w, "installPath", def.InstallPath);
             WriteFlag(w, "extractedPromptAnswered", def.ExtractedPromptAnswered);
-            WriteFlag(w, "patchNoteShown", def.PatchNoteShown);
             Write(w, "modFolder", def.ModFolder);
             Write(w, "netCallsign", def.NetCallsign);
             if (def.NetVoice is { } voice)
@@ -482,7 +477,6 @@ public sealed class OptionsStore
                 AudioVoice = ReadLevel(root, "audioVoice"),
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
                 ExtractedPromptAnswered = ReadFlag(root, "extractedPromptAnswered"),
-                PatchNoteShown = ReadFlag(root, "patchNoteShown"),
                 ModFolder = ReadShaped(root, "modFolder", Path.IsPathFullyQualified),
                 NetCallsign = ReadShaped(root, "netCallsign", static v => v.Length <= NameLimit),
                 NetVoice = root.TryGetProperty("netVoice", out var voice) && voice.ValueKind == JsonValueKind.Number

@@ -18,8 +18,8 @@ internal static class SourceScreenSuites
     [Suite("source-screen",
         "with no game files the picker view opens with Use these files focused, a non-install pick shows the "
         + "check's message, a temp install is taken and remembered, Copy shows the progress view with Cancel "
-        + "focused and the bar fed through the frame tick, the copy is the source handed back, a source "
-        + "without crimptch.rof notes it once with OK focused, and a second start with the same options is not asked again")]
+        + "focused, the frame tick hands the copy back as the source once, with no note about a missing "
+        + "crimptch.rof, and a second start with the same options is not asked again")]
     internal static void SourceScreen(TestContext ctx)
     {
         string root = Scratch(ctx);
@@ -56,19 +56,10 @@ internal static class SourceScreenSuites
                 ctx.Check(screen.Shown == SourceView.Copying && Focused(screen) == screen.Button("Cancel") && screen.Button("Quit") == null,
                     $"Copy shows the progress view with Cancel focused and no Quit ({string.Join(", ", screen.ButtonLabels)})");
                 pending?.Invoke();
-                ctx.Check(screen.BarValue == 0, $"the bar has not seen the copy before the frame tick ({screen.BarValue})");
+                ctx.Check(handbacks[0] == 0, $"nothing is handed back before the frame tick takes the finished copy ({handbacks[0]})");
                 screen._Process(0);
-                ctx.Check(Math.Abs(screen.BarValue - 100) < 0.01, $"the tick moves the bar to the finished copy ({screen.BarValue})");
-                ctx.Check(flow.Source?.Location == GameFileCopy.Target(data) && flow.Picked, $"and the copy is the source ({flow.Source?.Location}{(flow.Failure.Length > 0 ? "; " + flow.Failure : string.Empty)})");
-
-                ctx.Check(screen.Shown == SourceView.Patch && screen.BodyText.Contains("crimptch.rof", StringComparison.Ordinal),
-                    $"the copy holds no patch archive, which is noted ({screen.Shown})");
-                ctx.Check(Focused(screen) == screen.Button("OK"), $"with OK focused");
-                ctx.Check(handbacks[0] == 0, $"and no hand-back before it is read ({handbacks[0]})");
-                screen.Press("OK");
-                screen._Process(0);
-                ctx.Check(handbacks[0] == 1, $"OK hands back to the launcher once ({handbacks[0]})");
-                ctx.Check(store.Load().PatchNoteShown == true, $"and the note is remembered");
+                ctx.Check(flow.Source?.Location == GameFileCopy.Target(data) && flow.Picked, $"the tick takes the copy as the source ({flow.Source?.Location}{(flow.Failure.Length > 0 ? "; " + flow.Failure : string.Empty)})");
+                ctx.Check(handbacks[0] == 1, $"and hands back to the launcher once, the copy holding no patch archive ({handbacks[0]})");
                 ctx.Check(new SourceFlow(data, flow.Source, string.Empty, store, ask: true).View == SourceView.Done,
                     $"so the next start with those game files asks nothing");
             }
@@ -92,7 +83,7 @@ internal static class SourceScreenSuites
         string root = Scratch(ctx);
         try
         {
-            var source = new InstallFolderSource(Install(root, patched: true));
+            var source = new InstallFolderSource(Install(root));
             string data = Path.Combine(root, "data");
             string extracted = Path.Combine(data, SourceFlow.ExtractedFolder);
             Directory.CreateDirectory(Path.Combine(extracted, "C1"));
@@ -214,8 +205,8 @@ internal static class SourceScreenSuites
     private static string Scratch(TestContext ctx) =>
         Directory.CreateDirectory(Path.Combine(ctx.ScratchDir, "source-screen-" + Guid.NewGuid().ToString("N"))).FullName;
 
-    // An install layout with one chapter archive, and the patch archive only when asked for.
-    private static string Install(string root, bool patched = false)
+    // An install layout with one chapter archive and no patch archive.
+    private static string Install(string root)
     {
         string install = Path.Combine(root, "Crimson Skies");
         Directory.CreateDirectory(Path.Combine(install, "ZBD", "C1"));
@@ -223,11 +214,6 @@ internal static class SourceScreenSuites
         File.WriteAllText(Path.Combine(install, "ZBD", "planes.zbd"), "x");
         File.WriteAllText(Path.Combine(install, "ZBD", "C1", "gamez.zbd"), "x");
         File.WriteAllText(Path.Combine(install, "GOSDATA", "ASSETS", "crimson.rof"), "x");
-        if (patched)
-        {
-            File.WriteAllText(Path.Combine(install, "GOSDATA", "ASSETS", "crimptch.rof"), "x");
-        }
-
         return install;
     }
 

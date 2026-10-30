@@ -795,11 +795,12 @@ not read. A pad's A or a tap on the field raises `Utils/ScreenKeyboard.cs`.
 ## src/UI/Screens/SourceFlow.cs
 The game-file screen's engine-free state. `Validate` opens a pick through `GameFileSource.Open` or
 names why not (`InstallLocator.Check`'s message, or the image reader's). A pick is remembered and
-offers `GameFileCopy.Run`, never onto its own folder, asking before a replace. The questions asked
-once (`OptionsDef.ExtractedPromptAnswered`, `PatchNoteShown`, never in a scripted or `--det` run):
-keep or delete an old `extracted/`, never adopted, deleted after a second confirmation by
-`DeleteWithoutFollowingLinks`, which unlinks a junction and never enters it; and game files without
-`crimptch.rof`, naming where it goes. Workers run on a dedicated thread, crossing only through `Tick`.
+offers `GameFileCopy.Run`, never onto its own folder, asking before a replace. The question asked
+once (`OptionsDef.ExtractedPromptAnswered`, never in a scripted or `--det` run): keep or delete an
+old `extracted/`, never adopted, deleted after a second confirmation by
+`DeleteWithoutFollowingLinks`, which unlinks a junction and never enters it. A missing
+`crimptch.rof` is not asked about: its one member is a hangar script CSVM never runs. Workers run
+on a dedicated thread, crossing only through `Tick`.
 
 ## src/UI/Screens/InstallPicker.cs
 Godot's own `FileDialog` in folder mode over the whole file system, never the native dialog, so

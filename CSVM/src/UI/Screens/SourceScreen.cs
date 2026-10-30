@@ -10,8 +10,8 @@ namespace CSVM.UI.Screens;
 
 /// <summary>
 /// What the window shows instead of the menu while the game files are not settled. That is the
-/// picker when none were found and the optional copy into the data root. Then come the questions
-/// owed once, about an old <c>extracted</c> folder and a missing patch archive. The state and each view's words and
+/// picker when none were found and the optional copy into the data root. Then comes the question
+/// owed once, about an old <c>extracted</c> folder. The state and each view's words and
 /// buttons are <see cref="SourceFlow"/>'s. This lays them out and hands back to the launcher once
 /// the flow is done. Keyboard, pad, mouse and touch all drive it through Godot's own focus
 /// navigation; the folder and image picker is <see cref="InstallPicker"/>.
@@ -84,9 +84,6 @@ public sealed partial class SourceScreen : CanvasLayer
 
     /// <summary>Gets the notice under the field or the buttons.</summary>
     public string NoticeText => _notice.Visible ? _notice.Text : string.Empty;
-
-    /// <summary>Gets the progress bar's value, 0 to 100.</summary>
-    public double BarValue => _bar.Value;
 
     /// <summary>Gets the labels of the view's buttons, in order, Quit included.</summary>
     public IReadOnlyList<string> ButtonLabels => _buttons.Select(b => b.Text).ToList();

@@ -58,7 +58,6 @@ internal static class DisplaySettingsSuites
         ("AudioVoice", 25, false),
         ("InstallPath", Path.GetFullPath(Path.GetTempPath()), false),
         ("ExtractedPromptAnswered", true, false),
-        ("PatchNoteShown", true, false),
         ("ModFolder", Path.GetFullPath(Path.GetTempPath()), false),
         ("NetCallsign", "Laeresh", false),
         ("NetVoice", 5, false),

@@ -52,7 +52,7 @@ public class SourceFlowTests
     public void AnInstallAndADiscImageAreGameFilesAndARememberedImageIsLocated()
     {
         string root = TestData.TempDir();
-        string install = Install(root, patched: false);
+        string install = Install(root);
         Assert.Equal(Path.GetFullPath(install), SourceFlow.Validate("  \"" + install + "\"  ", out string? refusal)!.Location);
         Assert.Null(refusal);
 
@@ -64,10 +64,10 @@ public class SourceFlowTests
     }
 
     [Fact]
-    public void APickIsRememberedThenTheMissingPatchIsNotedOnce()
+    public void APickIsRememberedAndAMissingPatchIsNotAskedAbout()
     {
         string root = TestData.TempDir();
-        string install = Install(root, patched: false);
+        string install = Install(root);
         var store = new OptionsStore(Directory.CreateDirectory(Path.Combine(root, "user")).FullName);
         string data = Directory.CreateDirectory(Path.Combine(root, "data")).FullName;
         var flow = new SourceFlow(data, null, string.Empty, store, ask: true, work => work());
@@ -83,13 +83,9 @@ public class SourceFlowTests
         Assert.Equal(Path.GetFullPath(install), store.Load().InstallPath);
         Assert.Equal(new[] { "Play", "Copy, then play", "Choose others" }, flow.Choices.Select(c => c.Label));
 
+        // The install holds no crimptch.rof: its one script is one CSVM never runs, so Play asks nothing.
         Choose(flow, "Play");
-        Assert.Equal(SourceView.Patch, flow.View);
-        Assert.Contains(Path.Combine(install, "GOSDATA", "ASSETS"), flow.Body);
-        Assert.Equal(new[] { "OK" }, flow.Choices.Select(c => c.Label));
-        Choose(flow, "OK");
         Assert.Equal(SourceView.Done, flow.View);
-        Assert.True(store.Load().PatchNoteShown);
 
         var again = new SourceFlow(data, flow.Source, string.Empty, store, ask: true, work => work());
         Assert.Equal(SourceView.Done, again.View);
@@ -99,7 +95,7 @@ public class SourceFlowTests
     public void AnOldExtractionIsAskedAboutOnceAndKeptUntouched()
     {
         string root = TestData.TempDir();
-        var source = new InstallFolderSource(Install(root, patched: true));
+        var source = new InstallFolderSource(Install(root));
         string data = DataRootWithExtracted(root);
         var store = new OptionsStore(Directory.CreateDirectory(Path.Combine(root, "user")).FullName);
 
@@ -119,7 +115,7 @@ public class SourceFlowTests
     public void ADeleteIsConfirmedFirstAndWithoutAStoreIsAskedOncePerFlow()
     {
         string root = TestData.TempDir();
-        var source = new InstallFolderSource(Install(root, patched: true));
+        var source = new InstallFolderSource(Install(root));
         string data = DataRootWithExtracted(root);
         var flow = new SourceFlow(data, source, string.Empty, null, ask: true, work => work());
         Choose(flow, "Delete it...");
@@ -166,7 +162,7 @@ public class SourceFlowTests
     public void ACopyRebindsToTheCopyAndAnExistingTargetAsksFirst()
     {
         string root = TestData.TempDir();
-        string install = Install(root, patched: true);
+        string install = Install(root);
         string data = Directory.CreateDirectory(Path.Combine(root, "data")).FullName;
         var flow = new SourceFlow(data, null, install, null, ask: true, work => work());
         Assert.True(flow.Use());
@@ -193,20 +189,18 @@ public class SourceFlowTests
     }
 
     [Fact]
-    public void TheOnceFlagsRoundTripThroughTheOptionsFile()
+    public void TheOnceFlagRoundTripsThroughTheOptionsFile()
     {
-        var def = new OptionsDef { ExtractedPromptAnswered = true, PatchNoteShown = false };
-        var back = OptionsStore.Deserialize(OptionsStore.Serialize(def))!;
-        Assert.True(back.ExtractedPromptAnswered);
-        Assert.False(back.PatchNoteShown);
-        Assert.Null(OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef()))!.PatchNoteShown);
+        var def = new OptionsDef { ExtractedPromptAnswered = true };
+        Assert.True(OptionsStore.Deserialize(OptionsStore.Serialize(def))!.ExtractedPromptAnswered);
+        Assert.Null(OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef()))!.ExtractedPromptAnswered);
     }
 
     private static void Choose(SourceFlow flow, string label) =>
         flow.Choices.Single(c => c.Label == label).Press();
 
-    // An install layout with one chapter archive; the patch archive only when asked for.
-    private static string Install(string root, bool patched)
+    // An install layout with one chapter archive and no patch archive.
+    private static string Install(string root)
     {
         string install = Path.Combine(root, "Crimson Skies");
         Directory.CreateDirectory(Path.Combine(install, "ZBD", "C1"));
@@ -214,11 +208,6 @@ public class SourceFlowTests
         File.WriteAllText(Path.Combine(install, "ZBD", "planes.zbd"), "x");
         File.WriteAllText(Path.Combine(install, "ZBD", "C1", "gamez.zbd"), "x");
         File.WriteAllText(Path.Combine(install, "GOSDATA", "ASSETS", "crimson.rof"), "x");
-        if (patched)
-        {
-            File.WriteAllText(Path.Combine(install, "GOSDATA", "ASSETS", "crimptch.rof"), "x");
-        }
-
         return install;
     }
 
