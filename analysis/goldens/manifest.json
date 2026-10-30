@@ -148,7 +148,7 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "bb3885d1629bdab8249b2207bea673e1",
+      "hash": "7efa69c8f2f00db98bd4d44a7edbb216",
       "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean, calmed at the coast tiles, blurred SSR, Rich swaying conifers with sun shadows handing over to canopy clumps past 1 km, SSAO, settled TAA; frame-sensitive 24.09 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -169,14 +169,14 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "6d3c3c9f07edd2243d62f6553a7a0818",
+      "hash": "be2127ca74152e370fab7a19d610e3fc",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "f10d6a96956fd4f9db7d7467fc9f6e9c",
+      "hash": "66bc19f8e0122af1b88a53c9b1ce4238",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -190,7 +190,7 @@
     {
       "name": "c1-cockpit-xr-sim-enhanced",
       "frame": 120,
-      "hash": "32434e07b6a83918cdb46cd1db988964",
+      "hash": "4c198b02effa1af5e453aed2ececc4ba",
       "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
     },
