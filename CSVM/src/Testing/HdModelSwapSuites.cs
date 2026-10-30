@@ -106,7 +106,7 @@ internal static class HdModelSwapSuites
         }
 
         var planesGamez = ctx.Planes;
-        using var textures = new TextureArchive(texturesPath);
+        using var textures = new TextureArchive(WithProbeTextures(ctx, texturesPath));
         string planeNode = PlaneMeshNode(planesGamez, textures, ctx.PlaneName);
         ctx.Check(planeNode.Length > 0, $"{ctx.PlaneName} carries a mesh node to replace");
         if (planeNode.Length == 0)
@@ -339,6 +339,12 @@ internal static class HdModelSwapSuites
 
     // The export's cockpit1.glb, put unedited into a pack, redraws every meshed interior node as the
     // original. The airframe file holds no interior node.
+    // The world half's gamez names the synthetic C1 archive's textures. Over an extraction they join
+    // the chapter's own, which win a shared name, so the plane and the flyout keep their real skins.
+    private static TextureSet WithProbeTextures(TestContext ctx, TextureSet chapter) =>
+        ctx.SyntheticData ? chapter
+            : new TextureSet(chapter.Archive, chapter.Images.Concat(SyntheticTextures.For(Chapter).Images).ToList());
+
     private static void CheckInteriorRoundTrip(TestContext ctx, GameZ gamez, TextureArchive textures, string plane,
         Node3D plainModel, Node3D plainInterior, string root)
     {
