@@ -141,7 +141,7 @@
     {
       "name": "menu-original-flag",
       "frame": 120,
-      "hash": "c2c8da618ac099dc350c3d1085433c1e",
+      "hash": "0de7985f598bebc93dcd7953ec3eb3d3",
       "exercises": "The Original top level: the CrimFlag movie decoded from the install's MPEG-1 as the backmost layer at 250 percent, the logo, frame and every plaque over it, Multiplayer and the join board door included, and the build stamp with its folder icons.",
       "args": ["--menu", "--presentation=original", "--det", "--mute"]
     },
@@ -232,7 +232,7 @@
     {
       "name": "menu-original-xr-sim",
       "frame": 120,
-      "hash": "92ed9633678ea821e7af7cd29c20f173",
+      "hash": "c1a7e27f535165a258498ecad67b769c",
       "exercises": "The Original top level on the stand-in headset's theater screen: the menu's layers drawn into the screen's surface, the CrimFlag movie playing, on a quad ahead of both eyes over the dark surround; frame-sensitive 7.89 %.",
       "args": ["--menu", "--presentation=original", "--xr-sim", "--det", "--mute"]
     },
