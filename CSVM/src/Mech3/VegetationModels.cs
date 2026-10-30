@@ -17,13 +17,14 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class VegetationModels
 {
-    /// <summary>The Near word's band: inside <see cref="NearM"/> the model alone draws, past <see cref="FarM"/> the
-    /// card alone. Plain metres, so no View Distance moves the cost. It stays inside C1's card fades (500 m at
-    /// the nearest) and its clump handover (1000 m). A 300 m view's nearest stamp lies past it.</summary>
-    public const float NearM = 150f, FarM = 250f;
+    /// <summary>TUNE. The Near word's band: inside <see cref="NearM"/> the model alone draws, past <see cref="FarM"/>
+    /// the card alone. Plain metres, so no View Distance moves the cost. It stays inside C1's clump handover (1000 m)
+    /// and, at the default View Distance, inside the firs' and spruces' card fades. A model fades out with its card.</summary>
+    public const float NearM = 400f, FarM = 600f;
 
-    /// <summary>The Far word's band, which a 300 m view reaches. Still inside the clump handover.</summary>
-    public const float FarNearM = 250f, FarFarM = 400f;
+    /// <summary>TUNE. The Far word's band, past Near's and still inside the clump handover. A bush's card or C4's spruce
+    /// may fade first and take its model with it; the firs and palms fade past 1200 m.</summary>
+    public const float FarNearM = 600f, FarFarM = 900f;
 
     /// <summary>The edge of the square cells the models are cut into, so a pane reaches a handful of them.</summary>
     public const float CellM = 256f;

@@ -767,7 +767,7 @@ internal static class GraphicsSwitchSuites
         + "draws, and a disc's camera reads the card past the band; a crater and an activation hide collapse a stamp's model with its card and a show restores "
         + "it; a live move to original and a live switch to Original draw none, and back draws the same; the map edge copies "
         + "them under rich alone; a live move to Off draws none and zeroes the card band, a move to Far ranges the same cells out to "
-        + "400 m with the far band and back to Near restores them; a session at original draws none; a model pack's file under "
+        + "900 m with the far band and back to Near restores them; a session at original draws none; a model pack's file under "
         + "the chapter key replaces the shipped one")]
     internal static void VegetationModelsNear(TestContext ctx)
     {

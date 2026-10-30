@@ -3,8 +3,8 @@ The Enhanced vegetation plan's per-wave budget (PLAN-enhanced-vegetation, Decisi
 cost at one fixed worst-case view per chapter with a vegetation entry, under Faithful, Enhanced
 with --vegetation-quality=original and Enhanced with =rich, which on C1 draws the canopy clumps. The
 noclumps mode, asked for by name with -Modes, is rich with --canopy-clumps=off, the clumps' A/B, the
-nomodels mode rich with --vegetation-models=off, the near models' A/B, and the nocover mode rich with
---ground-cover=off, the ground cover's A/B. -ExtraViews takes "name=pos;lookat" entries (a chapter prefix
+nomodels mode rich with --vegetation-models=off, the near models' A/B, the far mode rich with --vegetation-models=far, and
+the nocover mode rich with --ground-cover=off, the ground cover's A/B. -ExtraViews takes "name=pos;lookat" entries (a chapter prefix
 on the name, C1-crop) in place of the chapter views.
 
 Every launch is --freecam at the chapter's pose below, --det (so no saved option reaches it and the
@@ -58,6 +58,7 @@ $modeArgs = @{
     "noclumps" = @("--graphics=enhanced", "--vegetation-quality=rich", "--canopy-clumps=off")
     "nomodels" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=off")
     "nocover"  = @("--graphics=enhanced", "--vegetation-quality=rich", "--ground-cover=off")
+    "far"      = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=far")
 }
 # Extra views replace the chapter ones: the name's text before the first '-' is the chapter.
 if ($ExtraViews) {

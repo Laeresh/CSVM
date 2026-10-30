@@ -378,8 +378,8 @@ A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/Game
 (`FollowVegetationQuality`); a mode switch recuts them too. The VIDEO page shows it as the Vegetation dropdown under View Distance.
 
 ## src/Utils/VegetationModelsSetting.cs
-How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (150 to 250 m, the default) or
-`far` (250 to 400 m); `VegetationModels.BandFor` holds the bands. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
+How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (400 to 600 m, the default) or
+`far` (600 to 900 m); `VegetationModels.BandFor` holds the bands. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
 the saved `vegetationModels` word, the `graphics.vegetationModels` key, then `near` on every machine and under `--det`, the Steam Deck
 included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page

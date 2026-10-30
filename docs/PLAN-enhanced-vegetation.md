@@ -1586,11 +1586,14 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
   scrub-set twin of a modelled card (C21's added stamps on the grassland) takes the model too.
 - *Band.* A registered word setting, 3D Vegetation (`Utils/VegetationModelsSetting.cs`, the VIDEO
   page's row under Vegetation, `--vegetation-models=off|near|far`, saved as `vegetationModels`): `near`,
-  the default on every machine and under `--det` (the Deck included, D36), is 150 to 250 m; `far` is 250 to 400 m; `off` draws no model. Plain metres, so no View Distance moves
-  the cost. Near sits inside C1's card fades (500 m at the nearest, at the highest View Distance) and
-  the clump handover (1000 m), and short of a 300 m view's nearest stamp: the 300 m capture is
-  pixel-identical with and without models. Far reaches a 300 m view and covers about 2.5 times Near's
-  area. A live change recuts with no rebuild: the cards and models take the word's band, the model cells
+  the default on every machine and under `--det` (the Deck included, D36), is 400 to 600 m; `far` is
+  600 to 900 m; `off` draws no model. Plain metres, so no View Distance moves the cost. Both sit inside
+  C1's clump handover (1000 m). Under Enhanced a card's own fade is its authored `far_fade_range` times
+  the fog push (2) and the View Distance reach (2 at the default Far), so at the default every tree
+  card's fade starts past 800 m (C4's `spruce`, authored from 200 m), the firs' and palms' past 1200 m;
+  a bush's or brush's, and C2's `palmtree3`'s, start at 400 to 600 m. A model draws inside its card's
+  fade, so where the card fades first the model fades with it, and at Normal View Distance (half the
+  reach) the short cards' models fade inside Near. A live change recuts with no rebuild: the cards and models take the word's band, the model cells
   its range, and `off` drops the cells and hides the edge copies. The words follow the existing
   settings' plain ladder (Shadow Quality's `off`, View Distance's `far`).
 - *Handover.* The card's Rich material fades it by the band's share (`ModelShare` in
@@ -1719,8 +1722,9 @@ docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_
     --lookat=-7400,50,-4600`: `rich` 4.42 against 4.44, 3.36 against 3.35 and 3.82 against 3.79 ms).
 
 **Ruling (yours, from the montages).** Brightness A: graded to the card with the card's sun-side gain.
-No shadows. The model sways with the card. The band: 150 to 250 m by default, with an option to push it
-out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). C3's painted canopy inside 950 m takes D33's `canopytree` crowns on B15's clump cells (*C3* above).
+No shadows. The model sways with the card. The band: 400 to 600 m by default (from the C1 fir-slope
+montage of Near, Far, 400-600 m and a thin 550-600 m band; the 3D trees ended too close at 150 to
+250 m), with an option to push it out, which became the 3D Vegetation setting above (Off, Near, Far). On the palms in game the per-channel grade turned them off-hue, so the grade matches brightness only and keeps each model's hue; the models are recoloured toward their cards in their generators (D33). C3's painted canopy inside 950 m takes D33's `canopytree` crowns on B15's clump cells (*C3* above).
 
 **Ruling (yours, from the montages).** C3's crowns: the greener palette (option C), 6 crowns a 32 m
 cell as built (not 9), their top 6 m over the painted canopy as built (not 3 or 10 m), and for the
@@ -1756,7 +1760,7 @@ stand outside the clutter root with no collider, ranged inside the band, drawing
 Rich stamps; the shader keeps the cells the card gives up; a crater, a hide and a show reach the model;
 a live move to original and a switch to Original draw none and back the same, the map edge copies them
 under rich alone; a live move to `off` draws none with every card band zero, one to `far` ranges the same
-cells past 400 m with the far band, and back to `near` restores them; a session at original draws none; a pack's
+cells past 900 m with the far band, and back to `near` restores them; a session at original draws none; a pack's
 `C1/firtree1.glb` replaces the shipped file), with `clutter-rich-variation`, `graphics-vegetation-quality`,
 `canopy-clumps`, `vegetation-added-stamps`, `vegetation-lab`, `clutter-activation`, `clutter-cells`,
 `graphics-live-switch`, `crater-carve`, `display-det-guard` (the new saved word is dropped under
@@ -1782,6 +1786,23 @@ and 666,111 against 470,049 primitives. D37 measures it on an idle machine with
 off, `c1-lake-enhanced` moves 344 pixels by at most 2 levels, `c1-cockpit-xr-sim-enhanced` 12 and
 `c1-rocket-hit-enhanced` 5 at that bound, and `c1-cloud-deck-enhanced` and `c1-cockpit-enhanced`
 none; D37 re-pins.
+
+Budget of the 400 to 600 m Near and 600 to 900 m Far, against 150 to 250 m and 250 to 400 m:
+`measure.ps1 -Modes rich,far,nomodels -Launches 3` at 5120x1440 on an idle machine, at A7's C1, C2,
+C3 and C4 views and D37's C1 meadow (`--pos=-4566,153,-4794 --lookat=-4566,128,-4894`), `gpu_ms`
+with primitives in thousands. The Deck column scales D36's Deck `near` by its measured cost a
+primitive (D36's `far` against `near` over the same views); it is an estimate, not a Deck run.
+
+| View | no models | Near before | Near | Far before | Far | Deck Near (est.) | Deck Far (est.) |
+|---|---|---|---|---|---|---|---|
+| C1 | 5.93 (465k) | 5.93 (781k) | 5.99 (1,035k) | 6.00 (849k) | 6.06 (1,321k) | 13.3 | 14.3 |
+| C1 meadow | 7.14 (1,061k) | 7.24 (1,124k) | 7.20 (1,300k) | 7.19 (1,217k) | 7.27 (1,470k) | 15.5 | 15.7 |
+| C2 | 3.01 (499k) | 3.08 (1,099k) | 3.12 (1,218k) | 3.09 (1,142k) | 3.16 (1,361k) | 9.6 | 9.9 |
+| C3 | 4.34 (376k) | 4.42 (1,248k) | 4.43 (1,266k) | 4.43 (1,263k) | 4.45 (1,442k) | 11.1 | 11.1 |
+| C4 | 2.78 (181k) | 2.87 (421k) | 3.00 (830k) | 2.93 (546k) | 3.11 (1,174k) | 9.7 | 10.6 |
+
+`render_cpu_ms` moves by at most 0.06 ms (C4 at Far), draws by up to 192 (C2 at Far). The Deck's worst
+Rich view stays C1's meadow, about 15.5 ms at Near.
 
 **⚠ Traps.** Not solid (Decision 15): give the 3D draw no collider.
 - Never parent the model cells under the clutter root: the crater walk would collapse a model as a
@@ -2393,6 +2414,9 @@ Shadow Quality's do; the OS is not read, so a discrete GPU on Linux runs the des
 | C3 palm transitions | 8.91 | 11.38 | 9.30 | 11.38 | 11.38 | 11.59 |
 | C4 | 8.07 | 8.71 | 8.17 | 8.63 | 8.64 | 9.02 |
 | C4 `terpat01`, 8 m | 13.27 | 13.98 | 14.02 | 13.41 | 13.41 | 14.16 |
+
+The Rich and far columns draw the models at 150 to 250 m and 250 to 400 m; D32's budget scales the
+400 to 600 m Near and 600 to 900 m Far from them.
 
 Two panes, C1's crop field, `frame_ms`:
 

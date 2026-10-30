@@ -50,12 +50,13 @@ public class VegetationModelsSettingTests
         Assert.Null(dropped!.Words[VegetationModelsSetting.Lookup]);
     }
 
-    /// <summary>Near draws inside 150-250 m, Far inside 250-400 m, and Off draws no model, its band zero.</summary>
+    /// <summary>Near draws inside 400-600 m, Far inside 600-900 m, and Off draws no model, its band zero.</summary>
     [Fact]
     public void EachWordDrawsItsBand()
     {
-        Assert.Equal(new Vector2(150f, 250f), VegetationModels.BandFor(VegetationModelsSetting.Near));
-        Assert.Equal(new Vector2(250f, 400f), VegetationModels.BandFor(VegetationModelsSetting.Far));
+        Assert.Equal(new Vector2(400f, 600f), VegetationModels.BandFor(VegetationModelsSetting.Near));
+        Assert.Equal(new Vector2(600f, 900f), VegetationModels.BandFor(VegetationModelsSetting.Far));
+        Assert.True(VegetationModels.FarM < CanopyClumps.HandoverNearM && VegetationModels.FarFarM < CanopyClumps.HandoverNearM);
         Assert.Equal(Vector2.Zero, VegetationModels.BandFor(VegetationModelsSetting.Off));
     }
 }
