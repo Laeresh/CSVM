@@ -1790,19 +1790,21 @@ none; D37 re-pins.
 Budget of the 400 to 600 m Near and 600 to 900 m Far, against 150 to 250 m and 250 to 400 m:
 `measure.ps1 -Modes rich,far,nomodels -Launches 3` at 5120x1440 on an idle machine, at A7's C1, C2,
 C3 and C4 views and D37's C1 meadow (`--pos=-4566,153,-4794 --lookat=-4566,128,-4894`), `gpu_ms`
-with primitives in thousands. The Deck column scales D36's Deck `near` by its measured cost a
-primitive (D36's `far` against `near` over the same views); it is an estimate, not a Deck run.
+with primitives in thousands. The Deck columns are D36's run (its method and views, two rounds in
+reverse order agreeing within 0.01 ms), Near before from the 150 to 250 m build in the same session.
 
-| View | no models | Near before | Near | Far before | Far | Deck Near (est.) | Deck Far (est.) |
-|---|---|---|---|---|---|---|---|
-| C1 | 5.93 (465k) | 5.93 (781k) | 5.99 (1,035k) | 6.00 (849k) | 6.06 (1,321k) | 13.3 | 14.3 |
-| C1 meadow | 7.14 (1,061k) | 7.24 (1,124k) | 7.20 (1,300k) | 7.19 (1,217k) | 7.27 (1,470k) | 15.5 | 15.7 |
-| C2 | 3.01 (499k) | 3.08 (1,099k) | 3.12 (1,218k) | 3.09 (1,142k) | 3.16 (1,361k) | 9.6 | 9.9 |
-| C3 | 4.34 (376k) | 4.42 (1,248k) | 4.43 (1,266k) | 4.43 (1,263k) | 4.45 (1,442k) | 11.1 | 11.1 |
-| C4 | 2.78 (181k) | 2.87 (421k) | 3.00 (830k) | 2.93 (546k) | 3.11 (1,174k) | 9.7 | 10.6 |
+| View | no models | Near before | Near | Far before | Far | Deck Near before | Deck Near | Deck Far |
+|---|---|---|---|---|---|---|---|---|
+| C1 | 5.93 (465k) | 5.93 (781k) | 5.99 (1,035k) | 6.00 (849k) | 6.06 (1,321k) | 12.35 | 12.84 | 13.31 |
+| C1 meadow | 7.14 (1,061k) | 7.24 (1,124k) | 7.20 (1,300k) | 7.19 (1,217k) | 7.27 (1,470k) | 15.37 | 15.47 | 15.72 |
+| C2 | 3.01 (499k) | 3.08 (1,099k) | 3.12 (1,218k) | 3.09 (1,142k) | 3.16 (1,361k) | 9.28 | 9.52 | 9.76 |
+| C3 | 4.34 (376k) | 4.42 (1,248k) | 4.43 (1,266k) | 4.43 (1,263k) | 4.45 (1,442k) | 10.91 | 10.69 | 10.92 |
+| C4 | 2.78 (181k) | 2.87 (421k) | 3.00 (830k) | 2.93 (546k) | 3.11 (1,174k) | 8.61 | 9.26 | 9.98 |
 
-`render_cpu_ms` moves by at most 0.06 ms (C4 at Far), draws by up to 192 (C2 at Far). The Deck's worst
-Rich view stays C1's meadow, about 15.5 ms at Near.
+`render_cpu_ms` moves by at most 0.06 ms (C4 at Far), draws by up to 192 (C2 at Far). On the Deck
+the worst Near view under `--det` is C1's crop field at 16.41 ms (61 fps, 13.46 before; Far 18.00),
+then C1's meadow at 15.47 and C4's `terpat01` at 14.37 (13.88 before). With the cover off, the Deck's
+own default (D36), the crop field draws at 14.08 ms (71 fps) and `terpat01` at 13.81.
 
 **⚠ Traps.** Not solid (Decision 15): give the 3D draw no collider.
 - Never parent the model cells under the clutter root: the crater walk would collapse a model as a
