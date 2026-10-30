@@ -218,6 +218,7 @@ public static class SuiteCatalog
         "targeting-candidates",
         "team-model",
         "tex-dropin",
+        "throttle-plate",
         "turret-death-effect-world-anchor",
         "turret-grouped-site-sightline",
         "turret-own-mount-sightline",

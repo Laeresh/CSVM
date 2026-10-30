@@ -317,6 +317,7 @@ rows).
 - `src/Flight/Hud/ScreenSize.cs`, screen-space sizing for world sprites: the pixel-floor inversion, and the nearest-viewer floor one shared mesh takes.
 - `src/Flight/Hud/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/Hud/GaugeCluster.cs`, the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
+- `src/Flight/Hud/ThrottlePlate.cs`, the optional throttle plate beside the speedometer, drawn from two SVGs at the pane's own size.
 - `src/Flight/Hud/FlightHud.cs`, everything one pane draws for its pilot, fed one per-frame state struct; the controller's seven HUD collaborators live here.
 
 **`Flight.Modes`**, stunt flying, Dogfight and the pause state.

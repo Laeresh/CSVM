@@ -1505,6 +1505,16 @@ the borders on a pane narrower than the reference frame. `HeadingDeg` carries th
 armour and health against thresholds mined from the data's own `injure_anims`. The sweep and lamp
 structs need no `Control`, so `CSVM.Tests` drives them. [../formats/hud.md](../formats/hud.md).
 
+## src/Flight/Hud/ThrottlePlate.cs
+A remake-only readout: the commanded lever as a 1930s lever plate, as tall as the speedometer and
+standing inboard of it. Plate and knob are SVGs in `CSVM/data/hud`, written by
+`render_throttle_plate.py` beside them as shapes and stroked glyphs, since Godot's SVG rasteriser
+reads no filters or text. `Image.LoadSvgFromString` re-rasterises both whenever the drawn size
+moves, so the plate stays sharp at any resolution. `KnobY` maps the lever onto the IDLE to MAX
+ticks. Every pilot pane builds one hidden; the Game Options **Throttle Plate** box or
+`--throttle-plate` shows it through `FlightHud.SetThrottlePlateShown`, and `--det` reads no saved
+box, so no golden draws it.
+
 ## src/Flight/Hangar/CustomPlaneDef.cs
 A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields
 (airframe, engine, per-zone armour units, four gun slots with their twin bits, per-wing hardpoint
