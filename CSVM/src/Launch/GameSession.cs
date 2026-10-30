@@ -334,6 +334,8 @@ public partial class GameSession : Node3D
     // See WorldBuilder.HideUnplacedEntities / RestorePlacedEntities.
     private WorldBuilder? _unplacedWatch;
     private double _unplacedRecheck;
+    // Set when a world node holding canopy or cover ground is switched (FollowGroundSwitch).
+    private bool _groundSwitched;
     // This session's startup timing, the always-on [perf] startup line. One per StartSession,
     // published as StartupProfile.Current so the shared build code can record into it, and cleared
     // when the line is emitted.
@@ -1177,6 +1179,7 @@ public partial class GameSession : Node3D
                 }
             }
         }
+        FollowGroundSwitch();
         // Everything below is anchored to *a* camera, so it runs once per rig, one in single
         // player, one per pane in splitscreen (each on that player's own visual layer). See
         // src/Session/World/WeatherRig.cs's Tick.
@@ -1253,6 +1256,17 @@ public partial class GameSession : Node3D
     /// whether more is left. The wave aeroplanes are that work. They belong to the load, where
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
     internal bool StepOwedLoad() => _flightRoster?.BuildOrderedAirframe() ?? false;
+
+    /// <summary>Builds the canopy clumps and the ground cover again once a world node holding their ground was
+    /// switched since the last build. Called each frame; one rebuild serves every switch a frame makes.</summary>
+    internal void FollowGroundSwitch()
+    {
+        if (!_groundSwitched)
+            return;
+        _groundSwitched = false;
+        _clutter?.ForgetCanopy();
+        FollowCanopyClumps(rebake: true);
+    }
 
     /// <summary>Every board's and the pause sheet's way out. A network race says so first. A guest's
     /// word marks its seats left on the host; a host leaving an ended race takes every guest to the
@@ -2710,6 +2724,9 @@ public partial class GameSession : Node3D
     private void FollowCanopyClumps(bool rebake = false)
     {
         FollowGroundCover(rebake);
+        // A script switching an island on or off rebuilds both on the next frame, from the ground then standing.
+        if (_clutter?.Vegetation is { } picks)
+            _clutter.FollowGround(t => Mech3.CanopyMask.IsCanopy(picks, t) || picks.CoverFor(t) != null, () => _groundSwitched = true);
         bool wanted = (_spec.CanopyClumps ?? Mech3.CanopyClumps.DefaultOn(_spec.Chapter)) && VegetationQualitySetting.RichOn;
         if (_canopyClumps != null && (!wanted || rebake))
         {
@@ -2751,13 +2768,13 @@ public partial class GameSession : Node3D
             return;
         if (cards && _groundCoverCards == null)
         {
-            _groundCoverCards = Mech3.GroundCover.Build(_clutter.Gamez, _sessionTextures, _clutter.Mask, entry, _spec.Chapter ?? "");
+            _groundCoverCards = Mech3.GroundCover.Build(_clutter.Gamez, _sessionTextures, _clutter.Mask, entry, _spec.Chapter ?? "", _clutter.SwitchedOff());
             if (_groundCoverCards != null)
                 _plane.AddChild(_groundCoverCards.Root);
         }
         if (shells && _groundCover == null)
         {
-            _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, _clutter.Mask, _sessionTextures, entry);
+            _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, _clutter.Mask, _sessionTextures, entry, switchedOff: _clutter.SwitchedOff());
             if (_groundCover != null)
                 _plane.AddChild(_groundCover);
         }

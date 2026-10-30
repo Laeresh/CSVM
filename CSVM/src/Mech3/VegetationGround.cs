@@ -46,7 +46,7 @@ public static class VegetationGround
     public static List<GroundLayer> LayersAt(GameZ gamez, Vector3 point, string worldName = "world1")
     {
         var layers = new List<GroundLayer>();
-        WalkWorld(gamez, worldName, (mesh, xf) => AddLayers(gamez, mesh, xf, point, layers));
+        WalkWorld(gamez, worldName, (_, mesh, xf) => AddLayers(gamez, mesh, xf, point, layers));
         layers.Sort((a, b) => Math.Abs(a.Y - point.Y).CompareTo(Math.Abs(b.Y - point.Y)));
         return layers;
     }
@@ -57,7 +57,7 @@ public static class VegetationGround
     public static Vector3[] Triangles(GameZ gamez, string worldName = "world1")
     {
         var corners = new List<Vector3>();
-        WalkWorld(gamez, worldName, (mesh, xf) =>
+        WalkWorld(gamez, worldName, (_, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
@@ -74,11 +74,12 @@ public static class VegetationGround
     }
 
     /// <summary>Every world triangle textured with a ground texture <paramref name="picked"/> accepts, three
-    /// corners each in world space, whatever its <c>no_clutter</c> flag: painted canopy shows on either layer.</summary>
-    public static Vector3[] Painted(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    /// corners each in world space, whatever its <c>no_clutter</c> flag: painted canopy shows on either layer.
+    /// The subtrees <paramref name="switchedOff"/> names are left out (<see cref="ClutterBuilder.SwitchedOff"/>).</summary>
+    public static Vector3[] Painted(GameZ gamez, Func<string, bool> picked, string worldName = "world1", Func<GameZNode, bool>? switchedOff = null)
     {
         var corners = new List<Vector3>();
-        WalkWorld(gamez, worldName, (mesh, xf) =>
+        WalkWorld(gamez, worldName, (_, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
@@ -93,16 +94,17 @@ public static class VegetationGround
                     corners.Add(xf * mesh.Vertices[c]);
                 }
             }
-        });
+        }, switchedOff);
         return corners.ToArray();
     }
 
     /// <summary>As <see cref="Painted"/>, each triangle with what the world draws it with: its texture and lit flag.
     /// Each corner carries its UV, baked vertex colour (white for none) and world normal.</summary>
-    public static List<SurfaceTriangle> PaintedSurface(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    public static List<SurfaceTriangle> PaintedSurface(GameZ gamez, Func<string, bool> picked, string worldName = "world1",
+        Func<GameZNode, bool>? switchedOff = null)
     {
         var found = new List<SurfaceTriangle>();
-        WalkWorld(gamez, worldName, (mesh, xf) =>
+        WalkWorld(gamez, worldName, (_, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
@@ -125,7 +127,7 @@ public static class VegetationGround
                     found.Add(new SurfaceTriangle(tex, mesh.Lighting, corners[0], corners[1], corners[2]));
                 }
             }
-        });
+        }, switchedOff);
         return found;
     }
 
@@ -133,10 +135,11 @@ public static class VegetationGround
     /// and its baked corner colours, for the ground cover (<see cref="GroundCover"/>). The <c>no_clutter</c> gate
     /// holds as for a stamp, so one coplanar layer grows cover. ⚠ Read UVs and colours by corner position, never by
     /// vertex id: C1 model 953 lists one vertex at two corners with two UVs.</summary>
-    public static List<CoverTriangle> Covered(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    public static List<CoverTriangle> Covered(GameZ gamez, Func<string, bool> picked, string worldName = "world1",
+        Func<GameZNode, bool>? switchedOff = null)
     {
         var found = new List<CoverTriangle>();
-        WalkWorld(gamez, worldName, (mesh, xf) =>
+        WalkWorld(gamez, worldName, (_, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
@@ -150,6 +153,26 @@ public static class VegetationGround
                     Color Col(int at) => poly.VertexColors is { } cols && at < cols.Count ? cols[at] : Colors.White;
                     found.Add(new CoverTriangle(tex, xf * mesh.Vertices[poly.VertexIndices[a]], xf * mesh.Vertices[poly.VertexIndices[b]],
                         xf * mesh.Vertices[poly.VertexIndices[c]], uvs[a], uvs[b], uvs[c], Col(a), Col(b), Col(c)));
+                }
+            }
+        }, switchedOff);
+        return found;
+    }
+
+    /// <summary>The gamez index of every world node, switched off or not, whose own mesh holds a polygon textured
+    /// with a texture <paramref name="picked"/> accepts. Switching one moves what <see cref="Painted"/> gives.</summary>
+    public static HashSet<int> Holders(GameZ gamez, Func<string, bool> picked, string worldName = "world1")
+    {
+        var found = new HashSet<int>();
+        WalkWorld(gamez, worldName, (node, mesh, _) =>
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.MaterialIndex >= 0 && poly.MaterialIndex < gamez.Materials.Count
+                    && gamez.Materials[poly.MaterialIndex].TextureName is { } tex && picked(tex))
+                {
+                    found.Add(node.Index);
+                    return;
                 }
             }
         });
@@ -254,7 +277,7 @@ public static class VegetationGround
 
     // The clutter's walk of the world node's tree: the same skipped nodes, the nearest LOD only, and
     // past any subtree the prune predicate names.
-    private static void WalkWorld(GameZ gamez, string worldName, Action<GameZMesh, Transform3D> visit, Func<GameZNode, bool>? prune = null)
+    private static void WalkWorld(GameZ gamez, string worldName, Action<GameZNode, GameZMesh, Transform3D> visit, Func<GameZNode, bool>? prune = null)
     {
         GameZNode? world = gamez.Nodes.Find(n => n.Kind == "World" && string.Equals(n.Name, worldName, StringComparison.OrdinalIgnoreCase));
         if (world == null)
@@ -270,7 +293,7 @@ public static class VegetationGround
             if (node.Local is { } local)
                 xf *= local;
             if (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count)
-                visit(gamez.Meshes[node.MeshIndex], xf);
+                visit(node, gamez.Meshes[node.MeshIndex], xf);
             foreach (var c in node.Children)
                 Walk(c, xf);
         }

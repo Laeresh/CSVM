@@ -232,7 +232,8 @@ public static class GroundCover
 
     /// <summary>The cover over the ground <paramref name="entry"/>'s <c>cover</c> picks, null where it picks none. The
     /// cells build as cameras come near (<see cref="Field.Update"/>). <paramref name="mask"/> null grows everywhere picked.</summary>
-    public static Field? Build(GameZ gamez, TextureArchive textures, VegetationMask? mask, VegetationEntry entry, string chapter)
+    public static Field? Build(GameZ gamez, TextureArchive textures, VegetationMask? mask, VegetationEntry entry, string chapter,
+        Func<GameZNode, bool>? switchedOff = null)
     {
         if (entry.Cover.Count == 0)
             return null;
@@ -240,7 +241,7 @@ public static class GroundCover
         var surfaces = new Dictionary<string, Surface?>(StringComparer.OrdinalIgnoreCase);
         var index = new Dictionary<(int, int), List<Ground>>();
         int kept = 0;
-        foreach (var t in VegetationGround.Covered(gamez, tex => entry.CoverFor(tex) != null))
+        foreach (var t in VegetationGround.Covered(gamez, tex => entry.CoverFor(tex) != null, switchedOff: switchedOff))
         {
             var pick = entry.CoverFor(t.Texture)!;
             if (!surfaces.TryGetValue(t.Texture, out var surface))

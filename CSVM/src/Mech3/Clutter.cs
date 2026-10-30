@@ -155,6 +155,9 @@ public sealed class ClutterBuilder
     // mention it; first-seen wins here, which is the same statement over a deterministic walk.
     private readonly Dictionary<string, Kind> _kindsByModel = new(StringComparer.OrdinalIgnoreCase);
 
+    // The handlers FollowGround bound on the built world's nodes, dropped on a rebind.
+    private readonly List<(Node3D Node, Action Changed)> _groundSyncs = new();
+
     // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
     private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
 
@@ -176,6 +179,9 @@ public sealed class ClutterBuilder
 
     // The canopy mask over the last Rich bake, made on first read; every bake drops it.
     private CanopyMask? _canopy;
+
+    // The built world FollowActivation bound, whose node switches the ground bakes prune by.
+    private Node3D? _world;
 
     // The last Build's root and exports. The remake-added stamps stand under their own node, shown
     // while Rich is on. They are the exports from _addedFrom on, which a lab edit rebuilds.
@@ -673,16 +679,17 @@ public sealed class ClutterBuilder
         bool painted = entry.Picks.Any(p => CanopyMask.IsCanopy(entry, p.Texture));
         if (painted)
         {
-            var triangles = VegetationGround.Painted(_gamez, t => CanopyMask.IsCanopy(entry, t), worldName);
+            var triangles = VegetationGround.Painted(_gamez, t => CanopyMask.IsCanopy(entry, t), worldName, SwitchedOff());
             _canopy = CanopyMask.FromPainted(triangles, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom, _mask);
         }
         else
         {
             // The Rich placements, never the Original: the cards drawn are jittered and thinned by the brush.
-            // An added set counts only when it is forest (VegetationSet.Mass).
+            // An added set counts only when it is forest (VegetationSet.Mass), and no stamp the activation hides.
             var stamps = (ExportedKinds ?? new List<KindExport>())
-                .Where(k => k.Rich != null && k.Mass)
-                .SelectMany(k => k.Rich!.Placements.Select(p => (p, k.Width, k.Height)));
+                .SelectMany((k, e) => k.Rich != null && k.Mass
+                    ? k.Rich.Placements.Where((_, i) => Activation?.IsHidden(e, i) != true).Select(p => (p, k.Width, k.Height))
+                    : Enumerable.Empty<(Transform3D, float, float)>());
             _canopy = CanopyMask.FromStamps(stamps, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom);
         }
         Log.Info("world", $"canopy mask: source={(painted ? "painted" : "stamps")} cells={_canopy.Width}x{_canopy.Height} covered={_canopy.Density.Count(d => d > 0f)}");
@@ -692,8 +699,49 @@ public sealed class ClutterBuilder
     /// <summary>Hides each stamp of the last Build while its stamping world node is not visible.
     /// It shows again when that node is (<see cref="ClutterActivation"/>).
     /// <paramref name="world"/> is the built world the stamping nodes live under.</summary>
-    public void FollowActivation(Node3D world) =>
+    public void FollowActivation(Node3D world)
+    {
+        _world = world;
         Activation = ClutterActivation.Bind(world, ExportedKinds, _addedFrom);
+    }
+
+    /// <summary>Drops the canopy mask, so the next <see cref="Canopy"/> bakes it under the node switches standing now.</summary>
+    public void ForgetCanopy() => _canopy = null;
+
+    /// <summary>The world nodes switched off now, read off the first built node per gamez index as the
+    /// activation binds, for a ground bake to prune. Null before <see cref="FollowActivation"/>.
+    /// ⚠ Read the node's own switch, never the record's ACTIVE bit: a script switches islands on later.</summary>
+    public Func<GameZNode, bool>? SwitchedOff()
+    {
+        if (_world == null)
+            return null;
+        var off = new HashSet<int>();
+        foreach (var (index, node) in BuiltByIndex(_world))
+        {
+            if (!node.Visible)
+                off.Add(index);
+        }
+        return n => off.Contains(n.Index);
+    }
+
+    /// <summary>Calls <paramref name="changed"/> when a world node holding a polygon <paramref name="picked"/>
+    /// accepts is switched on or off, itself or through an ancestor. A call replaces the last one's binding.</summary>
+    public void FollowGround(Func<string, bool> picked, Action changed)
+    {
+        foreach (var (node, sync) in _groundSyncs)
+            node.VisibilityChanged -= sync;
+        _groundSyncs.Clear();
+        if (_world == null)
+            return;
+        var holders = VegetationGround.Holders(_gamez, picked);
+        foreach (var (index, node) in BuiltByIndex(_world))
+        {
+            if (!holders.Contains(index))
+                continue;
+            node.VisibilityChanged += changed;
+            _groundSyncs.Add((node, changed));
+        }
+    }
 
     /// <summary>Draws every exported kind again under the graphics mode and the clutter fade scale
     /// standing now (<see cref="ClutterInstances.Recut"/>). A live mode switch calls it, and so does a
@@ -730,6 +778,21 @@ public sealed class ClutterBuilder
             + "        vec3(dir.y, 0.0, -dir.x),\n"
             + "        vec3(0.0, 1.0, 0.0),\n"
             + "        vec3(dir.x, 0.0, dir.y));";
+
+    // The first built node per gamez index in tree order, the claimant ClutterActivation binds.
+    private static Dictionary<int, Node3D> BuiltByIndex(Node world)
+    {
+        var built = new Dictionary<int, Node3D>();
+        void Collect(Node node)
+        {
+            if (node is Node3D n3d && n3d.HasMeta(AnimRuntime.IndexMeta))
+                built.TryAdd(n3d.GetMeta(AnimRuntime.IndexMeta).AsInt32(), n3d);
+            for (int i = 0, count = node.GetChildCount(); i < count; i++)
+                Collect(node.GetChild(i));
+        }
+        Collect(world);
+        return built;
+    }
 
     // A kind's node under the clutter root. The faithful path keeps its one MultiMesh; Enhanced cuts
     // it into map cells (ClutterInstances), so a pane skips the cells out of its reach.

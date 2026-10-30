@@ -237,14 +237,15 @@ public static class GroundCoverShells
     /// <summary>The shells over the ground <paramref name="entry"/>'s <c>cover</c> picks on <paramref name="gamez"/>, a
     /// cards-only pick left out, none where <paramref name="mask"/> is bare. Null when nothing is picked or left. With no mask
     /// the cut runs on an <see cref="UnmaskedCellM"/> grid and keeps every piece.</summary>
-    public static Node3D? Build(GameZ gamez, VegetationMask? mask, TextureArchive textures, VegetationEntry entry, string worldName = "world1")
+    public static Node3D? Build(GameZ gamez, VegetationMask? mask, TextureArchive textures, VegetationEntry entry, string worldName = "world1",
+        Func<GameZNode, bool>? switchedOff = null)
     {
         // The shells' own picks: a cards-only one neither grows shells nor counts as their ground, so it changes nothing here.
         entry = new VegetationEntry { Cover = entry.Cover.Where(c => !c.CardsOnly).ToList() };
         if (entry.Cover.Count == 0)
             return null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var triangles = VegetationGround.PaintedSurface(gamez, t => entry.CoverFor(t) != null, worldName);
+        var triangles = VegetationGround.PaintedSurface(gamez, t => entry.CoverFor(t) != null, worldName, switchedOff);
         if (triangles.Count == 0)
             return null;
         byte[]? texels = mask?.ToBytes();

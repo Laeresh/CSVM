@@ -1,3 +1,4 @@
+using System;
 using CSVM.Mech3;
 using Godot;
 using Xunit;
@@ -66,6 +67,20 @@ public sealed class VegetationGroundTests
         Assert.Empty(VegetationGround.Painted(World(), _ => false));
     }
 
+    /// <summary>A switched-off node grows nothing in any ground walk, and still names itself a holder of its ground.</summary>
+    [Fact]
+    public void ASwitchedOffNodeGivesNoGround()
+    {
+        Func<string, bool> all = _ => true;
+        Func<GameZNode, bool> tile = n => n.Index == 1;
+        Assert.NotEmpty(VegetationGround.Painted(World(), all));
+        Assert.Empty(VegetationGround.Painted(World(), all, switchedOff: tile));
+        Assert.Empty(VegetationGround.PaintedSurface(World(), all, switchedOff: tile));
+        Assert.Empty(VegetationGround.Covered(World(), all, switchedOff: tile));
+        Assert.Equal(new[] { 1 }, VegetationGround.Holders(World(), t => t == "hill"));
+        Assert.Empty(VegetationGround.Holders(World(), _ => false));
+    }
+
     /// <summary>A polygon of another texture covers a foot on it or within the reach of it, flagged or not.
     /// It covers from a little below the foot to under the rise above it, and the ground's own textures cover nothing.</summary>
     [Fact]
@@ -101,7 +116,7 @@ public sealed class VegetationGroundTests
         var world = new GameZNode { Kind = "World", Name = "world1" };
         world.Children.Add(1);
         gamez.Nodes.Add(world);
-        gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "tile", MeshIndex = 0 });
+        gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "tile", MeshIndex = 0, Index = 1 });
         foreach (string t in new[] { "overlay", "base", "bare", "hill" })
             gamez.Materials.Add(new GameZMaterial { TextureName = t });
         var mesh = new GameZMesh();
