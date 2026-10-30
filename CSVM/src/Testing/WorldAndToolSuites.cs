@@ -1726,7 +1726,7 @@ internal static class WorldAndToolSuites
             ctx.Check(b1.Canopy()!.Density.SequenceEqual(first.Density) && b1.Canopy()!.Top.SequenceEqual(first.Top),
                 $"a Neutral stroke gives the first C1 mask back");
 
-            // C21's added stamps feed the mass only as forest. Bushes scattered on C1's grassland leave the mask as it
+            // The remake-added stamps feed the mass only as forest. Bushes stamped on C1's grassland leave the mask as it
             // was, and the same pick marked forest covers more cells. The shipped entry gives the first mask back.
             var grass = c1.WithPick("terpat03.tif", new[] { "bush1.flt", "bush2.flt" });
             b1.ApplyVegetation(grass);

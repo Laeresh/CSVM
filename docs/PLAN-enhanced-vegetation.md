@@ -221,7 +221,7 @@ draws nothing different yet.
 - The VIDEO page's scrolled window grew a row (ten dropdowns over seven lines), which moves every
   test that counts the window's scroll positions or walks past View Distance.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation A1"`).
 
 ## A2 ☑ The vegetation sidecar: per-chapter kind list and values, read under Rich
 
@@ -394,7 +394,7 @@ brush on `terpat04` and `terpat04-128` at the density that replaces the dropped 
 every stamp, since `palmtree1` also stands in the residential yards. A dropped stamp leaves its blob
 bare, which reads as a ground mark.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation A3"`).
 
 ## A4 ☑ Card shading: wind sway, sun-side shading, contact shadow
 
@@ -468,7 +468,7 @@ looking along the sun's bearing, one across it), and a 3 s sway strip under `--d
 - The sun-side gain is a multiply on near-black foliage, so a gain that reads as large in the text
   moves a dark crown by a few sRGB levels; judge it at a pose across the sun's bearing, never along it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation A4"`).
 
 ## A5 ☑ Vegetation lab in `--freecam`: live values saved to the sidecar
 
@@ -527,7 +527,7 @@ re-bake and recut, never a rebuild) and the Shift+F2 row is in `docs/controls.md
 engine suite verifies it (one lab in `--freecam`, none in `--fly`, a tint edit re-bakes one kind alone,
 a seed edit rerolls, a revert draws the first build exactly, Save goes to a temp copy).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation A5"`).
 
 ## A6 ☑ The lab's paint tool: texture picks and a brush mask
 
@@ -632,7 +632,7 @@ hidden through a node hide and show and a crater across a live move, a cleared m
 copy, a Neutral stroke and a revert give back the first build, a pick lands in the entry and moves no
 stamp).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation A6"`).
 
 ## A7 ☑ Wave A budget: the perf baseline and the ceiling; goldens re-pinned
 
@@ -735,7 +735,7 @@ runs.
 **⚠ Traps.** Read `docs/verification.md` first. A golden that flips under external GPU load is a
 determinism defect to name and track, not one to re-pin.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation A7"`).
 
 # Wave B, mass
 
@@ -816,7 +816,7 @@ mass and the cards disagree.
 - The lab's pick tool removes a pick when no kind is checked, so re-picking a canopy texture there
   deletes its canopy pick; a canopy toggle in the lab belongs to B15 if the look needs it tuned.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation B11"`).
 
 ## B12 ❌ Prototype: canopy shells on C1
 
@@ -1557,7 +1557,7 @@ makes the crown shaggier and less tiered and lighter, with the card's yellow-gre
 hides the bare trunk in the upper half. On the second pass's renders: good enough to carry D32's
 handover, judged again in game.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` passes on the plan branch with this item landed; its tests, measurements and rulings are in its commits (`git log --grep="vegetation D31"`).
 
 ## D32 ☑ Near-radius 3D draw with a dither handover to the card
 
@@ -2397,6 +2397,8 @@ Shadow Quality's do; the OS is not read, so a discrete GPU on Linux runs the des
 - *Ground Cover.* `GroundCoverSetting.FallbackFor(integrated)`: `off` on an integrated GPU, under
   `default_integrated_gpu`; `cards` otherwise. Cards and Shells stay choices.
 - *3D Vegetation.* `near` on every machine, unchanged.
+- *Water Quality.* Keyed on the GPU the same way, by the user's ruling: `WaterQualitySetting.FallbackFor(integrated)`
+  gives `flat` on an integrated GPU on any OS and `waves` on a discrete one, under `default_integrated_gpu`.
 - *Panes.* `GameSession.BuildRigs` runs `WordSettings.FollowPanes(count)`, whose `WordSetting.Refresh`
   resolves a setting again only when the new count moves its fallback. The flag and the saved word
   still win, so a chosen word is never overridden. The session's exit puts one pane back with only the
@@ -2452,9 +2454,8 @@ four panes, `--det` at every count, the split rule's name, a saved Rich over the
 - `--det` drops the Deck's own defaults, so a Deck perf run passes `--shadow-quality=high
   --water-quality=flat` itself.
 - Desktop Mode trims a windowed 1280x800 to 718 rows, so pass `--fullscreen`.
-- A two-pane run under `--screenshot` keeps the spyglass on. With Rich the two spyglass discs draw
-  3.5M prims and 5.5 ms, mostly the near models. That is a follow-up like the ocean's B14, not fixed
-  here.
+- A two-pane run under `--screenshot` keeps the spyglass on. The discs draw no 3D model (D32's
+  *Spyglass discs*); the ground cards still cost them about 0.12 ms.
 - The user's `/home/deck/CSVM` has no `extracted/` folder, so a run there extracts its own.
 
 ## D37 ☑ Wave D budget and goldens

@@ -1,5 +1,5 @@
 <#
-The Enhanced vegetation plan's per-wave budget (PLAN-enhanced-vegetation, Decision 18): the frame
+The Enhanced vegetation budget: the frame
 cost at one fixed worst-case view per chapter with a vegetation entry, under Faithful, Enhanced
 with --vegetation-quality=original and Enhanced with =rich, which on C1 draws the canopy clumps. The
 noclumps mode, asked for by name with -Modes, is rich with --canopy-clumps=off, the clumps' A/B, the
@@ -10,7 +10,7 @@ on the name, C1-crop) in place of the chapter views.
 Every launch is --freecam at the chapter's pose below, --det (so no saved option reaches it and the
 sway's clock is the sim clock), --perf --no-vsync --mute, at -Resolution, and quits on a
 --screenshot at sim frame -Frames. Launches go through RunProbe.ps1, on the hidden desktop, and
-interleave the modes inside each repeat so drift lands on every mode alike (PERF-9, PERF-48). The
+interleave the modes inside each repeat so drift lands on every mode alike. The
 first -Skip windows of each launch (the first draw's shader compiles and the build settling) are
 dropped; each launch reports the median of its remaining windows, and each case the median and
 the range of its launches.

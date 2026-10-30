@@ -238,7 +238,7 @@ public static class VegetationModels
 
     // The card's look on a mesh, under the card's own far fade (none on a canopy model). Over the band the model
     // keeps the dither cells the card or the crowns give up, so a stamp never draws both or neither. It turns by
-    // a hash of its planted point, mirrors as its card does, leans in the card's breeze and gains on its sun half.
+    // a hash of its stamp's origin, mirrors as its card does, leans in the card's breeze and gains on its sun half.
     // ⚠ Never light it with the scene's lights: the card is unlit, and a lit model shows at the band.
     // ⚠ Never give it an instance uniform: each model cell would take 16 slots of Godot's global buffer.
     private static string ShaderCode(bool lit, bool fogged, bool canopy) => $$"""

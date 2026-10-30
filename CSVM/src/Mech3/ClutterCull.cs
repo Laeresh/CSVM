@@ -67,6 +67,9 @@ internal static class ClutterCull
             {
                 MultiMeshInstance3D mmi => Cards(mmi, shape, destroy),
                 StaticBody3D body when destroy => Bodies(body, shape),
+                // Original builds the Rich-only added stamps hidden: flattened for a live move to Rich, never counted.
+                Node3D { Visible: false, Name: var name } added when name == ClutterBuilder.AddedRootName
+                    => Walk(added, shape, destroy) * 0,
                 Node3D nested => Walk(nested, shape, destroy),
                 _ => 0,
             };

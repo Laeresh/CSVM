@@ -221,7 +221,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     public bool ResolutionPinned => _choices.ResolutionPinned;
 
     /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line. On the
-    /// bottom line 1 puts View Distance, 2 Vegetation and 3 VR Mode.</summary>
+    /// bottom line 1 puts View Distance, 2 Vegetation, 3 3D Vegetation, 4 Ground Cover and 5 VR Mode.</summary>
     public int Top => _top;
 
     /// <summary>The graphics mode word the page would apply.</summary>

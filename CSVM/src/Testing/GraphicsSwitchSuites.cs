@@ -984,6 +984,8 @@ internal static class GraphicsSwitchSuites
                 float heldShare = Mech3.CanopyClumps.HeldTopM / field.Clumps.Max(c => c.Height);
                 ctx.Check(MathF.Abs(Held(clumps) - heldShare) < 1e-4f,
                     $"the clumps stand held at a {Mech3.CanopyClumps.HeldTopM:0.#} m top at every distance (share {Held(clumps):0.###} of {heldShare:0.###})");
+                ctx.Check(clumps.Shader.Code.Contains($"float hold = {Mech3.SceneBuilder.FlatSeaEye} ? 0.0 : {Mech3.CanopyClumps.HeldParam};", StringComparison.Ordinal),
+                    $"a spyglass disc, which draws no crown, reads no hold, so its clumps rise as with 3D Vegetation off");
 
                 Models(live, VegetationModelsSetting.Off);
                 ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && Held(clumps) == 0f && live.Session.CanopyClumpField?.Models == models,
@@ -2768,7 +2770,7 @@ internal static class GraphicsSwitchSuites
         int drawn = 0;
         Walk(rig.Session, node =>
         {
-            if (node is MultiMeshInstance3D { Multimesh: { } mm } mmi && Under(mmi, "clutter_added") && mmi.IsVisibleInTree() && !mmi.IsQueuedForDeletion())
+            if (node is MultiMeshInstance3D { Multimesh: { } mm } mmi && Under(mmi, Mech3.ClutterBuilder.AddedRootName) && mmi.IsVisibleInTree() && !mmi.IsQueuedForDeletion())
             {
                 for (int i = 0; i < mm.InstanceCount; i++)
                     drawn += mm.GetInstanceTransform(i).Basis.Determinant() != 0f ? 1 : 0;

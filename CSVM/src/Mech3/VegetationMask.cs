@@ -36,7 +36,7 @@ public sealed class VegetationMask
     /// <summary>The byte that leaves the faithful density alone.</summary>
     public const byte NeutralByte = 128;
 
-    /// <summary>The share of C21's added stamps a neutral mask keeps, so a thickened mask can show more
+    /// <summary>The share of the remake-added stamps a neutral mask keeps, so a thickened mask can show more
     /// of them without placing any. An original stamp is kept whole at neutral or above.</summary>
     public const float AddedNeutralShare = 0.5f;
 

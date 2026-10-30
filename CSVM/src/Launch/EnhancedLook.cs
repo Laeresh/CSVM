@@ -203,7 +203,7 @@ public static class EnhancedLook
         if (!WriteClutterFadeScale())
             return;
         session?.FollowClutterFade();
-        Log.Info("world", $"view distance: clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+        LogViewDistance();
     }
 
     /// <summary>What the session builds from the word settings, followed on the running world. That is
@@ -211,10 +211,14 @@ public static class EnhancedLook
     /// whose word changes another session build adds it here.</summary>
     public static void FollowWordSettings(GameSession? session)
     {
-        FollowClutterFade(session);
+        bool moved = WriteClutterFadeScale();
+        // One clutter follow reads the fade and every vegetation word, so the session follows once.
+        session?.FollowClutterFade();
+        if (moved)
+            LogViewDistance();
         ApplyWaterQuality(session);
-        ApplyVegetationQuality(session);
-        ApplyVegetationModels(session);
+        LogVegetationQuality();
+        LogVegetationModels();
     }
 
     /// <summary>The resolved <see cref="VegetationModelsSetting"/> word on the running world. The clutter is
@@ -222,7 +226,7 @@ public static class EnhancedLook
     public static void ApplyVegetationModels(GameSession? session)
     {
         session?.FollowClutterFade();
-        Log.Info("world", $"vegetation models: {VegetationModelsSetting.Word} (applied live, band {Mech3.VegetationModels.Band.X:0}-{Mech3.VegetationModels.Band.Y:0} m)");
+        LogVegetationModels();
     }
 
     /// <summary>The resolved <see cref="VegetationQualitySetting"/> word on the running world: the
@@ -232,7 +236,7 @@ public static class EnhancedLook
     public static void ApplyVegetationQuality(GameSession? session)
     {
         session?.FollowVegetationQuality();
-        Log.Info("world", $"vegetation quality: {VegetationQualitySetting.Word} (applied live, rich {(VegetationQualitySetting.RichOn ? "on" : "off")})");
+        LogVegetationQuality();
     }
 
     /// <summary>The resolved <see cref="WaterQualitySetting"/> word on the running world: the session
@@ -380,6 +384,15 @@ public static class EnhancedLook
         env.TonemapAgxWhite = enhanced ? TonemapAgxWhite : fresh.TonemapAgxWhite;
         env.TonemapAgxContrast = enhanced ? TonemapAgxContrast : fresh.TonemapAgxContrast;
     }
+
+    private static void LogViewDistance() =>
+        Log.Info("world", $"view distance: clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+
+    private static void LogVegetationQuality() =>
+        Log.Info("world", $"vegetation quality: {VegetationQualitySetting.Word} (applied live, rich {(VegetationQualitySetting.RichOn ? "on" : "off")})");
+
+    private static void LogVegetationModels() =>
+        Log.Info("world", $"vegetation models: {VegetationModelsSetting.Word} (applied live, band {Mech3.VegetationModels.Band.X:0}-{Mech3.VegetationModels.Band.Y:0} m)");
 
     // The clutter fade's scale on the shader global and on EffectsLevel, which the clutter cells
     // read when they are cut. Returns whether the scale moved.

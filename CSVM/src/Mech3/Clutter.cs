@@ -40,12 +40,15 @@ public sealed class ClutterBuilder
     internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_side;\nvarying flat float v_sun;\n"
         + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";";
 
-    // How far into the handover band the planted point is, 0 inside it and 1 past it. It is the clumps'
+    /// <summary>The node the remake-added stamps stand under, hidden while Rich is off.</summary>
+    internal const string AddedRootName = "clutter_added";
+
+    // How far into the handover band the stamp's origin is, 0 inside it and 1 past it. It is the clumps'
     // alpha and the share the card fades by.
     internal const string HandoverShare = "clamp((distance(origin, CAMERA_POSITION_WORLD) - " + CanopyClumps.HandoverParam
         + ".x) / max(" + CanopyClumps.HandoverParam + ".y - " + CanopyClumps.HandoverParam + ".x, 1.0), 0.0, 1.0)";
 
-    // The breeze's lean at a planted point, which the card and its near model share so the swap does not jump.
+    // The breeze's lean at a stamp's origin, which the card and its near model share so the swap does not jump.
     internal const string LeanLines = "    vec2 breeze = vec2(0.9397, 0.3420);\n"
         + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
         + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
@@ -68,7 +71,7 @@ public sealed class ClutterBuilder
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);\n";
 
-    // How far into the near models' band the planted point is: 0 inside it, where the model alone draws.
+    // How far into the near models' band the stamp's origin is: 0 inside it, where the model alone draws.
     // A spyglass disc's camera (SceneBuilder.FlatSeaEye) reads 1, past the band. It draws no model
     // (VegetationModels.Layer), so the card and the clumps draw whole there, as with no models.
     internal static readonly string ModelShare = "(" + SceneBuilder.FlatSeaEye + " ? 1.0 : clamp((distance(origin, CAMERA_POSITION_WORLD) - "
@@ -77,7 +80,7 @@ public sealed class ClutterBuilder
     // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
     // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
     // It goes back through the face, so a hidden stamp's keep still collapses it. Periods of 12 s and
-    // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the planted point.
+    // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the stamp's origin.
     internal static readonly string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
         + "    v_side = sign(VERTEX.x);\n"
         + SunLine
@@ -174,7 +177,7 @@ public sealed class ClutterBuilder
     // The canopy mask over the last Rich bake, made on first read; every bake drops it.
     private CanopyMask? _canopy;
 
-    // The last Build's root and exports. The remake-added stamps (C21) stand under their own node, shown
+    // The last Build's root and exports. The remake-added stamps stand under their own node, shown
     // while Rich is on. They are the exports from _addedFrom on, which a lab edit rebuilds.
     private Node3D? _root;
     private List<KindExport>? _exports;
@@ -186,11 +189,11 @@ public sealed class ClutterBuilder
     private Node3D? _addedModels;
 
     /// <param name="scene">The world's SceneBuilder for the 3D decorations; null leaves only sprites.</param>
-    /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for
-    /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
-    /// at its authored model and size, never fading, rather than throwing.</param>
-    /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param> <param name="modelChapter">The chapter folder the near models are read under; null draws none.</param>
+    /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for <c>substitute</c>, <c>scale_range</c>
+    /// and <c>far_fade_range</c>. Null builds every decoration at its authored model and size, never fading.</param>
+    /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param>
     /// <param name="vegetation">The chapter's vegetation entry; its listed kinds get a Rich variant that <paramref name="mask"/> thins.</param>
+    /// <param name="modelChapter">The chapter folder the near models are read under; null draws none.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
         ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null,
         VegetationEntry? vegetation = null, VegetationMask? mask = null, string? modelChapter = null)
@@ -848,7 +851,7 @@ public sealed class ClutterBuilder
     }
 
     // The triangle's lattice, or null where a guard refuses it, counted in `stats`. The original's stamp and
-    // the remake's added one (C21) both pass these.
+    // the remake's added one both pass these.
     private static UvTriangle? Lattice(Vector3 a, Vector3 b, Vector3 c, Vector2 uva, Vector2 uvb, Vector2 uvc,
         LatticeStats stats)
     {
@@ -1250,7 +1253,7 @@ public sealed class ClutterBuilder
         Recut();
     }
 
-    // The remake-added stamps on each picked texture (C21) as kinds of their own, built after the original's.
+    // The remake-added stamps on each picked texture as kinds of their own, built after the original's.
     // Each listed card of a set draws as one such kind, two where both a forest set and another name it.
     // They stand under one node that Recut shows while Rich is on. A lab edit drops and rebuilds them.
     private void BuildAdded()
@@ -1269,7 +1272,7 @@ public sealed class ClutterBuilder
         if (_vegetation is not { } entry || PlaceAdded(entry) is not { Count: > 0 } added)
             return;
 
-        _addedRoot = new Node3D { Name = "clutter_added", Visible = VegetationQualitySetting.RichOn };
+        _addedRoot = new Node3D { Name = AddedRootName, Visible = VegetationQualitySetting.RichOn };
         _root.AddChild(_addedRoot);
         if (ModelRoot != null)
         {
@@ -1325,7 +1328,7 @@ public sealed class ClutterBuilder
         var stats = new LatticeStats();
         int deduped = 0, overDense = 0, minted = 0, overlaid = 0;
         // A rail, road or decal laid over picked ground shows there instead, so no added stamp stands on it.
-        // Transitions are exempt: the forest-edge blends sit over C1's fields, where the C22 hedges stand.
+        // Transitions are exempt: the forest-edge blends sit over C1's fields, where the hedgerow stamps stand.
         var overlays = VegetationGround.OverlaysOn(_gamez,
             tex => VegetationScatter.Stamped(entry, tex) != null || VegetationGround.IsTransition(tex), _worldName);
 
@@ -1938,7 +1941,7 @@ public sealed class ClutterBuilder
         // The near model drawn over the Rich stamps, null for a card with none. The map edge copies it too.
         public ClutterInstances.Near? Near;
 
-        // Stamps the remake added on a picked texture (C21), drawn under Rich alone. Their Placements
+        // Stamps the remake added on a picked texture, drawn under Rich alone. Their Placements
         // are the unvaried points, which nothing draws.
         public bool Added;
 
@@ -2259,7 +2262,7 @@ public sealed class ClutterBuilder
         // The offset from the model's node down to its drawn mesh, which a stamp the remake adds carries.
         public Vector3 Lift;
 
-        // An empty kind drawing this card, for the stamps the remake adds (C21). It takes this model's own
+        // An empty kind drawing this card, for the stamps the remake adds. It takes this model's own
         // fade, since a set places its member directly, and never a substitution or a scale.
         public Kind AddedTwin() => new()
         {

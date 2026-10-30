@@ -104,7 +104,7 @@ public static class CanopyClumps
     public static bool DefaultOn(string? chapter) =>
         string.Equals(chapter, "C1", StringComparison.OrdinalIgnoreCase) || string.Equals(chapter, "C3", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The clumps each cell of <paramref name="mask"/> holds on average: the kept card stamps planted in
+    /// <summary>The clumps each cell of <paramref name="mask"/> holds on average: the kept card stamps standing in
     /// it over <paramref name="meanTrees"/>. The clumps then carry the cards' trees per area cell by cell. The
     /// mask's density is held at one fir a cell, so a dense stand would lose trees through it.</summary>
     public static float[] Rate(CanopyMask mask, IEnumerable<Vector3> stamps, float meanTrees)
@@ -623,8 +623,10 @@ public static class CanopyClumps
             vec3 origin = MODEL_MATRIX[3].xyz;
             v_model = {{ClutterBuilder.ModelShare}};
             v_alpha = {{ClutterBuilder.HandoverShare}};
-            float stand = {{HeldParam}} > 0.0 ? {{HeldParam}} : v_alpha;
-            float keep = step(0.004, mix(v_alpha, {{HeldParam}} > 0.0 ? v_model : v_alpha, grow));
+            // A spyglass disc draws no crown model, so its clumps rise as with no models.
+            float hold = {{SceneBuilder.FlatSeaEye}} ? 0.0 : {{HeldParam}};
+            float stand = hold > 0.0 ? hold : v_alpha;
+            float keep = step(0.004, mix(v_alpha, hold > 0.0 ? v_model : v_alpha, grow));
             origin.y -= MODEL_MATRIX[1].y * (1.0 - stand) * grow;
             v_alpha = mix(v_alpha, 1.0, grow);
         {{ClutterBuilder.FaceBasisLines(false)}}

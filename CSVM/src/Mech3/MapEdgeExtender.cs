@@ -740,7 +740,7 @@ public sealed partial class MapEdgeExtender : Node3D
             // The card's near model over the same copies, each following its source stamp as the card does.
             if (rich != null && kind.Near is { } near)
             {
-                // ponytail: one node per edge cell; cut it into model cells if D37's edge views read it.
+                // ponytail: one node per edge cell; cut it into model cells if a map-edge view's budget reads it.
                 var model = Copies(near.Mesh, near.Material, $"clutter_{kindIndex}_model", default, -1);
                 model.Layers = VegetationModels.Layer;
                 var modelDraw = EdgeDraw.Of(model, kindIndex, near.Mesh.GetAabb(), placements) with { Near = true };

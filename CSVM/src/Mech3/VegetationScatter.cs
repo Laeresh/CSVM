@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The remake's added stamps on a picked ground texture (C21): one scatter per texture repeat. It walks the
+/// The remake's added stamps on a picked ground texture: one scatter per texture repeat. It walks the
 /// triangle's own UV lattice as the original walks a template, with the strict edge test and the dedup.
 /// The scatter is a fixed order of points on the unit repeat. Each is the farthest of <see cref="Tries"/>
 /// draws from those before it, so any prefix is spread. A triangle takes twice the stamps its set's density
