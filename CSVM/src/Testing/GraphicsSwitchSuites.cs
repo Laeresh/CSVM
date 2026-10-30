@@ -1040,7 +1040,7 @@ internal static class GraphicsSwitchSuites
         RequireData(ctx, "C1");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
-        var gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"));
+        var gamez = ctx.ChapterGamez("C1")!;
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
@@ -1344,7 +1344,7 @@ internal static class GraphicsSwitchSuites
         RequireData(ctx, "C5");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word;
-        var gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, Chapter));
+        var gamez = ctx.ChapterGamez(Chapter)!;
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
@@ -1453,7 +1453,7 @@ internal static class GraphicsSwitchSuites
                 }
                 else
                 {
-                    var c1Gamez = Mech3.GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, VegetationChapter));
+                    var c1Gamez = ctx.ChapterGamez(VegetationChapter)!;
                     var rails = Mech3.VegetationGround.Painted(c1Gamez, t => t.Equals(RailTexture, StringComparison.OrdinalIgnoreCase));
                     var onRails = AddedOf(c1Kinds).SelectMany(k => k.Rich).Where(xf => OnTriangles(rails, xf.Origin)).ToList();
                     int standing = onRails.Count(xf => xf.Basis.Determinant() != 0f);
