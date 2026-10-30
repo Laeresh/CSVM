@@ -366,7 +366,9 @@ along the intercept; `gun-hit-rate` fires boresight that way and hits. The same 
 shooter's frame lies on that muzzle ray too, nearer by the plane's own travel over `t`, because a
 plane flies along its nose. The two differ only through the chase camera's offset from the muzzle.
 It shows only while the solve succeeds and the reach, measured as the bracket gate measures it, is
-inside the group's `RANGE`. The original's pipper is untouched.
+inside the group's `RANGE`. A selected objective the marker draws blue (a non-destructive category
+such as a Danger Zone's Fly Through or a Protect site) gets no lead; its own marker is unchanged.
+The original's pipper is untouched.
 
 ## AI gunnery is a different system
 

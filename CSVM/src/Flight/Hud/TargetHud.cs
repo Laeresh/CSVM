@@ -386,15 +386,7 @@ public sealed partial class TargetHud : Control
     {
         if (target.Category is { Length: > 0 } category)
         {
-            foreach (var destructive in DestructiveCategories)
-            {
-                if (string.Equals(category, destructive, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    return HudRed;
-                }
-            }
-
-            return HudBlue;
+            return IsDestructive(category) ? HudRed : HudBlue;
         }
 
         return target.Team != ownTeam && target.Team != AimAssist.NeutralTeam
@@ -402,6 +394,13 @@ public sealed partial class TargetHud : Control
             ? HudRed
             : HudGreen;
     }
+
+    /// <summary>Whether <see cref="LeadMark"/> marks this target: everything except the blue
+    /// objective of <see cref="MarkerColor"/>. Its category asks for something other than damage,
+    /// a Danger Zone to fly through or a site to protect. A target with no category always leads.
+    /// </summary>
+    public static bool Leads(in TargetRef target) =>
+        target.Category is not { Length: > 0 } category || IsDestructive(category);
 
     /// <summary>The bracket gate's arithmetic (<c>FUN_004574d0</c>): solve the aim assist's lead
     /// intercept, accept only inside the weapon's authored <paramref name="range"/>. No intercept
@@ -519,8 +518,9 @@ public sealed partial class TargetHud : Control
     /// <summary>The marked target's lead point at this frame's drawn poses, or null where the marker
     /// is off or has nothing to mark. The target is the one <see cref="WorldMarks"/> marks: the
     /// selection, and the nearest hostile only with nothing selected, since that one changes
-    /// whenever another plane comes closer. It is solved on the simulation poses and moved by the
-    /// target's draw offset, so it holds still against the drawn target. Read by the suite.</summary>
+    /// whenever another plane comes closer. A selection <see cref="Leads"/> refuses marks nothing.
+    /// It is solved on the simulation poses and moved by the target's draw offset, so it holds
+    /// still against the drawn target. Read by the suite.</summary>
     public (Vector3 Lead, Vector3 Target)? LeadMark()
     {
         if (Own is not { LeadMarker: true } own)
@@ -532,6 +532,11 @@ public sealed partial class TargetHud : Control
         Vector3 pos, vel;
         if (Selected is { Source: { } selected } target)
         {
+            if (!Leads(target))
+            {
+                return null;
+            }
+
             (source, pos, vel) = (selected, target.Position, target.Velocity);
         }
         else if (GodotObject.IsInstanceValid(_hostile) && _hostile is { InPlay: true } hostile
@@ -863,6 +868,19 @@ public sealed partial class TargetHud : Control
     }
 
     private static string EdgeTag(string tag, int clockHour) => $"{tag}  {clockHour} o'clock";
+
+    private static bool IsDestructive(string category)
+    {
+        foreach (var destructive in DestructiveCategories)
+        {
+            if (string.Equals(category, destructive, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static void Brackets(CanvasItem into, Vector2 at, Color color, float s)
     {

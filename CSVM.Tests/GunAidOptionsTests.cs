@@ -94,4 +94,20 @@ public class GunAidOptionsTests
         Assert.Null(TargetHud.LeadPoint(muzzle, Vector3.Zero, 100f, 5000f, new Vector3(0f, 0f, -300f), new Vector3(0f, 0f, -400f)));
         Assert.NotNull(TargetHud.LeadPoint(muzzle, Vector3.Zero, 850f, 1000f, new Vector3(0f, 0f, -900f), Vector3.Zero));
     }
+
+    // A blue objective (fly through, protect) is nothing to shoot; a red one and every plain target are.
+    [Fact]
+    public void TheLeadMarksOnlyWhatTheGunsAreThereToHit()
+    {
+        Assert.False(TargetHud.Leads(TargetRef.ForStructure(default, TargetClass.Enemy, "dz1",
+            "Danger Zone", "Fly Through", objective: true)));
+        Assert.False(TargetHud.Leads(TargetRef.ForStructure(default, TargetClass.Enemy, "depot",
+            category: "Protect", objective: true)));
+        Assert.True(TargetHud.Leads(TargetRef.ForStructure(default, TargetClass.Enemy, "depot",
+            category: "Destroy", objective: true)));
+        Assert.True(TargetHud.Leads(TargetRef.ForStructure(default, TargetClass.NonAircraft, "tank")));
+        Assert.True(TargetHud.Leads(TargetRef.ForStructure(default, TargetClass.Enemy, "gasbag1")));
+        Assert.True(TargetHud.Leads(TargetRef.ForTurret(default, TargetClass.NonAircraft, "AA Emplacement")));
+        Assert.True(TargetHud.Leads(TargetRef.ForAircraft(default, TargetClass.Enemy, "ai1_player_fury")));
+    }
 }
