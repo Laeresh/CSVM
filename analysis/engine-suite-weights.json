@@ -137,6 +137,7 @@
     "campaign-zeppelin-wakeup": 1.526,
     "campaign-zeppelin-crash": 10.746,
     "canopy-hole-draws": 0.577,
+    "canopy-activation": 4.5,
     "canopy-clumps": 9.9,
     "canopy-mask": 2.2,
     "canopy-models": 8.0,

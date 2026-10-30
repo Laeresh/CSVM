@@ -1031,6 +1031,88 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("canopy-activation",
+        "CM02's script-hidden islands carry no Enhanced vegetation in a C3 flight at rich: no canopy clump and no crown "
+        + "model stands in a canopy cell painted only by a switched-off world node; switching those islands on builds "
+        + "clumps and crowns over them, and switching them off again takes them away")]
+    internal static void CanopyActivation(TestContext ctx)
+    {
+        RequireData(ctx, "C3");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = VegetationModelsSetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            VegetationModelsSetting.Resolve(VegetationModelsSetting.Near, null, null);
+            var live = Open(ctx, true, 1, "C3", "--mission=M02");
+            try
+            {
+                if (!live.Built || live.Session.CanopyClumpField is not { } field || live.Session.Clutter is not { } clutter
+                    || clutter.Vegetation is not { } entry || clutter.Gamez.FindByName("world1") is not { HasArea: true } w)
+                {
+                    ctx.Check(false, $"the rich C3 M02 flight builds its clumps");
+                    return;
+                }
+
+                // The switched-off nodes read off the built world, and those holding canopy ground under them: the islands.
+                Func<string, bool> canopy = t => CanopyMask.IsCanopy(entry, t);
+                var holders = Mech3.VegetationGround.Holders(clutter.Gamez, canopy);
+                var off = new HashSet<int>();
+                var islands = new List<Node3D>();
+                Walk(live.Session, node =>
+                {
+                    if (node is not Node3D { Visible: false } n || !n.HasMeta(AnimRuntime.IndexMeta))
+                        return;
+                    off.Add(n.GetMeta(AnimRuntime.IndexMeta).AsInt32());
+                    bool holds = false;
+                    Walk(n, d => holds |= d.HasMeta(AnimRuntime.IndexMeta) && holders.Contains(d.GetMeta(AnimRuntime.IndexMeta).AsInt32()));
+                    if (holds && n.GetParent() is Node3D parent && parent.IsVisibleInTree())
+                        islands.Add(n);
+                });
+                CanopyMask Bake(Func<GameZNode, bool>? prune) => CanopyMask.FromPainted(
+                    Mech3.VegetationGround.Painted(clutter.Gamez, canopy, switchedOff: prune), w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom);
+                var every = Bake(null);
+                var shown = Bake(n => off.Contains(n.Index));
+                bool OnHidden(Vector3 at) => every.CellAt(at.X, at.Z) is int c and >= 0 && every.PaintedShare(c) > 0f && shown.PaintedShare(c) == 0f;
+                (int Clumps, int Crowns) Over(Mech3.CanopyClumps.Field f) => (f.Clumps.Count(c => OnHidden(c.Base)), f.Crowns.Count(c => OnHidden(c.At)));
+
+                int hiddenCells = Enumerable.Range(0, every.Width * every.Height).Count(c => every.PaintedShare(c) > 0f && shown.PaintedShare(c) == 0f);
+                ctx.Check(islands.Count > 0 && hiddenCells > 0,
+                    $"CM02's script switches off {islands.Count} island(s) holding canopy, {hiddenCells} canopy cells painted by them alone");
+                var (clumps, crowns) = Over(field);
+                ctx.Check(clumps == 0 && crowns == 0,
+                    $"at mission start no clump ({clumps} of {field.Clumps.Count}) and no crown model ({crowns} of {field.Crowns.Count}) stands over hidden canopy alone");
+
+                foreach (var island in islands)
+                    AnimRuntime.SetSubtreeActive(island, true);
+                live.Session.FollowGroundSwitch();
+                var on = live.Session.CanopyClumpField;
+                var (clumpsOn, crownsOn) = on != null ? Over(on) : (0, 0);
+                ctx.Check(clumpsOn > 0 && crownsOn > 0,
+                    $"switched on, the islands carry {clumpsOn} clump(s) and {crownsOn} crown model(s) over their canopy");
+
+                foreach (var island in islands)
+                    AnimRuntime.SetSubtreeActive(island, false);
+                live.Session.FollowGroundSwitch();
+                var again = live.Session.CanopyClumpField;
+                var (clumpsOff, crownsOff) = again != null ? Over(again) : (-1, -1);
+                ctx.Check(clumpsOff == 0 && crownsOff == 0 && again!.Clumps.Count == field.Clumps.Count && again.Crowns.Count == field.Crowns.Count,
+                    $"switched off again, they carry none ({clumpsOff} clumps, {crownsOff} crowns) and the field is the first build's size ({again?.Clumps.Count} clumps)");
+            }
+            finally
+            {
+                live.Close();
+            }
+        }
+        finally
+        {
+            VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("ground-cover-cards",
         "the Ground Cover word's cards on C1 at rich: at off nothing builds; at cards, the launch default, the cells "
         + "around a crop field, a meadow and the strip clearance's edge hold crop and grass cards on the entry's cover "
