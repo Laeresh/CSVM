@@ -22,7 +22,9 @@
                    session reads in place, in -Shards processes,
                    split by the harness's own shard:<i>/<n> term over
                    analysis/engine-suite-weights.json, so the suite list is the registry's and
-                   never a copy of it; on the safe render thread (see the shard launch)
+                   never a copy of it; on the safe render thread (see the shard launch). When the
+                   tree holds an extraction's extracted\C1\gamez.zip, that one file is copied into
+                   the data root first, the input the modding-folder suite edits
 
     A stage that fails does not stop the ones after it that can still run: a tarball whose CSVM.x86_64
     lost its bit fails the payload stage AND shows what the copy does with it.
@@ -128,6 +130,13 @@ if (-not $NoSuites -and -not (Test-Path $Weights)) {
     throw "No $Weights; the shards are planned from it."
 }
 
+# The modding-folder suite skips without an extraction's C1 gamez output in the data root; the
+# rest of an extraction is not read, so only that file goes in. "-" stands for none, since
+# PowerShell 5.1 drops an empty native argument.
+$modRoots = @($RepoRoot)
+if ($env:CSVM_DATA_ROOT) { $modRoots += $env:CSVM_DATA_ROOT }
+$ModZip = $modRoots | ForEach-Object { Join-Path $_ "extracted\C1\gamez.zip" } | Where-Object { Test-Path $_ } | Select-Object -First 1
+
 # packaging/MANIFEST.md's Linux table is the statement of what the tarball holds, so the
 # expected listing is read from it rather than restated here. Each backticked name in a row's
 # first cell is one entry; a name ending in / is a folder that must hold at least one file, and a
@@ -177,7 +186,7 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 $checkScript = Join-Path $OutDir "linux-check.sh"
 $sh = @'
 set -u
-tarball="$1"; install="$2"; out="$3"; shards="$4"; suites="$5"; weights="$6"; timeout_s="$7"
+tarball="$1"; install="$2"; out="$3"; shards="$4"; suites="$5"; weights="$6"; timeout_s="$7"; modzip="$8"
 # bash's own notices (a child's "Segmentation fault") go to a file: native stderr reaching a
 # PowerShell caller that redirects it is a terminating error there.
 exec 2>"$out/bash.stderr"
@@ -219,6 +228,9 @@ du -sm "$copied" 2>/dev/null | cut -f1 > "$out/copy.mb"
 [ "$suites" = "1" ] || exit 0
 [ "$(cat "$out/copy.exit")" = "0" ] || exit 0
 
+if [ "$modzip" != "-" ]; then
+  mkdir -p "$data/extracted/C1" && cp -- "$modzip" "$data/extracted/C1/gamez.zip"
+fi
 mkdir -p analysis
 cp "$weights" analysis/engine-suite-weights.json
 start=$(date +%s)
@@ -260,12 +272,13 @@ exit 0
 Write-Banner "Linux release check in WSL ($Distro)"
 Write-Host "  tarball  $Tarball"
 Write-Host "  install  $Install"
+Write-Host "  modding  $(if ($ModZip) { $ModZip } else { 'no extracted\C1\gamez.zip, modding-folder skips' })"
 Write-Host "  output   $OutDir"
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $ErrorActionPreference = "Continue"
 & wsl.exe -d $Distro --exec bash (ConvertTo-WslPath $checkScript) (ConvertTo-WslPath $Tarball) `
     (ConvertTo-WslPath $Install) (ConvertTo-WslPath $OutDir) $Shards $(if ($NoSuites) { "0" } else { "1" }) `
-    (ConvertTo-WslPath $Weights) $ShardTimeoutSec
+    (ConvertTo-WslPath $Weights) $ShardTimeoutSec $(if ($ModZip) { ConvertTo-WslPath $ModZip } else { "-" })
 $wslRun = $LASTEXITCODE
 $ErrorActionPreference = "Stop"
 $totalSeconds = $watch.Elapsed.TotalSeconds
