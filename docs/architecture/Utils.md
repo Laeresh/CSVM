@@ -377,7 +377,7 @@ the rule `default_integrated_gpu`. `Pick` is the lookup without the store.
 
 ## src/Utils/VegetationQualitySetting.cs
 The Enhanced vegetation's quality: `original`, the clutter as the faithful path stamps and draws it, or `rich`, the remake's
-richer vegetation over the same stamps (`docs/PLAN-enhanced-vegetation.md`). It resolves as `ShadowQualitySetting` does: `--vegetation-quality=`,
+richer vegetation over the same stamps. It resolves as `ShadowQualitySetting` does: `--vegetation-quality=`,
 the saved `vegetationQuality` word, the `graphics.vegetationQuality` key, then `rich` under `--det` and otherwise
 `FallbackFor(integrated, panes)`: `original` on an integrated GPU (the Steam Deck) drawing two or more panes, under
 `default_integrated_gpu_panes`, and `rich` otherwise, whatever the OS. A splitscreen session resolves it again (`WordSettings.FollowPanes`).

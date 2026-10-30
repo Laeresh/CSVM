@@ -1,4 +1,4 @@
-"""Writes C1's vegetation mask (CSVM/data/vegetation/C1.bin, PLAN-enhanced-vegetation C22): hedgerows along the
+"""Writes C1's vegetation mask (CSVM/data/vegetation/C1.bin): hedgerows along the
 crop fields' edges, sparse field interiors, bare ground around the landing strips, neutral everywhere else.
 
 usage: python c1_mask.py [out.bin] [interior_byte=2] [hedge_byte=255] [side_m=150] [end_m=600]

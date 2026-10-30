@@ -3,7 +3,7 @@
 **Question.** Per chapter, which ground textures cover real area, which of them a clutter template
 dresses, and which undressed ones look like vegetation-bearing ground (grass, fields, jungle,
 scrub). Also: which decoration cards each chapter carries, placed or not. Asked for
-PLAN-enhanced-vegetation's density and near waves.
+the Enhanced vegetation's density and added stamps.
 
 **Instrument.** `survey.py` reuses `../bl-305-clutter-uv/eligibility.py`'s loader, template
 resolver and world walk over `extracted/<C>/gamez`, takes the registrations from `extracted/interp.json`
