@@ -512,7 +512,7 @@ internal static class NetBotSuites
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.AutoRespawnAfter = QuickRespawn;
+                pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
             }
         }
 
@@ -635,10 +635,10 @@ internal static class NetBotSuites
         var guestOwn = guest.SeatRigs[GuestSeat].Controller!;
         var guestCopy = host.SeatRigs[GuestSeat].Controller!;
         var hostPlane = host.SeatRigs[HostSeat].Controller!;
-        ctx.Check(!bot.RespawnOnFire && bot.AutoRespawnAfter == VersusDirector.RespawnDelay,
-            $"[{cell}] the bot's seat respawns on the crash camera's {bot.AutoRespawnAfter} s without waiting for Fire Guns (waits {bot.RespawnOnFire})");
-        ctx.Check(guestOwn.RespawnOnFire && guestOwn.AutoRespawnAfter == bot.AutoRespawnAfter,
-            $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's own seat on the same launch waits for Fire Guns after the same {guestOwn.AutoRespawnAfter} s (waits {guestOwn.RespawnOnFire})");
+        ctx.Check(!bot.Rule.WaitsOnFire && bot.Rule.AutoRespawnAfter == VersusDirector.RespawnDelay,
+            $"[{cell}] the bot's seat respawns on the crash camera's {bot.Rule.AutoRespawnAfter} s without waiting for Fire Guns (waits {bot.Rule.WaitsOnFire})");
+        ctx.Check(guestOwn.Rule.WaitsOnFire && guestOwn.Rule.AutoRespawnAfter == bot.Rule.AutoRespawnAfter,
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's own seat on the same launch waits for Fire Guns after the same {guestOwn.Rule.AutoRespawnAfter} s (waits {guestOwn.Rule.WaitsOnFire})");
 
         var pilot = bot.Pilot!;
         var gunner = pilot.Gunner!;
@@ -704,7 +704,7 @@ internal static class NetBotSuites
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.AutoRespawnAfter = QuickRespawn;
+                pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
             }
         }
 

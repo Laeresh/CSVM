@@ -188,19 +188,16 @@ public sealed class VersusDirector
             if (rig.Controller is { } pilot)
             {
                 int seat = rig.Index;
-                // Crash cam, then back in, R skips. With the lobby's Auto Respawn off the same
-                // crash cam runs and then waits for Fire Guns, as the original's does. ⚠ Never on a
-                // bot seat, which has no Fire Guns to press and would stay down for the match.
-                pilot.AutoRespawnAfter = RespawnDelay;
-                pilot.RespawnOnFire = !_spec.VsAutoRespawn && !IsBot(seat);
+                var rule = RespawnRule.Versus(RespawnDelay, IsBot(seat), _spec.VsAutoRespawn);
+                if (Wired)
+                    rule = rule with { Placement = new ReturnPlacement.AskHost(() => AskSpawn(seat)) };
+                else if (_rotation != null)
+                    rule = rule with { Placement = new ReturnPlacement.Rotation(() => Respawn(seat, lastKiller[seat])) };
+                pilot.Rule = rule;
                 pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                 // ⚠ No rematch key on the way to Game Scores. The next round is a lobby launch, and
                 // Zeppelin vs Zeppelin's Restart would land twice.
                 pilot.RestartMatch = _landOnScores == null ? Restart : null;
-                if (Wired)
-                    pilot.RespawnRequest = () => AskSpawn(seat);
-                else if (_rotation != null)
-                    pilot.RespawnPlacement = () => Respawn(seat, lastKiller[seat]);
                 pilot.Downed += (victim, killer) =>
                 {
                     if (victim >= 0 && victim < lastKiller.Length)
