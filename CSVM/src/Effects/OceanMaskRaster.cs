@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
 
@@ -27,13 +28,17 @@ internal static class OceanMaskRaster
     /// as sea, as it reads 255.</summary>
     public const byte RampSea = 254;
 
-    /// <summary>The shore distance in metres at which the mask's G saturates. G is the distance to
-    /// the nearest texel that is not open sea (a shore, coast-tile or solid texel) over this.</summary>
+    /// <summary>The shore distance in metres at which the mask's G saturates. G is the shore distance
+    /// over this. It is the nearer of the exact distance to the coastline and the texel distance to a
+    /// coast tile, hull or uncovered texel.</summary>
     public const float ShoreReach = 160f;
 
     // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
     // a chain of at most ShoreReach / Cell steps, so a band sees every chain its own rows can take.
     private const int Halo = (int)(ShoreReach / Cell) + 4;
+
+    // A solid's corner within this of y = 0 lies on the coastline; an edge between two is a segment of it.
+    private const float CoastBand = 0.25f;
 
     // How far past a ramp its plane is lifted. It reaches the nearest texel centre beyond the rim,
     // so the linear filter reads the plane on both sides of it.
@@ -95,7 +100,8 @@ internal static class OceanMaskRaster
         Parallel.For(0, count, b => Dilate(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, tint));
         Parallel.For(0, count, b => Seam(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1));
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
-        Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
+        var coast = Coastline(tris);
+        Parallel.For(0, count, b => Encode(grid, coast, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf);
@@ -115,6 +121,16 @@ internal static class OceanMaskRaster
         if (f > 0.5f || (f == 0.5f && (r & 1) == 1))
             r++;
         return (byte)r;
+    }
+
+    // The distance from (px, pz) to the segment a..b. The tests' oracle measures the coastline by it too.
+    internal static double Segment(double px, double pz, double ax, double az, double bx, double bz)
+    {
+        double dx = bx - ax, dz = bz - az;
+        double len = (dx * dx) + (dz * dz);
+        double s = len > 0.0 ? Math.Clamp((((px - ax) * dx) + ((pz - az) * dz)) / len, 0.0, 1.0) : 0.0;
+        double ex = ax + (s * dx) - px, ez = az + (s * dz) - pz;
+        return Math.Sqrt((ex * ex) + (ez * ez));
     }
 
     // Every triangle's texels within rows r0..r1, in list order. A later base triangle's tint wins
@@ -257,12 +273,13 @@ internal static class OceanMaskRaster
         float ax = t.A.X, ay = t.A.Z, bx = t.B.X, by = t.B.Z, cx = t.C.X, cy = t.C.Z;
         int z0 = Math.Max(r0, (int)Math.Floor((Math.Min(ay, Math.Min(by, cy)) - minZ) / Cell));
         int z1 = Math.Min(r1, (int)Math.Ceiling((Math.Max(ay, Math.Max(by, cy)) - minZ) / Cell));
+        bool hull = t.Kind == Kind.Solid && !IsCoast(t);
         // A triangle smaller than a texel still marks the texels its corners land in.
         if (t.Kind == Kind.Solid)
         {
-            Corner(g, (int)((ax - minX) / Cell), (int)((ay - minZ) / Cell), r0, r1);
-            Corner(g, (int)((bx - minX) / Cell), (int)((by - minZ) / Cell), r0, r1);
-            Corner(g, (int)((cx - minX) / Cell), (int)((cy - minZ) / Cell), r0, r1);
+            Corner(g, (int)((ax - minX) / Cell), (int)((ay - minZ) / Cell), r0, r1, hull);
+            Corner(g, (int)((bx - minX) / Cell), (int)((by - minZ) / Cell), r0, r1, hull);
+            Corner(g, (int)((cx - minX) / Cell), (int)((cy - minZ) / Cell), r0, r1, hull);
         }
         if (z0 > z1)
             return;
@@ -328,6 +345,7 @@ internal static class OceanMaskRaster
                         break;
                     default:
                         g.Solid[i] = true;
+                        g.Seed[i] = true;
                         break;
                 }
             }
@@ -368,16 +386,6 @@ internal static class OceanMaskRaster
         }
     }
 
-    // The distance from (px, pz) to the segment a..b.
-    private static double Segment(double px, double pz, double ax, double az, double bx, double bz)
-    {
-        double dx = bx - ax, dz = bz - az;
-        double len = (dx * dx) + (dz * dz);
-        double s = len > 0.0 ? Math.Clamp((((px - ax) * dx) + ((pz - az) * dz)) / len, 0.0, 1.0) : 0.0;
-        double ex = ax + (s * dx) - px, ez = az + (s * dz) - pz;
-        return Math.Sqrt((ex * ex) + (ez * ez));
-    }
-
     // Narrows lo..hi to the px where one edge's weight can pass the test. The bound is worked in
     // doubles and widened by two texels, far more than float rounding moves it. No texel the float
     // test takes is cut. The weight times area is ex * pRel - ey * (px - vx).
@@ -396,19 +404,30 @@ internal static class OceanMaskRaster
             lo = Math.Max(lo, vx + bound - slack);
     }
 
-    private static void Corner(Grid g, int x, int z, int r0, int r1)
+    private static void Corner(Grid g, int x, int z, int r0, int r1, bool hull)
     {
         if (x >= 0 && x < g.W && z >= r0 && z <= r1)
+        {
             g.Solid[(z * g.W) + x] = true;
+            g.Seed[(z * g.W) + x] |= hull;
+        }
     }
+
+    // A solid with a corner at sea level is land meeting the water; its corner texels leave the sea
+    // beside them to the coastline. A solid with none crosses the water with faces, a hull or a post.
+    private static bool IsCoast(in Tri t) =>
+        Math.Abs(t.A.Y) <= CoastBand || Math.Abs(t.B.Y) <= CoastBand || Math.Abs(t.C.Y) <= CoastBand;
 
     // Rows r0..r1 of both channels. The distance runs over the band plus its halo, then keeps its
     // own rows. A chain reaching past the halo is longer than ShoreReach and saturates.
-    private static void Encode(Grid g, int r0, int r1, byte[] mask, byte[] lift)
+    private static void Encode(Grid g, float[] coast, int r0, int r1, byte[] mask, byte[] lift)
     {
         int w = g.W;
         int e0 = Math.Max(0, r0 - Halo), e1 = Math.Min(g.H - 1, r1 + Halo);
         var dist = ShoreDistance(g, e0, e1);
+        // The nearer wins. A hull beside the coast keeps its calm. Land behind a coastline is never
+        // nearer than the coastline, so the coast reads the exact distance.
+        Exact(g, coast, dist, e0, r0, r1);
         for (int y = r0; y <= r1; y++)
         {
             for (int x = 0; x < w; x++)
@@ -417,15 +436,67 @@ internal static class OceanMaskRaster
                 mask[2 * i] = g.Sea[i] == 0 ? (byte)0 : g.Ramp[i] ? RampSea : (byte)255;
                 // The distance, not a height. The shader fades the swell and the look over ramps
                 // of their own, from the distance the linear filter interpolates between texels.
-                float d = dist[((y - e0) * w) + x];
+                float d = g.Sea[i] == 1 && !g.Solid[i] ? dist[((y - e0) * w) + x] : 0f;
                 mask[(2 * i) + 1] = d >= ShoreReach ? (byte)255 : (byte)Math.Round(d / ShoreReach * 255f);
                 lift[i] = Channel(g.Lift[i] / OceanMask.RampTop);
             }
         }
     }
 
-    // Distance in metres to the nearest texel that is not open sea, by a two-pass chamfer over
-    // rows e0..e1, indexed from row e0.
+    // The coastline in world XZ, four floats a segment: every edge of a solid whose two corners lie on it.
+    private static float[] Coastline(Tri[] tris)
+    {
+        var seg = new List<float>();
+        foreach (var t in tris)
+        {
+            if (t.Kind != Kind.Solid)
+                continue;
+            bool a = Math.Abs(t.A.Y) <= CoastBand, b = Math.Abs(t.B.Y) <= CoastBand, c = Math.Abs(t.C.Y) <= CoastBand;
+            if (a && b)
+                seg.AddRange(new[] { t.A.X, t.A.Z, t.B.X, t.B.Z });
+            if (b && c)
+                seg.AddRange(new[] { t.B.X, t.B.Z, t.C.X, t.C.Z });
+            if (c && a)
+                seg.AddRange(new[] { t.C.X, t.C.Z, t.A.X, t.A.Z });
+        }
+        return seg.ToArray();
+    }
+
+    // Lowers each open-sea texel of rows r0..r1 in dist (indexed from row e0) to its exact distance from
+    // every segment within ShoreReach. Each segment writes the box it reaches; past ShoreReach G saturates.
+    private static void Exact(Grid g, float[] coast, float[] dist, int e0, int r0, int r1)
+    {
+        int w = g.W;
+        float minX = g.MinX, minZ = g.MinZ;
+        byte[] sea = g.Sea;
+        bool[] solid = g.Solid;
+        for (int s = 0; s < coast.Length; s += 4)
+        {
+            float ax = coast[s], az = coast[s + 1], bx = coast[s + 2], bz = coast[s + 3];
+            int z0 = Math.Max(r0, (int)Math.Floor((Math.Min(az, bz) - ShoreReach - minZ) / Cell));
+            int z1 = Math.Min(r1, (int)Math.Ceiling((Math.Max(az, bz) + ShoreReach - minZ) / Cell));
+            int x0 = Math.Max(0, (int)Math.Floor((Math.Min(ax, bx) - ShoreReach - minX) / Cell));
+            int x1 = Math.Min(w - 1, (int)Math.Ceiling((Math.Max(ax, bx) + ShoreReach - minX) / Cell));
+            for (int z = z0; z <= z1; z++)
+            {
+                float pz = minZ + ((z + 0.5f) * Cell);
+                for (int x = x0; x <= x1; x++)
+                {
+                    int k = (z * w) + x;
+                    if (sea[k] != 1 || solid[k])
+                        continue;
+                    int i = ((z - e0) * w) + x;
+                    float e = (float)Segment(minX + ((x + 0.5f) * Cell), pz, ax, az, bx, bz);
+                    if (e < dist[i])
+                        dist[i] = e;
+                }
+            }
+        }
+    }
+
+    // Distance in metres to the nearest seed texel, by a two-pass chamfer over rows e0..e1, indexed
+    // from row e0. A seed is a coast tile, a texel nothing covers, a centre a solid covers, or a hull's
+    // corner texel. A coast solid's corner texel does not seed: its centre can lie in the sea.
     private static float[] ShoreDistance(Grid g, int e0, int e1)
     {
         int w = g.W, h = e1 - e0 + 1;
@@ -433,7 +504,10 @@ internal static class OceanMaskRaster
         const float big = 1e6f;
         int off = e0 * w;
         for (int i = 0; i < dist.Length; i++)
-            dist[i] = g.Sea[off + i] == 1 && !g.Solid[off + i] ? big : 0f;
+        {
+            int k = off + i;
+            dist[i] = g.Seed[k] || g.Sea[k] == 2 || (g.Sea[k] == 0 && !g.Solid[k]) ? 0f : big;
+        }
         const float d1 = Cell, d2 = Cell * 1.4142f;
         for (int y = 0; y < h; y++)
         {
@@ -496,6 +570,7 @@ internal static class OceanMaskRaster
             MinZ = minZ;
             Sea = new byte[w * h];
             Solid = new bool[w * h];
+            Seed = new bool[w * h];
             Zone = new byte[w * h];
             DrawZone = new byte[w * h];
             Tinted = new bool[w * h];
@@ -516,6 +591,9 @@ internal static class OceanMaskRaster
         public byte[] Sea { get; }
 
         public bool[] Solid { get; }
+
+        // Solid texels the chamfer runs from: every centre a solid covers, and a hull's corner texels.
+        public bool[] Seed { get; }
 
         // The zone group of the base sheet a texel shows, AnyZone on water off the sheet.
         public byte[] Zone { get; }

@@ -104,7 +104,7 @@ age taken from the travel since the newest sample so that frame pacing moves no 
 
 ## src/Effects/OceanMask.cs
 The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`), reused by every
-rebuild. Owns sea coverage, the distance to the nearest shore, coast-tile or solid texel, the sheet's baked tint, each texel's
+rebuild. Owns sea coverage, the shore distance (exact to the coastline, the land's sea-level edges; by texel to a coast tile or a hull), the sheet's baked tint, each texel's
 zone group where the sheet spans zone-gate layers, the surf ring and the ramps. The ring (`SceneBuilder.IsSurfTexture`, the `srf*` strip at sea level in C1B and C2) is open sea with its authored coverage `1 - u`, 1 at the land edge and 0 at its seaward edge, so the shore distance under it runs from the land; other sea-level water off the sheet (C1's opaque `water1_trans` tiles) stays shore.
 A ramp is a base-sheet triangle rising from sea level to under `RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp), open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wake sheets (and the turbulence sheets under the same ships), tile size and
 lowest priority; hulls (`OceanMovers.cs`) stay out. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
@@ -117,7 +117,7 @@ object touched. Owns the triangle fill, the shore distance pass, the off-sheet t
 between two groups, and a coast texel in the group of the sea beside it), and runs in row bands on the thread pool. A `Kind.Surf`
 texel is open sea to the distance pass, draws in every zone group (`AnyZone`) as a `Kind.Edge` coast-tile texel does, takes no
 tint of its own, and writes the triangle's interpolated surf coverage into the surf plane, the highest where triangles overlap. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
-not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
+not lighten the sheet's edge. An open texel's shore distance is the nearer of two. One is exact, to the coastline: every solid edge whose two corners lie within 0.25 m of y = 0, each segment written into the texels within `ShoreReach` of it in every band. The other is a chamfer from the coast tiles, the texels nothing covers, every texel centre a solid covers, and a hull's corner texels (a solid with no corner at sea level); a coast solid's corner texel does not seed, as its centre can lie in the sea, so a coast with sea-level edges reads no texel staircase and one without them keeps the chamfer. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
 hold the banded bytes to a plain single pass.
 
 ## src/Effects/TerrainShadow.cs

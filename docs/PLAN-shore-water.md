@@ -18,7 +18,8 @@ the islands have no geometry below the waterline and a trough at the coast would
 
 Out of scope: C1's `water1_trans1/2` coast tiles. They are opaque 256x64 gradient textures that
 paint the land inside the tile, so the land's edge is a texel boundary and not a polygon edge;
-replacing them is a different mechanism and a later plan. A skirt below the coastline (geometry that
+replacing them, and C3's `shore*` strips and `cliff1_watertrans*` tiles with them, is a different
+mechanism, filed as #270 for a later plan. A skirt below the coastline (geometry that
 would let waves lap the slope) is also out; decision 2 below says why. No `backlog` issue is drawn
 into this plan, so no re-verification is owed; #204 (the wake's Kelvin V) is adjacent and untouched.
 
@@ -118,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, the mask
 
 1. ☑ A surf kind in the mask: the ring's water is sea with an authored surf coverage, opaque coast tiles stay shore
-2. ☐ Exact shore distance to the coastline polyline, chamfer only for solids without a sea-level edge
+2. ☑ Exact shore distance to the coastline polyline, chamfer only for solids without a sea-level edge
 3. ☐ The surf coverage reaches the ocean material and the mask dump
 
 ### Wave B, the ring steps aside
@@ -220,7 +221,41 @@ the new test pins them not surf. `Kind.Edge` texels set `AnyZone` so every grid 
 C5-style zoned seas cut the band. The ring's vertex colours are not alpha and do not encode the
 band's fade (white and grey appear on both edges); the texture alpha along U does.
 
-## A2 ☐ Exact shore distance to the coastline polyline, chamfer only for solids without a sea-level edge
+## A2 ☑ Exact shore distance to the coastline polyline, chamfer only for solids without a sea-level edge
+
+**Landed.** All in `CSVM/src/Effects/OceanMaskRaster.cs`; `OceanMask.Read` is unchanged.
+`Coastline(Tri[])` collects the coastline from the triangles `Run` already receives: every edge of
+a `Kind.Solid` triangle whose two corners lie within `CoastBand` (0.25 m) of y = 0, as XZ segments.
+In each band, after its chamfer, `Exact` writes every segment's distance (`Segment`, now internal
+for the tests' oracle) into each open-sea texel of the band's rows within `ShoreReach` of the
+segment's box, keeping the nearer of that and the chamfer, so a hull beside the coast keeps its
+calm. The segments are not bucketed: a bucket ring search writes the same bytes at about four times
+the splat's `distance=` in the Debug probe, its work piling into the few bands that hold the
+islands. The chamfer seeds (`Grid.Seed`, replacing the plain solid test) are the coast tiles
+(`Sea = 2`), the texels nothing covers, every texel centre a solid covers, and the corner texels of
+a hull, a solid with no corner within 0.25 m of y = 0 (`IsCoast`). A coast solid's corner texel is
+solid (G = 0) but does not seed, since its centre can lie in the sea; that corner is what made the
+staircase. A land centre behind a coastline is never nearer than the coastline, so a coast with
+sea-level edges reads the exact distance, and a land edge standing off sea level (C1B's strip near
+(-7730, -5745) has a north edge with no corner on y = 0) keeps the chamfer instead of reading the
+distance across the land. Tests in `CSVM.Tests/OceanMaskRasterTests.cs`:
+`TheShoreChannelIsTheDistanceFromASolidCorner` became `AHullTakesTheTexelDistance` (its sliver now
+crosses y = 0 with no corner on it, same bytes); `ADiagonalCoastReadsTheExactDistance` (30 and 45
+degree coasts off the lattice: every sea texel within half a metre of the line distance, and at
+45 degrees each texel equal to its diagonal neighbour); `BesideACoastTheNearerShoreWins`;
+`ALandEdgeOffSeaLevelTakesTheTexelDistance`; `EveryBandCountMatchesTheWholeImagePass` adds 400
+hulls and one-corner solids to its scene, and its oracle splats every segment over the whole image
+beside the single-pass chamfer. `TheSurfRingIsSeaMeasuredFromTheLand` now expects G = x (the
+distance to the land's sea-level edge at x = 0) where it expected x + 4 (the land texel's centre).
+C1B: R and the tint byte-identical, G moves at 31,862 sea texels (28,554 down, median change
+3.8 m), a straight 20 degree shore 12 m out reads 12.07 m with sd 0.12 m where the chamfer read
+13.6 to 17.4 m; C1: R and tint identical, G moves at 1,035 texels, all within x -6632..-6208,
+z -3422..-3094, by at most 8.2 m. `bake=100 (distance=24.1)` in C1B,
+`bake=102 (distance=20.9)` in C1.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The mask's G channel is the Euclidean distance from the texel centre to the nearest
 coastline segment, so a foam band or a ramp drawn from it follows a straight or curved shore
