@@ -99,7 +99,7 @@ function Get-TextBeforeCommit {
 # GateCommand.ps1's Resolve-CommandTree.
 function Resolve-Target {
     param([string]$CommandLine, [string]$From)
-    if (-not $From) { $From = $scriptRoot }
+    if (-not $From) { $From = (Get-Location).Path }
     $before = Get-TextBeforeCommit -CommandLine $CommandLine
     $t = Resolve-CommandTree -CommandLine $CommandLine -Before $before -From $From
     $roots = @()
@@ -343,6 +343,12 @@ function Invoke-SelfTest {
         Assert-Row 'row 2  -C names the worktree and nothing else' (
             $r2.Count -eq 1 -and $r2[0] -ieq $wtNormal)
         Assert-Row 'row 2  and the fault there blocks' (@(Invoke-Checks -Roots $r2).Count -ge 1)
+        # A relative -C is taken from where the command runs, not from the scripts folder.
+        Push-Location -LiteralPath $base
+        try { $r2b = @(Get-TargetRoots -CommandLine 'git -C wt commit -m x') }
+        finally { Pop-Location }
+        Assert-Row 'row 2  a relative -C resolves against the current directory' (
+            $r2b.Count -eq 1 -and $r2b[0] -ieq $wtNormal)
 
         # Row 3: a directory change inside the same command is read off the command string, since
         # the hook runs before it and would otherwise check the tree being left.

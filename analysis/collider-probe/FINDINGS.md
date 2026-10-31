@@ -78,6 +78,6 @@ python analysis/collider-probe/probe.py --verbose   # + C4/C5 contributing-root 
 python analysis/collider-probe/marker_check.py      # the marker-gizmo cross-check above
 ```
 
-Runtime side, one chapter: `.\RunProbe.ps1 --freecam --chapter=C4 --collision
+Runtime side, one chapter: `.\scripts\RunProbe.ps1 --freecam --chapter=C4 --collision
 --screenshot=.scratch\c4.png`, then read the `loaded chapter C4 world + freecam: ... colliders`
 line from the printed `.out` log path.

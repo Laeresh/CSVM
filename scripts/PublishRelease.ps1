@@ -409,9 +409,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $assets = @($ZipPath, $TarPath, $LatestZipPath, $LatestTarPath)
+# A rehearsal must not become Latest: releases/latest/download is what the Lutris script fetches.
+$latestFlag = "--latest=$(if ($TagSuffix) { 'false' } else { 'true' })"
 Write-Host "Creating release $Tag with $((($assets | ForEach-Object { Split-Path $_ -Leaf }) -join ' and '))..." -ForegroundColor Cyan
 & $gh release create $Tag @assets --repo $RepoSlug --title $Title --notes-file $notesPath `
-    --verify-tag --latest
+    --verify-tag $latestFlag
 if ($LASTEXITCODE -ne 0) {
     throw "gh release create failed (exit $LASTEXITCODE). The tag $Tag is pushed and stays where " +
         "it is: re-run the gh release create above by hand once the cause is fixed, or delete " +

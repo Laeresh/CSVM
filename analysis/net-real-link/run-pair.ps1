@@ -27,7 +27,7 @@ $remote = "$DeckDir/deck-host.sh $Name $hostSecs -- " + (($hostArgs | ForEach-Ob
 $job = Start-Job -ScriptBlock { param($t, $r) ssh $t $r } -ArgumentList $SshTarget, $remote
 # The host waits up to 30 s for its first guest; the guest needs the host's socket open first.
 Start-Sleep -Seconds 4
-& (Join-Path $repo "RunProbe.ps1") -TimeoutSec $Seconds @guestArgs
+& (Join-Path $repo "scripts\RunProbe.ps1") -TimeoutSec $Seconds @guestArgs
 Wait-Job $job -Timeout ($hostSecs + 30) | Out-Null
 Receive-Job $job
 Remove-Job $job -Force
