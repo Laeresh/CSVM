@@ -148,14 +148,14 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "aebd047b325e802b9082e14c3b5bdce0",
+      "hash": "9bff994b64be505fcb00e9206605f431",
       "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean, calmed at the coast tiles, blurred SSR, Rich swaying conifers with sun shadows handing over to canopy clumps past 1 km, SSAO, settled TAA; frame-sensitive 24.09 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "dcf04f43bada1ce7621720b08665b5e2",
+      "hash": "f01239dbe827ff8dcd0da168695e0dcf",
       "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks lit out to their own fade, the far towers darkening into the black fog from 1,400 m, the far skyline fading into it, TAA, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -169,14 +169,14 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "5837ae9889b3d6746d3f7f075973a208",
+      "hash": "37c577611fdf0a90e0dbce54a8a17f06",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "19b5c75c121253d1c5f45c66193beb35",
+      "hash": "c6c7799bad87e5812895f1755aad1e05",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -190,7 +190,7 @@
     {
       "name": "c1-cockpit-xr-sim-enhanced",
       "frame": 120,
-      "hash": "8cd3314b173ada8fc575b3b2f337da7d",
+      "hash": "28f07af0a5c5b64e18ae973bf59ba106",
       "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -274,7 +274,7 @@
     {
       "name": "c1b-ocean-enhanced",
       "frame": 120,
-      "hash": "847a4f7c39eeef015c69f87eabdc321d",
+      "hash": "ee5219fa439168301d4ae6d9c9c0270a",
       "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming toward each shore, the surf ring, SSR, TAA, in the shipped C1B sea.",
       "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }
