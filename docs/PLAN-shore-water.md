@@ -124,7 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the ring steps aside
 
-11. ☐ The surf ring's shader carries the ocean hide, as the base sheet does
+11. ☑ The surf ring's shader carries the ocean hide, as the base sheet does
 
 ### Wave C, the shader
 
@@ -328,7 +328,24 @@ read `OceanMask.Live` because the server's global getter errors outside the edit
 
 # Wave B, the ring steps aside
 
-## B11 ☐ The surf ring's shader carries the ocean hide, as the base sheet does
+## B11 ☑ The surf ring's shader carries the ocean hide, as the base sheet does
+
+**Landed.** `SceneBuilder` (`CSVM/src/Mech3/SceneBuilder.cs`) passes an `oceanSurf` flag
+(`water && IsSurfTexture(texName)`) from the textured-material path through `BiasMaterial`,
+`GetBiasShader` (key bit 33554432) and `BiasShaderCode`, where
+`oceanHide = waterLit && (oceanBase || oceanSurf)`, so the ring's blended shader takes the base
+sheet's `csky_ocean.gdshaderinc` include, `v_ocean_pos` varying and `!FlatSeaEye`-guarded discard
+with no new shader text. `waterLit` exists only under Enhanced, so the Original text is unchanged.
+`graphics-ocean-switch` (`CSVM/src/Testing/GraphicsSwitchSuites.cs`) counts the `IsSurfTexture`
+materials in `Sea(Rig)` beside the base sheet and checks that every one carries
+`csky_ocean_hides_sea(` under Enhanced and none under Original, fresh, switched and round-tripped;
+C1B builds 5 ring materials, 5 of 5 hiding in Enhanced and 0 of 5 in Original. With the ocean live
+the white ring no longer draws in C1B or C2 and the flat sheet's water shows under it; with
+`--no-ocean` and under Original graphics the frame is byte-identical.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** While the wave ocean is live, the `srf*` ring draws nowhere the ocean draws; with the ocean
 off, in Original graphics, and on the spyglass disc it draws exactly as today.
