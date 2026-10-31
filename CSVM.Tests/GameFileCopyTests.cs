@@ -99,6 +99,31 @@ public class GameFileCopyTests
         Assert.Equal(new[] { GameFileSource.DataRootFolder }, Directory.GetFileSystemEntries(dataRoot).Select(Path.GetFileName));
     }
 
+    // The sound archive is the one file a game data holds open. Windows refuses to rename a folder
+    // holding an open file, so the picker closes it first.
+    [Fact]
+    public void AReplaceSucceedsOnceTheGameDataReadingTheOldCopyClosesItsSounds()
+    {
+        string dataRoot = TestData.TempDir();
+        string target = GameFileCopy.Target(dataRoot);
+        Directory.CreateDirectory(Path.Combine(target, "ZBD"));
+        Directory.CreateDirectory(Path.Combine(target, "GOSDATA", "ASSETS"));
+        File.WriteAllBytes(Path.Combine(target, "ZBD", "soundsh.zbd"), new byte[] { 1, 0, 0, 0, 0, 0, 0, 0 });
+        var data = GameData.Load(new InstallFolderSource(target));
+        Assert.NotNull(data.Sounds);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Throws<IOException>(() => GameFileCopy.Run(MemorySource.Complete(), dataRoot, replace: true));
+        }
+
+        data.Sounds!.Dispose();
+        var source = MemorySource.Complete();
+        GameFileCopy.Run(source, dataRoot, replace: true);
+
+        Assert.Equal(source.Content(GameData.SoundsPath), File.ReadAllBytes(Path.Combine(target, "ZBD", "soundsh.zbd")));
+        Assert.Equal(new[] { GameFileSource.DataRootFolder }, Directory.GetFileSystemEntries(dataRoot).Select(Path.GetFileName));
+    }
+
     [Fact]
     public void ACancelledCopyLeavesNoTreeAndTheOldCopyStanding()
     {
