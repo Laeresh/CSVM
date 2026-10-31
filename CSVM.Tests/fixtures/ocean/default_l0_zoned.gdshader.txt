@@ -28,7 +28,6 @@ const vec4 DETAIL_L[5] = vec4[5](vec4(0.951057, -0.309017, 0.166667, 0.284445), 
 const vec2 DETAIL_G[5] = vec2[5](vec2(0.751457, 0.27443), vec2(-0.739477, 0.305244), vec2(0.339077, -0.724588), vec2(0.239427, 0.763331), vec2(-0.692168, -0.401127));
 const float FOAM_JAC_SIGMA = 0.1375;
 varying vec2 v_param;
-varying vec3 v_world;
 varying vec3 v_shade;
 
 vec2 ocean_mask(vec2 p) {
@@ -375,8 +374,8 @@ void vertex() {
             // Full height at eight grid steps per local wavelength, none at four. A wave the grid
             // cannot carry would crawl as the grid follows the eye.
             float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
-            // The shadow probe follows the surface at sixteen grid steps per longest wavelength. It
-            // sits at sea level by eight, one ring before that wave's own fade begins.
+            // The shadow's read point follows the surface at sixteen grid steps per longest wavelength.
+            // It sits at sea level by eight, one ring before that wave's own fade begins.
             if (i == 0) {
                 keep = clamp(len / spacing * 0.125 - 1.0, 0.0, 1.0);
             }
@@ -388,7 +387,6 @@ void vertex() {
         // Over a harbour ramp the sea rises with the sheet it replaces, up to the quay it meets.
         float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * 4.0;
         vec3 world = vec3(p.x + disp.x, disp.y + lift, p.y + disp.z);
-        v_world = world;
         v_shade = vec3(world.x, mix(lift, world.y, keep), world.z);
         VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
         // A priority level below the lowest base sheet. Every coplanar layer over or beside it

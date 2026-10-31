@@ -54,8 +54,8 @@ public class TerrainShadowRasterTests
         float az = MathF.PI / 7f, el = MathF.PI / 8f;
         var sun = new Vector3(MathF.Cos(el) * MathF.Cos(az), MathF.Sin(el), MathF.Cos(el) * MathF.Sin(az));
         var r = TerrainShadowRaster.Run(tris.ToArray(), sun, 4);
-        // Up to k = 23 the ray is still over the ground. Past 241 m it has met the ground, whose own
-        // grazing line takes over.
+        // Within 241 m along the azimuth the ray is still over the ground. Past that it has met the
+        // ground, whose own grazing line takes over, so k stays well inside it.
         for (int k = 2; k <= 23; k += 7)
         {
             // A texel centre k columns west of the block's last column. Its ray travelled

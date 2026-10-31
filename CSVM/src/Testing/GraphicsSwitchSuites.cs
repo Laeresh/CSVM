@@ -39,7 +39,7 @@ internal static class GraphicsSwitchSuites
     // The chapter the vegetation lab suite edits: every one of its clutter kinds is listed.
     private const string VegetationChapter = "C1";
 
-    // The chapter whose cliff shades the waterline below it under its 25 degree sun.
+    // The chapter whose cliff shades the waterline below it under its low sun.
     private const string TerrainShadowChapter = "C3";
 
     // C1's railway: its own polygons laid over the picked grassland and fields.
@@ -1220,7 +1220,7 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("graphics-terrain-shadow",
-        "an Enhanced C3 build bakes the terrain's sun shadow over the ocean mask's grid and publishes it: "
+        "an Enhanced C3 build bakes the terrain's sun shadow over the shadowless ground's extent and publishes it: "
         + "the waterline texel under the cliff at (-6860, 0, -5756) reads shaded through the published "
         + "texture and an open-sea texel reads lit; switched to Original the globals hold their lit defaults")]
     internal static void TerrainShadowBakes(TestContext ctx)

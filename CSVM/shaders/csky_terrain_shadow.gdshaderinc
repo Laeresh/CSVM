@@ -1,7 +1,7 @@
 #ifndef CSKY_TERRAIN_SHADOW_INC
 #define CSKY_TERRAIN_SHADOW_INC
 
-// The Enhanced terrain's baked sun shadow (Effects/TerrainShadow.cs): per 8 m texel the height of the
+// The Enhanced terrain's baked sun shadow (Effects/TerrainShadow.cs): per texel the height of the
 // sun ray grazing the ground upstream along the sun's azimuth (R) and the horizontal distance to that
 // ground (G), over the rect (origin X/Z, then 1 / extent). The soft pair is the penumbra's growth in
 // height per metre of blocker distance and its one-texel floor. With no bake live the texture is one

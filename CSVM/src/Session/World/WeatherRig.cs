@@ -952,7 +952,7 @@ public sealed class WeatherRig
         view.Sun = ZoneSun(fog);
         if (!primary)
         {
-            Log.Info("world", $"weather: player {rig.Index + 1} camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, vertex light {fog.SunAmbient:0.##}/{fog.SunDiffuse:0.##} at {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch; the scene sun stays player {_primary + 1}'s");
+            Log.Info("world", $"weather: player {rig.Index + 1} camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, vertex light {fog.SunAmbient:0.##}/{fog.SunDiffuse:0.##} at {Mathf.RadToDeg(LightOrientation(fog).X):0.#}° pitch; the scene sun stays player {_primary + 1}'s");
             return;
         }
         ApplyZone(fog);
@@ -1410,7 +1410,7 @@ public sealed class WeatherRig
             return fog.SunOrientation;
         // ponytail: a zone authored like an earlier one reads that one's dome.
         string name = _weather.ZoneNames.FirstOrDefault(z => _weather.Zone(z).Equals(fog)) ?? _activeZone;
-        int state = name.Length > 0 && char.IsDigit(name[^1]) ? name[^1] - '0' : 0;
+        int state = ZoneNumberOf(name) ?? 0;
         Node3D? dome = _domes.Count == 1 ? _domes[0].Node : null;
         foreach (var d in _domes)
         {

@@ -10,8 +10,8 @@ using Godot;
 namespace CSVM.Effects;
 
 /// <summary>
-/// The terrain's baked sun shadow under Enhanced, one texture per sun orientation the mission's
-/// zones author. Per 8 m texel it holds the height of the sun ray grazing the shadowless ground
+/// The terrain's baked sun shadow under Enhanced, one texture per distinct zone sun. Per texel
+/// (<see cref="Cell"/> metres) it holds the height of the sun ray grazing the shadowless ground
 /// upstream along the sun's azimuth. Beside it lies the distance to that ground
 /// (<see cref="TerrainShadowRaster"/>). The lit arms' <c>light()</c> scale the sun by it through
 /// the <c>csky_terrain_shadow_*</c> globals (<see cref="SceneBuilder.TerrainShadowLight"/>).
@@ -168,17 +168,17 @@ internal sealed partial class TerrainShadow : Node
     }
 
     // A Shadow Quality apply moves the revision. The level's angular distance and whether it casts
-    // reach the globals from here, so Utils never names Effects.
+    // reach the globals from here, so Utils never names Effects. A withdrawn bake stays withdrawn.
     public override void _Process(double delta)
     {
-        if (_revision != ShadowQualitySetting.Revision)
+        if (Live == this && _revision != ShadowQualitySetting.Revision)
             Publish(_orientation);
     }
 
     // The penumbra's growth in height per metre of blocker distance under the level's angular
     // distance, and the one-texel floor. The floor is the line's own drop over one texel. A disc
     // of half-angle a around a sun at elevation e spans tan(e + a) - tan(e - a) in slope. That is
-    // 2 tan(a) (1 + tan(e)^2) to first order, the second factor on top of the issue's width.
+    // 2 tan(a) (1 + tan(e)^2) to first order, the second factor turning the horizontal width into a height.
     private static Vector2 Soft(Baked baked)
     {
         float angular = ShadowQualitySetting.HardShadows ? 0f : ShadowQualitySetting.Sun.AngularDistance;
@@ -193,6 +193,9 @@ internal sealed partial class TerrainShadow : Node
         var c = image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
         return new Vector2(c.R, c.G);
     }
+
+    // ponytail: a half holds the line to 0.5 m above 512 m and 1 m above 1024 m. Go to RGF if high
+    // ground shows acne.
 
     // RGH texel bytes: the line in R, the distance in G.
     private static byte[] Halves(float[] line, float[] distance)

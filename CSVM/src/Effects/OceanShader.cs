@@ -367,7 +367,6 @@ public static class OceanShader
         EmitDetail(sb, sea);
         sb.AppendLine($"const float FOAM_JAC_SIGMA = {Literal(jacSigma)};");
         sb.AppendLine("varying vec2 v_param;");
-        sb.AppendLine("varying vec3 v_world;");
         // Where the terrain shadow is read. Near the eye the swell's own surface, whose troughs dip
         // under the flat sea's grazing ray and read shaded. Sea level by the time the longest swell's
         // displacement fades out, so that shading goes with the waves instead of cutting with them.
@@ -717,8 +716,8 @@ void vertex() {
             // Full height at eight grid steps per local wavelength, none at four. A wave the grid
             // cannot carry would crawl as the grid follows the eye.
             float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
-            // The shadow probe follows the surface at sixteen grid steps per longest wavelength. It
-            // sits at sea level by eight, one ring before that wave's own fade begins.
+            // The shadow's read point follows the surface at sixteen grid steps per longest wavelength.
+            // It sits at sea level by eight, one ring before that wave's own fade begins.
             if (i == 0) {
                 keep = clamp(len / spacing * 0.125 - 1.0, 0.0, 1.0);
             }
@@ -730,7 +729,6 @@ void vertex() {
         // Over a harbour ramp the sea rises with the sheet it replaces, up to the quay it meets.
         float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * " + Literal(OceanMask.RampTop) + @";
         vec3 world = vec3(p.x + disp.x, disp.y + lift, p.y + disp.z);
-        v_world = world;
         v_shade = vec3(world.x, mix(lift, world.y, keep), world.z);
         VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
         // A priority level below the lowest base sheet. Every coplanar layer over or beside it

@@ -122,8 +122,8 @@ hold the banded bytes to a plain single pass.
 ## src/Effects/TerrainShadow.cs
 The Enhanced terrain's baked sun shadow, a node under the world root. At the world build or on the switch to Enhanced, while
 Shadow Quality casts, it collects the shadowless ground meshes `SceneBuilder` recorded (before the world merge swaps them),
-runs `TerrainShadowRaster` once per distinct `SUNLIGHT_ORIENTATION` the mission's zones author, and uploads each as an RGH
-texture. `Publish` hands the live zone's texture, rect and penumbra pair to the `csky_terrain_shadow_*` globals; the zone apply
+runs `TerrainShadowRaster` once per distinct zone sun (`WeatherRig.SunOrientations`: the light aimed at the zone's dome sun or
+moon card, else the authored `SUNLIGHT_ORIENTATION`), and uploads each as an RGH texture. `Publish` hands the live zone's texture, rect and penumbra pair to the `csky_terrain_shadow_*` globals; the zone apply
 (`WeatherRig.ApplyZone`) calls it again, a Shadow Quality apply reaches it through `ShadowQualitySetting.Revision`, and leaving
 the tree puts the defaults back. `SceneBuilder.TerrainShadowLight` writes the `light()` the world-lit, water, ocean and ground
 cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `csky_terrain_sun`; the Rich cards scale their sun
