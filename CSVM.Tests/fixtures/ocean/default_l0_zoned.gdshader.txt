@@ -10,6 +10,7 @@ uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, r
 uniform float tile_m = 32.0;
 uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;
 uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;
+uniform sampler2D surf_tex : hint_default_black, filter_linear, repeat_disable;
 uniform float rough_near = 0.2;
 uniform float rough_far = 0.3;
 uniform float wave_scale = 1.0;

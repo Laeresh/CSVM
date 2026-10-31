@@ -347,6 +347,7 @@ public static class OceanShader
         sb.AppendLine("uniform float tile_m = 32.0;");
         sb.AppendLine("uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;");
+        sb.AppendLine("uniform sampler2D surf_tex : hint_default_black, filter_linear, repeat_disable;");
         sb.AppendLine("uniform float rough_near = 0.2;");
         sb.AppendLine("uniform float rough_far = 0.3;");
         sb.AppendLine("uniform float wave_scale = 1.0;");

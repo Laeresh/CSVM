@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A surf kind in the mask: the ring's water is sea with an authored surf coverage, opaque coast tiles stay shore
 2. ☑ Exact shore distance to the coastline polyline, chamfer only for solids without a sea-level edge
-3. ☐ The surf coverage reaches the ocean material and the mask dump
+3. ☑ The surf coverage reaches the ocean material and the mask dump
 
 ### Wave B, the ring steps aside
 
@@ -298,7 +298,31 @@ thread pool in bands (`OceanMaskRaster.cs:395-415`); a per-band segment bucket m
 within `ShoreReach` of the band, not only inside it. The quantisation stays 160 m / 255 = 0.63 m,
 enough for a band that starts 4 m out.
 
-## A3 ☐ The surf coverage reaches the ocean material and the mask dump
+## A3 ☑ The surf coverage reaches the ocean material and the mask dump
+
+**Landed.** `OceanMask.SurfImage` and `SurfTexture` (`CSVM/src/Effects/OceanMask.cs`): `BakeNew`
+builds the R8 image from `OceanMaskRaster.Result.Surf` when `SurfTriangles > 0`, otherwise one zero
+texel, and uploads it with `callerKeeps: true`, as the lift. `SurfAt(Vector3 world)` returns the
+coverage 0..1, bilinear over texel centres as the shader's linear sampler reads it, 0 on the 1x1
+placeholder; it and `LiftAt` share the new private `Filtered(Image, Vector3)`, `LiftAt`'s former
+body. `OceanShader.cs` declares `uniform sampler2D surf_tex : hint_default_black, filter_linear,
+repeat_disable;` after `lift_tex`, unread until C21 and C22; `Ocean.Create`
+(`CSVM/src/Effects/Ocean.cs`) binds it to `mask.SurfTexture`, so it samples through the same
+`mask_rect`. The `ocean: built grid` line prints `surf=<w>x<h>` after `surf_tris=`.
+`--dump-ocean-mask=<path>` also writes `<name>.surf.png`, and its log line reads
+`ocean: mask written to <path> (with .tint.png and .surf.png)` (the error line covers a failed
+surf write as it did the tint). The fixture `CSVM.Tests/fixtures/ocean/default_l0_zoned.gdshader.txt`
+gains the one declaration line, and `OceanShaderTests`'s fourteen text hashes move with it. C1B's
+dump: mask and tint byte-identical to A2's, surf 1536x1536 with 5,845 non-zero texels (min 1,
+median 123, max 255); the texels at the ring's seaward end (surf 1..12) lie a median 29.5 m and a
+90th percentile 45.8 m from the land, the `u = 1 vertices to the nearest land vertex` figures of
+`analysis/shore-water/FINDINGS.md` (27.8 and 49.6 m). C2: surf 1188x1536, 81 non-zero texels
+(min 1, median 128, max 252) around the stacks near (-7500, -3230). C3: `surf_tris=0 surf=1x1`,
+and the dump's `.surf.png` is one black texel.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The ocean's shader can read the authored surf coverage at a world XZ, and
 `--dump-ocean-mask=` writes it beside the mask and the tint.

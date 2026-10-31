@@ -59,7 +59,7 @@ grid (Gerstner swell, drifting noise normals) replaces the sea-level base sheet 
 level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake and turbulence sheets,
 which no pane draws while their hull holds a wake slot on the sim clock. Owns up to 16 ship slots, nearest the eye first: a calm zone over each
 waterline (`OceanCalmZone.cs`, `OceanMovers.cs`) and the track its wake rides (`OceanWakeTrack.cs`). The shader text is
-`OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; `Apply` takes a new sea live, recompiling only on
+`OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; its material binds the mask, tint, lift, surf (`surf_tex`) and zone textures, read over one `mask_rect`. `Apply` takes a new sea live, recompiling only on
 a text change. `Launch/OceanStage.cs` builds and drops it; `--debug-wake` sails a wake ship on an arc.
 
 ## src/Effects/OceanSeas.cs
@@ -108,7 +108,7 @@ rebuild. Owns sea coverage, the shore distance (exact to the coastline, the land
 zone group where the sheet spans zone-gate layers, the surf ring and the ramps. The ring (`SceneBuilder.IsSurfTexture`, the `srf*` strip at sea level in C1B and C2) is open sea with its authored coverage `1 - u`, 1 at the land edge and 0 at its seaward edge, so the shore distance under it runs from the land; other sea-level water off the sheet (C1's opaque `water1_trans` tiles) stays shore.
 A ramp is a base-sheet triangle rising from sea level to under `RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp), open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wake sheets (and the turbulence sheets under the same ships), tile size and
 lowest priority; hulls (`OceanMovers.cs`) stay out. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
-the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. `--dump-ocean-mask=` writes the mask and the tint.
+the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. The ring's coverage is its own R8 `SurfTexture` (one zero texel without a ring), read back by `SurfAt` as `LiftAt` reads the lift. `--dump-ocean-mask=` writes the mask, the tint and the surf.
 Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
 
 ## src/Effects/OceanMaskRaster.cs

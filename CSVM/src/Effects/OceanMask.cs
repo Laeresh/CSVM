@@ -76,6 +76,13 @@ internal sealed class OceanMask
     /// <summary>The lift texture's pixels, kept for <see cref="LiftAt"/>.</summary>
     public Image LiftImage { get; private set; } = null!;
 
+    /// <summary>The surf ring's authored coverage (R8, 255 at the land edge, 0 off the ring), one
+    /// zero texel when the world has no surf triangle.</summary>
+    public ImageTexture SurfTexture { get; private set; } = null!;
+
+    /// <summary>The surf texture's pixels, kept for <see cref="SurfAt"/> and <c>--dump-ocean-mask</c>.</summary>
+    public Image SurfImage { get; private set; } = null!;
+
     /// <summary>The world X/Z of the mask's first texel corner.</summary>
     public Vector2 Origin { get; private set; }
 
@@ -227,16 +234,11 @@ internal sealed class OceanMask
 
     /// <summary>The height the calm ocean stands at over a world X/Z, sea level away from a ramp. It is
     /// filtered as the grid's vertex stage reads the lift.</summary>
-    public float LiftAt(Vector3 world)
-    {
-        if (LiftImage.GetWidth() == 1)
-            return 0f;
-        float tx = ((world.X - Origin.X) / Cell) - 0.5f, ty = ((world.Z - Origin.Y) / Cell) - 0.5f;
-        int ix = (int)Math.Floor(tx), iy = (int)Math.Floor(ty);
-        float fx = tx - ix, fy = ty - iy;
-        float a = Red(LiftImage, ix, iy), b = Red(LiftImage, ix + 1, iy), c = Red(LiftImage, ix, iy + 1), d = Red(LiftImage, ix + 1, iy + 1);
-        return Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(c, d, fx), fy) / 255f * RampTop;
-    }
+    public float LiftAt(Vector3 world) => Filtered(LiftImage, world) * RampTop;
+
+    /// <summary>The surf ring's authored coverage over a world X/Z, 1 at the land edge and 0 off the
+    /// ring. It is filtered as the ocean shader samples <c>surf_tex</c>.</summary>
+    public float SurfAt(Vector3 world) => Filtered(SurfImage, world);
 
     /// <summary>Milliseconds since <paramref name="t0"/>, which moves to now. The terrain shadow
     /// bake times itself by it too.</summary>
@@ -302,6 +304,11 @@ internal sealed class OceanMask
             ? Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Lift)
             : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
         result.LiftTexture = TextureUpload.Create(result.LiftImage, callerKeeps: true);
+        result.SurfImage = result.SurfTriangles > 0
+            ? Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Surf)
+            : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
+        // Kept: SurfAt and --dump-ocean-mask read it after the upload.
+        result.SurfTexture = TextureUpload.Create(result.SurfImage, callerKeeps: true);
         double uploadMs = Lap(ref t0);
         result.Timing = string.Create(CultureInfo.InvariantCulture,
             $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
@@ -323,6 +330,19 @@ internal sealed class OceanMask
         material is ShaderMaterial sm
             ? (int)Math.Floor((sm.GetShaderParameter("depth_bias").AsSingle() / SceneBuilder.DepthBiasPerLevel) + 0.25f)
             : 0;
+
+    // An R8 plane over the mask's rect, 0..1, bilinear between texel centres as a linear sampler
+    // reads it; a one-texel placeholder reads 0.
+    private float Filtered(Image image, Vector3 world)
+    {
+        if (image.GetWidth() == 1)
+            return 0f;
+        float tx = ((world.X - Origin.X) / Cell) - 0.5f, ty = ((world.Z - Origin.Y) / Cell) - 0.5f;
+        int ix = (int)Math.Floor(tx), iy = (int)Math.Floor(ty);
+        float fx = tx - ix, fy = ty - iy;
+        float a = Red(image, ix, iy), b = Red(image, ix + 1, iy), c = Red(image, ix, iy + 1), d = Red(image, ix + 1, iy + 1);
+        return Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(c, d, fx), fy) / 255f;
+    }
 
     // A world's bake, or null when it had no sea-level base sheet.
     private sealed record Memo(Node3D Root, OceanMask? Mask);
