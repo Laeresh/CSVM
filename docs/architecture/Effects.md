@@ -121,7 +121,7 @@ hold the banded bytes to a plain single pass.
 
 ## src/Effects/TerrainShadow.cs
 The Enhanced terrain's baked sun shadow, a node under the world root. At the world build or on the switch to Enhanced, while
-Shadow Quality casts, it collects the shadowless ground meshes `SceneBuilder` recorded (before the world merge swaps them),
+Shadow Quality casts, it collects the shadowless ground meshes `SceneBuilder` recorded (before the world merge swaps them), less their water surfaces, which receive the shadow and never cast it,
 runs `TerrainShadowRaster` once per distinct `SUNLIGHT_ORIENTATION` the mission's zones author, and uploads each as an RGH
 texture. `Publish` hands the live zone's texture, rect and penumbra pair to the `csky_terrain_shadow_*` globals; the zone apply
 (`WeatherRig.ApplyZone`) calls it again, a Shadow Quality apply reaches it through `ShadowQualitySetting.Revision`, and leaving
