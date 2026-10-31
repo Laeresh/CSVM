@@ -227,6 +227,26 @@ public class StuntRaceTests
     }
 
     [Fact]
+    public void TheRevisionClimbsOnEveryRecordChangeAndFieldChangeWithoutRepeating()
+    {
+        var race = OpenRace(3, out _, out _, out _);
+        var seen = new List<int> { race.Revision };
+        FlyRun(race, 2, new[] { 1f, 2f, 5f });
+        seen.Add(race.Revision);
+        race.Remove(2);
+        seen.Add(race.Revision);
+        race.Add(2, "Bloodhawk");
+        seen.Add(race.Revision);
+        race.MarkLeft(1);
+        seen.Add(race.Revision);
+        race.Rerun();
+        seen.Add(race.Revision);
+
+        for (int i = 1; i < seen.Count; i++)
+            Assert.True(seen[i] > seen[i - 1], $"revision {i}: {seen[i - 1]} -> {seen[i]}");
+    }
+
+    [Fact]
     public void FollowFeedsTheRaceFromARunsOwnClockZonesFinishAndReset()
     {
         var race = new StuntRace(60f, 2);

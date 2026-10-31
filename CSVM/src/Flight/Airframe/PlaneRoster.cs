@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 
 namespace CSVM.Flight.Airframe;
 
@@ -6,6 +7,10 @@ namespace CSVM.Flight.Airframe;
 /// <c>Session.Roster.HumanFieldPlanes</c>'s, since that reads the launch spec.</summary>
 public static class PlaneRoster
 {
+    // The derived name per vehicle.json def name. Every aircraft marker asks for it on every
+    // rendered frame, and the set of defs is small and fixed.
+    private static readonly ConcurrentDictionary<string, string> ByDefName = new();
+
     /// <summary>A readable plane name: the def's own authored <c>title</c> where it has been
     /// resolved ("Medusa Kestrel"), else derived from the vehicle.json def name, the player defs
     /// are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the leading p and
@@ -18,10 +23,17 @@ public static class PlaneRoster
         }
 
         var d = stats.DefName;
-        string name = d.Length > 1 && (d[0] == 'p' || d[0] == 'P') ? d[1..]
-            : d.Length > 0 ? d
-            : stats.NodeName;
-        return Humanize(name);
+        if (d.Length == 0)
+        {
+            return Humanize(stats.NodeName);
+        }
+
+        if (ByDefName.TryGetValue(d, out var cached))
+        {
+            return cached;
+        }
+
+        return ByDefName[d] = Humanize(d.Length > 1 && (d[0] == 'p' || d[0] == 'P') ? d[1..] : d);
     }
 
     /// <summary>"stunt_flying" → "Stunt Flying": underscores to spaces, each word title-cased.</summary>

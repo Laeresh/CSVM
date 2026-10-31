@@ -637,9 +637,11 @@ public partial class FlightController : Node3D
     // the weapon lab), so a hand-back naming no re-placement has nothing else to resume them from.
     private float? _stagedSpeed;
     private float? _stagedThrottle;
+    private string? _nodeName;    // NodeName's copy, dropped on a rename and on leaving the tree
 
     public FlightController()
     {
+        Renamed += () => _nodeName = null;
         _controls = new SeatControls(() => PadDevices, () => LocalPlayer, () => PlayerIndex, ComposeControlPrompts);
         _rumble = new PadRumble(() => PadDevices, _controls.Profile.Device);
         _rigOnDemand = () => CrashRuntime;
@@ -1114,6 +1116,12 @@ public partial class FlightController : Node3D
     /// debug mode that hides its instruments. Internal, not public: nothing outside this assembly
     /// draws on a live aircraft, and the per-frame feed is this node's alone.</summary>
     internal FlightHud PilotHud => _pilotHud;
+
+    /// <summary>The node's <c>Name</c> as a string, held between renames. Every pane's target pool
+    /// names every aircraft on every rendered frame, and each Godot read is a fresh string plus a
+    /// finalizable StringName. ⚠ Only held inside the tree: Godot raises <c>Renamed</c> for an
+    /// in-tree rename alone, so off the tree this reads <c>Name</c> each time.</summary>
+    internal string NodeName => IsInsideTree() ? _nodeName ??= Name : Name;
 
     // The sweep/ray seam: set in Bind, and lazy here too so a bare test rig that never binds
     // still gets one (GetWorld3D() only needs tree membership, which Bind does not gate).
@@ -2441,7 +2449,11 @@ public partial class FlightController : Node3D
     /// <summary>Gives the desktop mouse back on the way out. ⚠ Do not drop this. A session left
     /// through the pause board's EXIT tears the seat down without a halt of its own. The menu
     /// behind it would then come up with a pointer nothing hands back.</summary>
-    public override void _ExitTree() => Mouse.Release();
+    public override void _ExitTree()
+    {
+        Mouse.Release();
+        _nodeName = null;
+    }
 
     public override void _Process(double delta)
     {

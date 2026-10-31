@@ -222,6 +222,7 @@ public sealed class StuntRace
     private float _openingSeconds;
     private float _openingElapsed;
     private double _windowElapsed;
+    private int _shed;    // Revision's share from racers no longer in the field
 
     /// <param name="windowSeconds">The window's length from the opening GO to time up.</param>
     /// <param name="zoneCount">How many Danger Zones the course has.</param>
@@ -283,6 +284,21 @@ public sealed class StuntRace
     /// <summary>The racers in player order (index 0 = player 1).</summary>
     public IReadOnlyList<Racer> Racers => _racers;
 
+    /// <summary>Climbs on every change to a racer's record and on every entry to or exit from the
+    /// field, never repeating a value. With <see cref="Phase"/> and the clock's shown second it is
+    /// everything <see cref="LeaderboardLine"/> reads, so a pane holds its line while all three
+    /// stand. ⚠ A racer's <see cref="Racer.Callsign"/> is not counted: it is set at the build.</summary>
+    public int Revision
+    {
+        get
+        {
+            int sum = _shed;
+            for (int i = 0; i < _racers.Count; i++)
+                sum += _racers[i].Revision;
+            return sum;
+        }
+    }
+
     /// <summary>"1st" / "2nd" / "3rd" / "4th", placings, shared by the run HUD and the boards.</summary>
     public static string Ordinal(int rank) => rank switch
     {
@@ -314,6 +330,7 @@ public sealed class StuntRace
     {
         var racer = new Racer(index, ZoneCount) { PlaneDisplay = planeDisplay, ScoreKey = scoreKey };
         _racers.Add(racer);
+        _shed++;
         return racer;
     }
 
@@ -488,6 +505,12 @@ public sealed class StuntRace
     /// it, since nobody joins a race in progress.</summary>
     public void Rerun()
     {
+        foreach (var r in _racers)
+        {
+            if (r.Left)
+                _shed += r.Revision + 1;
+        }
+
         _racers.RemoveAll(r => r.Left);
         foreach (var r in _racers)
             r.Clear();
@@ -540,7 +563,10 @@ public sealed class StuntRace
     {
         int at = _racers.FindIndex(racer => racer.Index == index);
         if (at >= 0)
+        {
+            _shed += _racers[at].Revision + 1;
             _racers.RemoveAt(at);
+        }
     }
 
     private static int Compare(Racer a, Racer b)

@@ -92,6 +92,11 @@ public sealed class VersusMatch
     /// <see cref="RegisterKill"/>/<see cref="RegisterDeath"/>/<see cref="Advance"/> call is a no-op.</summary>
     public bool Completed { get; private set; }
 
+    /// <summary>Climbs on every change to a score, a kill or death count, a team, a team's name or
+    /// a team's term: everything <see cref="Standings"/> and <see cref="TeamStandings"/> read. A
+    /// per-frame reader holds what it derived from them while this stands.</summary>
+    public int Revision { get; private set; }
+
     /// <summary>True when the match ended because fewer than two pilots with lives were left, the
     /// original's end reason 4 "No Enemies Left" (docs/org/multiplayer-scoring.md). In a
     /// <see cref="Teamed"/> match, fewer than two teams.</summary>
@@ -129,6 +134,7 @@ public sealed class VersusMatch
     public void AssignTeams(IReadOnlyList<int> teams, IReadOnlyDictionary<int, string>? names = null)
     {
         ArgumentNullException.ThrowIfNull(teams);
+        Revision++;
         Teamed = false;
         for (int i = 0; i < _scores.Length; i++)
         {
@@ -186,6 +192,7 @@ public sealed class VersusMatch
         if (ObjectiveWinner != 0 || (Completed && !Replicated))
             return;
         ObjectiveWinner = Math.Max(1, winningTeam);
+        Revision++;
         foreach (int team in TeamNumbers())
         {
             if (team != losingTeam)
@@ -204,6 +211,7 @@ public sealed class VersusMatch
     {
         if (Completed)
             return;
+        Revision++;
         if (team > 0)
             _teamBonus[team] = Scores.ZeppelinKill;
         if (Replicated || RowOf(victim) is not { } victimRow)
@@ -285,6 +293,7 @@ public sealed class VersusMatch
     {
         if (Completed)
             return;
+        Revision++;
         var shooterRow = RowOf(shooter);
         bool teammate = shooter != victim && shooterRow is { Team: > 0 } && shooterRow.Team == TeamOf(victim);
         if (shooterRow != null && teammate)
@@ -311,6 +320,7 @@ public sealed class VersusMatch
     {
         if (Completed)
             return;
+        Revision++;
         var victimRow = RowOf(victim);
         if (victimRow != null)
         {
@@ -327,6 +337,7 @@ public sealed class VersusMatch
     {
         if (Completed || RowOf(playerIndex) is not { } row)
             return;
+        Revision++;
         row.Score += points;
         if (Reached(playerIndex))
             Complete();
@@ -353,6 +364,7 @@ public sealed class VersusMatch
         var row = RowOf(playerIndex);
         if (row == null)
             return;
+        Revision++;
         row.Score = score;
         row.Kills = kills;
         row.Deaths = deaths;
@@ -403,6 +415,7 @@ public sealed class VersusMatch
             Completed = false;
             ObjectiveWinner = 0;
             _teamBonus.Clear();
+            Revision++;
         }
     }
 
@@ -421,6 +434,7 @@ public sealed class VersusMatch
         AllAlone = false;
         ObjectiveWinner = 0;
         _teamBonus.Clear();
+        Revision++;
     }
 
     /// <summary>Every player ranked by score descending, ties sharing a rank, rank 1 alone is the

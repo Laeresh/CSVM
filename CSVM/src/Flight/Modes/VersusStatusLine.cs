@@ -26,6 +26,8 @@ public sealed partial class VersusStatusLine : Control
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
     private VersusMatch? _match;
+    private string? _line;
+    private (VersusMatch Match, int Pane, int Revision, int Clock, Func<int, string?>? BotName) _lineKey;
 
     /// <summary>What sends the line away while it answers true: the pane's held scores, whose
     /// Original text runs across the top of the pane. Null keeps it.</summary>
@@ -99,7 +101,22 @@ public sealed partial class VersusStatusLine : Control
         return $"{total / 60}:{total % 60:00}";
     }
 
+    // The line draws every frame and ranks the field. It is rebuilt only when the scores move, the
+    // clock shows another second, or the pane or its naming changes.
     private string StatusLine(VersusMatch match)
+    {
+        int clock = match.TimeLimit > 0f ? Mathf.Max(0, Mathf.CeilToInt(match.TimeRemaining)) : -1;
+        var key = (match, PlayerIndex, match.Revision, clock, BotName);
+        if (_line == null || key != _lineKey)
+        {
+            _lineKey = key;
+            _line = BuildStatusLine(match);
+        }
+
+        return _line;
+    }
+
+    private string BuildStatusLine(VersusMatch match)
     {
         string time = match.TimeLimit > 0f ? $"{FormatTime(match.TimeRemaining)}   " : "";
         string kd = $"K/D {match.KillsOf(PlayerIndex)}/{match.DeathsOf(PlayerIndex)}";

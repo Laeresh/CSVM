@@ -43,6 +43,15 @@ public sealed partial class StuntRunHud : Control
     private static readonly Color HudBlue = MarkerDraw.HudBlue;
     private static readonly Color HudGreen = new(0.60f, 1f, 0.70f); // completion feedback
 
+    private static readonly string[] TimeUpLines = { "TIME UP" };
+
+    // The two status lines as last built, and what each was built from: both draw every frame,
+    // and the leaderboard's sorts the field. No key starts equal to a live one.
+    private readonly string[] _runLine = { "" };
+    private readonly string[] _raceLine = { "" };
+    private (float Elapsed, int Cleared, int Total) _runLineKey = (-1f, -1, -1);
+    private (StuntRace? Race, int Index, StuntRacePhase Phase, int Clock, int Revision) _raceLineKey;
+
     private StuntMission _mission = null!;
     private float _flash;         // s left on the zone-cleared flash
     private string _flashText = "";
@@ -113,8 +122,14 @@ public sealed partial class StuntRunHud : Control
         bool status = StatusShown;
         if (status)
         {
-            DrawLines(font, new Vector2(cx, LineTop(0, s, lineHeight)),
-                new[] { $"{StuntMission.FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}" },
+            var runKey = (_mission.Elapsed, _mission.CompletedCount, _mission.TotalCount);
+            if (runKey != _runLineKey)
+            {
+                _runLineKey = runKey;
+                _runLine[0] = $"{StuntMission.FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}";
+            }
+
+            DrawLines(font, new Vector2(cx, LineTop(0, s, lineHeight)), _runLine,
                 statusFont, HudBlue, topAnchored: true);
         }
 
@@ -122,7 +137,7 @@ public sealed partial class StuntRunHud : Control
         // between the compass tape and the message slots.
         if (status && Race != null)
         {
-            DrawLines(font, new Vector2(cx, LineTop(1, s, lineHeight)), new[] { Race.LeaderboardLine(PlayerIndex) },
+            DrawLines(font, new Vector2(cx, LineTop(1, s, lineHeight)), RaceLine(Race),
                 statusFont, HudBlue, topAnchored: true);
             // Centred on the pane's width like the leaderboard's leader name, so no name box scrolls.
             if (WatchingLine is { } watching)
@@ -152,7 +167,7 @@ public sealed partial class StuntRunHud : Control
         if (_mission.AllComplete)
             DrawLines(font, new Vector2(cx, Size.Y * 0.26f), CompleteBanner(), bannerFont, HudGreen);
         else if (Race?.Of(PlayerIndex) is { InRun: false } && Race.Phase is StuntRacePhase.FinalRun or StuntRacePhase.Ended)
-            DrawLines(font, new Vector2(cx, Size.Y * 0.26f), new[] { "TIME UP" }, bannerFont, HudBlue);
+            DrawLines(font, new Vector2(cx, Size.Y * 0.26f), TimeUpLines, bannerFont, HudBlue);
 
         // The start count's figure, centred; GO in the completion green, fading out at the end.
         if (Count?.Figure is { } figure)
@@ -184,6 +199,20 @@ public sealed partial class StuntRunHud : Control
             lines.Add(best == _mission.Elapsed ? "BEST RUN" : $"BEST {StuntMission.FormatTime(best)}");
         lines.Add(Race.MayStartRun ? "hold respawn to fly again" : "TIME UP");
         return lines.ToArray();
+    }
+
+    // The leaderboard line, rebuilt only when the race moved or its clock shows another second.
+    private string[] RaceLine(StuntRace race)
+    {
+        int clock = Mathf.CeilToInt(race.Phase == StuntRacePhase.FinalRun ? race.FinalRunLeft : race.TimeLeft);
+        var key = (race, PlayerIndex, race.Phase, clock, race.Revision);
+        if (key != _raceLineKey)
+        {
+            _raceLineKey = key;
+            _raceLine[0] = race.LeaderboardLine(PlayerIndex);
+        }
+
+        return _raceLine;
     }
 
     private void DrawLines(Font font, Vector2 anchor, string[] lines, int fontSize, Color color,

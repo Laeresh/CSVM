@@ -15,6 +15,35 @@ namespace CSVM.Tests;
 public class VersusMatchTests
 {
     [Fact]
+    public void TheRevisionMovesWithEveryChangeTheStandingsRead()
+    {
+        var match = new VersusMatch(playerCount: 3, killTarget: 0, timeLimit: 0f);
+        int last = match.Revision;
+        void Moved(string what)
+        {
+            Assert.True(match.Revision != last, $"{what} left the revision at {last}");
+            last = match.Revision;
+        }
+
+        match.AssignTeams(new[] { 1, 2, 2 }, new Dictionary<int, string> { [1] = "Red" });
+        Moved("teams");
+        match.RegisterKill(shooter: 0, victim: 1);
+        Moved("a kill");
+        match.RegisterDeath(2);
+        Moved("a death");
+        match.AddScore(1, 3);
+        Moved("a mode's points");
+        match.ApplyScore(2, 5, 1, 1);
+        Moved("a host's score");
+        match.RegisterZeppelinKill(victim: 0, team: 2);
+        Moved("a zeppelin kill");
+        match.Restart();
+        Moved("a rematch");
+        match.EndOnHullLoss(losingTeam: 1, winningTeam: 2);
+        Moved("a hull loss");
+    }
+
+    [Fact]
     public void APilotIsOutOfLivesOnceItsDeathsReachTheLimit()
     {
         var match = new VersusMatch(playerCount: 2, killTarget: 0, timeLimit: 0f, lives: 2);

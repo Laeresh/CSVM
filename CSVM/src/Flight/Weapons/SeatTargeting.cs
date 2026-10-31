@@ -162,19 +162,28 @@ public sealed class SeatTargeting
         // The keyboard set: every one of the original's eleven targeting keys collides with our
         // flight scheme, so the shipped keys are remake-only. All eleven actions are here, one
         // per class per direction plus the two class-less ones, and each is rebindable.
-        DispatchKey(0, InputAction.TargetNextEnemy, () => sel.NextEnemy());
-        DispatchKey(1, InputAction.TargetNextAlly, () => sel.Next(TargetClass.Ally));
-        DispatchKey(2, InputAction.TargetNextNonAircraft, () => sel.Next(TargetClass.NonAircraft));
-        var position = frame.Position;
-        var attitude = frame.Attitude;
-        DispatchKey(3, InputAction.TargetNearest, () => sel.NearestCrosshairs(position, attitude));
-        DispatchKey(4, InputAction.TargetClear, () => sel.Clear());
-        DispatchKey(5, InputAction.TargetPreviousEnemy, () => sel.Previous(TargetClass.Enemy));
-        DispatchKey(6, InputAction.TargetPreviousAlly, () => sel.Previous(TargetClass.Ally));
-        DispatchKey(7, InputAction.TargetPreviousNonAircraft, () => sel.Previous(TargetClass.NonAircraft));
-        DispatchKey(8, InputAction.TargetNearestEnemy, () => sel.Nearest(TargetClass.Enemy));
-        DispatchKey(9, InputAction.TargetNearestAlly, () => sel.Nearest(TargetClass.Ally));
-        DispatchKey(10, InputAction.TargetNearestNonAircraft, () => sel.Nearest(TargetClass.NonAircraft));
+        if (KeyPressed(0, InputAction.TargetNextEnemy))
+            sel.NextEnemy();
+        if (KeyPressed(1, InputAction.TargetNextAlly))
+            sel.Next(TargetClass.Ally);
+        if (KeyPressed(2, InputAction.TargetNextNonAircraft))
+            sel.Next(TargetClass.NonAircraft);
+        if (KeyPressed(3, InputAction.TargetNearest))
+            sel.NearestCrosshairs(frame.Position, frame.Attitude);
+        if (KeyPressed(4, InputAction.TargetClear))
+            sel.Clear();
+        if (KeyPressed(5, InputAction.TargetPreviousEnemy))
+            sel.Previous(TargetClass.Enemy);
+        if (KeyPressed(6, InputAction.TargetPreviousAlly))
+            sel.Previous(TargetClass.Ally);
+        if (KeyPressed(7, InputAction.TargetPreviousNonAircraft))
+            sel.Previous(TargetClass.NonAircraft);
+        if (KeyPressed(8, InputAction.TargetNearestEnemy))
+            sel.Nearest(TargetClass.Enemy);
+        if (KeyPressed(9, InputAction.TargetNearestAlly))
+            sel.Nearest(TargetClass.Ally);
+        if (KeyPressed(10, InputAction.TargetNearestNonAircraft))
+            sel.Nearest(TargetClass.NonAircraft);
 
         // The spyglass toggle, both halves on their own slots. Its pad control is a button of its
         // own rather than the splitter, so a pad-only pilot reaches it without a double dispatch.
@@ -243,14 +252,9 @@ public sealed class SeatTargeting
         Log.Warn("core", $"--target={InitialTarget}: no match, selectable now: {listed}");
     }
 
-    // Edge-detects one targeting key against its own slot and runs its action once per press.
-    private void DispatchKey(int slot, InputAction action, Action act)
-    {
-        if (Pressed(slot, RowDown(action)))
-        {
-            act();
-        }
-    }
+    // Edge-detects one targeting key against its own slot: true once per press. The caller acts
+    // inline rather than through a delegate, since Step runs per seat per rendered frame.
+    private bool KeyPressed(int slot, InputAction action) => Pressed(slot, RowDown(action));
 
     // The edge rule for a control the caller reads, so one action can take a slot per device half.
     private bool Pressed(int slot, bool down)
