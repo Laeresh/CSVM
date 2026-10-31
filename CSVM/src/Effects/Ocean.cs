@@ -35,7 +35,8 @@ public sealed partial class Ocean : Node3D
     private const float WaterlineBand = OceanMovers.WaterlineBand;
 
     private static readonly StringName ParamName = Param;
-    private static readonly float[] BandEnds = { 700f, 2800f, 11000f, 45000f };
+    // The first band runs past the longest swell's full height, so no wave cuts from full at a step.
+    private static readonly float[] BandEnds = { 1400f, 2800f, 11000f, 45000f };
 
     private readonly Func<IEnumerable<Node3D>> _ships;
     private readonly List<Node3D> _wakes;

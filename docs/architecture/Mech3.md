@@ -267,7 +267,7 @@ replaced. The digit is not the side (`wing_flare1` is starboard on the Warhawk).
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): the World node's children plus every partition-referenced
-subtree, skipping `horizon` (`BuildHorizon` builds the camera-anchored skydome separately),
+subtree, skipping `horizon` (`BuildHorizon` builds the camera-anchored skydome separately, marking where its sun and moon cards stand, `MarkSkyCards`),
 `fvol*` (`IsFogVolumeNode`, the one list `FogVolumeSpec.VolumesOf` also reads, so the skipped set
 and the cloud-scatter set cannot drift apart) and `dzpaths`. Every node the walk builds is stamped
 with its own `zone_id` visual layer (`SceneBuilder`, `zoneGate: true`), so the camera's weather

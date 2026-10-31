@@ -709,7 +709,8 @@ flare anchors to is a *different node* and disagrees in height. C3 authors pitch
 and its `sun` stands on the same bearing 34.4° above the horizon (the node's position seen from
 the dome centre, measured in a built session). Nothing in the binary links the two, so the
 original disagrees with itself and we reproduce that rather than reconcile it (`WORLD-26`,
-`BL-165`).
+`BL-165`) in Original mode. Enhanced aims the scene light at that billboard, or at the dome's
+`moon` under a night zone, so its shadows agree with the sky (`docs/org/weather.md`).
 
 ⚠ **Shadows do not follow it.** A top-level `SHADOW_ANGLES` key outranks the sunlight direction in
 the original's shadow renderer (`FUN_0049d0a0`), and all 53 shipped files author

@@ -198,6 +198,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_facade.gdshaderinc\"";
     internal const string OceanInclude =
         "#include \"res://shaders/csky_ocean.gdshaderinc\"";
+    internal const string TerrainShadowInclude =
+        "#include \"res://shaders/csky_terrain_shadow.gdshaderinc\"";
 
     /// <summary>The animation runtime's <c>OBJECT_OPACITY_STATE</c> translucency, a per-instance
     /// multiplier on ALPHA, because materials are cached and this changes at runtime. Declared in
@@ -609,8 +611,9 @@ void fragment() {
     /// instances, plus each <see cref="SharedMesh"/> request a replacement answered.</summary>
     public int ReplacedMeshCount { get; private set; }
 
-    /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>.</summary>
-    public int ShadowlessMeshCount { get; private set; }
+    /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>, the
+    /// ground the baked terrain shadow casts from (<c>Effects.TerrainShadow</c>).</summary>
+    public List<MeshInstance3D> ShadowlessMeshes { get; } = new();
     public int ColliderCount { get; private set; }
 
     /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by
@@ -816,6 +819,20 @@ void fragment() {
     /// chapter's bias as one device render state. An arm sampling unbiased draws that chapter at a
     /// mip level the original never chose (docs/org/textures.md).</summary>
     internal static string SampleAlbedo(string uv) => $"csky_sample_albedo(albedo_tex, {uv})";
+
+    /// <summary>The <c>light()</c> of an Enhanced arm the baked terrain shadow reaches. It is Godot's
+    /// own diffuse and specular from <c>csky_terrain_shadow.gdshaderinc</c>, the directional light
+    /// scaled by <paramref name="sun"/>. That is the arm's expression for the bake's share at its
+    /// fragment. <paramref name="specular"/> is the arm's SPECULAR, which <c>light()</c> cannot
+    /// read.</summary>
+    internal static string TerrainShadowLight(string sun, float specular) => $@"
+void light() {{
+    vec3 csky_diffuse, csky_specular;
+    csky_terrain_light(LIGHT_IS_DIRECTIONAL ? {sun} : 1.0, NORMAL, LIGHT, VIEW, LIGHT_COLOR, ATTENUATION, ROUGHNESS,
+        {(0.16f * specular * specular).ToString("0.0####", System.Globalization.CultureInfo.InvariantCulture)}, SPECULAR_AMOUNT, csky_diffuse, csky_specular);
+    DIFFUSE_LIGHT += csky_diffuse;
+    SPECULAR_LIGHT += csky_specular;
+}}";
 
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
         UvAxesWithinUnitSquare(polys, pass) == UvClampAxes.Both;
@@ -1333,7 +1350,7 @@ void fragment() {
                 if (CastsNoShadow?.Invoke(node.MeshIndex) == true)
                 {
                     mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-                    ShadowlessMeshCount++;
+                    ShadowlessMeshes.Add(mi);
                 }
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
@@ -2450,6 +2467,14 @@ void fragment() {
             sb.AppendLine(OceanInclude);
             sb.AppendLine("varying vec3 v_ocean_pos;");
         }
+        // The baked terrain shadow darkens the sun on every world-lit arm through a light() of its
+        // own. The stereo interior's model frame is the XR origin's, not the world's, so it stays out.
+        bool terrainShadow = worldLit && !xrInterior && ShadowQualitySetting.TerrainShadows;
+        if (terrainShadow)
+        {
+            sb.AppendLine(TerrainShadowInclude);
+            sb.AppendLine("varying vec3 v_terrain_pos;");
+        }
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -2514,6 +2539,7 @@ void fragment() {
         // would stretch to its model origin. The colliders stay flat. The hide reads the ocean's mask
         // at the fragment's world X/Z, so a sheet shown after the bake still draws.
         string oceanVertex = oceanHide ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
+        string terrainVertex = terrainShadow ? "    v_terrain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2550,7 +2576,7 @@ void fragment() {{");
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{oceanVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -2658,6 +2684,8 @@ void fragment() {{");
         if (coverage)
             sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
+        if (terrainShadow)
+            sb.AppendLine(TerrainShadowLight("csky_terrain_sun(v_terrain_pos)", waterLit ? WaterSpecular : 0f));
         return sb.ToString();
     }
 

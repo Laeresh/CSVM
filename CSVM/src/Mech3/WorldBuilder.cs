@@ -35,6 +35,13 @@ public sealed class WorldBuilder
     /// and is not an authored tile. <c>WeatherRig.CollectDeckTiles</c> is the other reader.</summary>
     internal static readonly StringName DeckExtensionMeta = "deck_extension";
 
+    /// <summary>Metadata on a built skydome: where it draws its sun billboard and its moon, from the
+    /// dome's own origin (<see cref="MarkSkyCards"/>). <c>WeatherRig</c> aims the Enhanced light at them.</summary>
+    internal static readonly StringName SunCardMeta = "sky_sun_card";
+
+    /// <inheritdoc cref="SunCardMeta"/>
+    internal static readonly StringName MoonCardMeta = "sky_moon_card";
+
     // Share of the World node's own `area` rect a co-altitude bucket of flat quads must cover to
     // be the overcast deck. Per-chapter tile census: docs/formats/weather.md.
     // ⚠ Classify the deck structurally, never by texture name. 'cloudlayer' misses C4's Sky1.tif
@@ -485,7 +492,7 @@ public sealed class WorldBuilder
                 DisableShadows(cluster);
         }
 
-        Log.Info("world", $"sun shadow: {_scene.ShadowlessMeshCount} terrain/water mesh instance(s) cast none");
+        Log.Info("world", $"sun shadow: {_scene.ShadowlessMeshes.Count} terrain/water mesh instance(s) cast none");
         _builtWorld = world;
         return root;
     }
@@ -618,6 +625,7 @@ public sealed class WorldBuilder
             return null;
         DisableShadows(built);
         FaceMoonToEye(built);
+        MarkSkyCards(built, horizon, zone);
         DisableLightRangeFade(built);
         return built;
     }
@@ -646,10 +654,10 @@ public sealed class WorldBuilder
     internal static bool NoCollisionNode(GameZ gamez, GameZNode n) =>
         !n.IntersectSurface || MeshUsesTexture(gamez, n, IsNonSolidSkyTexture) || IsBillboardNode(gamez, n);
 
-    /// <summary>Whether one world mesh is ground that casts no sun shadow: a sheet of nothing but
-    /// water, or a ground tile carrying no building wall. The original's world casts no sun shadow
-    /// at all, and Enhanced keeps that for the ground. Under a low sun, Godot's soft filter makes a
-    /// flat sheet shadow itself in bands at the shadow map's texel pitch.
+    /// <summary>Whether one world mesh is ground that casts no shadow map: a sheet of nothing but
+    /// water, or a ground tile carrying no building wall. Under a low sun, Godot's soft filter makes a
+    /// flat sheet shadow itself in bands at the texel pitch. Enhanced keeps the ground out of the maps
+    /// and bakes its sun shade instead (<see cref="Effects.TerrainShadow"/>).
     /// ⚠ <c>cblock*</c> is the city GROUND texture, though it classifies as
     /// <c>buildings</c>; only a wall keeps a tile casting.</summary>
     internal static bool IsShadowlessGround(IReadOnlyList<Vector3> vertices,
@@ -1297,6 +1305,56 @@ public sealed class WorldBuilder
             Log.Info("world", $"horizon: no '{zone}' subtree (has {string.Join("/", names)}), building '{zones[0].Name}'");
         }
         return zones[0].Name;
+    }
+
+    // The sun billboard and the moon are four-corner cards named sun or moon, or skinned sun* or
+    // moon* (C1B's moon is a generic g-node). Each quad's centre, from the dome's own origin, goes on
+    // the dome as metadata.
+    private void MarkSkyCards(Node3D built, GameZNode horizon, string zone)
+    {
+        var root = _gamez.WorldTransformOf(horizon).AffineInverse();
+        foreach (var n in _gamez.Nodes)
+        {
+            if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count || !InZone(n))
+                continue;
+            var mesh = _gamez.Meshes[n.MeshIndex];
+            if (mesh.Vertices.Count != 4)
+                continue;
+            StringName? meta = Named(n, "sun") || Skinned(mesh, "sun") ? SunCardMeta
+                : Named(n, "moon") || Skinned(mesh, "moon") ? MoonCardMeta : null;
+            if (meta == null)
+                continue;
+            var centre = Vector3.Zero;
+            foreach (var v in mesh.Vertices)
+                centre += v;
+            built.SetMeta(meta, root * _gamez.WorldTransformOf(n) * (centre / 4f));
+        }
+
+        bool InZone(GameZNode n)
+        {
+            var child = n;
+            for (var p = _gamez.ParentOf(n); p != null; child = p, p = _gamez.ParentOf(p))
+            {
+                if (p == horizon)
+                    return !child.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
+                        || child.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+
+        static bool Named(GameZNode n, string card) => n.Name.Equals(card, StringComparison.OrdinalIgnoreCase);
+
+        bool Skinned(GameZMesh mesh, string card)
+        {
+            foreach (var polygon in mesh.Polygons)
+            {
+                if (polygon.MaterialIndex >= 0 && polygon.MaterialIndex < _gamez.Materials.Count
+                    && _gamez.Materials[polygon.MaterialIndex].TextureName is { } tex
+                    && tex.StartsWith(card, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
     }
 
     // The source moon is an axis-aligned quad, which looks tilted from most headings. Replaced

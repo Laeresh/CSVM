@@ -33,13 +33,6 @@ public sealed class ClutterBuilder
     /// reading a single shape.</summary>
     public static readonly StringName CollisionCellMeta = "csvm_clutter_cell";
 
-    // The Rich card's declarations: the sim clock its sway reads and its sun-side varyings. The handover
-    // band to the canopy clumps (CanopyClumps.Handover) is zero while none stand. The near models' band
-    // (VegetationModels) is zero on a card with no model.
-    // The Rich lines are emitted into the Rich variant alone, so the Original card's text never changes.
-    internal const string RichDecls = "\n#include \"res://shaders/csky_time.gdshaderinc\"\nvarying float v_side;\nvarying flat float v_sun;\n"
-        + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";";
-
     /// <summary>The node the remake-added stamps stand under, hidden while Rich is off.</summary>
     internal const string AddedRootName = "clutter_added";
 
@@ -53,10 +46,6 @@ public sealed class ClutterBuilder
         + "    float gust = 0.5 + 0.5 * sin(csky_time * 0.5235988 - dot(origin.xz, breeze) * 0.05);\n"
         + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
         + "    float lean = 0.012 + gust * (0.024 + 0.020 * flutter);\n";
-
-    // How much the card's half facing the sun's bearing gains, before its side; the clumps share it.
-    internal const string SunLine =
-        "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0);\n";
 
     // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
     // Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
@@ -76,24 +65,6 @@ public sealed class ClutterBuilder
     // (VegetationModels.Layer), so the card and the clumps draw whole there, as with no models.
     internal static readonly string ModelShare = "(" + SceneBuilder.FlatSeaEye + " ? 1.0 : clamp((distance(origin, CAMERA_POSITION_WORLD) - "
         + VegetationModels.BandParam + ".x) / max(" + VegetationModels.BandParam + ".y - " + VegetationModels.BandParam + ".x, 1.0), 0.0, 1.0))";
-
-    // The Rich card's vertex lines. The mirror reads a negative X axis off the instance basis. A card
-    // has vertices only at its base and top, so the sway is a lean about the base along a fixed breeze.
-    // It goes back through the face, so a hidden stamp's keep still collapses it. Periods of 12 s and
-    // 3 s divide ShaderTime.RolloverSecs, so the wrap shows no jump. The phase comes from the stamp's origin.
-    internal static readonly string RichVertexLines = "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
-        + "    v_side = sign(VERTEX.x);\n"
-        + SunLine
-        + "    if (" + CanopyClumps.HandoverParam + ".y > 0.0) {\n"
-        + "        v_alpha *= 1.0 - " + HandoverShare + ";\n"
-        + "        keep *= step(0.004, v_alpha);\n"
-        + "    }\n"
-        + "    if (" + VegetationModels.BandParam + ".y > 0.0) {\n"
-        + "        v_alpha *= " + ModelShare + ";\n"
-        + "        keep *= step(0.004, v_alpha);\n"
-        + "    }\n"
-        + LeanLines
-        + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     // The SphericalY pose, single-sourced with every other facade population so the law cannot
     // drift. Emitted into the spherical variant alone; a CylindricalY card poses off its own
@@ -227,6 +198,46 @@ public sealed class ClutterBuilder
         /// <summary>The triangle's three world vertices are collinear or coincident.</summary>
         ZeroWorldArea,
     }
+
+    /// <summary>The Rich card's declarations: the sim clock its sway reads, the terrain shadow's
+    /// include and its sun-side varyings. The handover band to the canopy clumps
+    /// (CanopyClumps.Handover) is zero while none stand. The near models' band (VegetationModels)
+    /// is zero on a card with no model. The Rich lines are emitted into the Rich variant alone, so
+    /// the Original card's text never changes.</summary>
+    public static string RichDecls => "\n#include \"res://shaders/csky_time.gdshaderinc\"\n" + TerrainShadowDecl
+        + "varying float v_side;\nvarying flat float v_sun;\n"
+        + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";";
+
+    /// <summary>The baked terrain shadow's include, for the three Rich vertex stages that scale
+    /// their sun side by it (<see cref="SunLine"/>); empty under <c>--terrain-shadows=off</c>.</summary>
+    public static string TerrainShadowDecl =>
+        Utils.ShadowQualitySetting.TerrainShadows ? SceneBuilder.TerrainShadowInclude + "\n" : "";
+
+    /// <summary>How much the card's half facing the sun's bearing gains, before its side; the
+    /// clumps and the models share it. Under a cliff's baked shadow the stamp's origin reads no
+    /// sun, so no gain.</summary>
+    public static string SunLine =>
+        "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0)"
+        + (Utils.ShadowQualitySetting.TerrainShadows ? " * csky_terrain_sun(MODEL_MATRIX[3].xyz)" : "") + ";\n";
+
+    /// <summary>The Rich card's vertex lines. The mirror reads a negative X axis off the instance
+    /// basis. A card has vertices only at its base and top, so the sway is a lean about the base
+    /// along a fixed breeze. It goes back through the face, so a hidden stamp's keep still
+    /// collapses it. Periods of 12 s and 3 s divide ShaderTime.RolloverSecs, so the wrap shows no
+    /// jump. The phase comes from the stamp's origin.</summary>
+    public static string RichVertexLines => "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
+        + "    v_side = sign(VERTEX.x);\n"
+        + SunLine
+        + "    if (" + CanopyClumps.HandoverParam + ".y > 0.0) {\n"
+        + "        v_alpha *= 1.0 - " + HandoverShare + ";\n"
+        + "        keep *= step(0.004, v_alpha);\n"
+        + "    }\n"
+        + "    if (" + VegetationModels.BandParam + ".y > 0.0) {\n"
+        + "        v_alpha *= " + ModelShare + ";\n"
+        + "        keep *= step(0.004, v_alpha);\n"
+        + "    }\n"
+        + LeanLines
+        + "    VERTEX += transpose(face) * vec3(breeze.x, 0.0, breeze.y) * (lean * VERTEX.y);\n";
 
     /// <summary>The vegetation entry the Rich variant was last baked from, null on a chapter with none.</summary>
     public VegetationEntry? Vegetation => _vegetation;

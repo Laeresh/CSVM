@@ -277,6 +277,9 @@ from this page and where it departs:
   a projected silhouette onto the terrain. The world is built `fullbright: true` and an unshaded
   material receives nothing, so `BL-324`'s removal of `_sun.ShadowEnabled` stays correct and is not
   a regression to rediscover.
+- **Enhanced's terrain shadow is remake-only.** The original's world is fullbright and no mountain
+  shades a valley or a lake; Enhanced bakes that shade from the ground's heights
+  (`Effects/TerrainShadow.cs`, `docs/architecture/Effects.md`) and nothing on this page describes it.
 - Taken verbatim: the straight-down projection and the player's forward skew, the 1/200 horizontal
   distance fade, the 60/250 altitude ramp, the player's 3× growth, the colour formula with its zero
   guard, and the spread and ramp the coverage texture is built through.
