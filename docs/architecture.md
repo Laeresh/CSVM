@@ -774,6 +774,8 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
 - `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare (screen rig or world rig).
+- `src/Launch/VegetationStage.cs`, the vegetation build step: the clutter, canopy clumps and ground cover, and the one follow every vegetation setting and the graphics switch take.
+- `src/Launch/OceanStage.cs`, the wave ocean build step: the chapter's sea and the ocean built or dropped with the graphics mode and Water Quality.
 - `src/Launch/SessionProbes.cs`, the build's scripted probes that report and quit, and the `--destroy=`/`--debug-objective=` build-time forces.
 - `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, the ocean and vegetation labs, flight labs and debug overlays.
 - `src/Launch/SessionBoards.cs`, the whole-window boards over a flight: the pause board and options leaf, the results boards, the menu readers and photo mode.

@@ -382,8 +382,8 @@ the saved `vegetationQuality` word, the `graphics.vegetationQuality` key, then `
 `FallbackFor(integrated, panes)`: `original` on an integrated GPU (the Steam Deck) drawing two or more panes, under
 `default_integrated_gpu_panes`, and `rich` otherwise, whatever the OS. A splitscreen session resolves it again (`WordSettings.FollowPanes`).
 The clutter reads `RichOn`, the word and the Enhanced mode together, never the word alone, so the faithful path stays Original.
-A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/GameSession.cs` recut the clutter and the map edge's copies
-(`FollowVegetationQuality`); a mode switch recuts them too. The VIDEO page shows it as the Vegetation dropdown under View Distance.
+A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/VegetationStage.cs` recut the clutter and the map edge's copies
+(`Follow`); a mode switch recuts them too. The VIDEO page shows it as the Vegetation dropdown under View Distance.
 
 ## src/Utils/VegetationModelsSetting.cs
 How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (400 to 600 m, the default) or
@@ -398,7 +398,7 @@ How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (
 (`Mech3/GroundCover.cs`), the default. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved
 `groundCover` word, the `graphics.groundCover` key, then `cards` under `--det` and otherwise `FallbackFor(integrated)`: `off` on an
 integrated GPU (the Steam Deck) under `default_integrated_gpu`, `cards` otherwise, whatever the OS. A live change reaches
-`Launch/GameSession.cs`'s `FollowGroundCover` through the session's follow, which builds the word's cover and drops the other with no
+`Launch/VegetationStage.cs`'s `Follow`, which builds the word's cover and drops the other with no
 other rebuild. The VIDEO page shows it as the Ground Cover dropdown under 3D Vegetation.
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
