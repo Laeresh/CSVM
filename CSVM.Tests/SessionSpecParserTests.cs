@@ -532,6 +532,10 @@ public class SessionSpecParserTests
         Assert.Equal("shadow.png", spec.TerrainShadowPath);
         Assert.True(SessionSpec.Parse(new[] { "--fly", "--terrain-shadows=on" }).TerrainShadows);
         Assert.True(spec.Fly);
+        Assert.Equal(4f, spec.TerrainShadowCell);
+        Assert.Equal(8f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=8" }).TerrainShadowCell);
+        Assert.Equal(2f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=0.5" }).TerrainShadowCell);
+        Assert.Equal(4f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=huge" }).TerrainShadowCell);
     }
 
     /// <summary><c>--hd-models=</c> names the model folder, empty naming none, and absent leaves

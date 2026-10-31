@@ -20,9 +20,6 @@ namespace CSVM.Effects;
 /// </summary>
 internal sealed partial class TerrainShadow : Node
 {
-    /// <summary>The texel edge in metres.</summary>
-    public const float Cell = TerrainShadowRaster.Cell;
-
     // The globals csky_terrain_shadow.gdshaderinc declares: the live texture, its world rect, and the
     // penumbra's growth per metre of blocker distance with its one-texel floor.
     private static readonly StringName MapParam = "csky_terrain_shadow";
@@ -39,6 +36,9 @@ internal sealed partial class TerrainShadow : Node
     private TerrainShadow()
     {
     }
+
+    /// <summary>The texel edge in metres.</summary>
+    public static float Cell => TerrainShadowRaster.Cell;
 
     /// <summary>The bake whose texture the globals carry, null while the defaults stand.</summary>
     public static TerrainShadow? Live { get; private set; }

@@ -1,6 +1,7 @@
 using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Session.World;
 using Godot;
 using Xunit;
 
@@ -41,6 +42,22 @@ public class SunOrientationTests
         Assert.Equal(original.X, godot.X, 5);
         Assert.Equal(original.Y, godot.Y, 5);
         Assert.Equal(original.Z, godot.Z, 5);
+    }
+
+    // Enhanced aims the light at the dome's sun or moon. The rotation built from a direction must
+    // put the light's +Z back on it, under the euler order the authored bearings use.
+    [Theory]
+    [InlineData(0.42f, 0.91f, 0f)]
+    [InlineData(-0.58f, 0.57f, -0.58f)]
+    [InlineData(0.64f, 0.42f, -0.64f)]
+    [InlineData(0f, 1f, 0f)]
+    public void OrientationTowardPutsTheLightsZOnTheDirection(float x, float y, float z)
+    {
+        var dir = new Vector3(x, y, z).Normalized();
+        var back = Basis.FromEuler(WeatherRig.OrientationToward(dir), EulerOrder.Yxz).Z;
+        Assert.Equal(dir.X, back.X, 5);
+        Assert.Equal(dir.Y, back.Y, 5);
+        Assert.Equal(dir.Z, back.Z, 5);
     }
 
     [Fact]

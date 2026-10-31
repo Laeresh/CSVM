@@ -264,6 +264,7 @@ public sealed class WeatherRig
     // The zone ApplyZone last lit the session with, so a live graphics-mode switch can light
     // it again under the other arm.
     private WeatherState.ZoneWeather? _appliedZone;
+    private IReadOnlyList<HorizonDome> _domes = Array.Empty<HorizonDome>();
 
     // The session's drawn aircraft and zeppelins, read fresh each frame. A wave spawns and an
     // airframe is shot down long after this rig is built, so a held list goes stale.
@@ -314,13 +315,13 @@ public sealed class WeatherRig
     /// the band stops drawing for a camera below it.</summary>
     public ObjectZoneGate ObjectGate => _objectGate;
 
-    /// <summary>The sun orientation every zone of the mission authors, for the terrain shadow bake;
-    /// the sun's own rotation when the mission has no weather.</summary>
+    /// <summary>The sun orientation the light wears under every zone of the mission, for the terrain
+    /// shadow bake. The sun's own rotation when the mission has no weather.</summary>
     public IEnumerable<Vector3> SunOrientations =>
-        _weather is { } weather ? weather.ZoneNames.Select(zone => weather.Zone(zone).SunOrientation) : new[] { _sun.Rotation };
+        _weather is { } weather ? weather.ZoneNames.Select(zone => LightOrientation(weather.Zone(zone))) : new[] { _sun.Rotation };
 
     /// <summary>The sun orientation the last zone apply wrote, the sun's own until one has.</summary>
-    public Vector3 SunOrientation => _appliedZone?.SunOrientation ?? _sun.Rotation;
+    public Vector3 SunOrientation => _appliedZone is { } fog ? LightOrientation(fog) : _sun.Rotation;
 
     /// <summary>The applied zone's <c>SUNLIGHT_DIFFUSE</c>/<c>SUNLIGHT_AMBIENT</c>, each scaled
     /// by its own authored colour. The authored pair rather than the energies derived from it,
@@ -411,6 +412,23 @@ public sealed class WeatherRig
     public static bool IsNightZone(WeatherState.ZoneWeather fog)
         => (0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
            < NightFogLuminance;
+
+    /// <summary>The light's Euler rotation whose +Z is <paramref name="dir"/>, the inverse of the
+    /// authored euler-to-direction mapping (docs/org/weather.md).</summary>
+    public static Vector3 OrientationToward(Vector3 dir)
+        => new(-Mathf.Asin(Mathf.Clamp(dir.Y, -1f, 1f)), Mathf.Atan2(dir.X, dir.Z), 0f);
+
+    /// <summary>The rotation aiming the light from <paramref name="dome"/>'s centre at its <c>sun</c>
+    /// billboard, or at its <c>moon</c> under a <paramref name="night"/> sky. Null where the dome draws
+    /// neither. The lens flare anchors to the same node.</summary>
+    public static Vector3? SkyAnchorOrientation(Node3D dome, bool night)
+    {
+        if (SkyCard(dome, WorldBuilder.SunCardMeta) is { } sun)
+            return OrientationToward(sun.Normalized());
+        if (night && SkyCard(dome, WorldBuilder.MoonCardMeta) is { } moon)
+            return OrientationToward(moon.Normalized());
+        return null;
+    }
 
     /// <summary>The fog range as written. Enhanced mode pushes the authored pair out by
     /// <c>EnhancedFogRangeScale</c>, so shadowed ground is not already grey. Pure and identity in
@@ -554,6 +572,8 @@ public sealed class WeatherRig
     {
         LoadWeather(missionZrdr, horizonZones);
         buildDomes(_activeZone);
+        if (rigs.Count > 0)
+            _domes = rigs[0].HorizonDomes;
         SetupWeather(rigs);
         _zoneWritten = true;
         if (_pendingFogState is { } pending)
@@ -838,6 +858,16 @@ public sealed class WeatherRig
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
+    // Where the dome draws a sky card, from its own origin (WorldBuilder.MarkSkyCards); null for none,
+    // or one standing at the origin.
+    private static Vector3? SkyCard(Node3D dome, StringName meta)
+    {
+        if (!dome.HasMeta(meta))
+            return null;
+        var at = dome.GetMeta(meta).AsVector3();
+        return at.LengthSquared() < 1f ? null : at;
+    }
+
     // "zone2 0 meshes, zone1 3 meshes", the evidence the pick was made on, not just its result.
     private static List<string> HorizonZoneCounts(IReadOnlyList<HorizonZone> horizonZones)
     {
@@ -927,7 +957,7 @@ public sealed class WeatherRig
         }
         ApplyZone(fog);
         WriteGlobals(FogOf(rig.Index), FogField.All);
-        Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}'){LightSuffix(fog)}");
+        Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(_sun.Rotation.X):0.#}°/{Mathf.RadToDeg(_sun.Rotation.Y):0.#}°{AimedSuffix(fog)} (dome built for '{_activeZone}'){LightSuffix(fog)}");
     }
 
     // Enhanced only: outside an armed fog volume a view's fog runs toward the volume zone's own. The
@@ -1257,7 +1287,8 @@ public sealed class WeatherRig
         _baseFog.Sun = ZoneSun(fog);
         WriteGlobals(FogOf(_primary), FogField.All);
         var fogRange = _baseFog.Fog.Range;
-        Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog)}");
+        Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(_sun.Rotation.X):0.#}° pitch / {Mathf.RadToDeg(_sun.Rotation.Y):0.#}° yaw{AimedSuffix(fog)}; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog)}");
+        Log.Info("world", $"sky cards: {SkyCardNote(fog)}");
         if (_fogWhiteout.Armed)
         {
             // Said out loud once per session, because "the curtain never fired" and "the chapter
@@ -1354,7 +1385,7 @@ public sealed class WeatherRig
     private SunWritten ZoneSun(WeatherState.ZoneWeather fog)
     {
         (Vector3 ambientRgb, Vector3 diffuseRgb) = SunVertexLight(fog);
-        return new SunWritten(SunDirectionFor(fog.SunOrientation), new Vector2(fog.SunAmbient, fog.SunDiffuse),
+        return new SunWritten(SunDirectionFor(LightOrientation(fog)), new Vector2(fog.SunAmbient, fog.SunDiffuse),
             ambientRgb, diffuseRgb, PhotographFill(fog));
     }
 
@@ -1370,6 +1401,47 @@ public sealed class WeatherRig
         return basis.Z.Normalized();
     }
 
+    // The bearing the light wears under one zone. Original keeps the authored SUNLIGHT_ORIENTATION,
+    // which shaded aircraft alone there. Enhanced casts shadow maps and the terrain bake from it. A
+    // shadow pointing away from the sky's sun or moon reads wrong, so Enhanced aims at the zone's dome.
+    private Vector3 LightOrientation(WeatherState.ZoneWeather fog)
+    {
+        if (!GraphicsMode.Enhanced || _weather == null || _domes.Count == 0)
+            return fog.SunOrientation;
+        // ponytail: a zone authored like an earlier one reads that one's dome.
+        string name = _weather.ZoneNames.FirstOrDefault(z => _weather.Zone(z).Equals(fog)) ?? _activeZone;
+        int state = name.Length > 0 && char.IsDigit(name[^1]) ? name[^1] - '0' : 0;
+        Node3D? dome = _domes.Count == 1 ? _domes[0].Node : null;
+        foreach (var d in _domes)
+        {
+            if (d.ZoneId == state)
+                dome = d.Node;
+            else if (dome == null && d.ZoneId <= 0)
+                dome = d.Node;
+        }
+        return dome != null && SkyAnchorOrientation(dome, IsNightZone(fog)) is { } aimed ? aimed : fog.SunOrientation;
+    }
+
+    private string AimedSuffix(WeatherState.ZoneWeather fog)
+        => LightOrientation(fog) != fog.SunOrientation ? " (aimed at the dome's sun or moon)" : string.Empty;
+
+    // The evidence the bearing was picked on: the sky cards the first dome draws and where they stand.
+    private string SkyCardNote(WeatherState.ZoneWeather fog)
+    {
+        if (_domes.Count == 0)
+            return "no dome";
+        var dome = _domes[0].Node;
+        return $"{dome.Name}: {Card("sun", WorldBuilder.SunCardMeta)}, {Card("moon", WorldBuilder.MoonCardMeta)}, {(IsNightZone(fog) ? "night" : "day")} zone";
+
+        string Card(string name, StringName meta)
+        {
+            if (SkyCard(dome, meta) is not { } at)
+                return $"no {name}";
+            var o = OrientationToward(at.Normalized());
+            return Log.Format($"{name} at {Mathf.RadToDeg(o.X):0.#}/{Mathf.RadToDeg(o.Y):0.#}");
+        }
+    }
+
     // The half of a zone apply there is one of per session: the scene sun, its bearing, the
     // plain vertex-light globals, the ambient. Called with the primary view's zone only.
     // ⚠ Pair every call with that view's fog write, so the light and the primary fog never drift
@@ -1377,11 +1449,12 @@ public sealed class WeatherRig
     private void ApplyZone(WeatherState.ZoneWeather fog)
     {
         _appliedZone = fog;
-        // The zone's authored SUNLIGHT_ORIENTATION, adopted unconditionally, no tune, no clamp.
-        // It shades aircraft only; the world is fullbright and casts no shadow from it.
+        // Original wears the zone's authored SUNLIGHT_ORIENTATION, no tune, no clamp; Enhanced the
+        // dome's sun or moon where the chapter draws one (LightOrientation).
         // ⚠ One scene light for the whole session: a light selects objects, not cameras.
-        _sun.Rotation = fog.SunOrientation;
-        Effects.TerrainShadow.Live?.Publish(fog.SunOrientation);
+        var orientation = LightOrientation(fog);
+        _sun.Rotation = orientation;
+        Effects.TerrainShadow.Live?.Publish(orientation);
         // The plain globals, in both modes. Each view's own copy rides FogViewTable whenever the
         // views disagree. The direction points toward the light.
         WriteSunDirection(_sun);

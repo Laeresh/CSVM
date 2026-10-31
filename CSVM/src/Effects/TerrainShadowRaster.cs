@@ -14,14 +14,15 @@ namespace CSVM.Effects;
 /// </summary>
 internal static class TerrainShadowRaster
 {
-    /// <summary>The texel edge in metres, the ocean mask's.</summary>
-    public const float Cell = OceanMaskRaster.Cell;
-
     /// <summary>The height of a texel no triangle covers, and of a line nothing upstream casts. No
     /// fragment lies below it, so it reads lit.</summary>
     public const float Empty = -10000f;
 
     private const int MinBandRows = 64;
+
+    /// <summary>The texel edge in metres, <c>--terrain-shadow-cell=</c>. A shadow edge steps by it and
+    /// the texture grows as its square: 4 m is 64 MB per zone sun over C3.</summary>
+    public static float Cell { get; set; } = 4f;
 
     /// <summary>Rasterises <paramref name="tris"/> (three corners per triangle) at the texel centres
     /// over their extent. Then it sweeps the grazing line along the azimuth of

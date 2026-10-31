@@ -13,7 +13,11 @@ namespace CSVM.Tests;
 /// </summary>
 public class TerrainShadowRasterTests
 {
-    private const float Cell = TerrainShadowRaster.Cell;
+    private static readonly float Cell = TerrainShadowRaster.Cell;
+
+    // The westmost texel centre of a 16 m block standing at x = 0. Its ground is the last to win, so
+    // a ray's distance counts from it.
+    private static readonly float BlockWest = Cell / 2f;
 
     // A sun from +X at 30 degrees: the shadow falls toward -X and the ray drops tan(30) per metre.
     private static readonly Vector3 SunEast = new Vector3(MathF.Cos(MathF.PI / 6f), MathF.Sin(MathF.PI / 6f), 0f);
@@ -23,13 +27,13 @@ public class TerrainShadowRasterTests
     {
         var tris = new List<Vector3>();
         AddQuad(tris, -1024f, -1024f, 2048f, 0f);
-        // A 16 m wide, 100 m tall block across the whole sheet, its texel centres at x = 4 and 12.
+        // A 16 m wide, 100 m tall block across the whole sheet.
         AddQuad(tris, 0f, -1024f, 16f, 100f, 2048f);
         var r = TerrainShadowRaster.Run(tris.ToArray(), SunEast, 3);
         float tan = MathF.Tan(MathF.PI / 6f);
         for (int k = 1; k <= 20; k++)
         {
-            float x = 4f - (k * Cell);
+            float x = BlockWest - (k * Cell);
             Assert.InRange(r.Line[At(r, x, 100f)], 100f - (k * Cell * tan) - 0.01f, 100f - (k * Cell * tan) + 0.01f);
             Assert.InRange(r.Distance[At(r, x, 100f)], (k * Cell) - 0.01f, (k * Cell) + 0.01f);
         }
@@ -55,8 +59,8 @@ public class TerrainShadowRasterTests
         for (int k = 2; k <= 23; k += 7)
         {
             // A texel centre k columns west of the block's last column. Its ray travelled
-            // k * Cell / cos(az) metres from x = 4.
-            float x = 4f - (k * Cell), d = k * Cell / MathF.Cos(az);
+            // k * Cell / cos(az) metres from there.
+            float x = BlockWest - (k * Cell), d = k * Cell / MathF.Cos(az);
             int i = At(r, x, -(k * Cell * MathF.Tan(az)));
             Assert.InRange(r.Line[i], 100f - (d * MathF.Tan(el)) - 0.05f, 100f - (d * MathF.Tan(el)) + 0.05f);
             Assert.InRange(r.Distance[i], d - 0.05f, d + 0.05f);
@@ -79,9 +83,13 @@ public class TerrainShadowRasterTests
         Assert.InRange(lit.Distance[i], Cell - 0.01f, Cell + 0.01f);
         var shaded = TerrainShadowRaster.Run(tris.ToArray(), SunEast, 2);
         i = At(shaded, 100f, 0f);
-        // The ridge's last texel centre, x = 508 at 1020 m, casts the line 51 steps down the slope.
-        Assert.InRange(shaded.Line[i], 1020f - (51f * drop) - 0.01f, 1020f - (51f * drop) + 0.01f);
-        Assert.InRange(shaded.Distance[i], 508f - 100f - 0.01f, 508f - 100f + 0.01f);
+        // The ridge's last texel centre casts the line down the slope, one drop per texel, to the
+        // texel holding x = 100.
+        float ridge = 512f - (Cell / 2f);
+        float at = shaded.Origin.X + ((MathF.Floor((100f - shaded.Origin.X) / Cell) + 0.5f) * Cell);
+        float line = ridge + 512f - ((ridge - at) / Cell * drop);
+        Assert.InRange(shaded.Line[i], line - 0.01f, line + 0.01f);
+        Assert.InRange(shaded.Distance[i], ridge - at - 0.01f, ridge - at + 0.01f);
     }
 
     [Fact]

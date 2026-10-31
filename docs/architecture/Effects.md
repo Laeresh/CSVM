@@ -130,7 +130,8 @@ cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `cs
 side by it. `SunAt` reads the texture as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
 
 ## src/Effects/TerrainShadowRaster.cs
-The bake's compute, with no engine object touched: the ground triangles' plane heights at the 8 m texel centres (the
+The bake's compute, with no engine object touched: the ground triangles' plane heights at the texel centres (`Cell`, 4 m
+unless `--terrain-shadow-cell=` says otherwise; the
 highest kept), then one sweep along the sun's azimuth that carries the higher of each texel's ground and line forward,
 dropping the sun's slope per step, with the horizontal distance to the ground that set it. A fragment below the line is
 in terrain shadow; `Lit` is the ramp over the penumbra the shader spells too. The floats are identical for any band count.

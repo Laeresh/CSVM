@@ -477,6 +477,10 @@ public sealed record SessionSpec
     /// texels as a PNG; empty for none. See <c>docs/cli.md</c>.</summary>
     public string TerrainShadowPath { get; private set; } = "";
 
+    /// <summary><c>--terrain-shadow-cell=&lt;metres&gt;</c>: the terrain shadow bake's texel edge, 2 to
+    /// 64 m, 4 unless said otherwise. See <c>docs/cli.md</c>.</summary>
+    public float TerrainShadowCell { get; private set; } = 4f;
+
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
     ///, flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
@@ -1741,6 +1745,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
             else if (arg is "--terrain-shadows=on" or "--terrain-shadows=off") { s.TerrainShadows = arg.EndsWith("on", StringComparison.Ordinal); }
             else if (arg.StartsWith("--dump-terrain-shadow=")) { s.TerrainShadowPath = arg["--dump-terrain-shadow=".Length..]; }
+            else if (arg.StartsWith("--terrain-shadow-cell=")) { s.TerrainShadowCell = float.TryParse(arg["--terrain-shadow-cell=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out float cell) ? Math.Clamp(cell, 2f, 64f) : s.TerrainShadowCell; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {

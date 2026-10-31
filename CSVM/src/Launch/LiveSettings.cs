@@ -88,6 +88,7 @@ internal sealed class LiveSettings
         WordSettings.ResolveLaunch(Flags(spec), spec.Det);
         ShadowQualitySetting.HardShadows = (spec.SkippedPasses & EnhancedPasses.SoftShadows) != 0;
         ShadowQualitySetting.TerrainShadows = spec.TerrainShadows;
+        Effects.TerrainShadowRaster.Cell = spec.TerrainShadowCell;
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={graphicsWord} {WordSettings.Describe()}");
         // The window's own viewport takes the render flags here, before any scene builds. The
