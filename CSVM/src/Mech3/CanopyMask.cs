@@ -35,6 +35,11 @@ public sealed class CanopyMask
     // A painted bake's sample heights per covered cell, PaintSamples squared row by row, NaN off the canopy.
     private readonly Dictionary<int, float[]> _samples = new();
 
+    // A painted bake's triangles, and per cell the ones whose XZ shadow reaches it. A height blended from the samples
+    // across a cliff stands a crown in the air, as at C3's Tiki Tunnel (#264).
+    private readonly Dictionary<int, List<int>> _bins = new();
+    private IReadOnlyList<Vector3> _painted = Array.Empty<Vector3>();
+
     private CanopyMask(float left, float top, float right, float bottom)
     {
         MinX = Math.Min(left, right);
@@ -119,8 +124,12 @@ public sealed class CanopyMask
         const float step = CellM / PaintSamples;
         var heights = new float[sw * sh];
         Array.Fill(heights, float.NaN);
+        mask._painted = triangles;
         for (int t = 0; t + 2 < triangles.Count; t += 3)
+        {
             Fill(triangles[t], triangles[t + 1], triangles[t + 2], mask.MinX, mask.MinZ, step, sw, sh, heights);
+            mask.Bin(t);
+        }
 
         for (int j = 0; j < mask.Height; j++)
         {
@@ -165,44 +174,17 @@ public sealed class CanopyMask
         return i < 0 || j < 0 || i >= Width || j >= Height ? -1 : (j * Width) + i;
     }
 
-    /// <summary>The painted surface's height at a world X/Z, bilinear between the bake's sample points (8 m apart)
-    /// that lie on the canopy. Off them, and on a stamp bake, the cell's mean ground; 0 off the area.</summary>
-    public float SurfaceAt(float x, float z)
-    {
-        const float step = CellM / PaintSamples;
-        float u = ((x - MinX) / step) - 0.5f, v = ((z - MinZ) / step) - 0.5f;
-        int i0 = (int)MathF.Floor(u), j0 = (int)MathF.Floor(v);
-        float sum = 0f, weight = 0f;
-        for (int k = 0; k < 4; k++)
-        {
-            int i = i0 + (k & 1), j = j0 + (k >> 1);
-            if (i < 0 || j < 0 || i >= Width * PaintSamples || j >= Height * PaintSamples
-                || !_samples.TryGetValue(((j / PaintSamples) * Width) + (i / PaintSamples), out var cell))
-                continue;
-            float y = cell[((j % PaintSamples) * PaintSamples) + (i % PaintSamples)];
-            if (float.IsNaN(y))
-                continue;
-            float w = (1f - MathF.Abs(u - i)) * (1f - MathF.Abs(v - j));
-            sum += w * y;
-            weight += w;
-        }
-
-        return weight > 1e-6f ? sum / weight : CellAt(x, z) is int c and >= 0 ? _ground[c] : 0f;
-    }
+    /// <summary>The painted surface's height at a world X/Z: the highest painted triangle over it, the layer the
+    /// samples keep. Off the canopy, and on a stamp bake, the cell's mean ground; 0 off the area.</summary>
+    public float SurfaceAt(float x, float z) =>
+        PaintedAt(x, z) ?? (CellAt(x, z) is int c and >= 0 ? _ground[c] : 0f);
 
     /// <summary>The share of a cell's sample points a painted bake found on the canopy, 0 on a stamp bake.</summary>
     public float PaintedShare(int cell) =>
         _samples.TryGetValue(cell, out var s) ? (float)s.Count(y => !float.IsNaN(y)) / s.Length : 0f;
 
-    /// <summary>Whether the sample point nearest a world X/Z lies on the painted canopy.</summary>
-    public bool IsPainted(float x, float z)
-    {
-        const float step = CellM / PaintSamples;
-        int i = (int)MathF.Floor((x - MinX) / step), j = (int)MathF.Floor((z - MinZ) / step);
-        return i >= 0 && j >= 0 && i < Width * PaintSamples && j < Height * PaintSamples
-            && _samples.TryGetValue(((j / PaintSamples) * Width) + (i / PaintSamples), out var cell)
-            && !float.IsNaN(cell[((j % PaintSamples) * PaintSamples) + (i % PaintSamples)]);
-    }
+    /// <summary>Whether a painted triangle lies over a world X/Z; never on a stamp bake.</summary>
+    public bool IsPainted(float x, float z) => PaintedAt(x, z) != null;
 
     /// <summary>The density at a world X/Z, bilinear between cell centres and 0 off the area.</summary>
     public float DensityAt(float x, float z)
@@ -243,6 +225,40 @@ public sealed class CanopyMask
                 ref float held = ref heights[(j * sw) + i];
                 if (float.IsNaN(held) || y > held)
                     held = y;
+            }
+        }
+    }
+
+    // The highest painted triangle's height over a world X/Z, null where none is.
+    private float? PaintedAt(float x, float z)
+    {
+        if (!_bins.TryGetValue(CellAt(x, z), out var list))
+            return null;
+        float? best = null;
+        foreach (int t in list)
+        {
+            if (VegetationGround.HeightIn(_painted[t], _painted[t + 1], _painted[t + 2], new Vector3(x, 0f, z)) is { } y && (best == null || y > best))
+                best = y;
+        }
+
+        return best;
+    }
+
+    // Lists painted triangle t in every cell its XZ bounds reach.
+    private void Bin(int t)
+    {
+        Vector3 a = _painted[t], b = _painted[t + 1], c = _painted[t + 2];
+        int i0 = Math.Max(0, (int)MathF.Floor((Math.Min(a.X, Math.Min(b.X, c.X)) - MinX) / CellM));
+        int i1 = Math.Min(Width - 1, (int)MathF.Floor((Math.Max(a.X, Math.Max(b.X, c.X)) - MinX) / CellM));
+        int j0 = Math.Max(0, (int)MathF.Floor((Math.Min(a.Z, Math.Min(b.Z, c.Z)) - MinZ) / CellM));
+        int j1 = Math.Min(Height - 1, (int)MathF.Floor((Math.Max(a.Z, Math.Max(b.Z, c.Z)) - MinZ) / CellM));
+        for (int j = j0; j <= j1; j++)
+        {
+            for (int i = i0; i <= i1; i++)
+            {
+                if (!_bins.TryGetValue((j * Width) + i, out var list))
+                    _bins[(j * Width) + i] = list = new List<int>();
+                list.Add(t);
             }
         }
     }
