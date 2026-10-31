@@ -300,23 +300,10 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
-    private Effects.Ocean? _ocean;
-    private bool _oceanEligible;
-    // The canopy clumps over the forest, standing while Rich is on and the chapter or --canopy-clumps draws them.
-    private Mech3.CanopyClumps.Field? _canopyClumps;
-
-    // The ground cover shells, standing while Rich is on and the Ground Cover word is shells.
-    private Node3D? _groundCover;
-
-    // The ground cover cards, standing while Rich is on and the Ground Cover word is cards.
-    private Mech3.GroundCover.Field? _groundCoverCards;
-    // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
-    // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
-    private Effects.SeaState _seaSaved = Effects.SeaState.Default;
-    private Effects.SeaState _sea = Effects.SeaState.Default;
-    // The world runtime whose motions say which hulls the ocean follows; set in every mode it builds in.
-    private AnimRuntime? _oceanRuntime;
-    private ClutterBuilder? _clutter;
+    // The world's vegetation, null before the world build ends and on a stage with no world.
+    private VegetationStage? _vegetation;
+    // The wave ocean's stage, null where the session cannot stand an ocean (OceanStage.Eligible).
+    private OceanStage? _ocean;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
@@ -327,8 +314,6 @@ public partial class GameSession : Node3D
     // See WorldBuilder.HideUnplacedEntities / RestorePlacedEntities.
     private WorldBuilder? _unplacedWatch;
     private double _unplacedRecheck;
-    // Set when a world node holding canopy or cover ground is switched (FollowGroundSwitch).
-    private bool _groundSwitched;
     // This session's startup timing, the always-on [perf] startup line. One per StartSession,
     // published as StartupProfile.Current so the shared build code can record into it, and cleared
     // when the line is emitted.
@@ -388,8 +373,12 @@ public partial class GameSession : Node3D
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
 
-    /// <summary>Whether the wave ocean stands in this session's world.</summary>
-    public bool OceanBuilt => _ocean != null;
+    /// <summary>The world's clutter, canopy clumps and ground cover, null before the world build ends
+    /// and where no world stands.</summary>
+    internal VegetationStage? Vegetation => _vegetation;
+
+    /// <summary>The wave ocean's stage, null where the session cannot stand one.</summary>
+    internal OceanStage? Ocean => _ocean;
 
     /// <summary>The static world's scene builder, null outside a built world. Read by the suites.</summary>
     internal SceneBuilder? WorldScene => _worldScene;
@@ -409,20 +398,6 @@ public partial class GameSession : Node3D
 
     /// <summary>The static world's merged draws, null outside flight. Read by the suites.</summary>
     internal Mech3.WorldMerge? WorldMerge => _worldMerge;
-
-    /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
-    internal ClutterBuilder? Clutter => _clutter;
-
-    /// <summary>The canopy clumps' node over the map, null while none stand. Read by the suites.</summary>
-    internal Node3D? CanopyClumps => _canopyClumps?.Root;
-
-    /// <summary>The canopy clumps standing, with their tiles and rate, null while none stand. Read by the suites.</summary>
-    internal Mech3.CanopyClumps.Field? CanopyClumpField => _canopyClumps;
-
-    internal Node3D? GroundCover => _groundCover;
-
-    /// <summary>The ground cover cards standing, null while none do. Read by the suites.</summary>
-    internal Mech3.GroundCover.Field? GroundCoverCards => _groundCoverCards;
 
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
@@ -862,14 +837,13 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
-        _oceanEligible = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
-        _oceanRuntime = state.WorldRuntime;
-        ResolveSea();
-        FollowOcean();
-        if (_oceanEligible && Effects.Ocean.Covers(_spec.Chapter))
-            _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
+        if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
+        {
+            var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles);
+            _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
+        }
         var gamez = state.Gamez;
-        if (_clutter?.Vegetation is { } vegetation)
+        if (_vegetation is { Clutter: { Vegetation: { } vegetation } clutter } stage)
         {
             // Built on the paint tool's first ray, so a session that never paints never pays for it.
             var ground = new Lazy<Vector3[]>(() =>
@@ -879,7 +853,7 @@ public partial class GameSession : Node3D
                 Log.Info("ui", $"vegetation lab: {triangles.Length / 3} ground triangles in {watch.ElapsedMilliseconds} ms");
                 return triangles;
             });
-            _labs!.BuildVegetationLab(vegetation, ApplyVegetation, _clutter.Mask, ApplyVegetationMask,
+            _labs!.BuildVegetationLab(vegetation, stage.Apply, clutter.Mask, stage.Apply,
                 p => VegetationGround.LayersAt(gamez, p), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
         }
         BuildWorldMerge(state);
@@ -910,10 +884,8 @@ public partial class GameSession : Node3D
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
-        FollowOcean();
-        _clutter?.Recut();
-        _edgeExtender?.FollowClutterFade();
-        FollowCanopyClumps();
+        _ocean?.Follow();
+        _vegetation?.Follow();
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
         _sky?.FollowGraphicsMode();
@@ -956,43 +928,6 @@ public partial class GameSession : Node3D
             }
         }
         SwitchProfile.Mark("shadows");
-    }
-
-    /// <summary>A live View Distance change under Enhanced cuts the clutter cells again. Their size
-    /// and visibility range come from the fade scale the launcher just wrote, as do the map edge's
-    /// copies' ranges.</summary>
-    public void FollowClutterFade()
-    {
-        _clutter?.Recut();
-        _edgeExtender?.FollowClutterFade();
-        FollowCanopyClumps();
-    }
-
-    /// <summary>A live Water Quality change builds or drops the wave ocean
-    /// (<see cref="EnhancedLook.ApplyWaterQuality"/>). The graphics-mode switch follows it too.</summary>
-    public void FollowWaterQuality() => FollowOcean();
-
-    /// <summary>A live Vegetation Quality change draws the clutter and the map edge's copies again
-    /// (<see cref="EnhancedLook.ApplyVegetationQuality"/>), the hook a Rich look reads the word
-    /// through. The graphics-mode switch recuts them too.</summary>
-    public void FollowVegetationQuality() => FollowClutterFade();
-
-    /// <summary>Bakes the clutter's Rich variant again from <paramref name="entry"/>, the vegetation
-    /// lab's live edit, and draws it with the map edge's copies (<see cref="ClutterBuilder.ApplyVegetation"/>).</summary>
-    public void ApplyVegetation(VegetationEntry entry)
-    {
-        _clutter?.ApplyVegetation(entry);
-        _edgeExtender?.FollowVegetation();
-        FollowCanopyClumps(rebake: true);
-    }
-
-    /// <summary>Bakes the clutter's Rich variant again under <paramref name="mask"/>, the vegetation lab's
-    /// brush stroke, as <see cref="ApplyVegetation"/> does for an entry.</summary>
-    public void ApplyVegetationMask(VegetationMask mask)
-    {
-        _clutter?.ApplyVegetationMask(mask);
-        _edgeExtender?.FollowVegetation();
-        FollowCanopyClumps(rebake: true);
     }
 
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
@@ -1169,7 +1104,7 @@ public partial class GameSession : Node3D
                 }
             }
         }
-        FollowGroundSwitch();
+        _vegetation?.FollowGroundSwitch();
         // Everything below is anchored to *a* camera, so it runs once per rig, one in single
         // player, one per pane in splitscreen (each on that player's own visual layer). See
         // src/Session/World/WeatherRig.cs's Tick.
@@ -1182,13 +1117,13 @@ public partial class GameSession : Node3D
         // One mirrored-tile window serves every pane (the union of the rings around each player),
         // so two players at opposite edges both get continued terrain. A no-op until one of them
         // crosses a cell boundary.
-        if (_edgeExtender != null || _groundCoverCards != null)
+        if (_edgeExtender != null || _vegetation?.GroundCoverCards != null)
         {
             _focusPoints.Clear();
             foreach (var rig in _rigs)
                 _focusPoints.Add(rig.Camera.Position);
             _edgeExtender?.Update(_focusPoints);
-            _groundCoverCards?.Update(_focusPoints);
+            _vegetation?.Update(_focusPoints);
         }
 
         // ⚠ Last in the frame, and the ONLY call anywhere: a suite that steps the simulation
@@ -1246,17 +1181,6 @@ public partial class GameSession : Node3D
     /// whether more is left. The wave aeroplanes are that work. They belong to the load, where
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
     internal bool StepOwedLoad() => _flightRoster?.BuildOrderedAirframe() ?? false;
-
-    /// <summary>Builds the canopy clumps and the ground cover again once a world node holding their ground was
-    /// switched since the last build. Called each frame; one rebuild serves every switch a frame makes.</summary>
-    internal void FollowGroundSwitch()
-    {
-        if (!_groundSwitched)
-            return;
-        _groundSwitched = false;
-        _clutter?.ForgetCanopy();
-        FollowCanopyClumps(rebake: true);
-    }
 
     /// <summary>Every board's and the pause sheet's way out. A network race says so first. A guest's
     /// word marks its seats left on the host; a host leaving an ended race takes every guest to the
@@ -1668,7 +1592,6 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         _worldScene = session.Builder.Scene;
-        _clutter = session.Clutter;
         state.WorldRuntime = session.Runtime;
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
@@ -1766,7 +1689,7 @@ public partial class GameSession : Node3D
             if (_probes!.DumpTileGrid(_edgeExtender))
                 return false;
         }
-        FollowCanopyClumps();
+        _vegetation = new VegetationStage(_spec, _plane, _sessionTextures, session.Clutter, _edgeExtender);
         // The sky step: the weather rig, its domes and decks' zone, the cloud field and banks, then
         // the lens flare over them (src/Launch/SkyStage.cs).
         _sky!.Build(state, builder);
@@ -2650,165 +2573,6 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
-    }
-
-    // The Enhanced wave ocean, built on the first Enhanced frame that asks for waves. A switch back
-    // to Original or to flat water drops it, and the sea sheet draws again because the shared
-    // switch resets.
-    private void FollowOcean()
-    {
-        if (!GraphicsMode.Enhanced || !WaterQualitySetting.DrawsWaves)
-        {
-            Drop(_ocean);
-            _ocean = null;
-            return;
-        }
-        if (_ocean != null || !_oceanEligible || _plane == null || _worldScene == null || _sessionTextures == null
-            || !Effects.Ocean.Covers(_spec.Chapter))
-            return;
-        if ((_spec.SkippedPasses & EnhancedPasses.Ocean) != 0)
-        {
-            Log.Info("world", $"ocean: skipped (--no-ocean)");
-            return;
-        }
-        var hulls = new HashSet<Node>();
-        if (_surfaceVehicles != null)
-        {
-            foreach (var v in _surfaceVehicles.Vessels)
-                hulls.Add(v.Body);
-        }
-        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _sea, _spec.OceanMaskPath);
-        if (_ocean != null)
-        {
-            _ocean.DebugDrive = _spec.DebugWake;
-            _plane.AddChild(_ocean);
-        }
-    }
-
-    // The canopy clumps follow Rich: built while it is on and dropped when it is not. The map edge's copies
-    // and the cards' handover go with them. A lab edit builds them again from the re-baked canopy mask.
-    private void FollowCanopyClumps(bool rebake = false)
-    {
-        FollowGroundCover(rebake);
-        // A script switching an island on or off rebuilds both on the next frame, from the ground then standing.
-        if (_clutter?.Vegetation is { } picks)
-            _clutter.FollowGround(t => Mech3.CanopyMask.IsCanopy(picks, t) || picks.CoverFor(t) != null, () => _groundSwitched = true);
-        bool wanted = (_spec.CanopyClumps ?? Mech3.CanopyClumps.DefaultOn(_spec.Chapter)) && VegetationQualitySetting.RichOn;
-        if (_canopyClumps != null && (!wanted || rebake))
-        {
-            Drop(_canopyClumps.Root);
-            _canopyClumps = null;
-            _edgeExtender?.SetClumps(null);
-            Mech3.CanopyClumps.Handover(_clutter?.ExportedKinds, false);
-        }
-        // The crown models over painted canopy follow the 3D Vegetation word on standing clumps, with no rebuild.
-        _canopyClumps?.FollowModels();
-        if (!wanted || _canopyClumps != null || _plane == null || _sessionTextures == null
-            || _clutter?.ExportedKinds is not { } kinds || _clutter.Vegetation is not { } entry || _clutter.Canopy() is not { } mask)
-            return;
-        string chapter = _spec.Chapter?.ToUpperInvariant() ?? "";
-        _canopyClumps = Mech3.CanopyClumps.Build(mask, kinds, entry, _sessionTextures, card => Mech3.CanopyClumps.TileFor(chapter, card), chapter);
-        if (_canopyClumps == null)
-            return;
-        _plane.AddChild(_canopyClumps.Root);
-        _edgeExtender?.SetClumps(_canopyClumps);
-    }
-
-    // The ground cover follows Rich and the Ground Cover word as the clumps do, and a lab edit builds it again under
-    // its mask. The word draws the cards or the shells over the entry's cover picks, never both.
-    private void FollowGroundCover(bool rebake)
-    {
-        string word = VegetationQualitySetting.RichOn ? GroundCoverSetting.Word : GroundCoverSetting.Off;
-        bool cards = word == GroundCoverSetting.Cards, shells = word == GroundCoverSetting.Shells;
-        if (_groundCoverCards != null && (!cards || rebake))
-        {
-            Drop(_groundCoverCards.Root);
-            _groundCoverCards = null;
-        }
-        if (_groundCover != null && (!shells || rebake))
-        {
-            Drop(_groundCover);
-            _groundCover = null;
-        }
-        if (_plane == null || _sessionTextures == null || _clutter?.Vegetation is not { } entry)
-            return;
-        if (cards && _groundCoverCards == null)
-        {
-            _groundCoverCards = Mech3.GroundCover.Build(_clutter.Gamez, _sessionTextures, _clutter.Mask, entry, _spec.Chapter ?? "", _clutter.SwitchedOff());
-            if (_groundCoverCards != null)
-                _plane.AddChild(_groundCoverCards.Root);
-        }
-        if (shells && _groundCover == null)
-        {
-            _groundCover = Mech3.GroundCoverShells.Build(_clutter.Gamez, _clutter.Mask, _sessionTextures, entry, switchedOff: _clutter.SwitchedOff());
-            if (_groundCover != null)
-                _plane.AddChild(_groundCover);
-        }
-    }
-
-    // The chapter's sea from the shipped file, read once per session that can stand an ocean, under
-    // any --debug-ocean overrides. A chapter with no entry draws the defaults.
-    private void ResolveSea()
-    {
-        if (!_oceanEligible || !Effects.Ocean.Covers(_spec.Chapter))
-            return;
-        _seaSaved = Effects.OceanSeas.Load().For(_spec.Chapter);
-        _sea = _seaSaved.WithOverrides(_spec.DebugOcean);
-        string debug = _spec.DebugOcean is { Length: > 0 } spec ? $" (--debug-ocean={spec})" : "";
-        Log.Info("world", $"ocean: sea {_spec.Chapter} saved={_seaSaved.Describe()} drawn={_sea.Describe()}{debug}");
-    }
-
-    // The ocean lab's edit: the standing ocean takes it at once, and a rebuilt one takes it too.
-    private void ApplySea(Effects.SeaState sea)
-    {
-        _sea = sea.Clamped();
-        _ocean?.Apply(_sea);
-    }
-
-    // The world nodes the bound program's played motions carry, as the runtime resolves them. The
-    // roster hulls are left out; they have their own source.
-    private List<Node3D> AnimatedMovers(HashSet<Node> roster)
-    {
-        var movers = new List<Node3D>();
-        if (_oceanRuntime is not { } runtime || _plane == null)
-            return movers;
-        var seen = new HashSet<Node3D>();
-        foreach (var def in runtime.ProgramDefs)
-        {
-            var moving = Effects.OceanMovers.MovingEvents(def);
-            if (moving.Count == 0)
-                continue;
-            foreach (var node in runtime.TargetsOf(def, moving))
-            {
-                if (node != _plane && GodotObject.IsInstanceValid(node) && !InRoster(node) && seen.Add(node))
-                    movers.Add(node);
-            }
-        }
-        var names = movers.Select(m => m.Name.ToString()).OrderBy(n => n, StringComparer.Ordinal);
-        Log.Debug("world", $"ocean: movers resolved [{string.Join(", ", names)}]");
-        return movers;
-
-        bool InRoster(Node node)
-        {
-            for (Node? n = node; n != null; n = n.GetParent())
-            {
-                if (roster.Contains(n))
-                    return true;
-            }
-            return false;
-        }
-    }
-
-    // The roster hulls the ocean calms around, each over its own waterline.
-    private IEnumerable<Node3D> OceanHulls()
-    {
-        if (_surfaceVehicles == null)
-            yield break;
-        foreach (var v in _surfaceVehicles.Vessels)
-        {
-            if (GodotObject.IsInstanceValid(v.Body) && v.Body.IsVisibleInTree())
-                yield return v.Body;
-        }
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

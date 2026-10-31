@@ -368,15 +368,15 @@ internal static class GraphicsSwitchSuites
                 }
 
                 string built = OceanState(live);
-                ctx.Check(live.Session.OceanBuilt && built == "1 in tree",
+                ctx.Check(live.Session.Ocean?.Built == true && built == "1 in tree",
                     $"at waves the session builds the ocean into its tree ({built})");
                 ApplyWater(live, WaterQualitySetting.Flat);
                 string flat = OceanState(live);
-                ctx.Check(!live.Session.OceanBuilt && flat == "0 in tree",
+                ctx.Check(live.Session.Ocean?.Built != true && flat == "0 in tree",
                     $"a live move to flat drops it and the sheet draws its sea again ({flat})");
                 ApplyWater(live, WaterQualitySetting.Waves);
                 string again = OceanState(live);
-                ctx.Check(live.Session.OceanBuilt && again == "1 in tree",
+                ctx.Check(live.Session.Ocean?.Built == true && again == "1 in tree",
                     $"and a move back to waves builds it again ({again})");
             }
             finally
@@ -389,7 +389,7 @@ internal static class GraphicsSwitchSuites
             try
             {
                 string none = OceanState(flatBuild);
-                ctx.Check(flatBuild.Built && !flatBuild.Session.OceanBuilt && none == "0 in tree",
+                ctx.Check(flatBuild.Built && flatBuild.Session.Ocean?.Built != true && none == "0 in tree",
                     $"a session built at flat builds no ocean (built={flatBuild.Built}, {none})");
             }
             finally
@@ -403,7 +403,7 @@ internal static class GraphicsSwitchSuites
             {
                 EnhancedLook.ApplyWaterQuality(door.Session);
                 string skipped = OceanState(door);
-                ctx.Check(door.Built && !door.Session.OceanBuilt && skipped == "0 in tree",
+                ctx.Check(door.Built && door.Session.Ocean?.Built != true && skipped == "0 in tree",
                     $"and --no-ocean still builds none at waves, through a live apply as well (built={door.Built}, {skipped})");
             }
             finally
@@ -436,7 +436,7 @@ internal static class GraphicsSwitchSuites
             var live = Open(ctx, enhanced: true);
             try
             {
-                if (!live.Built || live.Session.Clutter is not { } clutter)
+                if (!live.Built || live.Session.Vegetation?.Clutter is not { } clutter)
                 {
                     ctx.Check(false, $"the Enhanced session builds with its clutter");
                     return;
@@ -459,10 +459,10 @@ internal static class GraphicsSwitchSuites
                     && again.EdgeColored == builtDraw.EdgeColored,
                     $"and a move back to rich draws the first build's transforms and colours exactly ({again})");
                 var shipped = Mech3.VegetationSidecar.Load().For("C1");
-                live.Session.ApplyVegetation(new Mech3.VegetationEntry { Seed = shipped.Seed + 1, Kinds = shipped.Kinds });
+                live.Session.Vegetation?.Apply(new Mech3.VegetationEntry { Seed = shipped.Seed + 1, Kinds = shipped.Kinds });
                 Step(live);
                 var reseeded = DrawnStamps(live);
-                live.Session.ApplyVegetation(shipped);
+                live.Session.Vegetation?.Apply(shipped);
                 Step(live);
                 var rebaked = DrawnStamps(live);
                 ctx.Check(!reseeded.Stamps.SequenceEqual(builtDraw.Stamps) && rebaked.Stamps.SequenceEqual(builtDraw.Stamps)
@@ -518,12 +518,12 @@ internal static class GraphicsSwitchSuites
                     $"a rich C1 flight builds its clumps by default ({built.Text})");
                 ctx.Check(Handover(live) == "on" && EdgeClumps(live) > 0 && Handover(live, forest: false) == "off",
                     $"the cards hand over ({Handover(live)}), the grassland and hedge cards keep every distance ({Handover(live, forest: false)}), and the map edge copies the clumps ({EdgeClumps(live)} cell copies)");
-                var shipped = live.Session.CanopyClumpField!;
+                var shipped = live.Session.Vegetation?.CanopyClumpField!;
                 shippedTrees = shipped.TreesPerClump;
                 ctx.Check(shipped.Models == null, $"C1's card forest stands no crown model: only painted canopy does");
                 ctx.Check(shipped.Tiles.Any(t => t.StartsWith("firtree1 ", StringComparison.Ordinal)) && shipped.Tiles.All(ShippedTile),
                     $"the clumps take the firtree1 tile, and every tile is the one shipped beside its own species' model ({string.Join("; ", shipped.Tiles)})");
-                var clutter = live.Session.Clutter!;
+                var clutter = live.Session.Vegetation?.Clutter!;
                 var composed = Mech3.CanopyClumps.Build(clutter.Canopy()!, clutter.ExportedKinds!, clutter.Vegetation!, live.Session.SessionTextures!, _ => null)!;
                 static byte[] Atlas(Node3D root) => ((ShaderMaterial)((MultiMeshInstance3D)root.GetChild(0)).MaterialOverride)
                     .GetShaderParameter("albedo_tex").As<Texture2D>().GetImage().GetData();
@@ -531,18 +531,18 @@ internal static class GraphicsSwitchSuites
                     $"without a tile they compose from the cards, another atlas ({composed.Clumps.Count} clumps at {composed.TreesPerClump:0.##} trees, against {built.Count} at {shipped.TreesPerClump:0.##})");
                 composed.Root.Free();
                 ApplyVegetation(live, VegetationQualitySetting.Original);
-                ctx.Check(live.Session.CanopyClumps == null && !built.Node!.IsInsideTree() && EdgeClumps(live) == 0 && Handover(live) == "off",
+                ctx.Check(live.Session.Vegetation?.CanopyClumps == null && !built.Node!.IsInsideTree() && EdgeClumps(live) == 0 && Handover(live) == "off",
                     $"a live move to original drops them, their edge copies and the band ({EdgeClumps(live)} copies, {Handover(live)})");
                 ApplyVegetation(live, VegetationQualitySetting.Rich);
                 var again = Clumps(live);
                 ctx.Check(again.Count == built.Count && again.Text == built.Text && EdgeClumps(live) > 0 && Handover(live) == "on",
                     $"a move back to rich builds the same chunks and counts ({again.Text})");
                 Switch(live, enhanced: false);
-                ctx.Check(live.Session.CanopyClumps == null, $"a live switch to Original drops them");
+                ctx.Check(live.Session.Vegetation?.CanopyClumps == null, $"a live switch to Original drops them");
                 Switch(live, enhanced: true);
                 var back = Clumps(live);
                 ctx.Check(back.Text == built.Text, $"and a switch back to Enhanced builds them again");
-                live.Session.ApplyVegetation(Mech3.VegetationSidecar.Load().For("C1"));
+                live.Session.Vegetation?.Apply(Mech3.VegetationSidecar.Load().For("C1"));
                 Step(live);
                 var rebaked = Clumps(live);
                 ctx.Check(rebaked.Node != null && rebaked.Node != back.Node && rebaked.Text == built.Text && EdgeClumps(live) > 0 && Handover(live) == "on",
@@ -566,7 +566,7 @@ internal static class GraphicsSwitchSuites
                 var withPack = Open(ctx, true, 1, "C1");
                 try
                 {
-                    var field = withPack.Session.CanopyClumpField;
+                    var field = withPack.Session.Vegetation?.CanopyClumpField;
                     string seen = field == null ? "no clumps" : $"{string.Join("; ", field.Tiles)} at {field.TreesPerClump:0.##} trees against {shippedTrees:0.##}";
                     ctx.Check(field != null && field.Tiles.Count(t => t.StartsWith("firtree1 ", StringComparison.Ordinal) && t.EndsWith(packed, StringComparison.Ordinal)) == 1
                         && field.Tiles.All(t => t.StartsWith("firtree1 ", StringComparison.Ordinal) || ShippedTile(t)) && field.TreesPerClump > shippedTrees,
@@ -583,12 +583,12 @@ internal static class GraphicsSwitchSuites
             try
             {
                 var painted = Clumps(c3);
-                var mask = c3.Session.Clutter?.Canopy();
+                var mask = c3.Session.Vegetation?.Clutter?.Canopy();
                 var band = (painted.Node?.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial)
                     ?.GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2();
                 string crownTile = $"{Mech3.CanopyClumps.CrownModel} in {Mech3.CanopyClumps.Variants} slots from {Mech3.CanopyClumps.ShippedRoot}/C3/{Mech3.CanopyClumps.CrownModel}.clump.png.bin";
-                ctx.Check(c3.Built && painted.Count > 0 && mask != null && c3.Session.CanopyClumpField!.Tiles.SequenceEqual(new[] { crownTile }),
-                    $"a rich C3 flight builds clumps over its painted canopy from the crown tile in every slot ({painted.Count}; {string.Join("; ", c3.Session.CanopyClumpField!.Tiles)})");
+                ctx.Check(c3.Built && painted.Count > 0 && mask != null && c3.Session.Vegetation!.CanopyClumpField!.Tiles.SequenceEqual(new[] { crownTile }),
+                    $"a rich C3 flight builds clumps over its painted canopy from the crown tile in every slot ({painted.Count}; {string.Join("; ", c3.Session.Vegetation!.CanopyClumpField!.Tiles)})");
                 ctx.Check(band == new Vector2(Mech3.CanopyClumps.PaintedNearM, Mech3.CanopyClumps.PaintedFarM) && Handover(c3) == "off",
                     $"they fade in over the painted band ({band}) and the beach palms keep every distance ({Handover(c3)})");
                 int stray = painted.Node!.GetChildren().OfType<MultiMeshInstance3D>().Sum(m => Enumerable.Range(0, m.Multimesh.InstanceCount)
@@ -603,7 +603,7 @@ internal static class GraphicsSwitchSuites
             var off = Open(ctx, true, 1, "C1", "--canopy-clumps=off");
             try
             {
-                ctx.Check(off.Built && off.Session.CanopyClumps == null && EdgeClumps(off) == 0 && Handover(off) == "off",
+                ctx.Check(off.Built && off.Session.Vegetation?.CanopyClumps == null && EdgeClumps(off) == 0 && Handover(off) == "off",
                     $"--canopy-clumps=off builds none and leaves the cards whole ({Handover(off)})");
             }
             finally
@@ -615,7 +615,7 @@ internal static class GraphicsSwitchSuites
             var original = Open(ctx, true, 1, "C1");
             try
             {
-                ctx.Check(original.Built && original.Session.CanopyClumps == null && EdgeClumps(original) == 0,
+                ctx.Check(original.Built && original.Session.Vegetation?.CanopyClumps == null && EdgeClumps(original) == 0,
                     $"a session built at original builds none");
             }
             finally
@@ -642,7 +642,7 @@ internal static class GraphicsSwitchSuites
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
         static List<MultiMeshInstance3D> Chunks(Rig rig) =>
-            rig.Session.GroundCover?.GetChildren().OfType<MultiMeshInstance3D>().Where(m => m.IsInsideTree() && !m.IsQueuedForDeletion()).ToList() ?? new();
+            rig.Session.Vegetation?.GroundCover?.GetChildren().OfType<MultiMeshInstance3D>().Where(m => m.IsInsideTree() && !m.IsQueuedForDeletion()).ToList() ?? new();
         // A chunk is named <texture>_<i>_<j>.
         static string ChunkTexture(MultiMeshInstance3D m) => string.Join('_', m.Name.ToString().Split('_')[..^2]);
         static string Census(List<MultiMeshInstance3D> chunks) => string.Create(CultureInfo.InvariantCulture,
@@ -656,7 +656,7 @@ internal static class GraphicsSwitchSuites
                 var plain = Open(ctx, true, 1, "C1");
                 try
                 {
-                    ctx.Check(plain.Built && plain.Session.GroundCover == null, $"a rich C1 flight at {word} builds no shells");
+                    ctx.Check(plain.Built && plain.Session.Vegetation?.GroundCover == null, $"a rich C1 flight at {word} builds no shells");
                 }
                 finally
                 {
@@ -670,19 +670,19 @@ internal static class GraphicsSwitchSuites
             {
                 var chunks = Chunks(live);
                 string built = Census(chunks);
-                var entry = live.Session.Clutter!.Vegetation!;
-                ctx.Check(live.Built && chunks.Count > 0 && live.Session.GroundCoverCards == null, $"shells builds the shells and no cards ({built})");
+                var entry = live.Session.Vegetation!.Clutter!.Vegetation!;
+                ctx.Check(live.Built && chunks.Count > 0 && live.Session.Vegetation?.GroundCoverCards == null, $"shells builds the shells and no cards ({built})");
                 ctx.Check(chunks.All(m => entry.CoverFor(ChunkTexture(m)) != null),
                     $"every chunk draws a texture the entry's cover picks ({string.Join(", ", chunks.Select(ChunkTexture).Distinct())})");
-                var (uniforms, _) = InstanceUniformNodes(live.Session.GroundCover!);
+                var (uniforms, _) = InstanceUniformNodes(live.Session.Vegetation?.GroundCover!);
                 float Far(MultiMeshInstance3D m) => Mech3.GroundCoverShells.Band(entry.CoverFor(ChunkTexture(m))!.Grows).Y;
-                ctx.Check(uniforms == 0 && !HasCollider(live.Session.GroundCover!)
+                ctx.Check(uniforms == 0 && !HasCollider(live.Session.Vegetation?.GroundCover!)
                     && chunks.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && m.Multimesh.InstanceCount == Mech3.GroundCoverShells.Layers
                         && m.VisibilityRangeEnd > Far(m) && m.VisibilityRangeEnd < Far(m) + Mech3.GroundCoverShells.ChunkM),
                     $"no chunk declares an instance uniform ({uniforms}), stands a collider or casts a shadow; each draws {Mech3.GroundCoverShells.Layers} layers, ranged {chunks.Min(m => m.VisibilityRangeEnd):0}-{chunks.Max(m => m.VisibilityRangeEnd):0} m");
 
                 // Every piece's centre on the mask: none on a cleared texel.
-                var mask = live.Session.Clutter!.Mask!;
+                var mask = live.Session.Vegetation!.Clutter!.Mask!;
                 byte[] texels = mask.ToBytes();
                 float texel = (mask.MaxX - mask.MinX) / mask.Side;
                 byte TexelAt(Vector3 p) => texels[(Math.Clamp((int)MathF.Floor((p.Z - mask.MinZ) / texel), 0, mask.Side - 1) * mask.Side)
@@ -692,7 +692,7 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(centres.Count > 0 && cleared == 0, $"no piece of {centres.Count} stands on a cleared mask texel ({cleared})");
 
                 // The clearance is not empty of picked ground: the cut drops it.
-                var gamez = live.Session.Clutter.Gamez;
+                var gamez = live.Session.Vegetation!.Clutter.Gamez;
                 var picked = Mech3.VegetationGround.PaintedSurface(gamez, t => entry.CoverFor(t) != null);
                 double bare = picked.Sum(t => Mech3.GroundCoverShells.Clip(new Vector2(t.A.At.X, t.A.At.Z), new Vector2(t.B.At.X, t.B.At.Z), new Vector2(t.C.At.X, t.C.At.Z),
                     new Vector2(mask.MinX, mask.MinZ), texel, (i, j) => i >= 0 && j >= 0 && i < mask.Side && j < mask.Side && texels[(j * mask.Side) + i] == 0).Count);
@@ -724,17 +724,17 @@ internal static class GraphicsSwitchSuites
                     $"no shell stands on C1's railway ({RailTexture}, {rails.Length / 3} triangles): {cornersOnRail} piece corners on it, where {uncutOnRail} uncut pieces stand");
 
                 ApplyVegetation(live, VegetationQualitySetting.Original);
-                ctx.Check(live.Session.GroundCover == null && chunks.All(m => !m.IsInsideTree() || m.IsQueuedForDeletion()), $"a live move to original drops them");
+                ctx.Check(live.Session.Vegetation?.GroundCover == null && chunks.All(m => !m.IsInsideTree() || m.IsQueuedForDeletion()), $"a live move to original drops them");
                 ApplyVegetation(live, VegetationQualitySetting.Rich);
                 ctx.Check(Census(Chunks(live)) == built, $"a move back to rich builds the same ({Census(Chunks(live))})");
                 Switch(live, enhanced: false);
-                ctx.Check(live.Session.GroundCover == null, $"a live switch to Original drops them");
+                ctx.Check(live.Session.Vegetation?.GroundCover == null, $"a live switch to Original drops them");
                 Switch(live, enhanced: true);
                 ctx.Check(Census(Chunks(live)) == built, $"and a switch back to Enhanced builds them again");
                 ApplyGroundCover(live, GroundCoverSetting.Cards);
-                ctx.Check(live.Session.GroundCover == null && live.Session.GroundCoverCards != null, $"a live move to cards drops the shells for the cards");
+                ctx.Check(live.Session.Vegetation?.GroundCover == null && live.Session.Vegetation?.GroundCoverCards != null, $"a live move to cards drops the shells for the cards");
                 ApplyGroundCover(live, GroundCoverSetting.Shells);
-                ctx.Check(live.Session.GroundCoverCards == null && Census(Chunks(live)) == built, $"and back to shells builds the same shells");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards == null && Census(Chunks(live)) == built, $"and back to shells builds the same shells");
             }
             finally
             {
@@ -745,7 +745,7 @@ internal static class GraphicsSwitchSuites
             var original = Open(ctx, true, 1, "C1");
             try
             {
-                ctx.Check(original.Built && original.Session.GroundCover == null, $"a session built at original builds none");
+                ctx.Check(original.Built && original.Session.Vegetation?.GroundCover == null, $"a session built at original builds none");
             }
             finally
             {
@@ -785,7 +785,7 @@ internal static class GraphicsSwitchSuites
             var live = Open(ctx, true, 1, "C1");
             try
             {
-                if (!live.Built || live.Session.Clutter is not { ExportedKinds: { } kinds, ModelRoot: { } models } clutter
+                if (!live.Built || live.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds, ModelRoot: { } models } clutter
                     || ClutterRoot(live.Session) is not { } root)
                 {
                     ctx.Check(false, $"the rich C1 session builds its clutter with a model root");
@@ -889,7 +889,7 @@ internal static class GraphicsSwitchSuites
             var original = Open(ctx, true, 1, "C1");
             try
             {
-                ctx.Check(original.Built && original.Session.Clutter?.ModelRoot is { } r && ModelCells(r).Count == 0,
+                ctx.Check(original.Built && original.Session.Vegetation?.Clutter?.ModelRoot is { } r && ModelCells(r).Count == 0,
                     $"a session built at original draws no model");
             }
             finally
@@ -949,7 +949,7 @@ internal static class GraphicsSwitchSuites
             var live = Open(ctx, true, 1, "C3");
             try
             {
-                if (!live.Built || live.Session.CanopyClumpField is not { Models: { } models } field || live.Session.Clutter?.Canopy() is not { } mask)
+                if (!live.Built || live.Session.Vegetation?.CanopyClumpField is not { Models: { } models } field || live.Session.Vegetation?.Clutter?.Canopy() is not { } mask)
                 {
                     ctx.Check(false, $"the rich C3 flight builds its clumps with crown models");
                     return;
@@ -988,24 +988,24 @@ internal static class GraphicsSwitchSuites
                     $"a spyglass disc, which draws no crown, reads no hold, so its clumps rise over their own band");
 
                 Models(live, VegetationModelsSetting.Off);
-                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && Held(clumps) == 1f && live.Session.CanopyClumpField?.Models == models
+                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && Held(clumps) == 1f && live.Session.Vegetation?.CanopyClumpField?.Models == models
                         && clumps.Shader.Code.Contains($"if ({Mech3.VegetationModels.BandParam}.y > 0.0 && !csky_clutter_dither_keep", StringComparison.Ordinal),
                     $"a live move to Off hides the crowns and zeroes the clumps' band, which keeps every dither cell, and the clumps stay held at full height up to the eye, with no rebuild");
                 Models(live, VegetationModelsSetting.Far);
                 bool far = models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f;
                 Models(live, VegetationModelsSetting.Near);
-                ctx.Check(far && models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f && live.Session.CanopyClumpField?.Models == models,
+                ctx.Check(far && models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f && live.Session.Vegetation?.CanopyClumpField?.Models == models,
                     $"Far and Near draw the same crowns over the same band");
 
                 ApplyVegetation(live, VegetationQualitySetting.Original);
-                ctx.Check(live.Session.CanopyClumpField == null && !models.IsInsideTree(), $"a live move to original draws no crown");
+                ctx.Check(live.Session.Vegetation?.CanopyClumpField == null && !models.IsInsideTree(), $"a live move to original draws no crown");
                 ApplyVegetation(live, VegetationQualitySetting.Rich);
-                var again = live.Session.CanopyClumpField?.Crowns;
+                var again = live.Session.Vegetation?.CanopyClumpField?.Crowns;
                 ctx.Check(again != null && again.SequenceEqual(crowns), $"a move back to rich stands the same crowns ({again?.Count ?? 0})");
                 Switch(live, enhanced: false);
-                ctx.Check(live.Session.CanopyClumpField == null, $"a live switch to Original draws none");
+                ctx.Check(live.Session.Vegetation?.CanopyClumpField == null, $"a live switch to Original draws none");
                 Switch(live, enhanced: true);
-                ctx.Check(live.Session.CanopyClumpField?.Crowns.SequenceEqual(crowns) == true && live.Session.CanopyClumpField.Models!.Visible,
+                ctx.Check(live.Session.Vegetation?.CanopyClumpField?.Crowns.SequenceEqual(crowns) == true && live.Session.Vegetation!.CanopyClumpField.Models!.Visible,
                     $"and a switch back to Enhanced the same crowns");
             }
             finally
@@ -1017,8 +1017,8 @@ internal static class GraphicsSwitchSuites
             var launchedOff = Open(ctx, true, 1, "C3");
             try
             {
-                var offClumps = launchedOff.Session.CanopyClumpField?.Root.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial;
-                ctx.Check(launchedOff.Built && launchedOff.Session.CanopyClumpField?.Models is { Visible: false } && offClumps != null
+                var offClumps = launchedOff.Session.Vegetation?.CanopyClumpField?.Root.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial;
+                ctx.Check(launchedOff.Built && launchedOff.Session.Vegetation?.CanopyClumpField?.Models is { Visible: false } && offClumps != null
                         && offClumps.GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2() == Vector2.Zero
                         && offClumps.GetShaderParameter(Mech3.CanopyClumps.HeldParam).AsSingle() == 1f,
                     $"a session launched at Off hides the crowns and holds the clumps at full height up to the eye, as a live move does");
@@ -1032,7 +1032,7 @@ internal static class GraphicsSwitchSuites
             var original = Open(ctx, true, 1, "C3");
             try
             {
-                ctx.Check(original.Built && original.Session.CanopyClumpField == null, $"a session built at original draws no crown");
+                ctx.Check(original.Built && original.Session.Vegetation?.CanopyClumpField == null, $"a session built at original draws no crown");
             }
             finally
             {
@@ -1064,7 +1064,7 @@ internal static class GraphicsSwitchSuites
             var live = Open(ctx, true, 1, "C3", "--mission=M02");
             try
             {
-                if (!live.Built || live.Session.CanopyClumpField is not { } field || live.Session.Clutter is not { } clutter
+                if (!live.Built || live.Session.Vegetation?.CanopyClumpField is not { } field || live.Session.Vegetation?.Clutter is not { } clutter
                     || clutter.Vegetation is not { } entry || clutter.Gamez.FindByName("world1") is not { HasArea: true } w)
                 {
                     ctx.Check(false, $"the rich C3 M02 flight builds its clumps");
@@ -1102,16 +1102,16 @@ internal static class GraphicsSwitchSuites
 
                 foreach (var island in islands)
                     AnimRuntime.SetSubtreeActive(island, true);
-                live.Session.FollowGroundSwitch();
-                var on = live.Session.CanopyClumpField;
+                live.Session.Vegetation?.FollowGroundSwitch();
+                var on = live.Session.Vegetation?.CanopyClumpField;
                 var (clumpsOn, crownsOn) = on != null ? Over(on) : (0, 0);
                 ctx.Check(clumpsOn > 0 && crownsOn > 0,
                     $"switched on, the islands carry {clumpsOn} clump(s) and {crownsOn} crown model(s) over their canopy");
 
                 foreach (var island in islands)
                     AnimRuntime.SetSubtreeActive(island, false);
-                live.Session.FollowGroundSwitch();
-                var again = live.Session.CanopyClumpField;
+                live.Session.Vegetation?.FollowGroundSwitch();
+                var again = live.Session.Vegetation?.CanopyClumpField;
                 var (clumpsOff, crownsOff) = again != null ? Over(again) : (-1, -1);
                 ctx.Check(clumpsOff == 0 && crownsOff == 0 && again!.Clumps.Count == field.Clumps.Count && again.Crowns.Count == field.Crowns.Count,
                     $"switched off again, they carry none ({clumpsOff} clumps, {crownsOff} crowns) and the field is the first build's size ({again?.Clumps.Count} clumps)");
@@ -1150,7 +1150,7 @@ internal static class GraphicsSwitchSuites
             {
                 bool any = false;
                 Walk(off.Session, n => any |= n.Name == "ground_cover");
-                ctx.Check(off.Built && off.Session.GroundCoverCards == null && off.Session.GroundCover == null && !any, $"at off a rich C1 flight builds no ground cover");
+                ctx.Check(off.Built && off.Session.Vegetation?.GroundCoverCards == null && off.Session.Vegetation?.GroundCover == null && !any, $"at off a rich C1 flight builds no ground cover");
             }
             finally
             {
@@ -1162,8 +1162,8 @@ internal static class GraphicsSwitchSuites
             var live = Open(ctx, true, 1, "C1");
             try
             {
-                if (!live.Built || live.Session.GroundCoverCards is not { } field || live.Session.Clutter?.Mask is not { } mask
-                    || live.Session.Clutter.Vegetation is not { } entry)
+                if (!live.Built || live.Session.Vegetation?.GroundCoverCards is not { } field || live.Session.Vegetation?.Clutter?.Mask is not { } mask
+                    || live.Session.Vegetation!.Clutter.Vegetation is not { } entry)
                 {
                     ctx.Check(false, $"the default word builds the cover on a rich C1 flight over the shipped mask");
                     return;
@@ -1191,17 +1191,17 @@ internal static class GraphicsSwitchSuites
 
                 var root = field.Root;
                 ApplyVegetation(live, VegetationQualitySetting.Original);
-                ctx.Check(live.Session.GroundCoverCards == null && !root.IsInsideTree(), $"a live move to original drops the cover");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards == null && !root.IsInsideTree(), $"a live move to original drops the cover");
                 ApplyVegetation(live, VegetationQualitySetting.Rich);
-                ctx.Check(live.Session.GroundCoverCards != null, $"a move back to rich builds it again");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards != null, $"a move back to rich builds it again");
                 Switch(live, enhanced: false);
-                ctx.Check(live.Session.GroundCoverCards == null, $"a live switch to Original drops it");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards == null, $"a live switch to Original drops it");
                 Switch(live, enhanced: true);
-                ctx.Check(live.Session.GroundCoverCards != null, $"and a switch back to Enhanced builds it again");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards != null, $"and a switch back to Enhanced builds it again");
                 ApplyGroundCover(live, GroundCoverSetting.Off);
-                ctx.Check(live.Session.GroundCoverCards == null && live.Session.GroundCover == null, $"a live move to off drops it");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards == null && live.Session.Vegetation?.GroundCover == null, $"a live move to off drops it");
                 ApplyGroundCover(live, GroundCoverSetting.Cards);
-                ctx.Check(live.Session.GroundCoverCards != null && live.Session.GroundCover == null, $"and back to cards builds it again");
+                ctx.Check(live.Session.Vegetation?.GroundCoverCards != null && live.Session.Vegetation?.GroundCover == null, $"and back to cards builds it again");
             }
             finally
             {
@@ -1275,7 +1275,7 @@ internal static class GraphicsSwitchSuites
                 }
                 var freshEnhanced = Sea(enhanced);
                 builtFresh = FirstOcean(ctx.Host);
-                ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.OceanBuilt && freshEnhanced.Materials > 0
+                ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.Ocean?.Built == true && freshEnhanced.Materials > 0
                         && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
                 HideReadsTheMask(ctx, enhanced, builtFresh);
@@ -1286,7 +1286,7 @@ internal static class GraphicsSwitchSuites
 
                 Switch(enhanced, false);
                 var switchedOriginal = Sea(enhanced);
-                ctx.Check(switchedOriginal.Oceans == 0 && !enhanced.Session.OceanBuilt && OceansUnder(ctx.Host) == 0
+                ctx.Check(switchedOriginal.Oceans == 0 && enhanced.Session.Ocean?.Built != true && OceansUnder(ctx.Host) == 0
                         && builtFresh is { } dropped && (!GodotObject.IsInstanceValid(dropped) || !dropped.IsInsideTree()),
                     $"switched to Original the ocean leaves the tree ({switchedOriginal}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(switchedOriginal.Hidden == 0 && switchedOriginal.Census == freshOriginal.Census,
@@ -1319,7 +1319,7 @@ internal static class GraphicsSwitchSuites
             try
             {
                 var sea = flat.Built ? Sea(flat) : null;
-                ctx.Check(flat.Built && !flat.Session.OceanBuilt
+                ctx.Check(flat.Built && flat.Session.Ocean?.Built != true
                         && sea is { Oceans: 0 } && OceansUnder(ctx.Host) == 0,
                     $"a following Enhanced {FlatWaterChapter} session at flat water builds no ocean (built={flat.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(sea is { Materials: > 0, Drawn: > 0 } && sea.Hidden == sea.Materials,
@@ -1414,8 +1414,8 @@ internal static class GraphicsSwitchSuites
             var fly = Open(ctx, enhanced: true, chapter: OceanChapter, extra: "--fly");
             try
             {
-                ctx.Check(fly.Built && fly.Session.OceanBuilt && Labs(fly.Session).Count == 0,
-                    $"a --fly C1B session stands its ocean and builds no ocean lab (built={fly.Built}, ocean={fly.Session.OceanBuilt}, {Labs(fly.Session).Count} lab(s))");
+                ctx.Check(fly.Built && fly.Session.Ocean?.Built == true && Labs(fly.Session).Count == 0,
+                    $"a --fly C1B session stands its ocean and builds no ocean lab (built={fly.Built}, ocean={fly.Session.Ocean?.Built == true}, {Labs(fly.Session).Count} lab(s))");
             }
             finally
             {
@@ -1451,7 +1451,7 @@ internal static class GraphicsSwitchSuites
             var c3 = Open(ctx, enhanced: true, chapter: Chapter);
             try
             {
-                if (!c3.Built || c3.Session.Clutter is not { ExportedKinds: { } kinds, Mask: { } mask, Vegetation: { } shipped } clutter)
+                if (!c3.Built || c3.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds, Mask: { } mask, Vegetation: { } shipped } clutter)
                 {
                     ctx.Check(false, $"the Enhanced {Chapter} flight builds with its clutter, mask and vegetation entry");
                     return;
@@ -1481,15 +1481,15 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(AddedDrawn(c3) == drawn && SameAdded(AddedOf(kinds), opening), $"and back in Enhanced the same ones");
 
                 var palms = shipped.SetFor(picked.First())!;
-                c3.Session.ApplyVegetation(shipped.WithPick("cliff1_sandtrans.tif", palms.Models));
+                c3.Session.Vegetation?.Apply(shipped.WithPick("cliff1_sandtrans.tif", palms.Models));
                 Step(c3);
                 int withBeach = clutter.AddedCandidates;
-                c3.Session.ApplyVegetation(shipped.WithSet(palms.Name, palms.Density * 2f, palms.Mass));
+                c3.Session.Vegetation?.Apply(shipped.WithSet(palms.Name, palms.Density * 2f, palms.Mass));
                 Step(c3);
                 int doubled = clutter.AddedCandidates;
                 ctx.Check(withBeach > opening.Sum(k => k.Rich.Length) && doubled > 1.8 * opening.Sum(k => k.Rich.Length) && AddedDrawn(c3) > drawn,
                     $"a pick of cliff1_sandtrans and a doubled density each place them again ({withBeach} and {doubled} candidates against {opening.Sum(k => k.Rich.Length)})");
-                c3.Session.ApplyVegetation(shipped);
+                c3.Session.Vegetation?.Apply(shipped);
                 Step(c3);
                 ctx.Check(SameAdded(AddedOf(kinds), opening) && AddedDrawn(c3) == drawn, $"the shipped entry gives the first added stamps back exactly");
 
@@ -1498,7 +1498,7 @@ internal static class GraphicsSwitchSuites
                 var at = origins[origins.Count / 2];
                 var brush = mask.Clone();
                 brush.Stroke(at.X, at.Z, Radius, 1f, Mech3.VegetationBrush.Clear);
-                c3.Session.ApplyVegetationMask(brush);
+                c3.Session.Vegetation?.Apply(brush);
                 Step(c3);
                 var cleared = AddedOf(kinds);
                 int inside = 0, wrong = 0;
@@ -1521,11 +1521,11 @@ internal static class GraphicsSwitchSuites
                 }
                 ctx.Check(cleared.Count == opening.Count && inside > 0 && wrong == 0 && AddedDrawn(c3) <= drawn - inside,
                     $"a Clear stroke drops the {inside} added palms under it and moves no other ({wrong} wrong)");
-                c3.Session.ApplyVegetationMask(mask);
+                c3.Session.Vegetation?.Apply(mask);
                 Step(c3);
                 ctx.Check(SameAdded(AddedOf(kinds), opening), $"the neutral mask gives them back exactly");
 
-                c3.Session.ApplyVegetation(new Mech3.VegetationEntry
+                c3.Session.Vegetation?.Apply(new Mech3.VegetationEntry
                 {
                     Seed = shipped.Seed,
                     Mask = shipped.Mask,
@@ -1536,7 +1536,7 @@ internal static class GraphicsSwitchSuites
                 Step(c3);
                 ctx.Check(clutter.AddedCandidates == 0 && !kinds.Any(k => k.Added) && AddedDrawn(c3) == 0,
                     $"a pick to the canopy set stamps none ({clutter.AddedCandidates} candidates)");
-                c3.Session.ApplyVegetation(shipped);
+                c3.Session.Vegetation?.Apply(shipped);
                 Step(c3);
             }
             finally
@@ -1547,7 +1547,7 @@ internal static class GraphicsSwitchSuites
             var c1 = Open(ctx, enhanced: true, chapter: VegetationChapter);
             try
             {
-                if (!c1.Built || c1.Session.Clutter is not { ExportedKinds: { } c1Kinds })
+                if (!c1.Built || c1.Session.Vegetation?.Clutter is not { ExportedKinds: { } c1Kinds })
                 {
                     ctx.Check(false, $"the Enhanced {VegetationChapter} flight builds with its clutter");
                 }
@@ -1569,7 +1569,7 @@ internal static class GraphicsSwitchSuites
             var c5 = Open(ctx, enhanced: true, chapter: "C5");
             try
             {
-                ctx.Check(c5.Built && c5.Session.Clutter is { Vegetation: null, AddedCandidates: 0 } city && city.ExportedKinds?.Any(k => k.Added) != true
+                ctx.Check(c5.Built && c5.Session.Vegetation?.Clutter is { Vegetation: null, AddedCandidates: 0 } city && city.ExportedKinds?.Any(k => k.Added) != true
                         && AddedDrawn(c5) == 0,
                     $"C5 has no vegetation entry and builds no added stamp");
             }
@@ -1609,7 +1609,7 @@ internal static class GraphicsSwitchSuites
             try
             {
                 var labs = NodesOf<UI.Labs.VegetationLab>(freecam.Session);
-                if (!freecam.Built || labs.Count != 1 || freecam.Session.Clutter is not { ExportedKinds: { } kinds, Mask: { } mask })
+                if (!freecam.Built || labs.Count != 1 || freecam.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds, Mask: { } mask })
                 {
                     ctx.Check(false, $"the Enhanced --freecam {VegetationChapter} session builds one vegetation lab over its clutter and mask (built={freecam.Built}, {labs.Count} lab(s))");
                     return;
@@ -1624,8 +1624,8 @@ internal static class GraphicsSwitchSuites
                 var opening = RichOf(kinds);
                 var originals = kinds.Select(k => k.Placements.ToArray()).ToList();
                 var openingDraw = DrawnStamps(freecam);
-                int originalKinds = kinds.Count(k => !k.Added), openingCandidates = freecam.Session.Clutter!.AddedCandidates;
-                int openingKept = freecam.Session.Clutter.AddedKept;
+                int originalKinds = kinds.Count(k => !k.Added), openingCandidates = freecam.Session.Vegetation!.Clutter!.AddedCandidates;
+                int openingKept = freecam.Session.Vegetation!.Clutter.AddedKept;
                 int originalsDropped = Enumerable.Range(0, originalKinds).Sum(k => opening[k]?.Xf.Count(x => x.Basis.Determinant() == 0f) ?? 0);
                 ctx.Check(originalsDropped == 0, $"the shipped mask drops no original stamp ({originalsDropped} dropped)");
                 // A model no shipped set names, so a tint edit re-bakes one kind alone.
@@ -1676,14 +1676,14 @@ internal static class GraphicsSwitchSuites
                 string? texture = lab.Pick(at, new[] { model });
                 long pickMs = watch.ElapsedMilliseconds;
                 Step(freecam);
-                int pickedAdded = freecam.Session.Clutter!.AddedKept - openingKept;
+                int pickedAdded = freecam.Session.Vegetation!.Clutter!.AddedKept - openingKept;
                 ctx.Check(texture != null && lab.Edited.SetFor(texture)?.Models.Contains(model) == true && pickedAdded > 0
                         && SameRich(RichOf(kinds).Take(originalKinds).ToList(), opening.Take(originalKinds).ToList()),
                     $"a pick under a {model} stamp gives {texture ?? "nothing"} that kind, adds {pickedAdded} stamps of it and moves no original one (pick and re-bake {pickMs} ms)");
                 lab.RevertToSaved();
                 Step(freecam);
-                ctx.Check(kinds.Count == opening.Count && freecam.Session.Clutter.AddedCandidates == openingCandidates && SameRich(RichOf(kinds), opening),
-                    $"a revert drops the pick's added stamps ({kinds.Count} kinds against {opening.Count}, {freecam.Session.Clutter.AddedCandidates} candidates against {openingCandidates})");
+                ctx.Check(kinds.Count == opening.Count && freecam.Session.Vegetation!.Clutter.AddedCandidates == openingCandidates && SameRich(RichOf(kinds), opening),
+                    $"a revert drops the pick's added stamps ({kinds.Count} kinds against {opening.Count}, {freecam.Session.Vegetation!.Clutter.AddedCandidates} candidates against {openingCandidates})");
 
                 lab.Paint(at, Mech3.VegetationBrush.Clear, Radius, 1f);
                 watch.Restart();
@@ -1800,9 +1800,9 @@ internal static class GraphicsSwitchSuites
                 try
                 {
                     var mask = Effects.OceanMask.Live;
-                    if (!rig.Built || !rig.Session.OceanBuilt || mask == null || rig.Session.WorldScene == null)
+                    if (!rig.Built || rig.Session.Ocean?.Built != true || mask == null || rig.Session.WorldScene == null)
                     {
-                        ctx.Check(false, $"the Enhanced {chapter} session builds its ocean (built={rig.Built}, ocean={rig.Session.OceanBuilt})");
+                        ctx.Check(false, $"the Enhanced {chapter} session builds its ocean (built={rig.Built}, ocean={rig.Session.Ocean?.Built == true})");
                         continue;
                     }
                     var sheet = SheetOverSea(rig, mask);
@@ -2355,7 +2355,7 @@ internal static class GraphicsSwitchSuites
     // index, as the activation does in flight.
     private static MovedStamps? MoveStamps(Rig rig)
     {
-        if (ClutterRoot(rig.Session) is not { } root || rig.Session.Clutter?.ExportedKinds is not { } kinds)
+        if (ClutterRoot(rig.Session) is not { } root || rig.Session.Vegetation?.Clutter?.ExportedKinds is not { } kinds)
             return null;
         var kind = kinds.Where(k => k.Instances != null).MaxBy(k => k.Instances!.InstanceCount);
         if (kind?.Instances is not { InstanceCount: > 2 } stamps)
@@ -2381,7 +2381,7 @@ internal static class GraphicsSwitchSuites
         if (stamps.GetInstanceTransform(moved.Hidden).Basis.Determinant() != 0f)
             problems.Append("the hidden stamp stands; ");
         int indexed = 0;
-        foreach (var kind in rig.Session.Clutter!.ExportedKinds!)
+        foreach (var kind in rig.Session.Vegetation!.Clutter!.ExportedKinds!)
         {
             for (int i = 0; kind.Instances != null && i < kind.Instances.InstanceCount; i++)
                 indexed += kind.Instances.GetInstanceTransform(i).Basis.Determinant() == 0f ? 1 : 0;
@@ -2646,7 +2646,7 @@ internal static class GraphicsSwitchSuites
     // The clump node standing in a session, its total instances, and its chunks with their counts.
     private static (Node3D? Node, int Count, string Text) Clumps(Rig rig)
     {
-        var node = rig.Session.CanopyClumps;
+        var node = rig.Session.Vegetation?.CanopyClumps;
         var chunks = node?.GetChildren().OfType<MultiMeshInstance3D>().Select(m => (m.Name.ToString(), m.Multimesh.InstanceCount)).ToList() ?? new();
         return (node, chunks.Sum(c => c.InstanceCount), string.Join(" ", chunks.Select(c => $"{c.Item1}={c.InstanceCount}")));
     }
@@ -2791,7 +2791,7 @@ internal static class GraphicsSwitchSuites
     // The band on the cards the clumps take over: the original's and a forest set's. Another set's keep every distance.
     private static string Handover(Rig rig, bool forest = true)
     {
-        var bands = rig.Session.Clutter?.ExportedKinds?.Where(k => k.Rich?.Material is ShaderMaterial && (!k.Added || k.Mass) == forest)
+        var bands = rig.Session.Vegetation?.Clutter?.ExportedKinds?.Where(k => k.Rich?.Material is ShaderMaterial && (!k.Added || k.Mass) == forest)
             .Select(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2())
             .Distinct().ToList() ?? new();
         return bands.Count != 1 ? $"mixed ({bands.Count})"
@@ -2925,7 +2925,7 @@ internal static class GraphicsSwitchSuites
     private static void ActivationThroughDrop(TestContext ctx, Rig rig, IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds,
         Vector3 at, float inner, StringBuilder report)
     {
-        var activation = rig.Session.Clutter?.Activation;
+        var activation = rig.Session.Vegetation?.Clutter?.Activation;
         var owners = new Dictionary<int, Node3D>();
         Walk(rig.Session, node =>
         {
@@ -3054,7 +3054,7 @@ internal static class GraphicsSwitchSuites
         lab.Paint(at, Mech3.VegetationBrush.Clear, radius, 1f);
         lab.ApplyMask();
         Step(rig);
-        if (ClutterRoot(rig.Session) is not { } root || DroppedStamp(kinds, rig.Session.Clutter?.Activation, at, inner, _ => true) is not { } found)
+        if (ClutterRoot(rig.Session) is not { } root || DroppedStamp(kinds, rig.Session.Vegetation?.Clutter?.Activation, at, inner, _ => true) is not { } found)
         {
             ctx.Check(false, $"a cleared disk holds a dropped stamp to crater");
             return;
