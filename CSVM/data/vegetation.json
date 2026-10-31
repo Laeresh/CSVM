@@ -180,6 +180,7 @@
     }
   },
   "C3": {
+    "mask": "vegetation/C3.bin",
     "kinds": {
       "palmtree1.flt": {
         "yaw_deg": 90,
