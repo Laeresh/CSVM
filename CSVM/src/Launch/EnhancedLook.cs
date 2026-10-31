@@ -28,8 +28,8 @@ public static class EnhancedLook
 
     // TUNE, judged at the controls. Lower values put dithered acne over lit surfaces at C1's 25°
     // sun, and higher ones dissolve a hangar's shadow. These keep the building and aircraft
-    // silhouettes. The ground and the water cast no shadow (WorldBuilder.IsShadowlessGround), so
-    // neither can band itself.
+    // silhouettes. The ground and the water cast no shadow map (WorldBuilder.IsShadowlessGround), so
+    // neither can band itself. Their sun shade is the terrain bake's (Effects.TerrainShadow).
     private const float ShadowBias = 0.05f;
     private const float ShadowNormalBias = 1.25f;
 

@@ -654,10 +654,10 @@ public sealed class WorldBuilder
     internal static bool NoCollisionNode(GameZ gamez, GameZNode n) =>
         !n.IntersectSurface || MeshUsesTexture(gamez, n, IsNonSolidSkyTexture) || IsBillboardNode(gamez, n);
 
-    /// <summary>Whether one world mesh is ground that casts no sun shadow: a sheet of nothing but
-    /// water, or a ground tile carrying no building wall. The original's world casts no sun shadow
-    /// at all, and Enhanced keeps that for the ground. Under a low sun, Godot's soft filter makes a
-    /// flat sheet shadow itself in bands at the shadow map's texel pitch.
+    /// <summary>Whether one world mesh is ground that casts no shadow map: a sheet of nothing but
+    /// water, or a ground tile carrying no building wall. Under a low sun, Godot's soft filter makes a
+    /// flat sheet shadow itself in bands at the texel pitch. Enhanced keeps the ground out of the maps
+    /// and bakes its sun shade instead (<see cref="Effects.TerrainShadow"/>).
     /// ⚠ <c>cblock*</c> is the city GROUND texture, though it classifies as
     /// <c>buildings</c>; only a wall keeps a tile casting.</summary>
     internal static bool IsShadowlessGround(IReadOnlyList<Vector3> vertices,
