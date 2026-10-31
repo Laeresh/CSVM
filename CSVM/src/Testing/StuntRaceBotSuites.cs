@@ -152,14 +152,14 @@ internal static class StuntRaceBotSuites
         {
             var session = end.Session;
             var bot = end.Built && session.SeatRigs.Count > BotSeat ? session.SeatRigs[BotSeat].Controller : null;
-            ctx.Check(end.Built && session.Race?.Of(BotSeat)?.Callsign == Callsign && session.RaceBots != null && bot is { Stunt: not null },
+            ctx.Check(end.Built && session.RaceDirector?.Race?.Of(BotSeat)?.Callsign == Callsign && session.RaceDirector?.Bots != null && bot is { Stunt: not null },
                 $"[{cell}] the Instant Action session races the bot under its callsign on its own run");
-            if (session.Race?.Of(BotSeat) is not { } racer || session.RaceBots == null)
+            if (session.RaceDirector?.Race?.Of(BotSeat) is not { } racer || session.RaceDirector?.Bots == null)
             {
                 return;
             }
 
-            int limit = Steps(session.Race.WindowSeconds);
+            int limit = Steps(session.RaceDirector!.Race.WindowSeconds);
             int steps = 0;
             while (racer.MostZones == 0 && steps < limit)
             {
@@ -203,7 +203,7 @@ internal static class StuntRaceBotSuites
         {
             var session = end.Session;
             var seats = end.Built ? session.SeatRigs.Select(r => r.Controller).ToArray() : Array.Empty<FlightController?>();
-            if (session.Race is not { } race || seats is not [{ Stunt: { } paneRun } pane, { Stunt: { } firstRun, IsBotSeat: true } first, { Stunt: not null, IsBotSeat: true } second])
+            if (session.RaceDirector?.Race is not { } race || seats is not [{ Stunt: { } paneRun } pane, { Stunt: { } firstRun, IsBotSeat: true } first, { Stunt: not null, IsBotSeat: true } second])
             {
                 ctx.Check(false, $"[{cell}] the session builds a race of a pane and two bots, each on its own run");
                 return;
@@ -301,18 +301,18 @@ internal static class StuntRaceBotSuites
             }
 
             var peers = ends.Select(e => e.Session).ToArray();
-            ctx.Check(ends.All(e => e.Built) && peers.All(p => p.Race != null),
+            ctx.Check(ends.All(e => e.Built) && peers.All(p => p.RaceDirector?.Race != null),
                 $"[{cell}] both machines build {chapter}'s IA1 race ({string.Join(", ", ends.Select(e => e.Built))})");
-            if (!ends.All(e => e.Built) || peers[0].Race is not { } hostRace || peers[1].Race is not { } guestRace)
+            if (!ends.All(e => e.Built) || peers[0].RaceDirector?.Race is not { } hostRace || peers[1].RaceDirector?.Race is not { } guestRace)
             {
                 return;
             }
 
             var flown = peers[0].SeatRigs.Count > 2 ? peers[0].SeatRigs[2].Controller : null;
             var copy = peers[1].SeatRigs.Count > 2 ? peers[1].SeatRigs[2].Controller : null;
-            ctx.Check(peers[0].RaceBots != null && flown is { Pilot: not null, Stunt: not null },
+            ctx.Check(peers[0].RaceDirector?.Bots != null && flown is { Pilot: not null, Stunt: not null },
                 $"[{cell}] the host flies the bot on its own run of the course");
-            ctx.Check(peers[1].RaceBots == null && copy is { Pilot: null, Stunt: null, RemoteOwned: true },
+            ctx.Check(peers[1].RaceDirector?.Bots == null && copy is { Pilot: null, Stunt: null, RemoteOwned: true },
                 $"ABLE-TO-FAIL CONTROL: [{cell}] the guest flies no bot and times no run for it");
             if (hostRace.Of(2) is not { } hostRacer || guestRace.Of(2) is not { } guestRacer)
             {
@@ -382,9 +382,9 @@ internal static class StuntRaceBotSuites
         {
             var session = end.Session;
             var bot = end.Built && session.SeatRigs.Count > BotSeat ? session.SeatRigs[BotSeat].Controller : null;
-            ctx.Check(end.Built && session.Race != null && session.RaceBots != null && bot is { Stunt: not null, Race: not null, Pilot: not null },
+            ctx.Check(end.Built && session.RaceDirector?.Race != null && session.RaceDirector?.Bots != null && bot is { Stunt: not null, Race: not null, Pilot: not null },
                 $"[{cell}] the session builds a race whose bot flies its own run of the course");
-            if (session.Race is not { } race || session.RaceBots is not { } bots || bot is not { Stunt: { } run, Pilot: { } pilot })
+            if (session.RaceDirector?.Race is not { } race || session.RaceDirector?.Bots is not { } bots || bot is not { Stunt: { } run, Pilot: { } pilot })
             {
                 return 0;
             }
@@ -542,7 +542,7 @@ internal static class StuntRaceBotSuites
             var structures = bot?.Destructibles;
             var zone = bot?.Stunt?.Zones.FirstOrDefault(z => z.Route is { } r && structures != null
                 && StuntRaceBots.Unseen(r, true, structures, bot.WorldStruckAlong) != null);
-            if (session?.RaceBots is not { } bots || structures == null || zone?.Route is not { } route
+            if (session?.RaceDirector?.Bots is not { } bots || structures == null || zone?.Route is not { } route
                 || StuntRaceBots.Unseen(route, true, structures, bot!.WorldStruckAlong) is not { } gate)
             {
                 ctx.Check(false, $"[{cell}] the race builds, and a cast along a zone's route from its far end strikes a structure off its damage node first");
