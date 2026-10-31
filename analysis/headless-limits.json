@@ -20,6 +20,7 @@
     "moon-world-up": "reads the moon's rendered pixels back from a viewport; headless renders none",
     "muzzle-flash-rides-muzzle": "reads the flash quads' drawn instance transforms back, which the headless renderer does not keep",
     "nodelab-click-expand": "clicks a laid-out tree row, which a headless window of no size places off screen",
+    "puffer-buffer-publish": "reads each particle's MultiMesh instance slots and bounds back, which the headless renderer does not keep",
     "puffer-fire-glow": "reads each emitter column's MultiMesh instance custom data back, which the headless renderer does not keep",
     "puffer-smoke-sun": "reads each emitter column's MultiMesh instance custom data back, which the headless renderer does not keep",
     "render-thread-handoffs": "skips itself with no rendering device, since it draws and reads back",
