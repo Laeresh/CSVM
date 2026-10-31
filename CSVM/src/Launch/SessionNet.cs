@@ -21,7 +21,7 @@ namespace CSVM.Launch;
 /// list, the aircraft-state relay, combat, chat, the shared clock and the start gate. It wires the
 /// director, world, positional-start and cutscene links. The session keeps the tick order.
 /// Each wire step takes what it binds as arguments, and does nothing while <see cref="Link"/> is
-/// null outside a network match. <see cref="WireLiveRespawn"/> alone also pins a local match.
+/// null outside a network match.
 /// Module entry: docs/architecture/Launch.md on src/Launch/SessionNet.cs.</summary>
 internal sealed class SessionNet
 {
@@ -171,10 +171,6 @@ internal sealed class SessionNet
 
     /// <summary>Whether <see cref="TraceStep"/> writes, set by <c>--debug-net-trace</c>.</summary>
     public bool TraceSteps { get; init; }
-
-    // Where no seat respawns in flight: a Dogfight match, local or on a wire, and every other
-    // network session but a stunt race. ⚠ Read after WireCombat, which hands the match over.
-    private bool PinsLiveRespawn => Race == null && (_dogfight != null || (Link != null && Seats.Count > 0));
 
     /// <summary>Whether a guest's seat left the mission and is out of play.</summary>
     public bool HasLeft(int seat) => _seatsLeft.Contains(seat);
@@ -435,25 +431,29 @@ internal sealed class SessionNet
         Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
     }
 
-    /// <summary>The respawn control on a living aeroplane, pinned off on every seat. That holds in
-    /// a Dogfight match, split screen or wired, and in every other network session but a stunt
-    /// race. A pilot there flies again only from a crash, asked of the host where a wired match
-    /// grants returns. The one wire step that also acts with no link, since a local match counts
-    /// returns as a wired one does. Runs once every seat has its aeroplane.</summary>
+    /// <summary>Every seat's respawn rule as a network session tightens it
+    /// (<see cref="RespawnRule.OnTheWire"/>): no live respawn but in a stunt race. ⚠ Runs after
+    /// every director that sets a rule at build, once every seat has its aeroplane; a swap carries
+    /// the tightened rule over.</summary>
     public void WireLiveRespawn()
     {
-        if (!PinsLiveRespawn)
+        if (Link is not { } net || Seats.Count == 0)
         {
             return;
         }
 
-        for (int i = 0; i < _seatRigs.Count; i++)
+        foreach (var rig in _seatRigs)
         {
-            PinLiveRespawn(i);
+            if (rig.Controller is { } pilot)
+            {
+                pilot.Rule = pilot.Rule.OnTheWire(race: Race != null);
+            }
         }
 
-        string where = Link is { } net ? (net.IsHost ? "net host" : "net guest") : "local match";
-        Log.Info("core", $"live respawn: {where}, {_seatRigs.Count} seat(s), the respawn control returns a pilot from a crash only, never in flight");
+        if (Race == null)
+        {
+            Log.Info("core", $"live respawn: {(net.IsHost ? "net host" : "net guest")}, {_seatRigs.Count} seat(s), the respawn control returns a pilot from a crash only, never in flight");
+        }
     }
 
     /// <summary>The stunt race over the wire, before the roster builds, since each local seat's run
@@ -484,10 +484,6 @@ internal sealed class SessionNet
         }
 
         WireSeatChat(_seatRigs.IndexOf(owner));
-        if (PinsLiveRespawn)
-        {
-            PinLiveRespawn(_seatRigs.IndexOf(owner));
-        }
     }
 
     /// <summary>The campaign's objectives over the wire, once the graph is armed. The host's graph
@@ -861,16 +857,6 @@ internal sealed class SessionNet
         {
             var point = new SpawnPoint(spawn.Position, spawn.HeadingDeg);
             copy.RespawnAt(point.Position, point.Position + point.Forward);
-        }
-    }
-
-    // ⚠ Off only, never back on, so a director's own pin stands. An in-flight respawn is a free
-    // repair, restock and refuel the match never counts, and on a wire one the host never grants.
-    private void PinLiveRespawn(int seat)
-    {
-        if (seat >= 0 && seat < _seatRigs.Count && _seatRigs[seat].Controller is { } pilot)
-        {
-            pilot.AllowLiveRespawn = false;
         }
     }
 

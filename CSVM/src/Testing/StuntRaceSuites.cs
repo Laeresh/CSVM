@@ -129,7 +129,7 @@ internal static class StuntRaceSuites
                 seat.HoldActionForTest(InputAction.Respawn, false);
             }
 
-            p1.AutoRespawnAfter = WatchFrames * Dt;
+            p1.Rule = p1.Rule with { AutoRespawnAfter = WatchFrames * Dt };
             ctx.Check(p1.Race == race && p2.Race == race && race.Racers.Count == 2
                     && p1.StartCount.Figure == "READY" && p2.StartCount.Figure == "READY",
                 $"the roster seats both pilots in the race, each opening on READY: {p1.StartCount.Figure}/{p2.StartCount.Figure}, {race.Racers.Count} racers");
@@ -411,7 +411,7 @@ internal static class StuntRaceSuites
             {
                 seat.UseKeyboard = false;
                 seat.PadDevices = Array.Empty<int>();
-                seat.AutoRespawnAfter = WatchFrames * Dt;
+                seat.Rule = seat.Rule with { AutoRespawnAfter = WatchFrames * Dt };
             }
 
             void Frames(int n)
@@ -851,6 +851,10 @@ internal static class StuntRaceSuites
                 return;
             }
 
+            var raceRule = RespawnRule.InstantAction(RespawnDelay, race: true);
+            ctx.Check(p1.Rule == raceRule && p2.Rule == raceRule,
+                $"both seats carry Instant Action's race rule, in-flight respawn live (P1 {p1.Rule}, P2 {p2.Rule})");
+
             var mission = raceDirector.Runtime;
             race.BeginOpening(0f);
 
@@ -900,6 +904,9 @@ internal static class StuntRaceSuites
             {
                 return;
             }
+
+            ctx.Check(p1.Rule == RespawnRule.InstantAction(RespawnDelay, race: false),
+                $"with no race the seat carries Instant Action's lives rule, in-flight respawn refused ({p1.Rule})");
 
             var solo = soloDirector.Runtime;
             p1.DebugForceCrash();

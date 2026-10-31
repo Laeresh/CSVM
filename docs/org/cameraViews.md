@@ -324,23 +324,22 @@ airframes:
 
 ### Axis convention (fixed from the default fighter's cockpit sub-nodes)
 
-- **+Z = forward (nose)**, the elevators `rt_elev2`/`lft_elev2` sit at **z = −37** (the tail) and
-  the pilot seat `pass_st` at **z = +37.86** (forward).
+- **−Z = forward (nose), +Z = aft.** The Devastator is a canard: its elevators `rt_elev2`/`lft_elev2`
+  sit at **z = −37**, ahead of the eye with the gauges (`g743` at z = −11.8), and its ailerons at
+  z ≈ +56. The rear seat `pass_st` sits at **z = +37.86**, behind the eye. The Kestrel's tail-boom
+  rudders (`lrudder3`/`rrudder2`) sit at z = +315. The head-look code's own forward vector is
+  `(0, 0, −1)` at `0x00604080`.
 - **±X = wingspan**, the ailerons sit at **x = ±63**.
 - **+Y = up**.
 
 So a cockpit camera at `(0, 0.75, −0.2)` is on the fuselage centerline, 0.75 units above the local
-origin and marginally toward the tail. There is **no `nose_camera` node and no per-mode offset**,
+origin and marginally toward the nose. There is **no `nose_camera` node and no per-mode offset**,
 mode 7 reuses the exact `cockpit_camera` point.
 
-⚠ **This is the ORIGINAL BINARY's own internal convention, not Godot's.** It disagrees with this
-codebase's own, far more broadly established one: `docs/formats/gotchas.md` (censused over 6,728
-`AT_NODE`/`PUFFER_STATE` uses) puts the extracted frame's nose at **−Z**. `PlaneBuilder`/
-`SceneBuilder` never axis-flip a GameZ node's local transform when building the Godot tree, so a
-raw translate like `cockpit_camera`'s lands in Godot's frame unswapped and is taken as-is, CSVM
-places a Godot camera relative to a Godot-space plane using Godot-space marker data, the same as
-every firepoint and pylon, without ever needing to resolve which convention the original binary
-used internally.
+This is the convention `docs/formats/gotchas.md` censuses over 6,728 `AT_NODE`/`PUFFER_STATE` uses,
+nose at **−Z**. `PlaneBuilder`/`SceneBuilder` never axis-flip a GameZ node's local transform when
+building the Godot tree, so a raw translate like `cockpit_camera`'s lands in Godot's frame
+unswapped, the same as every firepoint and pylon.
 
 ## The external camera's distance, and the zoom axis that only goes outward
 
@@ -669,7 +668,7 @@ the interior first, so the eye in the interior is the marker's numbers read in i
 data agrees on every airframe:
 
 - **The tub is built round that point.** The Kestrel's centre gauge column, artificial horizon,
-  compass, pilot seat (`pass_st`) and turret sit at x 1.97-1.99 against its marker's 1.98; the
+  compass, rear seat (`pass_st`) and turret sit at x 1.97-1.99 against its marker's 1.98; the
   Peacemaker's at −1.81 against −1.80; the Firebrand's at −0.08 against −0.08. The other eight sit
   on x 0, where their markers are.
 - **The sight glass is dead ahead of it.** From the marker point the glass centre lies within 0.73°
@@ -686,6 +685,40 @@ brings the sight to within about a degree of the guns on the 0.75-unit airframes
 original's eye: `PlaneBuilder.StereoMount` mounts it untilted with the marker's numbers on the
 marker, and `PlaneBuilder.InteriorEye` hands that point to `XrCockpit` and the collimated reticle.
 Head-look is not applied to either mount.
+
+### The passenger seat
+
+`pass_st` is a modelless node, a direct child of `cockpit1` on all eleven player airframes and on
+no AI airframe. It sits 20 to 52 interior units aft of the eye and 8 to 16 below it, so a carried
+passenger is seen only when the head turns aft in the Cockpit view.
+
+Seating is mission data; `crimson.exe` holds none of these names. `apassengers` is a parentless
+library root in every chapter's gamez, holding `passall` and nine character cards (`p_spks`,
+`p_pick`, `p_jack`, `p_bjon`, `p_fas`, `p_ilsa`, `p_ub`, `p_swan`, `p_waldo`). Each card is a flat
+`CylindricalY` facade, unlit, authored in interior units, all nine shipped active. A mission's
+`add_<name>` (`passengers.zrd`) hides the nine in its `RESET_STATE`, then switches its one card on
+and runs `OBJECT_ADD_CHILD` parent `pass_st`, child `apassengers`. `rem_pas` hides the nine and
+detaches the group.
+
+The engine makes `pass_st` the flown aircraft's own: the vehicle setup `FUN_00476250` calls
+`FUN_00477680`, which strips the `.t` suffix from the player's `cockpit1` subtree and appends it to
+every other `cockpit1` subtree, so only the player's seat answers to the name. The compiled pointer
+the `add_*` definitions carry is the aircraft archive's index 2032, the Balmoral's seat, offset by
+the chapter's cross-archive base. `cockpit1` is switched off outside the interior pass
+(`FUN_0047e080`, `gwNodeSetActive(cockpit1, 0)` at `0x0047e17a`), and `FUN_0049fb00` draws it only
+while the player is alive in mode 6, so no external view and no Nose view draws the passenger.
+
+| Mission | Seated by | Card |
+|---|---|---|
+| CM01 (C3/M01) | `startanims: call_add_jack` | `p_jack` |
+| CM07 (C1/M02) | `cabpkup_player` after callback 951 | `p_ilsa` |
+| CM11 (C2/M02) | `lookat_pickfordpkup` and `trailer_player` | `p_pick` |
+| CM16 (C4/M01) | nothing: `add_spks` has no caller in the install | none |
+
+CSVM stands the group up once per world under a switched-off holder (`WorldSession`'s staged
+props), and indexes the flown aircraft's interior beside its airframe (`AircraftStage.StageFlown`),
+since the cockpit pass lifts `cockpit1` out of the model. The `add_*` call then resolves `pass_st`
+by name to that interior, which is the `.t` rule's effect.
 
 ## The enhanced presentation's own chase cue (remake-only)
 

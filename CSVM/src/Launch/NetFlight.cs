@@ -422,7 +422,7 @@ internal sealed class NetFlight
     /// keeps the wire for the lobby when the flight closes.</summary>
     public LobbyReturn? Landing(GameSession session)
     {
-        var landing = LobbyLanding(_lobbyFlight, Door?.Dogfight, session.Dogfight?.Match, session.NetSeats, session.Race);
+        var landing = LobbyLanding(_lobbyFlight, Door?.Dogfight, session.Dogfight?.Match, session.NetSeats, session.RaceDirector?.Race);
         _keepLobby = landing != null;
         return landing;
     }

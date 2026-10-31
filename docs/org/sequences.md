@@ -1076,9 +1076,9 @@ them.
     `player` from `world1`, cutscene camera rigging, `OnCall` and never reached by anything CSVM
     plays (`camera1`/`player`/`cpilot` are cutscene machinery for cutscenes this project does not
     have), and `apassengers-rem_pas.json`'s
-    `remove_passenger` detaches `apassengers` from `pass_st`, `pass_st` is not a gamez node in any
-    chapter (confirmed earlier, the archived development log), so the parent can never resolve even if a handler
-    were written.
+    `remove_passenger` detaches `apassengers` from `pass_st`. `pass_st` is in no chapter gamez: it
+    is the flown aircraft's own rear seat under `cockpit1` in the aircraft archive, which is where
+    the parent resolves ([cameraViews.md](cameraViews.md), "The passenger seat").
   - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached, they
     are called from the player's own `destroy_it` crash sequence,
     but in all three files the delete is the first of exactly two events, and the second is

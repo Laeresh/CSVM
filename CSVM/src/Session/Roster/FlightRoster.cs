@@ -412,6 +412,8 @@ public sealed class FlightRoster
             : null;
         var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, scheme, shippedSkins, build);
         RepointHolders(outgoing, replacement);
+        // The respawn rule is the seat's, not the airframe's: the mode and wire set it once.
+        replacement.Rule = outgoing.Rule;
         var hidden = AirframeHandover.CarriesCapturedDamage(order.Airframe)
             ? CarryCapturedDamage(captured, rig.Controller?.Damage)
             : null;

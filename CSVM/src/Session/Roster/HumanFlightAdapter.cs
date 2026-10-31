@@ -643,7 +643,7 @@ internal sealed class HumanFlightAdapter
             controller.Race = botRace;
             controller.RerunCount = _human.RerunCount;
             // Nobody presses R for it, so a crash returns it to its last zone unattended.
-            controller.AutoRespawnAfter = AircraftLifecycle.AutoRespawnDelay;
+            controller.Rule = RespawnRule.RaceBot;
             JoinRace(botRace, pi, planeDisplay, seat, run);
         }
         else if (swap == null && paneless && _human.StuntZones != null && _human.Race is { } remoteRace)

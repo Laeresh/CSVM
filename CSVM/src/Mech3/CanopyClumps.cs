@@ -750,8 +750,9 @@ public static class CanopyClumps
         }
 
         /// <summary>The crown models and the clumps' band follow the 3D Vegetation word, with no rebuild. Off hides
-        /// the models, and the clumps rise over their own band as with no models. Near and Far both draw over
-        /// <see cref="ModelBand"/>, the clumps held at their full height (<see cref="HeldParam"/>).</summary>
+        /// the models and zeroes the band, so the clumps draw up to the eye. Near and Far both draw over
+        /// <see cref="ModelBand"/>. Every word holds the clumps at their full height (<see cref="HeldParam"/>).
+        /// Risen over their own band, Off would draw only painted ground inside it.</summary>
         public void FollowModels()
         {
             if (Models == null)
@@ -759,7 +760,7 @@ public static class CanopyClumps
             bool on = VegetationModels.On;
             Models.Visible = on;
             _material.SetShaderParameter(VegetationModels.BandParam, on ? ModelBand : Vector2.Zero);
-            _material.SetShaderParameter(HeldParam, on ? 1f : 0f);
+            _material.SetShaderParameter(HeldParam, 1f);
         }
 
         // Stands the crown models in cells of VegetationModels.CellM, one MultiMesh per cell and shape, each ranged

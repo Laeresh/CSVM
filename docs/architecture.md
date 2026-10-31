@@ -205,6 +205,7 @@ rows).
 - `src/Flight/Airframe/AircraftContactResolver.cs`, the decoded contact rules for one aircraft: the damage pair, the fate and the un-embed loop, holding no node.
 - `src/Flight/Airframe/AircraftContactSweep.cs`, contact detection for one aircraft: the hull sweep, the AI probe rays and the centre ray, each into one `ContactReport`.
 - `src/Flight/Airframe/AircraftLifecycle.cs`, the states one aircraft moves between and the spawn timers; every transition reports what the node must then perform.
+- `src/Flight/Airframe/RespawnRule.cs`, a seat's respawn rule: the mode's named choice, which the wire may only tighten and a swap carries.
 - `src/Flight/Airframe/PlaneDamage.cs`, the decoded damage ledger: per-part pools plus the whole-vehicle pair, the armour-first take-hit flow, and the kill rule.
 - `src/Flight/Airframe/DamageVisuals.cs`, flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/Airframe/CraterGate.cs`, whether a round's ground strike asks for a crater: the original's `CAN_MODIFY` rule and the remake's carve option, as one `CraterAsk`.
@@ -874,6 +875,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/RearmRuntime.cs`, the multiplayer rearm bases in a Dogfight: each machine's own seats restored in full on entering a base that serves them.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.
 - `src/Session/World/NetChatLink.cs`, the in-flight chat over the wire and its keys: an all-chat to every machine, a team line to the typist's lobby team alone.
+- `src/Session/World/StuntRaceDirector.cs`, the engine side of one stunt race: the race and its window, its bots, spectators, best times and reruns, driving the race link.
 - `src/Session/World/NetRaceLink.cs`, a stunt race over the wire: each machine reports its own runs, the host keeps the window, board and ending, and a guest's race replicates them.
 - `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/World/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.

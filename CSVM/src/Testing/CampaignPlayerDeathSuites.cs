@@ -167,6 +167,8 @@ internal static class CampaignPlayerDeathSuites
                 $"--no-crash-loss leaves the same crash flying: {flewOn.Line}");
             ctx.Check(flewOn.RespawnOffered && flewOn.FlewAgain,
                 $"…where the respawn prompt still shows and the timer flies the pilot again: {flewOn.Line}");
+            ctx.Check(died.Rule == RespawnRule.Campaign && flewOn.Rule == RespawnRule.Campaign,
+                $"both legs fly on the campaign's respawn rule, its final crash a gate and not a rule (lost {died.Rule}, flown on {flewOn.Rule})");
 
             // ⚠ The able-to-fail control for what "crashed" means: the under-map backstop respawns
             // without a crash flag and without a Downed report, so a rule read off altitude would
@@ -232,6 +234,7 @@ internal static class CampaignPlayerDeathSuites
             var result = director.Result;
             bool crashed = human.Crashed;
             bool offered = human.RespawnOffered;
+            var rule = human.Rule; // the director's, ahead of the timer FliesAgainOnTimer arms
             bool flewAgain = crash && FliesAgainOnTimer(human);
             var leg = new Leg
             {
@@ -242,6 +245,7 @@ internal static class CampaignPlayerDeathSuites
                 Crashed = crashed,
                 RespawnOffered = offered,
                 FlewAgain = flewAgain,
+                Rule = rule,
                 PersistCount = profile.PersistLog.Count,
                 Line = $"{label}: ended={result != null} outcome={result?.Outcome.ToString() ?? "-"} "
                     + $"at={endedAt:0.00}s crashed={crashed} cabin={director.ReturnToCabin} "
@@ -260,7 +264,7 @@ internal static class CampaignPlayerDeathSuites
     // answer as the HUD prompt, so this measures the refusal the prompt reports.
     private static bool FliesAgainOnTimer(FlightController human)
     {
-        human.AutoRespawnAfter = StepDt;
+        human.Rule = human.Rule with { AutoRespawnAfter = StepDt };
         for (float t = 0f; t < AircraftLifecycle.AutoRespawnDelay + 1f && human.Crashed; t += StepDt)
         {
             human.SimStep(StepDt);
@@ -284,6 +288,8 @@ internal static class CampaignPlayerDeathSuites
         public bool RespawnOffered { get; init; }
 
         public bool FlewAgain { get; init; }
+
+        public RespawnRule? Rule { get; init; }
 
         public int PersistCount { get; init; }
 

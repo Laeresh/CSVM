@@ -82,6 +82,9 @@ public sealed class AircraftStage
 
     private TextureArchive _textures = null!;
 
+    // The flown aircraft's cockpit interior StageFlown indexed beside it, or null.
+    private Node3D? _flownInterior;
+
     private AircraftStage() { }
 
     /// <summary>The bodiless <c>player</c> marker, or null when the archive carries no such node.
@@ -320,7 +323,7 @@ public sealed class AircraftStage
     // table before the new one goes in. A swap frees the outgoing aeroplane, which the retirement
     // sweep covers; a co-op episode changing hands replaces a LIVE one. Two aeroplanes under one
     // airframe name leave the symbol table's claim on the seat that is not flying the episode.
-    public void StageFlown(AnimRuntime runtime, Node3D? planeModel)
+    public void StageFlown(AnimRuntime runtime, Node3D? planeModel, Node3D? interior = null)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (planeModel == null || ReferenceEquals(planeModel, Flown))
@@ -331,13 +334,29 @@ public sealed class AircraftStage
         int retired = Flown is { } previous && GodotObject.IsInstanceValid(previous)
             ? runtime.UnstageRebased(previous)
             : 0;
+        if (_flownInterior is { } seat && GodotObject.IsInstanceValid(seat) && !InTable(seat, Flown))
+        {
+            retired += runtime.UnstageRebased(seat);
+        }
+
         Flown = planeModel;
+        _flownInterior = interior;
         runtime.IndexRebasedStage(planeModel, PointerBase);
+        // The cockpit pass lifts `cockpit1` out of the model, so the walk above misses it. Its
+        // `pass_st` is the seat a passenger's definition names.
+        if (interior != null && !InTable(interior, planeModel))
+        {
+            runtime.IndexRebasedStage(interior, PointerBase);
+        }
         // The archive parks the hook GROUP off, not its arms; what parks those is the airframe's
         // own retract RESET_STATE, which the rebased index deliberately does not run.
         int parked = runtime.ParkDockingHook(planeModel);
         Log.Info("world", $"aircraft stage: flown '{AnimRuntime.NameOf(planeModel)}' indexed at base {PointerBase}, {retired} row(s) of the airframe it replaces retired, hook parked by {parked} definition(s)");
     }
+
+    // Whether the interior still hangs under the model, so that model's own walk covers it.
+    private static bool InTable(Node3D interior, Node3D? model) =>
+        model != null && GodotObject.IsInstanceValid(model) && model.IsAncestorOf(interior);
 
     // Every built node's stamped archive index shifted into the chapter's cross-archive block. The
     // two spaces cannot overlap, since the base always clears the chapter's own table.

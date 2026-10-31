@@ -90,7 +90,7 @@ public sealed class CanopyMaskTests
     }
 
     /// <summary>A painted bake keeps its surface. A point on it reads the slope's own height between the samples,
-    /// and whether its nearest sample is painted. A stamp bake has no surface, so it reads the cell's ground.</summary>
+    /// and whether a painted triangle lies under it. A stamp bake has no surface, so it reads the cell's ground.</summary>
     [Fact]
     public void APaintedBakeReadsItsSurfaceBetweenItsSamples()
     {
@@ -114,6 +114,22 @@ public sealed class CanopyMaskTests
         Assert.False(stamps.IsPainted(16f, 16f));
         Assert.Equal(0f, stamps.PaintedShare(0));
         Assert.Equal(stamps.Ground[0], stamps.SurfaceAt(16f, 16f));
+    }
+
+    /// <summary>A cliff's edge falls between two sample points, as at the mouths of C3's Tiki Tunnel (#264). A point
+    /// past the edge reads the floor under it. A blend of the samples on either side stands a crown in the air there.
+    /// A point past a painted plateau's edge is off the canopy, though its nearest sample is on it.</summary>
+    [Fact]
+    public void APointPastACliffEdgeReadsTheGroundUnderIt()
+    {
+        // Samples sit at x = 4, 12, 20 and on; the plateau's edge at x = 13 lies between the ones at 12 and 20.
+        var cliff = CanopyMask.FromPainted(Quad(0f, 0f, 13f, C, 50f).Concat(Quad(13f, 0f, 3 * C, C, 0f)).ToArray(), 0f, 0f, 3 * C, C);
+        Assert.Equal(50f, cliff.SurfaceAt(12.5f, 16f), 3);
+        Assert.Equal(0f, cliff.SurfaceAt(14f, 16f), 3);
+
+        var plateau = CanopyMask.FromPainted(Quad(0f, 0f, 13f, C, 50f), 0f, 0f, 3 * C, C);
+        Assert.True(plateau.IsPainted(12.5f, 16f));
+        Assert.False(plateau.IsPainted(14f, 16f));
     }
 
     /// <summary>The brush mask thins painted canopy and clears it, but a thickened stroke never makes a cell

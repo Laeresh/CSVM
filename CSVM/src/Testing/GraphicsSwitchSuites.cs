@@ -936,8 +936,9 @@ internal static class GraphicsSwitchSuites
         + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "
         + "ranged past the band's far edge; the clumps keep only the dither cells the models give up over the band, the models "
         + "the rest, and the clumps stand held at one height at every distance; every crown cell draws on the models' layer alone, which no spyglass disc draws; "
-        + "a live move to Off hides them, zeroes the clumps' band and lets them rise over their own, Far and Near draw the same nodes again; a live "
-        + "move to original and a switch to Original draw none, and back the same crowns; a session at original draws none")]
+        + "a live move to Off hides them and zeroes the clumps' band, the clumps still held at full height up to the eye, Far and Near draw the same nodes again; a live "
+        + "move to original and a switch to Original draw none, and back the same crowns; a session launched at Off holds "
+        + "the clumps as a live move does; a session at original draws none")]
     internal static void CanopyModelsOverPaintedCanopy(TestContext ctx)
     {
         RequireData(ctx, "C3");
@@ -987,11 +988,12 @@ internal static class GraphicsSwitchSuites
                 float Held(ShaderMaterial m) => m.GetShaderParameter(Mech3.CanopyClumps.HeldParam).AsSingle();
                 ctx.Check(Held(clumps) == 1f, $"the clumps stand held at their full height at every distance (share {Held(clumps):0.###})");
                 ctx.Check(clumps.Shader.Code.Contains($"float hold = {Mech3.SceneBuilder.FlatSeaEye} ? 0.0 : {Mech3.CanopyClumps.HeldParam};", StringComparison.Ordinal),
-                    $"a spyglass disc, which draws no crown, reads no hold, so its clumps rise as with 3D Vegetation off");
+                    $"a spyglass disc, which draws no crown, reads no hold, so its clumps rise over their own band");
 
                 Models(live, VegetationModelsSetting.Off);
-                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && Held(clumps) == 0f && live.Session.CanopyClumpField?.Models == models,
-                    $"a live move to Off hides the crowns, zeroes the clumps' band and lets them rise over their own, with no rebuild");
+                ctx.Check(!models.Visible && Band(clumps) == Vector2.Zero && Held(clumps) == 1f && live.Session.CanopyClumpField?.Models == models
+                        && clumps.Shader.Code.Contains($"if ({Mech3.VegetationModels.BandParam}.y > 0.0 && !csky_clutter_dither_keep", StringComparison.Ordinal),
+                    $"a live move to Off hides the crowns and zeroes the clumps' band, which keeps every dither cell, and the clumps stay held at full height up to the eye, with no rebuild");
                 Models(live, VegetationModelsSetting.Far);
                 bool far = models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f;
                 Models(live, VegetationModelsSetting.Near);
@@ -1012,6 +1014,21 @@ internal static class GraphicsSwitchSuites
             finally
             {
                 live.Close();
+            }
+
+            VegetationModelsSetting.Resolve(VegetationModelsSetting.Off, null, null);
+            var launchedOff = Open(ctx, true, 1, "C3");
+            try
+            {
+                var offClumps = launchedOff.Session.CanopyClumpField?.Root.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault()?.MaterialOverride as ShaderMaterial;
+                ctx.Check(launchedOff.Built && launchedOff.Session.CanopyClumpField?.Models is { Visible: false } && offClumps != null
+                        && offClumps.GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2() == Vector2.Zero
+                        && offClumps.GetShaderParameter(Mech3.CanopyClumps.HeldParam).AsSingle() == 1f,
+                    $"a session launched at Off hides the crowns and holds the clumps at full height up to the eye, as a live move does");
+            }
+            finally
+            {
+                launchedOff.Close();
             }
 
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);

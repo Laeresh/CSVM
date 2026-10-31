@@ -256,6 +256,20 @@ public static class VegetationGround
         return null;
     }
 
+    // The triangle's height at the point's XZ when its XZ shadow holds the point; null for a wall.
+    internal static float? HeightIn(Vector3 a, Vector3 b, Vector3 c, Vector3 p)
+    {
+        float d = ((b.Z - c.Z) * (a.X - c.X)) + ((c.X - b.X) * (a.Z - c.Z));
+        if (Math.Abs(d) < 1e-6f)
+            return null;
+        float w0 = (((b.Z - c.Z) * (p.X - c.X)) + ((c.X - b.X) * (p.Z - c.Z))) / d;
+        float w1 = (((c.Z - a.Z) * (p.X - c.X)) + ((a.X - c.X) * (p.Z - c.Z))) / d;
+        float w2 = 1f - w0 - w1;
+        if (w0 < 0f || w1 < 0f || w2 < 0f)
+            return null;
+        return (w0 * a.Y) + (w1 * b.Y) + (w2 * c.Y);
+    }
+
     private static void AddLayers(GameZ gamez, GameZMesh mesh, Transform3D xf, Vector3 point, List<GroundLayer> into)
     {
         foreach (var poly in mesh.Polygons)
@@ -317,20 +331,6 @@ public static class VegetationGround
     // The same triangle's corner positions in the polygon, which its UVs and colours are indexed by.
     private static (int A, int B, int C) Positions(GameZPolygon poly, int i) =>
         poly.TriangleStrip ? (i, i + 1, i + 2) : (0, i + 1, i + 2);
-
-    // The triangle's height at the point's XZ when its XZ shadow holds the point; null for a wall.
-    private static float? HeightIn(Vector3 a, Vector3 b, Vector3 c, Vector3 p)
-    {
-        float d = ((b.Z - c.Z) * (a.X - c.X)) + ((c.X - b.X) * (a.Z - c.Z));
-        if (Math.Abs(d) < 1e-6f)
-            return null;
-        float w0 = (((b.Z - c.Z) * (p.X - c.X)) + ((c.X - b.X) * (p.Z - c.Z))) / d;
-        float w1 = (((c.Z - a.Z) * (p.X - c.X)) + ((a.X - c.X) * (p.Z - c.Z))) / d;
-        float w2 = 1f - w0 - w1;
-        if (w0 < 0f || w1 < 0f || w2 < 0f)
-            return null;
-        return (w0 * a.Y) + (w1 * b.Y) + (w2 * c.Y);
-    }
 
     /// <summary>Overlay triangles binned by square cell, so a query reads only the cell its foot stands in.</summary>
     public sealed class Overlays

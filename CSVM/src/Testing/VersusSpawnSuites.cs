@@ -15,12 +15,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>Where a Dogfight seat comes back, on real flight rigs: the fixed spawn a camper can
-/// stand on, and the rotation that takes the seat somewhere else. The wiring is the one
-/// <c>GameSession</c> builds in <c>--vs</c>, a <see cref="VersusSpawnRotation"/> over the chapter's
-/// own <c>dogfight_ace</c> list feeding each rig's <c>RespawnPlacement</c>, so the suite exercises
-/// the production seam rather than the chooser alone (<c>CSVM.Tests/VersusSpawnRotationTests.cs</c>
-/// is the chooser's own coverage).</summary>
+/// <summary>Where a Dogfight seat comes back, on real flight rigs. One answer is the fixed spawn
+/// a camper can stand on, the other the rotation that takes the seat somewhere else. The wiring is
+/// the one <c>GameSession</c> builds in <c>--vs</c>: a <see cref="VersusSpawnRotation"/> over the
+/// chapter's own <c>dogfight_ace</c> list feeds each rig's rule placement. The suite exercises the
+/// production seam rather than the chooser alone, whose own coverage is
+/// <c>CSVM.Tests/VersusSpawnRotationTests.cs</c>.</summary>
 internal static class VersusSpawnSuites
 {
     private const float StepDt = 1f / 60f;
@@ -92,7 +92,7 @@ internal static class VersusSpawnSuites
                 int own = seat;
                 var pilot = rigs[seat];
                 pilot.Match = match;
-                pilot.RespawnPlacement = () => Placement(rotation, rigs, own, lastKiller[own]);
+                pilot.Rule = pilot.Rule with { Placement = new ReturnPlacement.Rotation(() => Placement(rotation, rigs, own, lastKiller[own])) };
                 pilot.Downed += (downed, killer) =>
                 {
                     if (downed >= 0 && downed < lastKiller.Length)
@@ -354,7 +354,7 @@ internal static class VersusSpawnSuites
             UseKeyboard = false,
             PadDevices = Array.Empty<int>(),
             AllowPause = false,
-            AutoRespawnAfter = RespawnDelay,
+            Rule = RespawnRule.FreeFlight with { AutoRespawnAfter = RespawnDelay },
             Name = $"VersusSpawnSeat{seat}",
         };
         rig.AddChild(model);

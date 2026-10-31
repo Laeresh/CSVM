@@ -154,7 +154,7 @@ internal static class NetFlagSuites
             {
                 if (rig.Controller is { } pilot)
                 {
-                    pilot.AutoRespawnAfter = QuickRespawn;
+                    pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
                 }
             }
 

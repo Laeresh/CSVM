@@ -309,20 +309,6 @@ public partial class FlightController : Node3D
     /// dogfight results board.</summary>
     public Action? RestartMatch;
 
-    /// <summary>Where this seat comes back, asked once per <see cref="Respawn"/>. It gives a world
-    /// position and a point to aim the nose at, or null to keep the pose it has. Null itself, the
-    /// default, leaves every respawn on the spawn <see cref="Setup"/> fixed, which is what every
-    /// mode but the dogfight wants. Set by the session, which owns the field the choice is made
-    /// against.</summary>
-    public Func<(Vector3 Pos, Vector3 LookAt)?>? RespawnPlacement;
-
-    /// <summary>Set, this seat's return is somebody else's to grant. A due crash timer and the
-    /// respawn key ask this instead of respawning. The aeroplane flies again only when the
-    /// session calls <see cref="RespawnAt"/> from the answer. It is asked on every step the
-    /// timer is due, so deciding to ask the wire once is the session's. Null, the default,
-    /// leaves the seat to come back on its own timer.</summary>
-    public Action? RespawnRequest;
-
     /// <summary>Run at the end of every <see cref="Respawn"/>, once the new pose stands, for what
     /// the seat's assembler owes a fresh airframe beyond the reset here. A bot seat starts its AI
     /// pilot over on it. Null, the default, adds nothing, and a mission AI keeps its orders through
@@ -465,15 +451,15 @@ public partial class FlightController : Node3D
     /// cycle key changes it; this field only seeds it.</summary>
     public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
 
-    /// <summary>Out of lives: this pilot stays crashed for the rest of
-    /// the mission, neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back, while
-    /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
+    /// <summary>Out of lives: this pilot stays crashed for the rest of the mission, and neither R
+    /// nor <see cref="Rule"/>'s timer brings it back. The session hands its pane to a
+    /// <see cref="SpectatorCamera"/> and the others fly on. Set by
     /// the session's own lives ledger (<c>InstantActionRuntime.NotifyPilotDown</c>), never from
     /// here; this node holds no mission state and decides no rule.</summary>
     public bool Spectating;
 
     /// <summary>This pilot's crash is final for the mission: a campaign human whose aircraft is
-    /// lost. Neither R nor <see cref="AutoRespawnAfter"/>'s timer brings the wreck back, and no
+    /// lost. Neither R nor <see cref="Rule"/>'s timer brings the wreck back, and no
     /// prompt offers it. Set by the campaign director, never from here; <c>--no-crash-loss</c>
     /// leaves it unset.</summary>
     public bool CrashIsFinal;
@@ -481,14 +467,6 @@ public partial class FlightController : Node3D
     /// <summary>The living aircraft an out-of-lives Dogfight pilot watches in chase view, or null
     /// to hold the crash camera. Picked by the session (<see cref="VersusMatch.NextWatched"/>).</summary>
     public FlightController? Watching;
-
-    /// <summary>Whether R and pad Y respawn a LIVE aircraft. False where that would be a free
-    /// repair, restock and refuel. That is a campaign mission, Instant Action, a Dogfight match
-    /// and every other network session but a race. There the button is read only from
-    /// <see cref="Crashed"/>. True in free flight and the stunt runs, races
-    /// included, where R means "put me back at the spawn". Pinned by the session's own director
-    /// or its wire, never from here.</summary>
-    public bool AllowLiveRespawn = true;
 
     /// <summary>How far this seat's controls are held back while the world flies on, see
     /// <see cref="FlightControlHold"/>. Set by the session's own director around an ending the
@@ -1000,27 +978,17 @@ public partial class FlightController : Node3D
     /// fired.</summary>
     public string? LastCrashDef => _lifecycle.LastCrashDef;
 
-    /// <summary>Seconds a crash sits on the crash cam before this plane auto-respawns, or null,
-    /// the default, for manual R only. The session arms it (Versus: 3 s, every rig) so a downed
-    /// player rejoins the fight without touching a key; R still respawns early, and the timer is
-    /// armed at <see cref="Crash"/>. Scripted HoldSegments runs auto-respawn regardless, on
-    /// <see cref="AircraftLifecycle.AutoRespawnDelay"/> unless this says otherwise.</summary>
-    public float? AutoRespawnAfter
+    /// <summary>This seat's respawn rule: its crash timer, the wait for Fire Guns, who places the
+    /// return and whether R works in flight. Chosen by the session's mode and tightened by its
+    /// wire, never from here; an airframe swap carries it to the new aircraft.</summary>
+    public RespawnRule Rule
     {
-        get => _lifecycle.AutoRespawnAfter;
-        set => _lifecycle.AutoRespawnAfter = value;
+        get => _lifecycle.Rule;
+        set => _lifecycle.Rule = value;
     }
 
     /// <summary>How long a crash holds this pane's crash camera (<see cref="AircraftLifecycle.CrashCameraSeconds"/>).</summary>
     public float CrashCameraSeconds => _lifecycle.CrashCameraSeconds;
-
-    /// <summary>Whether the crash, once <see cref="AutoRespawnAfter"/> has run, waits for a Fire
-    /// Guns press, the lobby's Auto Respawn off. R still respawns at any time.</summary>
-    public bool RespawnOnFire
-    {
-        get => _lifecycle.RespawnOnFire;
-        set => _lifecycle.RespawnOnFire = value;
-    }
 
     /// <summary>Whether this plane is crashed, frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
@@ -1174,7 +1142,7 @@ public partial class FlightController : Node3D
 
     // Whether the respawn control splits into a tap and a hold. A seat whose return somebody else
     // grants keeps the one press it asks with.
-    private bool StuntRespawnSplits => Stunt != null && RespawnRequest == null;
+    private bool StuntRespawnSplits => Stunt != null && Rule.Placement is not ReturnPlacement.AskHost;
 
     // A race's final run, which offers no respawn of any kind.
     private bool RaceRefusesRespawn => Race is { MayRespawn: false };
@@ -1413,7 +1381,7 @@ public partial class FlightController : Node3D
         // Read before anything reads the spawn pose, so the whole reset below lands on the new
         // point. The dogfight rotates a downed seat away from the one it was camped at. A granted
         // pose is taken instead of asked for, so it cannot run a rotation of its own.
-        var placed = _grantedPlacement ?? RespawnPlacement?.Invoke();
+        var placed = _grantedPlacement ?? (Rule.Placement as ReturnPlacement.Rotation)?.Place();
         _grantedPlacement = null;
         if (placed is { } placement)
         {
@@ -1493,7 +1461,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The same return, at a pose this machine did not choose: the placement a match's
     /// host granted this seat. The grant is consumed by the one <see cref="Respawn"/> it arms, so
-    /// a later return on this seat asks <see cref="RespawnPlacement"/> again as usual.</summary>
+    /// a later return on this seat asks its <see cref="Rule"/>'s placement again as usual.</summary>
     public void RespawnAt(Vector3 pos, Vector3 lookAt)
     {
         _grantedPlacement = (pos, lookAt);
@@ -2195,8 +2163,8 @@ public partial class FlightController : Node3D
                 _respawnPressTaken |= pressed;
                 // In a match the placement is granted, not taken: the ask goes out and the
                 // aeroplane stays down until the answer places it.
-                if (RespawnRequest is { } ask)
-                    ask();
+                if (Rule.Placement is ReturnPlacement.AskHost host)
+                    host.Ask();
                 else
                     Respawn();
                 return;
@@ -3853,12 +3821,12 @@ public partial class FlightController : Node3D
     // other sim-step helpers, rather than hoisting it for SA1202's sake.
     internal FlightInput ReadKeyboard(float dt)
     {
-        // The live respawn, read only where the mission does not count (AllowLiveRespawn): this
-        // body runs on a flying aircraft alone, since SimStep leaves through its crashed branch,
-        // and that branch's own read is what brings a crashed pilot back.
+        // The live respawn, read only where the mission does not count (Rule.LiveRespawn). This
+        // body runs on a flying aircraft alone, since SimStep leaves through its crashed branch.
+        // That branch's own read is what brings a crashed pilot back.
         if (StuntRespawnSplits)
         {
-            if (AllowLiveRespawn && !RaceRefusesRespawn)
+            if (Rule.LiveRespawn && !RaceRefusesRespawn)
                 Perform(_run.StepLive(RespawnPressed(), dt));
             else
                 _run.StepLiveRefused(dt); // the button is not read where the pin refuses it
@@ -3872,7 +3840,7 @@ public partial class FlightController : Node3D
             {
                 _respawnPressTaken = false;
             }
-            else if (AllowLiveRespawn && !_respawnPressTaken)
+            else if (Rule.LiveRespawn && !_respawnPressTaken)
             {
                 _respawnPressTaken = true;
                 Respawn();

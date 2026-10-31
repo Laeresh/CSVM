@@ -254,6 +254,19 @@ public sealed class CanopyClumpsTests
         Assert.Contains(crowns, c => !c.Mirror);
     }
 
+    /// <summary>A painted cliff's edge falls between two sample points, as at the mouths of C3's Tiki Tunnel (#264).
+    /// Each crown stands on the side of the edge under it, never on a height between the two.</summary>
+    [Fact]
+    public void CrownModelsStandOnTheGroundUnderThemAtACliff()
+    {
+        // Samples sit 8 m apart from x = 4, so the edge at 45 m lies between the ones at 44 and 52.
+        const float edge = C + 13f;
+        var mask = CanopyMask.FromPainted(Strip(0f, edge, 50f).Concat(Strip(edge, 4 * C, 0f)).ToArray(), 0f, 0f, 4 * C, 4 * C);
+        var crowns = CanopyClumps.CrownModels(mask, CanopyClumps.CrownsPerCell);
+        Assert.Contains(crowns, c => c.At.X > edge && c.At.X < edge + 7f);
+        Assert.All(crowns, c => Assert.Equal(c.At.X < edge ? 50f : 0f, c.At.Y, 3));
+    }
+
     /// <summary>The crown models alone fill the near view past the clumps' own near edge. They hand over to the
     /// clumps over a thin band inside the clumps' band. A model's top stands inside the clumps' rise.</summary>
     [Fact]
@@ -281,6 +294,13 @@ public sealed class CanopyClumpsTests
         }
         return CanopyMask.FromPainted(tris, 0f, 0f, 10 * C, 10 * C);
     }
+
+    // Two triangles over x0 to x1 and the first four cells of Z, at height y.
+    private static Vector3[] Strip(float x0, float x1, float y) => new[]
+    {
+        new Vector3(x0, y, 0f), new Vector3(x1, y, 0f), new Vector3(x1, y, 4 * C),
+        new Vector3(x0, y, 0f), new Vector3(x1, y, 4 * C), new Vector3(x0, y, 4 * C),
+    };
 
     // PerDensity clumps a cell for every unit of the mask's density.
     private static float[] Even(CanopyMask mask) => mask.Density.Select(d => d * PerDensity).ToArray();

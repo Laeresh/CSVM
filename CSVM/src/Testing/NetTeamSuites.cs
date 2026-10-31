@@ -225,7 +225,7 @@ internal static class NetTeamSuites
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.AutoRespawnAfter = QuickRespawn;
+                pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
             }
         }
 

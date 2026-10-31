@@ -2128,7 +2128,8 @@ internal static class LandingApproachSuites
         Action<LandingApproachRuntime, CutsceneController, FlightController, ObjectiveGraph> body,
         Action<ProjectilePool>? beforeBind = null,
         string planeNode = PlaneNode,
-        AircraftStage? aircraft = null)
+        AircraftStage? aircraft = null,
+        bool interior = false)
     {
         var cutscene = new CutsceneController();
         ctx.Host.AddChild(cutscene);
@@ -2144,7 +2145,7 @@ internal static class LandingApproachSuites
         ctx.Host.AddChild(pool);
         try
         {
-            rig = BuildRig(ctx, world, pool, planeNode);
+            rig = BuildRig(ctx, world, pool, planeNode, interior);
             var craft = rig;
             // The session's nearest-human seam: without it the EXECUTION_BY_RANGE poll reads the
             // test camera kilometres off, and a range-armed definition on the flown approach
@@ -2439,7 +2440,73 @@ internal static class LandingApproachSuites
                 $"the authored pickup camera episode runs to its handoff");
             ctx.Check(graph.CompletedOf(gated.Number),
                 $"finishing the train pickup clears OBJECTIVE{gated.Number}");
-        });
+            CheckSeated(ctx, rig, "p_ilsa", report);
+        }, aircraft: world.Session.Aircraft, interior: true);
+    }
+
+    // #267: the pickup's own add_<name> seats `apassengers` on the flown interior's `pass_st`,
+    // with that one card drawn. A null card is a pickup that seats nobody.
+    private static void CheckSeated(TestContext ctx, FlightController rig, string? card, StringBuilder report)
+    {
+        var seat = rig.Dressing.Interior is { } interior
+            ? FirstNamed(interior, "pass_st")
+            : null;
+        var group = seat != null ? FirstNamed(seat, "apassengers") : null;
+        var drawn = new List<string>();
+        if (group != null)
+        {
+            foreach (var node in group.FindChildren("*", owned: false))
+            {
+                // Drawn up to the group: the interior itself is hidden outside first person.
+                if (node is Node3D n3d && ShownUpTo(n3d, group)
+                    && AnimRuntime.NameOf(n3d).StartsWith("p_", StringComparison.OrdinalIgnoreCase))
+                {
+                    drawn.Add(AnimRuntime.NameOf(n3d));
+                }
+            }
+        }
+
+        report.AppendLine($"seat={(seat != null ? "yes" : "no")} group={(group != null ? "seated" : "absent")} "
+            + $"cards drawn: {string.Join(", ", drawn)}");
+        if (card == null)
+        {
+            ctx.Check(group == null, $"the pickup seats nobody on the flown interior's 'pass_st'");
+            return;
+        }
+
+        ctx.Check(group != null, $"the pickup seats 'apassengers' on the flown interior's 'pass_st'");
+        ctx.Check(drawn.Count == 1 && drawn[0] == card, $"and '{card}' is its one card: {string.Join(", ", drawn)}");
+    }
+
+    private static bool ShownUpTo(Node3D node, Node3D top)
+    {
+        for (Node3D? at = node; at != null; at = at.GetParent() as Node3D)
+        {
+            if (!at.Visible)
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(at, top))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static Node3D? FirstNamed(Node3D root, string name)
+    {
+        foreach (var node in root.FindChildren("*", owned: false))
+        {
+            if (node is Node3D n3d && string.Equals(AnimRuntime.NameOf(n3d), name, StringComparison.OrdinalIgnoreCase))
+            {
+                return n3d;
+            }
+        }
+
+        return null;
     }
 
     // CM07's pickup as the passenger, the flare and the ladder see it. The train is the mission's
@@ -2871,7 +2938,8 @@ internal static class LandingApproachSuites
                 $"the authored pickup episode runs to its handoff");
             ctx.Check(graph.CompletedOf(wakes.Number),
                 $"finishing the trailer pickup clears OBJECTIVE{wakes.Number}, the dock");
-        });
+            CheckSeated(ctx, rig, "p_pick", report);
+        }, aircraft: world.Session.Aircraft, interior: true);
     }
 
     // CM16's armoured-car pickup. The mission stages it itself: the train's definition opens the
@@ -2936,13 +3004,16 @@ internal static class LandingApproachSuites
             {
                 RunTheCarPickup(ctx, world, director, graph, trigger, cutscene, rig, pickup,
                     rescue, wreck, runs, down, () => starts, t => clock = t, report);
+                // The shipped data seats nobody here: `sparks_pkup` calls no add_*, and add_spks
+                // has no caller anywhere in the install.
+                CheckSeated(ctx, rig, null, report);
             }
             finally
             {
                 world.Runtime.OnInstanceStarted = wasStarted;
                 world.Runtime.OnInstanceFinished = wasFinished;
             }
-        });
+        }, aircraft: world.Session.Aircraft, interior: true);
     }
 
     private static void RunTheCarPickup(
@@ -3893,14 +3964,15 @@ internal static class LandingApproachSuites
     }
 
     private static FlightController BuildRig(TestContext ctx, TestWorld world, ProjectilePool pool,
-        string planeNode = PlaneNode)
+        string planeNode = PlaneNode, bool interior = false)
     {
         var textures = new TextureArchive(ctx.ChapterTextures(world.Chapter));
         try
         {
             var stats = PlaneStats.Load(ctx.Zrdr, planeNode);
-            var model = new PlaneBuilder(ctx.Planes, textures,
-                dockingHook: true).Build(planeNode);
+            var builder = new PlaneBuilder(ctx.Planes, textures,
+                dockingHook: true, cockpitInterior: interior);
+            var model = builder.Build(planeNode);
             var rig = new FlightController
             {
                 PlaneModel = model,
@@ -3914,6 +3986,7 @@ internal static class LandingApproachSuites
                 Team = AimAssist.PlayerTeam,
                 Name = "LandingApproachPlayer",
             };
+            rig.Dressing.Interior = builder.CockpitInterior;
             rig.AddChild(model);
             ctx.Host.AddChild(rig);
             rig.Setup(new FlightModel(stats), null, new CamParams(), Vector3.Zero,

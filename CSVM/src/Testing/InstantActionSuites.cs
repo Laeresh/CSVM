@@ -1034,7 +1034,7 @@ internal static class InstantActionSuites
             lifeLedger.RegisterPilot(probe.PlayerIndex);
             var respawnBoards = new List<InstantActionOutcome>();
             lifeLedger.WrapupDue += outcome => respawnBoards.Add(outcome);
-            probe.AutoRespawnAfter = 3f;
+            probe.Rule = probe.Rule with { AutoRespawnAfter = 3f };
             probe.DebugForceCrash();
             ctx.Check(probe.Crashed && lifeLedger.NotifyPilotDown(probe.PlayerIndex),
                 $"3 lives, first death: the ledger says fly again ({lifeLedger.LivesLeft(probe.PlayerIndex)} left)");
@@ -1144,7 +1144,7 @@ internal static class InstantActionSuites
 
             // A hull lost inside the win's hold falls for the rest of it. R is swallowed and the
             // armed crash cam is held off with it. Nothing comes back before the board.
-            seat.AutoRespawnAfter = 0.5f;
+            seat.Rule = seat.Rule with { AutoRespawnAfter = 0.5f };
             seat.ControlHold = FlightControlHold.CommandsOnly;
             seat.HoldActionForTest(InputAction.Respawn, true);
             seat.DebugForceCrash();

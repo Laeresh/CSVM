@@ -7,9 +7,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="AircraftLifecycle"/>'s transition table asserted with no <c>Node</c> and no world:
-/// bare construction, only <c>CrashDefs</c> and <c>AutoRespawnAfter</c> set.
+/// bare construction, only <c>CrashDefs</c> and the respawn <c>Rule</c> set.
 /// ⚠ CONTEXT.md fixes Rerun and Respawn as two different mechanisms. This module has only
-/// <see cref="AircraftLifecycle.Respawn"/>, the one that returns a plane mid-run; Rerun belongs to
+/// <see cref="AircraftLifecycle.Respawn"/>, the one that returns a plane mid-run. Rerun belongs to
 /// the node and never reaches here, so nothing below is named after it.
 /// </summary>
 public class AircraftLifecycleTests
@@ -54,7 +54,7 @@ public class AircraftLifecycleTests
     [Fact]
     public void DestroyArmsTheRespawnTimerToAutoRespawnAfterWhenSet()
     {
-        var life = new AircraftLifecycle { AutoRespawnAfter = 4f };
+        var life = new AircraftLifecycle { Rule = Timed(4f) };
 
         life.Destroy("wreck_fall", null);
 
@@ -65,7 +65,7 @@ public class AircraftLifecycleTests
     [Fact]
     public void AutoRespawnOffWaitsForFireGunsOnceTheCrashSequenceHasRun()
     {
-        var life = new AircraftLifecycle { AutoRespawnAfter = 3f, RespawnOnFire = true };
+        var life = new AircraftLifecycle { Rule = Timed(3f) with { WaitsOnFire = true } };
         int reads = 0;
         bool held = false;
         bool Fire()
@@ -85,7 +85,7 @@ public class AircraftLifecycleTests
         Assert.True(life.TickAutoRespawn(0.016f, scriptedRun: false, Fire));
 
         // ABLE-TO-FAIL CONTROL: Auto Respawn on, the same run-down timer is due with no press.
-        var auto = new AircraftLifecycle { AutoRespawnAfter = 3f };
+        var auto = new AircraftLifecycle { Rule = Timed(3f) };
         auto.Destroy("wreck_fall", null);
         Assert.True(auto.TickAutoRespawn(3.1f, scriptedRun: false, () => false));
     }
@@ -135,7 +135,7 @@ public class AircraftLifecycleTests
     [Fact]
     public void CrashArmsTheRespawnTimerLikeDestroyDoes()
     {
-        var life = new AircraftLifecycle { AutoRespawnAfter = 2f };
+        var life = new AircraftLifecycle { Rule = Timed(2f) };
 
         life.Crash(0, null);
 
@@ -148,7 +148,7 @@ public class AircraftLifecycleTests
     [Fact]
     public void TheFallingWrecksLandingReportsWreckLandingWithNoSecondShutdown()
     {
-        var life = new AircraftLifecycle { CrashDefs = CrashTable(5), AutoRespawnAfter = 9f };
+        var life = new AircraftLifecycle { CrashDefs = CrashTable(5), Rule = Timed(9f) };
         life.Destroy("wreck_fall", killer: 2); // arms the 9s timer and starts the fall
 
         var outcome = life.Crash(5, killer: 2);
@@ -427,4 +427,7 @@ public class AircraftLifecycleTests
             defs.Add(CrashPrefix + SurfaceRegistry.Names[id]);
         return new SurfaceDefTable(CrashPrefix, lastResort: "crash_default", defs.Contains);
     }
+
+    // A rule whose crash camera runs for the given seconds, everything else free flight's.
+    private static RespawnRule Timed(float seconds) => RespawnRule.FreeFlight with { AutoRespawnAfter = seconds };
 }

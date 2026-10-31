@@ -990,12 +990,14 @@ public sealed class CampaignDirector
                 continue;
             }
 
+            bool first = wired == null;
             _deathWiredTo[seat] = human;
             human.Downed += (_, _) => OnPlayerDown(seat, human);
-            // Pinned beside the death wiring, and for its reason: a story mission is lost with the
-            // aeroplane, so a respawn taken while flying would repair, restock and refuel for free.
-            // A 967 swap's new aeroplane arrives here as a new identity and is pinned with it.
-            human.AllowLiveRespawn = false;
+            // Set on the seat's first aeroplane only: a 967 swap's new one carries the rule over.
+            if (first)
+            {
+                human.Rule = RespawnRule.Campaign;
+            }
         }
     }
 

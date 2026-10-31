@@ -3069,7 +3069,7 @@ internal static class CombatSuites
             // the aircraft is still down just short of the mark and flying again within a frame or two of it,
             // and the respawn itself reports no death.
             target.Respawn();
-            target.AutoRespawnAfter = 3f;
+            target.Rule = target.Rule with { AutoRespawnAfter = 3f };
             target.DebugForceCrash();
             int deathsAtCrash = match.DeathsOf(1);
             for (int i = 0; i < 175; i++)

@@ -134,6 +134,20 @@ Everything a death dispatches: the destroy def's arms, wreck pieces and their fl
 callbacks, and the stops that end them.
 _Avoid_: death effects, destruction sequence, kill animation
 
+**Respawn rule**:
+A seat's standing terms for flying again, fixed for the launch: how long the crash camera holds,
+whether the return then waits for Fire Guns, who places the return (the spawn, this machine's
+rotation, or the host), and whether a live respawn is allowed. The mode picks it and a network
+session may only tighten it. Losing the last life or the aircraft ends the return without changing
+the rule.
+_Avoid_: respawn pin, respawn policy, respawn settings
+
+**Live respawn**:
+The respawn control used on an aircraft still flying, which puts it back at its spawn repaired,
+restocked and refuelled. Allowed only where nothing counts that would make it free: free flight and
+the stunt runs, races included.
+_Avoid_: in-flight respawn, reset
+
 ## Boards and the sim clock
 
 **Menu presentation**:

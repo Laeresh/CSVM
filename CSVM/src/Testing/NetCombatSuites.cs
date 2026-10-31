@@ -395,7 +395,7 @@ internal static class NetCombatSuites
             {
                 if (rig.Controller is { } pilot)
                 {
-                    pilot.AutoRespawnAfter = QuickRespawn;
+                    pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
                 }
             }
 
@@ -627,7 +627,7 @@ internal static class NetCombatSuites
             {
                 if (rig.Controller is { } pilot)
                 {
-                    pilot.AutoRespawnAfter = QuickRespawn;
+                    pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
                 }
             }
 
@@ -802,7 +802,7 @@ internal static class NetCombatSuites
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.AutoRespawnAfter = QuickRespawn;
+                pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
             }
         }
 
@@ -864,8 +864,8 @@ internal static class NetCombatSuites
     {
         var guest = peers[1];
         var pilot = guest.SeatRigs[1].Controller!;
-        ctx.Check(pilot.RespawnOnFire && pilot.AutoRespawnAfter != null,
-            $"the launch arms the crash camera and then the wait for Fire Guns ({pilot.AutoRespawnAfter}, {pilot.RespawnOnFire})");
+        ctx.Check(pilot.Rule.WaitsOnFire && pilot.Rule.AutoRespawnAfter != null,
+            $"the launch arms the crash camera and then the wait for Fire Guns ({pilot.Rule.AutoRespawnAfter}, {pilot.Rule.WaitsOnFire})");
         pilot.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
         Lockstep(WaitSteps, peers);
         ctx.Check(peers.All(p => p.SeatRigs[1].Controller is { Crashed: true }),
@@ -988,7 +988,7 @@ internal static class NetCombatSuites
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.AutoRespawnAfter = QuickRespawn;
+                pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
             }
         }
 
@@ -1107,7 +1107,7 @@ internal static class NetCombatSuites
             {
                 if (rig.Controller is { } pilot)
                 {
-                    pilot.AutoRespawnAfter = QuickRespawn;
+                    pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
                 }
             }
         }

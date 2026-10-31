@@ -120,9 +120,8 @@ internal static class LocalBotSuites
             $"[{cell}] the bot flies on an armed AI pilot under its seat index (human {bot.IsHumanPiloted}, shooter {bot.PlayerIndex})");
         ctx.Check(bot.Pilot?.Rocketeer is { WingmanRule: true, FiresOnFailedRoll: true },
             $"[{cell}] and its ordnance takes the wingman rule with a failed roll launching, as a network bot's does");
-        ctx.Check(bot.RespawnRequest == null && bot.RespawnPlacement != null
-                  && pane.RespawnRequest == null && pane.RespawnPlacement != null,
-            $"[{cell}] every seat's return is placed by this machine's rotation, none asked of a host (bot asks {bot.RespawnRequest != null}, pane asks {pane.RespawnRequest != null})");
+        ctx.Check(bot.Rule.Placement is ReturnPlacement.Rotation && pane.Rule.Placement is ReturnPlacement.Rotation,
+            $"[{cell}] every seat's return is placed by this machine's rotation, none asked of a host (bot {bot.Rule.Placement}, pane {pane.Rule.Placement})");
 
         // ABLE-TO-FAIL CONTROL. The pane on the same roster is a person's, so the reading above
         // is the bot seat's, not a build that made every rig alike.
@@ -208,10 +207,10 @@ internal static class LocalBotSuites
         const string cell = "no auto respawn";
         var pane = session.SeatRigs[PaneSeat].Controller!;
         var bot = session.SeatRigs[BotSeat].Controller!;
-        ctx.Check(!bot.RespawnOnFire && bot.AutoRespawnAfter == VersusDirector.RespawnDelay,
-            $"[{cell}] the bot respawns on the crash camera's {bot.AutoRespawnAfter} s without waiting for Fire Guns (waits {bot.RespawnOnFire})");
-        ctx.Check(pane.RespawnOnFire && pane.AutoRespawnAfter == bot.AutoRespawnAfter,
-            $"ABLE-TO-FAIL CONTROL: [{cell}] the pane on the same launch waits for Fire Guns after the same {pane.AutoRespawnAfter} s (waits {pane.RespawnOnFire})");
+        ctx.Check(!bot.Rule.WaitsOnFire && bot.Rule.AutoRespawnAfter == VersusDirector.RespawnDelay,
+            $"[{cell}] the bot respawns on the crash camera's {bot.Rule.AutoRespawnAfter} s without waiting for Fire Guns (waits {bot.Rule.WaitsOnFire})");
+        ctx.Check(pane.Rule.WaitsOnFire && pane.Rule.AutoRespawnAfter == bot.Rule.AutoRespawnAfter,
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the pane on the same launch waits for Fire Guns after the same {pane.Rule.AutoRespawnAfter} s (waits {pane.Rule.WaitsOnFire})");
 
         Lift(pane);
         Lift(bot);
