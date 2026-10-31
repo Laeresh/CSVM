@@ -723,17 +723,28 @@ public static class GroundCover
     /// and built again draws the same cards.</summary>
     public sealed class Field
     {
+        private static readonly Cover[] BothCovers = { Cover.Crop, Cover.Grass };
         private readonly Dictionary<(int X, int Z), List<Ground>> _index;
         private readonly VegetationGround.Overlays _overlays;
         private readonly VegetationMask? _mask;
         private readonly ArrayMesh[] _meshes = { CardMesh(Cover.Crop), CardMesh(Cover.Grass) };
         private readonly ShaderMaterial[] _materials = { Material(Cover.Crop), Material(Cover.Grass) };
         private readonly Dictionary<((int X, int Z) Cell, Cover Cover), MultiMeshInstance3D?> _live = new();
+
+        // Each indexed cell's lowest and highest triangle height, taken once at load.
+        private readonly Dictionary<(int X, int Z), (float Lo, float Hi)> _span;
+
+        // Update's working sets, kept and cleared each call since it runs every frame.
+        private readonly List<(float D, ((int X, int Z) Cell, Cover Cover) Key)> _wanted = new();
+        private readonly HashSet<((int, int), Cover)> _keep = new();
+        private readonly List<((int X, int Z) Cell, Cover Cover)> _gone = new();
+        private readonly Dictionary<(int X, int Z), float> _best = new();
         private bool _settled;
 
         internal Field(Dictionary<(int X, int Z), List<Ground>> index, VegetationGround.Overlays overlays, VegetationMask? mask)
         {
             _index = index;
+            _span = index.ToDictionary(c => c.Key, c => (c.Value.Min(g => g.Min.Y), c.Value.Max(g => g.Max.Y)));
             _overlays = overlays;
             _mask = mask;
         }
@@ -758,19 +769,27 @@ public static class GroundCover
         /// Call once a frame.</summary>
         public void Update(IReadOnlyList<Vector3> focuses, int budget = MaxCellsPerFrame)
         {
-            var wanted = new List<(float D, ((int X, int Z) Cell, Cover Cover) Key)>();
-            var keep = new HashSet<((int, int), Cover)>();
-            foreach (var cover in new[] { Cover.Crop, Cover.Grass })
+            var wanted = _wanted;
+            wanted.Clear();
+            _keep.Clear();
+            _gone.Clear();
+            foreach (var cover in BothCovers)
             {
                 float far = Band(cover).Y;
-                foreach (var (d, cell) in Near(focuses, far + CellM))
+                Near(focuses, far + CellM);
+                foreach (var (cell, d) in _best)
                 {
-                    keep.Add((cell, cover));
+                    _keep.Add((cell, cover));
                     if (d <= far && !_live.ContainsKey((cell, cover)))
                         wanted.Add((d, (cell, cover)));
                 }
             }
-            foreach (var gone in _live.Keys.Where(k => !keep.Contains(k)).ToList())
+            foreach (var key in _live.Keys)
+            {
+                if (!_keep.Contains(key))
+                    _gone.Add(key);
+            }
+            foreach (var gone in _gone)
             {
                 if (_live[gone] is { } m)
                 {
@@ -792,22 +811,24 @@ public static class GroundCover
             }
         }
 
-        // The indexed cells within `reach` of a focus, with their distance from the nearest one. The distance is XZ
-        // to the cell's square and height to the span its triangles cover.
-        private IEnumerable<(float D, (int X, int Z) Cell)> Near(IReadOnlyList<Vector3> focuses, float reach)
+        // Fills _best with the indexed cells within `reach` of a focus, each with its distance from the nearest one.
+        // The distance is XZ to the cell's square and height to the span its triangles cover.
+        private void Near(IReadOnlyList<Vector3> focuses, float reach)
         {
-            var best = new Dictionary<(int, int), float>();
+            var best = _best;
+            best.Clear();
             int rings = (int)MathF.Ceiling(reach / CellM);
-            foreach (var f in focuses)
+            for (int k = 0; k < focuses.Count; k++)
             {
+                var f = focuses[k];
                 int fx = Cell(f.X), fz = Cell(f.Z);
                 for (int x = fx - rings; x <= fx + rings; x++)
                 {
                     for (int z = fz - rings; z <= fz + rings; z++)
                     {
-                        if (!_index.TryGetValue((x, z), out var tris))
+                        if (!_span.TryGetValue((x, z), out var span))
                             continue;
-                        float lo = tris.Min(g => g.Min.Y), hi = tris.Max(g => g.Max.Y);
+                        var (lo, hi) = span;
                         float dx = MathF.Max(MathF.Max((x * CellM) - f.X, f.X - ((x + 1) * CellM)), 0f);
                         float dz = MathF.Max(MathF.Max((z * CellM) - f.Z, f.Z - ((z + 1) * CellM)), 0f);
                         float dy = MathF.Max(MathF.Max(lo - f.Y, f.Y - hi), 0f);
@@ -817,7 +838,6 @@ public static class GroundCover
                     }
                 }
             }
-            return best.Select(b => (b.Value, b.Key));
         }
 
         // One cover's cards in one cell, or null where it grows none. A crop field's hedge lines grow grass, so the

@@ -27,7 +27,7 @@ $ErrorActionPreference = "Continue"  # native stderr lines must not abort the ru
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $scratch = Join-Path $repoRoot ".scratch\d33-perf"
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-$probe = Join-Path $repoRoot "RunProbe.ps1"
+$probe = Join-Path $repoRoot "scripts\RunProbe.ps1"
 
 # --- the profile the CM18 launch needs, in a store of this run's own ---
 $store = Join-Path $scratch "profiles"

@@ -640,7 +640,12 @@ internal sealed class FlagRuntime
 
         string holder = CallsignOf(seat);
         int side = SideTeam(team);
-        pilot.MarkerName = team == 0 ? null : own => FlagMarkers.HolderTag(_in.Strings, holder, own, side);
+        // The tag reads the pane's team only through Friendly, so each side's line is built once
+        // rather than on every pane's every rendered frame.
+        string? yours = null, theirs = null;
+        pilot.MarkerName = team == 0 ? null : own => AimAssist.Friendly(own, side)
+            ? yours ??= FlagMarkers.HolderTag(_in.Strings, holder, own, side)
+            : theirs ??= FlagMarkers.HolderTag(_in.Strings, holder, own, side);
     }
 
     // One bot's order on its pilot. A bot breaking off to rearm keeps that run, unless it carries a

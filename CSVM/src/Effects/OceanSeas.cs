@@ -31,9 +31,6 @@ public sealed class OceanSeas
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    // Comments are skipped on every read, so a note added by hand breaks neither a load nor a Save.
-    private static readonly JsonDocumentOptions Reading = new() { CommentHandling = JsonCommentHandling.Skip };
-
     private readonly Dictionary<string, SeaState> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _warnings = new();
 
@@ -72,9 +69,9 @@ public sealed class OceanSeas
         JsonNode? root;
         try
         {
-            root = JsonNode.Parse(json, documentOptions: Reading);
+            root = Mech3.VegetationSidecar.ParseWhole(json);
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
             seas._warnings.Add($"not readable JSON ({ex.Message}), every chapter takes the default sea");
             return seas;
@@ -123,10 +120,10 @@ public sealed class OceanSeas
         {
             try
             {
-                root = JsonNode.Parse(existing, documentOptions: Reading) as JsonObject
+                root = Mech3.VegetationSidecar.ParseWhole(existing) as JsonObject
                     ?? throw new InvalidDataException("the seas file is not a JSON object, so Save leaves it as it is");
             }
-            catch (JsonException ex)
+            catch (Exception ex) when (ex is JsonException or ArgumentException)
             {
                 throw new InvalidDataException($"the seas file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
             }

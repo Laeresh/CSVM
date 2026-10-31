@@ -6,7 +6,8 @@ using System.Text;
 
 namespace CSVM.Mech3;
 
-/// <summary>Little-endian reads at offsets relative to one record, bounds-checked by the array.</summary>
+/// <summary>Little-endian reads at offsets relative to one record. A read past either end of the
+/// file throws <see cref="InvalidDataException"/>.</summary>
 internal readonly struct AnimBytes
 {
     public readonly byte[] Data;
@@ -18,22 +19,22 @@ internal readonly struct AnimBytes
         At = at;
     }
 
-    public int U8(int offset) => Data[At + offset];
+    public int U8(int offset) => Span(offset, 1)[0];
 
-    public int U16(int offset) => BinaryPrimitives.ReadUInt16LittleEndian(Data.AsSpan(At + offset));
+    public int U16(int offset) => BinaryPrimitives.ReadUInt16LittleEndian(Span(offset, 2));
 
-    public int I16(int offset) => BinaryPrimitives.ReadInt16LittleEndian(Data.AsSpan(At + offset));
+    public int I16(int offset) => BinaryPrimitives.ReadInt16LittleEndian(Span(offset, 2));
 
-    public int I32(int offset) => BinaryPrimitives.ReadInt32LittleEndian(Data.AsSpan(At + offset));
+    public int I32(int offset) => BinaryPrimitives.ReadInt32LittleEndian(Span(offset, 4));
 
-    public uint U32(int offset) => BinaryPrimitives.ReadUInt32LittleEndian(Data.AsSpan(At + offset));
+    public uint U32(int offset) => BinaryPrimitives.ReadUInt32LittleEndian(Span(offset, 4));
 
-    public float F32(int offset) => BinaryPrimitives.ReadSingleLittleEndian(Data.AsSpan(At + offset));
+    public float F32(int offset) => BinaryPrimitives.ReadSingleLittleEndian(Span(offset, 4));
 
     /// <summary>A fixed-width name field up to its first NUL; whatever follows the NUL is padding.</summary>
     public string Name(int offset, int width)
     {
-        var raw = Data.AsSpan(At + offset, width);
+        var raw = Span(offset, width);
         int nul = raw.IndexOf((byte)0);
         AnimZbdEvents.Expect(nul >= 0, "unterminated name", At + offset);
         foreach (byte b in raw[..nul])
@@ -52,6 +53,13 @@ internal readonly struct AnimBytes
 
     public Dictionary<string, object?> Color(int offset) => AnimZbdEvents.Bag(
         ("r", AnimZbdEvents.F(F32(offset))), ("g", AnimZbdEvents.F(F32(offset + 4))), ("b", AnimZbdEvents.F(F32(offset + 8))));
+
+    private ReadOnlySpan<byte> Span(int offset, int length)
+    {
+        long at = (long)At + offset;
+        AnimZbdEvents.Expect(at >= 0 && at + length <= Data.Length, "read past the end", at);
+        return Data.AsSpan((int)at, length);
+    }
 }
 
 /// <summary>
@@ -123,7 +131,7 @@ internal static class AnimZbdEvents
             var h = new AnimBytes(data, at);
             int type = h.U8(0), offset = h.U8(1), size = h.I32(4);
             float time = h.F32(8);
-            Expect(offset is >= 1 and <= 3 && h.U16(2) == 0 && size >= HeaderSize && at + size <= end, "event header", at);
+            Expect(offset is >= 1 and <= 3 && h.U16(2) == 0 && size >= HeaderSize && size <= end - at, "event header", at);
             Expect(Kinds.TryGetValue(type, out var kind), "event type " + type, at);
             Expect(kind.Size < 0 || kind.Size == size - HeaderSize, kind.Kind + " size", at);
             var payload = Payload(type, new AnimBytes(data, at + HeaderSize), size - HeaderSize, names);
@@ -491,10 +499,13 @@ internal static class AnimZbdEvents
         return list;
     }
 
+    // At most six 20-byte entries fit between their count at +408 and the growth count at +532.
     private static List<object?> PufferColors(AnimBytes p)
     {
+        int count = p.I32(408);
+        Expect(count is >= 0 and <= 6, "puffer colour count", p.At + 408);
         var list = new List<object?>();
-        for (int i = 0; i < p.I32(408); i++)
+        for (int i = 0; i < count; i++)
         {
             int at = 412 + (i * 20);
             list.Add(Bag(("unk00", F(p.F32(at))), ("color", p.Color(at + 4)), ("unk16", F(p.F32(at + 16)))));
@@ -503,10 +514,13 @@ internal static class AnimZbdEvents
         return list;
     }
 
+    // At most four 8-byte entries fit between +536 and the 572-byte payload's end.
     private static List<object?> PufferGrowths(AnimBytes p)
     {
+        int count = p.I32(532);
+        Expect(count is >= 0 and <= 4, "puffer growth count", p.At + 532);
         var list = new List<object?>();
-        for (int i = 0; i < p.I32(532); i++)
+        for (int i = 0; i < count; i++)
         {
             list.Add(p.Range(536 + (i * 8)));
         }

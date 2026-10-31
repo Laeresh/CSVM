@@ -13,7 +13,7 @@ namespace CSVM.Testing;
 /// either freed or kept unworn. Environment: CSVM_PROBE_FREE (1 frees, 0 keeps),
 /// CSVM_PROBE_SHADERS, CSVM_PROBE_ROUNDS, CSVM_PROBE_TAA (1 draws the pane with TAA). Not compiled
 /// here: copy it into CSVM/src/Testing, build, and run
-/// <c>.\RunProbe.ps1 --run-tests=probe-shader-free</c> (windowed; headless builds no variant).</summary>
+/// <c>.\scripts\RunProbe.ps1 --run-tests=probe-shader-free</c> (windowed; headless builds no variant).</summary>
 internal static class ShaderFreeProbeSuites
 {
 

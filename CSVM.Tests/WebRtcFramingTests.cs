@@ -31,6 +31,20 @@ public class WebRtcFramingTests
     }
 
     [Fact]
+    public void AReusedBufferFramesExactlyAsAFreshOne()
+    {
+        var reused = new WebRtcFraming();
+        var fresh = new WebRtcFraming();
+        var buffer = new byte[16];
+
+        reused.Frame(4, 3, NetReliability.UnreliableSequenced, new byte[] { 1, 2, 3, 4, 5 }, buffer);
+        fresh.Frame(4, 3, NetReliability.UnreliableSequenced, new byte[] { 1, 2, 3, 4, 5 });
+        int length = reused.Frame(4, 7, NetReliability.Reliable, new byte[] { 9 }, buffer);
+
+        Assert.Equal(fresh.Frame(4, 7, NetReliability.Reliable, new byte[] { 9 }), buffer.AsSpan(0, length).ToArray());
+    }
+
+    [Fact]
     public void ASequencedPayloadNotNewerThanTheNewestIsDiscarded()
     {
         var sender = new WebRtcFraming();

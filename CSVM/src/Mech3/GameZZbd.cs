@@ -129,7 +129,7 @@ public static class GameZZbd
             uint soil = r.U32(at + 32);
             if (!KnownSoils.Contains(soil))
             {
-                throw new FormatException($"Unknown material soil id {soil} at offset {at + 32}; GameZ.SoilLabelToId needs an entry.");
+                throw new InvalidDataException($"Unknown material soil id {soil} at offset {at + 32}; GameZ.SoilLabelToId needs an entry.");
             }
 
             mat.SoilId = (int)soil;
@@ -172,7 +172,7 @@ public static class GameZZbd
     private static int[] ReadModels(Cursor r, GameZ gz)
     {
         int arraySize = r.I32(r.Pos), count = r.I32(r.Pos + 4);
-        Expect(count >= 0 && arraySize >= count, "model counts", r.Pos);
+        Expect(count >= 0 && arraySize >= count && arraySize <= (r.Data.Length - r.Pos) / ModelEntrySize, "model counts", r.Pos);
         r.Pos += 12;
         var denseOfSlot = new int[arraySize];
         var live = new List<(int Record, int Data)>();

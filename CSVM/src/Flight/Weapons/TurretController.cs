@@ -83,6 +83,10 @@ public sealed class TurretController
     /// <c>0x004ac7c2</c>. The range gate reads the true distance first (docs/org/targeting.md "The picker's cost").</summary>
     public const float TurretDistanceTerm = 37.5f;
 
+    // WorldBlocksEmplacementLine's ray and its empty exclusion, shared by every emplacement.
+    private static PhysicsRayQueryParameters3D? _emplacementRay;
+    private static Godot.Collections.Array<Rid>? _noExclude; // never mutated
+
     private readonly FlightController? _host;
     private readonly IWorldQuery? _worldQuery; // the carried case's line-of-sight seam; null on an emplacement
     private readonly ProjectilePool _pool;
@@ -524,13 +528,12 @@ public sealed class TurretController
         {
             return false;
         }
-        // Both disposed on the way out: the query object and the hit dictionary are finalizable
-        // wrappers otherwise, one pair per turret per tick (PERF-20).
-        using var query = PhysicsRayQueryParameters3D.Create(from + span * (MountSkirtM / len), to, CollisionLayers.World);
-        if (exclude is { Count: > 0 })
-        {
-            query.Exclude = exclude;
-        }
+        // One query object for every turret, made on first use so the unit tests never build one;
+        // every field the ray reads is assigned here. The hit dictionary is disposed (PERF-20).
+        var query = _emplacementRay ??= new() { CollisionMask = CollisionLayers.World };
+        query.From = from + span * (MountSkirtM / len);
+        query.To = to;
+        query.Exclude = exclude is { Count: > 0 } ? exclude : (_noExclude ??= new());
         using var hit = space.IntersectRay(query);
         return hit.Count > 0;
     }

@@ -80,16 +80,18 @@ public sealed class ModdingFolder
             InterpScripts.GamePath, Messages.GameFile, GameData.RimagePath, GameData.PlanesPath,
             GameData.SoundsPath, GameData.RootZrdrPath,
         };
-        foreach (string chapterDir in Directory.EnumerateDirectories(Root))
+        // A drive root holds folders that refuse a listing (System Volume Information); none is output.
+        var readable = new EnumerationOptions { IgnoreInaccessible = true };
+        foreach (string chapterDir in Directory.EnumerateDirectories(Root, "*", readable))
         {
             string chapter = Path.GetFileName(chapterDir);
-            if (Directory.EnumerateFileSystemEntries(chapterDir, "rtexture*").Any())
+            if (Directory.EnumerateFileSystemEntries(chapterDir, "rtexture*", readable).Any())
             {
                 return true;
             }
 
             paths.AddRange(new[] { "gamez", "zrdr", "cam_anim", "texture" }.Select(name => $"ZBD/{chapter}/{name}.zbd"));
-            foreach (string missionDir in Directory.EnumerateDirectories(chapterDir))
+            foreach (string missionDir in Directory.EnumerateDirectories(chapterDir, "*", readable))
             {
                 string mission = Path.GetFileName(missionDir);
                 paths.Add($"ZBD/{chapter}/{mission}/zrdr.zbd");

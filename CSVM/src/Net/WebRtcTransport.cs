@@ -44,6 +44,7 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
     private readonly List<(int Peer, int Channel, byte[] Bytes)> _held = new();
     private readonly WebRtcFraming _framing = new();
     private readonly WebRtcMultiplayerPeer _peer = new();
+    private byte[] _sendFrame = new byte[256]; // Send's reused frame, grown to the largest payload sent
     private IMasterSocket? _socket;
     private MasterRegistration? _registration;
     private MasterGame? _listing;
@@ -189,7 +190,12 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
             return;
         }
 
-        byte[] frame = _framing.Frame(peer, channel, reliability, payload);
+        if (_sendFrame.Length < WebRtcFraming.HeaderBytes + payload.Length)
+        {
+            _sendFrame = new byte[WebRtcFraming.HeaderBytes + payload.Length];
+        }
+
+        var frame = _sendFrame.AsSpan(0, _framing.Frame(peer, channel, reliability, payload, _sendFrame));
         _peer.SetTargetPeer(peer);
         _peer.TransferChannel = 0;
         _peer.TransferMode = reliability == NetReliability.Reliable

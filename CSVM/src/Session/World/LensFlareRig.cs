@@ -60,6 +60,10 @@ public sealed class LensFlareRig
     private readonly SessionSpec _spec;
     private readonly List<Instance> _instances = new();
 
+    // The sun line-of-sight ray, reused per pane per frame. Its defaults are Create's: every
+    // layer, nothing excluded; only From and To change.
+    private readonly PhysicsRayQueryParameters3D _sunRay = new();
+
     public LensFlareRig(SessionSpec spec) => _spec = spec;
 
     /// <summary>How many panes got a flare, 0 when the chapter authors none, which is every
@@ -204,8 +208,9 @@ public sealed class LensFlareRig
             if (onScreen)
             {
                 var space = cam.GetWorld3D().DirectSpaceState;
-                using var query = PhysicsRayQueryParameters3D.Create(cam.GlobalPosition, sunGlobal);
-                using var hit = space.IntersectRay(query);
+                _sunRay.From = cam.GlobalPosition;
+                _sunRay.To = sunGlobal;
+                using var hit = space.IntersectRay(_sunRay);
                 losClear = hit.Count == 0;
             }
 

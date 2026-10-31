@@ -257,6 +257,9 @@ public sealed class FlightHud
     /// <summary>Whether the pane shows a spectator's view, see <see cref="SetSpectatorView"/>.</summary>
     public bool SpectatorView => _spectatorView;
 
+    /// <summary>The throttle plate switch, see <see cref="SetThrottlePlateShown"/>.</summary>
+    public bool ThrottlePlateShown => _throttlePlateShown;
+
     /// <summary>Height over ground from the last <see cref="StepAgl"/>, or
     /// <see cref="float.MaxValue"/> where the ray reached nothing (or there are no dials to hold
     /// it). The flight telemetry line reads it back out.</summary>

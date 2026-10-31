@@ -44,9 +44,9 @@ public sealed class GameData
     /// of the launch, so read-only by the contract <see cref="DecodeCache"/> states.</summary>
     public GameZ? Planes { get; init; }
 
-    /// <summary>The WAVs of <c>soundsh.zbd</c>, null without it. Opened once per launch and never
-    /// closed; each session wraps it in its own <see cref="SoundArchive"/>, whose dispose leaves it
-    /// open.</summary>
+    /// <summary>The WAVs of <c>soundsh.zbd</c>, null without it. Opened once per launch and closed
+    /// only by the source picker, which replaces this game data. Each session wraps it in its own
+    /// <see cref="SoundArchive"/>, whose dispose leaves it open.</summary>
     public SoundZbd? Sounds { get; init; }
 
     /// <summary>The root readers of <c>zrdr.zbd</c>, <see cref="ZrdrSet.None"/> without it. Shared
@@ -169,10 +169,24 @@ public sealed class GameData
         new(() => Read(game, mods, path, () => ZrdrSet.Load(game, path), ZrdrSet.FromExtracted, ZrdrSet.None));
 
     // The tier the game files pick (TextureSet.ForChapter), so a modded chapter keeps the original's.
-    private static TextureSet ChapterTextures(IGameFileSource? game, ModdingFolder? mods, string chapter) =>
-        TextureSet.ChapterArchive(game, chapter) is { } path
-            ? Read(game, mods, path, () => TextureSet.Load(game, path), output => TextureSet.FromExtracted(path, output), TextureSet.Empty)
-            : TextureSet.Empty;
+    // ⚠ Picking it looks inside a disc's chapter cabinet, which a damaged one fails like a read.
+    private static TextureSet ChapterTextures(IGameFileSource? game, ModdingFolder? mods, string chapter)
+    {
+        string? path;
+        try
+        {
+            path = TextureSet.ChapterArchive(game, chapter);
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException)
+        {
+            Log.Error("core", $"ZBD/{chapter} in {game?.Location} does not read, using no textures: {e.Message}");
+            return TextureSet.Empty;
+        }
+
+        return path == null
+            ? TextureSet.Empty
+            : Read(game, mods, path, () => TextureSet.Load(game, path), output => TextureSet.FromExtracted(path, output), TextureSet.Empty);
+    }
 
     // The modding folder's output for the path when it holds one and it reads, else the game file.
     // ⚠ The output is a modder's own files: any failure falls back, never takes the launch down.

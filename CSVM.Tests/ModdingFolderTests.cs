@@ -67,6 +67,27 @@ public class ModdingFolderTests
         Assert.False(new ModdingFolder(Path.Combine(root, "absent")).HoldsAny());
     }
 
+    // A drive root holds System Volume Information, which refuses a listing to everyone but SYSTEM.
+    [Fact]
+    public void HoldsAnyLooksPastAFolderThatRefusesAListing()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string drive = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.System))!;
+        Assert.Null(Record.Exception(() => new ModdingFolder(drive).HoldsAny()));
+    }
+
+    // A disc's chapter cabinet is parsed on the first lookup inside it, so a damaged one throws there.
+    [Fact]
+    public void AChapterWhoseTexturesCannotBeLookedUpHasNone()
+    {
+        var chapter = GameData.Load(new DamagedCabinet()).LoadChapter("C1", "M01");
+        Assert.Same(TextureSet.Empty, chapter.Textures);
+    }
+
     [Fact]
     public void TheFlagBeatsTheSavedFolderWhichADeterministicOrSyntheticRunNeverReads()
     {
@@ -269,5 +290,16 @@ public class ModdingFolderTests
         }
 
         return original;
+    }
+
+    private sealed class DamagedCabinet : IGameFileSource
+    {
+        public string Location => "disc";
+
+        public bool Exists(string path) => path.StartsWith("ZBD/C1/", StringComparison.Ordinal)
+            ? throw new InvalidDataException("the cabinet's header does not read")
+            : false;
+
+        public Stream? Open(string path) => null;
     }
 }

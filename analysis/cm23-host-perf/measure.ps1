@@ -25,7 +25,7 @@ param(
 $ErrorActionPreference = "Continue"  # native stderr lines must not abort the run (PS 5.1)
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $scratch = Join-Path $repoRoot ".scratch\cm23-host-perf"
-$probe = Join-Path $repoRoot "RunProbe.ps1"
+$probe = Join-Path $repoRoot "scripts\RunProbe.ps1"
 
 # One store for the host, one for the guest, so two processes never save into the same folder.
 function New-Store($name) {

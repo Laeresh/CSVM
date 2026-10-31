@@ -1473,6 +1473,9 @@ public partial class Launcher : Node3D
 
         if (flow.View == UI.Screens.SourceView.Asking)
         {
+            // The picker leaves only through a pick, which loads new game data. Its copy may replace
+            // the folder this data's sound archive holds open, which Windows refuses to rename.
+            _paths.Data.Sounds?.Dispose();
             Log.Error("core", $"no game files: {(refused == null ? "none found" : "the menus cannot read " + refused)}, showing the picker remembered={remembered ?? "none"} candidates={candidates.Count} prefill={(preFill.Length == 0 ? "none" : preFill)}");
         }
         else

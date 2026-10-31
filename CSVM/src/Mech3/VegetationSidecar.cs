@@ -248,7 +248,7 @@ public sealed class VegetationSidecar
         JsonNode? root;
         try
         {
-            root = JsonNode.Parse(json, documentOptions: Reading);
+            root = ParseWhole(json);
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
@@ -282,6 +282,29 @@ public sealed class VegetationSidecar
         return sidecar;
     }
 
+    /// <summary>Parses <paramref name="json"/> and walks every object and array in it. A JsonObject meets a key
+    /// given twice only when first read. The walk throws that <see cref="ArgumentException"/> inside the caller's catch.</summary>
+    public static JsonNode? ParseWhole(string json)
+    {
+        var root = JsonNode.Parse(json, documentOptions: Reading);
+        Walk(root);
+        return root;
+
+        static void Walk(JsonNode? node)
+        {
+            if (node is JsonObject o)
+            {
+                foreach (var (_, child) in o)
+                    Walk(child);
+            }
+            else if (node is JsonArray a)
+            {
+                foreach (var child in a)
+                    Walk(child);
+            }
+        }
+    }
+
     /// <summary>The file's text with <paramref name="chapter"/>'s entry replaced by <paramref name="entry"/>,
     /// each kind writing only its nonzero fields. Every other key keeps its place and value; a chapter the
     /// file lacks is appended. Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is
@@ -298,7 +321,7 @@ public sealed class VegetationSidecar
         {
             try
             {
-                root = JsonNode.Parse(existing, documentOptions: Reading) as JsonObject
+                root = ParseWhole(existing) as JsonObject
                     ?? throw new InvalidDataException("the vegetation file is not a JSON object, so Save leaves it as it is");
             }
             catch (Exception ex) when (ex is JsonException or ArgumentException)

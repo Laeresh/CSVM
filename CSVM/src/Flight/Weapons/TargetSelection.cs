@@ -28,8 +28,21 @@ public sealed class TargetSelection
     /// to have happened.</summary>
     private const int EmptyPoolReport = 300;
 
+    // Sector first, then nearest inside it, then the pre-sort index. That total order keeps a tie
+    // (two zeppelin parts at one range) from walking the cycle under the pilot between frames.
+    // It also makes the unstable sort's result unique.
+    private static readonly Comparer<(int Sector, float DistSq, int Index)> SortOrder =
+        Comparer<(int Sector, float DistSq, int Index)>.Create(
+            (x, y) => x.Sector != y.Sector ? x.Sector.CompareTo(y.Sector)
+                : x.DistSq != y.DistSq ? x.DistSq.CompareTo(y.DistSq)
+                : x.Index.CompareTo(y.Index));
+
     private readonly List<TargetRef> _ordered = new();  // the active cycle, in cycle order
     private readonly List<object> _attackers = new();   // the queue 0x24 walks backwards
+
+    // Sort's scratch, grown on demand: it runs per seat per rendered frame.
+    private (int Sector, float DistSq, int Index)[] _sortKeys = System.Array.Empty<(int, float, int)>();
+    private TargetRef[] _sortItems = System.Array.Empty<TargetRef>();
     private object? _selected;                          // the SOURCE object, never a TargetRef
     private bool _countsLogged;                         // verification breadcrumb: the cycle sizes log once
     private int _emptyRebuilds;                         // rebuilds seen with an empty pool, for that breadcrumb
@@ -453,30 +466,33 @@ public sealed class TargetSelection
             return;
         }
 
-        var keys = new (int Sector, float DistSq, int Index)[n];
+        if (_sortKeys.Length < n)
+        {
+            _sortKeys = new (int, float, int)[n];
+            _sortItems = new TargetRef[n];
+        }
+
+        var keys = _sortKeys;
+        var byKey = _sortItems;
         for (int i = 0; i < n; i++)
         {
             var v = _ordered[i].Position - position;
             keys[i] = (SectorKey(v, basis, _ordered[i].SortsFirst), v.LengthSquared(), i);
         }
 
-        var byKey = new TargetRef[n];
         for (int i = 0; i < n; i++)
         {
             byKey[i] = _ordered[i];
         }
 
-        // Sector first, then nearest inside it. The third key is the pre-sort index: a total order
-        // keeps a tie (two parts of one zeppelin at the same range) from reordering between frames
-        // and walking the cycle under the pilot.
-        System.Array.Sort(keys, byKey, Comparer<(int Sector, float DistSq, int Index)>.Create(
-            (x, y) => x.Sector != y.Sector ? x.Sector.CompareTo(y.Sector)
-                : x.DistSq != y.DistSq ? x.DistSq.CompareTo(y.DistSq)
-                : x.Index.CompareTo(y.Index)));
+        System.Array.Sort(keys, byKey, 0, n, SortOrder);
         _ordered.Clear();
         for (int i = 0; i < n; i++)
         {
             _ordered.Add(byKey[i]);
         }
+
+        // The scratch copies must not keep a freed source reachable until a longer cycle reuses them.
+        System.Array.Clear(byKey, 0, n);
     }
 }

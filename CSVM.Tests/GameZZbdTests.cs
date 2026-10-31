@@ -119,6 +119,34 @@ public class GameZZbdTests
     }
 
     [Fact]
+    public void EveryTruncationIsRefusedAsInvalidData()
+    {
+        var data = TinyArchive();
+        for (int n = 0; n < data.Length; n++)
+        {
+            Assert.Throws<InvalidDataException>(() => GameZZbd.Read(data[..n]));
+        }
+    }
+
+    [Fact]
+    public void AModelArrayLargerThanTheFileIsRefusedBeforeItAllocates()
+    {
+        var data = TinyArchive();
+        int models = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(24));
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(models), int.MaxValue);
+        Assert.Contains("model counts", Assert.Throws<InvalidDataException>(() => GameZZbd.Read(data)).Message);
+    }
+
+    [Fact]
+    public void AnUnknownSoilIsRefusedAsInvalidData()
+    {
+        var data = TinyArchive();
+        int materials = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(20));
+        BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(materials + 16 + 32), 2);
+        Assert.Contains("soil id 2", Assert.Throws<InvalidDataException>(() => GameZZbd.Read(data)).Message);
+    }
+
+    [Fact]
     public void NoSourceReadsAsNoModel()
     {
         Assert.Null(GameZZbd.Load(null, "ZBD/C1/gamez.zbd"));

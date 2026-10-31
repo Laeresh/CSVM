@@ -34,7 +34,9 @@ public static class AnimZbd
     {
         var r = new AnimBytes(data, 0);
         Expect(data.Length >= 16 && r.U32(0) == Signature && r.U32(4) == Version, "header", 0);
-        int pos = 16 + (r.I32(8) * 132) + (r.I32(12) * 84);
+        long infoAt = 16 + (r.I32(8) * 132L) + (r.I32(12) * 84L);
+        Expect(infoAt >= 16 && infoAt + InfoSize + DefSize <= data.Length, "header counts", 8);
+        int pos = (int)infoAt;
         var info = new AnimBytes(data, pos);
         int defCount = info.U16(10), scriptCount = info.I32(16);
         Expect(defCount > 0 && scriptCount >= 0, "anim info", pos);
@@ -77,7 +79,9 @@ public static class AnimZbd
         Expect(activation < Activations.Length, "activation", d.At + 161);
 
         var names = new AnimZbdNames();
-        pos += d.I32(36) * 36; // the compiled NAME1 node path, which the model does not read
+        int pathLength = d.I32(36);
+        Expect(pathLength >= 0 && pathLength <= (data.Length - pos) / 36, "node path", d.At + 36);
+        pos += pathLength * 36; // the compiled NAME1 node path, which the model does not read
         var objects = Refs(data, ref pos, d.U8(217), 92, 0, 36, null);
         var nodes = Refs(data, ref pos, d.U8(218), 44, 4, 40, names.Nodes, numberRepeats: true);
         Refs(data, ref pos, d.U8(219), 44, 0, 36, names.Lights);
@@ -86,6 +90,7 @@ public static class AnimZbd
         Refs(data, ref pos, d.U8(222), 40, 0, -1, names.StaticSounds);
         var prereqs = Prereqs(data, ref pos, d.U8(224));
         pos += d.U8(226) * 72; // the anim refs, which events name only by their index
+        Expect(pos <= data.Length, "anim refs", pos);
         List<object?>? scriptIds = null;
         if (d.U8(227) > 0)
         {
@@ -192,6 +197,7 @@ public static class AnimZbd
         Expect(pos + SequenceHeaderSize <= data.Length, "sequence", pos);
         var h = new AnimBytes(data, pos);
         int size = h.I32(60);
+        Expect(size >= 0 && size <= data.Length - pos - SequenceHeaderSize, "sequence length", pos + 60);
         var events = AnimZbdEvents.Read(data, pos + SequenceHeaderSize, size, names);
         pos += SequenceHeaderSize + size;
         return named ? Bag(("name", h.Name(0, 32)), ("seq_state", h.U8(32) == 3 ? "OnCall" : "Initial"), ("events", events)) : Bag(("events", events));
@@ -200,7 +206,7 @@ public static class AnimZbd
     private static List<(string Name, SiScript Script)> ReadScripts(byte[] data, ref int pos, int count)
     {
         int headers = pos;
-        Expect(pos + (count * ScriptHeaderSize) <= data.Length, "script headers", pos);
+        Expect(count >= 0 && pos + ((long)count * ScriptHeaderSize) <= data.Length, "script headers", pos);
         pos += count * ScriptHeaderSize;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var scripts = new List<(string, SiScript)>(count);
@@ -208,7 +214,9 @@ public static class AnimZbd
         {
             var h = new AnimBytes(data, headers + (i * ScriptHeaderSize));
             int nameLength = h.U8(8), objectLength = h.U8(9), frameCount = h.I32(16), length = h.I32(20);
-            Expect(pos + nameLength + objectLength + length <= data.Length, "script", pos);
+            // Every frame is at least its 12-byte {flags, start, end}.
+            Expect(length >= 0 && (long)pos + nameLength + objectLength + length <= data.Length
+                   && frameCount >= 0 && frameCount <= length / 12, "script", pos);
             string scriptName = new AnimBytes(data, pos).Name(0, nameLength);
             string objectName = new AnimBytes(data, pos + nameLength).Name(0, objectLength);
             pos += nameLength + objectLength;

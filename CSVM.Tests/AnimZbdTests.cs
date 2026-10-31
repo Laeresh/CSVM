@@ -127,6 +127,25 @@ public class AnimZbdTests
     }
 
     [Fact]
+    public void EveryTruncationIsRefusedAsInvalidData()
+    {
+        var data = TinyArchive();
+        for (int n = 0; n < data.Length; n++)
+        {
+            Assert.Throws<InvalidDataException>(() => AnimZbd.Read(data[..n], "T"));
+        }
+    }
+
+    [Fact]
+    public void AFrameCountPastTheScriptIsRefusedBeforeItAllocates()
+    {
+        var data = TinyArchive();
+        int header = new ReadOnlySpan<byte>(data).IndexOf(new byte[] { 1, 0, 0, 0, 1, 0, 0, 0, 16, 6, 0, 0 }); // the script header
+        BitConverter.GetBytes(int.MaxValue).CopyTo(data, header + 16);
+        Assert.Contains("bad script", Assert.Throws<InvalidDataException>(() => AnimZbd.Read(data, "T")).Message);
+    }
+
+    [Fact]
     public void NoSourceReadsAsNoArchive()
     {
         Assert.Null(AnimZbd.Load(null, "ZBD/C1/cam_anim.zbd", "C1/cam_anim"));

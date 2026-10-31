@@ -122,7 +122,7 @@ public sealed class TargetPool
     /// for hull, turret and structure alike, with no second name-of-source switch.</summary>
     internal static string NameOf(object? source) => source switch
     {
-        FlightController fc => fc.Name,
+        FlightController fc => fc.NodeName,
         SurfaceVehicle hull => hull.Name,
         ObjectiveSite site => site.Node,
         StuntZone zone => zone.DzName,

@@ -414,6 +414,7 @@ public sealed class FlightRoster
         RepointHolders(outgoing, replacement);
         // The respawn rule is the seat's, not the airframe's: the mode and wire set it once.
         replacement.Rule = outgoing.Rule;
+        CarrySeatSwitches(outgoing, replacement);
         var hidden = AirframeHandover.CarriesCapturedDamage(order.Airframe)
             ? CarryCapturedDamage(captured, rig.Controller?.Damage)
             : null;
@@ -428,6 +429,20 @@ public sealed class FlightRoster
         }
 
         return new AirframeSwapResult(true, hidden);
+    }
+
+    // The Game Options switches the pause menu writes onto the live seat. The rebuild reads the
+    // launch policy, so without this a swap would undo a mid-mission change.
+    private static void CarrySeatSwitches(FlightController outgoing, FlightController replacement)
+    {
+        replacement.LeadingAimAssist = outgoing.LeadingAimAssist;
+        replacement.LeadMarker = outgoing.LeadMarker;
+        replacement.AutoHeadTurn = outgoing.AutoHeadTurn;
+        replacement.PilotHud.SetThrottlePlateShown(outgoing.PilotHud.ThrottlePlateShown);
+        if (outgoing.Targeting is { } was && replacement.Targeting is { } now)
+        {
+            now.NearestAfterKill = was.NearestAfterKill;
+        }
     }
 
     // Code 967's other half: the aircraft the capture animation belongs to goes out of the world,
