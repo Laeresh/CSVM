@@ -202,7 +202,7 @@ public static class EnhancedLook
     {
         if (!WriteClutterFadeScale())
             return;
-        session?.FollowClutterFade();
+        session?.Vegetation?.Follow();
         LogViewDistance();
     }
 
@@ -213,7 +213,7 @@ public static class EnhancedLook
     {
         bool moved = WriteClutterFadeScale();
         // One clutter follow reads the fade and every vegetation word, so the session follows once.
-        session?.FollowClutterFade();
+        session?.Vegetation?.Follow();
         if (moved)
             LogViewDistance();
         ApplyWaterQuality(session);
@@ -225,7 +225,7 @@ public static class EnhancedLook
     /// drawn again with no rebuild: its near models on or off, their cells ranged at the word's band.</summary>
     public static void ApplyVegetationModels(GameSession? session)
     {
-        session?.FollowClutterFade();
+        session?.Vegetation?.Follow();
         LogVegetationModels();
     }
 
@@ -235,7 +235,7 @@ public static class EnhancedLook
     /// recuts it under the word standing then.</summary>
     public static void ApplyVegetationQuality(GameSession? session)
     {
-        session?.FollowVegetationQuality();
+        session?.Vegetation?.Follow();
         LogVegetationQuality();
     }
 
@@ -244,8 +244,8 @@ public static class EnhancedLook
     /// nothing, and a later switch to Enhanced builds what the word asks for.</summary>
     public static void ApplyWaterQuality(GameSession? session)
     {
-        session?.FollowWaterQuality();
-        Log.Info("world", $"water quality: {WaterQualitySetting.Word} (applied live, ocean {(session?.OceanBuilt == true ? "built" : "not built")})");
+        session?.Ocean?.Follow();
+        Log.Info("world", $"water quality: {WaterQualitySetting.Word} (applied live, ocean {(session?.Ocean?.Built == true ? "built" : "not built")})");
     }
 
     /// <summary>A texture's alpha depth on the running world. The archive uploads its alpha-plane

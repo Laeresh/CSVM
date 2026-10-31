@@ -60,7 +60,7 @@ level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) s
 which no pane draws while their hull holds a wake slot on the sim clock. Owns up to 16 ship slots, nearest the eye first: a calm zone over each
 waterline (`OceanCalmZone.cs`, `OceanMovers.cs`) and the track its wake rides (`OceanWakeTrack.cs`). The shader text is
 `OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; `Apply` takes a new sea live, recompiling only on
-a text change. `GameSession.FollowOcean` builds and drops it; `--debug-wake` sails a wake ship on an arc.
+a text change. `Launch/OceanStage.cs` builds and drops it; `--debug-wake` sails a wake ship on an arc.
 
 ## src/Effects/OceanSeas.cs
 The shipped per-chapter seas, `CSVM/data/ocean_seas.json`, read through `res://` at each sea chapter's build: one
