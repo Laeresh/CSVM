@@ -1006,7 +1006,7 @@ in through it: the three reader scopes, the two compiled anim archives, the shar
 emitter factory a suite substitutes and the archive factory that builds the real one, the clutter debug switches, the
 sound-group prewarm names, the callback and trigger hosts, and `CutsceneNames` (the session's
 camera, bars and intro names), whose presence gates `camera1`, the letterbox bars, the composition
-frames and the `AircraftStage`. It stands up the staged props a definition reparents onto placed content, and `ResolveLibraryRoot` is the lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
+frames and the `AircraftStage`. It stands up the staged props a definition reparents onto placed content and the library roots one seats in the flown cockpit (`apassengers`, which `ResolveLibraryRoot` then hands every caller), and `ResolveLibraryRoot` is the lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
 
 ## src/Mech3/PufferState.cs
 One decoded `PUFFER_STATE` block: emission mode and cadence, velocity, size, lifetime, the texture
@@ -1027,7 +1027,7 @@ the bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s para
 `balmoral`, and the `FigureNodes`/`PropNodes` groups. Each node's shipped active state and the
 holder it hangs under are on its own member, which decide whether it draws in a mission that never
 names it. All carry a rebased gamez index (`PointerBaseOf`) a compiled cross-archive symbol table
-binds; `StageFlown` puts the one flown airframe in the node table and parks its hook, taking the airframe it replaces back out so a second human's aeroplane cannot answer for the first's name. A skinned subtree gets its own
+binds; `StageFlown` puts the one flown airframe in the node table, with the cockpit interior the cockpit pass lifted out of it, and parks its hook, taking the airframe it replaces back out so a second human's aeroplane cannot answer for the first's name. A skinned subtree gets its own
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
