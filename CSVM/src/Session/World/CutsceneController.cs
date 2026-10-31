@@ -1201,7 +1201,7 @@ public sealed partial class CutsceneController : Node
     {
         if (_runtime is { } runtime && _aircraft is { } aircraft && EpisodeOwner is { } owner)
         {
-            aircraft.StageFlown(runtime, owner.Controller?.PlaneModel);
+            aircraft.StageFlown(runtime, owner.Controller?.PlaneModel, owner.Controller?.Dressing.Interior);
         }
     }
 

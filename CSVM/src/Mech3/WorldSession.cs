@@ -318,9 +318,10 @@ public sealed class WorldSession
 
         // Not gated on cutscenes: a staged prop is ordinary mission content, and its definitions run
         // out of the mission's startanims in every mode that builds the whole world.
+        var seated = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
         if (o.NodeSubtree == null)
         {
-            BuildStagedProps(root, gamez, builder, animProgram);
+            BuildStagedProps(root, gamez, builder, animProgram, o.PlanesGamez, seated);
         }
 
         // ⚠ Every cutscene, not an intro alone: a mid-mission definition poses the flown aeroplane
@@ -352,6 +353,10 @@ public sealed class WorldSession
             var stagedChute = s.Aircraft?.Chuteman;
             animRuntime.ResolveLibraryRoot = (name, callAnchor, callSite) =>
             {
+                // A seated root is one instance every caller shares, as in the original's world.
+                // CM11's ranged add_pick names no operand and must still seat those cards.
+                if (seated.TryGetValue(name, out var seat))
+                    return seat;
                 bool fromStage = stagedChute != null
                     && string.Equals(name, AircraftStage.ChuteNode, StringComparison.OrdinalIgnoreCase);
                 // ⚠ A caller naming no site asks for the actor where it stands, and this figure's
@@ -587,37 +592,51 @@ public sealed class WorldSession
         }
     }
 
-    // The staged props this program hangs onto placed world content: an unplaced, model-bearing
-    // gamez root that ships switched off, named as an OBJECT_ADD_CHILD child. CM19's launch hook is
-    // the case: three place definitions park a display aeroplane on the hook's `bmhookpoint` at
-    // NEW_GAME_START and the launch definition switches one on for its ride down, so a world with no
-    // such node flies an empty hook (docs/formats/mission-entities/enemy-generators.md).
+    // The OBJECT_ADD_CHILD children a world must hold before any definition reparents them. A staged
+    // prop ships off and lands on placed content, CM19's launch-hook aeroplane
+    // (docs/formats/mission-entities/enemy-generators.md). A seated root lands on the flown
+    // aircraft's interior: `apassengers` on `pass_st` (docs/org/cameraViews.md, "The passenger seat").
     private static void BuildStagedProps(Node3D root, GameZ gamez, WorldBuilder builder,
-        AnimProgram program)
+        AnimProgram program, GameZ? planesGamez, Dictionary<string, Node3D> seated)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Node3D? seats = null;
         foreach (var def in program.Defs)
         {
             foreach (var sequence in Blocks(def))
             {
                 foreach (var ev in sequence.Events)
                 {
-                    // The parent must be placed: a prop whose host is itself off the world walk has
-                    // nowhere to land, and building it would only add a hidden node.
                     if (!string.Equals(ev.Kind, "ObjectAddChild", StringComparison.Ordinal)
                         || ev.Data.Str("child") is not { } child
                         || ev.Data.Str("parent") is not { } parent
-                        || gamez.FindByName(child) is not { } node
-                        || !gamez.IsStagedProp(node)
-                        || gamez.FindByName(parent) is not { } host
-                        || !gamez.IsPlaced(host)
-                        || !seen.Add(child))
+                        || gamez.FindByName(child) is not { } node)
                     {
                         continue;
                     }
 
-                    if (builder.Scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
+                    // A prop's host must be placed, or the prop has nowhere to land.
+                    var host = gamez.FindByName(parent);
+                    bool prop = gamez.IsStagedProp(node) && host != null && gamez.IsPlaced(host);
+                    bool seat = !prop && host == null && gamez.IsLibraryRoot(node)
+                        && InCockpit(planesGamez, parent);
+                    if (!(prop || seat) || !seen.Add(child)
+                        || builder.Scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
                     {
+                        continue;
+                    }
+
+                    if (seat)
+                    {
+                        // ⚠ Shipped state, under a switched-off holder like AircraftStage's figures.
+                        // The bind's RESET_STATE hides the cards; the seating reparent draws one.
+                        seats ??= new Node3D { Name = "cockpit_seated", Visible = false };
+                        if (seats.GetParent() == null)
+                            root.AddChild(seats);
+                        built.Transform = Transform3D.Identity;
+                        seats.AddChild(built);
+                        seated[node.Name] = built;
+                        Log.Info("anim", $"anim: library root '{node.Name}' (gamez {node.Index}) staged for a seat on the flown aircraft's '{parent}'");
                         continue;
                     }
 
@@ -626,10 +645,22 @@ public sealed class WorldSession
                     // its authored rest hangs an aeroplane at the map origin until then.
                     AnimRuntime.SetSubtreeActive(built, false);
                     root.AddChild(built);
-                    Log.Info("anim", $"anim: staged prop '{node.Name}' (gamez {node.Index}) stood up for a reparent onto '{host.Name}'");
+                    Log.Info("anim", $"anim: staged prop '{node.Name}' (gamez {node.Index}) stood up for a reparent onto '{host!.Name}'");
                 }
             }
         }
+    }
+
+    // Whether the aircraft archive's first node of this name sits inside a `cockpit1` interior,
+    // which only the flown aircraft's own answers to (AircraftStage.StageFlown).
+    private static bool InCockpit(GameZ? planesGamez, string name)
+    {
+        for (var at = planesGamez?.FindByName(name); at != null; at = planesGamez!.ParentOf(at))
+        {
+            if (at.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     private static IEnumerable<AnimSequence> Blocks(AnimDefinition def)
