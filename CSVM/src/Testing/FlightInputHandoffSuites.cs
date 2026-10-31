@@ -137,7 +137,7 @@ internal static class FlightInputHandoffSuites
                 $"{ctx.PlaneName} spawns flying on a full tank ({tank:0.#} units), which a respawn tops up");
 
             // Pinned, the way a campaign mission, Instant Action and a Dogfight pin it.
-            pilot.AllowLiveRespawn = false;
+            pilot.Rule = pilot.Rule with { LiveRespawn = false };
             BurnHalf(pilot);
             float burned = pilot.Fuel.Remaining;
             pilot.HoldActionForTest(InputAction.Respawn, true);
@@ -146,14 +146,14 @@ internal static class FlightInputHandoffSuites
                 $"held on a living aeroplane the pin refuses it: still flying on {pilot.Fuel.Remaining:0.#} of {tank:0.#} units, no top-up off the {burned:0.#} it had");
 
             // The control: the same hold on the same rig, unpinned.
-            pilot.AllowLiveRespawn = true;
+            pilot.Rule = pilot.Rule with { LiveRespawn = true };
             pilot.HoldActionForTest(InputAction.Respawn, true);
             pilot.SimStep(StepDt);
             ctx.Check(pilot.Fuel.Remaining > tank * 0.9f,
                 $"ABLE-TO-FAIL CONTROL: unpinned, the same hold respawns and fills the tank ({pilot.Fuel.Remaining:0.#} of {tank:0.#} units)");
 
             // And the crashed read, which the pin does not touch: it is the crash camera's skip.
-            pilot.AllowLiveRespawn = false;
+            pilot.Rule = pilot.Rule with { LiveRespawn = false };
             BurnHalf(pilot);
             pilot.HoldActionForTest(InputAction.Respawn, false);
             pilot.DebugForceCrash();
@@ -269,7 +269,7 @@ internal static class FlightInputHandoffSuites
                 $"a hold from a crash restarts once at the start: zones {run.CompletedCount}, clock {StuntMission.FormatTime(run.Elapsed)}, {pilot.WorldPosition.DistanceTo(start):0.0} m from the start");
 
             // Pinned as Instant Action pins it: neither press is taken in flight.
-            pilot.AllowLiveRespawn = false;
+            pilot.Rule = pilot.Rule with { LiveRespawn = false };
             ClearZone(run, run.Zones[1]);
             exit = run.ReturnPose()!.Value;
             respawns = pilot.RespawnCount;

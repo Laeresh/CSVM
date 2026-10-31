@@ -177,7 +177,7 @@ internal static class NetZvzBotSuites
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.AutoRespawnAfter = QuickRespawn;
+                pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
             }
         }
 

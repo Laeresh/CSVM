@@ -657,10 +657,7 @@ public sealed class InstantActionDirector
             // G14's "Shot %": the decode's "the local player" filter, generalised to every
             // human seat for splitscreen (ProjectilePool.ScoredShooters).
             inputs.Projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
-            pilot.AutoRespawnAfter = inputs.RespawnDelay; // crash cam, then back in, R skips
-            // Lives make R the crash cam's skip alone; a live respawn would repair, restock and
-            // refuel for free. A race's pilot restarts at will instead, the time attack's rule.
-            pilot.AllowLiveRespawn = inputs.Race != null;
+            pilot.Rule = RespawnRule.InstantAction(inputs.RespawnDelay, race: inputs.Race != null);
             pilot.Downed += (victim, _) =>
             {
                 // ⚠ Ahead of the ledger: the ending settled the result, so a hull lost inside the

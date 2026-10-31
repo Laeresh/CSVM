@@ -90,7 +90,9 @@ internal static class CrashRespawnSuites
                     $"[{cell}] two panes and no roster ({session.NetSeats.Count} seat(s), {session.Rigs.Count} pane(s))");
                 Settle(peers, pane, other);
                 Pressed(ctx, cell, peers, pane, () => Dive(pane, pane.WorldPosition, out _));
-                ctx.Check(!other.AllowLiveRespawn, $"[{cell}] the match pins the second pane's in-flight respawn off too ({other.AllowLiveRespawn})");
+                ctx.Check(Terms(other) == RespawnRule.Versus(VersusDirector.RespawnDelay, isBot: false, panes.VsAutoRespawn)
+                          && other.Rule.Placement is ReturnPlacement.Rotation,
+                    $"[{cell}] the second pane carries the match's rule, placed by this machine's rotation ({other.Rule})");
                 Settle(peers, pane, other);
                 InFlightPinned(ctx, cell, peers, pane);
             });
@@ -142,8 +144,9 @@ internal static class CrashRespawnSuites
             var hostPane = host.Session.SeatRigs[PaneSeat].Controller!;
             var guestPane = guest.Session.SeatRigs[GuestSeat].Controller!;
             var guestCopy = host.Session.SeatRigs[GuestSeat].Controller!;
-            ctx.Check(hostPane.RespawnRequest != null && guestPane.RespawnRequest != null,
-                $"both panes ask for their return over the wire (host asks {hostPane.RespawnRequest != null}, guest asks {guestPane.RespawnRequest != null})");
+            var wired = RespawnRule.Versus(VersusDirector.RespawnDelay, isBot: false, spec.VsAutoRespawn).OnTheWire(race: false);
+            ctx.Check(new[] { hostPane, guestPane }.All(p => Terms(p) == wired && p.Rule.Placement is ReturnPlacement.AskHost),
+                $"both panes carry the wired match's rule, asking the host for their return (host {hostPane.Rule}, guest {guestPane.Rule})");
             if (host.Session.SeatRigs[NetBotSeat].Controller?.Pilot?.Gunner is { } gunner)
             {
                 gunner.AutoTarget = false;
@@ -168,17 +171,15 @@ internal static class CrashRespawnSuites
                 $"[guest pane] placed from the host's grant, which places its copy of the guest once too ({guest.Session.Dogfight.SpawnsTaken - grantsBefore} grant(s) taken, {guestCopy.RespawnCount - copyBefore} placement(s) of the copy)");
 
             // In flight the control places nothing on a wire, on either machine's own pane.
-            ctx.Check(!hostPane.AllowLiveRespawn && !guestPane.AllowLiveRespawn,
-                $"the wire pins both panes' in-flight respawn off (host {hostPane.AllowLiveRespawn}, guest {guestPane.AllowLiveRespawn})");
             Settle(peers, hostPane, guestPane);
             InFlight(ctx, "host pane in flight", peers, hostPane, expected: 0);
             InFlight(ctx, "guest pane in flight", peers, guestPane, expected: 0);
 
             // ABLE-TO-FAIL CONTROL. The same press with the pin lifted respawns the host's pane. The
             // two readings above are then the pin's, not a press that never reached the seat.
-            hostPane.AllowLiveRespawn = true;
+            hostPane.Rule = hostPane.Rule with { LiveRespawn = true };
             InFlight(ctx, "ABLE-TO-FAIL CONTROL: host pane, pin lifted", peers, hostPane, expected: 1);
-            hostPane.AllowLiveRespawn = false;
+            hostPane.Rule = hostPane.Rule with { LiveRespawn = false };
         }
         finally
         {
@@ -196,8 +197,8 @@ internal static class CrashRespawnSuites
         var peers = new[] { session };
         var pane = session.SeatRigs[PaneSeat].Controller!;
         var bot = session.SeatRigs[BotSeat].Controller!;
-        ctx.Check(pane.RespawnRequest == null && pane.RespawnPlacement != null,
-            $"[{cell}] the pane's return is placed by this machine's rotation");
+        ctx.Check(pane.Rule.Placement is ReturnPlacement.Rotation,
+            $"[{cell}] the pane's return is placed by this machine's rotation ({pane.Rule.Placement})");
         if (bot.Pilot?.Gunner is { } gunner)
         {
             gunner.AutoTarget = false;
@@ -271,11 +272,11 @@ internal static class CrashRespawnSuites
     // with the pin lifted places it once, so the zero is the pin's and not a press never read.
     private static void InFlightPinned(TestContext ctx, string cell, GameSession[] peers, FlightController pane)
     {
-        ctx.Check(!pane.AllowLiveRespawn, $"[{cell}] the match pins the pane's in-flight respawn off ({pane.AllowLiveRespawn})");
+        ctx.Check(!pane.Rule.LiveRespawn, $"[{cell}] the match's rule refuses the pane's in-flight respawn ({pane.Rule})");
         InFlight(ctx, $"{cell}, in flight", peers, pane, expected: 0);
-        pane.AllowLiveRespawn = true;
+        pane.Rule = pane.Rule with { LiveRespawn = true };
         InFlight(ctx, $"ABLE-TO-FAIL CONTROL: {cell}, pin lifted", peers, pane, expected: 1);
-        pane.AllowLiveRespawn = false;
+        pane.Rule = pane.Rule with { LiveRespawn = false };
     }
 
     // A local session of a mode that is not a Dogfight: every pane keeps its in-flight respawn.
@@ -285,10 +286,13 @@ internal static class CrashRespawnSuites
         {
             ctx.Check(session.Rigs.Count == 2 && isMode(session),
                 $"[{cell}] two panes in the mode ({session.Rigs.Count} pane(s), dogfight {session.Dogfight != null})");
-            ctx.Check(session.Rigs.All(r => r.Controller is { AllowLiveRespawn: true }),
-                $"[{cell}] every pane's in-flight respawn stays live ({string.Join(", ", session.Rigs.Select(r => r.Controller?.AllowLiveRespawn.ToString() ?? "-"))})");
+            ctx.Check(session.Rigs.All(r => r.Controller is { Rule.LiveRespawn: true }),
+                $"[{cell}] every pane's in-flight respawn stays live ({string.Join(", ", session.Rigs.Select(r => r.Controller?.Rule.ToString() ?? "-"))})");
         });
     }
+
+    // A seat's rule with its placement left out, since a placement's delegate compares by reference.
+    private static RespawnRule Terms(FlightController pilot) => pilot.Rule with { Placement = ReturnPlacement.Spawn };
 
     // The respawn control held over steps of level flight. It places the aeroplane `expected` times.
     private static void InFlight(TestContext ctx, string cell, GameSession[] peers, FlightController plane, int expected)

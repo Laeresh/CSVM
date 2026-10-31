@@ -802,6 +802,13 @@ internal static class AirframeSwapSuites
     private static void CheckOtherCodesDropIt(TestContext ctx, FlightRoster roster, PlayerRig rig,
         StringBuilder report)
     {
+        // The respawn rule is the seat's, so every rebuild carries it, a hand-over or not.
+        var rule = RespawnRule.Campaign with { AutoRespawnAfter = 2f };
+        if (rig.Controller is { } first)
+        {
+            first.Rule = rule;
+        }
+
         foreach (int code in OtherSwapCodes)
         {
             if (AirframeSwapCodes.For(code) is not { } airframe)
@@ -815,6 +822,7 @@ internal static class AirframeSwapSuites
             report.AppendLine($"code {code}: {(rebuilt == null ? "no rebuild" : DescribeFit(rebuilt))}");
             ctx.Check(rebuilt != null && Carries(rebuilt, HandedPylon, HandedAmmo),
                 $"code {code}'s rebuild onto '{airframe.PlaneNode}' carries '{HandedPylon}' on every pylon and '{HandedAmmo}' in every gun, its own case's table rather than the sortie's picks");
+            ctx.Check(rebuilt?.Rule == rule, $"code {code}'s rebuild carries the seat's respawn rule ({rebuilt?.Rule})");
         }
     }
 

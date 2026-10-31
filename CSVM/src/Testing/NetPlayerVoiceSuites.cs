@@ -131,7 +131,7 @@ internal static class NetPlayerVoiceSuites
             {
                 if (rig.Controller is { } pilot)
                 {
-                    pilot.AutoRespawnAfter = QuickRespawn;
+                    pilot.Rule = pilot.Rule with { AutoRespawnAfter = QuickRespawn };
                 }
             }
 

@@ -205,6 +205,7 @@ rows).
 - `src/Flight/Airframe/AircraftContactResolver.cs`, the decoded contact rules for one aircraft: the damage pair, the fate and the un-embed loop, holding no node.
 - `src/Flight/Airframe/AircraftContactSweep.cs`, contact detection for one aircraft: the hull sweep, the AI probe rays and the centre ray, each into one `ContactReport`.
 - `src/Flight/Airframe/AircraftLifecycle.cs`, the states one aircraft moves between and the spawn timers; every transition reports what the node must then perform.
+- `src/Flight/Airframe/RespawnRule.cs`, a seat's respawn rule: the mode's named choice, which the wire may only tighten and a swap carries.
 - `src/Flight/Airframe/PlaneDamage.cs`, the decoded damage ledger: per-part pools plus the whole-vehicle pair, the armour-first take-hit flow, and the kill rule.
 - `src/Flight/Airframe/DamageVisuals.cs`, flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/Airframe/CraterGate.cs`, whether a round's ground strike asks for a crater: the original's `CAN_MODIFY` rule and the remake's carve option, as one `CraterAsk`.

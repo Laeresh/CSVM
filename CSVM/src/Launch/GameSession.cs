@@ -2336,9 +2336,6 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
-        // No Dogfight seat and no network seat but a stunt racer's takes the respawn control in
-        // flight. After WireCombat, which hands the wire the match; every seat stands now.
-        _wire.WireLiveRespawn();
         AttachScores(race, weaponMessages);
 
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
@@ -2508,6 +2505,8 @@ public partial class GameSession : Node3D
             BuildWrapupBoard = boards.BuildIaWrapupBoard,
             WrapupToMenu = LandsInMenu ? _instantActionWrapup : null,
         });
+        // The wire tightens every seat's respawn rule, after the last director that sets one at build.
+        _wire.WireLiveRespawn();
 
         // World AA emplacements, after the zeppelins and the Instant Action turret arm above.
         _turretEmplacements = opposition.PlaceEmplacements(state, turretDefs, weaponDefs, projectiles,

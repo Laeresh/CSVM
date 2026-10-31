@@ -152,8 +152,8 @@ internal static class NetStuntRaceSuites
             // Each seat's copy on the other machine.
             var copies = new[] { s.Peers[1].SeatRigs[0].Controller!, s.Peers[0].SeatRigs[1].Controller! };
             var names = new[] { "host", "guest" };
-            ctx.Check(seats.All(p => p.AllowLiveRespawn && p.RespawnRequest == null),
-                $"[{cell}] the wire leaves both race seats' in-flight respawn live, asked of nobody ({string.Join(", ", seats.Select(p => $"{p.AllowLiveRespawn}/{p.RespawnRequest != null}"))})");
+            ctx.Check(seats.All(p => p.Rule == RespawnRule.FreeFlight),
+                $"[{cell}] the wire leaves both race seats on the free-flight rule, in-flight respawn live and asked of nobody ({string.Join(", ", seats.Select(p => p.Rule.ToString()))})");
 
             Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
             Steps(s.Peers, 30);

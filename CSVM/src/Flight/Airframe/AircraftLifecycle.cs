@@ -78,7 +78,7 @@ public readonly record struct DestroyOutcome
 public sealed class AircraftLifecycle
 {
     /// <summary>Seconds a crash sits on the crash cam before an unattended run respawns itself, and
-    /// the fallback for a session that armed <see cref="AutoRespawnAfter"/> with nothing.</summary>
+    /// the fallback for a rule with no timer.</summary>
     public const float AutoRespawnDelay = 1.5f;
 
     /// <summary>Seconds after a carrier drop that an AI's ground-blow response runs at the 0.15
@@ -102,19 +102,13 @@ public sealed class AircraftLifecycle
     /// The prefix names the family, so a suite can pin which one fired.</summary>
     public string? LastCrashDef { get; private set; }
 
-    /// <summary>Seconds a crash waits before respawning itself, or null for manual respawn only.
-    /// The session arms it per rig; a scripted run respawns on <see cref="AutoRespawnDelay"/>
-    /// regardless.</summary>
-    public float? AutoRespawnAfter { get; set; }
+    /// <summary>This seat's respawn rule, set by the session's mode and wire. A scripted run respawns
+    /// on <see cref="AutoRespawnDelay"/> whatever it says.</summary>
+    public RespawnRule Rule { get; set; } = RespawnRule.FreeFlight;
 
-    /// <summary>How long a crash holds the crash camera: <see cref="AutoRespawnAfter"/>, else
+    /// <summary>How long a crash holds the crash camera: the rule's timer, else
     /// <see cref="AutoRespawnDelay"/>.</summary>
-    public float CrashCameraSeconds => AutoRespawnAfter ?? AutoRespawnDelay;
-
-    /// <summary>Whether a crash waits for the pilot's Fire Guns press once
-    /// <see cref="AutoRespawnAfter"/> has run. It is the lobby's Auto Respawn turned off
-    /// (docs/org/multiplayer-scoring.md).</summary>
-    public bool RespawnOnFire { get; set; }
+    public float CrashCameraSeconds => Rule.AutoRespawnAfter ?? AutoRespawnDelay;
 
     /// <summary>Frozen at the impact point, waiting for a respawn.</summary>
     public bool Crashed => _crashed;
@@ -174,16 +168,16 @@ public sealed class AircraftLifecycle
     /// <summary>Drains the crash's respawn timer by one step and answers whether it is due. An
     /// unattended run respawns with no session timer armed, which is what
     /// <paramref name="scriptedRun"/> says. A run with neither never counts down at all. Under
-    /// <see cref="RespawnOnFire"/> a run-down timer waits on <paramref name="firePressed"/>. That
-    /// press is read only once the timer has run down.</summary>
+    /// the rule's <see cref="RespawnRule.WaitsOnFire"/> a run-down timer waits on
+    /// <paramref name="firePressed"/>. That press is read only once the timer has run down.</summary>
     public bool TickAutoRespawn(float dt, bool scriptedRun, Func<bool>? firePressed = null)
     {
-        if (!scriptedRun && AutoRespawnAfter == null)
+        if (!scriptedRun && Rule.AutoRespawnAfter == null)
             return false;
         _autoRespawnIn -= dt;
         if (_autoRespawnIn > 0f)
             return false;
-        return scriptedRun || !RespawnOnFire || firePressed?.Invoke() == true;
+        return scriptedRun || !Rule.WaitsOnFire || firePressed?.Invoke() == true;
     }
 
     /// <summary>The DEATH transition: whole-vehicle health has reached zero.
