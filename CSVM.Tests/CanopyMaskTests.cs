@@ -90,7 +90,7 @@ public sealed class CanopyMaskTests
     }
 
     /// <summary>A painted bake keeps its surface. A point on it reads the slope's own height between the samples,
-    /// and whether its nearest sample is painted. A stamp bake has no surface, so it reads the cell's ground.</summary>
+    /// and whether a painted triangle lies under it. A stamp bake has no surface, so it reads the cell's ground.</summary>
     [Fact]
     public void APaintedBakeReadsItsSurfaceBetweenItsSamples()
     {
