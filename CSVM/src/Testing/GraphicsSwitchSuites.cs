@@ -1222,8 +1222,7 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-terrain-shadow",
         "an Enhanced C3 build bakes the terrain's sun shadow over the ocean mask's grid and publishes it: "
         + "the waterline texel under the cliff at (-6860, 0, -5756) reads shaded through the published "
-        + "texture, an open-sea texel reads lit and so does a swell trough 3 m under it, since the sea receives "
-        + "the shadow and never casts it; switched to Original the globals hold their lit defaults")]
+        + "texture and an open-sea texel reads lit; switched to Original the globals hold their lit defaults")]
     internal static void TerrainShadowBakes(TestContext ctx)
     {
         RequireData(ctx, TerrainShadowChapter);
@@ -1241,11 +1240,9 @@ internal static class GraphicsSwitchSuites
                     return;
                 float cliff = bake.SunAt(new Vector3(-6860f, 0f, -5756f));
                 float sea = bake.SunAt(new Vector3(-12000f, 0f, -3000f));
-                float trough = bake.SunAt(new Vector3(-12000f, -3f, -3000f));
-                ctx.Note($"sun share at the cliff's waterline {cliff:0.###}, on the open sea {sea:0.###}, in a 3 m trough {trough:0.###}; rect origin ({bake.Origin.X:0},{bake.Origin.Y:0}) size {bake.Size.X:0}x{bake.Size.Y:0}");
+                ctx.Note($"sun share at the cliff's waterline {cliff:0.###}, on the open sea {sea:0.###}; rect origin ({bake.Origin.X:0},{bake.Origin.Y:0}) size {bake.Size.X:0}x{bake.Size.Y:0}");
                 ctx.Check(cliff < 0.05f, $"the waterline texel under the cliff reads shaded ({cliff:0.###})");
                 ctx.Check(sea > 0.99f, $"the open-sea texel reads lit ({sea:0.###})");
-                ctx.Check(trough > 0.99f, $"a swell trough 3 m under the open sea reads lit, the sea casting nothing ({trough:0.###})");
                 Switch(rig, false);
                 ctx.Check(Effects.TerrainShadow.Live == null, $"switched to Original the terrain shadow globals hold their lit defaults");
             }

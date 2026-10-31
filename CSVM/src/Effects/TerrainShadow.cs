@@ -223,15 +223,10 @@ internal sealed partial class TerrainShadow : Node
             Log.Error("world", $"--dump-terrain-shadow: could not write {path} ({err})");
     }
 
-    // The world-space corners of every surface of the meshes the builder set casting no shadow, less
-    // the water. A flat sea tile would hang its grazing ray one texel's drop under the surface. A
-    // swell trough under a low moon dips below that. The sea receives the shadow and never casts it.
+    // The world-space corners of every surface of the meshes the builder set casting no shadow.
     private static Vector3[] Triangles(SceneBuilder scene)
     {
         var tris = new List<Vector3>();
-        var textures = new Dictionary<Material, string>();
-        foreach (var (mat, tex) in scene.TexturedMaterials)
-            textures[mat] = tex;
         foreach (var mi in scene.ShadowlessMeshes)
         {
             if (!GodotObject.IsInstanceValid(mi) || !mi.IsInsideTree() || !mi.IsVisibleInTree())
@@ -241,9 +236,6 @@ internal sealed partial class TerrainShadow : Node
             var xf = mi.GlobalTransform;
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
-                var mat = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
-                if (mat != null && textures.TryGetValue(mat, out var tex) && SceneBuilder.ClassifySurface(tex) == "water")
-                    continue;
                 var arrays = scene.SurfaceArrays(mesh, s);
                 var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
                 var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil

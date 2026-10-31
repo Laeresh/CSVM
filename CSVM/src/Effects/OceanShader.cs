@@ -368,6 +368,10 @@ public static class OceanShader
         sb.AppendLine($"const float FOAM_JAC_SIGMA = {Literal(jacSigma)};");
         sb.AppendLine("varying vec2 v_param;");
         sb.AppendLine("varying vec3 v_world;");
+        // Where the terrain shadow is read. Near the eye the swell's own surface, whose troughs dip
+        // under the flat sea's grazing ray and read shaded. Sea level by the time the longest swell's
+        // displacement fades out, so that shading goes with the waves instead of cutting with them.
+        sb.AppendLine("varying vec3 v_shade;");
         sb.AppendLine(@"
 vec2 ocean_mask(vec2 p) {
     return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
@@ -705,6 +709,7 @@ void vertex() {
         mat2 dwarp;
         vec4 warp = sea_warp(p, dwarp);
         vec4 fine = sea_fine(p);
+        float keep = 0.0;
         for (int i = 0; i < SWELL_DKA.length(); i++) {
             vec4 w = SWELL_DKA[i];
             float len = 6.2831853 / length(sea_wavevector(w, SWELL_MOD[i], dwarp));
@@ -712,6 +717,11 @@ void vertex() {
             // Full height at eight grid steps per local wavelength, none at four. A wave the grid
             // cannot carry would crawl as the grid follows the eye.
             float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
+            // The shadow probe follows the surface at sixteen grid steps per longest wavelength. It
+            // sits at sea level by eight, one ring before that wave's own fade begins.
+            if (i == 0) {
+                keep = clamp(len / spacing * 0.125 - 1.0, 0.0, 1.0);
+            }
             float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
             disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
             disp.y += w.w * g * sin(th);
@@ -721,6 +731,7 @@ void vertex() {
         float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * " + Literal(OceanMask.RampTop) + @";
         vec3 world = vec3(p.x + disp.x, disp.y + lift, p.y + disp.z);
         v_world = world;
+        v_shade = vec3(world.x, mix(lift, world.y, keep), world.z);
         VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
         // A priority level below the lowest base sheet. Every coplanar layer over or beside it
         // stays on top, the surf ring and C5's fog-gradient passes included.
@@ -850,7 +861,7 @@ void fragment() {
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
 }");
         if (ShadowQualitySetting.TerrainShadows)
-            sb.AppendLine(SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_world)", SceneBuilder.WaterSpecular));
+            sb.AppendLine(SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_shade)", SceneBuilder.WaterSpecular));
         return sb.ToString();
     }
 
