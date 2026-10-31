@@ -116,6 +116,22 @@ public sealed class CanopyMaskTests
         Assert.Equal(stamps.Ground[0], stamps.SurfaceAt(16f, 16f));
     }
 
+    /// <summary>A cliff's edge falls between two sample points, as at the mouths of C3's Tiki Tunnel (#264). A point
+    /// past the edge reads the floor under it. A blend of the samples on either side stands a crown in the air there.
+    /// A point past a painted plateau's edge is off the canopy, though its nearest sample is on it.</summary>
+    [Fact]
+    public void APointPastACliffEdgeReadsTheGroundUnderIt()
+    {
+        // Samples sit at x = 4, 12, 20 and on; the plateau's edge at x = 13 lies between the ones at 12 and 20.
+        var cliff = CanopyMask.FromPainted(Quad(0f, 0f, 13f, C, 50f).Concat(Quad(13f, 0f, 3 * C, C, 0f)).ToArray(), 0f, 0f, 3 * C, C);
+        Assert.Equal(50f, cliff.SurfaceAt(12.5f, 16f), 3);
+        Assert.Equal(0f, cliff.SurfaceAt(14f, 16f), 3);
+
+        var plateau = CanopyMask.FromPainted(Quad(0f, 0f, 13f, C, 50f), 0f, 0f, 3 * C, C);
+        Assert.True(plateau.IsPainted(12.5f, 16f));
+        Assert.False(plateau.IsPainted(14f, 16f));
+    }
+
     /// <summary>The brush mask thins painted canopy and clears it, but a thickened stroke never makes a cell
     /// denser than its cover.</summary>
     [Fact]
