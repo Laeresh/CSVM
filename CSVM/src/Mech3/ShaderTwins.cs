@@ -286,14 +286,16 @@ internal static class ShaderTwins
         shader.Code = text;
     }
 
-    // A fade copy's text off its source's: the source with an ALPHA line before its closing brace.
+    // A fade copy's text off its source's: the source with an ALPHA line before fragment()'s closing
+    // brace. That brace is the last one unless a light() follows, as on the terrain shadow's arms.
     // Null when the code cannot take it (no csky_opacity preamble, or no col local).
     internal static string? FadeCode(string code)
     {
         if (!code.Contains(SceneBuilder.InstanceUniformsInclude, StringComparison.Ordinal)
             || !code.Contains("vec4 col = ", StringComparison.Ordinal))
             return null;
-        int close = code.LastIndexOf('}');
+        int light = code.IndexOf("\nvoid light()", StringComparison.Ordinal);
+        int close = light < 0 ? code.LastIndexOf('}') : code.LastIndexOf('}', light);
         if (close < 0)
             return null;
         return code[..close] + $"    ALPHA = col.a{SceneBuilder.OpacityTerm};\n" + code[close..];

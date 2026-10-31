@@ -119,6 +119,24 @@ between two groups, and a coast texel in the group of the sea beside it), and ru
 not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
 hold the banded bytes to a plain single pass.
 
+## src/Effects/TerrainShadow.cs
+The Enhanced terrain's baked sun shadow, a node under the world root. At the world build or on the switch to Enhanced, while
+Shadow Quality casts, it collects the shadowless ground meshes `SceneBuilder` recorded (before the world merge swaps them),
+runs `TerrainShadowRaster` once per distinct zone sun (`WeatherRig.SunOrientations`: the light aimed at the zone's dome sun or
+moon card, else the authored `SUNLIGHT_ORIENTATION`), and uploads each as an RGH texture. `Publish` hands the live zone's texture, rect and penumbra pair to the `csky_terrain_shadow_*` globals; the zone apply
+(`WeatherRig.ApplyZone`) calls it again, a Shadow Quality apply reaches it through `ShadowQualitySetting.Revision`, and leaving
+the tree puts the defaults back. `SceneBuilder.TerrainShadowLight` writes the `light()` the world-lit, water, ocean and ground
+cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `csky_terrain_sun`; the Rich cards scale their sun
+side by it. `SunAt` reads the texture as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
+
+## src/Effects/TerrainShadowRaster.cs
+The bake's compute, with no engine object touched: the ground triangles' plane heights at the texel centres (`Cell`, 4 m
+unless `--terrain-shadow-cell=` says otherwise; the
+highest kept), then one sweep along the sun's azimuth that carries the higher of each texel's ground and line forward,
+dropping the sun's slope per step, with the horizontal distance to the ground that set it. A fragment below the line is
+in terrain shadow; `Lit` is the ramp over the penumbra the shader spells too. The floats are identical for any band count.
+`TerrainShadowRasterTests` hold the wall's exact line and distance, the oblique azimuth, the lit and shaded ramp.
+
 ## src/Effects/OceanMovers.cs
 The rule for the boats an animation carries across the sea, with no engine object touched. A mover is the target
 of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an OBJECT_TRANSLATE_STATE; reset

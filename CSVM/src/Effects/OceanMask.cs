@@ -234,6 +234,16 @@ internal sealed class OceanMask
         return Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(c, d, fx), fy) / 255f * RampTop;
     }
 
+    /// <summary>Milliseconds since <paramref name="t0"/>, which moves to now. The terrain shadow
+    /// bake times itself by it too.</summary>
+    internal static double Lap(ref long t0)
+    {
+        long now = Stopwatch.GetTimestamp();
+        double ms = (now - t0) * 1000.0 / Stopwatch.Frequency;
+        t0 = now;
+        return ms;
+    }
+
     // The red byte of a texel, clamped to the edge as the include's fetch is.
     private static float Red(Image image, int x, int y) =>
         Mathf.Round(image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1)).R * 255f);
@@ -292,15 +302,6 @@ internal sealed class OceanMask
         result.Timing = string.Create(CultureInfo.InvariantCulture,
             $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
         return result;
-    }
-
-    // Milliseconds since t0, which moves to now.
-    private static double Lap(ref long t0)
-    {
-        long now = Stopwatch.GetTimestamp();
-        double ms = (now - t0) * 1000.0 / Stopwatch.Frequency;
-        t0 = now;
-        return ms;
     }
 
     // Godot keeps a vertex colour as RGBA8, truncated, and a read-back returns those bytes over 255.

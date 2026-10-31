@@ -387,6 +387,8 @@ rows).
 - `src/Effects/OceanCalmZone.cs`, one ship's calm zone on the wave ocean: a box along the hull's heading over its waterline.
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.
+- `src/Effects/TerrainShadow.cs`, the Enhanced terrain's baked sun shadow, one texture per zone sun, published to the world-lit arms' `light()`.
+- `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
 - `src/Effects/OceanShader.cs`, the wave ocean's shader text generated from one sea state, byte-identical to the tune at the defaults.

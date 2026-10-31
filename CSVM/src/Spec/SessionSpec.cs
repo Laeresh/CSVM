@@ -469,6 +469,18 @@ public sealed record SessionSpec
     /// mask as a PNG when it builds; empty for none. See <c>docs/cli.md</c>.</summary>
     public string OceanMaskPath { get; private set; } = "";
 
+    /// <summary><c>--terrain-shadows=on|off</c>: whether Enhanced bakes the terrain's sun shadow
+    /// (<see cref="Effects.TerrainShadow"/>), the A/B lever; on unless said otherwise. See <c>docs/cli.md</c>.</summary>
+    public bool TerrainShadows { get; private set; } = true;
+
+    /// <summary><c>--dump-terrain-shadow=&lt;path&gt;</c>: where the terrain shadow bake writes its
+    /// texels as a PNG; empty for none. See <c>docs/cli.md</c>.</summary>
+    public string TerrainShadowPath { get; private set; } = "";
+
+    /// <summary><c>--terrain-shadow-cell=&lt;metres&gt;</c>: the terrain shadow bake's texel edge, 2 to
+    /// 64 m, 4 unless said otherwise. See <c>docs/cli.md</c>.</summary>
+    public float TerrainShadowCell { get; private set; } = 4f;
+
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
     ///, flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
@@ -1731,6 +1743,9 @@ public sealed record SessionSpec
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
             else if (arg == "--no-ocean") { s.SkippedPasses |= EnhancedPasses.Ocean; }
             else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
+            else if (arg is "--terrain-shadows=on" or "--terrain-shadows=off") { s.TerrainShadows = arg.EndsWith("on", StringComparison.Ordinal); }
+            else if (arg.StartsWith("--dump-terrain-shadow=")) { s.TerrainShadowPath = arg["--dump-terrain-shadow=".Length..]; }
+            else if (arg.StartsWith("--terrain-shadow-cell=")) { s.TerrainShadowCell = float.TryParse(arg["--terrain-shadow-cell=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out float cell) ? Math.Clamp(cell, 2f, 64f) : s.TerrainShadowCell; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {

@@ -39,6 +39,9 @@ internal static class GraphicsSwitchSuites
     // The chapter the vegetation lab suite edits: every one of its clutter kinds is listed.
     private const string VegetationChapter = "C1";
 
+    // The chapter whose cliff shades the waterline below it under its low sun.
+    private const string TerrainShadowChapter = "C3";
+
     // C1's railway: its own polygons laid over the picked grassland and fields.
     private const string RailTexture = "gantry_tracks2.tif";
 
@@ -1212,6 +1215,44 @@ internal static class GraphicsSwitchSuites
         {
             GroundCoverSetting.Resolve(launchedCover, null, null);
             VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-terrain-shadow",
+        "an Enhanced C3 build bakes the terrain's sun shadow over the shadowless ground's extent and publishes it: "
+        + "the waterline texel under the cliff at (-6860, 0, -5756) reads shaded through the published "
+        + "texture and an open-sea texel reads lit; switched to Original the globals hold their lit defaults")]
+    internal static void TerrainShadowBakes(TestContext ctx)
+    {
+        RequireData(ctx, TerrainShadowChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            ViewDistance.Set(null);
+            var rig = Open(ctx, enhanced: true, chapter: TerrainShadowChapter);
+            try
+            {
+                var bake = Effects.TerrainShadow.Live;
+                ctx.Check(rig.Built && bake != null && bake.Width >= 1024 && bake.Height >= 1024,
+                    $"an Enhanced {TerrainShadowChapter} build publishes a terrain shadow bake (built={rig.Built}, {bake?.Width}x{bake?.Height})");
+                if (bake == null)
+                    return;
+                float cliff = bake.SunAt(new Vector3(-6860f, 0f, -5756f));
+                float sea = bake.SunAt(new Vector3(-12000f, 0f, -3000f));
+                ctx.Note($"sun share at the cliff's waterline {cliff:0.###}, on the open sea {sea:0.###}; rect origin ({bake.Origin.X:0},{bake.Origin.Y:0}) size {bake.Size.X:0}x{bake.Size.Y:0}");
+                ctx.Check(cliff < 0.05f, $"the waterline texel under the cliff reads shaded ({cliff:0.###})");
+                ctx.Check(sea > 0.99f, $"the open-sea texel reads lit ({sea:0.###})");
+                Switch(rig, false);
+                ctx.Check(Effects.TerrainShadow.Live == null, $"switched to Original the terrain shadow globals hold their lit defaults");
+            }
+            finally
+            {
+                rig.Close();
+            }
+        }
+        finally
+        {
             Restore(wasEnhanced);
         }
     }

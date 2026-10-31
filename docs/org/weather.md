@@ -294,7 +294,14 @@ which reproduces `FUN_0053c610` exactly, pinned at `(0,0)`, `(−90,0)` and `(0,
 ⚠ **`SUNLIGHT_ORIENTATION` is the SHADING direction, not the sun object's position.** The gamez
 `sun` billboard the lens flare anchors to is a different node entirely. In C3 it stands on the same
 135° bearing but 34.4° above the horizon, against the authored −25° pitch. That disagreement is the
-original's, and reproducing it is correct (`WORLD-26`).
+original's, and reproducing it is correct (`WORLD-26`) in Original mode, where the bearing shades
+aircraft alone. Enhanced casts shadow maps and the baked terrain shadow from the light, and a
+shadow pointing away from the sky's sun reads wrong, so its zone apply aims the light at the dome's
+`sun` billboard, or at its `moon` under a night zone, where the chapter draws one
+(`WeatherRig.LightOrientation`); the lens flare anchors to the same node. The cards are the dome's
+four-corner quads named or skinned `sun`/`moon` (`WorldBuilder.MarkSkyCards`): C1B's moon is a
+generic `g1166` node skinned `moon1.tif`, so a name alone would miss it. C1B's authored
+`[-65, 90]` stands 65° up in the east while its moon stands about 25° up at yaw −135°.
 
 ⚠ **Ground shadows do not use this direction either.** The top-level `SHADOW_ANGLES` outranks it in
 the shadow renderer, and every shipped file authors straight down. The same node's diffuse and

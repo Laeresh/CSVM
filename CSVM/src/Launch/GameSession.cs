@@ -304,6 +304,9 @@ public partial class GameSession : Node3D
     private VegetationStage? _vegetation;
     // The wave ocean's stage, null where the session cannot stand an ocean (OceanStage.Eligible).
     private OceanStage? _ocean;
+    private Effects.TerrainShadow? _terrainShadow;
+    // A full world stood for a plane, which the terrain shadow bake needs; false on a node subtree.
+    private bool _fullWorld;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
@@ -837,6 +840,8 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        _fullWorld = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
+        FollowTerrainShadow();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles);
@@ -881,6 +886,8 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("alpha");
         _worldScene?.FollowGraphicsMode();
         SwitchProfile.Mark("world");
+        // Before the merge, which swaps the ground meshes the bake reads for their residuals.
+        FollowTerrainShadow();
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
@@ -2573,6 +2580,40 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // The terrain shadow is baked at the world build or on the switch to Enhanced, while Shadow
+    // Quality casts. It is kept for the session, since the world never moves. Original reads the
+    // defaults, and the node leaving the tree with the world puts them back. The bake reads the
+    // ground meshes, so it runs before the world merge swaps them for their residuals.
+    private void FollowTerrainShadow()
+    {
+        var weather = _sky?.Weather;
+        bool wanted = GraphicsMode.Enhanced && ShadowQualitySetting.TerrainShadows && _fullWorld
+            && _plane != null && _worldScene != null && weather != null;
+        if (!wanted)
+        {
+            if (_terrainShadow != null)
+                Effects.TerrainShadow.Withdraw();
+            return;
+        }
+        // ponytail: a launch at Off bakes nothing, so a level raised live shows terrain shadows from
+        // the next load only. Bake here on that apply if someone misses them.
+        if (_terrainShadow == null && !ShadowQualitySetting.Sun.Cast)
+            return;
+        if (_terrainShadow == null)
+        {
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            _terrainShadow = Effects.TerrainShadow.Bake(_worldScene!, weather!.SunOrientations, _spec.TerrainShadowPath);
+            if (_terrainShadow == null)
+            {
+                Log.Info("world", $"terrain shadow: no shadowless ground, not baked");
+                return;
+            }
+            _plane!.AddChild(_terrainShadow);
+            Log.Info("world", $"terrain shadow: baked {_terrainShadow.Width}x{_terrainShadow.Height} cell={Effects.TerrainShadow.Cell}m origin=({_terrainShadow.Origin.X:0},{_terrainShadow.Origin.Y:0}) ms={System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ({_terrainShadow.Timing})");
+        }
+        _terrainShadow.Publish(weather!.SunOrientation);
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
