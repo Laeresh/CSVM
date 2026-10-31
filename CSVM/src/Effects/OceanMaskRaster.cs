@@ -28,7 +28,7 @@ internal static class OceanMaskRaster
     public const byte RampSea = 254;
 
     /// <summary>The shore distance in metres at which the mask's G saturates. G is the distance to
-    /// the nearest texel that is not open base sea (a shore, surf or solid texel) over this.</summary>
+    /// the nearest texel that is not open sea (a shore, coast-tile or solid texel) over this.</summary>
     public const float ShoreReach = 160f;
 
     // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
@@ -42,18 +42,20 @@ internal static class OceanMaskRaster
     // Below this many rows a band's halo costs more than its thread saves.
     private const int MinBandRows = 64;
 
-    /// <summary>What a triangle marks: open sea, the surf ring's water, or a solid near sea level.</summary>
+    /// <summary>What a triangle marks: open sea, other water at sea level (an opaque coast tile), the
+    /// surf ring, or a solid near sea level. The surf ring is open sea with its authored coverage.</summary>
     public enum Kind
     {
         Base,
         Edge,
+        Surf,
         Solid,
     }
 
     /// <summary>The band count the bake uses on this machine.</summary>
     public static int DefaultBands => Math.Clamp(System.Environment.ProcessorCount, 1, 16);
 
-    /// <summary>Rasterises <paramref name="tris"/> into a mask over the base and edge triangles'
+    /// <summary>Rasterises <paramref name="tris"/> into a mask over the water triangles'
     /// extent. <paramref name="mean"/> is the sRGB tint every texel off the base sheet takes.</summary>
     public static Result Run(Tri[] tris, Color mean, int bands)
     {
@@ -96,7 +98,7 @@ internal static class OceanMaskRaster
         Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift);
+        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf);
     }
 
     /// <summary>(byte)Math.Clamp(Math.Round(v * 255f), 0, 255), banker's rounding included, in float
@@ -218,7 +220,7 @@ internal static class OceanMaskRaster
 
     // The zone of a land texel the filtered coverage reaches is the group of the sea beside it. The
     // coast's last metres then draw and cull with that sea. Beside two groups it is a seam, beside
-    // surf water alone every grid's. ⚠ Do not leave it 0: group 0's grid would draw a sliver of
+    // water off the sheet alone every grid's. ⚠ Do not leave it 0: group 0's grid would draw a sliver of
     // shore around every other group's culled sea. The diagonals count: the filter reads them.
     private static byte Shore(Grid g, int x, int y)
     {
@@ -315,6 +317,14 @@ internal static class OceanMaskRaster
                     case Kind.Edge:
                         g.Sea[i] = 2;
                         g.Zone[i] = AnyZone;
+                        break;
+                    case Kind.Surf:
+                        if (g.Sea[i] == 0)
+                            g.Sea[i] = 1;
+                        g.Zone[i] = AnyZone;
+                        byte surf = Channel((t.Surf.X * w1) + (t.Surf.Y * w2) + (t.Surf.Z * w0));
+                        if (surf > g.Surf[i])
+                            g.Surf[i] = surf;
                         break;
                     default:
                         g.Solid[i] = true;
@@ -414,7 +424,7 @@ internal static class OceanMaskRaster
         }
     }
 
-    // Distance in metres to the nearest texel that is not open base sea, by a two-pass chamfer over
+    // Distance in metres to the nearest texel that is not open sea, by a two-pass chamfer over
     // rows e0..e1, indexed from row e0.
     private static float[] ShoreDistance(Grid g, int e0, int e1)
     {
@@ -462,16 +472,18 @@ internal static class OceanMaskRaster
 
     /// <summary>One world-space triangle. On the base sheet it carries its corners' stored vertex
     /// colours and its mesh instance's zone group. A ramp is a base triangle rising off sea level:
-    /// its texels take <see cref="RampSea"/> and its plane lifts the ocean.</summary>
-    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false);
+    /// its texels take <see cref="RampSea"/> and its plane lifts the ocean. A surf triangle carries
+    /// its corners' surf coverage (1 - u) in <see cref="Surf"/>'s X, Y and Z.</summary>
+    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default);
 
-    /// <summary>The texel bytes of the mask, tint, zone group and lift, and each pass's milliseconds
-    /// over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore distance), the tint
-    /// RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on surf-ring water and
-    /// <see cref="SeamZone"/> on a seam between two groups. The lift is R8, the ocean's
-    /// height over a ramp over <see cref="OceanMask.RampTop"/>.</summary>
+    /// <summary>The texel bytes of the mask, tint, zone group, lift and surf, and each pass's
+    /// milliseconds over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore
+    /// distance), the tint RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on water off the sheet
+    /// and <see cref="SeamZone"/> on a seam between two groups. The lift is R8, the ocean's height
+    /// over a ramp over <see cref="OceanMask.RampTop"/>. The surf is R8, the surf ring's coverage,
+    /// 0 off it.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
-        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift);
+        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift, byte[] Surf);
 
     // The coverage both passes share. Each band writes only its own rows.
     private sealed class Grid
@@ -489,6 +501,7 @@ internal static class OceanMaskRaster
             Tinted = new bool[w * h];
             Ramp = new bool[w * h];
             Lift = new float[w * h];
+            Surf = new byte[w * h];
         }
 
         public int W { get; }
@@ -499,12 +512,12 @@ internal static class OceanMaskRaster
 
         public float MinZ { get; }
 
-        // 1 open base sea, 2 the surf ring's water.
+        // 1 open sea (the base sheet or the surf ring), 2 other water at sea level.
         public byte[] Sea { get; }
 
         public bool[] Solid { get; }
 
-        // The zone group of the base sheet a texel shows, AnyZone on surf-ring water.
+        // The zone group of the base sheet a texel shows, AnyZone on water off the sheet.
         public byte[] Zone { get; }
 
         // The zone byte the grids draw each texel by. A seam texel holds SeamZone, a coast texel the
@@ -519,5 +532,8 @@ internal static class OceanMaskRaster
 
         // The height in metres the ocean rises to over and around a ramp.
         public float[] Lift { get; }
+
+        // The surf ring's coverage, the highest of the surf triangles over a texel.
+        public byte[] Surf { get; }
     }
 }

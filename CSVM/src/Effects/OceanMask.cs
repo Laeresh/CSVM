@@ -13,8 +13,8 @@ namespace CSVM.Effects;
 
 /// <summary>
 /// The wave ocean's shore mask, baked once from a built world's mesh instances. Its red channel is
-/// sea coverage. Its green channel is the distance to the nearest shore, surf texel or solid object
-/// near sea level. The ocean's shader fades the waves from it. The tint texture carries the base sheet's baked vertex
+/// sea coverage, the surf ring's water included. Its green channel is the distance to the nearest
+/// shore, coast tile or solid object near sea level. The ocean's shader fades the waves from it. The tint texture carries the base sheet's baked vertex
 /// colour, which darkens the water around the islands. The bake also finds the wake sheets and the
 /// base texture's tile size. <see cref="OceanMaskRaster"/> turns the triangles into texels.
 /// </summary>
@@ -99,6 +99,10 @@ internal sealed class OceanMask
     public int BaseLevel { get; private set; }
 
     public int EdgeTriangles { get; private set; }
+
+    /// <summary>The surf ring's triangles at sea level (<see cref="SceneBuilder.IsSurfTexture"/>),
+    /// open sea in the mask, not counted in <see cref="EdgeTriangles"/>.</summary>
+    public int SurfTriangles { get; private set; }
 
     /// <summary>The base-sheet triangles rising off sea level below <see cref="RampTop"/>, counted
     /// in <see cref="BaseTriangles"/> too.</summary>
@@ -471,13 +475,14 @@ internal sealed class OceanMask
             var (mesh, s, tex, xf, material, layers, movers) = surface;
             bool water = SceneBuilder.ClassifySurface(tex) == "water";
             bool isBase = water && SceneBuilder.IsOceanBaseTexture(tex);
+            bool isSurf = water && SceneBuilder.IsSurfTexture(tex);
             // The builder's own copy: Godot's read-back copies the surface off the GPU and waits
-            // for the render thread, about a millisecond a surface. UVs and colours serve the base.
+            // for the render thread, about a millisecond a surface. UVs serve the base and the surf.
             var arrays = _scene.SurfaceArrays(mesh, s);
             var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
             var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil
                 ? Array.Empty<int>() : arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-            var uv = !isBase || arrays[(int)Mesh.ArrayType.TexUV].VariantType == Variant.Type.Nil
+            var uv = !(isBase || isSurf) || arrays[(int)Mesh.ArrayType.TexUV].VariantType == Variant.Type.Nil
                 ? Array.Empty<Vector2>() : arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
             var col = !isBase || arrays[(int)Mesh.ArrayType.Color].VariantType == Variant.Type.Nil
                 ? Array.Empty<Color>() : arrays[(int)Mesh.ArrayType.Color].AsColorArray();
@@ -494,7 +499,7 @@ internal sealed class OceanMask
                 float maxY = Math.Max(a.Y, Math.Max(b.Y, c.Y));
                 bool seaLevel = minY > -0.5f && maxY < 0.5f;
                 bool foot = minY > -0.5f && minY < 0.5f;
-                // A base triangle rising off the sea to a quay is sea the hide clears whole. As surf
+                // A base triangle rising off the sea to a quay is sea the hide clears whole. As edge
                 // water its footprint drew calm and in the mean tint, a dark patch in the waves.
                 bool ramp = isBase && foot && maxY >= HideHeight && maxY < RampTop;
                 if (movers.Length > 0 && OceanMovers.ReachesWaterline(a, b, c))
@@ -532,6 +537,12 @@ internal sealed class OceanMask
                         ColorCount++;
                     }
                 }
+                else if (isSurf && seaLevel)
+                {
+                    // The ring's inner edge is the land edge, so the shore distance runs from the land.
+                    kind = Kind.Surf;
+                    _result.SurfTriangles++;
+                }
                 else if (water && (seaLevel || (isBase && foot)))
                 {
                     // A base-sheet slope too tall for a ramp hides only below HideHeight, so the
@@ -550,7 +561,10 @@ internal sealed class OceanMask
                 }
                 bool tinted = kind == Kind.Base && col.Length > 0;
                 byte zone = kind == Kind.Base ? ZoneOf(layers) : (byte)0;
-                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp));
+                // U runs 0 at the land edge to 1 at the ring's seaward edge, the texture's alpha gradient.
+                var surf = kind == Kind.Surf && uv.Length > 0
+                    ? new Vector3(1f - uv[i0].X, 1f - uv[i1].X, 1f - uv[i2].X) : default;
+                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp, surf));
                 _triMovers.Add(movers);
             }
         }
@@ -618,6 +632,8 @@ internal sealed class OceanMask
                     _result.SolidTriangles--;
                 else if (Tris[i].Kind == Kind.Edge)
                     _result.EdgeTriangles--;
+                else if (Tris[i].Kind == Kind.Surf)
+                    _result.SurfTriangles--;
             }
             Tris.RemoveRange(kept, Tris.Count - kept);
         }

@@ -67,7 +67,7 @@ Measured by `analysis/shore-water/` over `extracted/C1B/gamez.zip` and `extracte
 | Ring texture | `srf0001`..`srf0016`, 32x64 RGBA, alpha a gradient along U (opaque at u = 0, clear at u = 1), 9 fps material cycle | one static `srf0001` |
 | Sea sheet | `wtr00000`..`wtr00015`, 64x64 RGB, 695 polygons of 512 m at y = 0, 10 fps cycle | `wtr*` likewise |
 | Geometry below y = 0 under the ring's seaward edge | none but node `g1165` at -11,680 m (the world floor) | not checked |
-| Mask bake (`[world] ocean: built grid`) | 1536x1536 texels of 8 m from (-12288, -12288), base_tris 1360, edge_tris 377, solid_tris 20911, bake about 1.2 s | not read |
+| Mask bake (`[world] ocean: built grid`, `--freecam --det`) | 1536x1536 texels of 8 m from (-12288, -12288), base_tris 1360, edge_tris 377 (surf_tris 377 since A1), solid_tris 723, bake 90 ms (walk 15, raster 36, distance 15, upload 6) | not read |
 
 Engine facts the items lean on:
 
@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, the mask
 
-1. ☐ A surf kind in the mask: the ring's water is sea with an authored surf coverage, opaque coast tiles stay shore
+1. ☑ A surf kind in the mask: the ring's water is sea with an authored surf coverage, opaque coast tiles stay shore
 2. ☐ Exact shore distance to the coastline polyline, chamfer only for solids without a sea-level edge
 3. ☐ The surf coverage reaches the ocean material and the mask dump
 
@@ -150,7 +150,31 @@ worktree session here; use a local commit or a file copy.
 
 # Wave A, the mask
 
-## A1 ☐ A surf kind in the mask: the ring's water is sea with an authored surf coverage, opaque coast tiles stay shore
+## A1 ☑ A surf kind in the mask: the ring's water is sea with an authored surf coverage, opaque coast tiles stay shore
+
+**Landed.** `SceneBuilder.IsSurfTexture(string)` (`CSVM/src/Mech3/SceneBuilder.cs`, beside
+`IsOceanBaseTexture`) matches the `srf` prefix case-blind, with or without an extension, as
+`IsOceanBaseTexture` matches `wtr`; only `srf0001`..`srf0016` exist in the extracted data, all
+surf. `OceanMaskRaster.Kind.Surf` (`CSVM/src/Effects/OceanMaskRaster.cs`): `OceanMask.Read`
+(`CSVM/src/Effects/OceanMask.cs`) marks a sea-level water triangle with a surf texture `Surf`
+ahead of the `Edge` branch and carries `1 - u` per corner in the new `Tri.Surf` (a `Vector3`,
+corners A, B, C). The raster gives a Surf texel `Sea = 1` (set only where no water marked it, so an
+`Edge` texel stays shore whatever the triangle order), `Zone = AnyZone`, no tint, and the
+barycentric coverage through `Channel` into `Grid.Surf`, the highest over overlapping triangles;
+`OceanMaskRaster.Result.Surf` returns that plane (R8, `Width * Height`, 0 off the ring). Nothing
+uploads it yet (A3). `OceanMask.SurfTriangles` counts the ring apart from `EdgeTriangles`, in
+`DropMovingHulls` too, and the `[world] ocean: built grid` line prints `surf_tris=`
+(`CSVM/src/Effects/Ocean.cs`). Tests: `OceanBaseTextureTests` pins `srf0001.tif`, `SRF0016.TIF`
+and `srf0001` surf and `water1_trans1/2`, `wtr00003`, `water1`, `wakefront1`, `watersquirt` not;
+`OceanMaskRasterTests.TheSurfRingIsSeaMeasuredFromTheLand` puts a 64 m ring between a solid and
+the sheet and holds G to the distance from the land texel, the surf byte to `1 - x / 64`, and the
+zone to `AnyZone`; `EveryBandCountMatchesTheWholeImagePass` adds 200 surf pieces to its scene and
+compares the surf plane at every band count. No existing test changed meaning. In C1B the bake now
+logs `edge_tris=0 surf_tris=377` (377 `edge_tris` before), in C1 `edge_tris=646 surf_tris=0`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A texel under the surf ring is open sea to the shore-distance pass and carries the
 authored surf coverage (`1 - u`, 1 at the land edge, 0 at the ring's seaward edge). A texel under
@@ -227,9 +251,9 @@ green, and add a hull case that still takes the chamfer.
 every Enhanced sea shot reads it.
 
 **Verify.** The unit tests above; then the C1B and C1 mask dumps against the A1 baselines, G now
-smooth along the diagonal shores (a line profile across the dump, not a hash). The bake time in the
-`[world] ocean: built grid` line stays under about 1.5 s on the user's rig (1.2 s today), the exact
-pass under about 200 ms in the `Timing` breakdown.
+smooth along the diagonal shores (a line profile across the dump, not a hash). The C1B freecam bake
+line reads `bake=90 (... distance=14.9 ...)` today; with the exact pass the bake stays under about
+300 ms and the `distance=` figure under about 150 ms on the user's rig.
 
 **⚠ Traps.** The chamfer's distance is a texel-centre distance and the exact one is an edge
 distance, so they do not agree at the texel right beside the coast; do not mix them per texel, pick

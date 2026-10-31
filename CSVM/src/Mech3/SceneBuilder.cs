@@ -901,6 +901,12 @@ void light() {{
         return stem.Equals("water1", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Whether a water texture is the authored surf ring along a coast (C1B's
+    /// <c>srf0001</c>..<c>srf0016</c> cycle, C2's <c>srf0001</c>). Its U runs from the land edge
+    /// to its seaward edge.</summary>
+    internal static bool IsSurfTexture(string texName) =>
+        texName.StartsWith("srf", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
     /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
     /// opaque sky sprite paints its backdrop in the sky's colour. Keying it lets the sky show up to

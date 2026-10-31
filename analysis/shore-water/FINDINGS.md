@@ -49,8 +49,9 @@ is why the plan holds the swell at zero inside the surf zone.
 ## The sea sheet
 
 C1B: 695 `wtr00000` polygons at y = 0, median 512 m across, priority 0. The engine's mask bake
-over C1B (`[world] ocean: built grid`): 1536x1536 texels of 8 m from (-12288, -12288), base_tris
-1360, edge_tris 377, solid_tris 20911, about 1.2 s.
+over C1B in `--freecam --det` (`[world] ocean: built grid`): 1536x1536 texels of 8 m from
+(-12288, -12288), base_tris 1360, edge_tris 377 (surf_tris 377 once the ring is its own kind),
+solid_tris 723, bake 90 ms of which the distance pass is 15 ms.
 
 The land-slope figures `coast_detail.py` prints are not used: a land triangle touching sea level
 can reach any depth elsewhere, so the slope distribution mixes the coast with the floor.

@@ -27,7 +27,7 @@ public class OceanMaskRasterTests
     public void EveryBandCountMatchesTheWholeImagePass(int seed)
     {
         var tris = Scene(new Random(seed));
-        var (w, h, mask, tint) = Reference(tris, Mean);
+        var (w, h, mask, tint, surf) = Reference(tris, Mean);
         foreach (int bands in new[] { 1, 5, 12 })
         {
             var r = OceanMaskRaster.Run(tris.ToArray(), Mean, bands);
@@ -35,6 +35,7 @@ public class OceanMaskRasterTests
             Assert.Equal(h, r.Height);
             Assert.True(mask.AsSpan().SequenceEqual(r.Mask), $"mask differs at {bands} bands");
             Assert.True(tint.AsSpan().SequenceEqual(r.Tint), $"tint differs at {bands} bands");
+            Assert.True(surf.AsSpan().SequenceEqual(r.Surf), $"surf differs at {bands} bands");
         }
     }
 
@@ -102,8 +103,8 @@ public class OceanMaskRasterTests
         Assert.Equal(51, Tint(500f, -500f));
     }
 
-    // A sheet split over two zone layers, with surf-ring water on the seam. Each texel names the
-    // group of the sheet it shows, the ring every group, and no band count moves either.
+    // A sheet split over two zone layers, with coast water on the seam. Each texel names the
+    // group of the sheet it shows, the coast water every group, and no band count moves either.
     [Fact]
     public void EachTexelNamesItsSheetsZoneGroup()
     {
@@ -183,8 +184,44 @@ public class OceanMaskRasterTests
         Assert.Equal(0, r.Lift[((int)((500f - r.Origin.Y) / Cell) * r.Width) + (int)((500f - r.Origin.X) / Cell)]);
     }
 
-    // C1B-like: a sheet of 512 m base quads with baked colours and scattered edge water. The solids
-    // run from slivers to large faces, some reaching past the sheet.
+    // The surf ring between the land and the sheet is open sea, which every grid draws. Its shore
+    // distance runs from the land. Its surf byte runs from 1 at the land edge to 0 at the seaward edge.
+    [Fact]
+    public void TheSurfRingIsSeaMeasuredFromTheLand()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, 64f, -512f, 1024f, Kind.Base, Colors.White);
+        AddQuad(tris, -1024f, -512f, 1024f, Kind.Solid, Colors.White);
+        var a = new Vector3(0f, 0f, -512f);
+        var b = new Vector3(64f, 0f, -512f);
+        var d = new Vector3(0f, 0f, 512f);
+        var e = new Vector3(64f, 0f, 512f);
+        tris.Add(new Tri(a, b, e, Kind.Surf, Colors.White, Colors.White, Colors.White, Surf: new Vector3(1f, 0f, 0f)));
+        tris.Add(new Tri(a, e, d, Kind.Surf, Colors.White, Colors.White, Colors.White, Surf: new Vector3(1f, 0f, 1f)));
+        // A sliver far west stretches the mask over the land.
+        var far = new Vector3(-512f, 0f, -512f);
+        tris.Add(new Tri(far, far + new Vector3(1f, 0f, 0f), far + new Vector3(0f, 0f, 1f), Kind.Base, Colors.White, Colors.White, Colors.White));
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 3);
+        int row = (int)((4f - r.Origin.Y) / Cell);
+        int At(float x) => (row * r.Width) + (int)((x - r.Origin.X) / Cell);
+        for (float x = 4f; x < 64f; x += Cell)
+        {
+            Assert.Equal(255, r.Mask[2 * At(x)]);
+            // The nearest land texel's centre is at x = -4.
+            Assert.Equal((byte)Math.Round((x + 4f) / OceanMaskRaster.ShoreReach * 255f), r.Mask[(2 * At(x)) + 1]);
+            Assert.Equal(OceanMaskRaster.Channel(1f - (x / 64f)), r.Surf[At(x)]);
+            Assert.Equal(OceanMaskRaster.AnyZone, r.Zones[At(x)]);
+        }
+        Assert.Equal(239, r.Surf[At(4f)]);
+        Assert.Equal(16, r.Surf[At(60f)]);
+        Assert.Equal(0, r.Surf[At(68f)]);
+        Assert.Equal(0, r.Surf[At(-4f)]);
+        Assert.Equal(0, r.Mask[(2 * At(-4f)) + 1]);
+        Assert.True(r.Surf.AsSpan().SequenceEqual(OceanMaskRaster.Run(tris.ToArray(), Mean, 7).Surf));
+    }
+
+    // C1B-like: a sheet of 512 m base quads with baked colours, scattered edge water and surf ring
+    // pieces. The solids run from slivers to large faces, some reaching past the sheet.
     private static List<Tri> Scene(Random rng)
     {
         var tris = new List<Tri>();
@@ -216,6 +253,9 @@ public class OceanMaskRasterTests
             tris.Add(new Tri(p, q, p + new Vector3(0f, 0f, 0.01f + rng.NextSingle()), Kind.Solid, Colors.White, Colors.White, Colors.White));
             tris.Add(new Tri(p, p + new Vector3(300f, 0f, 0f), p + new Vector3(0f, 0f, 300f), Kind.Edge, Colors.White, Colors.White, Colors.White));
         }
+        // Surf pieces, overlapping each other, the sheet, the edge water and the solids.
+        for (int i = 0; i < 200; i++)
+            tris.Add(Scatter(rng, Kind.Surf, rng.NextSingle() * 80f) with { Surf = new Vector3(rng.NextSingle(), rng.NextSingle(), rng.NextSingle()) });
         return tris;
     }
 
@@ -243,7 +283,7 @@ public class OceanMaskRasterTests
     }
 
     // The whole-image pass: every texel of every triangle's box, one thread, one distance pass.
-    private static (int W, int H, byte[] Mask, byte[] Tint) Reference(List<Tri> tris, Color mean)
+    private static (int W, int H, byte[] Mask, byte[] Tint, byte[] Surf) Reference(List<Tri> tris, Color mean)
     {
         float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
         foreach (var t in tris)
@@ -267,9 +307,10 @@ public class OceanMaskRasterTests
         var sea = new byte[w * h];
         var solid = new bool[w * h];
         var tint = new Color[w * h];
+        var surf = new byte[w * h];
         Array.Fill(tint, new Color(-1f, 0f, 0f));
         foreach (var t in tris)
-            RasterReference(t, minX, minZ, w, h, sea, solid, tint);
+            RasterReference(t, minX, minZ, w, h, sea, solid, tint, surf);
         var dist = DistanceReference(sea, solid, w, h);
         var mask = new byte[w * h * 2];
         var tintBytes = new byte[w * h * 3];
@@ -307,10 +348,10 @@ public class OceanMaskRasterTests
                     dilated[(3 * ((z * w) + x)) + ch] = (byte)Math.Round(sum[ch] / (double)n, MidpointRounding.AwayFromZero);
             }
         }
-        return (w, h, mask, dilated);
+        return (w, h, mask, dilated, surf);
     }
 
-    private static void RasterReference(Tri t, float minX, float minZ, int w, int h, byte[] sea, bool[] solid, Color[] tint)
+    private static void RasterReference(Tri t, float minX, float minZ, int w, int h, byte[] sea, bool[] solid, Color[] tint, byte[] surf)
     {
         var a = new Vector2(t.A.X, t.A.Z);
         var b = new Vector2(t.B.X, t.B.Z);
@@ -340,6 +381,11 @@ public class OceanMaskRasterTests
                     Mark(x, z);
                     if (t.Kind == Kind.Base)
                         tint[(z * w) + x] = (t.CA * w1) + (t.CB * w2) + (t.CC * w0);
+                    if (t.Kind == Kind.Surf)
+                    {
+                        float s = (t.Surf.X * w1) + (t.Surf.Y * w2) + (t.Surf.Z * w0);
+                        surf[(z * w) + x] = Math.Max(surf[(z * w) + x], (byte)Math.Clamp(Math.Round(s * 255f), 0, 255));
+                    }
                 }
             }
         }
@@ -352,6 +398,7 @@ public class OceanMaskRasterTests
             switch (t.Kind)
             {
                 case Kind.Base:
+                case Kind.Surf:
                     if (sea[i] == 0)
                         sea[i] = 1;
                     break;
