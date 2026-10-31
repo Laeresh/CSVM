@@ -86,14 +86,14 @@ false result means the pane already has a spectator. `ReleaseControls` drops the
 spectator stays, and `HandBack` undoes all of it on every pane and frees the tracked spectators.
 
 ## src/Session/Roster/RaceSpectate.cs
-A race's spectators, stepped by `GameSession` after the race and its link. In the final run a pane
+A race's spectators, stepped by `StuntRaceDirector` after the race and its link. In the final run a pane
 with no run left (lost, finished, or out at time up) waits `FlightController.CrashCameraSeconds`,
 then `SpectateHandoff.Begin` puts it onto a seat still in a run, its target key cycling over those
 seats alone; a watcher whose racer leaves its run moves on, one its pilot released stays free. The pane keeps its run HUD alone, over a wreck too (`FlightController.SetSpectatorHud`), naming the racer followed.
 A guest watches through the copies it flies. Nothing is handed over before time up, onto nobody, or to a bot.
 `RaceCompleted` releases a held stick, so R reaches the board however the race ended. A finished
 aeroplane cannot ram: a race keeps every body off the aircraft layer (`race-presence`). `HandBack`
-runs at the top of `RerunRace`.
+runs at the top of every new window (`StuntRaceDirector.Rerun`).
 
 ## src/Session/InstantAction/IaWrapupSnapshot.cs
 What one ended Instant Action mission hands its wrap-up. `IaWrapupSnapshot` is the final numbers,
@@ -244,7 +244,7 @@ or with the flag not carried, it draws nothing and the billboard draws. `Follow`
 suite drives. Rule: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md), "Towed banner".
 
 ## src/Session/World/StuntRaceBots.cs
-The stunt race bots a machine flies, built by `GameSession` beside the race: one
+The stunt race bots a machine flies, built by `StuntRaceDirector.Wire` beside the race: one
 `Flight/Ai/StuntBotObjective.cs` per bot seat with a run of the course, stepped ahead of the seats.
 It decides every zone end's run once at build, against the built world, for every bot.
 It steers each bot for its next zone, starts the ribbon run, and starts a completed run again while
@@ -297,6 +297,15 @@ team, once each. `TakeKey` is the typing seat's keys, and `HoldsKeyboard` keeps 
 flight keys idle until every key pressed into a line is up. A line whose first word is the original
 console's `ejectflag` is no chat: it runs `EjectFlag` for the typist. It owns the machine's
 `Flight/Hud/FlightChat.cs`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/Session/World/StuntRaceDirector.cs
+The engine side of one stunt race, split screen or over the wire, the sibling of `VersusDirector`.
+`TryCreate` runs ahead of the roster: a stunt run races with a second seat or as a lobby Stunt Race,
+in the window the launch asked for (zero under `--debug-scoreboard`), and opens SessionNet's
+`NetRaceLink` on that race. `Wire` builds the bots, the spectators, the board's exit and withheld
+restart (`--debug-race-end` poses a split screen board as a network one's) and the best times.
+`StepBots` runs before the seats, `Step` after them. `Rerun` opens a new window on every local
+seat; a guest's waits for the host's call through the link.
 
 ## src/Session/World/NetRaceLink.cs
 A stunt race over the wire, one per network race session, opened before the roster so `Feed`
