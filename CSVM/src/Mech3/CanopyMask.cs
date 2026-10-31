@@ -186,20 +186,6 @@ public sealed class CanopyMask
     /// <summary>Whether a painted triangle lies over a world X/Z; never on a stamp bake.</summary>
     public bool IsPainted(float x, float z) => PaintedAt(x, z) != null;
 
-    /// <summary>The density at a world X/Z, bilinear between cell centres and 0 off the area.</summary>
-    public float DensityAt(float x, float z)
-    {
-        if (CellAt(x, z) < 0)
-            return 0f;
-        float u = ((x - MinX) / CellM) - 0.5f, v = ((z - MinZ) / CellM) - 0.5f;
-        int i0 = Math.Clamp((int)MathF.Floor(u), 0, Width - 1), j0 = Math.Clamp((int)MathF.Floor(v), 0, Height - 1);
-        int i1 = Math.Min(i0 + 1, Width - 1), j1 = Math.Min(j0 + 1, Height - 1);
-        float fu = Math.Clamp(u - i0, 0f, 1f), fv = Math.Clamp(v - j0, 0f, 1f);
-        float a = Mathf.Lerp(_density[(j0 * Width) + i0], _density[(j0 * Width) + i1], fu);
-        float b = Mathf.Lerp(_density[(j1 * Width) + i0], _density[(j1 * Width) + i1], fu);
-        return Mathf.Lerp(a, b, fv);
-    }
-
     // Marks every sample point in the triangle's XZ shadow with its height there, keeping the higher layer.
     private static void Fill(Vector3 a, Vector3 b, Vector3 c, float x0, float z0, float step, int sw, int sh, float[] heights)
     {

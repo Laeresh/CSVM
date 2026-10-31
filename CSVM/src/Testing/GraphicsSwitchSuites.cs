@@ -1183,6 +1183,10 @@ internal static class GraphicsSwitchSuites
                         $"at the {name} every card stands on picked ground ({offPick.Count} of {sample.Count} sampled off it{(offPick.Count > 0 ? $", first at {offPick[0].At}" : "")}) and none on a bare mask texel ({onBare})");
                 }
                 ctx.Check(field.Bare > 0, $"the strip clearance's bare texels grew nothing on {field.Bare} lattice points of picked ground");
+                int bareHeld = field.Bare;
+                var held = field.Draws.ToList();
+                field.Update(new[] { new Vector3(-6090f, 140f, -4494f) }, int.MaxValue);
+                ctx.Check(field.Bare == bareHeld && field.Draws.SequenceEqual(held), $"a second update at the same focus keeps the {held.Count} draws and builds none");
                 var (uniforms, _) = InstanceUniformNodes(field.Root);
                 ctx.Check(field.Root.GetParent() != null && !UnderClutter(field.Root) && !HasCollider(field.Root) && uniforms == 0
                         && field.Draws.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && m.VisibilityRangeEnd > Mech3.GroundCover.Band((Mech3.GroundCover.Cover)(int)m.GetMeta("cover")).Y

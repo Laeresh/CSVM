@@ -97,10 +97,14 @@ public sealed class VegetationSidecarTests
         Assert.Same(VegetationEntry.Empty, sidecar.For("C5"));
     }
 
-    [Fact]
-    public void AnUnreadableFileWarnsAndListsNothing()
+    /// <summary>A key given twice, at the top or nested, reads as unreadable JSON rather than throwing.</summary>
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("{ \"C1\": {}, \"C1\": {} }")]
+    [InlineData("{ \"C1\": { \"kinds\": { \"bush1.flt\": {}, \"bush1.flt\": {} } } }")]
+    public void AnUnreadableFileWarnsAndListsNothing(string text)
     {
-        var sidecar = VegetationSidecar.Parse("{ not json");
+        var sidecar = VegetationSidecar.Parse(text);
         Assert.Single(sidecar.Warnings);
         Assert.Empty(sidecar.For("C1").Kinds);
     }
@@ -380,6 +384,7 @@ public sealed class VegetationSidecarTests
     [Theory]
     [InlineData("{ \"C1\": {}, ")]
     [InlineData("[ 1, 2 ]")]
+    [InlineData("{ \"C1\": {}, \"C1\": {} }")]
     public void SaveRefusesAFileItCannotRead(string text)
     {
         string path = Path.Combine(TestData.TempDir(), "vegetation.json");

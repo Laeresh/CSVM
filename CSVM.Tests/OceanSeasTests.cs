@@ -48,10 +48,14 @@ public sealed class OceanSeasTests
         Assert.Equal(SeaState.Default, seas.For("C1B"));
     }
 
-    [Fact]
-    public void AnUnreadableFileWarnsAndTakesTheDefaults()
+    /// <summary>A key given twice, at the top or nested, reads as unreadable JSON rather than throwing.</summary>
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("{ \"C1\": {}, \"C1\": {} }")]
+    [InlineData("{ \"C1\": { \"windDeg\": 1, \"windDeg\": 2 } }")]
+    public void AnUnreadableFileWarnsAndTakesTheDefaults(string text)
     {
-        var seas = OceanSeas.Parse("{ not json");
+        var seas = OceanSeas.Parse(text);
         Assert.Single(seas.Warnings);
         Assert.Equal(SeaState.Default, seas.For("C1"));
     }
@@ -165,6 +169,7 @@ public sealed class OceanSeasTests
     [Theory]
     [InlineData("{ \"C1\": {}, ")]
     [InlineData("[ 1, 2 ]")]
+    [InlineData("{ \"C1\": {}, \"C1\": {} }")]
     public void SaveRefusesAFileItCannotRead(string text)
     {
         string path = Path.Combine(TestData.TempDir(), "ocean_seas.json");

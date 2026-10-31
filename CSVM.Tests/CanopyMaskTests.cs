@@ -18,7 +18,7 @@ public sealed class CanopyMaskTests
     private const float C = CanopyMask.CellM;
 
     /// <summary>The grid covers the area from its lowest corner, whichever way the corners come.
-    /// A point off it has no cell and no density.</summary>
+    /// A point off it has no cell.</summary>
     [Fact]
     public void TheGridCoversTheAreaFromItsLowestCorner()
     {
@@ -29,7 +29,6 @@ public sealed class CanopyMaskTests
         Assert.Equal(0, mask.CellAt(-12288f, -12288f));
         Assert.Equal((383 * 384) + 383, mask.CellAt(-1f, -1f));
         Assert.Equal(-1, mask.CellAt(1f, -10f));
-        Assert.Equal(0f, mask.DensityAt(1f, -10f));
     }
 
     /// <summary>A crown shades its cell as a share of a full forest cell, held at 1, and ground and top are
@@ -86,7 +85,6 @@ public sealed class CanopyMaskTests
         Assert.Equal(0.5f, mask.Density[1]);
         Assert.Equal(10f, mask.Ground[1], 4);
         Assert.Equal(0f, mask.Density[2]);
-        Assert.Equal(0.75f, mask.DensityAt(C, 0.5f * C), 4);
     }
 
     /// <summary>A painted bake keeps its surface. A point on it reads the slope's own height between the samples,
