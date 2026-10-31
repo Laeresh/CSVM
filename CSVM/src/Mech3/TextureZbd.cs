@@ -120,6 +120,8 @@ public static class TextureZbd
         Expect(I32(data, at + 8) == 0, $"field 08 of {name}", at + 8);
         Expect(paletteCount <= 256 && (globalPalette == null || paletteCount >= 1), $"palette count of {name}", at + 12);
 
+        // Two u16 sides can overflow an int; no texture outsizes the bytes left.
+        Expect((long)width * height <= data.Length - pos, $"size of {name}", at + 4);
         int size = width * height;
         bool full = alpha == TextureArchive.AlphaClass.Full;
         byte[] pixels;
@@ -212,7 +214,7 @@ public static class TextureZbd
 
     private static ReadOnlySpan<byte> Take(byte[] data, ref int pos, int length, string name)
     {
-        Expect(length <= data.Length - pos, $"data of {name} past the end", pos);
+        Expect(length >= 0 && length <= data.Length - pos, $"data of {name} past the end", pos);
         var span = data.AsSpan(pos, length);
         pos += length;
         return span;

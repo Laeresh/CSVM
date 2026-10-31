@@ -121,6 +121,27 @@ public class TextureZbdTests
     }
 
     [Fact]
+    public void EveryTruncationIsRefusedAsInvalidData()
+    {
+        var data = Encode(
+            new[] { new ushort[256] },
+            Rgb565("full", 0xAB, 8, 0x07E0, 0x001F) with { Plane = new byte[] { 7, 200 } },
+            Paletted("global", 0xB5, new byte[] { 1, 1 }, null) with { GlobalPalette = 0, PaletteCount = 2 });
+        for (int n = 0; n < data.Length; n++)
+        {
+            Assert.Throws<InvalidDataException>(() => TextureZbd.Read(data[..n]));
+        }
+    }
+
+    [Fact]
+    public void SidesWhoseAreaOverflowsAnIntAreRefused()
+    {
+        var data = Encode(Rgb565("a", 0xA5, 0, 1, 1));
+        BitConverter.GetBytes(uint.MaxValue).CopyTo(data, 24 + 40 + 4); // width and height 0xFFFF
+        Assert.Contains("size of a", Assert.Throws<InvalidDataException>(() => TextureZbd.Read(data)).Message);
+    }
+
+    [Fact]
     public void NoSourceReadsAsNoTextures()
     {
         Assert.Null(TextureZbd.Load(null, "ZBD/C1/texture.zbd"));

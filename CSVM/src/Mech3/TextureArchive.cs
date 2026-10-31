@@ -632,7 +632,7 @@ public static class TextureDropIn
 
 /// <summary>Texture lookup over one decoded texture archive (<see cref="TextureSet"/>), building
 /// each image the first time a material asks. Absorbs the stored-name quirks (20-char truncation,
-/// legacy renames, docs/formats/gamez.md) so a truncated material name still resolves.
+/// doubled periods, docs/formats/gamez.md) so a truncated material name still resolves.
 /// Mip levels: <see cref="Mips"/>, docs/formats/gamez.md. Plumbing: this module's entry in
 /// docs/architecture.md.</summary>
 public sealed class TextureArchive : IDisposable
@@ -951,7 +951,7 @@ public sealed class TextureArchive : IDisposable
     public int RenderFlags(string materialTextureName)
     {
         // ⚠ Read the flags off the RESOLVED archive name, never the material's: a truncated or
-        // renamed material name is not a stored name (see Resolve).
+        // period-doubled material name is not a stored name (see Resolve).
         var resolved = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));
         return resolved != null && _renderFlags.TryGetValue(resolved.Key, out int flags) ? flags : 0;
     }
@@ -1260,7 +1260,7 @@ public sealed class TextureArchive : IDisposable
         string name = texture.Key;
         LastHadAlpha = ImageHasAlpha(img);
         // ⚠ Read the class off the RESOLVED archive name, never the material's: a truncated or
-        // renamed material name is not a stored name (see Resolve).
+        // period-doubled material name is not a stored name (see Resolve).
         LastAlphaClass = AlphaClassOf(name, LastHadAlpha);
         // Before mipmaps: raw pixels only. A texture in the family table is soft whatever the pixel
         // rule says about it (see SoftAlphaNamed).
@@ -1401,12 +1401,6 @@ public sealed class TextureArchive : IDisposable
     {
         if (_byBaseName.TryGetValue(baseName, out var exact))
             return exact;
-        // mech3ax v0.6.1 disambiguates duplicate texture-table entries as "name.-N";
-        // the pixel data lives under the original name. The fork indexes textures by
-        // position instead and never renames, so this is legacy-tree-only.
-        var m = System.Text.RegularExpressions.Regex.Match(baseName, @"^(.*)\.-\d+$");
-        if (m.Success && _byBaseName.TryGetValue(m.Groups[1].Value, out var renamed))
-            return renamed;
         // Trailing doubled periods: fork-only, decode in docs/formats/gamez.md.
         var trimmed = baseName.TrimEnd('.');
         if (trimmed.Length != baseName.Length && _byBaseName.TryGetValue(trimmed, out var undoubled))

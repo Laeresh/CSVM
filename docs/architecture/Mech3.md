@@ -18,7 +18,7 @@ Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.
 
 ## src/Mech3/TextureArchive.cs
 Texture lookup over one decoded archive, a `TextureSet` of `TextureZbd` records, building each image with `ImageOf` (RGB8 or RGBA8, the format the PNG decode gave) the first time it is asked for. It absorbs the
-stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing doubled period) and classifies each texture's alpha twice, for two unrelated readers:
+stored-name quirks (20-char truncation prefix match, the fork's trailing doubled period) and classifies each texture's alpha twice, for two unrelated readers:
 `LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the texture
 header, the one reader that sees the `Simple` textures. The header also supplies the raw `RenderFlags` word, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
 `Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
