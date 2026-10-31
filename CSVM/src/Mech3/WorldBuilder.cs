@@ -485,7 +485,7 @@ public sealed class WorldBuilder
                 DisableShadows(cluster);
         }
 
-        Log.Info("world", $"sun shadow: {_scene.ShadowlessMeshCount} terrain/water mesh instance(s) cast none");
+        Log.Info("world", $"sun shadow: {_scene.ShadowlessMeshes.Count} terrain/water mesh instance(s) cast none");
         _builtWorld = world;
         return root;
     }

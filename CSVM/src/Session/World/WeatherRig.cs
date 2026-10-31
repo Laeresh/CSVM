@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using CSVM.Effects;
 using CSVM.Flight.Airframe;
@@ -312,6 +313,14 @@ public sealed class WeatherRig
     /// <summary>The per-object half of the zone gate, for the suite that asserts an object above
     /// the band stops drawing for a camera below it.</summary>
     public ObjectZoneGate ObjectGate => _objectGate;
+
+    /// <summary>The sun orientation every zone of the mission authors, for the terrain shadow bake;
+    /// the sun's own rotation when the mission has no weather.</summary>
+    public IEnumerable<Vector3> SunOrientations =>
+        _weather is { } weather ? weather.ZoneNames.Select(zone => weather.Zone(zone).SunOrientation) : new[] { _sun.Rotation };
+
+    /// <summary>The sun orientation the last zone apply wrote, the sun's own until one has.</summary>
+    public Vector3 SunOrientation => _appliedZone?.SunOrientation ?? _sun.Rotation;
 
     /// <summary>The applied zone's <c>SUNLIGHT_DIFFUSE</c>/<c>SUNLIGHT_AMBIENT</c>, each scaled
     /// by its own authored colour. The authored pair rather than the energies derived from it,
@@ -1372,6 +1381,7 @@ public sealed class WeatherRig
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One scene light for the whole session: a light selects objects, not cameras.
         _sun.Rotation = fog.SunOrientation;
+        Effects.TerrainShadow.Live?.Publish(fog.SunOrientation);
         // The plain globals, in both modes. Each view's own copy rides FogViewTable whenever the
         // views disagree. The direction points toward the light.
         WriteSunDirection(_sun);

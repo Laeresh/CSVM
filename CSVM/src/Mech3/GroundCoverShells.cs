@@ -430,6 +430,9 @@ public static class GroundCoverShells
     private static string ShaderCode(Cover cover, bool lit)
     {
         bool crop = cover == Cover.Crop;
+        // The baked terrain shadow's share, read once per vertex. A piece is small and the cover's
+        // overdraw is deep, so the fragment stage fetches nothing for it.
+        bool shadow = lit && Utils.ShadowQualitySetting.TerrainShadows;
         float height = crop ? 0.9f : 0.5f;
         // The pattern's cell: a tuft's spacing, or the row spacing.
         float cell = crop ? 0.75f : 0.45f;
@@ -489,6 +492,7 @@ public static class GroundCoverShells
             #include "res://shaders/csky_srgb.gdshaderinc"
             #include "res://shaders/csky_clutter_fade.gdshaderinc"
             #include "res://shaders/csky_time.gdshaderinc"
+            {{(shadow ? SceneBuilder.TerrainShadowInclude : "")}}
 
             const float HEIGHT = {{F(height)}};
             const float CELL = {{F(cell)}};
@@ -502,6 +506,7 @@ public static class GroundCoverShells
             varying flat float v_h;
             varying vec3 v_world;
             varying vec3 v_normal;
+            {{(shadow ? "varying flat float v_terrain_sun;" : "")}}
 
             vec4 cover_hash(vec2 c) {
                 uvec2 q = uvec2(ivec2(c) + ivec2(1 << 20));
@@ -531,6 +536,7 @@ public static class GroundCoverShells
                 VERTEX *= keep;
                 v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
                 v_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+                {{(shadow ? "v_terrain_sun = csky_terrain_sun(v_world);" : "")}}
             }
 
             void fragment() {
@@ -564,6 +570,7 @@ public static class GroundCoverShells
                 ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
             """)}}
             }
+            {{(shadow ? SceneBuilder.TerrainShadowLight("v_terrain_sun", 0f) : "")}}
             """;
     }
 

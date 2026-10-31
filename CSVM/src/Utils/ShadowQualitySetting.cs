@@ -105,6 +105,12 @@ public static class ShadowQualitySetting
     /// The launcher sets it once from the spec, before the sun is dressed.</summary>
     public static bool HardShadows { get; set; }
 
+    /// <summary>Gets or sets whether the Enhanced terrain casts its baked sun shadow
+    /// (<c>Effects.TerrainShadow</c>); <c>--terrain-shadows=off</c> clears it. The launcher sets it
+    /// once from the spec, before the first world shader is written. The lit arms carry a
+    /// <c>light()</c> only while it holds.</summary>
+    public static bool TerrainShadows { get; set; } = true;
+
     /// <summary>Whether the renderer runs on an integrated GPU, the Steam Deck's APU among them. Read
     /// once, since the device cannot change under a run. The water, vegetation and ground cover
     /// fallbacks read it too.</summary>

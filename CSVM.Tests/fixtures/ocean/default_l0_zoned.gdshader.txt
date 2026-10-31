@@ -3,6 +3,7 @@ render_mode skip_vertex_transform, cull_disabled;
 #include "res://shaders/csky_time.gdshaderinc"
 #include "res://shaders/csky_atmosphere.gdshaderinc"
 #include "res://shaders/csky_mip_bias.gdshaderinc"
+#include "res://shaders/csky_terrain_shadow.gdshaderinc"
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
 uniform vec4 mask_rect;
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -27,6 +28,7 @@ const vec4 DETAIL_L[5] = vec4[5](vec4(0.951057, -0.309017, 0.166667, 0.284445), 
 const vec2 DETAIL_G[5] = vec2[5](vec2(0.751457, 0.27443), vec2(-0.739477, 0.305244), vec2(0.339077, -0.724588), vec2(0.239427, 0.763331), vec2(-0.692168, -0.401127));
 const float FOAM_JAC_SIGMA = 0.1375;
 varying vec2 v_param;
+varying vec3 v_world;
 
 vec2 ocean_mask(vec2 p) {
     return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
@@ -379,6 +381,7 @@ void vertex() {
         // Over a harbour ramp the sea rises with the sheet it replaces, up to the quay it meets.
         float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * 4.0;
         vec3 world = vec3(p.x + disp.x, disp.y + lift, p.y + disp.z);
+        v_world = world;
         VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
         // A priority level below the lowest base sheet. Every coplanar layer over or beside it
         // stays on top, the surf ring and C5's fog-gradient passes included.
@@ -506,4 +509,12 @@ void fragment() {
     // Foam is matte where it covers the water.
     ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), 0.25, sheet), 0.6, foam_mix);
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
+}
+
+void light() {
+    vec3 csky_diffuse, csky_specular;
+    csky_terrain_light(LIGHT_IS_DIRECTIONAL ? csky_terrain_sun(v_world) : 1.0, NORMAL, LIGHT, VIEW, LIGHT_COLOR, ATTENUATION, ROUGHNESS,
+        0.04, SPECULAR_AMOUNT, csky_diffuse, csky_specular);
+    DIFFUSE_LIGHT += csky_diffuse;
+    SPECULAR_LIGHT += csky_specular;
 }

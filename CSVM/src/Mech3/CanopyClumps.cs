@@ -613,7 +613,7 @@ public static class CanopyClumps
         #include "res://shaders/csky_clutter_fade.gdshaderinc"
         #include "res://shaders/csky_mip_bias.gdshaderinc"
         #include "res://shaders/csky_instance_uniforms.gdshaderinc"
-
+        {{ClutterBuilder.TerrainShadowDecl}}
         varying flat float v_alpha;
         varying flat float v_mirror;
         varying flat float v_sun;

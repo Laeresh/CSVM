@@ -519,6 +519,21 @@ public class SessionSpecParserTests
         Assert.True(spec.Fly);
     }
 
+    /// <summary><c>--terrain-shadows=</c> is on unless it says off, and <c>--dump-terrain-shadow=</c>
+    /// carries its path beside an ordinary session.</summary>
+    [Fact]
+    public void TerrainShadowFlagsCarryTheirValues()
+    {
+        var spec = SessionSpec.Parse(new[] { "--fly", "--chapter=C3" });
+        Assert.True(spec.TerrainShadows);
+        Assert.Equal("", spec.TerrainShadowPath);
+        spec = SessionSpec.Parse(new[] { "--fly", "--chapter=C3", "--terrain-shadows=off", "--dump-terrain-shadow=shadow.png" });
+        Assert.False(spec.TerrainShadows);
+        Assert.Equal("shadow.png", spec.TerrainShadowPath);
+        Assert.True(SessionSpec.Parse(new[] { "--fly", "--terrain-shadows=on" }).TerrainShadows);
+        Assert.True(spec.Fly);
+    }
+
     /// <summary><c>--hd-models=</c> names the model folder, empty naming none, and absent leaves
     /// config.json's; <c>--no-hd-models</c> is its own switch, so it holds in either order.</summary>
     [Fact]

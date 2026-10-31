@@ -566,6 +566,7 @@ public partial class Launcher : Node3D
         // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
         Effects.Ocean.RegisterGlobal();
+        Effects.TerrainShadow.RegisterGlobals();
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump

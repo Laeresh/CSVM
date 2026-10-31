@@ -339,6 +339,8 @@ public static class OceanShader
         sb.AppendLine(SceneBuilder.TimeInclude);
         sb.AppendLine(SceneBuilder.AtmosphereInclude);
         sb.AppendLine(SceneBuilder.MipBiasInclude);
+        if (ShadowQualitySetting.TerrainShadows)
+            sb.AppendLine(SceneBuilder.TerrainShadowInclude);
         sb.AppendLine("uniform sampler2D mask_tex : filter_linear, repeat_disable;");
         sb.AppendLine("uniform vec4 mask_rect;");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
@@ -365,6 +367,7 @@ public static class OceanShader
         EmitDetail(sb, sea);
         sb.AppendLine($"const float FOAM_JAC_SIGMA = {Literal(jacSigma)};");
         sb.AppendLine("varying vec2 v_param;");
+        sb.AppendLine("varying vec3 v_world;");
         sb.AppendLine(@"
 vec2 ocean_mask(vec2 p) {
     return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
@@ -717,6 +720,7 @@ void vertex() {
         // Over a harbour ramp the sea rises with the sheet it replaces, up to the quay it meets.
         float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * " + Literal(OceanMask.RampTop) + @";
         vec3 world = vec3(p.x + disp.x, disp.y + lift, p.y + disp.z);
+        v_world = world;
         VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
         // A priority level below the lowest base sheet. Every coplanar layer over or beside it
         // stays on top, the surf ring and C5's fog-gradient passes included.
@@ -845,6 +849,8 @@ void fragment() {
     ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + Literal(SceneBuilder.WaterRoughness) + @", sheet), " + Literal(FoamRoughness) + @", foam_mix);
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
 }");
+        if (ShadowQualitySetting.TerrainShadows)
+            sb.AppendLine(SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_world)", SceneBuilder.WaterSpecular));
         return sb.ToString();
     }
 

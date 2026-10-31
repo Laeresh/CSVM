@@ -254,7 +254,7 @@ public static class VegetationModels
         #include "res://shaders/csky_clutter_fade.gdshaderinc"
         #include "res://shaders/csky_mip_bias.gdshaderinc"
         #include "res://shaders/csky_time.gdshaderinc"
-
+        {{ClutterBuilder.TerrainShadowDecl}}
         const float csky_fog_on = 1.0;
         uniform float half_width = 1.0;
 

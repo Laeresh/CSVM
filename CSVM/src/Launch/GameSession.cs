@@ -308,6 +308,7 @@ public partial class GameSession : Node3D
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
     private Effects.Ocean? _ocean;
+    private Effects.TerrainShadow? _terrainShadow;
     private bool _oceanEligible;
     // The canopy clumps over the forest, standing while Rich is on and the chapter or --canopy-clumps draws them.
     private Mech3.CanopyClumps.Field? _canopyClumps;
@@ -876,6 +877,7 @@ public partial class GameSession : Node3D
         _oceanRuntime = state.WorldRuntime;
         ResolveSea();
         FollowOcean();
+        FollowTerrainShadow();
         if (_oceanEligible && Effects.Ocean.Covers(_spec.Chapter))
             _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
         var gamez = state.Gamez;
@@ -917,6 +919,8 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("alpha");
         _worldScene?.FollowGraphicsMode();
         SwitchProfile.Mark("world");
+        // Before the merge, which swaps the ground meshes the bake reads for their residuals.
+        FollowTerrainShadow();
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
@@ -2717,6 +2721,40 @@ public partial class GameSession : Node3D
             _ocean.DebugDrive = _spec.DebugWake;
             _plane.AddChild(_ocean);
         }
+    }
+
+    // The terrain shadow is baked at the world build or on the switch to Enhanced, while Shadow
+    // Quality casts. It is kept for the session, since the world never moves. Original reads the
+    // defaults, and the node leaving the tree with the world puts them back. The bake reads the
+    // ground meshes, so it runs before the world merge swaps them for their residuals.
+    private void FollowTerrainShadow()
+    {
+        var weather = _sky?.Weather;
+        bool wanted = GraphicsMode.Enhanced && ShadowQualitySetting.TerrainShadows && _oceanEligible
+            && _plane != null && _worldScene != null && weather != null;
+        if (!wanted)
+        {
+            if (_terrainShadow != null)
+                Effects.TerrainShadow.Withdraw();
+            return;
+        }
+        // ponytail: a launch at Off bakes nothing, so a level raised live shows terrain shadows from
+        // the next load only. Bake here on that apply if someone misses them.
+        if (_terrainShadow == null && !ShadowQualitySetting.Sun.Cast)
+            return;
+        if (_terrainShadow == null)
+        {
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            _terrainShadow = Effects.TerrainShadow.Bake(_worldScene!, weather!.SunOrientations, _spec.TerrainShadowPath);
+            if (_terrainShadow == null)
+            {
+                Log.Info("world", $"terrain shadow: no shadowless ground, not baked");
+                return;
+            }
+            _plane!.AddChild(_terrainShadow);
+            Log.Info("world", $"terrain shadow: baked {_terrainShadow.Width}x{_terrainShadow.Height} cell={Effects.TerrainShadow.Cell}m origin=({_terrainShadow.Origin.X:0},{_terrainShadow.Origin.Y:0}) ms={System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ({_terrainShadow.Timing})");
+        }
+        _terrainShadow.Publish(weather!.SunOrientation);
     }
 
     // The canopy clumps follow Rich: built while it is on and dropped when it is not. The map edge's copies
