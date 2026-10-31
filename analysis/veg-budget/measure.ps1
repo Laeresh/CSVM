@@ -38,7 +38,7 @@ $ErrorActionPreference = "Continue"  # native stderr lines must not abort the ru
 [Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]::InvariantCulture
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $scratch = Join-Path $repoRoot ".scratch\veg-budget"
-$probe = Join-Path $repoRoot "RunProbe.ps1"
+$probe = Join-Path $repoRoot "scripts\RunProbe.ps1"
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 
 # Low over each chapter's densest listed vegetation, looking at it from 300 m off on both axes and
