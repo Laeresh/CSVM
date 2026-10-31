@@ -471,6 +471,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<AnimInstance> _instances = new();
 
+    // _instances as a set, for the walks' per-instance liveness test. ⚠ Every Add, Remove and Clear
+    // of _instances updates it too; a missed site advances a stopped instance or skips a live one.
+    private readonly HashSet<AnimInstance> _live = new();
+
     // The per-frame snapshot Advance walks. ⚠ An instance's own STOP_ANIMATION removes OTHER
     // instances mid-walk, so an index into the live list goes out of range; a cutscene definition
     // that stops the scene it just called is where that happens.
@@ -1221,6 +1225,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (keepAnim != null && string.Equals(inst.Def.AnimName, keepAnim, StringComparison.OrdinalIgnoreCase))
                 continue;
             _instances.RemoveAt(i);
+            _live.Remove(inst);
             TearDownResourcesOf(inst.Def, inst.Anchor);
             OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
         }
@@ -1252,6 +1257,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public void ResetToBaseState()
     {
         _instances.Clear();
+        _live.Clear();
         Motions.Reset();
         Emitters.Reset();
         _inputNodes.Clear();
@@ -1591,7 +1597,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         try
         {
             float left = float.IsFinite(seconds) ? seconds : 0f;
-            while (left > 0f && late.Any(_instances.Contains))
+            while (left > 0f && _live.Overlaps(late))
             {
                 float step = MathF.Min(left, SequenceRunner.AnimFrame);
                 left -= step;
@@ -2194,7 +2200,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _queuedStarts.RemoveAt(0);
             // A later event of the caller can stop what an earlier one started, and the original's
             // dispatcher clears such a node rather than calling it.
-            if (!_instances.Contains(inst))
+            if (!_live.Contains(inst))
                 continue;
             AdvanceStarted(inst, protect);
         }
@@ -2220,8 +2226,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         // The t=0 events can finish the instance, so notify only a finish that removed something:
         // the timeline needs start and finish notifications balanced against the live count.
-        if (Retirable(inst) && _instances.Remove(inst))
+        if (Retirable(inst) && _live.Remove(inst))
         {
+            _instances.Remove(inst);
             FinishInputGoverned(inst.Def, inst.Anchor);
             OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
         }
@@ -2710,6 +2717,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private void AddLive(AnimInstance inst)
     {
         _instances.Add(inst);
+        _live.Add(inst);
         _lateStarts?.Add(inst);
         OnInstanceStarted?.Invoke(inst.Def, inst.Anchor);
     }
@@ -2787,6 +2795,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 && ReferenceEquals(top.Inst, inst))
                 continue;
             _instances.RemoveAt(i);
+            _live.Remove(inst);
             if (tearDown)
             {
                 TearDownResourcesOf(inst.Def, inst.Anchor);
@@ -4151,7 +4160,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             for (int i = _advancing.Count - 1; i >= 0; i--)
             {
                 var inst = _advancing[i];
-                if (!_instances.Contains(inst) || owedStarts?.Contains(inst) == true)
+                if (!_live.Contains(inst) || owedStarts?.Contains(inst) == true)
                 {
                     continue;
                 }
@@ -4178,8 +4187,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private void RetireFromWalk(AnimInstance inst)
     {
-        if (Retirable(inst) && _instances.Remove(inst))
+        if (Retirable(inst) && _live.Remove(inst))
         {
+            _instances.Remove(inst);
             FinishInputGoverned(inst.Def, inst.Anchor);
             FinishEffectInstance(inst.Def, inst.Anchor);
             _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
@@ -4199,7 +4209,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             for (int i = walk.Count - 1; i >= 0; i--)
             {
                 var inst = walk[i];
-                if (!_instances.Contains(inst) || _queuedStarts.Any(q => q.Inst == inst))
+                if (!_live.Contains(inst) || _queuedStarts.Any(q => q.Inst == inst))
                 {
                     continue;
                 }

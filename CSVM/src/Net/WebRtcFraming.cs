@@ -31,12 +31,21 @@ public sealed class WebRtcFraming
     /// channel to <paramref name="peer"/>.</summary>
     public byte[] Frame(int peer, int channel, NetReliability reliability, ReadOnlySpan<byte> payload)
     {
+        var frame = new byte[HeaderBytes + payload.Length];
+        Frame(peer, channel, reliability, payload, frame);
+        return frame;
+    }
+
+    /// <summary><see cref="Frame(int, int, NetReliability, ReadOnlySpan{byte})"/> written into
+    /// <paramref name="frame"/>, which holds at least <see cref="HeaderBytes"/> plus the payload,
+    /// so a sender can reuse one buffer. Returns the frame's length.</summary>
+    public int Frame(int peer, int channel, NetReliability reliability, ReadOnlySpan<byte> payload, Span<byte> frame)
+    {
         if (channel is < 0 or > byte.MaxValue)
         {
             throw new ArgumentOutOfRangeException(nameof(channel), channel, "a framed channel is 0 to 255");
         }
 
-        var frame = new byte[HeaderBytes + payload.Length];
         frame[0] = (byte)channel;
         if (reliability == NetReliability.UnreliableSequenced)
         {
@@ -44,11 +53,15 @@ public sealed class WebRtcFraming
             ushort sequence = _sent.TryGetValue(key, out ushort last) ? (ushort)(last + 1) : (ushort)0;
             _sent[key] = sequence;
             frame[1] = SequencedFlag;
-            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(2), sequence);
+            BinaryPrimitives.WriteUInt16LittleEndian(frame[2..], sequence);
+        }
+        else
+        {
+            frame[1..HeaderBytes].Clear(); // a reused buffer still holds the last frame's header
         }
 
-        payload.CopyTo(frame.AsSpan(HeaderBytes));
-        return frame;
+        payload.CopyTo(frame[HeaderBytes..]);
+        return HeaderBytes + payload.Length;
     }
 
     /// <summary>Reads a frame from <paramref name="peer"/>. False for a frame too short to hold a

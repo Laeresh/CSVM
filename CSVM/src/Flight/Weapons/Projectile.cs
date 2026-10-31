@@ -393,6 +393,7 @@ public sealed partial class ProjectilePool : Node3D
     // destructible DamageSink. The aircraft halves of fuse and blast run off the registered
     // `_aircraft` list instead (ProximityFuseTriggered / GatherAircraftCandidates), never this query.
     private readonly PhysicsShapeQueryParameters3D _proximityQuery = new() { CollisionMask = CollisionLayers.World };
+    private readonly Godot.Collections.Array<Rid> _blastExclude = new(); // NearestBlastPoint's, refilled per call
     // The splash occlusion ray (C11): world geometry is cover, aircraft are not. The original casts
     // through its whole intersect database; whether aircraft nodes are in it was not settled, and
     // our hulls live on their own query layer, so a plane between a burst and its victim shields
@@ -2635,7 +2636,9 @@ public sealed partial class ProjectilePool : Node3D
     private Vector3 NearestBlastPoint(PhysicsDirectSpaceState3D space, Vector3 center, float radius,
         Node3D body, Rid bodyRid, Godot.Collections.Array<Godot.Collections.Dictionary> hits, int shapeIndex)
     {
-        var exclude = new Godot.Collections.Array<Rid>();
+        // Reused per call: the Exclude setter copies the RIDs native-side, so clearing is safe.
+        var exclude = _blastExclude;
+        exclude.Clear();
         foreach (var hit in hits)
         {
             var rid = (Rid)hit["rid"];
@@ -2644,8 +2647,8 @@ public sealed partial class ProjectilePool : Node3D
         }
         ConfigureSphereQuery(radius, center);
         _proximityQuery.Exclude = exclude;
-        var rest = space.GetRestInfo(_proximityQuery);
-        _proximityQuery.Exclude = new Godot.Collections.Array<Rid>();
+        using var rest = space.GetRestInfo(_proximityQuery);
+        _proximityQuery.Exclude = NoExclude;
         return rest.Count > 0 ? (Vector3)rest["point"] : BlastCentre(body, bodyRid, shapeIndex, body.GlobalPosition);
     }
 

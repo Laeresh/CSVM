@@ -40,6 +40,10 @@ public sealed class WorldFlareRig
     private readonly Node3D? _xrHead;
     private readonly List<Instance> _instances = new();
 
+    // The sun line-of-sight ray, reused per pane per frame. Its defaults are Create's: every
+    // layer, nothing excluded; only From and To change.
+    private readonly PhysicsRayQueryParameters3D _sunRay = new();
+
     /// <summary>A rig over <paramref name="spec"/>. <paramref name="xrHead"/> is the stereo path's
     /// tracked head, the view a stereo flare is placed for; null in a flat session.</summary>
     public WorldFlareRig(SessionSpec spec, Node3D? xrHead)
@@ -243,8 +247,9 @@ public sealed class WorldFlareRig
             if (at.InFrame)
             {
                 var space = inst.Rig.Camera.GetWorld3D().DirectSpaceState;
-                using var query = PhysicsRayQueryParameters3D.Create(view.Origin, sunGlobal);
-                using var hit = space.IntersectRay(query);
+                _sunRay.From = view.Origin;
+                _sunRay.To = sunGlobal;
+                using var hit = space.IntersectRay(_sunRay);
                 losClear = hit.Count == 0;
             }
 

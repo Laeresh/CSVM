@@ -99,7 +99,20 @@ public sealed class AiRocketeer
 
     private readonly Func<float> _roll;
     private readonly Dictionary<int, float> _slotLockouts = new();
+    private readonly List<int> _slotKeys = new(); // Tick's reused copy of the keys it writes through
     private float _lockout;
+
+    // The last verdict as data, its strings built only when read. Every pylon a gate passes over
+    // replaces it, and only the walk's final one is ever logged.
+    private Verdict _verdict;
+    private int _verdictPylon;
+    private float _verdictA;
+    private float _verdictB;
+    private float _verdictC;
+    private bool _verdictRolled;
+    private string _verdictDice = string.Empty;
+    private string _key = string.Empty;
+    private (Verdict, int, bool) _keyOf;
 
     /// <summary>The dice source is a delegate, not the engine's rng object: the roll is a decoded
     /// gate and has to be assertable without a Godot runtime, which a
@@ -108,6 +121,17 @@ public sealed class AiRocketeer
     public AiRocketeer(Func<float> roll)
     {
         _roll = roll;
+    }
+
+    private enum Verdict
+    {
+        None,
+        QuickDraw,
+        NoPylon,
+        Band,
+        Intercept,
+        Aim,
+        Taken,
     }
 
     /// <summary>The AI's rocket trigger, replacing the human one for a non-human pilot. True when
@@ -132,11 +156,44 @@ public sealed class AiRocketeer
     /// <summary>What the last unlocked <see cref="Solve"/> decided, for the host's breadcrumb:
     /// the pylon it took and the dice, or why every candidate pylon was passed over. A locked-out
     /// tick leaves the previous verdict standing.</summary>
-    public string LastVerdict { get; private set; } = string.Empty;
+    public string LastVerdict => _verdict switch
+    {
+        Verdict.QuickDraw => "quick draw refuses the aspect",
+        Verdict.NoPylon => "no pylon offered",
+        Verdict.Band => FormattableString.Invariant(
+            $"pylon{_verdictPylon} out of its {_verdictA:0}-{_verdictB:0} m band at {Mathf.Sqrt(_verdictC):0} m"),
+        Verdict.Intercept => $"pylon{_verdictPylon} has no intercept",
+        Verdict.Aim => FormattableString.Invariant(
+            $"pylon{_verdictPylon} lead {_verdictA:0}° yaw {_verdictB:0}° pitch off the mount"),
+        Verdict.Taken => FormattableString.Invariant(
+            $"pylon{_verdictPylon} taken, dice {_verdictDice}, next in {_verdictA:0} s"),
+        _ => string.Empty,
+    };
 
     /// <summary>The gate and pylon behind <see cref="LastVerdict"/> without its numbers, so the
-    /// host logs a verdict when the GATE changes rather than every metre the range moves.</summary>
-    public string LastVerdictKey { get; private set; } = string.Empty;
+    /// host logs a verdict when the GATE changes rather than every metre the range moves. The host
+    /// reads it every tick, so the string is rebuilt only when the gate or pylon changes.</summary>
+    public string LastVerdictKey
+    {
+        get
+        {
+            var of = (_verdict, _verdictPylon, _verdictRolled);
+            if (of == _keyOf)
+                return _key;
+            _keyOf = of;
+            _key = _verdict switch
+            {
+                Verdict.QuickDraw => "quick draw refuses the aspect",
+                Verdict.NoPylon => "no pylon offered",
+                Verdict.Band => $"band:{_verdictPylon}",
+                Verdict.Intercept => $"intercept:{_verdictPylon}",
+                Verdict.Aim => $"aim:{_verdictPylon}",
+                Verdict.Taken => $"taken:{_verdictPylon}:{_verdictRolled}",
+                _ => string.Empty,
+            };
+            return _key;
+        }
+    }
 
     /// <summary>True once <see cref="UseWingmanRule"/> ran: the vehicle's window and interval then
     /// stand for every pylon, whatever window or interval a pylon carries.</summary>
@@ -183,7 +240,9 @@ public sealed class AiRocketeer
         // both on every launch and gates on both, which is why a two-type fit cannot alternate.
         if (_slotLockouts.Count > 0)
         {
-            foreach (int index in new List<int>(_slotLockouts.Keys))
+            _slotKeys.Clear();
+            _slotKeys.AddRange(_slotLockouts.Keys);
+            foreach (int index in _slotKeys)
             {
                 if (_slotLockouts[index] > 0f)
                     _slotLockouts[index] -= dt;
@@ -207,13 +266,12 @@ public sealed class AiRocketeer
             return;
         if (!AiGunner.QuickDrawAccepts(ownPos, targetPos, targetForward, QuickDrawAngleDeg))
         {
-            LastVerdict = LastVerdictKey = "quick draw refuses the aspect";
+            _verdict = Verdict.QuickDraw;
             return; // too oblique an attack for this pilot's quick draw
         }
         var basis = ownBasis.Orthonormalized();
         var toLocal = basis.Transposed();
-        string passedOver = "no pylon offered";
-        string passedOverKey = passedOver;
+        _verdict = Verdict.NoPylon;
         foreach (var p in pylons)
         {
             if (!p.Armed)
@@ -233,9 +291,7 @@ public sealed class AiRocketeer
             float sep2 = p.MountPos.DistanceSquaredTo(targetPos);
             if (sep2 < minRange * minRange || sep2 > maxRange * maxRange)
             {
-                passedOver = FormattableString.Invariant(
-                    $"pylon{p.Index} out of its {minRange:0}-{maxRange:0} m band at {Mathf.Sqrt(sep2):0} m");
-                passedOverKey = $"band:{p.Index}";
+                SetVerdict(Verdict.Band, p.Index, minRange, maxRange, sep2);
                 continue;
             }
             // The original leads each round in the frame it flies in (FUN_0041afe0): a motor round
@@ -249,8 +305,7 @@ public sealed class AiRocketeer
                     out aim, out _);
             if (!solved)
             {
-                passedOver = $"pylon{p.Index} has no intercept"; // a target outrunning the round is simply not shot at
-                passedOverKey = $"intercept:{p.Index}";
+                SetVerdict(Verdict.Intercept, p.Index); // a target outrunning the round is simply not shot at
                 continue;
             }
             var local = (toLocal * aim).Normalized();
@@ -261,9 +316,7 @@ public sealed class AiRocketeer
             if (clamped.Dot(local) < AimQualityCos)
             {
                 // the mount cannot be brought close enough: keep maneuvering
-                passedOver = FormattableString.Invariant(
-                    $"pylon{p.Index} lead {yawDeg:0}° yaw {pitchDeg:0}° pitch off the mount");
-                passedOverKey = $"aim:{p.Index}";
+                SetVerdict(Verdict.Aim, p.Index, yawDeg, pitchDeg);
                 continue;
             }
             SelectedPylon = p.Index;
@@ -274,14 +327,11 @@ public sealed class AiRocketeer
             // The dice, last and only here. Inclusive, as the original's compare is.
             bool rolled = _roll() <= QuickDrawChance;
             WantsFire = rolled || FiresOnFailedRoll;
-            string dice = rolled ? "pass" : FiresOnFailedRoll ? "fail, launched anyway" : "fail";
-            LastVerdict = FormattableString.Invariant(
-                $"pylon{p.Index} taken, dice {dice}, next in {refire:0} s");
-            LastVerdictKey = $"taken:{p.Index}:{rolled}";
+            SetVerdict(Verdict.Taken, p.Index, refire);
+            _verdictRolled = rolled;
+            _verdictDice = rolled ? "pass" : FiresOnFailedRoll ? "fail, launched anyway" : "fail";
             return;
         }
-        LastVerdict = passedOver;
-        LastVerdictKey = passedOverKey;
     }
 
     // The accelerating intercept the original solves for a weapon authoring ACCELERATION
@@ -332,5 +382,15 @@ public sealed class AiRocketeer
     {
         float ramp = velocity / accel;
         return t <= ramp ? 0.5f * accel * t * t : (velocity * t) - (0.5f * velocity * ramp);
+    }
+
+    private void SetVerdict(Verdict verdict, int pylon, float a = 0f, float b = 0f, float c = 0f)
+    {
+        _verdict = verdict;
+        _verdictPylon = pylon;
+        _verdictA = a;
+        _verdictB = b;
+        _verdictC = c;
+        _verdictRolled = false;
     }
 }

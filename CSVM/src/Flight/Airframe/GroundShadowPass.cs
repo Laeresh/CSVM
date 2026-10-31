@@ -55,6 +55,10 @@ public sealed partial class GroundShadowPass : Node3D
     private readonly Func<(Vector3 Diffuse, Vector3 Ambient)> _sunlight;
     private readonly Mesh _quad;
 
+    // Ground's ray, reused across every shadow and frame rather than made per call. Only From and
+    // To change between calls; nothing else writes it.
+    private readonly PhysicsRayQueryParameters3D _ray = new() { CollisionMask = CollisionLayers.World };
+
     // The pane set as the last pass read it, so a suite or a caller asking what one pane sees
     // reads the same ownership the quads were built against.
     private IReadOnlyList<PlayerRig> _seen = Array.Empty<PlayerRig>();
@@ -210,9 +214,9 @@ public sealed partial class GroundShadowPass : Node3D
         groundY = 0f;
         if (GetWorld3D()?.DirectSpaceState is not { } space)
             return false;
-        using var query = PhysicsRayQueryParameters3D.Create(
-            at, at - (Vector3.Up * GroundShadowLaw.CutoffAltitude), CollisionLayers.World);
-        using var hit = space.IntersectRay(query);
+        _ray.From = at;
+        _ray.To = at - (Vector3.Up * GroundShadowLaw.CutoffAltitude);
+        using var hit = space.IntersectRay(_ray);
         if (hit.Count == 0)
             return false;
         groundY = ((Vector3)hit["position"]).Y;

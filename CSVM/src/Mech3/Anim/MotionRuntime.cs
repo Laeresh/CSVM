@@ -61,6 +61,11 @@ internal sealed class MotionRuntime : IAnimMotion
     // through charges the watchdog instead, so this cap never decides a resting height.
     private const int MaxContacts = 8;
 
+    // One ray query for every motion's contact reads, made on first use (see Ray), and the empty
+    // exclusion it takes when a body passes none. Both are never mutated outside Ray.
+    private static PhysicsRayQueryParameters3D? _ray;
+    private static Godot.Collections.Array<Rid>? _noExclude;
+
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
 
@@ -509,14 +514,11 @@ internal sealed class MotionRuntime : IAnimMotion
         // The original's column is a query at (x, z), so a body already under a surface is lifted
         // back onto it. ⚠ The second cast comes DOWN from above, never up from below: a one-sided
         // collider answers nothing from behind, and every water polygon in the install is one.
-        using var down = PhysicsRayQueryParameters3D.Create(
-            from, from + Vector3.Down * ColumnDepth, _contactMask, _ownColliders);
-        using var downHit = space.IntersectRay(down); // disposed, per motion per tick (PERF-20)
-        using var up = downHit.Count == 0
-            ? PhysicsRayQueryParameters3D.Create(
-                from + Vector3.Up * ColumnDepth, from, _contactMask, _ownColliders)
+        using var downHit = space.IntersectRay( // disposed, per motion per tick (PERF-20)
+            Ray(from, from + Vector3.Down * ColumnDepth, _contactMask, _ownColliders));
+        using var upHit = downHit.Count == 0
+            ? space.IntersectRay(Ray(from + Vector3.Up * ColumnDepth, from, _contactMask, _ownColliders))
             : null;
-        using var upHit = up != null ? space.IntersectRay(up) : null;
         var hit = downHit.Count > 0 ? downHit : upHit;
         if (hit == null || hit.Count == 0)
             return Watchdog(dt, next);
@@ -529,6 +531,19 @@ internal sealed class MotionRuntime : IAnimMotion
         // original does: it rewrites the step's Y component alone and leaves X and Z be.
         return Land(next, parent.AffineInverse() * new Vector3(to.X, surfaceY, to.Z),
             hit["collider"].As<GodotObject>(), byContact: true, arrivalSq, dt, to.Y - from.Y);
+    }
+
+    // The shared ray, every field Create would set assigned here, so nothing from the previous
+    // motion's call stays in force. Reused rather than made per call: per motion per tick.
+    private PhysicsRayQueryParameters3D Ray(Vector3 from, Vector3 to, uint mask,
+        Godot.Collections.Array<Rid>? exclude)
+    {
+        var ray = _ray ??= new();
+        ray.From = from;
+        ray.To = to;
+        ray.CollisionMask = mask;
+        ray.Exclude = exclude ?? (_noExclude ??= new());
+        return ray;
     }
 
     // How fast the body is really arriving, squared: its own velocity taken into world, plus the
@@ -576,8 +591,7 @@ internal sealed class MotionRuntime : IAnimMotion
         if (from.DistanceSquaredTo(to) < 1e-8f)
             return false;
 
-        using var query = PhysicsRayQueryParameters3D.Create(from, to, _contactMask);
-        using var hit = space.IntersectRay(query);
+        using var hit = space.IntersectRay(Ray(from, to, _contactMask, null));
         if (hit.Count == 0)
             return Watchdog(dt, next);
 

@@ -34,6 +34,21 @@ public class AiRocketeerTests
         Assert.Equal(0, r.SelectedPylon);
     }
 
+    // The breadcrumb's text and its change key, which the host logs by and the torpedo suite reads.
+    [Fact]
+    public void TheVerdictNamesTheGateAndAKeyWithoutItsNumbers()
+    {
+        var r = Rocketeer(rollsPass: true);
+        Solve(r, 900f);
+        Assert.Equal("pylon0 out of its 200-800 m band at 900 m", r.LastVerdict);
+        Assert.Equal("band:0", r.LastVerdictKey);
+        Solve(r, 500f);
+        Assert.Equal("pylon0 taken, dice pass, next in 30 s", r.LastVerdict);
+        Assert.Equal("taken:0:True", r.LastVerdictKey);
+        Solve(r, 150f); // locked out: the verdict stands
+        Assert.Equal("taken:0:True", r.LastVerdictKey);
+    }
+
     // The band's two edges are both live: a max-range-only gate would let an AI launch from the
     // merge, which the shipped 200 m floor exists to stop.
     [Theory]
