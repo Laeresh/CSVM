@@ -10,7 +10,11 @@
     "length": 1.27,
     "sharpness": 0.31,
     "bend_m": 61,
-    "detail_slope": 0.125
+    "detail_slope": 0.125,
+    "swell_from": 8,
+    "swell_full": 48,
+    "look_from": 8,
+    "look_full": 24
   },
   "C1C": {
     "height": 2,
@@ -23,8 +27,10 @@
     "height": 0.39,
     "length": 1.71,
     "wind": 291,
-    "look_from": 10,
-    "look_full": 127
+    "swell_from": 8,
+    "swell_full": 32,
+    "look_from": 8,
+    "look_full": 16
   },
   "C2B": {
     "height": 1.8518,

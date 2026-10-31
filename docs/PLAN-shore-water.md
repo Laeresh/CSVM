@@ -128,7 +128,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the shader
 
-21. ☐ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
+21. ☑ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
 22. ☐ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
 
 ### Wave D, landing
@@ -406,7 +406,34 @@ only build. The ring's material is `BlendSurface`, so `WorldMerge` never merges 
 
 # Wave C, the shader
 
-## C21 ☐ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
+## C21 ☑ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
+
+**Landed.** `OceanShader`'s vertex stage (`CSVM/src/Effects/OceanShader.cs`) reads the surf coverage
+at the vertex as it reads the lift, `float surf = textureLod(surf_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r;`,
+and scales the swell by it, `float amp = shore * (1.0 - surf) * ship_calm(p) * wave_scale;`; the
+wake term keeps `shore` alone and the fragment's `look` is unchanged. The lines are emitted at every
+sea, so the default sea's text grows by them (the fixture
+`CSVM.Tests/fixtures/ocean/default_l0_zoned.gdshader.txt` gains the read, its one-line comment and
+the factor; `OceanShaderTests`' fourteen hashes move with it) and a world without a ring reads the
+zero texel, so its output is unchanged in value. `CSVM/data/ocean_seas.json` gives `C1B` and `C2`
+their own ramps, candidate A of three shot for the author: A, to the edge, C1B look 8..24 m and
+swell 8..48 m (full just past the ring's seaward edge), C2 look 8..16 m and swell 8..32 m; B, soft,
+C1B look 8..40 m and swell 16..96 m, C2 look 8..24 m and swell 8..48 m; C, the surf factor alone,
+with the ramps unchanged (C1B the defaults, look 12..64 m and swell 24..160 m; C2 its former entry,
+look 10..127 m, swell at the defaults). A is the working value pending the author's verdict on the
+montages; B and C go in by `--debug-ocean=`. `SeaState`, its defaults, `Clamped`'s `LookFrom >= Cell`
+floor and `RampGap`, and every other chapter's entry are unchanged. Poses for the look:
+the golden pose; C1B close, `--freecam --chapter=C1B --pos=-6010,12,-8110 --direction=0.15,-0.12,1`
+(12 m up, about 35 m west of the golden pose's near island at its south-west corner, the coast
+running away on the left); C2 close, `--freecam --chapter=C2 --pos=-7500,25,-3365 --direction=0,-0.35,1` (25 m up and
+about 45 m off the sea stack's ring); all `--det --mute --graphics=enhanced --water-quality=waves
+--frames=120`. With the ramps unchanged the surf factor alone moves 307 pixels of the C1B close pose
+and none of the C2 one: the ring there lies inside `SwellFrom`, where the swell is already zero, so
+the factor matters on the wider rings and once the ramps start nearer the land.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** In C1B and C2 the waves' texture, normals and whitecaps run to the land edge; the swell's
 height is zero where the authored surf coverage is full and rises with distance from the land, so no

@@ -701,7 +701,9 @@ void vertex() {
         vec2 p = VERTEX.xz + CAMERA_POSITION_WORLD.xz;
         float spacing = max(UV.x, 0.01);
         float shore = shore_swell(ocean_mask(p).g);
-        float amp = shore * ship_calm(p) * wave_scale;
+        // No swell under the surf: nothing lies below sea level at the coast to hide a trough.
+        float surf = textureLod(surf_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r;
+        float amp = shore * (1.0 - surf) * ship_calm(p) * wave_scale;
         // The wakes ride on the swell whatever the sea's height. The hulls calm only the swell, so
         // a wake stands tallest beside its own hull.
         vec3 disp = vec3(0.0, shore * ship_wake(p, vec2(4.0, 8.0) * spacing, 0.0).x, 0.0);
