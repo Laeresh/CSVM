@@ -161,6 +161,33 @@ public sealed class OceanShaderTests
         Assert.Equal(1.0, OceanShader.DetailTurnsPerWrap(6f, 0.01f));
         Assert.Equal(0.0, OceanShader.DetailTurnsPerWrap(6f, 0f));
         Assert.Equal(1f, OceanShader.PatchPeriodsPerWrap(1e9f, 1.5f));
+        Assert.Equal(1f, OceanShader.SurfLinesPerWrap(40f, 0.001f));
+        Assert.Equal(0f, OceanShader.SurfLinesPerWrap(12f, 0f));
+    }
+
+    /// <summary>A sea with surf writes the surf into the foam, its lines passing a whole number per wrap at
+    /// about the set speed. Without surf the text holds none, and its spacing and speed leave the text alone.</summary>
+    [Theory]
+    [InlineData(0.7f, 0.6f, 12f, 1.5f, 450.0)]
+    [InlineData(0.8f, 0f, 12f, 1.5f, 450.0)]
+    [InlineData(0.3f, 0.9f, 10f, 2f, 720.0)]
+    [InlineData(0f, 0.5f, 7f, 1.3f, 669.0)]
+    public void ASeaWithSurfWritesItsLinesWholePerWrap(float wash, float lines, float spacing, float speed, double perWrap)
+    {
+        var sea = SeaState.Default with { SurfWash = wash, SurfLines = lines, SurfSpacing = spacing, SurfSpeed = speed };
+        string text = OceanShader.Code(sea, 0, true);
+        Assert.Contains("foam_mix = max(foam_mix, cover * surf_keep);", text);
+        var phase = Regex.Match(text, @"m\.g \* ([0-9.]+) \+ csky_time \* \(([0-9.]+) / 3600\.0\)");
+        Assert.True(phase.Success, "the surf's phase is in the text");
+        Assert.Equal(160.0 / spacing, double.Parse(phase.Groups[1].Value, CultureInfo.InvariantCulture), 4);
+        double written = double.Parse(phase.Groups[2].Value, CultureInfo.InvariantCulture);
+        AssertWhole(written, $"surf lines at {speed} m/s every {spacing} m");
+        Assert.Equal(perWrap, written);
+        Assert.InRange(written * spacing / Wrap, speed - (spacing / (2 * Wrap)), speed + (spacing / (2 * Wrap)));
+
+        string plain = OceanShader.Code(SeaState.Default, 0, true);
+        Assert.DoesNotContain("surf_keep", plain);
+        Assert.Equal(plain, OceanShader.Code(SeaState.Default with { SurfSpacing = spacing, SurfSpeed = speed + 1f }, 0, true));
     }
 
     /// <summary>The shader reads csky_time, never Godot's TIME, at any sea: a network peer and a

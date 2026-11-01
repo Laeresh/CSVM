@@ -73,21 +73,21 @@ key and its order, skipping comments as the read does, and refusing a file it ca
 ## src/Effects/OceanShader.cs
 The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
 tables, the bending field, the coast ramps and the open sea's tint, written as literals; at the defaults it is the
-ocean's tune byte for byte (`OceanShaderTests`), so nothing moves until a sea is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
-setting. The swell's height is the swell ramp times one minus the surf coverage (`surf_tex`), zero where the authored ring is full against the land, which has no geometry below sea level to cover a trough; the wakes ride the ramp alone and the look (normals, foam, texture) its own ramp.
+ocean's tune byte for byte (`OceanShaderTests`), so nothing moves until a sea is saved. Every swell omega, detail drift, patch drift and surf line rate is rounded to whole cycles per `csky_time` wrap at any
+setting. The swell's height is the swell ramp times one minus the surf coverage (`surf_tex`), zero where the authored ring is full against the land, which has no geometry below sea level to cover a trough; the wakes ride the ramp alone and the look (normals, foam, texture) its own ramp. A surf strength above zero writes the surf into the fragment's foam over the authored ring: a wash dense against the land (the shore distance holds it dense within one mask texel, where the filter blends the ring's coverage into the land's zero) and thinning seaward, its outline read through a noise warp so no mask texel shows, and breaking lines along the shore distance that run toward the land, a whole number per wrap (`SurfLinesPerWrap`), bent and broken by still noise, at their mean under the footprint fade. The whitecaps' lace breaks both at every distance, its cell whole octaves of theirs picked by the pixel's mean side. The sheet's tint scales it; only the fog hands it back to the sheet. At the default zero strengths the text holds no surf.
 Height, foam strength and roughness stay uniforms, set by `Ocean.cs`. Every noise reads `sea_hash`, an integer hash of the cell, so no lattice line cuts it. `ship_wake` draws each moving hull's foam trail and the foam along its
 V's arms from its track uniforms, its lengths scaled by the square root of the hull's length; the V's Kelvin waves sit
 behind `WakeWaves`, which is off. `wake_foam` churns the trail's foam with the water's age, thins it with distance
 and laces it up close. `WakeSamples` is the track's sample count.
 
 ## src/Effects/SeaState.cs
-One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
+One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour, surf)
 with the ocean's tune as its default, and `Fields` naming each one's key, label, group, range and slider step for the
 file, the flag and the lab. `Clamped`, which every path into the shader takes, holds each value in range, sharpness
 times height at the fold limit (at the base group gain, so a grouped crest can still fold), and each coast ramp at
 least 4 m wide within the mask's 160 m reach, the look's starting at least one mask texel out. The ramps measure the
 mask's shore distance, from the land edge under a surf ring, where the shader also holds the swell at zero by the surf
-coverage; C1B and C2 carry their own ramps in the file. `Written` is the sea at the file's precision, rounded toward a bound
+coverage; C1B and C2 carry their own ramps in the file. The surf's wash and line strengths default to zero, so only an entry that sets them (C1B, C2) draws surf. `Written` is the sea at the file's precision, rounded toward a bound
 it would otherwise pass. `WithOverrides` reads `--debug-ocean`. `SeaStateTests`. Read `OceanShader.cs` next.
 
 ## src/Effects/OceanCalmZone.cs

@@ -183,6 +183,29 @@ public static class OceanShader
     // TUNE. Foam's roughness, which it takes in the share it covers, so it reflects no sky.
     private const float FoamRoughness = 0.6f;
 
+    // TUNE. The surf's lines bend by up to SurfBend radians over SurfBendCell metres, and break into
+    // lengths over SurfBreakCell metres.
+    private const float SurfBendCell = 40f;
+    private const float SurfBend = 5f;
+    private const float SurfBreakCell = 20f;
+
+    // TUNE. The wash reads the coverage displaced by up to SurfWarp metres of noise over two cells, so
+    // its outline shows no 8 m mask texel. Its edge is ragged over two more. Metres throughout.
+    private const float SurfWarp = 6f;
+    private const float SurfWarpCell = 10f;
+    private const float SurfWarpFineCell = 3.5f;
+    private const float SurfEdgeCell = 6f;
+    private const float SurfEdgeFineCell = 2.5f;
+
+    // TUNE. The surf's lace takes the whitecaps' cell doubled up to SurfLaceOctaves times. A cell spans
+    // about SurfLacePixels mean pixels, so the lace shows at every distance without shimmer.
+    private const float SurfLacePixels = 4f;
+    private const float SurfLaceOctaves = 3f;
+
+    // The breaking line's profile, smoothstep(0.55, 0.95) of its sine, has this mean over a cycle. A line
+    // too fine for the footprint fades to it, so a far shore keeps its band without shimmer.
+    private const float SurfLineMean = 0.23f;
+
     // TUNE. The swell the vertex stage displaces: wavelengths of tens of metres, a crest of about
     // 1-2 m where several meet. Angles are offsets from the wind. The lengths step by about 1.3
     // with no common ratio, so no two waves dominate and cross on a visible lattice.
@@ -229,6 +252,11 @@ public static class OceanShader
     public static float PatchPeriodsPerWrap(float cell, float speed) =>
         (float)Math.Max(1.0, Math.Round(speed * ShaderTime.RolloverSecs / cell));
 
+    /// <summary>The whole surf lines <paramref name="spacing"/> metres apart that pass a point per
+    /// <c>csky_time</c> wrap at <paramref name="speed"/> m/s: one at least, unless held still.</summary>
+    public static float SurfLinesPerWrap(float spacing, float speed) =>
+        (float)Math.Max(speed > 0f ? 1.0 : 0.0, Math.Round(speed * ShaderTime.RolloverSecs / spacing));
+
     /// <summary>The swell table's wavelengths as the sea scales them, longest first.</summary>
     public static IEnumerable<float> SwellLengths(SeaState sea)
     {
@@ -274,6 +302,52 @@ public static class OceanShader
             sb.Append(CultureInfo.InvariantCulture, $" + {Literal(o.Weight)} * foam_noise(pw * {Literal(1f / cell)} - vec2(csky_time * {perSec}, 0.0), {Literal(period)})");
         }
         return sb.ToString();
+    }
+
+    // The fragment's surf over the authored ring, folded into the foam. Both strengths at zero write
+    // nothing, so a sea without surf keeps its text. The lines pass whole numbers per csky_time wrap.
+    private static string SurfFoam(SeaState sea)
+    {
+        if (sea.SurfWash <= 0f && sea.SurfLines <= 0f)
+            return "";
+        string perSec = $"({Literal(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed))} / {Literal((float)ShaderTime.RolloverSecs)})";
+        string Fade(float cell) => $"smoothstep({Literal(FootprintFadeFrom)}, {Literal(FootprintFadeFull)}, {Literal(cell)} / footprint)";
+        string Noise(float cell, string offset) => $"foam_noise(p * {Literal(1f / cell)} + vec2({offset}), 65536.0)";
+        return @"
+    // The surf over the authored ring: a wash dense against the land, thinning seaward, and lines
+    // breaking toward the land. Only the fog hands it back to the sheet; the look ramp does not.
+    float surf = textureLod(surf_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r;
+    float surf_keep = (1.0 - smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt)) * dot(tint, vec3(" + Literal(1f / 3f) + @"));
+    // The lace's cell follows the pixel's mean side, so a grazing view keeps it fine; the long side
+    // widens the holes' edges. Taken here, where every fragment of the quad runs.
+    float surf_fp = sqrt(length(dFdx(p)) * length(dFdy(p)));
+    if (surf > 0.0 && surf_keep > 0.0) {
+        // The phase in cycles falls with time along the shore distance, so each line runs toward the
+        // land. A still noise field bends it, so no line is a clean offset of the coast.
+        float cyc = m.g * " + Literal(OceanMaskRaster.ShoreReach / sea.SurfSpacing) + @" + csky_time * " + perSec + @"
+            + " + Literal(SurfBend / Mathf.Tau) + @" * foam_noise(p * " + Literal(1f / SurfBendCell) + @", 65536.0);
+        float lines = mix(" + Literal(SurfLineMean) + @", smoothstep(0.55, 0.95, sin(6.2831853 * cyc)), " + Fade(sea.SurfSpacing) + @")
+            * smoothstep(-0.1, 0.25, " + Noise(SurfBreakCell, "-13.0, 29.0") + @") * smoothstep(0.0, 0.35, surf);
+        // The coverage is read through a two-octave warp, so the wash's outline shows no mask texel.
+        // The shore distance keeps it dense against the land, where the filter blends in the land's zero.
+        vec2 warp = vec2(" + Noise(SurfWarpCell, "3.0, 17.0") + @", " + Noise(SurfWarpCell, "-29.0, 5.0") + @")
+            + 0.4 * " + Fade(SurfWarpFineCell) + @" * vec2(" + Noise(SurfWarpFineCell, "11.0, -7.0") + @", " + Noise(SurfWarpFineCell, "-5.0, 23.0") + @");
+        float surf_w = textureLod(surf_tex, (p + " + Literal(SurfWarp) + @" * warp - mask_rect.xy) * mask_rect.zw, 0.0).r;
+        float dense = max(surf_w, 1.0 - m.g * " + Literal(OceanMaskRaster.ShoreReach / OceanMask.Cell) + @") * smoothstep(0.0, 0.1, surf);
+        float edge_n = " + Noise(SurfEdgeCell, "7.0, -11.0") + @" + 0.5 * " + Fade(SurfEdgeFineCell) + @" * " + Noise(SurfEdgeFineCell, "-17.0, 3.0") + @";
+        float cover = min(" + Literal(sea.SurfWash) + @" * smoothstep(0.45, 0.9, dense + 0.3 * edge_n) + " + Literal(sea.SurfLines) + @" * lines, 1.0);
+        // The whitecaps' lace at every distance: two whole octaves of its cell, blended so the cells
+        // span four to eight mean pixels. Past the coarsest octave it fades to its mean.
+        float level = clamp(log2(surf_fp * " + Literal(SurfLacePixels / FoamCellFine) + @"), 0.0, " + Literal(SurfLaceOctaves) + @");
+        float lo = floor(level);
+        float cell = " + Literal(FoamCellFine) + @" * exp2(lo);
+        float hole = 1.3 - 1.6 * cover;
+        float e0 = max(0.04, 2.0 * footprint / cell);
+        float lace = mix(smoothstep(hole - e0, hole + e0 + 0.35, foam_holes(p / cell + vec2(-23.0, 41.0))),
+            smoothstep(hole - 0.5 * e0, hole + 0.5 * e0 + 0.35, foam_holes(p / (2.0 * cell) + vec2(-23.0, 41.0))), level - lo);
+        cover = mix(cover, lace * min(cover * 20.0, 1.0), smoothstep(2.0, 4.0, " + Literal(FoamCellFine * Mathf.Pow(2f, SurfLaceOctaves)) + @" / surf_fp));
+        foam_mix = max(foam_mix, cover * surf_keep);
+    }";
     }
 
     // vec4(dir.x, dir.z, k, A) and vec2(Q, omega) per wave. Omega is rounded to a whole number of
@@ -851,7 +925,7 @@ void fragment() {
         }
     }
     float wake_foam = " + Literal(WakeFoamWhite) + @" * wake.w;
-    float foam_mix = max(min(foam * foam_strength, 1.0), wake_foam) * (1.0 - sheet);
+    float foam_mix = max(min(foam * foam_strength, 1.0), wake_foam) * (1.0 - sheet);" + SurfFoam(sea) + @"
     col = mix(col, vec3(0.6, 0.65, 0.68), foam_mix);
     ALBEDO = col;
     METALLIC = 0.0;

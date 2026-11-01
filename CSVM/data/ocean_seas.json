@@ -14,7 +14,9 @@
     "swell_from": 8,
     "swell_full": 48,
     "look_from": 8,
-    "look_full": 24
+    "look_full": 24,
+    "surf_wash": 0.7,
+    "surf_lines": 0.6
   },
   "C1C": {
     "height": 2,
@@ -30,7 +32,9 @@
     "swell_from": 8,
     "swell_full": 32,
     "look_from": 8,
-    "look_full": 16
+    "look_full": 16,
+    "surf_wash": 0.7,
+    "surf_lines": 0.6
   },
   "C2B": {
     "height": 1.8518,

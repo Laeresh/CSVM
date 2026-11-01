@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, the shader
 
 21. ☑ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
-22. ☐ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
+22. ☑ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
 
 ### Wave D, landing
 
@@ -470,7 +470,44 @@ them in code comments. `Clamped` holds `SwellFrom <= SwellFull - RampGap` and th
 error. The wake's calm zone (`ship_calm`) and the harbour ramps (`lift_tex`, C2's quays at 1.03 m)
 are unchanged by this item; a C2 quay that floods under a crest is a ramp question, not a surf one.
 
-## C22 ☐ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
+## C22 ☑ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
+
+**Landed.** `SeaState` (`CSVM/src/Effects/SeaState.cs`) gains four fields in a fifth lab group, "Surf":
+`surf_wash` (0..1, default 0), `surf_lines` (0..1, default 0), `surf_spacing_m` (4..40 m, default 12) and
+`surf_speed_mps` (0..5 m/s, default 1.5), so the lab dials the wash and the lines to zero separately; `Clamped`,
+`Written`, `Describe`, `--debug-ocean=` and the lab's sliders take them through `Fields`. `OceanShader`
+(`CSVM/src/Effects/OceanShader.cs`) writes a surf block after `foam_mix` only when a strength is above zero, so the
+default sea's text and the fixture `default_l0_zoned.gdshader.txt` are unchanged. The block reads `surf_tex` at the
+fragment's `p` and the mask's G. The wash is `surf_wash` times a smoothstep of the coverage read through a noise warp
+(6 m over 10 m and 3.5 m cells), so its outline follows no 8 m mask texel, with a seaward edge ragged over 6 m and
+2.5 m cells, and held dense within one mask texel of the land by G (the linear filter blends the ring's coverage into
+the land texels' zero). The lines are `surf_lines` times
+`smoothstep(0.55, 0.95, sin(2 pi (G / spacing + csky_time * n / 3600) + bend))`, which moves each line toward the land,
+with `n = OceanShader.SurfLinesPerWrap(spacing, speed)`, whole lines per wrap (450 for 12 m at 1.5 m/s). Still noise
+bends the lines (5 rad over 40 m) and breaks them into lengths (20 m cells), the coverage's own smoothstep fades them
+at the ring's seaward edge, and under the footprint fade they turn to their mean (0.23). The whitecaps' lace
+(`foam_holes`) breaks wash and lines at every distance: its cell is the whitecaps' 1.4 m doubled up to three times,
+two octaves blended by the pixel's mean side (`dFdx`, `dFdy`) so a cell spans four to eight mean pixels, its hole
+edges widened by the long side; past 11.2 m cells it fades to its mean. Every rate stays whole per wrap and nothing
+else moves with time, so a `--det` frame repeats. The sheet's tint mean scales the surf's amount (0.6 to 1.0 under
+C1B's ring, 0.27 to 0.50 under C2's); the fog hands it back to the sheet over `FogSheetAt`, the look ramp does not,
+since the wash lies where `sheet` is 1. `foam_mix` takes the larger of the whitecaps and the surf, so the surf has the
+foam colour, the terrain `light()` and the foam roughness, with no night brightening. `CSVM/data/ocean_seas.json`
+gives `C1B` and `C2` `surf_wash: 0.7, surf_lines: 0.6` (spacing and speed at the defaults, which the file leaves out).
+This shape (D, the lace at every distance over a fine-warped band) is the working one pending the author's verdict, of
+three shot at the golden pose, the 45 m corner pose `--pos=-6050,45,-8160 --lookat=-5960,0,-8050`, a 300 m pose
+`--pos=-5900,300,-8700 --lookat=-5900,0,-7900` and C21's C2 stack pose: E, the same lace over a wash graded across the
+whole ring (`smoothstep(0.2, 1.0, ...)`) with thin breaker lines (a sharp shoreward front and a seaward tail on
+`fract` of the phase, broken more sparsely); F, a speckle grain thresholded by the same graded density, two value-noise
+octaves picked as the lace's are, like the authored `srf0001` texture's grain. E and F differ in shader text, not in a
+field. On the ring D costs 8 `foam_noise` calls, 2 `foam_holes` and 2 coverage reads per fragment (the earlier band
+cost 3 noise calls and 1 read, plus one `foam_holes` up close). In C1B the surf reads as a lacy white band around each
+island with broken lines past it; C2's ring is one or two texels wide, so its surf stays a narrow grey lace rim at the
+stack's base. The far islands at the 300 m pose lie past `FogSheetAt` and draw no surf.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Along every ringed coast the ocean draws its own surf: foam that is dense against the
 land, thins across the authored ring's width, and carries breaking lines that travel toward the

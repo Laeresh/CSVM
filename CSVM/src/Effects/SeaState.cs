@@ -54,6 +54,12 @@ public sealed record SeaState
         new("tint_b", "Tint blue", Coast, 0.5f, 1.5f, 0.01f, s => s.TintB, (s, v) => s with { TintB = v }),
         new("rough_near", "Roughness near", Coast, 0.02f, 0.8f, 0.01f, s => s.RoughNear, (s, v) => s with { RoughNear = v }),
         new("rough_far", "Roughness far", Coast, 0.02f, 0.8f, 0.01f, s => s.RoughFar, (s, v) => s with { RoughFar = v }),
+        new("surf_wash", "Wash at the land", Surf, 0f, 1f, 0.01f, s => s.SurfWash, (s, v) => s with { SurfWash = v },
+            "foam dense against the land across the authored ring; none without a ring"),
+        new("surf_lines", "Breaking lines", Surf, 0f, 1f, 0.01f, s => s.SurfLines, (s, v) => s with { SurfLines = v }),
+        new("surf_spacing_m", "Line spacing (m)", Surf, 4f, 40f, 1f, s => s.SurfSpacing, (s, v) => s with { SurfSpacing = v }),
+        new("surf_speed_mps", "Line speed (m/s)", Surf, 0f, 5f, 0.1f, s => s.SurfSpeed, (s, v) => s with { SurfSpeed = v },
+            "steps by whole lines per csky_time wrap"),
     };
 
     // The lab's groups, in the order its panel shows them.
@@ -61,6 +67,7 @@ public sealed record SeaState
     private const string Bending = "Bending + detail";
     private const string Foam = "Foam";
     private const string Coast = "Coast + colour";
+    private const string Surf = "Surf";
 
     /// <summary>TUNE. The swell's height, the shader's <c>wave_scale</c>, on the grid and in the normals.</summary>
     public float Height { get; init; } = 1f;
@@ -130,6 +137,19 @@ public sealed record SeaState
 
     /// <summary>TUNE. The roughness far off, the shader's <c>rough_far</c>.</summary>
     public float RoughFar { get; init; } = 0.3f;
+
+    /// <summary>TUNE. The surf's foam against the land, over the authored ring's coverage. At zero, with
+    /// <see cref="SurfLines"/>, the shader writes no surf.</summary>
+    public float SurfWash { get; init; }
+
+    /// <summary>TUNE. The surf's breaking lines across the ring, travelling toward the land.</summary>
+    public float SurfLines { get; init; }
+
+    /// <summary>TUNE. Metres between breaking lines, along the shore distance.</summary>
+    public float SurfSpacing { get; init; } = 12f;
+
+    /// <summary>TUNE. The lines' speed toward the land in m/s, rounded to whole lines per <c>csky_time</c> wrap.</summary>
+    public float SurfSpeed { get; init; } = 1.5f;
 
     /// <summary>Whether the open sea's colour is tinted at all. An untinted sea writes no tint term.</summary>
     public bool Tinted => TintR != 1f || TintG != 1f || TintB != 1f;

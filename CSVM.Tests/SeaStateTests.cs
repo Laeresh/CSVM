@@ -22,6 +22,7 @@ public sealed class SeaStateTests
         Assert.Equal((1.3f, 0.12f, 1f, 0.3f), (d.FoamThreshold, d.FoamStrength, d.FoamPatch, d.FoamCover));
         Assert.Equal((24f, 160f, 12f, 64f), (d.SwellFrom, d.SwellFull, d.LookFrom, d.LookFull));
         Assert.Equal((0.2f, 0.3f), (d.RoughNear, d.RoughFar));
+        Assert.Equal((0f, 0f, 12f, 1.5f), (d.SurfWash, d.SurfLines, d.SurfSpacing, d.SurfSpeed));
         Assert.False(d.Tinted);
         Assert.Equal(d, d.Clamped());
         Assert.Equal("defaults", d.Describe());
@@ -33,8 +34,21 @@ public sealed class SeaStateTests
     {
         Assert.Equal(SeaState.Fields.Count, SeaState.Fields.Select(f => f.Key).Distinct().Count());
         Assert.All(SeaState.Fields, f => Assert.InRange(f.Default, f.Min, f.Max));
-        Assert.Equal(new[] { "Swell", "Bending + detail", "Foam", "Coast + colour" },
+        Assert.Equal(new[] { "Swell", "Bending + detail", "Foam", "Coast + colour", "Surf" },
             SeaState.Fields.Select(f => f.Group).Distinct());
+    }
+
+    /// <summary>The surf's four fields clamp into their ranges, and the file's precision gives back what was set.</summary>
+    [Fact]
+    public void TheSurfFieldsClampAndRoundTrip()
+    {
+        var wild = SeaState.Default.WithOverrides("surf_wash:2,surf_lines:-1,surf_spacing_m:1,surf_speed_mps:9");
+        Assert.Equal((1f, 0f, 4f, 5f), (wild.SurfWash, wild.SurfLines, wild.SurfSpacing, wild.SurfSpeed));
+        var sea = SeaState.Default with { SurfWash = 0.70001f, SurfLines = 0.6f, SurfSpacing = 10f, SurfSpeed = 2f };
+        var written = sea.Written();
+        Assert.Equal((0.7f, 0.6f, 10f, 2f), (written.SurfWash, written.SurfLines, written.SurfSpacing, written.SurfSpeed));
+        Assert.Equal(written, written.Written());
+        Assert.Equal("surf_wash:0.70,surf_lines:0.60,surf_spacing_m:10,surf_speed_mps:2.0", sea.Describe());
     }
 
     [Theory]
