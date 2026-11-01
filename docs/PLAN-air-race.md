@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, course model and run
 
 1. ☑ Course file format, loader for both sources, content hash, terms
-2. ☐ Gate apertures from course gates, with a directional crossing test
+2. ☑ Gate apertures from course gates, with a directional crossing test
 3. ☐ Strict-order course run with a flying start
 4. ☐ Touch penalty, +3 s debounced, no collision
 5. ☐ Course bests keyed by layout hash, with penalty count
@@ -177,7 +177,27 @@ nothing else moved.
 or behind an env var unset by default. A `--det` run reads no `<dataRoot>/Courses`, by analogy with
 the HD folders.
 
-## A2 ☐ Gate apertures from course gates, with a directional crossing test
+## A2 ☑ Gate apertures from course gates, with a directional crossing test
+
+**Landed.** `CSVM/src/Flight/Modes/CourseAperture.cs`, with `CSVM.Tests/CourseApertureTests.cs`;
+`StuntGate` is unchanged. `new CourseAperture(gate)` builds the polygon once in the gate's own
+frame (plane z = 0, forward -Z) as a `StuntGate`: a pylon gate's `Width` by `Height` rectangle from
+its base, or a balloon ring's 32-gon of its `Diameter` about its centre. `CrossedBy(from, to,
+direction, motion, out t)` carries the world segment into that frame through `(Rest * motion)`'s
+inverse, refuses motion the wrong way along the forward, and runs `StuntGate.CrossedBy` there; `t`
+is the fraction along the world segment, which an affine map keeps. `Rest` is the authored
+transform (heading about Y at `Position`). `motion` is the gate's idle motion as a `Transform3D` in
+its own frame, `Transform3D.Identity` at rest, so B11's motion function should return that offset
+and draw the gate at `Rest * motion` too; A3 passes it each physics step at the sim time it draws
+with. 32 sides: the inscribed polygon falls short of the circle by `1 - cos(180°/32)`, under 0.5 % of
+the radius (5 cm on a 20 m ring), and the vertices are read only on a step that crosses the gate's
+plane, so the count costs nothing per step. The aperture uses the pylons' centrelines; a plane
+clipping a pylon body is A4's touch, not a miss here. Danger Zone runs keep the side-blind
+`StuntGate.CrossedBy`, now pinned by a unit test.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Each course gate yields a scoring polygon (between the two pylons up to their tops; the
 inside of a ring), and a crossing counts only from the side its sequence entry names.
@@ -190,12 +210,17 @@ with the last and current plane position (`StuntMission.cs:288-289`). Whether it
 crossing by side is not checked.
 
 **Approach.** Build `StuntGate`s from course gates; approximate a ring with a polygon. Add the
-direction check (sign of the motion along `Normal`) without changing Danger Zone behaviour.
-<TODO: the ring polygon's vertex count.>
+direction check (sign of the motion along `Normal`) without changing Danger Zone behaviour. The
+ring polygon's vertex count is settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: a small pure-C# geometry module with unit tests and no
+engine behaviour.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseApertureTests"`
+(forward pass, reverse refused both ways, misses beside a pylon, above the tops, below the base and
+outside the ring, a fast step, a turned heading, a bobbed and swayed pose, the Danger Zone gate
+counting either side), then the complete unit tests. No engine path builds an aperture yet, so the
+battery shows only that nothing else moved.
 
 **⚠ Traps.** The ring polygon moves with the bobbing ring (Decision 9), so the aperture is rebuilt
 or transformed per step; it must be driven by the sim clock, not wall time, or goldens and replays

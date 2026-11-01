@@ -979,6 +979,16 @@ from the file's path. `Parse` reads a file or rejects it whole with the reason, 
 same shape (its doc lists the fields), and `Hash` digests pool, sequence and start but not the
 name or ids, for course bests. Read `CourseLibrary` for where the files live.
 
+## src/Flight/Modes/CourseAperture.cs
+A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its pylons from the
+ground to their tops, or a balloon ring's 32-gon of its diameter, vertical and facing the gate's
+forward. `CrossedBy(from, to, direction, motion, out t)` counts a segment only when it travels the
+way the sequence entry names; `StuntGate.CrossedBy`, which Danger Zones keep calling, counts either
+side. The polygon lives in the gate's frame as a `StuntGate` and the segment is carried into it
+through `Rest * motion`, `motion` being the gate's idle motion as a `Transform3D` in its own frame
+(the identity at rest), so a bobbing ring scores where it is drawn without a per-step allocation.
+The inscribed 32-gon falls short of the circle by under 0.5 % of the radius.
+
 ## src/Flight/Modes/CourseLibrary.cs
 The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped and
 `<dataRoot>/Courses/<chapter>/<name>.json` in the game folder, which wins a name clash. `List`
