@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the mask reads the painted coast
 
 11. ☑ A shore U per coast texture, read from the texture's own profile at bake time (#270)
-12. ☐ A painted-coast kind in the mask: sea on the water side of the iso-line with surf coverage, shore on the land side (#270)
+12. ☑ A painted-coast kind in the mask: sea on the water side of the iso-line with surf coverage, solid on the land side (#270)
 13. ☐ The iso-line is a coastline segment for the exact shore distance (#270)
 
 ### Wave C, the coast steps aside
@@ -336,6 +336,32 @@ commit.
   it lies flat at y = 0 anywhere before leaving it out of the list.
 
 ## B12 ☐ A painted-coast kind in the mask
+
+**Landed.** `Kind.Coast` in `OceanMaskRaster`, chosen by the mask's own predicate (the B11 name list
+and `IsPaintedSeaTile`) on triangles passing the sea-level test, now the shared constant
+`OceanMaskRaster.SeaLevelBand`. Once the base sheet and profiles are known, each corner stores how far
+seaward of its profile's crossing it lies, in fade widths; sea tiles store 2 (sea, no coverage). The
+raster interpolates it per texel: above 0 is water with coverage 1 at the crossing falling to 0 one
+fade seaward, the surf ring's meaning; at or below 0 is land. Triangles only mark per-texel coast
+arrays (land beats water, highest coverage wins) and each band resolves its own rows afterward, so
+order and band count cannot change a texel. The water side is sea over coplanar land only: a solid
+rising off the water keeps its texels and seed (`StandSolid`, `StandSeed`). The land side is solid
+over the tile or sheet beneath. `coast_tris=` joins the `ocean: built grid` line, and the surf plane
+now carries the painted coasts' coverage, so C1's and C3's waves calm and wash at them already. No
+coastline segment comes from the iso-line yet (B13) and no shader changed (C21).
+
+**Verified.** `dotnet build` 0 warnings; `dotnet test` 7960 passed, 0 failed, 6 skipped;
+`OceanMaskRasterTests` covers the kind in the whole-image oracle at 1, 5 and 12 bands, plus four tests
+in both triangle orders (sea to the waterline, sea over the land beneath a strip, an overlay's land
+over its sea tile, a rising solid on a strip's water keeping its texels, which fails without the
+narrowing). Mask dumps under `--freecam --det --graphics=enhanced --water-quality=waves` at two poses
+per chapter put the sea's edge on the painted waterline: C1 at the rock overlay's edge, C2 on
+`beach1`'s foam band and the decal's mean rock edge, C3 on `shore1`'s seaward foam fringe and the cliff
+tiles' 10 % point. C1's 376 `cliff01_trans2` triangles are 262 over the tiles and 114 zero-area strip
+joins the raster drops. `coast_tris` C1 1022, C2 121, C3 1315. The complete battery runs on the merged
+tree at the wave's end.
+
+**Original approach (kept for reference).**
 
 **Goal.** In the mask, texels on the water side of each painted-coast triangle's iso-line are open sea
 (`Sea = 1`) with a surf coverage measured across the texture's fade, and texels on the land side stay

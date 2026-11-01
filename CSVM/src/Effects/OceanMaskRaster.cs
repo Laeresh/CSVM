@@ -37,6 +37,10 @@ internal static class OceanMaskRaster
     /// and the hide's band over it. A bridge deck or a roof over the sea is no shore, and marks no texel.</summary>
     public const float SolidTop = OceanMask.RampTop + OceanMask.HideHeight;
 
+    /// <summary>How far either side of y = 0 every corner of a sea-level triangle lies. A solid within it
+    /// is coplanar land, which a painted coast's water side clears.</summary>
+    public const float SeaLevelBand = 0.5f;
+
     // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
     // a chain of at most ShoreReach / Cell steps, so a band sees every chain its own rows can take.
     private const int Halo = (int)(ShoreReach / Cell) + 4;
@@ -52,13 +56,20 @@ internal static class OceanMaskRaster
     // Below this many rows a band's halo costs more than its thread saves.
     private const int MinBandRows = 64;
 
-    /// <summary>What a triangle marks: open sea, other water at sea level (an opaque coast tile), the
-    /// surf ring, or a solid near sea level. The surf ring is open sea with its authored coverage.</summary>
+    // A texel's painted-coast mark. The higher wins, so land wins where two coasts overlap.
+    private const byte CoastWater = 1;
+    private const byte CoastLand = 2;
+
+    /// <summary>What a triangle marks: open sea, other water at sea level, the surf ring, a painted
+    /// coast, or a solid near sea level. The surf ring is open sea with its authored coverage. A
+    /// painted coast is sea with a surf coverage seaward of its painted waterline, solid landward of
+    /// it. It decides its texels over every other kind.</summary>
     public enum Kind
     {
         Base,
         Edge,
         Surf,
+        Coast,
         Solid,
     }
 
@@ -152,6 +163,7 @@ internal static class OceanMaskRaster
             if (tris[i].Ramp && spans[i].Hi + 2 >= r0 && spans[i].Lo - 2 <= r1)
                 Lift(tris[i], g, r0, r1);
         }
+        PaintedCoasts(g, r0, r1);
         // Open texels take the mean, rounded through Channel as a tinted texel is. The bytes do not
         // depend on how the rows split into bands.
         byte mr = Channel(mean.R), mg = Channel(mean.G), mb = Channel(mean.B);
@@ -164,6 +176,32 @@ internal static class OceanMaskRaster
             tint[o] = open ? mr : Channel(c.R);
             tint[o + 1] = open ? mg : Channel(c.G);
             tint[o + 2] = open ? mb : Channel(c.B);
+        }
+    }
+
+    // A painted coast decides its texel once every triangle has marked it, so no triangle order
+    // moves it. Its land side is solid over the tile or sheet beneath. Its water side is open sea
+    // over the coplanar land under a strip, while a solid rising off the water keeps its marks. Where
+    // two coasts overlap, land wins.
+    private static void PaintedCoasts(Grid g, int r0, int r1)
+    {
+        for (int i = r0 * g.W; i < (r1 + 1) * g.W; i++)
+        {
+            if (g.Coast[i] == CoastLand)
+            {
+                g.Sea[i] = 0;
+                g.Solid[i] = true;
+                g.Seed[i] = true;
+            }
+            else if (g.Coast[i] == CoastWater)
+            {
+                g.Sea[i] = 1;
+                g.Solid[i] = g.StandSolid[i];
+                g.Seed[i] = g.StandSeed[i];
+                g.Zone[i] = AnyZone;
+                if (g.CoastSurf[i] > g.Surf[i])
+                    g.Surf[i] = g.CoastSurf[i];
+            }
         }
     }
 
@@ -281,12 +319,13 @@ internal static class OceanMaskRaster
         int z0 = Math.Max(r0, (int)Math.Floor((Math.Min(ay, Math.Min(by, cy)) - minZ) / Cell));
         int z1 = Math.Min(r1, (int)Math.Ceiling((Math.Max(ay, Math.Max(by, cy)) - minZ) / Cell));
         bool hull = t.Kind == Kind.Solid && !IsCoast(t);
+        bool standing = t.Kind == Kind.Solid && !IsFlat(t);
         // A triangle smaller than a texel still marks the texels its corners land in.
         if (t.Kind == Kind.Solid)
         {
-            Corner(g, (int)((ax - minX) / Cell), (int)((ay - minZ) / Cell), r0, r1, hull);
-            Corner(g, (int)((bx - minX) / Cell), (int)((by - minZ) / Cell), r0, r1, hull);
-            Corner(g, (int)((cx - minX) / Cell), (int)((cy - minZ) / Cell), r0, r1, hull);
+            Corner(g, (int)((ax - minX) / Cell), (int)((ay - minZ) / Cell), r0, r1, hull, standing);
+            Corner(g, (int)((bx - minX) / Cell), (int)((by - minZ) / Cell), r0, r1, hull, standing);
+            Corner(g, (int)((cx - minX) / Cell), (int)((cy - minZ) / Cell), r0, r1, hull, standing);
         }
         if (z0 > z1)
             return;
@@ -350,9 +389,27 @@ internal static class OceanMaskRaster
                         if (surf > g.Surf[i])
                             g.Surf[i] = surf;
                         break;
+                    case Kind.Coast:
+                        // How far seaward of the painted waterline, in fade widths.
+                        float sea = (t.Surf.X * w1) + (t.Surf.Y * w2) + (t.Surf.Z * w0);
+                        if (sea > 0f)
+                        {
+                            if (g.Coast[i] == 0)
+                                g.Coast[i] = CoastWater;
+                            byte cover = Channel(1f - sea);
+                            if (cover > g.CoastSurf[i])
+                                g.CoastSurf[i] = cover;
+                        }
+                        else
+                        {
+                            g.Coast[i] = CoastLand;
+                        }
+                        break;
                     default:
                         g.Solid[i] = true;
                         g.Seed[i] = true;
+                        g.StandSolid[i] |= standing;
+                        g.StandSeed[i] |= standing;
                         break;
                 }
             }
@@ -411,14 +468,21 @@ internal static class OceanMaskRaster
             lo = Math.Max(lo, vx + bound - slack);
     }
 
-    private static void Corner(Grid g, int x, int z, int r0, int r1, bool hull)
+    private static void Corner(Grid g, int x, int z, int r0, int r1, bool hull, bool standing)
     {
         if (x >= 0 && x < g.W && z >= r0 && z <= r1)
         {
-            g.Solid[(z * g.W) + x] = true;
-            g.Seed[(z * g.W) + x] |= hull;
+            int i = (z * g.W) + x;
+            g.Solid[i] = true;
+            g.Seed[i] |= hull;
+            g.StandSolid[i] |= standing;
+            g.StandSeed[i] |= standing && hull;
         }
     }
+
+    // A triangle within the sea-level band at every corner, the walk's own test for coplanar land.
+    private static bool IsFlat(in Tri t) =>
+        Math.Min(t.A.Y, Math.Min(t.B.Y, t.C.Y)) > -SeaLevelBand && Math.Max(t.A.Y, Math.Max(t.B.Y, t.C.Y)) < SeaLevelBand;
 
     // A solid touching sea level, or with a coast edge, meets the water; its corner texels leave the
     // sea beside them to the coastline. Only a solid off the water's reach seeds its corners.
@@ -578,15 +642,17 @@ internal static class OceanMaskRaster
     /// <summary>One world-space triangle. On the base sheet it carries its corners' stored vertex
     /// colours and its mesh instance's zone group. A ramp is a base triangle rising off sea level:
     /// its texels take <see cref="RampSea"/> and its plane lifts the ocean. A surf triangle carries
-    /// its corners' surf coverage (1 - u) in <see cref="Surf"/>'s X, Y and Z.</summary>
+    /// its corners' surf coverage (1 - u) in <see cref="Surf"/>'s X, Y and Z. A painted coast carries
+    /// there how far seaward of its painted waterline each corner lies, in widths of its fade. At 0
+    /// or below a texel is land; above, its coverage is 1 less that.</summary>
     public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default);
 
     /// <summary>The texel bytes of the mask, tint, zone group, lift and surf, and each pass's
     /// milliseconds over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore
     /// distance), the tint RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on water off the sheet
     /// and <see cref="SeamZone"/> on a seam between two groups. The lift is R8, the ocean's height
-    /// over a ramp over <see cref="OceanMask.RampTop"/>. The surf is R8, the surf ring's coverage,
-    /// 0 off it.</summary>
+    /// over a ramp over <see cref="OceanMask.RampTop"/>. The surf is R8, the coverage of the surf
+    /// ring and the painted coasts' water sides, 0 off them.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
         double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift, byte[] Surf);
 
@@ -608,6 +674,10 @@ internal static class OceanMaskRaster
             Ramp = new bool[w * h];
             Lift = new float[w * h];
             Surf = new byte[w * h];
+            Coast = new byte[w * h];
+            CoastSurf = new byte[w * h];
+            StandSolid = new bool[w * h];
+            StandSeed = new bool[w * h];
         }
 
         public int W { get; }
@@ -618,7 +688,7 @@ internal static class OceanMaskRaster
 
         public float MinZ { get; }
 
-        // 1 open sea (the base sheet or the surf ring), 2 other water at sea level.
+        // 1 open sea (the base sheet, the surf ring, a painted coast's water side), 2 other water at sea level.
         public byte[] Sea { get; }
 
         public bool[] Solid { get; }
@@ -644,5 +714,15 @@ internal static class OceanMaskRaster
 
         // The surf ring's coverage, the highest of the surf triangles over a texel.
         public byte[] Surf { get; }
+
+        // The painted coasts' mark (CoastWater, CoastLand) and their water sides' highest coverage.
+        public byte[] Coast { get; }
+
+        public byte[] CoastSurf { get; }
+
+        // The Solid and Seed marks of solids rising off the water, which a coast's water side keeps.
+        public bool[] StandSolid { get; }
+
+        public bool[] StandSeed { get; }
     }
 }
