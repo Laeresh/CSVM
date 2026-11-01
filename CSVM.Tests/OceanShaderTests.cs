@@ -177,10 +177,11 @@ public sealed class OceanShaderTests
         var sea = SeaState.Default with { SurfWash = wash, SurfLines = lines, SurfSpacing = spacing, SurfSpeed = speed };
         string text = OceanShader.Code(sea, 0, true);
         Assert.Contains("foam_mix = max(foam_mix, cover * surf_keep);", text);
-        var phase = Regex.Match(text, @"m\.g \* ([0-9.]+) \+ csky_time \* \(([0-9.]+) / 3600\.0\)");
-        Assert.True(phase.Success, "the surf's phase is in the text");
+        var arrive = Regex.Match(text, @"float arrive = csky_time \* \(([0-9.]+) / 3600\.0\)");
+        var phase = Regex.Match(text, @"float cyc = m\.g \* ([0-9.]+) \+ arrive;");
+        Assert.True(arrive.Success && phase.Success, "the surf's phase is in the text");
         Assert.Equal(160.0 / spacing, double.Parse(phase.Groups[1].Value, CultureInfo.InvariantCulture), 4);
-        double written = double.Parse(phase.Groups[2].Value, CultureInfo.InvariantCulture);
+        double written = double.Parse(arrive.Groups[1].Value, CultureInfo.InvariantCulture);
         AssertWhole(written, $"surf lines at {speed} m/s every {spacing} m");
         Assert.Equal(perWrap, written);
         Assert.InRange(written * spacing / Wrap, speed - (spacing / (2 * Wrap)), speed + (spacing / (2 * Wrap)));
@@ -188,6 +189,30 @@ public sealed class OceanShaderTests
         string plain = OceanShader.Code(SeaState.Default, 0, true);
         Assert.DoesNotContain("surf_keep", plain);
         Assert.Equal(plain, OceanShader.Code(SeaState.Default with { SurfSpacing = spacing, SurfSpeed = speed + 1f }, 0, true));
+    }
+
+    /// <summary>The surf's foam moves only at whole rates per wrap. Every drifting noise drifts whole
+    /// periods of its own cells, the warp turns whole turns, and every other csky_time rate is whole.</summary>
+    [Fact]
+    public void TheSurfsChurnRunsWholePerWrap()
+    {
+        string text = OceanShader.Code(SeaState.Default with { SurfWash = 0.7f, SurfLines = 0.6f }, 0, true);
+        var drifts = Regex.Matches(text, @"- vec2\(csky_time \* \(([0-9.]+) / 3600\.0\), 0\.0\)(?: \+ vec2\([-0-9., ]+\))?, ([0-9.]+)\)");
+        Assert.Equal(8, drifts.Count);
+        foreach (Match m in drifts)
+        {
+            double periods = double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+            AssertWhole(periods, "a drifting noise's periods per wrap");
+            Assert.Equal(periods, double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+        }
+        var turn = Regex.Match(text, @"float turn = 6\.2831853 \* csky_time \* \(([0-9.]+) / 3600\.0\)");
+        Assert.True(turn.Success, "the warp's turn is in the text");
+        Assert.Equal(90.0, double.Parse(turn.Groups[1].Value, CultureInfo.InvariantCulture));
+        var rates = Regex.Matches(text, @"csky_time \* \(([0-9.]+) / 3600\.0\)");
+        Assert.Equal(10, rates.Count);
+        foreach (Match m in rates)
+            AssertWhole(double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), "a surf rate per wrap");
+        Assert.Contains("float surge = 0.25 * sin(6.2831853 * (arrive - 0.1));", text);
     }
 
     /// <summary>The shader reads csky_time, never Godot's TIME, at any sea: a network peer and a

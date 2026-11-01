@@ -130,6 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
 22. ☑ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
+23. ☑ The surf's foam moves on the sim clock: churn in the wash and the lace, a surge with each breaker
 
 ### Wave D, landing
 
@@ -516,8 +517,8 @@ bends the lines (5 rad over 40 m) and breaks them into lengths (20 m cells), the
 at the ring's seaward edge, and under the footprint fade they turn to their mean (0.23). The whitecaps' lace
 (`foam_holes`) breaks wash and lines at every distance: its cell is the whitecaps' 1.4 m doubled up to three times,
 two octaves blended by the pixel's mean side (`dFdx`, `dFdy`) so a cell spans four to eight mean pixels, its hole
-edges widened by the long side; past 11.2 m cells it fades to its mean. Every rate stays whole per wrap and nothing
-else moves with time, so a `--det` frame repeats. The sheet's tint mean scales the surf's amount (0.6 to 1.0 under
+edges widened by the long side; past 11.2 m cells it fades to its mean. Every rate stays whole per wrap, so a `--det`
+frame repeats; C23 moves the foam itself. The sheet's tint mean scales the surf's amount (0.6 to 1.0 under
 C1B's ring, 0.27 to 0.50 under C2's); the fog hands it back to the sheet over `FogSheetAt`, the look ramp does not,
 since the wash lies where `sheet` is 1. `foam_mix` takes the larger of the whitecaps and the surf, so the surf has the
 foam colour, the terrain `light()` and the foam roughness, with no night brightening. `CSVM/data/ocean_seas.json`
@@ -582,6 +583,58 @@ C21, as a montage of frames 120, 180 and 240 for the author
 `light()` (`SceneBuilder.TerrainShadowLight`, `OceanShader.cs:861-862`), so night chapters dim it
 as the ring's vertex greys did; do not brighten it for C1B alone. The fog hands the fragment back
 to the sheet look (`FogSheetAt`, line 814); surf past that is wasted work and a pop.
+
+## C23 ☑ The surf's foam moves on the sim clock: churn in the wash and the lace, a surge with each breaker
+
+**Landed.** `OceanShader.SurfFoam` (`CSVM/src/Effects/OceanShader.cs`) moves the surf's foam on `csky_time`; the
+lines are unchanged. Each lace octave's `foam_holes` lookup is warped by up to 1.2 of its cells by a two-channel noise
+field of two lace cells, each channel drifting along its own turned axis (`TurnA`, `TurnB`) at half a noise cell a
+second, 1800 periods of `foam_noise`'s repeat per wrap, as the wake's foam churns with the water's age and the
+whitecaps' patches drift (`FoamPatchTerms`). The wash's edge octaves drift apart, the 6 m one at 0.6 m/s along
+`TurnA` (360 periods per wrap) and the 2.5 m one at 1 m/s along `TurnB` (1440), and its coverage warp turns once
+every 40 s (90 turns per wrap). The wash's density surges by `0.25 * sin(2 pi (arrive - 0.1))`, where `arrive` is the
+lines' phase at the land edge (their 450 cycles per wrap plus the bend), so the whole wash floods as each bent line
+reaches the land and drains before the next; it does not vary with the shore distance, which would stripe the wash
+into rings. Every new tune is a `// TUNE.` constant (`SurfChurnRate`, `SurfChurnWarp`, `SurfEdgeDrift`,
+`SurfEdgeFineDrift`, `SurfWarpTurnSecs`, `SurfSurge`, `SurfSurgeLag`); no `SeaState` field is added, the default sea
+writes no surf and the fixture is unchanged. This shape (H, churn plus surge) is the working one pending the author's
+verdict, of three with the lines unchanged: G, the churn, drifts and turn alone; J, G with the lace carried toward the
+land at 1 m/s along the shore distance's gradient (two extra mask reads), in two layers restarting every 3 s half a
+period apart (1200 restarts per wrap, each restart's offset keyed modulo 1200). Against C22's D, G and H add four
+`foam_noise` calls (twelve on the ring) and keep two `foam_holes`; J adds the same four noise calls, two more
+`foam_holes` (four) and two mask reads. Shot at the golden and 45 m corner poses as 121-frame bursts (`--shots`,
+frames 120 to 240), and at C21's C2 stack pose for D and H.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
+**Goal.** The surf's foam moves on the sim clock as the open sea's foam does: the wash and its lace churn in place,
+and the wash answers each breaker, so a live flight sees moving foam and not a still pattern under moving lines.
+
+**Evidence (confidence: direction-sound, magnitude TUNE).** In C22's surf only the lines read `csky_time`; the lace's
+`foam_holes`, the coverage warp and the wash's edge noise are fixed in world space. The author, flying C1B live: "In
+C1B the foam is static only the lines move, can we add some movement to it?" The house patterns are the whitecaps'
+patch drift (`FoamPatchTerms`: `foam_noise` repeating along x and drifting a whole period per wrap) and `wake_foam`'s
+churn (a drifting noise field warping the hole lookup).
+
+**Approach.** Churn: warp each lace octave's `foam_holes` lookup by a drifting two-channel noise field of its own
+scale, the channels along two turned axes; drift the wash's two edge octaves in different directions; turn the
+coverage warp slowly. Candidates with the lines unchanged: G, the churn; H, G with the wash's density breathing on the
+line phase; J, G with the hole field advected toward the land. Every rate whole per wrap; a new tune is a `SeaState`
+field only when the lab needs to dial it.
+
+**Model recommendation.** high. Look work with a determinism constraint; the author judges it from GIFs.
+
+**Verify.** `OceanShaderTests` gains a case that every drifting noise drifts whole periods of its own repeat per wrap
+and the warp turns whole turns; the Ocean and SeaState unit filter and the four ocean suites; the golden and corner
+poses at frames 120, 135, 150, 165 and 180 per candidate with C22's D as the reference row, and animated GIFs; C2's
+stack at 120 and 180 for D and the pick; the golden pose at frame 120 twice under `--det`, the same pixmd5.
+
+**⚠ Traps.** `foam_noise` repeats along x only, so a drift runs along a turned x axis and drifts a whole period per
+wrap; a drift along y or a fractional period flashes at the hour. `foam_holes` has no period, so its lookup moves only by
+a bounded warp or by layers that restart on a whole count per wrap, never by an offset that grows with time. A surge that varies with the shore distance stripes the wash
+into rings. The derivatives that pick the lace's octave stay outside the ring's branch.
 
 # Wave D, landing
 
