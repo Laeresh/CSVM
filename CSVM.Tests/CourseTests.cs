@@ -61,6 +61,44 @@ public class CourseTests
     }
 
     [Fact]
+    public void ATitleRoundTripsAndABlankOneShowsTheFileName()
+    {
+        var titled = Parse(Json.Replace("\"version\": 1,", "\"version\": 1, \"title\": \"Harbour Dash\",", StringComparison.Ordinal));
+        var again = Parse(titled.ToJson());
+
+        Assert.Equal(("Harbour Dash", "Harbour Dash"), (titled.Title, titled.DisplayName));
+        Assert.Equal(titled.Title, again.Title);
+        Assert.Equal(titled.ToJson(), again.ToJson());
+        Assert.Equal(("", "Harbour"), (Parse(Json).Title, Parse(Json).DisplayName));
+        var empty = Parse(Json.Replace("\"version\": 1,", "\"version\": 1, \"title\": \"\",", StringComparison.Ordinal));
+        Assert.Equal("Harbour", empty.DisplayName);
+        Assert.DoesNotContain("title", empty.ToJson(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ATitleIsNotInTheHash()
+    {
+        var course = Parse(Json);
+
+        Assert.Equal(course.Hash, (course with { Title = "Harbour Dash" }).Hash);
+        Assert.Equal(course.Hash, (course with { Title = "Something Else" }).Hash);
+    }
+
+    [Fact]
+    public void LibraryDisplayNameFallsBackToTheFileName()
+    {
+        var library = new CourseLibrary(_shipped, _game);
+        WriteCourse(_shipped, "C1", "titled", Json.Replace("\"version\": 1,", "\"version\": 1, \"title\": \"Harbour Dash\",", StringComparison.Ordinal));
+        WriteCourse(_shipped, "C1", "plain", Json);
+        WriteCourse(_shipped, "C1", "broken", "{ \"start\": 3 }");
+
+        Assert.Equal("Harbour Dash", library.DisplayName("C1", "titled"));
+        Assert.Equal("plain", library.DisplayName("C1", "plain"));
+        Assert.Equal("broken", library.DisplayName("C1", "broken"));
+        Assert.Equal("absent", library.DisplayName("C1", "absent"));
+    }
+
+    [Fact]
     public void HeadingZeroCrossesTowardMinusZ()
     {
         var forward = Parse(Json).Gates[0].Forward;
@@ -95,6 +133,8 @@ public class CourseTests
     [InlineData("\"start\": { \"pos\": [10, 120, -40.5],", "\"start\": { \"pos\": [10, 120],", "is not [x, y, z]")]
     [InlineData("\"heading\": 90", "\"heading\": \"east\"", "start \"heading\" is not a number")]
     [InlineData("\"version\": 1", "\"version\": 2", "newer than this build")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"title\": 7,", "course \"title\" is not a string")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"title\": null,", "course \"title\" is not a string")]
     [InlineData("\"sequence\": [", "\"sequence\": [ }", "")]
     public void RejectsAMalformedFileWithAReason(string from, string to, string reason)
     {

@@ -24,11 +24,11 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
     public const string CourseNote = "Fly through every gate in order.";
 
     /// <summary>What the load and pause screens call this flight. An Instant Action mission takes the
-    /// wizard's own name for it ("Attacking a Zeppelin"), an authored course its name, anything else
+    /// wizard's own name for it ("Attacking a Zeppelin"), an authored course its title, anything else
     /// its mode. ⚠ Not ModeName, that is the log file's internal tag ("fly", "stunt").</summary>
-    public static string Subject(SessionSpec launch)
+    public static string Subject(SessionSpec launch, string dataRoot)
     {
-        if (FlownCourse(launch) is { } course)
+        if (FlownCourse(launch, dataRoot) is { } course)
         {
             return course;
         }
@@ -41,9 +41,12 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             : launch.Versus ? "Dogfight" : "Free Flight";
     }
 
-    /// <summary>The authored course's name the launch flies, or null.</summary>
-    public static string? FlownCourse(SessionSpec launch) =>
-        launch.Course is { } course && launch.CourseRefusal == null ? course.Name : null;
+    /// <summary>The display name of the authored course the launch flies, read from the library the
+    /// flight reads (<see cref="Flight.Modes.CourseLibrary.DisplayName"/>), or null.</summary>
+    public static string? FlownCourse(SessionSpec launch, string dataRoot) =>
+        launch.Course is { } course && launch.CourseRefusal == null
+            ? Flight.Modes.CourseLibrary.ForLaunch(dataRoot, launch.Det).DisplayName(course.Chapter, course.Name)
+            : null;
 
     /// <summary>The chapter and mode letter a Dogfight door's <c>:chapter:letter</c> suffix names.
     /// A suffix leaving either out names C1, or a Deathmatch with nobody on a team.</summary>
@@ -73,7 +76,7 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         string? briefing = briefingKey
             ?? (campaign || missionType != null ? null : LaunchBriefing(teamedLobby));
         // A course is ours too: its name heads the board, the one rule under it.
-        string? note = !campaign && FlownCourse(spec) != null ? CourseNote : null;
+        string? note = !campaign && spec.Course != null && spec.CourseRefusal == null ? CourseNote : null;
         var board = UI.Screens.LoadBoard.Build(
             paths.DataRoot, paths.Data.Rimage, paths.Data.Zrdr, paths.Data.Messages, campaign, subject, missionType, sheet, briefing, note);
         if (briefing != null)
@@ -308,5 +311,5 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
                 ? CampaignProfileStore.ForSession(spec.ProfilesDir).Load(name)
                 : null);
 
-    private string LaunchSubject() => Subject(spec);
+    private string LaunchSubject() => Subject(spec, paths.DataRoot);
 }

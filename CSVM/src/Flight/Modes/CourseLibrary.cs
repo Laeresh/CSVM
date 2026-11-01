@@ -98,6 +98,10 @@ public sealed class CourseLibrary
         return course;
     }
 
+    /// <summary>What a screen calls the course <paramref name="chapter"/>/<paramref name="name"/>: its
+    /// <see cref="Course.DisplayName"/>, or <paramref name="name"/> where the file is missing or broken.</summary>
+    public string DisplayName(string chapter, string name) => Load(chapter, name, out _)?.DisplayName ?? name;
+
     /// <summary>Writes <paramref name="course"/> to <c>&lt;chapter&gt;/&lt;name&gt;.json</c> under the
     /// <paramref name="target"/> root, atomically, and returns the OS path written. A shipped root is
     /// resolved through <see cref="ProjectSettings.GlobalizePath"/>, which is the source tree only in a

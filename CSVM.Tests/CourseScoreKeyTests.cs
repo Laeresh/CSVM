@@ -58,6 +58,15 @@ public class CourseScoreKeyTests
     }
 
     [Fact]
+    public void ARetitleKeepsTheBoard()
+    {
+        var retitled = Sample with { Title = "Out and Back" };
+
+        Assert.Equal(Key(Sample), Key(retitled));
+        Assert.Equal(Key(Sample), Key(retitled with { Title = "Another Title" }));
+    }
+
+    [Fact]
     public void ACourseRunNeverKeysUnderItsDangerZoneMission()
     {
         // The launch flies a course over the chapter's IA1 world, the Danger Zone key's mission.

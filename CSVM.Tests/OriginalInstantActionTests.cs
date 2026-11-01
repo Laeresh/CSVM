@@ -598,7 +598,7 @@ public class OriginalInstantActionTests
     [Fact]
     public void TheCourseBoxShowsForASoloStuntRunAndAPickedCourseFliesAloneOrHidesForABotRow()
     {
-        var host = OpenSeated(out var ia, out var setup, code => code == "C5" ? new[] { "harbour_dash" } : Array.Empty<string>());
+        var host = OpenSeated(out var ia, out var setup, code => code == "C5" ? new[] { ("harbour_dash", "harbour_dash") } : Array.Empty<(string, string)>());
         Assert.False(Row(host, OriginalInstantActionScreen.CourseKey).Visible);
         Click(host, 1);
         Assert.Equal(("stunt_flying", "C5"), (ia.MissionType.Key, ia.Environment.Code));
@@ -1116,7 +1116,7 @@ public class OriginalInstantActionTests
     // when the loadout screen is under test, and a build store where the Pilot Plane list is.
     private static InstantActionHost Host(
         out InstantActionFeature ia, bool stock, out PlayerSetupFeature setup, CustomPlaneStore? planes = null,
-        Func<string, IReadOnlyList<string>>? courses = null)
+        Func<string, IReadOnlyList<(string Name, string Title)>>? courses = null)
     {
         ia = new InstantActionFeature(_ => InstantActionFeatureTests.InstantActionDefFor("Test Ace"), courses);
         setup = new PlayerSetupFeature();
@@ -1137,7 +1137,7 @@ public class OriginalInstantActionTests
 
     // The same with seat 0 joined, which is what makes the pilot's fit a seat's own.
     private static InstantActionHost OpenSeated(
-        out InstantActionFeature ia, out PlayerSetupFeature setup, Func<string, IReadOnlyList<string>>? courses = null)
+        out InstantActionFeature ia, out PlayerSetupFeature setup, Func<string, IReadOnlyList<(string Name, string Title)>>? courses = null)
     {
         var host = Host(out ia, stock: true, out setup, courses: courses);
         setup.SetRoster(OriginalRosters.Roster(Array.Empty<CustomPlaneDef>()));

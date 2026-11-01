@@ -22,6 +22,7 @@ internal static class CourseLabSuites
     private const string Chapter = "C1";
     private const string Sample = "sample_out_and_back";
     private const string Edited = "course_lab_suite";
+    private const string EditedTitle = "Lab Suite Loop";
     private const int PaneWidth = 1280;
     private const int PaneHeight = 720;
 
@@ -37,8 +38,9 @@ internal static class CourseLabSuites
         + "a click places pylon gates and a ring on the ground facing the camera's way, ids p1, p2, r1 flown forward "
         + "in placing order, and the start point; a click on a gate selects it; the ring's height-above-ground and "
         + "diameter sliders and a held drag move what they should; a pylon gate placed over the sea stands on the sea "
-        + "surface; a delete drops the gate's sequence entries; Save writes the scratch root alone and the file "
-        + "reloads to the same course; the panel over the course is photographed. The sequence panel: a row click "
+        + "surface; a delete drops the gate's sequence entries; Save writes the scratch root alone, with the title "
+        + "field's title and an unmoved hash, the file reloads to the same course and the list shows its title and "
+        + "file name; the panel over the course is photographed. The sequence panel: a row click "
         + "selects its entry and flies the camera onto it, a placed gate's entry goes after the selected one, Up, "
         + "Flip, Remove and Add again (reverse) edit the order, the world numbers and line follow, and the sequence "
         + "saves and reloads; the panels over the numbered course are photographed. The gizmo: a press on a handle "
@@ -191,6 +193,8 @@ internal static class CourseLabSuites
                 && draft.SelectedId == null && lab.Visuals?.GateNodes.Count == 2,
             $"deleting p2 drops it and its sequence entry, and the drawing follows: {string.Join(", ", draft.Course.Sequence)}");
 
+        string hashBefore = draft.Course.Hash;
+        ((LineEdit)lab.FindChild("course_title", true, false)).Text = EditedTitle;
         string? path = lab.Save();
         string expected = Path.Combine(root, "shipped", Chapter, Edited + ".json");
         string real = Path.Combine(ctx.RepoRoot, "CSVM", "data", "courses", Chapter, Edited + ".json");
@@ -200,6 +204,10 @@ internal static class CourseLabSuites
         var saved = draft.Course;
         var back = new CourseLibrary(library.Shipped, library.GameFolder).Load(Chapter, Edited, out string error);
         ctx.Check(back != null && back.ToJson() == saved.ToJson() && back.Hash == saved.Hash, $"the saved file reloads to the same course, hash {back?.Hash} for {saved.Hash} {error}");
+        var list = (OptionButton)lab.FindChild("course_list", true, false);
+        string listed = Enumerable.Range(0, list.ItemCount).Select(list.GetItemText).FirstOrDefault(t => t.Contains(Edited, StringComparison.Ordinal)) ?? "none";
+        ctx.Check(back?.Title == EditedTitle && saved.Hash == hashBefore && listed.StartsWith($"{EditedTitle} [{Edited}]", StringComparison.Ordinal),
+            $"the title field's text is saved and reloads, the hash unmoved, and the list shows title and file name: {back?.Title}, {listed}");
         lab.New("scratch_other");
         ctx.Check(lab.Open(Edited) && draft.Course.ToJson() == saved.ToJson() && lab.Visuals?.GateNodes.Count == 2,
             $"the lab opens it again from its list: {draft.Course.Name}, {draft.Course.Gates.Count} gates");

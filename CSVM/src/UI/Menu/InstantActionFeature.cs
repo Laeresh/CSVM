@@ -102,18 +102,19 @@ public sealed class InstantActionFeature : IMenuFeature
     private static readonly int[] RaceWindowRows = { 3, 5, 10, 15 };
 
     private readonly Func<string, InstantActionDef> _loadBase;
-    private readonly Func<string, IReadOnlyList<string>> _listCourses;
-    private readonly Dictionary<string, IReadOnlyList<string>> _courses = new(StringComparer.Ordinal);
+    private readonly Func<string, IReadOnlyList<(string Name, string Title)>> _listCourses;
+    private readonly Dictionary<string, IReadOnlyList<(string Name, string Title)>> _courses = new(StringComparer.Ordinal);
     private readonly InstantActionWaveSetup[] _waves = new InstantActionWaveSetup[WaveSlots];
 
     /// <summary>A feature whose environment defs come from <paramref name="loadBase"/>, called with
     /// a chapter code when an environment is confirmed. The loader's failure policy is its own;
-    /// see <see cref="ForGameData"/> for the one the game uses. <paramref name="listCourses"/>
-    /// names a chapter's authored courses, none when it is null.</summary>
-    public InstantActionFeature(Func<string, InstantActionDef> loadBase, Func<string, IReadOnlyList<string>>? listCourses = null)
+    /// see <see cref="ForGameData"/> for the one the game uses. A chapter's authored courses, each a
+    /// file name and the title it shows, come from <paramref name="listCourses"/>; none when it is null.</summary>
+    public InstantActionFeature(
+        Func<string, InstantActionDef> loadBase, Func<string, IReadOnlyList<(string Name, string Title)>>? listCourses = null)
     {
         _loadBase = loadBase ?? throw new ArgumentNullException(nameof(loadBase));
-        _listCourses = listCourses ?? (_ => Array.Empty<string>());
+        _listCourses = listCourses ?? (_ => Array.Empty<(string, string)>());
         Discard();
     }
 
@@ -153,25 +154,12 @@ public sealed class InstantActionFeature : IMenuFeature
     /// only where <see cref="LaunchCourse"/> answers it.</summary>
     public string? Course { get; private set; }
 
-    /// <summary>The Course option's rows for the picked environment: <see cref="DangerZonesLabel"/>
-    /// where the chapter ships Danger Zones, then its courses by name.</summary>
-    public IReadOnlyList<string> CourseOptions
-    {
-        get
-        {
-            var rows = new List<string>();
-            if (MenuChapters.DangerZonesFor(Environment.Code))
-            {
-                rows.Add(DangerZonesLabel);
-            }
-
-            rows.AddRange(CoursesFor(Environment.Code));
-            return rows;
-        }
-    }
+    /// <summary>The Course option's rows for the picked environment as they show: <see cref="DangerZonesLabel"/>
+    /// where the chapter ships Danger Zones, then its courses' titles in file name order.</summary>
+    public IReadOnlyList<string> CourseOptions => CourseRows.Select(r => r.Title).ToList();
 
     /// <summary>The picked row within <see cref="CourseOptions"/>.</summary>
-    public int CourseIndex => Course is { } name ? Math.Max(0, CourseOptions.ToList().IndexOf(name)) : 0;
+    public int CourseIndex => Math.Max(0, CourseRows.FindIndex(r => r.Name == Course));
 
     /// <summary>The picked mission type's row within <see cref="MissionTypes"/>. A presentation
     /// keeps it inside the list by confirming the environment after changing it.</summary>
@@ -230,11 +218,28 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <c>disallow_missions</c>), or null until <see cref="ConfirmEnvironment"/> has run.</summary>
     public InstantActionDef? BaseDef { get; private set; }
 
+    // The Course rows with the file name each picks, null for the Danger Zones.
+    private List<(string? Name, string Title)> CourseRows
+    {
+        get
+        {
+            var rows = new List<(string? Name, string Title)>();
+            if (MenuChapters.DangerZonesFor(Environment.Code))
+            {
+                rows.Add((null, DangerZonesLabel));
+            }
+
+            rows.AddRange(CoursesFor(Environment.Code).Select(c => ((string?)c.Name, c.Title)));
+            return rows;
+        }
+    }
+
     /// <summary>The feature the game runs: environment defs read from the chapter's own
     /// <c>IA1/ia.zrd</c> out of <paramref name="data"/>. A failed read falls back to the built-in
     /// defaults with a warning rather than leaving the menu unable to proceed. The courses come from
     /// <paramref name="listCourses"/>, as the constructor takes them.</summary>
-    public static InstantActionFeature ForGameData(Spec.GameData data, Func<string, IReadOnlyList<string>>? listCourses = null)
+    public static InstantActionFeature ForGameData(
+        Spec.GameData data, Func<string, IReadOnlyList<(string Name, string Title)>>? listCourses = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         return new InstantActionFeature(
@@ -310,8 +315,8 @@ public sealed class InstantActionFeature : IMenuFeature
             count, $"{militia.Name} {aircraft}", aircraft, SkillRows[skillIndex], militia.AccentId);
     }
 
-    /// <summary>A chapter's authored course names, listed once per environment confirm.</summary>
-    public IReadOnlyList<string> CoursesFor(string chapterCode)
+    /// <summary>A chapter's authored courses, file name and title, listed once per environment confirm.</summary>
+    public IReadOnlyList<(string Name, string Title)> CoursesFor(string chapterCode)
     {
         if (!_courses.TryGetValue(chapterCode, out var names))
         {
@@ -334,9 +339,8 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>Picks a row within <see cref="CourseOptions"/>.</summary>
     public void SelectCourse(int index)
     {
-        var rows = CourseOptions;
-        string row = rows[Index(index, rows.Count, nameof(index))];
-        Course = index == 0 && MenuChapters.DangerZonesFor(Environment.Code) ? null : row;
+        var rows = CourseRows;
+        Course = rows[Index(index, rows.Count, nameof(index))].Name;
     }
 
     /// <summary>Whether the setup offers the Course option: stunt flying in a chapter with
@@ -361,15 +365,15 @@ public sealed class InstantActionFeature : IMenuFeature
     {
         _courses.Clear();
         MissionTypeIndex = Wrap(MissionTypeIndex, MissionTypes.Count);
-        var names = CoursesFor(Environment.Code);
-        if (Course != null && !names.Contains(Course))
+        var courses = CoursesFor(Environment.Code);
+        if (Course != null && !courses.Any(c => c.Name == Course))
         {
             Course = null;
         }
 
-        if (Course == null && !MenuChapters.DangerZonesFor(Environment.Code) && names.Count > 0)
+        if (Course == null && !MenuChapters.DangerZonesFor(Environment.Code) && courses.Count > 0)
         {
-            Course = names[0];
+            Course = courses[0].Name;
         }
 
         BaseDef = _loadBase(Environment.Code);

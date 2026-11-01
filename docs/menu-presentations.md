@@ -455,9 +455,10 @@ of its own beyond handing the feature the seats. The host hides the presentation
 runs, and a failed build shows the same instance again where it stood.
 
 Instant Action's Stunt Flying has a remake-only **Course** option. Its rows are "Danger Zones" (the
-original's run, the default) where the chapter ships them, then the chapter's authored courses by
-name from both course sources (`Flight/Modes/CourseLibrary.cs`, the game folder's winning a name; a
-`--det` run lists the shipped ones alone). A chapter with an authored course offers Stunt Flying
+original's run, the default) where the chapter ships them, then the chapter's authored courses in
+file name order from both course sources (`Flight/Modes/CourseLibrary.cs`, the game folder's winning
+a name; a `--det` run lists the shipped ones alone). A row shows the course file's `title`, or its
+file name where it has none; the pick and the launch carry the file name. A chapter with an authored course offers Stunt Flying
 even without Danger Zones, and takes its first course; the local lobby's Stunt Race keeps to the
 Danger Zones. Authored courses are solo, so the option is offered only to one seat with no bot row
 on the join board (`InstantActionFeature.OffersCourse`); a second seat or a bot row withdraws it and
@@ -468,7 +469,7 @@ course. A course the build cannot fly does not quit the process as the command l
 launcher returns to the screen the launch came from with the reason in Original's warning box.
 Original draws the option as a dropdown on the Race Bots line, the two never showing together, and
 a picked course blanks the wingman, enemy and Lives boxes, since a course run takes none of them.
-Its load screen is the blackboard headed by the course's name with "Fly through every gate in
+Its load screen is the blackboard headed by the course's title with "Fly through every gate in
 order." in the blurb's place, never the Instant Action stunt dialog's Danger Zone text.
 
 A local Dogfight's mission rules are the `PlayerSetupFeature`'s `MatchOptions`, the network lobby's own

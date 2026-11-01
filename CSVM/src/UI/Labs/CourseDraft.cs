@@ -299,4 +299,11 @@ public sealed class CourseDraft
         Course = Course with { Name = name };
         Changed?.Invoke();
     }
+
+    /// <summary>Sets the title a player sees; blank shows the name. The file name and bests stay.</summary>
+    public void Retitle(string title)
+    {
+        Course = Course with { Title = title };
+        Changed?.Invoke();
+    }
 }

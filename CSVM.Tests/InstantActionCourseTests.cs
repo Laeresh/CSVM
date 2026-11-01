@@ -71,6 +71,20 @@ public class InstantActionCourseTests
     }
 
     [Fact]
+    public void TheCourseRowsShowTitlesAndPickFileNames()
+    {
+        var ia = new InstantActionFeature(_ => InstantAction.Defaults(), code => code == "C1" ? new[] { ("a_loop", "a_loop"), (Sample, "Airfield Out and Back") } : Array.Empty<(string, string)>());
+        ia.ConfirmEnvironment();
+        ia.SelectMissionType(2);
+
+        Assert.Equal(new[] { InstantActionFeature.DangerZonesLabel, "a_loop", "Airfield Out and Back" }, ia.CourseOptions);
+        ia.SelectCourse(2);
+        Assert.Equal(Sample, ia.Course);
+        Assert.Equal(2, ia.CourseIndex);
+        Assert.Equal(Sample, ia.BuildExit(new[] { Seat }).Course);
+    }
+
+    [Fact]
     public void ACourseIsOfferedToOneSeatWithNoBotRowsOnAStuntRunAlone()
     {
         var ia = StuntOnC1();
@@ -156,7 +170,7 @@ public class InstantActionCourseTests
     public void EveryPresetKeepsItsMissionTypeWhereCoursesWidenTheList()
     {
         var plain = new InstantActionFeature(_ => InstantAction.Defaults());
-        var everywhere = new InstantActionFeature(_ => InstantAction.Defaults(), _ => new[] { "any" });
+        var everywhere = new InstantActionFeature(_ => InstantAction.Defaults(), _ => new[] { ("any", "any") });
         for (int i = 0; i < InstantActionFeature.Presets.Count; i++)
         {
             plain.ApplyPreset(i);
@@ -176,8 +190,9 @@ public class InstantActionCourseTests
         Assert.Single(LoadScreens.Texts(null, "FREE FLIGHT", ZrdrSet.None, new Messages()));
     }
 
+    // Each course shows its file name, as a file without a title does.
     private static InstantActionFeature Feature(Dictionary<string, string[]> courses) =>
-        new(_ => InstantAction.Defaults(), code => courses.TryGetValue(code, out var names) ? names : Array.Empty<string>());
+        new(_ => InstantAction.Defaults(), code => courses.TryGetValue(code, out var names) ? names.Select(n => (n, n)).ToList() : new List<(string, string)>());
 
     // Stunt flying on the first environment, C1, which ships Danger Zones and two stand-in courses.
     private static InstantActionFeature StuntOnC1()

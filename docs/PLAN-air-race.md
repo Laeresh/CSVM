@@ -63,6 +63,7 @@ exist in one player's game folder only) and bots taught the sequence; both are a
 | 24 | Position storage | **Absolute world coordinates**; a pylon over water stands on the sea surface (assumed, not asked) |
 | 25 | Default element sizes | **TUNE at the controls**; these planes are larger than Red Bull racers (assumed, not asked) |
 | 26 | Terms | **"Pylon" already means a weapon hardpoint** (`MarkerKind.Pylon`, `CSVM/src/Mech3/MarkerRig.cs:62`); the new elements get distinct terms in `CONTEXT.md` |
+| 27 | Course display name | **An optional title in the course file**, falling back to the file name; not in the hash or score key |
 
 ## Ground rules
 
@@ -114,6 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ◐ Course option in Stunt Flying
 32. ☐ File the multiplayer and bots follow-up issue
+33. ☑ Course display name in the file
 
 ## Dependency and parallelism notes
 
@@ -121,7 +123,7 @@ A1 blocks everything (every item reads the course model). A2 → A3 → A4 is a 
 A5 and A6 need A3. B11 needs A1 only and can run beside A2..A6; B12 needs B11 and A4 (the touch
 event drives the cut); B13 needs A3 and A4. Wave C needs A1, and C22 needs B11's meshes to show
 what is placed; C21 → C22 → C23 → C24 is a chain in one lab file. D31 needs A1 and A6. D32 has no
-dependency. File contention: A3, A4 and B13 all touch the Stunt run and HUD under
+dependency. D33 needs A1, C21 and D31, whose display sites it changes. File contention: A3, A4 and B13 all touch the Stunt run and HUD under
 `CSVM/src/Flight/Modes/`, so do not run them in parallel worktrees; Wave C items share the lab file.
 
 ---
@@ -931,8 +933,8 @@ the generic failed-build text; a command line still quits with exit 1. **Load sc
 `CourseNote`, "Fly through every gate in order.", which `LoadScreens.Texts` writes in the stunt
 blurb's place (OBJ5: 360, 135, wrap 400, body face) under the heading; a course launch carries no
 def, so the Instant Action stunt dialog's Danger Zone text never draws. The pause sheet's heading
-takes the course name through the same `Subject`. The heading is the raw file stem upper-cased
-(`SAMPLE_OUT_AND_BACK`); prettifying it is the user's call.
+takes the course name through the same `Subject`. D33 makes the heading and the dropdown row the
+course file's title (`AIRFIELD OUT AND BACK`), the file name upper-cased where the file has none.
 
 **Verified.** <pending orchestrator run>
 
@@ -982,3 +984,64 @@ agent). A guest may not have the host's game-folder course file.
 **Verify.** The issue exists and is linked from the closing commit.
 
 **⚠ Traps.** None known.
+
+## D33 ☑ Course display name in the file
+
+**Landed.** **Format** (`Flight/Modes/Course.cs`): an optional top-level `"title"` string. `Parse`
+reads it into `Course.Title` (an init property, empty when absent) and rejects a non-string one,
+`null` included, as `course "title" is not a string`. `ToJson` writes it after `version` only when it
+is not blank. `DisplayName` is the title, or `Name` (the file stem) where the title is absent, empty
+or whitespace. The title is in neither `Course.Hash` nor `ScoreStore.KeyFor` (still
+`course/<chapter>/<name>/<hash>/<plane>`), so a retitle keeps a course's bests; the file name stays
+the id for `--course=`, `--course-edit=`, `CourseLibrary.Load`/`Save` and the menu's pick.
+`CourseLibrary.DisplayName(chapter, name)` loads the winning file and answers its `DisplayName`, the
+name where the file is missing or broken. **Where it shows:** the Stunt Flying Course dropdown
+(`InstantActionFeature`'s lister now yields file name and title pairs; `CourseOptions` are the titles,
+`Course`, `CourseIndex` and `SelectCourse` work on the file name through a private `CourseRows`;
+`ProcessMenu` and `MenuSuiteHost` build the pairs through `DisplayName`); the load board heading and
+the pause sheet heading (`LaunchBoards.Subject(spec, dataRoot)`/`FlownCourse`, reading
+`CourseLibrary.ForLaunch(dataRoot, spec.Det)`, the library the flight reads; `SessionBoards` passes
+its data root); and the lab's course list, as `title [name] (source)` where the two differ.
+**Lab:** a `course_title` line edit under the name row, placeholder "title players see (blank: the
+name)"; Save applies it through `CourseDraft.Retitle` beside `Rename`, and every `Changed` shows the
+draft's title in it while it has no focus. **Sample:** `C1/sample_out_and_back.json` carries
+`"title": "Airfield Out and Back"`. The shots are `d33-course-option.png` (the open Course list:
+Danger Zones, Airfield Out and Back) and `d33-course-loadboard.png` (headed AIRFIELD OUT AND BACK)
+under `.scratch/air-race/d33/` of the plan worktree.
+
+**Verified.** <pending orchestrator run>
+
+**Model recommendation.** A mid-tier model: one optional field threaded through a parser, a lister
+and three display sites, with unit tests and suite extensions.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseTests|FullyQualifiedName~CourseScoreKeyTests|FullyQualifiedName~InstantActionCourseTests|FullyQualifiedName~OriginalInstantActionTests"`
+(the title round trip, absent and empty falling back to the file name and leaving no `title` in the
+written JSON, a number and a `null` title rejected naming the field, the hash and the score key
+unchanged by a title, `CourseLibrary.DisplayName` over a titled, a plain, a broken and an absent
+file, the dropdown showing titles while the pick and exit carry the file name), then the complete
+unit tests, then `.\scripts\RunTests.ps1 -Suite 'course-lab,course-launch,menu-instant-action-course,menu-original-instant-action' -SkipUnits -SkipGoldens`.
+`course-lab` types a title into `course_title` before its save and checks the reloaded file's title,
+the hash unmoved and the list row `Lab Suite Loop [course_lab_suite]`; `menu-instant-action-course`
+finds and clicks the sample by its title, checks the exit still names `sample_out_and_back`, and
+checks `LaunchBoards.Subject` of a `--det --course=C1/sample_out_and_back` spec is the title. The
+look closes with the user's verdict on the two shots.
+
+**Original approach (kept for reference).**
+
+**Goal.** A course shows players a readable name instead of its file stem (`sample_out_and_back`,
+`SAMPLE_OUT_AND_BACK` on the loading board).
+
+**Evidence (confidence: traced-to-code).** D31 left the dropdown row and `LaunchBoards.Subject` on
+`Course.Name`, the file stem, and called prettifying it the user's call. The user chose a display
+name stored in the course file (Decision 27).
+
+**Approach.** An optional `"title"` in the course JSON, written by `ToJson` when set, read by
+`Parse`, the file name standing in when it is absent or empty; a non-string title is a format error
+naming the field. The course lab gets a Title field next to the name field. The dropdown, the
+loading board heading, the pause sheet heading and the lab's course list (title and file name where
+they differ) show the title. The title stays out of `Course.Hash` and the score key (Decision 20),
+and the file name stays the id everywhere. The shipped sample gets a title.
+
+**⚠ Traps.** Renaming the display must not reset bests, so the title must not reach the hash or
+the key. The board heading is built before the flight loads its course, so it reads the file itself,
+through the same `--det`-aware library the flight uses.

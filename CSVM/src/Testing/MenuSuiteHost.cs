@@ -29,7 +29,10 @@ internal static class MenuSuiteHost
         host.Features.Add(new FreeFlightFeature());
         // The shipped courses alone: no suite may depend on a course one machine dropped in.
         host.Features.Add(InstantActionFeature.ForGameData(data, chapter =>
-            new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, null).List(chapter).Select(f => f.Name).ToList()));
+        {
+            var library = new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, null);
+            return library.List(chapter).Select(f => (f.Name, library.DisplayName(chapter, f.Name))).ToList();
+        }));
         host.Features.Add(new PlayerSetupFeature());
         // The hangar reads its labels and stock defaults as the launcher wires them: the langui
         // table, the stock fits and the root reader scope.

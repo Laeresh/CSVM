@@ -266,7 +266,8 @@ _Avoid_: zoom window, magnifier, picture-in-picture, scope
 **Course**:
 An authored air race layout for one chapter, one file per course: a gate pool, a sequence, and a
 start point. Remake-only content flown under Stunt Flying, distinct from the Danger Zones the
-original authors.
+original authors. Its file name is its id; its optional title is the name a player sees, the file
+name standing in where it has none.
 _Avoid_: track, route (a `dzpathN` ribbon is a route), circuit, map
 
 **Course gate**:

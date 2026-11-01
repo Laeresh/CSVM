@@ -116,10 +116,11 @@ internal static class MenuInstantActionSuites
     [Suite("menu-instant-action-course",
         "Instant Action's Course option through Original's screen over the install's layout and the shipped "
         + "courses alone: stunt flying on the airfield (C1) opens a Course list of Danger Zones then "
-        + "sample_out_and_back, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
-        + "Mission leaves as a LaunchExit naming the course with no def whose session spec matches "
+        + "sample_out_and_back by its title, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
+        + "Mission leaves as a LaunchExit naming the course by file name with no def whose session spec matches "
         + "--stunt --course=C1/sample_out_and_back on the course, chapter, mission, mode, pilots, plane, def and "
-        + "bots, a bot row on the join board withdraws the box and flies the Danger Zones, and a menu-driven "
+        + "bots, the load and pause boards' heading is the title, a bot row on the join board withdraws the box and "
+        + "flies the Danger Zones, and a menu-driven "
         + "session over a course no library holds fails its build with the reason for the menu rather than "
         + "quitting, the return landing back on the Instant Action screen with that reason in its warning box")]
     internal static void MenuInstantActionCourse(TestContext ctx)
@@ -182,19 +183,20 @@ internal static class MenuInstantActionSuites
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, List<MenuExit> exits)
     {
         const string sample = "sample_out_and_back";
+        const string title = "Airfield Out and Back";
         ctx.Check(shell.InstantAction.PoseCourse() && shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.CourseKey,
             $"stunt flying opens the Course list ({ia.MissionType.Key}, {shell.InstantAction.OpenDropdown})");
         var labels = shell.Rows.Select(r => r.Label).ToList();
-        ctx.Check(ia.Environment.Code == "C1" && labels.Count >= 2 && labels[0] == InstantActionFeature.DangerZonesLabel && labels.Contains(sample),
-            $"on the airfield the list is the Danger Zones then the chapter's courses ({ia.Environment.Code}: {string.Join(", ", labels)})");
-        var pick = shell.Rows.FirstOrDefault(r => r.Label == sample);
+        ctx.Check(ia.Environment.Code == "C1" && labels.Count >= 2 && labels[0] == InstantActionFeature.DangerZonesLabel && labels.Contains(title),
+            $"on the airfield the list is the Danger Zones then the chapter's courses by their titles ({ia.Environment.Code}: {string.Join(", ", labels)})");
+        var pick = shell.Rows.FirstOrDefault(r => r.Label == title);
         if (pick == null)
         {
             return null;
         }
 
         Click(host, seat, Pointer(fit, pick.X + 5f, pick.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(ia.Course == sample && shell.InstantAction.OpenDropdown == null && Row(shell, OriginalInstantActionScreen.CourseKey)?.Label == sample,
+        ctx.Check(ia.Course == sample && shell.InstantAction.OpenDropdown == null && Row(shell, OriginalInstantActionScreen.CourseKey)?.Label == title,
             $"a click on the sample picks it and closes the list ({ia.Course}, {Row(shell, OriginalInstantActionScreen.CourseKey)?.Label})");
         ctx.Check(Row(shell, OriginalInstantActionScreen.WingmenKey) is { Enabled: false } && Row(shell, "IA_D_NENEMY0") is { Enabled: false }
                 && Row(shell, OriginalInstantActionScreen.LivesKey) is { Enabled: false, Label: "" },
@@ -221,6 +223,9 @@ internal static class MenuInstantActionSuites
             $"its session spec is the one --stunt --course= builds ({menu.Course}/{cli.Course}, {menu.Chapter}/{menu.Mission}, players {menu.Players}, plane {menu.PlaneName})");
         ctx.Check(MenuReturnDestination.ForLaunch(exit) == MenuReturnDestination.InstantAction,
             $"and it names the Instant Action screen as its return ({MenuReturnDestination.ForLaunch(exit).GetType().Name})");
+        // --det keeps a game-folder course of the same name out, as the shipped list above is.
+        string heading = Launch.LaunchBoards.Subject(SessionSpec.Parse(new[] { "--det", $"--course=C1/{sample}" }), ctx.DataRoot);
+        ctx.Check(heading == title, $"the load and pause boards head the flight with the course's title ({heading})");
         return exit;
     }
 

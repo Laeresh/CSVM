@@ -976,12 +976,14 @@ when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run, `--debug-scor
 own; internal overloads let a suite name the file, `stunt-scores-scripted` pins it. `CustomPlaneStore` is the same shape.
 
 ## src/Flight/Modes/Course.cs
-One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon gate or a balloon
-ring, world position, heading and sizes), the `SequenceEntry` list naming pool gates by id with a
-`GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come
-from the file's path. `Parse` reads a file or rejects it whole with the reason, `ToJson` writes the
-same shape (its doc lists the fields), and `Hash` digests pool, sequence and start but not the
-name or ids; `ScoreStore.KeyFor` adds chapter and name for course bests. Read `CourseLibrary` for where the files live.
+One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon gate or a balloon ring, world position,
+heading and sizes), the `SequenceEntry` list naming pool gates by id with a `GateDirection` (a gate may repeat), and the
+start point as a `SpawnPoint`. Chapter and name come from the file's path, and the name is the id everywhere (`--course=`,
+`--course-edit=`, the library, the score key). The optional `title` is what a player sees: `DisplayName` is the title, or
+the name where it is absent or blank; a non-string title is a format error. `Parse` reads a file or rejects it whole with
+the reason, `ToJson` writes the same shape (its doc lists the fields), and `Hash` digests pool, sequence and start but not
+the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course bests, so a retitle keeps them. Read
+`CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
 A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its pylons from the
@@ -1007,7 +1009,8 @@ not game data. Coverage: `CSVM.Tests/CourseTouchTests.cs`.
 The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped and
 `<dataRoot>/Courses/<chapter>/<name>.json` in the game folder, which wins a name clash. `List`
 names a chapter's courses, `Load` parses the winning file, `Save` writes one atomically into either
-root. `ForLaunch` reads no game folder under `--det`, as no HD pack is read; a test hands in OS
+root, and `DisplayName(chapter, name)` is the winning file's title for the menu, the boards and the
+lab's list, the name where the file is missing, broken or untitled. `ForLaunch` reads no game folder under `--det`, as no HD pack is read; a test hands in OS
 paths instead. `Launch/GameSession.cs` is its engine reader, for `--course=`, and the
 `course-launch` suite reads the shipped `C1/sample_out_and_back` through `res://` and a
 game-folder file of that name over it. Read `Course` for the model.

@@ -347,7 +347,7 @@ rows).
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
 - `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, a course run's under `course/` with its hash and penalty count, faster runs only; a scripted run's store is a throwaway.
-- `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the JSON shape and the layout hash.
+- `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the optional display title, the JSON shape and the layout hash.
 - `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
 - `src/Flight/Modes/CourseElements.cs`, a course gate's touch volumes on `CourseGateShape`'s sizes (course pylon cones, ring rim tube, balloons), the +3 s penalty and the `CourseTouch` event record.
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
@@ -504,7 +504,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/BootSequence.cs`, `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
 - `src/UI/Screens/BootCard.cs`, the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/Screens/LoadBoard.cs`, the node that hangs the load screen over a build, tracking the window until the world appears.
-- `src/UI/Screens/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts, or a course's name and rule.
+- `src/UI/Screens/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts, or a course's title and rule.
 - `src/UI/Screens/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/UI/Screens/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/Screens/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.

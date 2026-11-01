@@ -56,9 +56,16 @@ public sealed record Course(
     private static readonly JsonDocumentOptions ReaderOptions =
         new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
+    /// <summary>The file's optional <c>title</c>, the name a player sees; empty where it has none.
+    /// ⚠ Not in <see cref="Hash"/> nor the score key: retitling a course keeps its bests.</summary>
+    public string Title { get; init; } = string.Empty;
+
+    /// <summary>What every screen calls the course: <see cref="Title"/>, or <see cref="Name"/> where it is blank.</summary>
+    public string DisplayName => string.IsNullOrWhiteSpace(Title) ? Name : Title;
+
     /// <summary>A stable hex digest of the gate pool (in file order, ids left out), the sequence and
-    /// the start point. The name, chapter and gate ids are not in it. The score key adds the first
-    /// two (<see cref="ScoreStore.KeyFor"/>), and any moved gate starts a fresh board.</summary>
+    /// the start point. The name, title, chapter and gate ids are not in it. The score key adds the
+    /// name and chapter (<see cref="ScoreStore.KeyFor"/>), and any moved gate starts a fresh board.</summary>
     public string Hash
     {
         get
@@ -106,6 +113,12 @@ public sealed record Course(
                 throw new FormatException($"version {version.GetInt32()} is newer than this build reads ({Version})");
             }
 
+            string title = string.Empty;
+            if (root.TryGetProperty("title", out var titled))
+            {
+                title = titled.ValueKind == JsonValueKind.String ? titled.GetString()! : throw new FormatException("course \"title\" is not a string");
+            }
+
             var start = Field(root, "start", "course");
             var gates = new List<CourseGate>();
             foreach (var g in Field(root, "gates", "course").EnumerateArray())
@@ -135,7 +148,10 @@ public sealed record Course(
 
             error = string.Empty;
             return new Course(
-                chapter, name, new SpawnPoint(Vec(Field(start, "pos", "start")), Number(start, "heading", "start")), gates, sequence);
+                chapter, name, new SpawnPoint(Vec(Field(start, "pos", "start")), Number(start, "heading", "start")), gates, sequence)
+            {
+                Title = title,
+            };
         }
         catch (Exception e) when (e is JsonException or FormatException or InvalidOperationException)
         {
@@ -145,7 +161,8 @@ public sealed record Course(
     }
 
     /// <summary>The course as indented JSON, the shape <see cref="Parse"/> reads. The top level holds
-    /// <c>version</c>, <c>start</c> {<c>pos</c>, <c>heading</c>}, <c>gates</c> and <c>sequence</c>.
+    /// <c>version</c>, <c>title</c> where one is set, <c>start</c> {<c>pos</c>, <c>heading</c>},
+    /// <c>gates</c> and <c>sequence</c>.
     /// A gate is {<c>id</c>, <c>kind</c> <c>pylons</c>|<c>ring</c>, <c>pos</c>, <c>heading</c>} plus
     /// <c>width</c> and <c>height</c>, or <c>diameter</c>. An entry is {<c>gate</c>, <c>dir</c>
     /// <c>forward</c>|<c>reverse</c>}, and a position is [x, y, z].</summary>
@@ -156,6 +173,11 @@ public sealed record Course(
         {
             w.WriteStartObject();
             w.WriteNumber("version", Version);
+            if (!string.IsNullOrWhiteSpace(Title))
+            {
+                w.WriteString("title", Title);
+            }
+
             w.WriteStartObject("start");
             WriteVec(w, "pos", Start.Position);
             w.WriteNumber("heading", Start.HeadingDeg);

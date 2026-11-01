@@ -54,6 +54,7 @@ public sealed partial class CourseLab : Node
     private MeshInstance3D? _box;
     private OptionButton? _courses;
     private LineEdit? _name;
+    private LineEdit? _title;
     private Label? _info;
     private Label? _selectedTitle;
     private Control? _selected;
@@ -409,8 +410,9 @@ public sealed partial class CourseLab : Node
         }
     }
 
-    /// <summary>Writes the course, named from the name field, under <see cref="SaveTarget"/>. Returns the
-    /// path written, or null where Save is off or the write failed, the reason on the status line.</summary>
+    /// <summary>Writes the course, named from the name field and titled from the title field, under
+    /// <see cref="SaveTarget"/>. Returns the path written, or null where Save is off or the write
+    /// failed, the reason on the status line.</summary>
     public string? Save()
     {
         if (SaveTarget is not { } target)
@@ -423,6 +425,11 @@ public sealed partial class CourseLab : Node
         if (_name != null && _name.Text.Trim() is { Length: > 0 } typed && typed != Draft.Course.Name)
         {
             Draft.Rename(typed);
+        }
+
+        if (_title != null && _title.Text.Trim() != Draft.Course.Title)
+        {
+            Draft.Retitle(_title.Text.Trim());
         }
 
         try
@@ -582,6 +589,9 @@ public sealed partial class CourseLab : Node
         newRow.AddChild(_name);
         newRow.AddChild(Btn("New", () => New(_name.Text.Trim() is { Length: > 0 } typed ? typed : NewName)));
         box.AddChild(newRow);
+        _title = new LineEdit { Name = "course_title", PlaceholderText = "title players see (blank: the name)" };
+        _title.TextSubmitted += _ => _title.ReleaseFocus();
+        box.AddChild(_title);
 
         box.AddChild(new Label { Text = "LEFT CLICK PLACES", Modulate = Amber });
         var place = new OptionButton { Name = "place_kind", FocusMode = Control.FocusModeEnum.None };
@@ -799,7 +809,9 @@ public sealed partial class CourseLab : Node
         _courses.Clear();
         foreach (var file in Library.List(_chapter))
         {
-            _courses.AddItem($"{file.Name} ({(file.Source == CourseSource.Shipped ? "shipped" : "game folder")})");
+            string title = Library.DisplayName(_chapter, file.Name);
+            string shown = title == file.Name ? file.Name : $"{title} [{file.Name}]";
+            _courses.AddItem($"{shown} ({(file.Source == CourseSource.Shipped ? "shipped" : "game folder")})");
             _courses.SetItemMetadata(_courses.ItemCount - 1, file.Name);
         }
     }
@@ -816,6 +828,11 @@ public sealed partial class CourseLab : Node
         if (_name != null && !_name.HasFocus())
         {
             _name.Text = course.Name;
+        }
+
+        if (_title != null && !_title.HasFocus())
+        {
+            _title.Text = course.Title;
         }
 
         var s = course.Start;
