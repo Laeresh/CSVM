@@ -247,7 +247,13 @@ public sealed class CourseDraft
     /// <summary>The start point <see cref="StartAboveGroundM"/> over <paramref name="ground"/> at <paramref name="heading"/>.</summary>
     public void PlaceStart(Vector3 ground, float heading)
     {
-        Course = Course with { Start = new SpawnPoint(ground + (Vector3.Up * StartAboveGroundM), heading) };
+        SetStart(new SpawnPoint(ground + (Vector3.Up * StartAboveGroundM), heading));
+    }
+
+    /// <summary>The start point exactly at <paramref name="start"/>.</summary>
+    public void SetStart(SpawnPoint start)
+    {
+        Course = Course with { Start = start };
         Changed?.Invoke();
     }
 

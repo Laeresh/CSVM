@@ -32,6 +32,9 @@ public sealed partial class CourseLab : Node
     // A down ray for the ground under a point starts this high, above any chapter's terrain.
     private const float RayTopM = 20000f;
 
+    // "Start here" puts the start point this far ahead of the camera, so the spawned aircraft does not sit in the eye.
+    private const float StartAheadM = 2f;
+
     // A row click's flight, TUNE. It eases over this long to an eye behind the gate on the entry's approach.
     // The eye stands back this share of the gate's largest size plus a margin, raised this share of that.
     private const float FlySeconds = 0.6f;
@@ -316,6 +319,23 @@ public sealed partial class CourseLab : Node
         var start = camera == null ? default : new SpawnPoint(camera.GlobalPosition, CourseDraft.HeadingOf(camera.GlobalBasis));
         _note = $"new course {_chapter}/{name}, its start at the camera until one is placed";
         Draft.Load(CourseDraft.Empty(_chapter, name, start));
+    }
+
+    /// <summary>Puts the start point <see cref="StartAheadM"/> ahead of the camera on its level heading, at
+    /// its height, so a run begins where the editor stands. False without a camera.</summary>
+    public bool StartAtCamera()
+    {
+        if (!IsInsideTree() || GetViewport().GetCamera3D() is not { } camera)
+        {
+            return false;
+        }
+
+        float heading = CourseDraft.HeadingOf(camera.GlobalBasis);
+        var ahead = new Basis(Vector3.Up, Mathf.DegToRad(heading)) * Vector3.Forward;
+        Draft.SetStart(new SpawnPoint(camera.GlobalPosition + (ahead * StartAheadM), heading));
+        _note = "start point set ahead of the camera";
+        UpdateStatus();
+        return true;
     }
 
     /// <summary>A left click at <paramref name="screen"/> with the panel open. It selects the course gate under
@@ -603,6 +623,7 @@ public sealed partial class CourseLab : Node
         place.Selected = (int)Place;
         place.ItemSelected += i => Place = (PlaceKind)(int)i;
         box.AddChild(place);
+        box.AddChild(Btn("Start here (2 m ahead of the camera)", () => StartAtCamera()));
         _info = Small("");
         box.AddChild(_info);
 

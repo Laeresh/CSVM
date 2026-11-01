@@ -64,6 +64,10 @@ public class CourseDraftTests
         draft.PlaceStart(ground, 45f);
         Assert.Equal(new SpawnPoint(ground + (Vector3.Up * CourseDraft.StartAboveGroundM), 45f), draft.Course.Start);
         Assert.Equal(3, changes);
+        var exact = new SpawnPoint(new Vector3(10f, 250f, -40f), -30f);
+        draft.SetStart(exact);
+        Assert.Equal(exact, draft.Course.Start);
+        Assert.Equal(4, changes);
     }
 
     [Fact]
