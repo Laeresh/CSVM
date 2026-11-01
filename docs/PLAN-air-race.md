@@ -109,9 +109,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, course editor lab
 
 21. ☑ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
-22. ◐ Click-to-place, adjustment sliders, start point
-23. ◐ 3D gizmo: three move arrows and a yaw ring
-24. ◐ Sequence panel, gate reuse with direction, world numbers and path line
+22. ☑ Click-to-place, adjustment sliders, start point
+23. ☑ 3D gizmo: three move arrows and a yaw ring
+24. ☑ Sequence panel, gate reuse with direction, world numbers and path line
 
 ### Wave D, menu and follow-up
 
@@ -786,9 +786,9 @@ continues as C22's Verify says.
 **⚠ Traps.** No lab writes objects to a file yet, so there is no precedent to copy for the exported
 save path.
 
-## C22 ◐ Click-to-place, adjustment sliders, start point
+## C22 ☑ Click-to-place, adjustment sliders, start point
 
-**Landed (at the controls pending).** In `CourseLab.cs` and `CourseDraft.cs`. **Kind selector:** "Nothing (click
+**Landed.** The user built and flew their own course in the lab, accepting its feel. In `CourseLab.cs` and `CourseDraft.cs`. **Kind selector:** "Nothing (click
 selects)", pylon gate (the default), balloon ring, start point (`CourseLab.Place`). **Click:** a left click the panel
 does not take (`_UnhandledInput`, so it reaches the lab before the freecam's `SelectionService`) runs `ClickAt(screen)`.
 It first selects the course gate whose drawn parts' boxes the camera ray meets, the nearest box centre winning, whatever
@@ -848,9 +848,9 @@ and the default sizes with their flight.
 
 **⚠ Traps.** Default sizes are TUNE at the controls (Decision 25).
 
-## C23 ◐ 3D gizmo: three move arrows and a yaw ring
+## C23 ☑ 3D gizmo: three move arrows and a yaw ring
 
-**Landed (look pending).** The new `CSVM/src/UI/Labs/CourseGizmo.cs`, wired in `CourseLab.cs`, with
+**Landed.** The user built and flew their own course in the lab, accepting its feel. The new `CSVM/src/UI/Labs/CourseGizmo.cs`, wired in `CourseLab.cs`, with
 `CSVM.Tests/CourseGizmoTests.cs`. **Handles:** arrows along the **world** X, Y and Z axes (red, green, blue; not the gate's
 own frame, so Y stays vertical) and a magenta heading ring, at the opening's middle (`CourseDraft.Centre`). Primitive meshes
 (cylinder shafts, cone heads, a torus) on unshaded, fog-free materials with no depth test, render priority 30, tagged
@@ -901,9 +901,9 @@ in a real `--course-edit` session.
 them. The suite drives the lab's `PressAt`/`MoveTo`/`ReleaseAt`, not real input events, so the captured-mouse guard and
 the release-over-the-panel recovery are checked only at the controls.
 
-## C24 ◐ Sequence panel, gate reuse with direction, world numbers and path line
+## C24 ☑ Sequence panel, gate reuse with direction, world numbers and path line
 
-**Landed (look pending).** In `CourseLab.cs`, `CourseDraft.cs` and the new `CSVM/src/UI/Labs/CourseSequenceOverlay.cs`, with
+**Landed.** The user built and flew their own course in the lab, accepting its feel. In `CourseLab.cs`, `CourseDraft.cs` and the new `CSVM/src/UI/Labs/CourseSequenceOverlay.cs`, with
 `SpectatorCamera.LookFrom` added for the camera flight. **Selection:** `CourseDraft.SelectedEntry` (or -1) beside
 `SelectedId` is the insertion point. `SelectEntry(i)` sets the entry and its gate; `Select(id)`, a world click on a gate, sets
 the gate alone and keeps the entry. So "select entry 3, click r1 in the world, Add again Reverse" puts r1 reversed fourth.
