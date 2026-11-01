@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, landing
 
-31. ☐ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
+31. ◐ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
 
 ## Dependency and parallelism notes
 
@@ -173,7 +173,13 @@ zone to `AnyZone`; `EveryBandCountMatchesTheWholeImagePass` adds 200 surf pieces
 compares the surf plane at every band count. No existing test changed meaning. In C1B the bake now
 logs `edge_tris=0 surf_tris=377` (377 `edge_tris` before), in C1 `edge_tris=646 surf_tris=0`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The two unit filters pass 37 of 37, graphics-water-quality, graphics-ocean-switch,
+ocean-lab, ocean-harbour-ramp and ocean-wake pass on the tree, and the C1 mask, tint and screenshot
+dumps are byte-identical to the baseline taken before the change while C1B's R and tint are
+unchanged and 5,443 texels under the ring read 8 to 64 m where they read 0. The complete battery on
+the branch with every item landed (fde319ed6): build clean, units 7936 passed and 6 skipped for
+data, engine 632 passed and 2 skipped with the engine errors clean, goldens 38 of 38
+hash-identical, perf 8 of 8 scenarios recorded.
 
 **Original approach (kept for reference).**
 
@@ -253,7 +259,13 @@ C1B: R and the tint byte-identical, G moves at 31,862 sea texels (28,554 down, m
 z -3422..-3094, by at most 8.2 m. `bake=100 (distance=24.1)` in C1B,
 `bake=102 (distance=20.9)` in C1.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The 16 raster tests pass; graphics-ocean-switch, ocean-harbour-ramp and ocean-wake
+pass; a straight 20 degree shore sampled 12 m out reads 11.8 to 12.3 m (sd 0.12) where the chamfer
+read 13.6 to 17.4 m (sd 0.99). The battery after Wave A moved only `c1b-ocean-enhanced`, so
+`c1-lake-enhanced`, `c5-city-night-enhanced` and the C1 cockpit, cloud-deck and rocket shots held
+their hashes through the distance change, and every Original shot held. The complete battery on the
+final branch (fde319ed6) is green: units 7936 passed, engine 632 passed with the engine errors
+clean, goldens 38 of 38 hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -320,7 +332,12 @@ median 123, max 255); the texels at the ring's seaward end (surf 1..12) lie a me
 (min 1, median 128, max 252) around the stacks near (-7500, -3230). C3: `surf_tris=0 surf=1x1`,
 and the dump's `.surf.png` is one black texel.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The Ocean unit filter passes 62 of 62 with the fixture regenerated for the one
+declaration line; graphics-ocean-switch, ocean-lab and ocean-harbour-ramp pass; the C1B dump's
+`.surf.png` carries the rings at 5,845 texels (median 123, max 255) with the mask and tint
+byte-identical to A2's, C2's 81 texels in two rings, C3's one black texel. The complete battery on
+the final branch (fde319ed6) is green: units 7936 passed, engine 632 passed with the engine errors
+clean, goldens 38 of 38 hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -367,7 +384,13 @@ C1B builds 5 ring materials, 5 of 5 hiding in Enhanced and 0 of 5 in Original. W
 the white ring no longer draws in C1B or C2 and the flat sheet's water shows under it; with
 `--no-ocean` and under Original graphics the frame is byte-identical.
 
-**Verified.** <pending orchestrator run>
+**Verified.** graphics-ocean-switch and graphics-water-quality pass with the ring check reading
+5 of 5 hiding under Enhanced and 0 of 5 under Original on every reading; at the C1B Enhanced golden
+pose the rings are gone (34,148 pixels inside the sea) while the same pose with `--no-ocean`, the
+Original golden pose and C2's default pose are byte-identical to their before frames, and C2's stack
+pose loses its ring. In the complete battery on the final branch (fde319ed6) every Original shot,
+`c1b-night-sea` included, is hash-identical, which with the Enhanced C1B shot seen to move in the
+same runs is the proof Original's text did not change.
 
 **Original approach (kept for reference).**
 
@@ -431,7 +454,12 @@ about 45 m off the sea stack's ring); all `--det --mute --graphics=enhanced --wa
 and none of the C2 one: the ring there lies inside `SwellFrom`, where the swell is already zero, so
 the factor matters on the wider rings and once the ramps start nearer the land.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The Ocean and SeaState unit filter passes 164 of 164; graphics-ocean-switch, ocean-lab,
+ocean-harbour-ramp and ocean-wake pass; the C1B close pose under `--det` gives the same pixmd5
+twice. The author chose A from the montages of the C1B close pose, the 45 m corner and C2's stack,
+where no candidate opened a hole at a trough or lifted a crest through the land. The complete
+battery on the final branch (fde319ed6) is green, goldens 38 of 38 hash-identical with
+`c1b-ocean-enhanced` pinned to the C22 look.
 
 **Original approach (kept for reference).**
 
@@ -505,7 +533,17 @@ cost 3 noise calls and 1 read, plus one `foam_holes` up close). In C1B the surf 
 island with broken lines past it; C2's ring is one or two texels wide, so its surf stays a narrow grey lace rim at the
 stack's base. The far islands at the 300 m pose lie past `FogSheetAt` and draw no surf.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The Ocean and SeaState unit filter passes 169 of 169 with the default fixture
+unchanged; graphics-ocean-switch, ocean-lab, ocean-harbour-ramp and ocean-wake pass; the golden pose
+under `--det` gives pixmd5 ae61d7a817ee5fc78bae3016a7e3e183 three times across two builds. The
+author's verdict on the first pass was "Do another run, improve the quality, C1B looks very coarse,
+C2 is better"; the rework's D was their pick from the golden, corner, 300 m and C2 montages. The
+complete battery on the final branch (fde319ed6): units 7936 passed, engine 632 passed with the
+engine errors clean, goldens 38 of 38 hash-identical with `c1b-ocean-enhanced` pinned to that hash.
+A single-launch `--perf` A/B at the golden pose reads `gpu_ms` 2.0 to 2.1 with the surf and 2.5 to
+2.6 with it dialled to zero, so the surf's cost there is inside the launch-to-launch noise; no
+regression verdict is claimed from one launch. Owed to a live flight (DET-15): shimmer while the
+camera moves, the lace changing scale with altitude, the lines' pacing.
 
 **Original approach (kept for reference).**
 
@@ -547,7 +585,24 @@ to the sheet look (`FogSheetAt`, line 814); surf past that is wasted work and a 
 
 # Wave D, landing
 
-## D31 ☐ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
+## D31 ◐ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
+
+**Landed.** `c1b-ocean-enhanced` is pinned to the C22 look (`ae61d7a817ee5fc78bae3016a7e3e183`,
+its exercises text naming the waves calming to the land edge and the surf's lace and lines over the
+hidden ring); it was the only shot to move at any point of the run, once after Wave A and B11 (the
+ring hidden, the waves calming from the land) and once with C22, re-rendered pixel-identical each
+time. The complete battery on the branch at fde319ed6 with `-Perf`: build clean, units 7936 passed
+and 6 skipped for data, engine 632 passed and 2 skipped with the engine errors clean, goldens 38 of
+38 hash-identical, perf 8 of 8 scenarios recorded under Original graphics (no scenario flies a ring
+chapter under Enhanced, so the stage cannot read the surf; a single-launch `--perf` A/B at the C1B
+golden pose puts the surf's `gpu_ms` inside the launch noise, C22's Verified). The look was judged
+from montages at the author's screen for C21 and C22; the live flight is owed.
+
+**Verified.** <pending the author's flight: C1B along an island shore and C2 past the sea stack
+under Enhanced at waves, watching for shimmer, the lace's scale with altitude, the lines' pacing,
+and any hole or crest at the waterline>
+
+**Original approach (kept for reference).**
 
 **Goal.** Every pinned Enhanced shot over a sea is re-rendered, the moves are named, the look passes
 at the controls, and the complete battery is green on the merged tree.
