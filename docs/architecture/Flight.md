@@ -916,7 +916,7 @@ zones-cleared status line, in a race the live leaderboard on the line under it
 the one-shot intro banner, the zone-cleared flash, the completion banner (in a race this run
 against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). The status and leaderboard lines step aside while `StatusHiddenWhile` answers true, which `HumanFlightAdapter` sets to the seat's held scores. While the pane spectates a race, `WatchedRacer` names the racer watched on a third line (`WatchingLine`) and no banner, flash or count draws. It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
-A course run (`Course` set) reads in course words: `StatusLine` is `CourseStatusLine`, `0:14.2    GATE 2/5    +6 s` (the entry to fly next, then the penalty time when there is any), there is no intro line (a course run's `IntroLine` is empty), the cleared flash `GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing), the completion banner COURSE COMPLETE with its penalty time, and each `ElementTouched` with `TimeAdded` shows a `PenaltyFlash` ("+3 s", summed while it shows) on the line under the clock. Danger Zone runs read as before. Coverage: `CSVM.Tests/CourseHudTests.cs`, suite `course-hud`.
+A course run (`Course` set) reads in course words: `StatusLine` is `CourseStatusLine`, `0:14.2    GATE 2/5    +6 s` (the entry to fly next, then the penalty time when there is any), there is no intro line (a course run's `IntroLine` is empty), the cleared flash `GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing, then `-0.8` or `+1.3` from `SplitDelta` against the stored best's split there, tinted the penalty red when `Behind`; `BestSplits`, set by `HumanFlightAdapter`, is read at each run's first entry, so a rerun after a new record compares against it), the completion banner COURSE COMPLETE with its penalty time, and each `ElementTouched` with `TimeAdded` shows a `PenaltyFlash` ("+3 s", summed while it shows) on the line under the clock. Danger Zone runs read as before. Coverage: `CSVM.Tests/CourseHudTests.cs`, suite `course-hud`.
 
 ## src/Flight/Modes/StuntCapture.cs
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
@@ -970,7 +970,7 @@ Stunt best-time persistence: one JSON object in `user://stunt_scores.json`, with
 `RecordIfBest`, which never worsens a record and answers whether the run was a new best. `KeyFor` is
 every recorder's key: `chapter/mission/plane`, or a course run's `course/<chapter>/<name>/<Course.Hash>/<plane>`,
 a namespace no Danger Zone key shares, so old files load unchanged; the name in it makes a rename a
-fresh board, as an edit is. A course entry adds `penalties` (`PenaltiesOf`, `GetPenalties`). A session's
+fresh board, as an edit is. A course entry adds `penalties` (`PenaltiesOf`, `GetPenalties`) and `splits`, the clock at each sequence entry (`SplitsOf`, `GetSplits`, null for an entry written before splits). A session's
 store is `ForSession(spec.ScoresPath, spec.ScoresThrowaway)`: the `--scores=` file, an in-memory throwaway
 when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run, `--debug-scoreboard`), else the player's
 own; internal overloads let a suite name the file, `stunt-scores-scripted` pins it. `CustomPlaneStore` is the same shape.

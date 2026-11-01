@@ -26,8 +26,9 @@ internal static class CourseLaunchSuites
         + "it; a --det --stunt --course= C1 session spawns on the start point, draws the gates and flies "
         + "them in sequence order only, the clock standing until the first entry and stopping on the "
         + "last, every drawn gate standing at the pose its crossing is scored against; the finished run "
-        + "records its best and penalty count under the course key in the launch's --scores= file, an "
-        + "old-format Danger Zone entry there loading and surviving untouched, and takes no photograph")]
+        + "records its best, penalty count and splits under the course key in the launch's --scores= file, an "
+        + "old-format Danger Zone entry there loading and surviving untouched, and takes no photograph; a "
+        + "slower rerun's gate flashes carry the signed delta to the stored splits and leave them stored")]
     internal static void CourseLaunch(TestContext ctx)
     {
         Sources(ctx);
@@ -156,6 +157,8 @@ internal static class CourseLaunchSuites
                 if (i == 0)
                 {
                     ctx.Check(run.Elapsed <= 2f * dt, $"…and the clock starts on it: {run.Elapsed:0.0000} s");
+                    ctx.Check(plane.PilotHud.StuntRun?.FlashLine == StuntRunHud.ClearedFlash(run, run.Zones[0]),
+                        $"…and with no best stored its flash carries no delta: '{plane.PilotHud.StuntRun?.FlashLine}'");
                     run.AddPenalty(CourseElements.TouchPenaltySeconds); // a touch, for the stored count
                 }
 
@@ -175,9 +178,11 @@ internal static class CourseLaunchSuites
             Step(plane, 30);
             ctx.Check(run.AllComplete && run.Elapsed == atLast && atLast > 0f,
                 $"the last entry completes the run and stops the clock at {StuntMission.FormatTime(atLast)}");
-            Recorded(ctx, scores, dzKey, $"course/{Chapter}/{Sample}/{course.Hash}/{spec.PlaneName}", run);
+            string courseKey = $"course/{Chapter}/{Sample}/{course.Hash}/{spec.PlaneName}";
+            Recorded(ctx, scores, dzKey, courseKey, run);
             ctx.Check(photographs == 0 && plane.StuntShots?.Count == 0 && !Directory.Exists(StuntCapture.ShotDir()),
                 $"the course run takes no Danger Zone photograph: {photographs} request(s), {plane.StuntShots?.Count} latched");
+            AgainstTheBest(ctx, plane, run, course, scores, courseKey);
         }
         finally
         {
@@ -213,11 +218,55 @@ internal static class CourseLaunchSuites
         var store = ScoreStore.Load(scores);
         ctx.Check(run.PenaltyCount >= 1 && store.GetBest(courseKey) == run.Elapsed && store.GetPenalties(courseKey) == run.PenaltyCount,
             $"the run's best is stored under '{courseKey}' with its penalties: {store.GetBest(courseKey)} s for {run.Elapsed}, {store.GetPenalties(courseKey)} penalties for {run.PenaltyCount}");
-        ctx.Check(store.GetBest(dzKey) == 300f && store.GetPenalties(dzKey) == null,
-            $"the old-format Danger Zone entry '{dzKey}' loads unchanged: {store.GetBest(dzKey)} s, penalties {store.GetPenalties(dzKey)?.ToString() ?? "none"}");
+        var splits = store.GetSplits(courseKey);
+        ctx.Check(splits != null && splits.SequenceEqual(ScoreStore.SplitsOf(run)!) && splits.Length == run.TotalCount,
+            $"…and its split at each entry: [{string.Join(", ", splits ?? System.Array.Empty<float>())}]");
+        ctx.Check(store.GetBest(dzKey) == 300f && store.GetPenalties(dzKey) == null && store.GetSplits(dzKey) == null,
+            $"the old-format Danger Zone entry '{dzKey}' loads unchanged: {store.GetBest(dzKey)} s, penalties {store.GetPenalties(dzKey)?.ToString() ?? "none"}, no splits");
         var keys = Godot.Json.ParseString(File.ReadAllText(scores)).AsGodotDictionary().Keys.Select(k => k.AsString()).OrderBy(k => k).ToArray();
         ctx.Check(keys.SequenceEqual(new[] { dzKey, courseKey }.OrderBy(k => k)),
             $"…and the file holds those two keys only: {string.Join(", ", keys)}");
+    }
+
+    // A rerun against the first run's stored splits. The first took a touch after entry 1, this one
+    // two after entry 2: ahead at entry 2, behind from entry 3. Slower overall, it leaves the stored
+    // best and its splits as they were.
+    private static void AgainstTheBest(TestContext ctx, FlightController plane, StuntMission run, Course course, string scores, string courseKey)
+    {
+        var stored = ScoreStore.Load(scores);
+        var best = stored.GetSplits(courseKey);
+        float? bestTotal = stored.GetBest(courseKey);
+        if (plane.PilotHud.StuntRun is not { } hud || best == null || run.TotalCount < 3)
+        {
+            ctx.Check(false, $"a second run needs the pilot's run HUD and the first run's splits: hud={plane.PilotHud.StuntRun != null}, splits={best != null}");
+            return;
+        }
+
+        plane.Rerun();
+        var flashes = new string?[run.TotalCount];
+        for (int i = 0; i < run.TotalCount; i++)
+        {
+            Through(plane, run, course, course.Sequence[i]);
+            flashes[i] = hud.FlashLine;
+            if (i == 1)
+            {
+                run.AddPenalty(CourseElements.TouchPenaltySeconds);
+                run.AddPenalty(CourseElements.TouchPenaltySeconds);
+            }
+        }
+
+        Step(plane, 30);
+        var deltas = run.Zones.Select(z => StuntRunHud.SplitDelta(run, z, best)).ToArray();
+        ctx.Check(run.AllComplete && flashes.Select((f, i) => f == StuntRunHud.ClearedFlash(run, run.Zones[i], best)).All(x => x),
+            $"the second run's every flash carries its delta to the stored split: {string.Join(" | ", flashes)}");
+        ctx.Check(deltas[0] is > -0.5f and < 0.5f && deltas[1] is > -3.5f and < -2.5f && deltas[2] is > 2.5f and < 3.5f
+                && flashes[1]!.EndsWith($"  {StuntRunHud.DeltaText(deltas[1]!.Value)}", System.StringComparison.Ordinal),
+            $"…level at entry 1, ahead at entry 2 and behind at entry 3: {string.Join(", ", deltas)}");
+        ctx.Check(!StuntRunHud.Behind(deltas[1]!.Value) && StuntRunHud.Behind(deltas[2]!.Value),
+            $"…entry 2's flash draws green and entry 3's red");
+        var after = ScoreStore.Load(scores);
+        ctx.Check(run.Elapsed > bestTotal && after.GetBest(courseKey) == bestTotal && after.GetSplits(courseKey)?.SequenceEqual(best) == true,
+            $"the slower run ({run.Elapsed} s against {bestTotal} s) leaves the stored best and its splits");
     }
 
     private static GateDirection Flip(GateDirection d) => d == GateDirection.Forward ? GateDirection.Reverse : GateDirection.Forward;

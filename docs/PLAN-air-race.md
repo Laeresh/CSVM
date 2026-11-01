@@ -64,6 +64,7 @@ exist in one player's game folder only) and bots taught the sequence; both are a
 | 25 | Default element sizes | **TUNE at the controls**; these planes are larger than Red Bull racers (assumed, not asked) |
 | 26 | Terms | **"Pylon" already means a weapon hardpoint** (`MarkerKind.Pylon`, `CSVM/src/Mech3/MarkerRig.cs:62`); the new elements get distinct terms in `CONTEXT.md` |
 | 27 | Course display name | **An optional title in the course file**, falling back to the file name; not in the hash or score key |
+| 28 | Split delta | **Each gate flash shows the signed difference to the stored best run's split there**, course runs only |
 
 ## Ground rules
 
@@ -103,6 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Procedural course pylons, rings and balloons with idle animation
 12. ☑ Pylon cut: slice, sag, regrow
 13. ☑ Race HUD: next gate, `Gate n/N`, penalties, wrong-side cross
+14. ☑ Split delta to the best run at each gate
 
 ### Wave C, course editor lab
 
@@ -672,6 +674,67 @@ false before the first entry and on the finishing step). The rest is settled und
 
 **⚠ Traps.** `CONTEXT.md` lists "waypoint marker" under `_Avoid_` for the HUD off-screen marker; use
 its term.
+
+## B14 ☑ Split delta to the best run at each gate
+
+**Landed.** **Stored shape:** a course best's entry gains `splits` beside `best`, `date` and
+`penalties`, the clock at each sequence entry in sequence order (each entry's `CompletedAt`, so the
+penalty time taken so far is inside it), e.g. `"splits": [0.0, 3.32, 3.63, 3.95, 4.27]`.
+`ScoreStore.SplitsOf(run)` is a course run's array and null for a Danger Zone run, whose entry keeps
+its shape; `RecordIfBest(key, total, penalties, splits)` writes it only with a new best, so a slower
+run leaves both; `GetSplits(key)` reads it back and answers null for a key without one, which is
+every Danger Zone key and a course best from a file written before splits. Both recorders pass it
+(`StuntScoreboard`, `InstantActionDirector.BuildStuntSummary`); the race director records no course
+best, since a course refuses a race (Decision 22). **Flash:** `StuntRunHud.ClearedFlash(run, z,
+best)` appends `SplitDelta` (this crossing's clock minus the best's split at the same entry) as
+`DeltaText`, signed to the tenth, invariant culture, two spaces after the time: `GATE 3  0:14.2  -0.8`
+ahead, `GATE 3  0:15.5  +1.3` behind. A tie, and anything that rounds to it, reads `+0.0`. No delta
+without a stored split for that entry. **Colour:** the flash is one line in one colour, so the whole
+line tints: the existing completion green when level or ahead, the penalty red (`HudPenalty`, the
+"+3 s" flash's) when `Behind` (the rounded delta above zero). Colouring the figure alone would mean
+splitting the centred line by hand, which was left out. **Which best:** `HumanFlightAdapter` hands the
+HUD `BestSplits`, a reader over `HumanRosterBindings.BestSplits`, which `GameSession` binds to the
+session's store (`ScoreStore.ForSession(spec.ScoresPath, spec.ScoresThrowaway).GetSplits(key)`, the
+file read afresh). The HUD reads it at each run's first entry: the board records a new best on the
+previous run's `RunCompleted`, so a rerun after a new record compares against that record, and a run
+compares against one best throughout. A throwaway store (`--det` without `--scores=`) shows no delta.
+**Summary:** the end-of-run split table is unchanged; the deltas there would need the previous splits
+read before the record in both recorders.
+
+**Verified.** `dotnet test CSVM.Tests/CSVM.Tests.csproj`: 8089 passed, 0 failed, 6 skipped (the new
+`CourseHudTests` delta format, flash and no-split cases, `CourseScoreKeyTests`' splits of a run with a
+penalty, and the C4 Danger Zone run's flash unchanged with splits handed to it).
+`.\scripts\RunTests.ps1 -Suite 'course-hud,course-launch,stunt-scores-scripted,stunt-race-time-attack' -SkipUnits -SkipGoldens`:
+4 passed, 0 failed, engine errors clean. `course-launch` now checks the first run's entry 1 flash
+carries no delta, the stored splits round trip through its `--scores=` file and equal the run's, the
+old-format Danger Zone entry has none, then reruns: every flash equals `ClearedFlash` against the
+stored splits, about level at entry 1, about -3.0 at entry 2 (the first run's touch, green) and +3.0
+at entry 3 (two touches, red), and the slower run leaves the stored best and splits as they were.
+
+**Original approach (kept for reference).**
+
+**Goal.** The user's request: "We show the current split time for each gate. We should show the
+difference to the best completed run, too + and - time." On a course run, each gate flash shows the
+difference to the stored best run's split at that sequence entry, signed.
+
+**Evidence (confidence: traced).** `StuntRunHud.ClearedFlash` writes `GATE n  m:ss.t` from the
+entry's `CompletedAt`, which already includes penalty time; `ScoreStore.RecordIfBest` stores `best`,
+`date` and `penalties` under `KeyFor`'s course key (A5); the solo board and the Instant Action
+summary record it.
+
+**Approach.** Store each entry's `CompletedAt` beside the best when a course run sets one; hand the
+HUD the stored splits; append the signed delta to the flash, no delta without a stored split.
+
+**Model recommendation.** A mid-tier model: one stored field, a formatter and a suite extension.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj` (delta format, the flash with and without
+splits, a run's splits, the Danger Zone flash unchanged), then
+`.\scripts\RunTests.ps1 -Suite 'course-hud,course-launch,stunt-scores-scripted,stunt-race-time-attack' -SkipUnits -SkipGoldens`,
+`course-launch` flying the sample twice in its scratch store.
+
+**⚠ Traps.** Danger Zone runs are order-free and keep their flash and stored shape. Old score files
+load unchanged. The store reads through Godot, so its file round trip is the engine suite's, not a
+unit test's. Never touch the real `user://stunt_scores.json`.
 
 # Wave C, course editor lab
 

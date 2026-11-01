@@ -600,6 +600,8 @@ internal sealed class HumanFlightAdapter
                 controller.Audio?.BindStartCount(_human.MenuSounds);
             }
             var scoreKey = ScoreStore.KeyFor(run, _policy.Chapter, _policy.Mission, custom?.Name ?? planeName);
+            if (run.Course != null && _human.BestSplits is { } bestSplits)
+                runHud.BestSplits = () => bestSplits(scoreKey);
             if (_human.Race is { } race)
             {
                 // Racing: no per-player splits board. The race's shared board covers the whole

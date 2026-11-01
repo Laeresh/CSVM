@@ -42,6 +42,49 @@ public class CourseHudTests
     }
 
     [Fact]
+    public void TheSplitDeltaIsSignedToTheTenthAndATieReadsPlus()
+    {
+        Assert.Equal("-0.8", StuntRunHud.DeltaText(14.2f - 15f));
+        Assert.Equal("+1.3", StuntRunHud.DeltaText(1.3f));
+        Assert.Equal("+0.0", StuntRunHud.DeltaText(0f));
+        Assert.Equal("+0.0", StuntRunHud.DeltaText(-0.04f));
+        Assert.Equal("+0.1", StuntRunHud.DeltaText(0.05f));
+        Assert.Equal("-62.5", StuntRunHud.DeltaText(-62.5f));
+        Assert.True(StuntRunHud.Behind(0.05f));
+        Assert.False(StuntRunHud.Behind(0.04f));
+        Assert.False(StuntRunHud.Behind(-0.8f));
+    }
+
+    [Fact]
+    public void EachGateFlashCarriesTheDeltaToTheBestSplitThere()
+    {
+        var run = Run(Fwd(A), Fwd(B));
+        var best = new[] { 0f, 6.3f };
+        var flashes = new List<string>();
+        run.ZoneCompleted += z => flashes.Add(StuntRunHud.ClearedFlash(run, z, best));
+
+        Pass(run, A);
+        run.Tick(2.5f);
+        Brush(run);
+        Pass(run, B);
+
+        Assert.Equal(new[] { "GATE 1  0:00.0  +0.0", "GATE 2  0:05.5  -0.8" }, flashes);
+        Assert.Equal(5.5f - 6.3f, StuntRunHud.SplitDelta(run, run.Zones[1], best));
+    }
+
+    [Fact]
+    public void NoStoredSplitShowsNoDelta()
+    {
+        var run = Run(Fwd(A), Fwd(B));
+        Pass(run, A);
+
+        Assert.Equal("GATE 1  0:00.0", StuntRunHud.ClearedFlash(run, run.Zones[0], null));
+        Assert.Null(StuntRunHud.SplitDelta(run, run.Zones[0], null));
+        Assert.Null(StuntRunHud.SplitDelta(run, run.Zones[1], new[] { 0f, 1f })); // not flown yet
+        Assert.Null(StuntRunHud.SplitDelta(run, run.Zones[0], System.Array.Empty<float>()));
+    }
+
+    [Fact]
     public void ThePenaltyFlashShowsOnlyTimeAddedAndAddsUpWhileShown()
     {
         var flash = default(StuntRunHud.PenaltyFlash);

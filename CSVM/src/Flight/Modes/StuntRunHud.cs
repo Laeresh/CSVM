@@ -60,7 +60,13 @@ public sealed partial class StuntRunHud : Control
     private StuntMission _mission = null!;
     private float _flash;         // s left on the zone-cleared flash
     private string _flashText = "";
+    private bool _flashBehind;
+    private float[]? _bestSplits;
     private PenaltyFlash _penalty;
+
+    /// <summary>A course run's stored best splits, read afresh at each run's first entry, so a rerun
+    /// after a new record compares against that record. Null shows no split delta.</summary>
+    public Func<float[]?>? BestSplits { get; set; }
 
     /// <summary>The cleared flash's text while it shows, else null.</summary>
     public string? FlashLine => _flash > 0f ? _flashText : null;
@@ -112,11 +118,34 @@ public sealed partial class StuntRunHud : Control
         string.Format(CultureInfo.InvariantCulture, "+{0:0.#} s", seconds);
 
     /// <summary>The flash for zone <paramref name="z"/> of <paramref name="run"/> just flown. A course
-    /// entry reads its number and the clock at its crossing, a Danger Zone its name CLEARED.</summary>
-    public static string ClearedFlash(StuntMission run, StuntZone z) =>
-        run.Course != null
-            ? string.Create(CultureInfo.InvariantCulture, $"GATE {z.CompletionOrder + 1}  {StuntMission.FormatTime(z.CompletedAt)}")
-            : z.Description.Length > 0 ? $"{z.Description} CLEARED" : "DANGER ZONE CLEARED";
+    /// entry reads its number and the clock at its crossing, then its <see cref="SplitDelta"/> to
+    /// <paramref name="best"/> when there is one. A Danger Zone reads its name CLEARED.</summary>
+    public static string ClearedFlash(StuntMission run, StuntZone z, float[]? best = null)
+    {
+        if (run.Course == null)
+            return z.Description.Length > 0 ? $"{z.Description} CLEARED" : "DANGER ZONE CLEARED";
+        string flash = string.Create(CultureInfo.InvariantCulture, $"GATE {z.CompletionOrder + 1}  {StuntMission.FormatTime(z.CompletedAt)}");
+        return SplitDelta(run, z, best) is { } delta ? $"{flash}  {DeltaText(delta)}" : flash;
+    }
+
+    /// <summary>Seconds course entry <paramref name="z"/> was crossed behind the best run's split
+    /// there, negative ahead. Null on a Danger Zone run or with no stored split for it.</summary>
+    public static float? SplitDelta(StuntMission run, StuntZone z, float[]? best) =>
+        run.Course != null && best != null && z.CompletionOrder >= 0 && z.CompletionOrder < best.Length
+            ? z.CompletedAt - best[z.CompletionOrder]
+            : null;
+
+    /// <summary>A split delta as the flash prints it, to the tenth: "-0.8" ahead, "+1.3" behind,
+    /// and a tie "+0.0".</summary>
+    public static string DeltaText(float seconds)
+    {
+        double tenths = Tenths(seconds);
+        return string.Format(CultureInfo.InvariantCulture, "{0}{1:0.0}", tenths < 0 ? "-" : "+", Math.Abs(tenths));
+    }
+
+    /// <summary>Whether a split delta reads behind, so the flash draws in the penalty red. A tie
+    /// is not behind.</summary>
+    public static bool Behind(float seconds) => Tenths(seconds) > 0;
 
     /// <summary>Binds the run and subscribes to the completion and penalty flashes. Add to the HUD
     /// canvas; nothing needs feeding per frame.</summary>
@@ -214,7 +243,7 @@ public sealed partial class StuntRunHud : Control
         // Brief zone-cleared flash (fades over its last 0.4 s).
         if (_flash > 0f)
             DrawLines(font, new Vector2(cx, Size.Y * 0.34f), new[] { _flashText }, bannerFont,
-                new Color(HudGreen, Mathf.Clamp(_flash / FlashFade, 0f, 1f)));
+                new Color(_flashBehind ? HudPenalty : HudGreen, Mathf.Clamp(_flash / FlashFade, 0f, 1f)));
 
         if (_mission.AllComplete)
             DrawLines(font, new Vector2(cx, Size.Y * 0.26f), CompleteBanner(), bannerFont, HudGreen);
@@ -233,10 +262,16 @@ public sealed partial class StuntRunHud : Control
         }
     }
 
+    private static double Tenths(float seconds) => Math.Round(seconds, 1, MidpointRounding.AwayFromZero);
+
     private void OnZoneCompleted(StuntZone z)
     {
+        // The board records a new best on the previous run's last entry, before this read.
+        if (z.CompletionOrder == 0)
+            _bestSplits = BestSplits?.Invoke();
         _flash = FlashDuration;
-        _flashText = ClearedFlash(_mission, z);
+        _flashText = ClearedFlash(_mission, z, _bestSplits);
+        _flashBehind = SplitDelta(_mission, z, _bestSplits) is { } delta && Behind(delta);
     }
 
     private void OnElementTouched(CourseTouch touch) => _penalty.Touched(touch);

@@ -93,6 +93,21 @@ public class CourseScoreKeyTests
         Assert.Contains(summary.TotalLine(), summary.Lines());
     }
 
+    [Fact]
+    public void ACourseRunRecordsItsClockAtEachEntryPenaltiesIncluded()
+    {
+        var run = StuntMission.ForCourse(Sample)!;
+        run.Update(new Vector3(0f, 15f, 1f));
+        run.Update(new Vector3(0f, 15f, -1f));
+        run.Tick(4f);
+        run.AddPenalty(CourseElements.TouchPenaltySeconds);
+        run.Update(new Vector3(0f, 50f, -195f));
+        run.Update(new Vector3(0f, 50f, -205f));
+
+        Assert.True(run.AllComplete);
+        Assert.Equal(new[] { run.Zones[0].CompletedAt, 7f }, ScoreStore.SplitsOf(run));
+    }
+
     [ExtractedDataFact]
     public void ADangerZoneRunKeepsItsKeyAndRecordsNoPenalties()
     {
@@ -102,7 +117,14 @@ public class CourseScoreKeyTests
 
         Assert.Equal($"C4/IA1/{Plane}", ScoreStore.KeyFor(run, "C4", "IA1", Plane));
         Assert.Null(ScoreStore.PenaltiesOf(run));
+        Assert.Null(ScoreStore.SplitsOf(run));
         Assert.Equal($"TOTAL   {StuntMission.FormatTime(0f)}", new StuntSummary(run, 0f, null, false).TotalLine());
+
+        // Its cleared flash ignores any splits handed to it.
+        var zone = run.Zones[0];
+        Assert.Equal(StuntRunHud.ClearedFlash(run, zone), StuntRunHud.ClearedFlash(run, zone, new[] { 1f, 2f }));
+        Assert.EndsWith("CLEARED", StuntRunHud.ClearedFlash(run, zone, new[] { 1f, 2f }));
+        Assert.Null(StuntRunHud.SplitDelta(run, zone, new[] { 1f, 2f }));
     }
 
     private static string Key(Course course) =>

@@ -134,7 +134,7 @@ public sealed class InstantActionDirector
     internal static StuntSummary BuildStuntSummary(StuntMission run, ScoreStore store, string key)
     {
         float? prevBest = store.GetBest(key);
-        bool newBest = run.AllComplete && store.RecordIfBest(key, run.Elapsed, ScoreStore.PenaltiesOf(run));
+        bool newBest = run.AllComplete && store.RecordIfBest(key, run.Elapsed, ScoreStore.PenaltiesOf(run), ScoreStore.SplitsOf(run));
         return new StuntSummary(run, run.Elapsed, prevBest, newBest);
     }
 

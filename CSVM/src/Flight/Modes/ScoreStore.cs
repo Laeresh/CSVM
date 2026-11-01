@@ -1,3 +1,4 @@
+using System.Linq;
 using CSVM.Utils;
 using Godot;
 
@@ -42,13 +43,18 @@ public sealed class ScoreStore
     /// <summary>The key <paramref name="run"/> records under. A Danger Zone run's is
     /// <c>chapter/mission/plane</c>. A course run's is <c>course/</c> plus the course's chapter, name
     /// and <see cref="Course.Hash"/>, then the plane, so a renamed or edited course starts a fresh
-    /// board. Its entry adds <c>penalties</c> beside the best.</summary>
+    /// board. Its entry adds <c>penalties</c> and <c>splits</c> beside the best.</summary>
     public static string KeyFor(StuntMission run, string chapter, string mission, string plane) =>
         run.Course is { } c ? $"course/{c.Chapter}/{c.Name}/{c.Hash}/{plane}" : $"{chapter}/{mission}/{plane}";
 
     /// <summary>The penalty count a run records beside its best: a course run's touches. A Danger
     /// Zone run's is null, so its entry keeps its old shape.</summary>
     public static int? PenaltiesOf(StuntMission run) => run.Course != null ? run.PenaltyCount : null;
+
+    /// <summary>The split times a run records beside its best: a course run's clock at each sequence
+    /// entry, penalties so far included, in sequence order. A Danger Zone run's is null.</summary>
+    public static float[]? SplitsOf(StuntMission run) =>
+        run.Course != null ? run.Zones.Select(z => z.CompletedAt).ToArray() : null;
 
     /// <summary>The stored best total, seconds, for this run key, or null if none is recorded yet.</summary>
     public float? GetBest(string key) => Field(key, "best")?.AsSingle();
@@ -57,11 +63,17 @@ public sealed class ScoreStore
     /// which every Danger Zone key is.</summary>
     public int? GetPenalties(string key) => Field(key, "penalties")?.AsInt32();
 
+    /// <summary>The stored best's split at each sequence entry, or null for a key with none. No
+    /// Danger Zone key has any, nor a course best written before splits were stored.</summary>
+    public float[]? GetSplits(string key) =>
+        Field(key, "splits")?.AsFloat32Array() is { Length: > 0 } splits ? splits : null;
+
     /// <summary>Records <paramref name="total"/> as the new best for <paramref name="key"/> if it
     /// beats the stored one (or there is none), persisting immediately, with
-    /// <paramref name="penalties"/> beside it when given. Returns true when it was a new best (the
-    /// scoreboard flags NEW BEST), false when a stored time stands, never worsens a record.</summary>
-    public bool RecordIfBest(string key, float total, int? penalties = null)
+    /// <paramref name="penalties"/> and <paramref name="splits"/> beside it when given. Returns true
+    /// when it was a new best (the scoreboard flags NEW BEST), false when a stored time stands,
+    /// never worsens a record.</summary>
+    public bool RecordIfBest(string key, float total, int? penalties = null, float[]? splits = null)
     {
         var prev = GetBest(key);
         if (prev.HasValue && total >= prev.Value)
@@ -73,6 +85,8 @@ public sealed class ScoreStore
         };
         if (penalties is { } count)
             entry["penalties"] = count;
+        if (splits != null)
+            entry["splits"] = splits;
         _data[key] = entry;
         Save();
         return true;

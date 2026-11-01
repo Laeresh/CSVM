@@ -342,11 +342,11 @@ rows).
 - `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
 - `src/Flight/Modes/StuntRunControl.cs`, a stunt seat's run control, engine-free: the tap/hold respawn split, the start count's stepping and the clock it holds, the pose a tap returns to.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
-- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; a course run's GATE n/N line, penalty time and "+3 s" flash; one per player.
+- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; a course run's GATE n/N line, penalty time, "+3 s" flash and split delta to the best run; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting; none on a course run.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
 - `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
-- `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, a course run's under `course/` with its hash and penalty count, faster runs only; a scripted run's store is a throwaway.
+- `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, a course run's under `course/` with its hash, penalty count and splits, faster runs only; a scripted run's store is a throwaway.
 - `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the optional display title, the JSON shape and the layout hash.
 - `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
 - `src/Flight/Modes/CourseElements.cs`, a course gate's touch volumes on `CourseGateShape`'s sizes (course pylon cones, ring rim tube, balloons), the +3 s penalty and the `CourseTouch` event record.

@@ -2202,6 +2202,7 @@ public partial class GameSession : Node3D
             PadAssignment = padAssignment,
             PauseState = _pauseState!,
             StuntBoard = boards.BuildSoloStuntBoard,
+            BestSplits = key => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway).GetSplits(key),
             ToggleGraphicsMode = _toggleGraphicsMode,
             RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,
