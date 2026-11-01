@@ -216,6 +216,8 @@ public static class EnhancedLook
         session?.Vegetation?.Follow();
         if (moved)
             LogViewDistance();
+        // Before the water, which then builds over the decals as they draw.
+        session?.FollowShadowDecals();
         ApplyWaterQuality(session);
         LogVegetationQuality();
         LogVegetationModels();

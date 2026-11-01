@@ -62,18 +62,23 @@ internal sealed class OceanStage
     public static bool Eligible(SessionSpec spec, bool partialStage) =>
         !partialStage && (spec.Fly || spec.Freecam) && Ocean.Covers(spec.Chapter);
 
+    /// <summary>Drops a standing ocean and follows again, so its shore mask is baked from the world as
+    /// it now draws. The shadow decals' gate calls it (<see cref="SceneBuilder.FollowShadowDecals"/>).</summary>
+    public void Rebuild()
+    {
+        if (Ocean == null)
+            return;
+        Drop();
+        Follow();
+    }
+
     /// <summary>Builds the ocean on the first Enhanced frame that asks for waves. A switch back to
     /// Original or to flat water drops it, and the sea sheet draws again because the shared switch resets.</summary>
     public void Follow()
     {
         if (!GraphicsMode.Enhanced || !WaterQualitySetting.DrawsWaves)
         {
-            if (Ocean != null)
-            {
-                Ocean.GetParent()?.RemoveChild(Ocean);
-                Ocean.QueueFree();
-            }
-            Ocean = null;
+            Drop();
             return;
         }
         if (Ocean != null || _worldScene == null || _textures == null)
@@ -102,6 +107,16 @@ internal sealed class OceanStage
     {
         Sea = sea.Clamped();
         Ocean?.Apply(Sea);
+    }
+
+    private void Drop()
+    {
+        if (Ocean != null)
+        {
+            Ocean.GetParent()?.RemoveChild(Ocean);
+            Ocean.QueueFree();
+        }
+        Ocean = null;
     }
 
     // The world nodes the bound program's played motions carry, as the runtime resolves them. The

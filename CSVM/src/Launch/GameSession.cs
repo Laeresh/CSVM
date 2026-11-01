@@ -849,6 +849,8 @@ public partial class GameSession : Node3D
 
         FinishFraming(state);
         _fullWorld = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
+        // Before the ocean stage, whose shore mask is baked from what draws.
+        FollowShadowDecals();
         FollowTerrainShadow();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
@@ -899,6 +901,7 @@ public partial class GameSession : Node3D
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
+        FollowShadowDecals();
         _ocean?.Follow();
         _vegetation?.Follow();
         SwitchProfile.Mark("clutter");
@@ -1204,6 +1207,16 @@ public partial class GameSession : Node3D
     {
         _raceDirector?.Leave(toLobby: _menuDriven);
         _exitSession();
+    }
+
+    /// <summary>Hides the original's painted shadow decals while our shadow maps draw: Enhanced, with a
+    /// Shadow Quality that casts. A standing ocean is rebuilt over the world as it now draws, since a
+    /// decal on the water reads as land in its shore mask.</summary>
+    internal void FollowShadowDecals()
+    {
+        bool hidden = GraphicsMode.Enhanced && ShadowQualitySetting.Sun.Cast;
+        if (_worldScene?.FollowShadowDecals(hidden) == true)
+            _ocean?.Rebuild();
     }
 
     // The --campaign= zeppelin/generator peek's plumbing: true when the loader's list is
