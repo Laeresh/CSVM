@@ -1554,8 +1554,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, HoveredRowR, HoveredRowG, HoveredRowB));
             }
 
+            // A marquee line, so a value wider than its row (a long course title) keeps to the row.
             panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
-                item.Enabled ? BoardInk.Row : BoardInk.Detail, i));
+                item.Enabled ? BoardInk.Row : BoardInk.Detail, i)
+            { Marquee = true });
         }
 
         if (OpenInstantActionDrop(screen) is { } drop && OriginalDropLists.Window(drop, _iaListTop, StripSize) is { } window
@@ -1617,8 +1619,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                     layers.Pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
                 }
 
+                // A marquee line: a plain one wider than the box would wrap below it.
                 lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
-                    focused ? BoardInk.RowFocused : BoardInk.Row, index));
+                    focused ? BoardInk.RowFocused : BoardInk.Row, index)
+                { Marquee = true });
                 break;
             case OriginalRowKind.Radio when row.Art != null:
                 // An eight-state strip: the four button states unmarked, then the same four marked.

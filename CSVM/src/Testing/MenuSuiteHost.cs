@@ -20,19 +20,18 @@ internal static class MenuSuiteHost
 {
     /// <summary>Registers the shared features a presentation needs, as the launcher does. Before
     /// the seat: the host lends the setup feature's seat list once the feature is in, so seat 0
-    /// has to be joined through it.</summary>
+    /// has to be joined through it. The Course list reads a suite's own scratch library where one
+    /// is passed as <paramref name="courses"/>, and the shipped courses alone otherwise.</summary>
     internal static void AddFeatures(
         MenuHost host, string dataRoot, Spec.GameData data, Action<int, BindingProfile>? saveBindings = null,
         ChapterCinema? chapterCinema = null, ClosingCinema? closingCinema = null,
-        NetPlayFeature? netDoor = null)
+        NetPlayFeature? netDoor = null, Flight.Modes.CourseLibrary? courses = null)
     {
         host.Features.Add(new FreeFlightFeature());
-        // The shipped courses alone: no suite may depend on a course one machine dropped in.
+        // Never the game folder: no suite may depend on a course one machine dropped in.
+        var library = courses ?? new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, null);
         host.Features.Add(InstantActionFeature.ForGameData(data, chapter =>
-        {
-            var library = new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, null);
-            return library.List(chapter).Select(f => (f.Name, library.DisplayName(chapter, f.Name))).ToList();
-        }));
+            library.List(chapter).Select(f => (f.Name, library.DisplayName(chapter, f.Name))).ToList()));
         host.Features.Add(new PlayerSetupFeature());
         // The hangar reads its labels and stock defaults as the launcher wires them: the langui
         // table, the stock fits and the root reader scope.
