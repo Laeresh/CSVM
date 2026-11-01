@@ -114,6 +114,8 @@ public sealed class WorldSession
         {
             Log.Info("world", $"effect cycles: {effectCycles.Count} material(s): {string.Join(", ", effectCycles)}");
         }
+        // Before the build too: priority feeds the depth bias, ConflictRank and the clutter's layer picks.
+        gamez.ApplyShippedPolygonPatches(o.Chapter);
         // The area-selected toggles are resolved to gamez node indices here, while the gamez is in
         // hand: Apply runs inside the animation bootstrap, which sees only the built tree.
         missionSetup?.BindPartitions(gamez);
