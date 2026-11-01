@@ -1,7 +1,8 @@
 #ifndef CSKY_OCEAN_INC
 #define CSKY_OCEAN_INC
 
-// The Enhanced wave ocean's switch, shared by the ocean and the base sea sheet it replaces.
+// The Enhanced wave ocean's switch, shared by the ocean, the base sea sheet it replaces and the
+// surf ring over that sheet.
 // 1 while an ocean node is live (Effects/Ocean.cs), 0 otherwise.
 global uniform float csky_ocean_on;
 
@@ -39,8 +40,8 @@ bool csky_ocean_ramp(vec2 xz) {
     return any(lessThan(abs(r * 255.0 - 254.0), vec4(0.5)));
 }
 
-// Whether a base-sea fragment at world position `world` steps aside for the ocean: only where the
-// ocean itself draws, so each texel has one owner and a sheet shown after the mask bake (C3's
+// Whether a base-sea or surf-ring fragment at world position `world` steps aside for the ocean: only
+// where the ocean itself draws, so each texel has one owner and a sheet shown after the mask bake (C3's
 // drained crater floor) draws flat instead of leaving a hole. The coverage threshold is the
 // ocean's own discard (OceanMask.SeaThreshold). A zone-seam texel (OceanMaskRaster.AnyZone - 1) is
 // one no grid draws. A ramp clears up to OceanMask.RampTop; C3's raised water and C4's lakes stay.
