@@ -2040,8 +2040,9 @@ public partial class GameSession : Node3D
             stuntZones = _courseRun ?? StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
             if (_courseRun?.Course is { } course)
             {
-                // The gates drawn where they are scored: both read CourseMotion on the sim clock.
-                _worldRoot!.AddChild(CourseVisuals.Build(course));
+                // The gates drawn where they are scored: both read CourseMotion on the sim clock. A
+                // touched course pylon is cut, and a rerun stands them whole.
+                _worldRoot!.AddChild(CourseVisuals.Build(course).Follow(_courseRun));
             }
 
             if (stuntZones == null)

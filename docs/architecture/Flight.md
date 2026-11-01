@@ -1027,8 +1027,18 @@ A course's gates drawn from Godot primitives to `CourseGateShape`'s dimensions: 
 course pylons per pylon gate, and per ring a striped torus under three tethered balloons.
 `Build` makes one node per pool gate, in pool order, plus an optional start cone;
 `Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
-shader text, lit and fogged as the faithful aircraft, with the pylon ripple on `csky_time`. Read
-`CourseMotion` and the `course-visuals` suite.
+shader text, lit and fogged as the faithful aircraft, with the pylon ripple on `csky_time`. A course
+pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
+`ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
+`ElementTouched` (course pylons only) and restores on `RunReset`. Read `CoursePylonCut`.
+
+## src/Flight/Modes/CoursePylonCut.cs
+A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and
+the seconds since the cut: the stump's top and sag, the falling top's drop (resting on the ground),
+outward tip and fade, whole before the cut and from `RegrowSeconds` (3 s) on. `Recut` keeps a
+second cut within what has regrown, so nothing fallen falls twice. Ages are doubles from the sim
+clock, so `csky_time`'s 3600 s wrap never reaches them. Every time and share is a look tuned at the
+controls. Read `CoursePylonCutTests.cs`.
 
 ## src/Flight/Modes/StuntRace.cs
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:

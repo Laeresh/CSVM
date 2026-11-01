@@ -25,16 +25,97 @@ internal static class CourseVisualsSuites
     private const float PylonWidthM = 40f;
     private const float PylonHeightM = 30f;
     private const float RingDiameterM = 40f;
+    private const float CutHeightM = 13f;
+    private const float TouchHeightM = 12f;
+    private const double TouchAt = 10.0;
 
     [Suite("course-visuals",
         "a course's procedural gates build two course pylons per pylon gate and a ring, three balloons and "
         + "three tethers per balloon ring, every gate node standing at CourseMotion's pose for the sim time "
-        + "it is posed at, on a shader reading csky_time and never TIME; in a C1 flight they are photographed "
-        + "close, wide and a second apart into a montage")]
+        + "it is posed at, on a shader reading csky_time and never TIME; a run's touch of a course pylon "
+        + "cuts that pylon alone at the touch's height, whole again at the regrow time or on the run's reset; "
+        + "in a C1 flight they are photographed close, wide, a second apart and through a cut into montages")]
     internal static void CourseVisualsDraw(TestContext ctx)
     {
         CheckBuild(ctx);
+        CheckCut(ctx);
         Montage(ctx);
+    }
+
+    // A run's real touch, brushing the left course pylon's outside from clear of the gate, drives the
+    // cut. The uniforms are read back from both pylons' materials at sim times around it.
+    private static void CheckCut(TestContext ctx)
+    {
+        var gate = new CourseGate("p", CourseGateKind.PylonGate, new Vector3(10f, 5f, -20f), 30f, PylonWidthM, PylonHeightM, 0f);
+        var course = new Course(Chapter, "cut", new SpawnPoint(new Vector3(0f, 100f, 0f), 0f), new[] { gate },
+            new[] { new SequenceEntry("p", GateDirection.Forward) });
+        double now = 0.0;
+        var run = StuntMission.ForCourse(course)!;
+        run.SimSeconds = () => now;
+        var touches = new List<CourseTouch>();
+        run.ElementTouched += touches.Add;
+        var visuals = CourseVisuals.Build(course).Follow(run);
+        ctx.Host.AddChild(visuals);
+        try
+        {
+            var left = visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_left");
+            var top = left.GetNode<MeshInstance3D>("top");
+            var stump = (ShaderMaterial)left.MaterialOverride;
+            var falling = (ShaderMaterial)top.MaterialOverride;
+            var right = (ShaderMaterial)visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_right").MaterialOverride;
+            float Uniform(ShaderMaterial m, string name) => m.GetShaderParameter(name).AsSingle();
+
+            var rest = CourseMotion.Rest(gate);
+            float radius = Mathf.Lerp(CourseGateShape.PylonBaseRadius(gate), CourseGateShape.PylonTopRadius(gate), TouchHeightM / PylonHeightM);
+            var clear = rest * new Vector3((-0.5f * PylonWidthM) - radius - 10f, TouchHeightM, 0.3f);
+            var brush = rest * new Vector3((-0.5f * PylonWidthM) - radius - 0.5f, TouchHeightM, 0.3f);
+            run.Update(clear, 1f);
+            now = TouchAt;
+            run.Update(brush, 1f);
+            ctx.Same(1, touches.Count, $"one touch of the gate");
+            if (touches.Count != 1 || touches[0].Element != CourseElement.LeftCoursePylon)
+            {
+                ctx.Check(false, $"the touch is of the left course pylon: {touches.Count} touches, first {touches.FirstOrDefault().Element}");
+                return;
+            }
+
+            float cut = touches[0].PylonHeight;
+            visuals.Pose(TouchAt);
+            ctx.Check(Mathf.IsEqualApprox(Uniform(stump, "clip_hi_m"), cut) && Mathf.IsEqualApprox(Uniform(falling, "clip_lo_m"), cut) && top.Visible,
+                $"the stump ends and the falling top starts at the touch's {cut:0.00} m: stump {Uniform(stump, "clip_hi_m"):0.00}, top {Uniform(falling, "clip_lo_m"):0.00}, shown {top.Visible}");
+            ctx.Check(Uniform(right, "clip_hi_m") == CoursePylonCut.NoClipM, $"the right course pylon stays whole");
+
+            visuals.Pose(TouchAt + 1.5);
+            var mid = CoursePylonCut.At(PylonHeightM, cut, CoursePylonCut.NoClipM, 1.5);
+            ctx.Check(Mathf.IsEqualApprox(Uniform(stump, "clip_hi_m"), mid.StumpTopM) && Uniform(stump, "sag_m") > 0f
+                    && mid.StumpTopM > cut && mid.StumpTopM < PylonHeightM && !top.Visible,
+                $"mid-regrow the stump stands at {Uniform(stump, "clip_hi_m"):0.00} m of {PylonHeightM}, sagging {Uniform(stump, "sag_m"):0.00} m, the top gone");
+            visuals.Pose(TouchAt + CoursePylonCut.RegrowSeconds - 0.02);
+            ctx.Check(Uniform(stump, "clip_hi_m") < PylonHeightM, $"still regrowing just short of {CoursePylonCut.RegrowSeconds} s");
+            visuals.Pose(TouchAt + CoursePylonCut.RegrowSeconds);
+            ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(stump, "sag_m") == 0f && !top.Visible,
+                $"whole at {CoursePylonCut.RegrowSeconds} s");
+
+            visuals.Cut(0, CourseElement.RingRim, TouchHeightM, TouchAt + 4.0);
+            visuals.Cut(0, CourseElement.Balloon, TouchHeightM, TouchAt + 4.0);
+            visuals.Pose(TouchAt + 4.0);
+            ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(right, "clip_hi_m") == CoursePylonCut.NoClipM,
+                $"a rim or balloon touch cuts nothing");
+
+            run.Update(clear, 1f);
+            now = TouchAt + 5.0;
+            run.Update(brush, 1f);
+            visuals.Pose(now + 0.2);
+            ctx.Check(touches.Count == 2 && Uniform(stump, "clip_hi_m") < PylonHeightM && top.Visible, $"a second touch, after leaving, cuts again");
+            run.Reset();
+            visuals.Pose(now + 0.3);
+            ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(stump, "sag_m") == 0f && !top.Visible,
+                $"the run's reset stands the pylon whole mid-regrow");
+        }
+        finally
+        {
+            visuals.Free();
+        }
     }
 
     private static void CheckBuild(TestContext ctx)
@@ -161,22 +242,32 @@ internal static class CourseVisualsSuites
             };
             string dir = Path.Combine(ctx.ScratchDir, "course-visuals");
             Directory.CreateDirectory(dir);
-            var images = new List<Image>();
-            foreach (var shot in shots)
+            List<Image>? Shoot(IEnumerable<(string Name, Vector3 Eye, Vector3 At, double Time)> list)
             {
-                visuals.Pose(shot.Time);
-                RenderingServer.GlobalShaderParameterSet(ShaderTime.Param, (float)shot.Time);
-                var view = Eye(ctx, pane, camera, shot.Eye, shot.At);
-                views.Add(view);
-                Settle(pane);
-                if (Render(view) is not { } image)
+                var taken = new List<Image>();
+                foreach (var shot in list)
                 {
-                    ctx.Note($"{shot.Name}: no image, the process draws nothing");
-                    return;
+                    visuals!.Pose(shot.Time);
+                    RenderingServer.GlobalShaderParameterSet(ShaderTime.Param, (float)shot.Time);
+                    var view = Eye(ctx, pane, camera, shot.Eye, shot.At);
+                    views.Add(view);
+                    Settle(pane);
+                    if (Render(view) is not { } image)
+                    {
+                        ctx.Note($"{shot.Name}: no image, the process draws nothing");
+                        return null;
+                    }
+
+                    image.SavePng(Path.Combine(dir, shot.Name + ".png"));
+                    taken.Add(image);
                 }
 
-                image.SavePng(Path.Combine(dir, shot.Name + ".png"));
-                images.Add(image);
+                return taken;
+            }
+
+            if (Shoot(shots) is not { } images)
+            {
+                return;
             }
 
             ctx.Check(visuals.GateNodes[1].GlobalTransform.IsEqualApprox(CourseMotion.Pose(ring, t0 + 1.0)),
@@ -185,6 +276,27 @@ internal static class CourseVisualsSuites
             string montage = Path.Combine(dir, "montage.png");
             Grid(images, 3).SavePng(montage);
             ctx.Note($"montage {montage}; bob pair at {t0:0.00} s and {t0 + 1.0:0.00} s, ring moved {CourseMotion.Offset(ring, t0).Origin.DistanceTo(CourseMotion.Offset(ring, t0 + 1.0).Origin):0.00} m");
+
+            // The left course pylon cut a little under half way up, seen from the close view's sunlit side.
+            // It is whole, then its top tips away as the stump sags, then it regrows and stands whole.
+            double cutAt = t0 + 5.0;
+            visuals.Cut(0, CourseElement.LeftCoursePylon, CutHeightM, cutAt);
+            var leftBase = CourseMotion.Rest(pylons) * CourseGateShape.PylonBase(pylons, 0);
+            var cutEye = leftBase - (f * 45f) - (r * 30f) + (Vector3.Up * 10f);
+            var cutLook = leftBase + (Vector3.Up * 12f);
+            var cutShots = new (string Name, Vector3 Eye, Vector3 At, double Time)[]
+            {
+                ("cut-whole", cutEye, cutLook, cutAt - 1.0),
+                ("cut-falling", cutEye, cutLook, cutAt + 0.6),
+                ("cut-regrowing", cutEye, cutLook, cutAt + 1.8),
+                ("cut-regrown", cutEye, cutLook, cutAt + CoursePylonCut.RegrowSeconds + 0.1),
+            };
+            if (Shoot(cutShots) is { } cut)
+            {
+                string cutMontage = Path.Combine(dir, "cut-montage.png");
+                Grid(cut, 2).SavePng(cutMontage);
+                ctx.Note($"cut montage {cutMontage}; cut at {CutHeightM} m, shots at -1, 0.6, 1.8 and {CoursePylonCut.RegrowSeconds + 0.1} s");
+            }
         }
         finally
         {
