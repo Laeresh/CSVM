@@ -4,7 +4,6 @@
     "mask": "vegetation/C1.bin",
     "kinds": {
       "firtree1.flt": {
-        "jitter_uv": 0.005,
         "yaw_deg": 90,
         "tint": 0.1,
         "brightness": 0.2
@@ -52,6 +51,7 @@
     "picks": {
       "terpat03.tif": "scrub",
       "terpat03b.tif": "scrub",
+      "grass1.tif": "scrub",
       "crop04.tif": "hedge",
       "crop05.tif": "hedge"
     },
