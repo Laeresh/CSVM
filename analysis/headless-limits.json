@@ -60,6 +60,7 @@
     "graphics-flare-switch": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-ocean-switch": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-shader-twins": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
+    "graphics-shadow-decals": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-terrain-shadow": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-switch-cover": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-twins-world-release": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
