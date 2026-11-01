@@ -1,0 +1,317 @@
+{
+  "version": 1,
+  "start": {
+    "pos": [
+      -5221.4453,
+      145.88513,
+      -6863.006
+    ],
+    "heading": -170.48538
+  },
+  "gates": [
+    {
+      "id": "p1",
+      "kind": "pylons",
+      "pos": [
+        -5160.53,
+        161.5892,
+        -6415.952
+      ],
+      "heading": -164.70514,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p2",
+      "kind": "pylons",
+      "pos": [
+        -5088.203,
+        19.975021,
+        -6018.171
+      ],
+      "heading": -143.57063,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p3",
+      "kind": "pylons",
+      "pos": [
+        -4990.315,
+        8.207661,
+        -5661.604
+      ],
+      "heading": -160.7443,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p4",
+      "kind": "pylons",
+      "pos": [
+        -4972.5312,
+        8,
+        -5132.1484
+      ],
+      "heading": -177.78976,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p5",
+      "kind": "pylons",
+      "pos": [
+        -4992.559,
+        8,
+        -4864.3936
+      ],
+      "heading": -136.57956,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p6",
+      "kind": "pylons",
+      "pos": [
+        -4903.0845,
+        8,
+        -4549.156
+      ],
+      "heading": 135.07639,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p7",
+      "kind": "pylons",
+      "pos": [
+        -5377.147,
+        8,
+        -4225.1636
+      ],
+      "heading": 91.56816,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p8",
+      "kind": "pylons",
+      "pos": [
+        -5990.7417,
+        15.751144,
+        -4249.5874
+      ],
+      "heading": 93.57345,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "id": "p9",
+      "kind": "pylons",
+      "pos": [
+        -6258.314,
+        26.998377,
+        -4248.825
+      ],
+      "heading": 89.96383,
+      "width": 21,
+      "height": 30
+    },
+    {
+      "id": "p10",
+      "kind": "pylons",
+      "pos": [
+        -6650.4507,
+        7.999998,
+        -4249.188
+      ],
+      "heading": 89.96383,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p11",
+      "kind": "pylons",
+      "pos": [
+        -6783.6973,
+        8.000002,
+        -4447.634
+      ],
+      "heading": -1.0788794,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p12",
+      "kind": "pylons",
+      "pos": [
+        -6778.75,
+        7.999996,
+        -4694.813
+      ],
+      "heading": -3.8863876,
+      "width": 23,
+      "height": 30
+    },
+    {
+      "id": "p14",
+      "kind": "pylons",
+      "pos": [
+        -6734.3403,
+        8,
+        -4976.074
+      ],
+      "heading": -52.794006,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p15",
+      "kind": "pylons",
+      "pos": [
+        -6522.75,
+        8.000015,
+        -5178.428
+      ],
+      "heading": -52.10791,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p16",
+      "kind": "pylons",
+      "pos": [
+        -6174.396,
+        8.197266,
+        -5394.9995
+      ],
+      "heading": -140.76202,
+      "width": 40,
+      "height": 30
+    },
+    {
+      "id": "p17",
+      "kind": "pylons",
+      "pos": [
+        -6095.808,
+        8.000004,
+        -4997.8135
+      ],
+      "heading": 178.91945,
+      "width": 21,
+      "height": 30
+    },
+    {
+      "id": "p18",
+      "kind": "pylons",
+      "pos": [
+        -6239.2534,
+        -0.010650635,
+        -4256.6953
+      ],
+      "heading": 178.51837,
+      "width": 40,
+      "height": 24
+    },
+    {
+      "id": "r1",
+      "kind": "ring",
+      "pos": [
+        -6314.338,
+        49.999985,
+        -3518.4316
+      ],
+      "heading": -179.07542,
+      "diameter": 40
+    },
+    {
+      "id": "r2",
+      "kind": "ring",
+      "pos": [
+        -6318.0776,
+        278.65756,
+        -3511.8037
+      ],
+      "heading": -8.666321,
+      "diameter": 40
+    }
+  ],
+  "sequence": [
+    {
+      "gate": "p1",
+      "dir": "forward"
+    },
+    {
+      "gate": "p2",
+      "dir": "forward"
+    },
+    {
+      "gate": "p3",
+      "dir": "forward"
+    },
+    {
+      "gate": "p4",
+      "dir": "forward"
+    },
+    {
+      "gate": "p5",
+      "dir": "forward"
+    },
+    {
+      "gate": "p6",
+      "dir": "forward"
+    },
+    {
+      "gate": "p7",
+      "dir": "forward"
+    },
+    {
+      "gate": "p8",
+      "dir": "forward"
+    },
+    {
+      "gate": "p9",
+      "dir": "forward"
+    },
+    {
+      "gate": "p10",
+      "dir": "forward"
+    },
+    {
+      "gate": "p11",
+      "dir": "forward"
+    },
+    {
+      "gate": "p12",
+      "dir": "forward"
+    },
+    {
+      "gate": "p14",
+      "dir": "forward"
+    },
+    {
+      "gate": "p15",
+      "dir": "forward"
+    },
+    {
+      "gate": "p16",
+      "dir": "forward"
+    },
+    {
+      "gate": "p17",
+      "dir": "forward"
+    },
+    {
+      "gate": "p18",
+      "dir": "forward"
+    },
+    {
+      "gate": "r1",
+      "dir": "forward"
+    },
+    {
+      "gate": "r2",
+      "dir": "forward"
+    }
+  ]
+}
