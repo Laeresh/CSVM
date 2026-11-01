@@ -570,7 +570,7 @@ internal sealed class OceanMask
                     kind = Kind.Edge;
                     _result.EdgeTriangles++;
                 }
-                else if (!water && minY < 20f && maxY - minY < 400f)
+                else if (!water && minY < OceanMaskRaster.SolidTop && maxY - minY < 400f)
                 {
                     kind = Kind.Solid;
                     _result.SolidTriangles++;

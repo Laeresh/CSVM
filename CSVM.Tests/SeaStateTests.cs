@@ -56,7 +56,8 @@ public sealed class SeaStateTests
     [InlineData("length", 0.1f, 0.5f)]
     [InlineData("wind", -10f, 0f)]
     [InlineData("swell_full", 400f, 160f)]
-    [InlineData("look_from", 1f, 8f)]
+    [InlineData("look_from", -5f, 0f)]
+    [InlineData("look_full", 1f, 4f)]
     [InlineData("foam_cover", 0f, 0.1f)]
     [InlineData("sharpness", float.NaN, 0.55f)]
     public void AValueOutOfRangeIsHeldAtItsEdge(string key, float value, float held)
@@ -85,6 +86,8 @@ public sealed class SeaStateTests
         var sea = (SeaState.Default with { SwellFrom = 150f, SwellFull = 100f, LookFrom = 70f, LookFull = 30f }).Clamped();
         Assert.Equal((96f, 100f), (sea.SwellFrom, sea.SwellFull));
         Assert.Equal((26f, 30f), (sea.LookFrom, sea.LookFull));
+        var narrow = (SeaState.Default with { LookFrom = 3f, LookFull = 6f }).Clamped();
+        Assert.Equal((2f, 6f), (narrow.LookFrom, narrow.LookFull));
     }
 
     [Fact]

@@ -46,9 +46,9 @@ public sealed record SeaState
         new("swell_from", "Swell ramp from (m)", Coast, 0f, OceanMaskRaster.ShoreReach - RampGap, 1f, s => s.SwellFrom, (s, v) => s with { SwellFrom = v }),
         new("swell_full", "Swell ramp full (m)", Coast, 16f, OceanMaskRaster.ShoreReach, 1f, s => s.SwellFull, (s, v) => s with { SwellFull = v },
             "the mask stops at 160 m; farther needs a rebake"),
-        new("look_from", "Look ramp from (m)", Coast, OceanMask.Cell, OceanMaskRaster.ShoreReach - RampGap, 1f, s => s.LookFrom, (s, v) => s with { LookFrom = v },
-            "at least one mask texel, which keeps the coast tile seam"),
-        new("look_full", "Look ramp full (m)", Coast, 16f, OceanMaskRaster.ShoreReach, 1f, s => s.LookFull, (s, v) => s with { LookFull = v }),
+        new("look_from", "Look ramp from (m)", Coast, 0f, OceanMaskRaster.ShoreReach - RampGap, 1f, s => s.LookFrom, (s, v) => s with { LookFrom = v },
+            "0 runs the look to a solid shore; keep a texel where an opaque coast tile meets the sea"),
+        new("look_full", "Look ramp full (m)", Coast, RampGap, OceanMaskRaster.ShoreReach, 1f, s => s.LookFull, (s, v) => s with { LookFull = v }),
         new("tint_r", "Tint red", Coast, 0.5f, 1.5f, 0.01f, s => s.TintR, (s, v) => s with { TintR = v }),
         new("tint_g", "Tint green", Coast, 0.5f, 1.5f, 0.01f, s => s.TintG, (s, v) => s with { TintG = v }),
         new("tint_b", "Tint blue", Coast, 0.5f, 1.5f, 0.01f, s => s.TintB, (s, v) => s with { TintB = v }),
@@ -115,9 +115,10 @@ public sealed record SeaState
     /// <summary>TUNE. Where the swell reaches full height, at most the mask's reach.</summary>
     public float SwellFull { get; init; } = OceanMaskRaster.ShoreReach;
 
-    /// <summary>TUNE. Metres from the shore over which the look (slope, chop, foam, texture) fades in. The
-    /// ocean then matches the flat sheet where an opaque coast tile meets it. It clears the texel
-    /// beside the coast one, which the linear filter blends into the boundary.</summary>
+    /// <summary>TUNE. Metres from the shore over which the look (slope, chop, foam, texture) fades in. Where
+    /// an opaque coast tile meets the sea it wants at least one mask texel. The ocean then matches the
+    /// flat sheet over the texel the linear filter blends into the tile. A solid shore has no such
+    /// seam, since the sheet is hidden there, so 0 runs the look to the land.</summary>
     public float LookFrom { get; init; } = 12f;
 
     /// <summary>TUNE. Where the look is full.</summary>
@@ -203,7 +204,8 @@ public sealed record SeaState
     }
 
     /// <summary>This sea with every value in its field's range and each coast ramp at least
-    /// <see cref="RampGap"/> wide. Sharpness times height is at most <see cref="FoldLimit"/>, though
+    /// <see cref="RampGap"/> wide. The narrowest look runs from the land to RampGap out.
+    /// Sharpness times height is at most <see cref="FoldLimit"/>, though
     /// grouped crests can still fold. A value that is not a number takes its default. Every path into
     /// the shader goes through here.</summary>
     public SeaState Clamped()

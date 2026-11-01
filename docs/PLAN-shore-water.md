@@ -131,6 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ The ramps measure from the land: swell zero inside the surf zone, look to the coast, per-chapter tune
 22. ☑ Procedural surf in the ocean fragment: dense wash at the land edge, breaking lines travelling shoreward
 23. ☑ The surf's foam moves on the sim clock: churn in the wash and the lace, a surge with each breaker
+24. ☑ The waves reach a quay wall: a solid the water reaches is coastline, a solid over the water is none, and the look ramp may start at the land
 
 ### Wave D, landing
 
@@ -635,6 +636,76 @@ stack at 120 and 180 for D and the pick; the golden pose at frame 120 twice unde
 wrap; a drift along y or a fractional period flashes at the hour. `foam_holes` has no period, so its lookup moves only by
 a bounded warp or by layers that restart on a whole count per wrap, never by an offset that grows with time. A surge that varies with the shore distance stripes the wash
 into rings. The derivatives that pick the lace's octave stay outside the ring's branch.
+
+## C24 ☑ The waves reach a quay wall: a solid the water reaches is coastline, a solid over the water is none, and the look ramp may start at the land
+
+**Landed.**
+
+*Coastline rule.* `OceanMaskRaster` (`CSVM/src/Effects/OceanMaskRaster.cs`) counts as coastline every solid edge
+whose two corners lie from 0.25 m below sea level to under `OceanMask.RampTop` (`CoastEdge`). That covers the land's
+sea-level edges and a quay's foot on a harbour ramp, level or rising along the ramp as C2's does. It also counts the
+cut through y = 0 of every solid face reaching more than 0.25 m to either side (`Cut`): a pier's, a seawall's or a
+hull's waterline. A solid that touches sea level, crosses it or has such an edge is a coast solid (`IsCoast`): its
+corner texels no longer seed the chamfer, while its covered centres still do.
+
+*Solid bound.* A solid is a non-water triangle whose lowest corner stands under `OceanMaskRaster.SolidTop` (`RampTop`
+plus `HideHeight`, 4.25 m). `OceanMask.Read` classifies by it, and `Raster` ignores anything above it. A bridge deck,
+a crane arm or a roof over the sea cannot touch the water and marks nothing: C2's bridge deck at 14 to 27 m no longer
+holds the water under its western span at G = 0. The bound drops 648 solid triangles in C1, 109 in C1B, 5,196 in C2,
+1,754 in C3 and 22,445 in C5 (C5's city stands at 5 m); every solid that touches the water keeps a corner under it.
+
+*Look ramp.* `SeaState.Fields`' `look_from` runs from 0, with a note that a mask texel is still owed where an opaque
+coast tile meets the sea. `look_full` runs from `RampGap`. `CSVM/data/ocean_seas.json` gives C2 `look_from: 0,
+look_full: 6` and C1B `look_from: 0` with `look_full` 24, since 12 and 6 changed little under its surf wash. C1 keeps
+55.
+
+*Tests* (`CSVM.Tests/OceanMaskRasterTests.cs`): `AQuayWallReadsTheExactDistanceToItsFoot` (a rising and a level
+foot), `APierReadsTheExactDistanceToItsWaterline`, `ASolidOverTheWaterIsNoShore`,
+`ASolidOffTheWaterTakesTheTexelDistance` (formerly `AHullTakesTheTexelDistance`),
+`ALandEdgeAboveTheWaterTakesTheTexelDistance`; the band test's scene and oracle follow both rules. `SeaStateTests`
+holds `look_from` -5 to 0 and `look_full` 1 to 4.
+
+*Measured.* C2's east quay: the texel beside the wall reads 3.8 m where it read 8.2 m along the whole 250 m wall. C2's
+bridge: the water under the deck reads 5 to 61.5 m where it read 0. G moves with R byte-identical and C1's frame
+unchanged: C2 at 3,527 texels, C1B at 1,939 (a water tower in the sea, down by up to 15 m, and the space under a rock
+island, up), C1 at 304 around its harbour tugs, tanker and docks (-2.5 to +10 m), C3 at 561, C5 at 10,240. The bake's
+`distance=` reads 33 ms in C2, 31 in C1B and 73 in C1 (22.5 before C24).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
+**Goal.** In C2 the waves run to the harbour's walls, the mole, the beach strip and the piers; no flat band hugs a
+solid.
+
+**Evidence (confidence: traced).** The author flew C2: "the waves dont run to the walls they stop a few meters before
+that." Three mechanisms made the band.
+1. The look ramp. `SeaState.LookFrom` had a floor of one mask texel, and C2's entry sat on it (8 m) with `look_full`
+   16, so the look was half strength only 8 m out. The floor protects the seam where an opaque coast tile meets the
+   ocean; a solid shore has none, since the sheet is hidden there.
+2. The quay foot. The ramp's east quay (`bldgside1`, x = -6144, z -4096..-3843) stands on a foot rising along the ramp
+   from 0 to 1.03 m. No corner pair of it lay on sea level, so it had no coastline, and the texel beside it read the
+   8 m chamfer step.
+3. The bridge deck. Its tarmac at 14 to 27 m was a solid (lowest corner under 20 m), so its covered texels read G = 0.
+
+The mole, the beach strip, the pier faces, the hexagonal island and the west quays already read the exact distance
+(6.3, 5.0, 6.9, 1.9 and 3.8 m at the texel beside each), so their band was the look ramp alone. A trial at
+`look_full` 6 m ran the waves to the wall where 16 m left a band about 5 m wide.
+
+**Approach.** Widen A2's coastline rule from sea-level edges to every edge the water can reach (corners from -0.25 m
+to under `RampTop`) and each crossing face's waterline. Bound solids by a lowest corner under `RampTop` plus
+`HideHeight`. Drop `look_from`'s floor, lower `look_full`'s to `RampGap`, and give C2 a look of 0 to 6 m.
+
+**⚠ Traps.**
+- A chapter with opaque coast tiles still needs the look to start at least a mask texel out (C1's 55 m), or the
+  ocean's look meets the flat tile at a seam.
+- A level-foot rule finds nothing in C2: its ramp quay's foot rises.
+- C2's quay tops stand at 8 m, so where the sheet runs under them the hidden water reads its distance to the wall.
+- A pier whose only horizontal faces are high caps reads about 5 m inside its footprint, which is hidden.
+- C1's bake `distance=` triples (22.5 to 73 ms) from its many low harbour solids. Every inland edge under `RampTop`
+  adds a segment that no sea texel is nearer to than the shore.
+- A small moving boat in C2's harbour flips 1 to 3 levels over about a hundred pixels between `--det` launches;
+  compare shore water with that box masked.
 
 # Wave D, landing
 
