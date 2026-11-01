@@ -1,3 +1,4 @@
+using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -117,7 +118,12 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Availability = OriginalAvailable;
         host.Held = () => stamp.DesktopModeNotice?.Visible == true;
         host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForGameData(at.Data));
+        // The courses a launch would read, so the menu offers no course the flight cannot find.
+        host.Features.Add(InstantActionFeature.ForGameData(at.Data, chapter =>
+        {
+            var library = Flight.Modes.CourseLibrary.ForLaunch(paths().DataRoot, spec.Det);
+            return library.List(chapter).Select(f => (f.Name, library.DisplayName(chapter, f.Name))).ToList();
+        }));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature { SeatLimit = SeatLimit() });

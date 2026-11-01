@@ -134,7 +134,7 @@ public sealed class InstantActionDirector
     internal static StuntSummary BuildStuntSummary(StuntMission run, ScoreStore store, string key)
     {
         float? prevBest = store.GetBest(key);
-        bool newBest = run.AllComplete && store.RecordIfBest(key, run.Elapsed);
+        bool newBest = run.AllComplete && store.RecordIfBest(key, run.Elapsed, ScoreStore.PenaltiesOf(run), ScoreStore.SplitsOf(run));
         return new StuntSummary(run, run.Elapsed, prevBest, newBest);
     }
 
@@ -856,7 +856,7 @@ public sealed class InstantActionDirector
         if (_rigs is not { Count: > 0 } || _rigs[0].Controller?.Stunt is not { } run)
             return null;
         var store = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
-        string key = $"{_spec.Chapter}/{_spec.Mission}/{HumanFieldPlanes.PlaneFor(_spec, 0)}";
+        string key = ScoreStore.KeyFor(run, _spec.Chapter, _spec.Mission, HumanFieldPlanes.PlaneFor(_spec, 0));
         return BuildStuntSummary(run, store, key);
     }
 

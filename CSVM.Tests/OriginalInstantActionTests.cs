@@ -47,7 +47,7 @@ public class OriginalInstantActionTests
                 OriginalInstantActionScreen.LivesKey, OriginalInstantActionScreen.MissionKey,
                 OriginalInstantActionScreen.EnvironmentKey, OriginalInstantActionScreen.RaceTimeKey,
                 "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
-                OriginalInstantActionScreen.RaceBotsKey,
+                OriginalInstantActionScreen.RaceBotsKey, OriginalInstantActionScreen.CourseKey,
                 OriginalInstantActionScreen.PageUpKey, OriginalInstantActionScreen.PageDownKey,
                 OriginalInstantActionScreen.PlayerRadioKey, OriginalInstantActionScreen.WingmanRadioKey,
                 OriginalInstantActionScreen.WeaponLoadoutKey,
@@ -596,6 +596,45 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
+    public void TheCourseBoxShowsForASoloStuntRunAndAPickedCourseFliesAloneOrHidesForABotRow()
+    {
+        var host = OpenSeated(out var ia, out var setup, code => code == "C5" ? new[] { ("harbour_dash", "harbour_dash") } : Array.Empty<(string, string)>());
+        Assert.False(Row(host, OriginalInstantActionScreen.CourseKey).Visible);
+        Click(host, 1);
+        Assert.Equal(("stunt_flying", "C5"), (ia.MissionType.Key, ia.Environment.Code));
+
+        // Solo stunt flying in a chapter with a course: the box stands on the race toggle's line on Danger Zones.
+        var box = Row(host, OriginalInstantActionScreen.CourseKey);
+        Assert.True(box.Visible && box.Enabled);
+        Assert.Equal(InstantActionFeature.DangerZonesLabel, box.Label);
+        Assert.Equal((520f, 380f, 210f, 20f), Rect(box));
+        Assert.Contains(Compose(host).Lines, l => l.Text == "Course:" && l.X == 420f && l.Y == 380f);
+        Assert.True(Row(host, "IA_D_NENEMY0").Enabled);
+
+        Assert.True(host.Module.PoseCourse());
+        Assert.Equal(new[] { InstantActionFeature.DangerZonesLabel, "harbour_dash" }, host.Rows.Select(r => r.Label));
+        Click(host, $"{OriginalInstantActionScreen.CourseKey}:1");
+        Assert.Equal("harbour_dash", ia.Course);
+        Assert.Equal("harbour_dash", Row(host, OriginalInstantActionScreen.CourseKey).Label);
+
+        // A course flies alone: the wingmen, the waves and the lives stand blank and inert.
+        Assert.False(Row(host, OriginalInstantActionScreen.WingmenKey).Enabled);
+        Assert.False(Row(host, "IA_D_NENEMY0").Enabled);
+        Assert.Equal((false, ""), (Row(host, OriginalInstantActionScreen.LivesKey).Enabled, Row(host, OriginalInstantActionScreen.LivesKey).Label));
+        var exit = Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey));
+        Assert.Equal(("C5", "harbour_dash"), (exit.Chapter, exit.Course));
+        Assert.Null(exit.InstantAction);
+
+        // A bot row on the board withdraws the box for the race toggle, and the launch flies the zones.
+        Assert.True(setup.AddBot());
+        Assert.False(Row(host, OriginalInstantActionScreen.CourseKey).Visible);
+        Assert.True(Row(host, OriginalInstantActionScreen.RaceBotsKey).Visible);
+        Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.CourseKey));
+        Assert.True(Row(host, "IA_D_NENEMY0").Enabled);
+        Assert.Null(Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey)).Course);
+    }
+
+    [Fact]
     public void TheRaceBlanksTheWingmanAndEnemyBoxesAndOneSeatBringsThemBack()
     {
         var host = OpenSeated(out var ia, out var setup);
@@ -1075,9 +1114,11 @@ public class OriginalInstantActionTests
 
     // The module over a fresh feature and the layout fixture. It takes the committed stock table
     // when the loadout screen is under test, and a build store where the Pilot Plane list is.
-    private static InstantActionHost Host(out InstantActionFeature ia, bool stock, out PlayerSetupFeature setup, CustomPlaneStore? planes = null)
+    private static InstantActionHost Host(
+        out InstantActionFeature ia, bool stock, out PlayerSetupFeature setup, CustomPlaneStore? planes = null,
+        Func<string, IReadOnlyList<(string Name, string Title)>>? courses = null)
     {
-        ia = new InstantActionFeature(_ => InstantActionFeatureTests.InstantActionDefFor("Test Ace"));
+        ia = new InstantActionFeature(_ => InstantActionFeatureTests.InstantActionDefFor("Test Ace"), courses);
         setup = new PlayerSetupFeature();
         var table = stock ? StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json")) : null;
         var host = new InstantActionHost();
@@ -1095,9 +1136,10 @@ public class OriginalInstantActionTests
     }
 
     // The same with seat 0 joined, which is what makes the pilot's fit a seat's own.
-    private static InstantActionHost OpenSeated(out InstantActionFeature ia, out PlayerSetupFeature setup)
+    private static InstantActionHost OpenSeated(
+        out InstantActionFeature ia, out PlayerSetupFeature setup, Func<string, IReadOnlyList<(string Name, string Title)>>? courses = null)
     {
-        var host = Host(out ia, stock: true, out setup);
+        var host = Host(out ia, stock: true, out setup, courses: courses);
         setup.SetRoster(OriginalRosters.Roster(Array.Empty<CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         host.Module.OpenInstantAction();

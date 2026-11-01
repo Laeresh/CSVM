@@ -33,7 +33,7 @@ public abstract record MenuReturnDestination
     {
         CampaignMissionExit { Profile.Length: 0, Net: not null } => new CoopGuestReturn(null),
         CampaignMissionExit mission => new CabinReturn(mission.Profile),
-        LaunchExit { InstantAction: not null } => InstantAction,
+        LaunchExit { InstantAction: not null } or LaunchExit { Course: not null } => InstantAction,
         _ => TopLevel,
     };
 }

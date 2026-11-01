@@ -124,6 +124,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// stunt flying. The race toggle stands on, with the cursor on it.</summary>
     public const string InstantActionRaceBotsAid = "race-bots";
 
+    /// <summary>The Instant Action aid's argument that picks stunt flying and opens the Course list,
+    /// which the first environment's shipped sample course fills.</summary>
+    public const string InstantActionCourseAid = "course";
+
     /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
     /// the page a flown mission's ending lands on.</summary>
     public const string InstantActionWrapupAid = "instant-action-wrapup";
@@ -689,6 +693,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case InstantActionAid + ":" + InstantActionRaceBotsAid:
                     _shell.InstantAction.OpenInstantAction();
                     _shell.InstantAction.PoseRaceBots();
+                    break;
+                case InstantActionAid + ":" + InstantActionCourseAid:
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.PoseCourse();
                     break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));

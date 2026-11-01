@@ -407,6 +407,24 @@ internal sealed class InspectionLabs
         Log.Info("ui", $"vegetation lab ready (Shift+F2), save {savePath ?? "off in an exported build"}");
     }
 
+    /// <summary>The course editor lab (Shift+F3), in <c>--freecam</c> over a chapter world alone, open at
+    /// launch under <c>--course-edit</c>. The editor build saves into the shipped courses, an exported one
+    /// into <paramref name="library"/>'s game folder. <paramref name="groundHit"/> is the world's ground ray.</summary>
+    public void BuildCourseLab(CourseLibrary library, Func<Vector3, Vector3, Vector3?> groundHit)
+    {
+        var spec = _in.Spec;
+        if (!spec.Freecam || spec.EmptyStage)
+            return;
+        var target = CourseDraft.SaveTarget(OS.HasFeature("editor"), library.GameFolder != null);
+        _in.WorldRoot.AddChild(new CourseLab(spec.Chapter.ToUpperInvariant(), library, target, groundHit)
+        {
+            StartOpen = spec.CourseEdit != null,
+            StartCourse = spec.CourseEdit?.Name,
+            Spectator = Spectator,
+        });
+        Log.Info("ui", $"course lab ready (Shift+F3), save {target?.ToString() ?? "off, no game folder"}");
+    }
+
     /// <summary>The damage lab in flight (F19), the viewer's panel bound to P1's real damage. A
     /// dialled-in state then drives the HUD and can be flown. Splitscreen binds P1 only, since the
     /// panel is one overlay, not one per pane.</summary>

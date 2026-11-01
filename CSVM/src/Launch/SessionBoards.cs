@@ -353,7 +353,7 @@ internal sealed class SessionBoards
     // load screen heads it (docs/org/pause-screen.md). It needs no readout.
     private OriginalPauseBoard? BuildOwnModePauseBoard()
     {
-        string heading = LaunchBoards.Subject(_in.Spec).ToUpperInvariant();
+        string heading = LaunchBoards.Subject(_in.Spec, _in.DataRoot).ToUpperInvariant();
         if (PauseSheet.LoadOwnMode(_in.Zrdr, _in.Messages, heading) is not { } sheet)
         {
             Log.Warn("ui", $"pause: no ia_escape.zrd blackboard for {heading}");
