@@ -1,6 +1,6 @@
 # Shore water: what the surf ring and the coast are made of
 
-The measurements `docs/PLAN-shore-water.md` rests on. Both scripts read unzbd's gamez output
+The measurements behind PLAN-shore-water's surf-ring items. Both scripts read unzbd's gamez output
 (`extracted/<chapter>/gamez.zip`, unpacked to a scratch folder) and print their figures; no game
 data is stored here.
 
