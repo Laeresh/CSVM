@@ -8,8 +8,10 @@ pointer; any live prose linking this file by path is unlinked in the same commit
 This plan delivers issue #270. Under Enhanced graphics at the `waves` water quality, the wave ocean
 stops short of every coast whose shoreline the authors painted into a flat texture at y = 0 rather
 than modelled as a polygon edge: C1's `water1_trans1`/`water1_trans2` tiles, C3's `shore1` and
-`shore_trans` strips and flat `cliff1_watertrans*` polygons, and C2's `beach1` strip. The plan teaches
-the shore mask to read the coastline out of those textures, so the waves run to the painted waterline
+`shore_trans` strips and flat `cliff1_watertrans*` polygons, C2's `beach1` strip, and the
+`cliff01_trans2` rock edge that C1 draws as an overlay over its tiles and C2 lays as a decal over its
+sheet at the foot of its cliffs (the author's report of C2 coast tiles like C1's, measured in A2; #270
+does not list them). The plan teaches the shore mask to read the coastline out of those textures, so the waves run to the painted waterline
 and the tiles' water side steps aside for them. It builds on what PLAN-shore-water landed: the surf
 kind and plane (its A1), the segment-based shore distance (A2), the surf coverage in the material
 (A3), the ring's ocean hide (B11) and the procedural surf (C22).
@@ -45,14 +47,27 @@ its own predicate, because the colliders and the tile census read that classific
 | 3 | Golden coverage of the painted coasts | **Three new Enhanced `--water-quality=waves` goldens, one per chapter** (a C1 coast tile, C2's beach, a C3 shore strip), pinned in D31 after C22's verdict |
 | 4 | Whether C22 re-judges C3's ramps | **Yes**: a montage of today's ramps beside C1B's and C2's, the author picks, the value lands in `ocean_seas.json` |
 | 5 | Whether C22 re-judges C1's look ramp | **Yes**, the same montage: `look_from` 55 beside 0; #270 does not name it, but it may hide the tile gap as C3's ramps do |
+| 6 | Where the waves stop on a texture whose colour fades with no step | **C1: at the rock overlay's edge**, `cliff01_trans2`'s alpha 0.5, so `water1_trans*` is sea up to the overlay; **C3's cliff tiles: where the colour first leaves the painted water** (the 10 % point, v 0.777 and 0.762). Alpha strips (`shore1`, `shore_trans`, `beach1`, `cliff01_trans2`) stop at alpha 0.5 on their water side. Chosen from a montage of the candidate lines on the textures |
+| 7 | C3's corner tile `cliff1_watertrans3`, whose water is a wedge no one-axis crossing places | **Left land, as today**: 36 polygons, 0.16 km², 7 % water texels; no two-dimensional water map |
 
 ## ⚠ Read this before implementing anything
 
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | B12, B13, C21, D31 | The mask's gaps, the hide's gate and the golden coverage are read from the code and manifest; confirm the line numbers, then implement. |
-| **Direction sound, magnitude a judgement call** | B11 | The shore U is a measured texture property; how the colour gradient's crossing is detected in an opaque tile is a threshold to settle on the data. |
-| **Leads only, no mechanism yet** | A1, A2, A3, C22 | Wave A is the measurement the issue names as owed; C22 is the author's look call. |
+| **Direction sound, magnitude a judgement call** | B11 | The crossings are measured (Wave A); the rule that finds them in the pixels must reproduce those figures. |
+| **Leads only, no mechanism yet** | C22 | The author's look call. |
+
+Wave A corrected #270 in five places; the data table below carries the corrections, and
+`analysis/painted-coasts/FINDINGS.md` holds the measurements:
+
+| # | The claim | What the data shows |
+|---|---|---|
+| 1 | C3's strips run from the land's edge out to sea, both edges 30 to 37 m from land | Flat land at y = 0 lies coplanar under each strip's sand half; its edge runs near the strip's centre line, and the painted waterline sits a third of the strip seaward of it (A1) |
+| 2 | `shore1`'s alpha is transparent on the water side, then opaque sand | It is transparent at both edges; the water side is U = 0, told apart by its painted colour (A1) |
+| 3 | 45 `cliff1_watertrans*` polygons climb the cliff face | One polygon does, at 41 to 81 m, and never meets the water; 257 of 258 are flat (A3) |
+| 4 | C1's tiles are 256x64 gradients along U | `water1_trans2` is 256x256 with a diagonal seam, and both tiles carry the `cliff01_trans2` rock overlay over their landward strip (A2) |
+| 5 | C2's coast is `beach1` alone | C2 also lays `cliff01_trans2` as a 30 m decal over its sheet at the cliff foot (A2) |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
 worktree session here; use a local commit or a file copy. This plan runs in
@@ -60,16 +75,18 @@ worktree session here; use a local commit or a file copy. This plan runs in
 
 ## What the data actually ships
 
-Measured in #270 from the extracted gamez (unzbd output, node transforms applied); the scripts in
-`analysis/shore-water/` are the pattern, and `analysis/shore-water/FINDINGS.md` holds the surf-ring
-survey this extends.
+Measured in #270 and Wave A from the extracted gamez (unzbd output, node transforms applied); the
+scripts and the full figures are in `analysis/painted-coasts/`, and
+`analysis/shore-water/FINDINGS.md` holds the surf-ring survey this extends.
 
 | Chapter | Texture | Geometry | Texture | Mask today |
 |---|---|---|---|---|
-| C1 | `water1_trans1`, `water1_trans2` | flat tiles at y = 0 between the `water1` sheet and the land | 256x64 RGB, opaque, a colour gradient from the water's blue to the land's green along U | `Kind.Edge` (water that is not the base sheet): shore, so the waves stop at the tile's seaward edge |
-| C2 | `beach1` | 58 flat polygons at y = 0, 125 to 589 m along the coast and about 120 to 330 m across; the nearest land vertex at sea level sits 65 m from both of its edges | 256x128 RGBA: painted surf foam along the water edge, wet sand, then dry sand and rocks, the alpha fading out at both long edges; the alpha runs along V | land, so the waves stop at the strip's seaward edge, 65 m or more from the painted waterline |
-| C3 | `shore1` (487 polygons), `shore_trans` (55) | flat strips at y = 0, 17 to 116 m across (median 65 m), both edges 30 to 37 m from the nearest land vertex at sea level | 128x256 and 128x128 RGBA: transparent on the water side, a foam band, then opaque sand along U | land, so the waves stop at the strip's seaward edge and the strip draws over the flat sheet |
-| C3 | `cliff1_watertrans`, `cliff1_watertrans2`, `cliff1_watertrans3` | 258 flat polygons at y = 0 against the cliffs, 90 to 130 m across, their landward edge on the land vertices; 45 more rise up the cliff face to 81 m | 128x128 RGB, opaque, water blue painted into the cliff base | land |
+| C1 | `water1_trans1` (129 polygons), `water1_trans2` (243) | flat tiles at y = 0, seaward edge on the `water1` sheet, landward edge on `cliff01` land; 128 m and 90.5 m across (A2) | `trans1` 256x64 RGB along U, `trans2` 256x256 RGB along the diagonal u + v; opaque, from the sheet's colour to a grass green with no step (A2) | `Kind.Edge` (water that is not the base sheet): shore, so the waves stop at the tile's seaward edge |
+| C1 | `cliff01_trans2`, an overlay pass on 43 `trans1` and 64 `trans2` polygons | the tiles' landward strip, u 0.75 to 1 (32 m) or p 0 to 0.25 (22.6 m) | 256x64 RGBA rock edge, opaque at the cliff foot, alpha 0.5 at 19.7 m (`trans1`) and 13.9 m (`trans2`) from it (A2) | land over the tile, so solid |
+| C2 | `cliff01_trans2` | 27 flat polygons at y = 0 (2 more climb to 8 m), 20 to 45 m across, a decal over the `wtr` sheet, which runs under it to the cliff foot; 31 `cliff01` rock polygons rise from its landward edge to 64 to 111 m (A2) | 64x256 RGBA along U, transparent at u = 0 (the water side), a ragged rock edge, alpha 0.5 at u = 0.398 (A2) | land, so solid out to its seaward edge |
+| C2 | `beach1` | 58 flat polygons at y = 0, 89 to 589 m along the coast and 117 to 333 m across; flat `terpat` land at y = 0 lies under its sand half, its edge near the strip's centre line (A1) | 256x128 RGBA: painted surf foam along the water edge, wet sand, then dry sand and rocks, the alpha fading out at both long edges; the alpha runs along V | land, so the waves stop at the strip's seaward edge, 65 m or more from the painted waterline |
+| C3 | `shore1` (487 polygons), `shore_trans` (55) | flat strips at y = 0, 17 to 116 m across (median 65 m); flat land at y = 0 lies under their sand half and its sea-level edge runs near their centre line, with only the base sheet under the water side (A1) | 128x256 and 128x128 RGBA along U, transparent at both edges: the painted waterline at U = 0.19 on the water side (U = 0), a foam band, then sand (A1) | land, so the waves stop at the strip's seaward edge and the strip draws over the flat sheet |
+| C3 | `cliff1_watertrans`, `cliff1_watertrans2`, `cliff1_watertrans3` | 258 polygons, 257 flat at y = 0 against the cliffs (p10 to p90 64 to 149 m across), their landward edge on the cliff's foot and seaward edge on the base sheet; one `cliff1_watertrans` polygon sits at 41 to 81 m and never meets the water (A3) | 128x128 RGB, opaque, water painted into the cliff base along V, 30 to 33 RGB from the base sheet's colour, fading over about 70 m with no step; `cliff1_watertrans3` is a corner tile with a water wedge (A3) | land |
 | C3 | `shore2` | the beach slope itself, rising to 7.6 m | RGBA sand and foam | land, correctly |
 
 C2's authored `srf0001` ring (86 polygons) covers only the sea stack. C2's quays meet the `wtr` sheet
@@ -101,9 +118,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, measure first
 
-1. ☐ What lies under C3's sand strips (#270)
-2. ☐ C1's tiles: world width, shore U, and whether the land meets their landward edge (#270)
-3. ☐ Which of C3's `cliff1_watertrans*` polygons are flat (#270)
+1. ☑ What lies under C3's sand strips (#270)
+2. ☑ C1's and C2's coast tiles: world width, shore U, and whether the land meets their landward edge (#270)
+3. ☑ Which of C3's `cliff1_watertrans*` polygons are flat (#270)
 
 ### Wave B, the mask reads the painted coast
 
@@ -133,7 +150,20 @@ never run B12, B13 and C21 in parallel worktrees.
 
 # Wave A, measure first
 
-## A1 ☐ What lies under C3's sand strips
+## A1 ☑ What lies under C3's sand strips
+
+**Landed.** `analysis/painted-coasts/a1_strips.py` and FINDINGS.md's A1 section. No land lies below
+sea level under any strip in C3 or C2: under each strip there is only the base sheet and flat land at
+y = 0, the land's edge near the strip's centre line, and the painted waterline (alpha 0.5 on the water
+side, U 0.188 for `shore1`, 0.195 for `shore_trans`, V 0.125 for `beach1`) about a third of the strip
+seaward of it. The strip's land side takes the solid write alone. Two poses per chapter recorded.
+
+**Verified.** The script reproduces #270's census (487 and 55 polygons, 17 to 116 m across, `shore1`'s
+edges 30 to 37 m from land) and finds 20 strips at their own height under their own samples; the
+orchestrator re-ran it on C3 with the same figures. Four `--freecam --det` screenshots put the frame
+centre on the strip at each pose.
+
+**Original approach (kept for reference).**
 
 **Goal.** It is known whether the land mesh under each C3 `shore1`/`shore_trans` strip lies below sea
 level, at sea level, or is absent, so B12 knows whether the strip's opaque sand is the only land there.
@@ -159,11 +189,27 @@ in a `--freecam --chapter=C3` screenshot.
 **⚠ Traps.** The extracted gamez carries node transforms the script must apply, as the
 `analysis/shore-water/` scripts do; an untransformed mesh reads a strip in the wrong place.
 
-## A2 ☐ C1's tiles: world width, shore U, and whether the land meets their landward edge
+## A2 ☑ C1's and C2's coast tiles: world width, shore U, and whether the land meets their landward edge
+
+**Landed.** `analysis/painted-coasts/a2_tiles.py` and FINDINGS.md's A2 section. C1's tiles meet the
+sheet at their seaward edge and `cliff01` land at their landward edge; their colour fades with no step
+from the sheet's colour to a grass green that is not the land they meet; `water1_trans2` is 256x256
+with its ramp along the diagonal; and both carry `cliff01_trans2`, a rock edge, as an overlay pass
+over their landward strip, passing alpha 0.5 at 19.7 m (`trans1`) and 13.9 m (`trans2`) from the cliff
+foot. C2 has no opaque gradient tile: its coast tiles are `cliff01_trans2` laid as a 30 m decal over
+the `wtr` sheet, alpha 0.5 at u = 0.398, with `cliff01` rock polygons rising from their landward edge.
+Two poses per chapter recorded, not yet seen in a frame.
+
+**Verified.** The water end of every C1 profile matches the `water1` sheet's mean texel to within 2.2
+RGB; the orchestrator re-ran the script on C1 and confirmed the polygon counts and overlay passes, and
+read `water1_trans2.png` as 256x256 and C2's `cliff01_trans2.png` as 64x256 RGBA.
+
+**Original approach (kept for reference).**
 
 **Goal.** The world width of C1's `water1_trans1`/`water1_trans2` tiles, the U at which their colour
 gradient leaves the water's blue, and whether the land polygons meet each tile at its landward edge
-are measured.
+are measured. The same is measured for C2's coast tiles, which the author reports are like C1's with
+some rocks above the water; A2 names their textures and separates the rocks from the flat tiles.
 
 **Evidence (confidence: lead-only).** #270: the surf ring's inner edge coincides with the land to
 0.0 m, but the tiles were not measured. The tiles are 256x64 RGB, opaque, a gradient along U
@@ -183,7 +229,19 @@ findings.
 picks the threshold from the profile itself (the midpoint of the water-to-land colour distance,
 unless the profile shows a sharper step) and records it; B11 applies the same rule.
 
-## A3 ☐ Which of C3's `cliff1_watertrans*` polygons are flat
+## A3 ☑ Which of C3's `cliff1_watertrans*` polygons are flat
+
+**Landed.** `analysis/painted-coasts/a3_cliffs.py` and FINDINGS.md's A3 section. 257 of the 258
+polygons are flat at y = 0; the one that is not sits at 41 to 81 m and never meets the water, so the
+mask's own per-triangle sea-level test separates them with a 40 m margin. V runs across the coast,
+land at v = 0 on the cliff's foot and the sheet at v = 1. The colour leaves the painted water at
+v 0.777 (`cliff1_watertrans`) and 0.762 (`cliff1_watertrans2`). `cliff1_watertrans3` is a corner tile
+whose water is a wedge. No polygon carries an overlay pass. Two poses recorded, not yet seen in a frame.
+
+**Verified.** Every v = 0 vertex lies within 0.5 m of a sea-level land vertex and every v = 1 vertex of
+a sheet edge; the orchestrator re-ran the script with the same counts and crossings.
+
+**Original approach (kept for reference).**
 
 **Goal.** The flat `cliff1_watertrans*` polygons at y = 0 (the mask's candidates) are separated from
 those that climb the cliff face (land).
@@ -206,25 +264,39 @@ sea-level test makes a candidate.
 
 ## B11 ☐ A shore U per coast texture, read from the texture's own profile at bake time
 
-**Goal.** Each painted-coast texture carries the U (V for C2's `beach1`) at which it crosses from
-water to land, and the width of its painted foam fade, read from its pixels and never typed in.
+**Goal.** Each painted-coast texture carries the coordinate, along whichever UV axis runs across the
+coast (U for C3's strips, V for C2's `beach1` and C3's cliff tiles), at which it crosses from water
+to land, and the width of its painted foam fade, read from its pixels and never typed in.
 
-**Evidence (confidence: direction-sound).** #270's mechanism: the alpha crossing 0.5 for C3's strips
-and C2's beach, the colour leaving the water's blue for the opaque tiles. The values themselves are
-unmeasured until A1 and A2.
+**Evidence (confidence: direction-sound).** Wave A measured every crossing (FINDINGS.md), and
+decisions 6 and 7 set which one is the coast:
 
-**Approach.** `TextureArchive` (`CSVM/src/Mech3/TextureArchive.cs`) computes the profile at runtime
+| Texture | Axis, water side | Crossing the profile must reproduce |
+|---|---|---|
+| `shore1`, `shore_trans` (C3) | U, water at U = 0 | alpha 0.5 at U 0.188, 0.195 (the water-side crossing of two) |
+| `beach1` (C2) | V, water at V = 0 | alpha 0.5 at V 0.125 (the water-side crossing of two) |
+| `cliff01_trans2` (C2 decal, C1 overlay) | U in C2's 64x256; the C1 copy is 256x64 | alpha 0.5 at u 0.398 in C2; in C1 the overlay crosses at the tile's u 0.846 and p 0.154 |
+| `cliff1_watertrans`, `cliff1_watertrans2` (C3) | V, water at v = 1 | the 10 % point of the colour profile normalised to its own ends, v 0.777, 0.762 |
+| `water1_trans1`, `water1_trans2` (C1) | none | no crossing: the tile is sea, and its coast is the overlay's |
+| `cliff1_watertrans3` (C3) | none | not a painted coast: left land |
+
+**Approach.** `TextureArchive` (`CSVM/src/Mech3/TextureArchive.cs`) computes a coast profile at runtime
 from the decoded authored image (`FindImage(name, authored: true)`, `:1073`) the first time it is asked
-for, and caches it as it caches the soft-alpha check (`AlphaIsSoft`, `:1139`, cached in `_alphaInfo`).
-`Ocean.Create` already holds the archive (`CSVM/src/Effects/Ocean.cs:113`) and passes it into
-`OceanMask.Bake`, which today sees only the `SceneBuilder`. The profile is a one-dimensional reading
-along the coast axis, with the crossing and the fade width derived from it (decision 1).
+for, and caches it as it caches the soft-alpha check (`AlphaIsSoft`, `:1139`, cached in `_alphaInfo`)
+(decision 1). `Ocean.Create` already holds the archive (`CSVM/src/Effects/Ocean.cs:113`) and passes it
+into `OceanMask.Bake`, which today sees only the `SceneBuilder`. The profile is one-dimensional: the
+axis is the one along which the texture varies, the water side is read from the pixels (for alpha, the
+transparent end whose colour is nearer the chapter's base sheet; for an opaque ramp, the end nearer
+it), and the crossing follows the table's rule. Which textures are painted coasts is a name list beside
+`SoftAlphaCoastline` (`TextureArchive.cs:681-688`), as `ClassifySurface` matches by name; the values are
+never typed in.
 
 **Model recommendation.** medium: a pixel reduction on an existing cache pattern.
 
-**Verify.** A unit test over a synthetic image, alpha and opaque gradient both, pins the crossing and
-the fade width. The crossing for each real texture is logged once at bake and recorded in the commit,
-matching A1 and A2's measured values.
+**Verify.** A unit test over synthetic images (a two-edged alpha strip, a one-edged alpha strip and an
+opaque ramp) pins the axis, the water side, the crossing and the fade width. Each real texture's
+profile is logged once at bake and matches the table to within one texel; the figures go in the
+commit.
 
 **⚠ Traps.**
 - `shore1`'s alpha runs the opposite way to the surf ring's: transparent on the water side, opaque
@@ -233,6 +305,12 @@ matching A1 and A2's measured values.
   is `1 - u` (`CSVM/src/Effects/OceanMask.cs:585-586`). Neither holds for these textures.
 - Read the authored pixels, never the HD replacement: an HD pack repaints the texture, and the mask
   must not move with a modding folder.
+- A threshold taken from the base sheet's mean texel fires on texel noise for the cliff tiles, whose
+  painted water sits 33 RGB from the sheet (A3); normalise to the profile's own ends.
+- `water1_trans2`'s ramp runs along the diagonal; it needs no profile under decision 6, so do not
+  build a diagonal reader for it.
+- `SoftAlphaCoastline` also names `shore1_end`, which Wave A did not meet in any census; check whether
+  it lies flat at y = 0 anywhere before leaving it out of the list.
 
 ## B12 ☐ A painted-coast kind in the mask
 
@@ -257,9 +335,14 @@ of B11's shore U per texel (decision 2): each texel interpolates the triangle's 
 weights the raster already computes, as the surf case does (`OceanMaskRaster.cs:345-352`). A texel on
 the water side is written as the surf case writes it, with the coverage measured across B11's fade. A
 texel on the land side is written as a solid (`Sea = 0`). Candidate polygons are those A3's height
-test calls flat. If A1 finds land below sea level under C3's strips, their land side also takes a
-ramp's lift (`OceanMaskRaster.Lift`, `:365`), as #270 says; if A1 finds flat water or nothing there,
-the solid write alone.
+test calls flat. A1 finds no land below sea level under any strip, so the land side takes the solid
+write alone, with no ramp lift. `water1_trans*` triangles are sea throughout, with no coverage of their
+own (decision 6). A painted-coast texel decides its texel over every other kind there: its water side
+is sea over coplanar land (A1's strips), and its land side is solid over the tile or sheet beneath it
+(C1's overlay on `water1_trans*`, C2's `cliff01_trans2` decal on the `wtr` sheet). Where two painted
+coasts overlap (`shore_trans` over the cliff tiles, the overlay over its tile), the land side wins.
+Overlay passes are their own surfaces with their own UVs (`CSVM/src/Mech3/SceneBuilder.cs:433-438`,
+`:1043-1047`), so the mask reads `cliff01_trans2` as it reads any other painted coast.
 
 **Model recommendation.** high: a new mask kind across the banded raster, the dump and the counters.
 
@@ -278,6 +361,15 @@ tiles) and A3 (C3 cliffs); A1 also records C2's two `beach1` poses with the same
 - A painted tile's mask under its land half must read `Sea = 0`, or C21's hide discards land. `Kind.Edge`
   is not that: it writes `Sea = 2` (`OceanMaskRaster.cs:342`), which encodes as R = 255 (`:451`), and the
   hide reads R alone. C1's tiles are `Kind.Edge` today, so their land half must move to the solid write.
+- Flat land at y = 0 lies coplanar under the strips (A1): under `shore1`'s painted water (U below
+  0.25) 12 % of samples have land beneath them, and under `shore_trans` some of that land is A3's
+  cliff tiles. That land is a solid in the mask and its edges are coastline segments today, so on the
+  water side of the painted waterline the strip's sea has to win over the land under it, or the waves
+  stop at the land mesh's edge near the strip's centre line instead of at the painted waterline.
+- `shore1`'s and `shore_trans`'s alpha crosses 0.5 twice, at both U edges; the water side is U = 0,
+  told apart by its painted colour (A1). B11 takes the crossing on that side.
+- The precedence cannot rest on triangle order: the raster's bands and the parallel pass must give the
+  same texel whatever order the surfaces arrive in (`EveryBandCountMatchesTheWholeImagePass`).
 - Moving-hull removal decrements the per-kind counters (`OceanMask.cs:650-656`); a new kind needs its
   counter there too.
 
@@ -301,7 +393,11 @@ distance to the iso-line. The bake time per chapter is read from the `distance=`
 `ocean: built grid` line (`CSVM/src/Effects/Ocean.cs:169`, phases at `OceanMask.cs:313-314`) in C1, C2
 and C3, before and after, two runs each side (verification.md PERF-9).
 
-**⚠ Traps.** PLAN-shore-water's closing commit records C1's bake distance pass tripling to 73 ms from
+**⚠ Traps.**
+- Coplanar land under a strip's water side (A1: 12 % of `shore1`'s painted-water samples) is a solid
+  whose edges `Coastline` adds today. Left in, those segments lie seaward of the painted waterline and
+  shorten the shore distance there; a solid edge inside a painted coast's water side is not coastline.
+- PLAN-shore-water's closing commit records C1's bake distance pass tripling to 73 ms from
 its many low harbour edges. Every new segment adds to that pass, so measure the bake time per chapter
 before and after.
 
