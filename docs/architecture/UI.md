@@ -937,10 +937,10 @@ The course editor lab (Shift+F3), built by `InspectionLabs.BuildCourseLab` in `-
 under `--course-edit`. A right-edge panel lists, opens, starts (its start at the camera) and saves courses to `CourseDraft.SaveTarget`.
 A left click off the panels selects the course gate whose drawn part's box the ray meets, else places the chosen kind facing the
 camera's yaw on the vegetation lab's world-triangle ray (no colliders in `--freecam`; over the sea it meets the sea-level sheet),
-else falls through to the freecam's selection. Held H drags the selected gate. Each `CourseDraft.Changed` rebuilds the
-`CourseVisuals`, the amber box and the `CourseSequenceOverlay`. A sequence panel beside it has a flat button row per entry (rebuilt
-only when `Course.Sequence` is a new list) and Up, Down, Flip, Remove and Add again. A row click (`ChooseEntry`) eases the camera
-for 0.6 s behind the gate on that entry's approach via `SpectatorCamera.LookFrom`; a right click cancels the ease.
+else falls through to the freecam's selection; a `CourseGizmo` handle claims a press first (`PressAt`). Motion (`MoveTo`) drags
+a grabbed handle, else the held-H ground drag, else lights the handle under the cursor (never while RMB look captures the mouse).
+Each `CourseDraft.Changed` rebuilds the `CourseVisuals`, the amber box and the `CourseSequenceOverlay`. A sequence panel has a flat
+button row per entry (rebuilt only when `Course.Sequence` is a new list), Up, Down, Flip, Remove and Add again; a row click (`ChooseEntry`) eases the camera 0.6 s behind the gate on that entry's approach via `SpectatorCamera.LookFrom`, and a right click cancels it.
 
 ## src/UI/Labs/CourseDraft.cs
 The course lab's edits, engine-free: the course, its selected gate and selected entry (the insertion point), and `Changed` after
@@ -960,6 +960,16 @@ material joins the opening middles in sequence order, each leg with a two-barb h
 short arrow through its gate the way it is flown; a leg between one gate and itself draws nothing. Nothing moves per frame,
 so the gates' metre of idle bob is not followed. ⚠ A one-frame suite cannot photograph the numbers: `Label3D` shapes its
 text on a deferred call.
+
+## src/UI/Labs/CourseGizmo.cs
+The course lab's move and turn tool on `CourseDraft.Selected` at `CourseDraft.Centre`: world X, Y, Z arrows (red, green, blue)
+and a magenta heading ring, primitive meshes on unshaded materials drawn through the ground. `Fit` scales it each frame by
+`ScreenScale` to a 110 px arrow at its depth along the view. `HandleAt` projects the arrows (past their inner fifth) and the ring
+to screen polylines and `Pick` takes the nearest within 10 px, the lower handle on a tie; the hovered or grabbed one turns pale
+yellow. An arrow drag moves the gate by `AlongAxis` (the axis point nearest the cursor's ray); the ring turns the heading by the
+angle swept round the middle in its horizontal plane (`AngleAround`, `Turned`, wrapped to [-180, 180), Ctrl snaps to 15 degrees).
+A pylon gate has no Y arrow and stands on the ground as an X or Z drag moves it; a ring keeps its world Y. Each drag step is
+one `CourseDraft.Update`, which keeps the sequence list. Sizes and colours are TUNE.
 
 ## src/UI/Labs/WorldDamageLab.cs
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever

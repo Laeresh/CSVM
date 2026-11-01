@@ -10,6 +10,7 @@ using CSVM.Tooling;
 using CSVM.UI.Labs;
 using CSVM.Utils;
 using Godot;
+using Handle = CSVM.UI.Labs.CourseGizmo.Handle;
 
 namespace CSVM.Testing;
 
@@ -40,7 +41,10 @@ internal static class CourseLabSuites
         + "reloads to the same course; the panel over the course is photographed. The sequence panel: a row click "
         + "selects its entry and flies the camera onto it, a placed gate's entry goes after the selected one, Up, "
         + "Flip, Remove and Add again (reverse) edit the order, the world numbers and line follow, and the sequence "
-        + "saves and reloads; the panels over the numbered course are photographed")]
+        + "saves and reloads; the panels over the numbered course are photographed. The gizmo: a press on a handle "
+        + "grabs it without placing or reselecting, the X and Y arrows move a ring along their axes and the heading ring "
+        + "turns it (Ctrl snaps), with no sequence row rebuilt; a pylon gate has no Y arrow and stays on the ground; "
+        + "the selected ring with its gizmo is photographed")]
     internal static void CourseLabEdits(TestContext ctx)
     {
         var savedClock = GameClock.Current;
@@ -201,7 +205,87 @@ internal static class CourseLabSuites
             $"the lab opens it again from its list: {draft.Course.Name}, {draft.Course.Gates.Count} gates");
 
         Photograph(ctx, pane, camera, lab);
+        Gizmo(ctx, pane, camera, lab);
         Sequence(ctx, pane, camera, lab, library);
+    }
+
+    // The gizmo pressed and dragged from screen points on its handles: r1's X and Y arrows and heading ring, then
+    // p1's X arrow. The gates are put back after, so the sequence steps see the saved course.
+    private static void Gizmo(TestContext ctx, SubViewport pane, Camera3D camera, CourseLab lab)
+    {
+        var draft = lab.Draft;
+        var gizmo = lab.Gizmo!;
+        var savedP1 = draft.Course.Gates.First(g => g.Id == "p1");
+        var savedR1 = draft.Course.Gates.First(g => g.Id == "r1");
+        var sequence = draft.Course.Sequence;
+        var rows = SequenceRows(lab);
+        int pool = draft.Course.Gates.Count;
+        draft.SelectEntry(1);
+        camera.LookAtFromPosition(savedR1.Position + new Vector3(220f, 180f, 260f), savedR1.Position, Vector3.Up);
+        Vector2 At(Handle handle, Vector3 offset = default)
+        {
+            gizmo.Fit(camera);
+            return camera.UnprojectPosition(gizmo.Grip(handle) + offset);
+        }
+
+        lab.MoveTo(At(Handle.X));
+        ctx.Check(gizmo.Visible && gizmo.Hovered == Handle.X, $"the gizmo stands on the selected r1 and lights the X arrow under the cursor: {gizmo.Hovered}, arrows {gizmo.Size:0.0} m");
+
+        // A press on a handle with a pylon gate armed grabs it, placing nothing and keeping the selection.
+        lab.Place = CourseLab.PlaceKind.PylonGate;
+        ctx.Check(lab.PressAt(At(Handle.X)) && gizmo.Grabbed == Handle.X && draft.Course.Gates.Count == pool && draft is { SelectedId: "r1", SelectedEntry: 1 },
+            $"a press on the X arrow grabs it and neither places nor reselects: {gizmo.Grabbed}, {draft.Course.Gates.Count} gates, {draft.SelectedId} entry {draft.SelectedEntry}");
+        lab.MoveTo(At(Handle.X, Vector3.Right * 30f));
+        ctx.Check(lab.ReleaseAt() && (draft.Selected!.Position - savedR1.Position).DistanceTo(Vector3.Right * 30f) < 0.1f,
+            $"dragging the X arrow 30 m along it moves r1 by {draft.Selected!.Position - savedR1.Position}");
+
+        var moved = draft.Selected!.Position;
+        lab.PressAt(At(Handle.Y));
+        lab.MoveTo(At(Handle.Y, Vector3.Up * 20f));
+        lab.ReleaseAt();
+        var ring = draft.Selected!;
+        float above = ring.Position.Y - (lab.GroundBelow(ring.Position) ?? float.NaN);
+        double slider = Slider(lab, "ring_above").Value;
+        ctx.Check((ring.Position - moved).DistanceTo(Vector3.Up * 20f) < 0.1f && Math.Abs(slider - above) <= 0.51,
+            $"dragging the Y arrow 20 m up raises r1 by {ring.Position - moved}, and its height slider follows to {slider} for {above:0.00} m");
+
+        // The ring is gripped 45 degrees off heading 0 the near way, and swept 40 degrees, then 47 with Ctrl.
+        lab.PressAt(At(Handle.Yaw));
+        float radius = (gizmo.Grip(Handle.Yaw) - gizmo.Position).Length();
+        Vector3 Round(float heading) => new Vector3(-Mathf.Sin(Mathf.DegToRad(heading)), 0f, -Mathf.Cos(Mathf.DegToRad(heading))) * radius;
+        lab.MoveTo(camera.UnprojectPosition(gizmo.Position + Round(-5f)));
+        lab.ReleaseAt();
+        float turned = draft.Selected!.Heading;
+        lab.PressAt(At(Handle.Yaw));
+        lab.MoveTo(camera.UnprojectPosition(gizmo.Position + Round(2f)), snap: true);
+        lab.ReleaseAt();
+        ctx.Check(Mathf.Abs(turned - (savedR1.Heading + 40f)) < 0.1f && draft.Selected!.Heading == -180f,
+            $"sweeping the heading ring 40 degrees turns r1 from {savedR1.Heading} to {turned:0.00}, and 47 more with Ctrl snaps 177 to {draft.Selected!.Heading}");
+        ctx.Check(ReferenceEquals(sequence, draft.Course.Sequence) && rows.SequenceEqual(SequenceRows(lab)) && draft.Course.Gates.Count == pool,
+            $"the gizmo's drags keep the sequence list, so no panel row was rebuilt ({rows.Length} rows)");
+
+        // A pylon gate has no Y arrow, and its X arrow keeps it standing on the ground.
+        draft.Select("p1");
+        camera.LookAtFromPosition(savedP1.Position + new Vector3(220f, 180f, 260f), savedP1.Position, Vector3.Up);
+        lab.PressAt(At(Handle.X));
+        lab.MoveTo(At(Handle.X, Vector3.Right * 30f));
+        lab.ReleaseAt();
+        var p1 = draft.Selected!;
+        float ground = lab.GroundBelow(p1.Position) ?? float.NaN;
+        ctx.Check(!((Node3D)gizmo.FindChild(nameof(Handle.Y), false, false)).Visible && Mathf.Abs(p1.Position.X - savedP1.Position.X - 30f) < 0.1f
+                && p1.Position.Z == savedP1.Position.Z && Mathf.Abs(p1.Position.Y - ground) < OnM,
+            $"p1 shows no Y arrow, and its X arrow moves it {p1.Position.X - savedP1.Position.X:0.00} m along X onto the ground ({p1.Position.Y - ground:0.00} m off)");
+
+        float snapped = draft.Course.Gates.First(g => g.Id == "r1").Heading;
+        ctx.Note($"gizmo: r1 moved {moved - savedR1.Position} by X and {ring.Position - moved} by Y, heading {savedR1.Heading} to {turned:0.000} to {snapped} snapped; p1 moved {p1.Position - savedP1.Position}");
+        draft.Update(savedP1);
+        draft.Update(savedR1);
+        // Aimed to the ring's right, so it sits left of the two panels; the hovered X arrow is lit.
+        draft.Select("r1");
+        camera.LookAtFromPosition(savedR1.Position + new Vector3(220f, 180f, 260f), savedR1.Position + new Vector3(110f, 0f, -95f), Vector3.Up);
+        lab.MoveTo(At(Handle.X));
+        Render(ctx, pane, lab, "gizmo.png");
+        lab.MoveTo(Vector2.Zero);
     }
 
     // The sequence panel through its own list and buttons, from the saved p1, r1 course flown in that order.
@@ -300,6 +384,9 @@ internal static class CourseLabSuites
     // The sequence as ids, a reversed entry marked with a tilde.
     private static string Ids(CourseDraft draft) =>
         string.Join(" ", draft.Course.Sequence.Select(e => e.Direction == GateDirection.Forward ? e.GateId : e.GateId + "~"));
+
+    private static Node[] SequenceRows(CourseLab lab) =>
+        lab.FindChild("sequence_rows", true, false).GetChildren().ToArray();
 
     private static string[] Rows(CourseLab lab) =>
         lab.FindChild("sequence_rows", true, false).GetChildren().Cast<Button>().Select(b => b.Text).ToArray();

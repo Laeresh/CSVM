@@ -17,8 +17,9 @@ namespace CSVM.UI.Labs;
 /// <c>--course-edit</c>. A panel down the right edge lists, opens, starts and saves the chapter's courses, and
 /// a second one beside it edits the sequence. A left click on the world selects the course gate under the
 /// cursor. Off a gate it places the chosen kind on the ground, facing the camera's way. Holding the drag key
-/// moves the selected gate over the ground under the cursor. Every edit goes through <see cref="Draft"/>, and on
-/// each change <see cref="CourseVisuals"/> and <see cref="CourseSequenceOverlay"/> draw the course again.
+/// moves the selected gate over the ground under the cursor, and <see cref="CourseGizmo"/> moves and turns it,
+/// claiming its presses first. Every edit goes through <see cref="Draft"/>, and on each change
+/// <see cref="CourseVisuals"/> and <see cref="CourseSequenceOverlay"/> draw the course again.
 /// </summary>
 public sealed partial class CourseLab : Node
 {
@@ -64,6 +65,7 @@ public sealed partial class CourseLab : Node
     private Button[] _entryButtons = Array.Empty<Button>();
     private Button[] _addButtons = Array.Empty<Button>();
     private CourseSequenceOverlay? _overlay;
+    private CourseGizmo? _gizmo;
     private string _note = "";
     private bool _open;
     private bool _syncing;
@@ -130,6 +132,9 @@ public sealed partial class CourseLab : Node
     /// <summary>The entry numbers and sequence line over the world; null until the lab first opens.</summary>
     public CourseSequenceOverlay? Overlay => _overlay;
 
+    /// <summary>The move arrows and heading ring on the selected gate; null until the lab first opens.</summary>
+    public CourseGizmo? Gizmo => _gizmo;
+
     /// <summary>The freecam a row click flies, kept in step with the move; without one the camera is set directly.</summary>
     public SpectatorCamera? Spectator { get; init; }
 
@@ -184,20 +189,68 @@ public sealed partial class CourseLab : Node
             _flyT = -1f; // a look drag takes the camera back; left unhandled for the freecam
         }
 
+        // A captured mouse is the freecam's look drag: its position is stale, so no handle is pressed or lit.
+        bool looking = Input.MouseMode == Input.MouseModeEnum.Captured;
         if (@event is InputEventKey { Echo: false, Keycode: DragKey } key)
         {
             _dragging = key.Pressed && Draft.Selected != null;
             GetViewport().SetInputAsHandled();
         }
-        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } button && ClickAt(button.Position))
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left } button
+            && (button.Pressed ? (!looking && PressAt(button.Position)) || ClickAt(button.Position) : ReleaseAt()))
         {
             GetViewport().SetInputAsHandled();
         }
-        else if (_dragging && @event is InputEventMouseMotion motion)
+        else if (@event is InputEventMouseMotion motion && !looking)
         {
-            DragTo(motion.Position);
+            // A release over the panel never reaches here, so a grab outlives its button only until the next motion.
+            if (_gizmo?.Grabbed is not (null or CourseGizmo.Handle.None) && !Input.IsMouseButtonPressed(MouseButton.Left))
+            {
+                ReleaseAt();
+            }
+
+            if (MoveTo(motion.Position, motion.CtrlPressed))
+            {
+                GetViewport().SetInputAsHandled();
+            }
         }
     }
+
+    /// <summary>A left press at <paramref name="screen"/> on a gizmo handle grabs it and claims the click before
+    /// <see cref="ClickAt"/> selects or places. Returns whether a handle took it.</summary>
+    public bool PressAt(Vector2 screen) =>
+        _open && _gizmo != null && GetViewport().GetCamera3D() is { } camera && _gizmo.Press(camera, screen);
+
+    /// <summary>A mouse motion to <paramref name="screen"/>. It drags a grabbed handle (<paramref name="snap"/> rounds a
+    /// turn), else moves the gate while the drag key is held, else lights the handle under it. Returns true for a
+    /// handle drag, which the freecam must not also see.</summary>
+    public bool MoveTo(Vector2 screen, bool snap = false)
+    {
+        if (_gizmo == null || GetViewport().GetCamera3D() is not { } camera)
+        {
+            return false;
+        }
+
+        if (_gizmo.Grabbed != CourseGizmo.Handle.None)
+        {
+            _gizmo.DragTo(camera, screen, snap);
+            return true;
+        }
+
+        if (_dragging)
+        {
+            DragTo(screen);
+        }
+        else
+        {
+            _gizmo.Hover(camera, screen);
+        }
+
+        return false;
+    }
+
+    /// <summary>A left release: lets go of a grabbed handle. Returns whether one was held.</summary>
+    public bool ReleaseAt() => _gizmo?.Release() ?? false;
 
     /// <summary>Shows or hides the panel and the course, building both on the first open.</summary>
     public void Toggle()
@@ -212,6 +265,8 @@ public sealed partial class CourseLab : Node
         _layer!.Visible = _open;
         _dragging = false;
         _flyT = -1f;
+        _gizmo!.Release();
+        _gizmo.Active = _open;
         if (first && (StartCourse == null || !Open(StartCourse)))
         {
             // A broken file keeps its name to itself, so a save cannot overwrite what failed to load.
@@ -571,7 +626,8 @@ public sealed partial class CourseLab : Node
         }, Dim));
         _status = Small("");
         box.AddChild(_status);
-        box.AddChild(Small($"Left click a gate to select it · hold {DragKey} and move the mouse to drag it · RMB looks · Shift+F3 hides this panel", Dim));
+        box.AddChild(Small($"Left click a gate to select it · drag its arrows to move it and its ring to turn it (Ctrl snaps to {CourseGizmo.SnapDeg:0}°) · "
+            + $"hold {DragKey} and move the mouse to drag it over the ground · RMB looks · Shift+F3 hides this panel", Dim));
 
         margin.AddChild(box);
         panel.AddChild(margin);
@@ -579,6 +635,8 @@ public sealed partial class CourseLab : Node
         root.AddChild(BuildSequencePanel());
         _layer.AddChild(root);
         AddChild(_layer);
+        _gizmo = new CourseGizmo(Draft, GroundBelow);
+        AddChild(_gizmo);
         RefreshList();
     }
 

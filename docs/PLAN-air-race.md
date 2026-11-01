@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
 22. ◐ Click-to-place, adjustment sliders, start point
-23. ☐ 3D gizmo: three move arrows and a yaw ring
+23. ◐ 3D gizmo: three move arrows and a yaw ring
 24. ◐ Sequence panel, gate reuse with direction, world numbers and path line
 
 ### Wave D, menu and follow-up
@@ -782,20 +782,58 @@ and the default sizes with their flight.
 
 **⚠ Traps.** Default sizes are TUNE at the controls (Decision 25).
 
-## C23 ☐ 3D gizmo: three move arrows and a yaw ring
+## C23 ◐ 3D gizmo: three move arrows and a yaw ring
+
+**Landed (look pending).** The new `CSVM/src/UI/Labs/CourseGizmo.cs`, wired in `CourseLab.cs`, with
+`CSVM.Tests/CourseGizmoTests.cs`. **Handles:** arrows along the **world** X, Y and Z axes (red, green, blue; not the gate's
+own frame, so Y stays vertical) and a magenta heading ring, at the opening's middle (`CourseDraft.Centre`). Primitive meshes
+(cylinder shafts, cone heads, a torus) on unshaded, fog-free materials with no depth test, render priority 30, tagged
+`SelectionService.OverlayMeta`. **Size:** an arrow is 110 px long whatever the distance: `Fit` scales the node each frame by
+`ScreenScale(depth along the view, fov, viewport rows, 110)`. The ring's radius is 0.8 of an arrow. All TUNE. **Picking:**
+each arrow past its inner fifth and the ring (48 segments) are projected to screen polylines; `Pick` takes the handle nearest
+the cursor within 10 px, the lower handle (X, Y, Z, ring) on an exact tie. The hovered handle, and the grabbed one while
+held, turn pale yellow. **Dragging:** an arrow moves the gate by `AlongAxis`, the parameter of the axis point nearest the
+cursor's ray, minus the press's, on the axis line through the press-time origin. The ring turns the heading by the angle the
+cursor sweeps round the middle, read where the ray meets the middle's horizontal plane (`AngleAround`, on `SpawnPoint`'s
+heading convention), the short way round and wrapped to [-180, 180) (`Turned`). **Snapping:** Ctrl held during a ring drag
+rounds the heading to 15 degrees; moves do not snap. **Pylon gates:** the Y arrow is hidden; an X or Z drag stands the
+gate on the ground under its new spot each motion (`CourseLab.GroundBelow`), so it never leaves the ground. A ring's Y
+arrow moves its world Y freely and its height-above-ground slider follows on `Changed`; an X or Z drag keeps the ring's
+world Y (the held-H drag still keeps its height above ground). **Input:** in the lab's `_UnhandledInput`, a left press goes
+to `PressAt` (the gizmo) before `ClickAt`, so a handle press never selects or places; motion goes to `MoveTo` (a grabbed
+handle, else the held-H drag, else hover), and a left release to `ReleaseAt`. A handle drag's motion is marked handled.
+While the freecam's RMB look holds the mouse captured, no handle is pressed or lit, so the look never grabs. A release over
+the panel never reaches the lab, so a grab whose button is up is let go on the next motion. Each drag step is one
+`Draft.Update`, which keeps the sequence list, so no panel row is rebuilt mid-drag.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The selected gate shows three move arrows and one yaw ring that drag it in the world.
 
 **Evidence (confidence: lead-only).** Godot has no runtime 3D gizmo, so this is new code.
 
-**Approach.** <TODO.>
+**Approach.** Settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A top-tier model: new interaction code with ray and projection math, and an input path shared
+with the freecam, the lab's click and the held-H drag.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseGizmoTests"` (the axis point
+nearest a ray, straight down, slanted and parallel; the swept heading on the spawn convention, the short way across the
+seam, wrapped, and snapped; the screen scale against a pinhole projection; the pick's nearest handle, tolerance, tie order
+and a hidden handle), then the complete unit tests, then the `course-lab` suite. After C22's steps it selects r1's entry,
+hovers and presses r1's X arrow with a pylon gate armed (it grabs, places nothing, keeps r1 and its entry), drags it 30 m
+along X and its Y arrow 20 m up from rays through the projected handle points, checks the height slider follows, sweeps
+the ring 40 degrees (90 to 130) and 47 more with Ctrl (177 snaps to 180, kept as -180), and checks the sequence list and
+its row nodes are the same instances. It then checks p1 shows no Y arrow and that its X arrow moves it 30 m onto the
+ground, restores both gates, and photographs `course-lab/gizmo.png`, r1 with its gizmo and the X arrow lit. The feel
+(arrow and ring sizes, colours, the 10 px grab tolerance, snapping) closes at the controls: the user moves and turns gates
+in a real `--course-edit` session.
 
 **⚠ Traps.** Freecam already uses RMB look and left-click select; the gizmo's drag must not fight
-them.
+them. The suite drives the lab's `PressAt`/`MoveTo`/`ReleaseAt`, not real input events, so the captured-mouse guard and
+the release-over-the-panel recovery are checked only at the controls.
 
 ## C24 ◐ Sequence panel, gate reuse with direction, world numbers and path line
 
