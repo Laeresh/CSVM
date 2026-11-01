@@ -19,6 +19,10 @@ namespace CSVM.Testing;
 /// </summary>
 internal static class MenuInstantActionSuites
 {
+    // A course a player titled at length, as the course lab lets them.
+    private const string LongCourse = "long_title_slalom";
+    private const string LongTitle = "The Grand Hollywoodland Studio Lot Slalom and Harbour Climb Run";
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -114,8 +118,10 @@ internal static class MenuInstantActionSuites
     }
 
     [Suite("menu-instant-action-course",
-        "Instant Action's Course option through Original's screen over the install's layout and the shipped "
-        + "courses alone: stunt flying on the airfield (C1) opens a Course list of Danger Zones then "
+        "Instant Action's Course option through Original's screen over the install's layout, the shipped "
+        + "courses and a scratch copy of the sample titled far wider than the Course box: that title stays on one line "
+        + "inside its box both as an open list row and picked in the closed box; "
+        + "stunt flying on the airfield (C1) opens a Course list of Danger Zones then "
         + "sample_out_and_back by its title, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
         + "Mission leaves as a LaunchExit naming the course by file name with no def whose session spec matches "
         + "--stunt --course=C1/sample_out_and_back on the course, chapter, mission, mode, pilots, plane, def and "
@@ -145,7 +151,7 @@ internal static class MenuInstantActionSuites
             Planes = store,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, courses: LongTitledLibrary(ctx, suite));
         host.AddSeat(seat);
         try
         {
@@ -162,6 +168,7 @@ internal static class MenuInstantActionSuites
             }
 
             var ia = host.Features.Get<InstantActionFeature>();
+            CourseLongTitle(ctx, host, seat, shell, fit, ia);
             if (CoursePicked(ctx, host, seat, shell, fit, ia, exits) is not { } exit)
             {
                 return;
@@ -175,6 +182,79 @@ internal static class MenuInstantActionSuites
             host.Deactivate();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             MenuSuiteHost.DropScratchPlanes(ctx, suite);
+        }
+    }
+
+    // The shipped courses plus, in the suite's scratch game folder, the sample under a title far wider than the Course box.
+    private static Flight.Modes.CourseLibrary LongTitledLibrary(TestContext ctx, string suite)
+    {
+        string folder = System.IO.Path.Combine(ctx.ScratchDir, suite, Flight.Modes.CourseLibrary.GameFolderName);
+        if (System.IO.Directory.Exists(folder))
+        {
+            System.IO.Directory.Delete(folder, recursive: true);
+        }
+
+        var library = new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, folder);
+        if (library.Load("C1", "sample_out_and_back", out string error) is { } sample)
+        {
+            library.Save(sample with { Name = LongCourse, Title = LongTitle }, Flight.Modes.CourseSource.GameFolder);
+        }
+        else
+        {
+            ctx.Check(false, $"the shipped sample loads to copy under a long title ({error})");
+        }
+
+        return library;
+    }
+
+    // A title far wider than the Course box, in the open list and then closed in the box. Each stays
+    // on one line inside its box, clipped and scrolling as the lobby's long names do.
+    private static void CourseLongTitle(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
+    {
+        ctx.Check(shell.InstantAction.PoseCourse(), $"stunt flying opens the Course list ({ia.MissionType.Key})");
+        var item = shell.Rows.FirstOrDefault(r => r.Label == LongTitle);
+        StaysInBox(ctx, "the open list's row", shell.Compose().Overlays.SelectMany(p => p.Lines).FirstOrDefault(l => l.Text == LongTitle), item);
+        if (item == null)
+        {
+            return;
+        }
+
+        Click(host, seat, Pointer(fit, item.X + 5f, item.Y + 5f, pressed: true, clicked: true));
+        var box = Row(shell, OriginalInstantActionScreen.CourseKey);
+        ctx.Check(ia.Course == LongCourse && box?.Label == LongTitle, $"a click picks the long-titled course ({ia.Course})");
+        StaysInBox(ctx, "the closed Course box", shell.Compose().Lines.FirstOrDefault(l => l.Text == LongTitle), box);
+        // Back to the Danger Zones, so the steps after start where a fresh screen does.
+        ia.SelectCourse(0);
+    }
+
+    // The title drawn whole is wider than its box, so the check can fail. A plain line wraps onto the
+    // rows below; a marquee line stays on one, clipped to its box.
+    private static void StaysInBox(TestContext ctx, string what, BoardLine? line, OriginalRow? box)
+    {
+        ctx.Check(line != null && box != null, $"{what} draws the long title");
+        if (line == null || box == null)
+        {
+            return;
+        }
+
+        // At the authored page size: the suite's own viewport is no window a pilot sizes.
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            var measure = ComposedBoardView.MeasureBox(fit, view.GetThemeDefaultFont(), line.Size);
+            var one = measure(line.Text, 100000f);
+            var wrapped = measure(line.Text, line.Width);
+            ctx.Check(one.X > line.Width,
+                $"ABLE-TO-FAIL CONTROL: drawn whole, the title is wider than {what}'s text ({one.X:0.0} against {line.Width:0})");
+            float right = line.X + (line.Marquee ? line.Width : wrapped.X);
+            ctx.Check((line.Marquee || wrapped.Y <= one.Y) && line.X >= box.X && right <= box.X + box.Width,
+                $"{what} keeps the title on one line inside its box (marquee {line.Marquee}, {wrapped.Y:0.0} px tall against one line's {one.Y:0.0}, {line.X:0.0} to {right:0.0} inside {box.X:0} to {box.X + box.Width:0})");
+        }
+        finally
+        {
+            view.Free();
         }
     }
 
