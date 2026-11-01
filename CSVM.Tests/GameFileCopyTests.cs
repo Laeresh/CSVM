@@ -124,6 +124,30 @@ public class GameFileCopyTests
         Assert.Equal(new[] { GameFileSource.DataRootFolder }, Directory.GetFileSystemEntries(dataRoot).Select(Path.GetFileName));
     }
 
+    // A virus scanner briefly holds a fresh file without FileShare.Delete. Windows refuses the
+    // folder's rename until it lets go.
+    [Fact]
+    public void ACopySucceedsOnceAScannerBrieflyHoldingAFreshFileLetsGo()
+    {
+        string dataRoot = TestData.TempDir();
+        string held = Path.Combine(GameFileCopy.Target(dataRoot) + GameFileCopy.PartialSuffix, Messages.GameFile);
+        FileStream? scanner = null;
+        using var release = new Timer(_ => scanner?.Dispose());
+        var source = MemorySource.Complete();
+
+        GameFileCopy.Run(source, dataRoot, progress: step =>
+        {
+            if (step.Done == GameFileCopy.Files.Count && scanner == null)
+            {
+                scanner = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read);
+                release.Change(200, Timeout.Infinite);
+            }
+        });
+
+        Assert.NotNull(scanner);
+        Assert.Equal(source.Content(Messages.GameFile), File.ReadAllBytes(Path.Combine(GameFileCopy.Target(dataRoot), Messages.GameFile)));
+    }
+
     [Fact]
     public void ACancelledCopyLeavesNoTreeAndTheOldCopyStanding()
     {

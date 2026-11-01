@@ -42,7 +42,8 @@ as it is (so a remembered image counts), then `InstallLocator.Candidates`. Engin
 `Run(source, dataRoot, replace, progress, cancel)` copies `Files` (`strings.dll`, `ZBD/` plus each
 `ZbdManifest.Expected` archive, `RofFiles.GamePaths`) into `Target(dataRoot)`, the folder `Locate`
 takes as an install. A disc's chapters come out of their cabinets. The tree is written under
-`CrimsonSkiesGame.partial` and renamed in last; a failure or cancel deletes it. An existing copy
+`CrimsonSkiesGame.partial` and renamed in last; a failure or cancel deletes it. Each rename retries
+for 620 ms while another process (a virus scanner) holds a file inside. An existing copy
 throws unless `replace`, which renames it to `.old`, swaps the new one in and deletes the old whole.
 A file the source lacks is named in `Missing`. `RunToLog` is `--copy-game-files=`, never replacing.
 Coverage: `CSVM.Tests/GameFileCopyTests.cs`.
