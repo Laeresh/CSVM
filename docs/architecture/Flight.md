@@ -808,7 +808,7 @@ null where a mission authors none), `Update` requires both polygon-plane crossin
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
 `Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick), `RunReset` and `RunStopped` (`Stop`) feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
-apart from its logging. `ForCourse` builds the strict-order run over a `Course` (null for an empty sequence): one zone per sequence entry (`Gate n`), so every consumer above reads it unchanged, `Update` tests only entry `CompletedCount` through its `CourseAperture` at `GateMotion(pool index, SimSeconds())` (identity until wired; `SimSeconds` is `GameClock.Time`), the clock starts on the first entry, `CollectTargets` offers the next entry alone, `ReturnPose` is the last gate's centre, and `AddPenalty` adds to a running clock with `PenaltyCount`.
+apart from its logging. `ForCourse` builds the strict-order run over a `Course` (null for an empty sequence): one zone per sequence entry (`Gate n`), so every consumer above reads it unchanged, `Update` tests only entry `CompletedCount` through its `CourseAperture` at `GateMotion(pool index, SimSeconds())` (identity until wired; `SimSeconds` is `GameClock.Time`), the clock starts on the first entry, `CollectTargets` offers the next entry alone, `ReturnPose` is the last gate's centre, and `AddPenalty` adds to a running clock with `PenaltyCount`. Each course step also tests every gate's `CourseElements` touch volumes, at the same motion, against a sphere of the `planeRadius` `Update` is passed (`FlightController` passes `AircraftBody.BoundRadius`): a per-gate bounding-sphere reject, then each element, debounced per element by an inside flag, so a touch counts on entering and again only after leaving. A touch calls `AddPenalty(TouchPenaltySeconds)` and raises `ElementTouched` with a `CourseTouch`, also before the first entry and on the finishing step, where no time is added. A finished run tests nothing; a Danger Zone run never tests touches.
 Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the rest of what a run draws, and `StuntScoreboard` for what it scores. Coverage of the course run: `CSVM.Tests/CourseRunTests.cs`.
 
 ## src/Flight/Modes/StartCount.cs
@@ -988,6 +988,16 @@ side. The polygon lives in the gate's frame as a `StuntGate` and the segment is 
 through `Rest * motion`, `motion` being the gate's idle motion as a `Transform3D` in its own frame
 (the identity at rest), so a bobbing ring scores where it is drawn without a per-step allocation.
 The inscribed 32-gon falls short of the circle by under 0.5 % of the radius.
+
+## src/Flight/Modes/CourseElements.cs
+A course gate's touch volumes, engine-free, in the gate's frame so they move with its drawn motion.
+Every size is `CourseGateShape`'s, the one the meshes read: a course pylon is its tapered cone from
+`PylonBase`, a ring rim the `TubeRadius` tube about the `TubeCentreline` circle, a balloon the
+upright-stretched sphere at `BalloonCentre` (its nearest point is taken in squashed space, a few
+percent off the exact one). None is a collider, so a touch deals no crash damage. `CourseTouch` is
+`StuntMission.ElementTouched`'s record (pool index, `CourseElement`, balloon, world contact point,
+height up a course pylon, whether time was added); `TouchPenaltySeconds` is the 3 s Red Bull rule,
+not game data. Coverage: `CSVM.Tests/CourseTouchTests.cs`.
 
 ## src/Flight/Modes/CourseLibrary.cs
 The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped and

@@ -338,7 +338,7 @@ rows).
 - `src/Flight/Modes/DangerZoneRibbon.cs`, one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
 - `src/Flight/Modes/DangerZoneRibbons.cs`, a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
 - `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, a multiplayer `net.zrd` table by block, or objectives.json PLAYER_INIT as fallback.
-- `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot; `ForCourse` makes the strict-order course run.
+- `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot; `ForCourse` makes the strict-order course run, with its debounced touch penalty and `ElementTouched`.
 - `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
 - `src/Flight/Modes/StuntRunControl.cs`, a stunt seat's run control, engine-free: the tap/hold respawn split, the start count's stepping and the clock it holds, the pose a tap returns to.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
@@ -349,6 +349,7 @@ rows).
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only; a scripted run's store is a throwaway.
 - `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the JSON shape and the layout hash.
 - `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
+- `src/Flight/Modes/CourseElements.cs`, a course gate's touch volumes on `CourseGateShape`'s sizes (course pylon cones, ring rim tube, balloons), the +3 s penalty and the `CourseTouch` event record.
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
 - `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
 - `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: pylon bases and taper, ring tube, balloons and tethers.

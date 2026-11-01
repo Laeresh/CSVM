@@ -133,6 +133,12 @@ public sealed class StuntMission
     // Danger Zone run, which is how every course branch below knows which rule it runs.
     private readonly CourseAperture[] _apertures = Array.Empty<CourseAperture>();
     private readonly int[] _entryGates = Array.Empty<int>();
+
+    // Per pool gate, its elements' bounding sphere and where they start in _touching. That holds
+    // whether the plane was inside each element's volume on the last step.
+    private readonly (Vector3 Centre, float Radius)[] _gateBounds = Array.Empty<(Vector3, float)>();
+    private readonly int[] _firstElement = Array.Empty<int>();
+    private readonly bool[] _touching = Array.Empty<bool>();
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
     private bool _clockStarted;
@@ -145,6 +151,16 @@ public sealed class StuntMission
         Course = course;
         _apertures = apertures;
         _entryGates = entryGates;
+        _gateBounds = new (Vector3, float)[course.Gates.Count];
+        _firstElement = new int[course.Gates.Count];
+        int elements = 0;
+        for (int g = 0; g < course.Gates.Count; g++)
+        {
+            _gateBounds[g] = CourseElements.Bounds(course.Gates[g]);
+            _firstElement[g] = elements;
+            elements += CourseElements.Count(course.Gates[g]);
+        }
+        _touching = new bool[elements];
     }
 
     /// <summary>Fired once per zone the moment it is flown through (scoring records a split).</summary>
@@ -162,6 +178,12 @@ public sealed class StuntMission
 
     /// <summary>Fired by <see cref="Stop"/>: the run flies no further, and what it reached stands.</summary>
     public event Action? RunStopped;
+
+    /// <summary>Fired on a course run's step the plane enters a course element's touch volume
+    /// (<see cref="CourseElements"/>), once until it leaves that element. It fires before the first
+    /// entry and on the finishing step too, with no time added, so a cut still plays. A finished run
+    /// tests nothing.</summary>
+    public event Action<CourseTouch>? ElementTouched;
 
     public bool AllComplete { get; private set; }
 
@@ -348,9 +370,10 @@ public sealed class StuntMission
     }
 
     /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
-    /// frame, and complete a zone once both its gates have been crossed (order-free, several
-    /// can complete in one pass).</summary>
-    public void Update(Vector3 planePos)
+    /// frame. A zone completes once both its gates have been crossed, in either order, and several
+    /// can complete in one pass. A course run also tests the touch volumes against a sphere of
+    /// <paramref name="planeRadius"/> about the plane, the airframe's <c>AircraftBody.BoundRadius</c>.</summary>
+    public void Update(Vector3 planePos, float planeRadius = 0f)
     {
         if (AllComplete)
             return;
@@ -363,6 +386,7 @@ public sealed class StuntMission
         if (Course != null)
         {
             CrossNextEntry(planePos);
+            TouchElements(planePos, planeRadius);
             _lastPlanePos = planePos;
             return;
         }
@@ -746,6 +770,43 @@ public sealed class StuntMission
             RunStarted?.Invoke();
         }
         Complete(z);
+    }
+
+    // An element counts on the step the plane's sphere enters its volume, and again only once it has
+    // left. Volumes are tested in each gate's frame at the motion it is drawn with.
+    private void TouchElements(Vector3 planePos, float planeRadius)
+    {
+        double now = SimSeconds();
+        for (int g = 0; g < _apertures.Length; g++)
+        {
+            var gate = _apertures[g].Gate;
+            var frame = _apertures[g].Rest * GateMotion(g, now);
+            var local = frame.AffineInverse() * planePos;
+            var bounds = _gateBounds[g];
+            bool near = local.DistanceTo(bounds.Centre) <= bounds.Radius + planeRadius;
+            for (int e = 0, count = CourseElements.Count(gate); e < count; e++)
+            {
+                int slot = _firstElement[g] + e;
+                bool was = _touching[slot];
+                var contact = near ? CourseElements.Nearest(gate, e, local) : Vector3.Zero;
+                _touching[slot] = near && local.DistanceSquaredTo(contact) <= planeRadius * planeRadius;
+                if (_touching[slot] && !was)
+                    Touch(g, e, frame * contact, contact.Y);
+            }
+        }
+    }
+
+    private void Touch(int g, int e, Vector3 point, float height)
+    {
+        var gate = Course!.Gates[g];
+        bool pylons = gate.Kind == CourseGateKind.PylonGate;
+        var element = pylons ? (e == 0 ? CourseElement.LeftCoursePylon : CourseElement.RightCoursePylon)
+            : e == 0 ? CourseElement.RingRim : CourseElement.Balloon;
+        int before = PenaltyCount;
+        AddPenalty(CourseElements.TouchPenaltySeconds);
+        bool added = PenaltyCount > before;
+        Log.Info("flight", $"stunt: {LogTag}touched {gate.Id} {element}{(e > 0 && !pylons ? $" {e - 1}" : "")}{(added ? ", time added" : "")}");
+        ElementTouched?.Invoke(new CourseTouch(g, element, pylons ? 0 : Math.Max(e - 1, 0), point, pylons ? height : 0f, added));
     }
 
     private void Complete(StuntZone z)

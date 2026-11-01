@@ -93,13 +93,13 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ Course file format, loader for both sources, content hash, terms
 2. ☑ Gate apertures from course gates, with a directional crossing test
 3. ☑ Strict-order course run with a flying start
-4. ☐ Touch penalty, +3 s debounced, no collision
+4. ☑ Touch penalty, +3 s debounced, no collision
 5. ☐ Course bests keyed by layout hash, with penalty count
 6. ☐ `--course=<chapter>/<name>` launch under `--stunt`
 
 ### Wave B, look and HUD
 
-11. ◐ Procedural course pylons, rings and balloons with idle animation
+11. ☑ Procedural course pylons, rings and balloons with idle animation
 12. ☐ Pylon cut: slice, sag, regrow
 13. ☐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
 
@@ -284,7 +284,35 @@ No engine path builds a course run yet, so the battery shows only that nothing e
 
 **⚠ Traps.** A gate repeated in the sequence must not register twice from one crossing.
 
-## A4 ☐ Touch penalty, +3 s debounced, no collision
+## A4 ☑ Touch penalty, +3 s debounced, no collision
+
+**Landed.** `CSVM/src/Flight/Modes/CourseElements.cs`, with `CSVM.Tests/CourseTouchTests.cs`; the
+test runs from `StuntMission.Update`'s course branch after `CrossNextEntry`. No element is a
+collider. The volumes are in each gate's frame at `Rest * GateMotion(poolIndex, SimSeconds())`, the
+motion the crossing test asks, and every size is B11's `CourseGateShape`, the one the meshes read: a
+course pylon is the solid tapered cone from `PylonBase(gate, side)`, `PylonBaseRadius` at the foot to
+`PylonTopRadius` at Height; a ring rim the `TubeRadius` tube about the `TubeCentreline` circle (the
+Diameter is the clear opening, the tube outside it); a balloon the sphere of `BalloonRadius`
+stretched upright (local Y) by `BalloonStretch` at `BalloonCentre(gate, i)`, one per
+`BalloonAnglesDeg` entry. The balloon's nearest point is taken in squashed space, a few percent of
+its radius off the exact one. **Plane extent:** a sphere of `AircraftBody.BoundRadius`, the radius
+about the body origin holding every `PlaneCollider` hull, which `FlightController` passes as
+`Stunt.Update(_model.Position, Body?.BoundRadius ?? 0f)` (0, a point, where no body exists). Each step
+does one bounding-sphere reject per gate, then each element's nearest point, with no allocation. An
+element touches when the plane's centre lies within the sphere radius of its nearest point.
+**Debounce:** one inside flag per element; a touch counts on the step the flag rises and again only
+after it has fallen. **Penalty:** `AddPenalty(CourseElements.TouchPenaltySeconds)`, 3 s. **Event:**
+`StuntMission.ElementTouched`, an `Action<CourseTouch>`; `CourseTouch(int Gate, CourseElement
+Element, int Balloon, Vector3 Point, float PylonHeight, bool TimeAdded)`, with `CourseElement`
+`LeftCoursePylon` (-X, left flying forward), `RightCoursePylon`, `RingRim`, `Balloon`. `Point` is
+the world point of the element's surface nearest the plane, `PylonHeight` that point's height above
+the course pylon's base. It fires before the first entry and on the finishing step too, with
+`TimeAdded` false, so the cut still plays and the "+3 s" flash can stay off. A finished run tests
+nothing, since `Update` returns first; a Danger Zone run never tests touches.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Course pylons, ring rims and balloons have no collision; each touch adds 3 s to the run,
 counted once until the plane leaves that element's volume, and raises an event the cut effect and
@@ -297,15 +325,22 @@ would take the normal crash damage, which Decision 5 rejects.
 **Approach.** Create no collider; test the plane against each element's volume per physics step.
 A3 landed the clock side: `StuntMission.AddPenalty(seconds)` adds to a running course clock and
 counts `PenaltyCount`, so a touch calls it with 3 s and raises A4's own touch event.
-<TODO: the volume shapes (capsule per pylon, torus distance for a rim, sphere per balloon) and the
-plane's extent used.>
+The volume shapes and the plane's extent are settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: engine-free geometry inside one class's course branch,
+with unit tests.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseTouchTests"`
+(a centre pass takes nothing, a long brush one 3 s, leaving and re-entering a second, two elements
+in one step two, rim and balloon touches, a moving ring's volumes with its motion, the event's
+element, point and height on a turned gate, no time before the first entry or on the finish while
+the event fires, a C4 Danger Zone run tests nothing), then the complete unit tests and the Stunt
+suites. No engine path builds a course run until A6, so the suites show only that nothing else moved.
 
 **⚠ Traps.** The 3 s value is the Red Bull rule, not original-game data. Debounce per element, not
-per run (Decision 6).
+per run (Decision 6). The bounding sphere is pessimistic along the fuselage and above and below the
+wings, so a plane passing a course pylon nose-first can touch earlier than its drawn wingtip would;
+`AircraftBody.NearestShape` is the hull-exact upgrade if that reads wrong at the controls.
 
 ## A5 ☐ Course bests keyed by layout hash, with penalty count
 
@@ -352,9 +387,9 @@ does with `--vs` or `--players`.
 
 # Wave B, look and HUD
 
-## B11 ◐ Procedural course pylons, rings and balloons with idle animation
+## B11 ☑ Procedural course pylons, rings and balloons with idle animation
 
-**Landed (look pending).** `CSVM/src/Flight/Modes/CourseMotion.cs` is the motion: `Rest(gate)` is
+**Landed.** The user accepted the look from the C1 montage, sizes and colours to be tuned in flight. `CSVM/src/Flight/Modes/CourseMotion.cs` is the motion: `Rest(gate)` is
 the gate frame A2 scores in (heading yaw, local -Z forward, the flown plane at local z = 0),
 `Offset(gate, seconds)` the motion in that frame (a ring bobs 1.0 m over 6 s, drifts 0.6 m in its
 own plane and rolls 2 degrees about its axis over 8.5 s; a pylon gate is the identity), and
@@ -394,7 +429,9 @@ Godot primitives; pylons ripple like fabric, balloons and rings bob and sway.
 balloons exist only as C3/C4 scenery (`docs/formats/anim-definitions.md`), so they are not reused.
 
 **Approach.** Primitive meshes and one shader for ripple and bob, driven by the sim clock. The ring
-transform used for scoring (A2) and the one drawn come from the same function. <TODO: the look
+transform used for scoring (A2) and the one drawn come from the same function. A4's touch volumes
+(`CourseElements`) read `CourseGateShape`'s sizes, so a change there moves the drawn and touched
+elements together. <TODO: the look
 (colours, chequered bands, tether lines) is the user's judgement; show a montage before settling.>
 
 **Model recommendation.** <TODO: not settled in the grilling.>
@@ -411,7 +448,11 @@ the stump sags, and the pylon regrows over about 3 s.
 
 **Evidence (confidence: lead-only).** The grilling's description of the Red Bull inflatable pylon.
 
-**Approach.** Shader uniforms set from A4's touch event (cut height, cut time). <TODO: how the
+**Approach.** Shader uniforms set from A4's touch event (cut height, cut time). The event is
+`StuntMission.ElementTouched` (`CourseTouch`): a cut is an `Element` of `LeftCoursePylon` or
+`RightCoursePylon` on pool gate `Gate`, sliced at `PylonHeight` (metres above that course pylon's
+base, the contact point's height); the event fires whether or not `TimeAdded`, so read the sim clock
+for the cut time. <TODO: how the
 falling top is drawn (second instance or the same mesh clipped the other way).>
 
 **Model recommendation.** <TODO: not settled in the grilling.>
@@ -435,7 +476,10 @@ exploration agent, not re-read).
 entry. The next entry is `Zones[CompletedCount]`, its gate `Course.Gates` by `PathName` (the pool
 id) with `Course.Sequence[CompletedCount].Direction`; `TotalCount` is the entry count and `Elapsed`
 the clock. `CollectTargets` already offers only the next entry, so the objective marker follows
-it. Until B13 the status line reads `ZONES n/N` and the flash `Gate n CLEARED`. <TODO: the rest.>
+it. Until B13 the status line reads `ZONES n/N` and the flash `Gate n CLEARED`. The penalty total
+is `PenaltyCount` touches of `CourseElements.TouchPenaltySeconds` each, already inside `Elapsed`;
+the "+3 s" flash shows on `StuntMission.ElementTouched` when its `CourseTouch.TimeAdded` holds (it is
+false before the first entry and on the finishing step). <TODO: the rest.>
 
 **Model recommendation.** <TODO: not settled in the grilling.>
 
