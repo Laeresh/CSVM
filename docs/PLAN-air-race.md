@@ -44,7 +44,7 @@ exist in one player's game folder only) and bots taught the sequence; both are a
 | 5 | Hitting a pylon, rim or balloon | **No collision, +3 s penalty**, the inflatable-pylon rule |
 | 6 | Penalty counting | **+3 s per touch, debounced**: one touch until the plane leaves that element's volume; pylons, rims and balloons count alike |
 | 7 | Element visuals | **Procedural primitives**, animated |
-| 8 | Pylon cut | **Slice at the crossing height, top drops and fades, stump sags, regrows over about 3 s** |
+| 8 | Pylon cut | **Slice at the crossing height, top tips and falls and vanishes on landing, stump sags, regrows over about 3 s**; a dithered fade of the top was rejected as too dithery |
 | 9 | Idle animation | **Everything ripples**: pylons like fabric, balloons and rings bob and sway; the ring's scoring polygon moves with the visible ring |
 | 10 | Course storage | **Shipped `CSVM/data/courses/`** (written from the dev build) **and `<dataRoot>/Courses/`** (written from an exported build); no `user://` source |
 | 11 | File granularity | **One file per course**, `<chapter>/<name>.json`, so a course is shared by copying one file |
@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, look and HUD
 
 11. ☑ Procedural course pylons, rings and balloons with idle animation
-12. ◐ Pylon cut: slice, sag, regrow
+12. ☑ Pylon cut: slice, sag, regrow
 13. ☐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
 
 ### Wave C, course editor lab
@@ -517,38 +517,42 @@ elements together. <TODO: the look
 **⚠ Traps.** No game assets in the repo. A vertex-shader-only bob would put the drawn ring off the
 scoring polygon; Decision 9 requires them to agree.
 
-## B12 ◐ Pylon cut: slice, sag, regrow
+## B12 ☑ Pylon cut: slice, sag, regrow
 
-**Landed (look pending).** `CSVM/src/Flight/Modes/CoursePylonCut.cs` is the cut as a pure function,
+**Landed.** The user accepted the cut from the C1 montage, timings to be tuned in flight. `CSVM/src/Flight/Modes/CoursePylonCut.cs` is the cut as a pure function,
 with `CSVM.Tests/CoursePylonCutTests.cs`; `CourseVisuals.cs` draws it. **Uniforms:** each course
 pylon has its own two `ShaderMaterial`s on the pooled shader, set as `MaterialOverride` (per-node
 materials, not instance uniforms: those live in the canonical block every CSVM shader shares, and a
 course has a handful of pylons). The shader gains a clip window on the undisplaced height above the
-base (`clip_lo_m`, `clip_hi_m`), `sag_m` and the falling top's `drop_m`, `tilt_rad`, `tilt_pivot`
-and `fade`, all at rest by default, so rings and balloons draw as before. **Time:** the uniforms are
+base (`clip_lo_m`, `clip_hi_m`), `sag_m` and the falling top's `drop_m`, `tilt_rad` and
+`tilt_pivot`, all at rest by default, so rings and balloons draw as before. **Time:** the uniforms are
 written from C# by `Pose(seconds)`, on a change only, from the age since the cut on the session's
 sim clock as a double, so `csky_time`'s 3600 s wrap never reaches them and the shader holds no time
 logic for the cut. **Falling top:** a second, hidden `MeshInstance3D` on the same mesh, child of the
 course pylon, clipped below the cut, tipped outward from the aperture (away from the plane in the
-common inside brush) about the cut's outer edge, dropped under 9.81 m/s² until it rests on the
-ground, and dithered away by `FRAGCOORD` (interleaved gradient noise) so it stays opaque, sorted and
-deterministic; it is hidden once faded. The same-mesh alternative was rejected: the triangles across
+common inside brush) about the cut's outer edge and dropped under 9.81 m/s². It is hidden the moment
+the drop reaches the cut height, its foot on the ground, at `sqrt(2 * cut / 9.81)` s (1.6 s for a
+13 m cut); there is no fade and no ground settle. This replaces Decision 8's fade: the first montage
+dithered the top away by screen-space noise, which the user judged "Fade too dithery", and chose a
+top that just falls and vanishes on landing. The same-mesh alternative was rejected: the triangles across
 the cut would stretch between the stump and the falling top. The stump is the course pylon's own
 instance, clipped above its regrowing top and sagged in `ripple()` (down and slightly out, growing toward
 its top). The shader now draws both faces, the inside at half light, so the cut reads as a hollow
 tube; closed meshes draw as before. **TUNE:** `RegrowSeconds` 3.0 (whole from then on),
 `HoldSeconds` 0.5 at the cut before regrowing (smoothstep to full height), `SagInSeconds` 0.3,
-`SagShare` 0.15 of the stump, `FadeSeconds` 1.2 for the tip (to `MaxTiltDeg` 70) and fade,
-`FallAccel` 9.81. A second cut mid-regrow is cut within what has regrown (`Recut`), and a touch
+`SagShare` 0.15 of the stump, `TipSeconds` 1.2 for the tip (to `MaxTiltDeg` 70), `FallAccel`
+9.81, which also sets when the top vanishes. A second cut mid-regrow is cut within what has regrown (`Recut`), and a touch
 above the regrown stump drops nothing. **Wiring:** `GameSession` adds
 `CourseVisuals.Build(course).Follow(_courseRun)`; `Follow` cuts on `ElementTouched` (course pylons
 only, every touch, `TimeAdded` or not) at the run's `SimSeconds()` and stands every pylon whole on
 `RunReset`, so a rerun meets every pylon whole at once (the open TODO, settled as reset). The
 handlers only record; `Pose` draws on the next frame. The `course-visuals` suite brushes a run's
 left course pylon and reads the uniforms back (the cut at the touch's height, the other pylon whole,
-regrowing at 1.5 s, still short at 2.98 s, whole at 3 s, rims and balloons ignored, a second touch
-cutting again, a reset whole mid-regrow), and writes `course-visuals/cut-montage.png` from a C1
-flight: whole, 0.6 s, 1.8 s and 3.1 s after a cut at 13 m.
+the top still falling 0.05 s before its landing and hidden 0.01 s after, regrowing at 2 s, still
+short at 2.98 s, whole at 3 s, rims and balloons ignored, a second touch cutting again, a reset
+whole mid-regrow), and writes `course-visuals/cut-montage.png` from a C1 flight: whole, then 0.5 s
+(tipping), 1.53 s (falling, just before landing), 1.68 s (just after it vanished), 2.3 s and 3.1 s
+after a cut at 13 m.
 
 **Verified.** <pending orchestrator run>
 

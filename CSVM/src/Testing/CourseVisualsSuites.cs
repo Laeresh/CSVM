@@ -33,7 +33,7 @@ internal static class CourseVisualsSuites
         "a course's procedural gates build two course pylons per pylon gate and a ring, three balloons and "
         + "three tethers per balloon ring, every gate node standing at CourseMotion's pose for the sim time "
         + "it is posed at, on a shader reading csky_time and never TIME; a run's touch of a course pylon "
-        + "cuts that pylon alone at the touch's height, whole again at the regrow time or on the run's reset; "
+        + "cuts that pylon alone at the touch's height, its top vanishing as it lands, whole again at the regrow time or on the run's reset; "
         + "in a C1 flight they are photographed close, wide, a second apart and through a cut into montages")]
     internal static void CourseVisualsDraw(TestContext ctx)
     {
@@ -85,8 +85,15 @@ internal static class CourseVisualsSuites
                 $"the stump ends and the falling top starts at the touch's {cut:0.00} m: stump {Uniform(stump, "clip_hi_m"):0.00}, top {Uniform(falling, "clip_lo_m"):0.00}, shown {top.Visible}");
             ctx.Check(Uniform(right, "clip_hi_m") == CoursePylonCut.NoClipM, $"the right course pylon stays whole");
 
-            visuals.Pose(TouchAt + 1.5);
-            var mid = CoursePylonCut.At(PylonHeightM, cut, CoursePylonCut.NoClipM, 1.5);
+            double landing = Math.Sqrt(2.0 * cut / CoursePylonCut.FallAccel);
+            visuals.Pose(TouchAt + landing - 0.05);
+            float drop = Uniform(falling, "drop_m");
+            ctx.Check(top.Visible && drop > 0f && drop < cut, $"the top is still falling just before it lands at {landing:0.00} s: dropped {drop:0.00} m of {cut:0.00}");
+            visuals.Pose(TouchAt + landing + 0.01);
+            ctx.Check(!top.Visible, $"the top vanishes as it lands");
+
+            visuals.Pose(TouchAt + 2.0);
+            var mid = CoursePylonCut.At(PylonHeightM, cut, CoursePylonCut.NoClipM, 2.0);
             ctx.Check(Mathf.IsEqualApprox(Uniform(stump, "clip_hi_m"), mid.StumpTopM) && Uniform(stump, "sag_m") > 0f
                     && mid.StumpTopM > cut && mid.StumpTopM < PylonHeightM && !top.Visible,
                 $"mid-regrow the stump stands at {Uniform(stump, "clip_hi_m"):0.00} m of {PylonHeightM}, sagging {Uniform(stump, "sag_m"):0.00} m, the top gone");
@@ -278,8 +285,10 @@ internal static class CourseVisualsSuites
             ctx.Note($"montage {montage}; bob pair at {t0:0.00} s and {t0 + 1.0:0.00} s, ring moved {CourseMotion.Offset(ring, t0).Origin.DistanceTo(CourseMotion.Offset(ring, t0 + 1.0).Origin):0.00} m");
 
             // The left course pylon cut a little under half way up, seen from the close view's sunlit side.
-            // It is whole, then its top tips away as the stump sags, then it regrows and stands whole.
+            // It is whole, then its top tips away and falls as the stump sags. The top is gone on landing,
+            // and the stump regrows and stands whole.
             double cutAt = t0 + 5.0;
+            double lands = Math.Sqrt(2.0 * CutHeightM / CoursePylonCut.FallAccel);
             visuals.Cut(0, CourseElement.LeftCoursePylon, CutHeightM, cutAt);
             var leftBase = CourseMotion.Rest(pylons) * CourseGateShape.PylonBase(pylons, 0);
             var cutEye = leftBase - (f * 45f) - (r * 30f) + (Vector3.Up * 10f);
@@ -287,15 +296,17 @@ internal static class CourseVisualsSuites
             var cutShots = new (string Name, Vector3 Eye, Vector3 At, double Time)[]
             {
                 ("cut-whole", cutEye, cutLook, cutAt - 1.0),
-                ("cut-falling", cutEye, cutLook, cutAt + 0.6),
-                ("cut-regrowing", cutEye, cutLook, cutAt + 1.8),
+                ("cut-tipping", cutEye, cutLook, cutAt + 0.5),
+                ("cut-falling", cutEye, cutLook, cutAt + lands - 0.1),
+                ("cut-landed", cutEye, cutLook, cutAt + lands + 0.05),
+                ("cut-regrowing", cutEye, cutLook, cutAt + 2.3),
                 ("cut-regrown", cutEye, cutLook, cutAt + CoursePylonCut.RegrowSeconds + 0.1),
             };
             if (Shoot(cutShots) is { } cut)
             {
                 string cutMontage = Path.Combine(dir, "cut-montage.png");
-                Grid(cut, 2).SavePng(cutMontage);
-                ctx.Note($"cut montage {cutMontage}; cut at {CutHeightM} m, shots at -1, 0.6, 1.8 and {CoursePylonCut.RegrowSeconds + 0.1} s");
+                Grid(cut, 3).SavePng(cutMontage);
+                ctx.Note($"cut montage {cutMontage}; cut at {CutHeightM} m, shots at -1, 0.5, {lands - 0.1:0.00}, {lands + 0.05:0.00}, 2.3 and {CoursePylonCut.RegrowSeconds + 0.1} s");
             }
         }
         finally

@@ -37,7 +37,6 @@ public sealed partial class CourseVisuals : Node3D
         uniform float drop_m = 0.0;
         uniform float tilt_rad = 0.0;
         uniform vec3 tilt_pivot = vec3(0.0);
-        uniform float fade = 0.0;
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
@@ -72,8 +71,7 @@ public sealed partial class CourseVisuals : Node3D
 
         void fragment() {
             float up = v_local.y + 0.5 * height_m;
-            float dither = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
-            if (up < clip_lo_m || up > clip_hi_m || dither < fade) {
+            if (up < clip_lo_m || up > clip_hi_m) {
                 discard;
             }
             float s = band_by_angle > 0.5 ? atan(v_local.z, v_local.x) / TAU + 0.5 : v_local.y / height_m + 0.5;
@@ -313,7 +311,6 @@ public sealed partial class CourseVisuals : Node3D
             falling.SetShaderParameter("drop_m", look.DropM);
             falling.SetShaderParameter("tilt_rad", -outward * look.TiltRad);
             falling.SetShaderParameter("tilt_pivot", new Vector3(outward * cutRadius, look.CutM - (0.5f * gate.Height), 0f));
-            falling.SetShaderParameter("fade", look.Fade);
             top.Visible = look.TopShown;
         }
 

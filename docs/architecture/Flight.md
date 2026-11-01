@@ -1035,8 +1035,8 @@ pylon's own two materials draw its cut: its instance is the stump, clipped on `v
 
 ## src/Flight/Modes/CoursePylonCut.cs
 A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and
-the seconds since the cut: the stump's top and sag, the falling top's drop (resting on the ground),
-outward tip and fade, whole before the cut and from `RegrowSeconds` (3 s) on. `Recut` keeps a
+the seconds since the cut: the stump's top and sag, the falling top's outward tip and drop, which
+hides it as its foot reaches the ground, whole before the cut and from `RegrowSeconds` (3 s) on. `Recut` keeps a
 second cut within what has regrown, so nothing fallen falls twice. Ages are doubles from the sim
 clock, so `csky_time`'s 3600 s wrap never reaches them. Every time and share is a look tuned at the
 controls. Read `CoursePylonCutTests.cs`.

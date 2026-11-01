@@ -53,14 +53,16 @@ public class CoursePylonCutTests
     }
 
     [Fact]
-    public void TheTopFallsTipsAndFadesOutAndComesToRestOnTheGround()
+    public void TheTopTipsAndFallsAndVanishesAsItLands()
     {
-        var mid = Fresh(0.5 * CoursePylonCut.FadeSeconds);
-        Assert.True(mid.TopShown && mid.DropM > 0f && mid.TiltRad > 0f && mid.Fade is > 0f and < 1f);
-        var gone = Fresh(CoursePylonCut.FadeSeconds);
-        Assert.False(gone.TopShown);
-        Assert.Equal(1f, gone.Fade);
-        Assert.Equal(Godot.Mathf.DegToRad(CoursePylonCut.MaxTiltDeg), gone.TiltRad, 5);
+        double landing = System.Math.Sqrt(2.0 * CutAt / CoursePylonCut.FallAccel);
+        var mid = Fresh(0.5 * landing);
+        Assert.True(mid.TopShown && mid.DropM > 0f && mid.DropM < CutAt && mid.TiltRad > 0f);
+        Assert.True(Fresh(landing - 0.01).TopShown);
+        var landed = Fresh(landing + 0.001);
+        Assert.False(landed.TopShown);
+        Assert.Equal(CutAt, landed.DropM);
+        Assert.Equal(Godot.Mathf.DegToRad(CoursePylonCut.MaxTiltDeg), Fresh(CoursePylonCut.TipSeconds).TiltRad, 5);
         Assert.All(Ages, a => Assert.True(Fresh(a).DropM <= CutAt));
         Assert.Equal(1f, CoursePylonCut.At(Height, 1f, CoursePylonCut.NoClipM, 2.0).DropM);
     }
