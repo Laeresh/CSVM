@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, course model and run
 
-1. ☐ Course file format, loader for both sources, content hash, terms
+1. ☑ Course file format, loader for both sources, content hash, terms
 2. ☐ Gate apertures from course gates, with a directional crossing test
 3. ☐ Strict-order course run with a flying start
 4. ☐ Touch penalty, +3 s debounced, no collision
@@ -128,7 +128,27 @@ dependency. File contention: A3, A4 and B13 all touch the Stunt run and HUD unde
 
 # Wave A, course model and run
 
-## A1 ☐ Course file format, loader for both sources, content hash, terms
+## A1 ☑ Course file format, loader for both sources, content hash, terms
+
+**Landed.** `CSVM/src/Flight/Modes/Course.cs` (the engine-free model, JSON reader and writer, and
+layout hash) and `CourseLibrary.cs` beside it (the two sources, list, load, save), with
+`CSVM.Tests/CourseTests.cs`. The home is `Flight/Modes/` beside `StuntMission.cs` and
+`ScoreStore.cs`, the Stunt Flying machinery a course feeds. The file carries `version`, `start`
+{`pos`, `heading`}, `gates` [{`id`, `kind` `pylons`|`ring`, `pos`, `heading`, `width` and `height`
+or `diameter`}] and `sequence` [{`gate`, `dir` `forward`|`reverse`}]; positions are `[x, y, z]`,
+headings yaw degrees on `SpawnPoint`'s convention, and chapter and name come from the path only. A
+pylon gate's `pos` is its base midway between the pylons; a ring's is its centre. The hash covers
+the pool in file order without ids, the sequence as pool indices with direction, and the start;
+name, chapter and ids stay out of it. The game folder wins a clash, matched without case. **A
+`--det` run reads no game folder** (`CourseLibrary.ForLaunch(dataRoot, det)`), as it reads no HD
+pack; a suite builds its own `CourseLibrary` over `ctx.ScratchDir` folders. `CONTEXT.md` gains
+course, course gate, pylon gate, course pylon, balloon ring and sequence entry. A malformed file is
+rejected whole with a reason naming the field; an empty sequence parses, so the editor can save a
+course in progress, and A3 must refuse to run one.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A course loads from `CSVM/data/courses/<chapter>/<name>.json` or
 `<dataRoot>/Courses/<chapter>/<name>.json`, the game-folder file winning on a clash, and lists per
@@ -142,16 +162,20 @@ re-read). `--det` runs read neither HD folder unless a flag names it.
 
 **Approach.** A pure C# course model and JSON reader/writer, a source scan over the two folders, and
 a hash over the gate and sequence fields (not the name). Add the terms for the new elements to
-`CONTEXT.md` (Decision 26). <TODO: the JSON field names and the module's home (`Flight/Modes/` beside
-`StuntMission.cs`, or `Session/`), decided after reading `docs/architecture.md`'s index.>
+`CONTEXT.md` (Decision 26). The JSON field names and the module's home are settled under
+**Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: a contained pure-C# module with unit tests and no
+engine behaviour.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseTests"`
+(round trip, a reused gate, the clash, hash stability, malformed files, `--det`), then the complete
+unit tests and the battery. No engine path reads a course yet, so the battery shows only that
+nothing else moved.
 
 **⚠ Traps.** Tests never read `<dataRoot>` modding folders; a suite's courses go in `ctx.ScratchDir`
-or behind an env var unset by default. Whether a `--det` run reads `<dataRoot>/Courses` is open
-<TODO: decide, by analogy with the HD folders>.
+or behind an env var unset by default. A `--det` run reads no `<dataRoot>/Courses`, by analogy with
+the HD folders.
 
 ## A2 ☐ Gate apertures from course gates, with a directional crossing test
 

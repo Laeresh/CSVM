@@ -971,6 +971,21 @@ that never saves when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted r
 file instead; `stunt-scores-scripted` pins the choice.
 `CustomPlaneStore` is the same file-backed shape for a heavier record.
 
+## src/Flight/Modes/Course.cs
+One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon gate or a balloon
+ring, world position, heading and sizes), the `SequenceEntry` list naming pool gates by id with a
+`GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come
+from the file's path. `Parse` reads a file or rejects it whole with the reason, `ToJson` writes the
+same shape (its doc lists the fields), and `Hash` digests pool, sequence and start but not the
+name or ids, for course bests. Read `CourseLibrary` for where the files live.
+
+## src/Flight/Modes/CourseLibrary.cs
+The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped and
+`<dataRoot>/Courses/<chapter>/<name>.json` in the game folder, which wins a name clash. `List`
+names a chapter's courses, `Load` parses the winning file, `Save` writes one atomically into either
+root. `ForLaunch` reads no game folder under `--det`, as no HD pack is read; a test hands in OS
+paths instead. Read `Course` for the model.
+
 ## src/Flight/Modes/StuntRace.cs
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
 `BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
