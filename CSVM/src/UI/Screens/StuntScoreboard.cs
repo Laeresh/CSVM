@@ -65,7 +65,7 @@ public sealed partial class StuntScoreboard : ResultsBoard
     {
         float total = _mission.Elapsed;
         float? prevBest = _store.GetBest(_scoreKey);
-        bool newBest = _store.RecordIfBest(_scoreKey, total);
+        bool newBest = _store.RecordIfBest(_scoreKey, total, ScoreStore.PenaltiesOf(_mission));
         string bestSuffix = newBest ? " (NEW BEST)"
             : prevBest.HasValue ? $" (best {StuntMission.FormatTime(prevBest.Value)})" : "";
         Log.Info("flight", $"stunt: run complete {StuntMission.FormatTime(total)}{bestSuffix}");

@@ -599,7 +599,7 @@ internal sealed class HumanFlightAdapter
                 controller.RerunCount = count;
                 controller.Audio?.BindStartCount(_human.MenuSounds);
             }
-            var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
+            var scoreKey = ScoreStore.KeyFor(run, _policy.Chapter, _policy.Mission, custom?.Name ?? planeName);
             if (_human.Race is { } race)
             {
                 // Racing: no per-player splits board. The race's shared board covers the whole
@@ -620,7 +620,7 @@ internal sealed class HumanFlightAdapter
             else if (_human.StuntBoard is { } stuntBoard)
             {
                 // Solo: the end-of-run scoreboard, per-zone splits + total + persisted best time,
-                // keyed chapter/mission/plane in user://stunt_scores.json, the key a race run
+                // keyed by ScoreStore.KeyFor in user://stunt_scores.json, the key a race run
                 // records under too.
                 controller.Scoreboard = stuntBoard(controller.Stunt, planeDisplay,
                     $"{_policy.Chapter}   ·   {PlaneRoster.Humanize(_policy.Scenario)}",

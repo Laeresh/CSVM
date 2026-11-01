@@ -57,8 +57,8 @@ public sealed record Course(
         new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
     /// <summary>A stable hex digest of the gate pool (in file order, ids left out), the sequence and
-    /// the start point. The name, chapter and gate ids are not in it, so a rename keeps a course's
-    /// bests and any moved gate starts a fresh board.</summary>
+    /// the start point. The name, chapter and gate ids are not in it. The score key adds the first
+    /// two (<see cref="ScoreStore.KeyFor"/>), and any moved gate starts a fresh board.</summary>
     public string Hash
     {
         get

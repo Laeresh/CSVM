@@ -25,7 +25,9 @@ internal static class CourseLaunchSuites
         "the shipped sample course lists and loads from res:// and a game-folder file of its name wins "
         + "it; a --det --stunt --course= C1 session spawns on the start point, draws the gates and flies "
         + "them in sequence order only, the clock standing until the first entry and stopping on the "
-        + "last, every drawn gate standing at the pose its crossing is scored against")]
+        + "last, every drawn gate standing at the pose its crossing is scored against; the finished run "
+        + "records its best and penalty count under the course key in the launch's --scores= file, an "
+        + "old-format Danger Zone entry there loading and surviving untouched, and takes no photograph")]
     internal static void CourseLaunch(TestContext ctx)
     {
         Sources(ctx);
@@ -61,7 +63,17 @@ internal static class CourseLaunchSuites
         var savedClock = GameClock.Current;
         string? savedShots = StuntCapture.DirectoryOverride;
         StuntCapture.DirectoryOverride = Path.Combine(ctx.ScratchDir, "course-launch");
-        var spec = SessionSpec.Parse(new[] { $"--course={Chapter}/{Sample}", "--det", "--mute", "--no-pads" });
+        if (Directory.Exists(StuntCapture.ShotDir()))
+        {
+            Directory.Delete(StuntCapture.ShotDir(), recursive: true);
+        }
+
+        string scores = Path.Combine(ctx.ScratchDir, "course-launch", "stunt_scores.json");
+        var spec = SessionSpec.Parse(new[] { $"--course={Chapter}/{Sample}", "--det", "--mute", "--no-pads", $"--scores={scores}" });
+        // An old-format file holding this plane's own Danger Zone best, which the course run must leave be.
+        string dzKey = $"{Chapter}/IA1/{spec.PlaneName}";
+        Directory.CreateDirectory(Path.GetDirectoryName(scores)!);
+        File.WriteAllText(scores, $"{{\n  \"{dzKey}\": {{ \"best\": 300.0, \"date\": \"2000-01-01\" }}\n}}");
         var pane = new SubViewport
         {
             Size = new Vector2I(320, 180),
@@ -114,6 +126,12 @@ internal static class CourseLaunchSuites
                 return;
             }
 
+            // A camera whose pane accepts every request, so only the course rule can keep it shut.
+            // Each pass below starts inside a Danger Zone marker's radius of the gate centre.
+            int photographs = 0;
+            plane.StuntShots = new StuntCapture(run, Chapter, _ => ++photographs > 0);
+            ctx.Check(LeadM < StuntMission.DzRadius, $"each pass starts {LeadM} m from the gate centre, inside the {StuntMission.DzRadius} m camera radius");
+
             Step(plane, 5);
             Ground(ctx, pane, course);
             plane.Rerun();
@@ -138,6 +156,7 @@ internal static class CourseLaunchSuites
                 if (i == 0)
                 {
                     ctx.Check(run.Elapsed <= 2f * dt, $"…and the clock starts on it: {run.Elapsed:0.0000} s");
+                    run.AddPenalty(CourseElements.TouchPenaltySeconds); // a touch, for the stored count
                 }
 
                 int g = course.Gates.ToList().FindIndex(x => x.Id == entry.GateId);
@@ -156,6 +175,9 @@ internal static class CourseLaunchSuites
             Step(plane, 30);
             ctx.Check(run.AllComplete && run.Elapsed == atLast && atLast > 0f,
                 $"the last entry completes the run and stops the clock at {StuntMission.FormatTime(atLast)}");
+            Recorded(ctx, scores, dzKey, $"course/{Chapter}/{Sample}/{course.Hash}/{spec.PlaneName}", run);
+            ctx.Check(photographs == 0 && plane.StuntShots?.Count == 0 && !Directory.Exists(StuntCapture.ShotDir()),
+                $"the course run takes no Danger Zone photograph: {photographs} request(s), {plane.StuntShots?.Count} latched");
         }
         finally
         {
@@ -182,6 +204,20 @@ internal static class CourseLaunchSuites
         }
 
         return run.CompletedCount > before;
+    }
+
+    // The solo board's record, read back from the file. The course key holds the run's total and
+    // penalty count; the seeded Danger Zone entry is the only other key.
+    private static void Recorded(TestContext ctx, string scores, string dzKey, string courseKey, StuntMission run)
+    {
+        var store = ScoreStore.Load(scores);
+        ctx.Check(run.PenaltyCount >= 1 && store.GetBest(courseKey) == run.Elapsed && store.GetPenalties(courseKey) == run.PenaltyCount,
+            $"the run's best is stored under '{courseKey}' with its penalties: {store.GetBest(courseKey)} s for {run.Elapsed}, {store.GetPenalties(courseKey)} penalties for {run.PenaltyCount}");
+        ctx.Check(store.GetBest(dzKey) == 300f && store.GetPenalties(dzKey) == null,
+            $"the old-format Danger Zone entry '{dzKey}' loads unchanged: {store.GetBest(dzKey)} s, penalties {store.GetPenalties(dzKey)?.ToString() ?? "none"}");
+        var keys = Godot.Json.ParseString(File.ReadAllText(scores)).AsGodotDictionary().Keys.Select(k => k.AsString()).OrderBy(k => k).ToArray();
+        ctx.Check(keys.SequenceEqual(new[] { dzKey, courseKey }.OrderBy(k => k)),
+            $"…and the file holds those two keys only: {string.Join(", ", keys)}");
     }
 
     private static GateDirection Flip(GateDirection d) => d == GateDirection.Forward ? GateDirection.Reverse : GateDirection.Forward;

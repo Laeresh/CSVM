@@ -833,7 +833,8 @@ cue). Coverage: `CSVM.Tests/StuntRunControlTests.cs`, suite `stunt-start-count`.
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
 compared against and whether it set a new one. `Lines` flattens the table to text, one line per
-zone in the order flown, then the total (opening with `TotalLabel`) and the best comparison, so the
+zone in the order flown, then the total (`TotalLine`, opening with `TotalLabel` and, on a course
+run, ending with its penalty count) and the best comparison, so the
 Instant Action wrap-up can carry it past the session. The boards draw the same table through
 `UI/Screens/StuntSplits.cs`.
 
@@ -918,11 +919,11 @@ every other one. What it reports is `StuntMission`'s.
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
 latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
 marker centre, lingering or a later pass latching nothing; the run's completing frame is the last
-tested. A latch counts the shot, fires the `snd_dangerzone_camera` sting, raises `ShotLatched` and
-requests the pane. The frame lands later on a worker, which writes the PNG named by chapter,
-marker and run clock into `screenshots/stunts/` and the thumbnail; `Settle` completes the record
-on the main thread and raises `ShotLanded`. The pixels come from the caller's `PaneRequest`
-(`DangerZonePhotograph` live, the pane headless, a synthetic frame in a suite).
+tested, and a course run (`StuntMission.Course`) latches nothing. A latch counts the shot, fires the
+`snd_dangerzone_camera` sting, raises `ShotLatched` and requests the pane. A worker writes the
+landed frame as a PNG named by chapter, marker and run clock into `screenshots/stunts/` with the
+thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`. The pixels come
+from the caller's `PaneRequest` (`DangerZonePhotograph` live, the pane headless, a suite's own).
 
 ## src/Flight/Modes/FlagMatch.cs
 Capture the Flag's rules, engine-free: one flag per lobby team with its home, held, at home or
@@ -962,14 +963,14 @@ latched until it is outside all of them; `NearestServing` is the base a bot's re
 `docs/org/multiplayer-rearm.md`.
 
 ## src/Flight/Modes/ScoreStore.cs
-Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
-`chapter/mission/plane`, with `GetBest` and `RecordIfBest`, which never worsens a record and
-answers whether the run was a new best. A session takes its store from
-`ForSession(spec.ScoresPath, spec.ScoresThrowaway)`: the `--scores=` file, an in-memory throwaway
-that never saves when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run,
-`--debug-scoreboard`), else the player's own file. The internal overloads let a suite name the
-file instead; `stunt-scores-scripted` pins the choice.
-`CustomPlaneStore` is the same file-backed shape for a heavier record.
+Stunt best-time persistence: one JSON object in `user://stunt_scores.json`, with `GetBest` and
+`RecordIfBest`, which never worsens a record and answers whether the run was a new best. `KeyFor` is
+every recorder's key: `chapter/mission/plane`, or a course run's `course/<chapter>/<name>/<Course.Hash>/<plane>`,
+a namespace no Danger Zone key shares, so old files load unchanged; the name in it makes a rename a
+fresh board, as an edit is. A course entry adds `penalties` (`PenaltiesOf`, `GetPenalties`). A session's
+store is `ForSession(spec.ScoresPath, spec.ScoresThrowaway)`: the `--scores=` file, an in-memory throwaway
+when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run, `--debug-scoreboard`), else the player's
+own; internal overloads let a suite name the file, `stunt-scores-scripted` pins it. `CustomPlaneStore` is the same shape.
 
 ## src/Flight/Modes/Course.cs
 One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon gate or a balloon
@@ -977,7 +978,7 @@ ring, world position, heading and sizes), the `SequenceEntry` list naming pool g
 `GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come
 from the file's path. `Parse` reads a file or rejects it whole with the reason, `ToJson` writes the
 same shape (its doc lists the fields), and `Hash` digests pool, sequence and start but not the
-name or ids, for course bests. Read `CourseLibrary` for where the files live.
+name or ids; `ScoreStore.KeyFor` adds chapter and name for course bests. Read `CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
 A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its pylons from the

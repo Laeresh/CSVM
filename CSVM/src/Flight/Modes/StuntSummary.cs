@@ -11,6 +11,13 @@ public readonly record struct StuntSummary(StuntMission Mission, float Total, fl
     /// shows the mission clock can leave that line out.</summary>
     public const string TotalLabel = "TOTAL";
 
+    /// <summary>The total's line, with a course run's penalty count after the time, which already
+    /// includes them.</summary>
+    public string TotalLine() =>
+        ScoreStore.PenaltiesOf(Mission) is { } n
+            ? $"{TotalLabel}   {StuntMission.FormatTime(Total)}   ({n} {(n == 1 ? "penalty" : "penalties")})"
+            : $"{TotalLabel}   {StuntMission.FormatTime(Total)}";
+
     /// <summary>The split table as flat text, one line per zone in the order flown and then the
     /// total and the best comparison. What a run hands a menu page: the summary holds a live
     /// mission object, which cannot outlive the session, and these strings can.</summary>
@@ -34,7 +41,7 @@ public readonly record struct StuntSummary(StuntMission Mission, float Total, fl
             n++;
         }
 
-        lines.Add($"{TotalLabel}   {StuntMission.FormatTime(Total)}");
+        lines.Add(TotalLine());
         if (NewBest)
         {
             lines.Add(PrevBest is { } was

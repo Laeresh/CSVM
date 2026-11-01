@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Gate apertures from course gates, with a directional crossing test
 3. ☑ Strict-order course run with a flying start
 4. ☑ Touch penalty, +3 s debounced, no collision
-5. ☐ Course bests keyed by layout hash, with penalty count
+5. ☑ Course bests keyed by layout hash, with penalty count
 6. ☑ `--course=<chapter>/<name>` launch under `--stunt`
 
 ### Wave B, look and HUD
@@ -342,7 +342,46 @@ per run (Decision 6). The bounding sphere is pessimistic along the fuselage and 
 wings, so a plane passing a course pylon nose-first can touch earlier than its drawn wingtip would;
 `AircraftBody.NearestShape` is the hull-exact upgrade if that reads wrong at the controls.
 
-## A5 ☐ Course bests keyed by layout hash, with penalty count
+## A5 ☑ Course bests keyed by layout hash, with penalty count
+
+**Landed.** `ScoreStore.KeyFor(run, chapter, mission, plane)` is the one key every recorder asks
+(`HumanFlightAdapter`'s solo board and race seat, `InstantActionDirector`'s wrap-up summary): a
+Danger Zone run keeps `chapter/mission/plane`, a course run's is
+`course/<chapter>/<name>/<Course.Hash>/<plane>`, which keeps it off `<chapter>/IA1/<plane>`, the
+Danger Zone key of the world it flies, whose best it would otherwise overwrite. The `course/` prefix is a namespace no Danger Zone key can take (those open with a chapter
+id), so old score files load unchanged and need no migration. **Rename:** the key carries the name,
+as Decision 20 says, so a renamed course starts a fresh board even though `Course.Hash` (which leaves
+the name out, A1) is unchanged; an edit of the layout, sequence or start changes the hash and starts
+one too. `Course.Hash`'s comment points at the key as where the name enters.
+**Penalties:** `RecordIfBest(key, total, penalties)` writes `penalties` beside `best` and `date` when
+given; `ScoreStore.PenaltiesOf(run)` is a course run's `PenaltyCount` and null for a Danger Zone run,
+whose entry keeps its old shape; `GetPenalties(key)` reads it back. The best is `Elapsed`, which
+already includes the penalty time. **Summary:** `StuntSummary.TotalLine()` ends a course run's total
+with `(n penalties)`, drawn by `StuntSplits` and flattened by `Lines`; the comparison line is
+unchanged and compares against the course key's best. The stored best's own penalty count is not
+shown (B13 or D31 can read `GetPenalties`). **Photograph:** `StuntCapture.Update` returns at once on
+a course run (`Course != null`). The Danger Zone camera is the original's feature tied to its `dzN`
+markers; on a course it would write one PNG per gate into the player's `screenshots/stunts`. No
+`StuntMission` change was needed.
+
+**Verified.** <pending orchestrator run>
+
+**Model recommendation.** A mid-tier model: one key function threaded through three recorders, a
+guard in the camera, and a suite extension.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseScoreKeyTests"`
+(the key's shape, a file round trip keeps it, a moved gate and a reversed entry change it, a rename
+changes it with the hash equal, a course key is never the IA1 Danger Zone key, the penalty count and
+the summary's total line, a C4 Danger Zone run's key and no penalties), then the complete unit
+tests, then `.\scripts\RunTests.ps1 -Suite 'course-launch,stunt-scores-scripted,stunt-capture,stunt-race-time-attack' -SkipUnits -SkipGoldens`.
+`course-launch` now launches with `--scores=` over a scratch file seeded with the plane's old-format
+`C1/IA1/<plane>` best, adds one penalty after the first entry, and after the finish reads the file
+back: the course key holds `Elapsed` and the penalty count, the Danger Zone entry loads unchanged
+with no penalties, and the file holds those two keys only. It also swaps in a camera whose pane
+accepts every request, each pass starting inside the 15 m camera radius: no request, no latch, no
+`screenshots/stunts`. With the course guard disabled that check fails (5 requests, 5 latched).
+
+**Original approach (kept for reference).**
 
 **Goal.** A course best is stored per chapter, course name, plane and layout hash, including
 penalties, with the penalty count beside it; editing a course starts a fresh board.
@@ -382,10 +421,8 @@ west), pylon gate `p1` 400 m out, ring `r1` 800 m out and 80 m right, pylon gate
 and 60 m left, ring `r2` 1600 m out, then back through `r1` reversed. Pylons stand on the ground
 the suite's ray reads (128 m and 136.5 m), and the rings' centres sit 50 m and 55 m above it.
 Both library reads worked in the engine: `res://` listing and loading the shipped file, and a
-game-folder file of the same name winning it. Open for A5: a course run still records its best under
-the Danger Zone key `<chapter>/IA1/<plane>` (`HumanFlightAdapter`), so a played course run can
-overwrite a Danger Zone best until A5 keys it. Open for B13: the Danger Zone photograph
-(`StuntCapture`) still latches within 15 m of each gate centre on a course run.
+game-folder file of the same name winning it. A course run's best key and its Danger Zone
+photograph are A5's.
 
 **Verified.** <pending orchestrator run>
 
