@@ -313,6 +313,8 @@ public sealed class TargetPool
         return name;
     }
 
+    private static string? NullIfEmpty(string s) => s.Length > 0 ? s : null;
+
     /// <summary>Wraps one classed candidate as a <see cref="TargetRef"/>. The KIND picks the shape
     /// (which is why an unrecognised source still lands in the right cycle with an empty name rather
     /// than vanishing); the source supplies only the strings and the health figures. This is the one
@@ -354,12 +356,11 @@ public sealed class TargetPool
                         site.CategoryFor(ownTeam), objective, displayName: site.DisplayName);
                 }
 
-                // A Danger Zone is labelled off the same targets.zrd triple every other objective
-                // site is, so it reads "Danger Zone [Fly Through] - Train Tunnel Mid" and takes the
-                // non-destructive objective's blue, which is the original's own stunt marker.
+                // A Danger Zone reads its targets.zrd triple in the objective's blue, as the original's
+                // stunt marker does. A course's sequence entry has no label pair, so line 1 stays blank.
                 if (c.Source is StuntZone zone)
                 {
-                    return TargetRef.ForStructure(c, cls, name, zone.Category, zone.Help,
+                    return TargetRef.ForStructure(c, cls, name, NullIfEmpty(zone.Category), NullIfEmpty(zone.Help),
                         objective: true,
                         displayName: zone.Description.Length > 0 ? zone.Description : zone.DzName);
                 }

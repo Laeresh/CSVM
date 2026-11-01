@@ -64,9 +64,15 @@ public static class MarkerDraw
         {
             float w = font.GetStringSize(line, HorizontalAlignment.Left, -1f, fontSize).X;
             var p = new Vector2(anchor.X - w / 2f, y);
-            into.DrawString(font, p + Vector2.One, line, HorizontalAlignment.Left, -1f, fontSize, Shadow);
-            into.DrawString(font, p, line, HorizontalAlignment.Left, -1f, fontSize, color);
+            Text(into, font, p + Vector2.One, line, fontSize, Shadow);
+            Text(into, font, p, line, fontSize, color);
             y += lineH;
         }
     }
+
+    /// <summary>One left-aligned string onto <paramref name="into"/>'s canvas item, what
+    /// <c>CanvasItem.DrawString</c> does without its inside-<c>_Draw</c> guard. A suite thus draws a
+    /// HUD frame, since a suite's single frame never reaches the deferred redraw.</summary>
+    public static void Text(CanvasItem into, Font font, Vector2 at, string text, int fontSize, Color color) =>
+        font.DrawString(into.GetCanvasItem(), at, text, HorizontalAlignment.Left, -1f, fontSize, color);
 }

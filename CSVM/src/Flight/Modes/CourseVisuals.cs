@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -10,12 +11,24 @@ namespace CSVM.Flight.Modes;
 /// striped torus under tethered balloons per ring. One child node
 /// per pool gate, in pool order, stands at <see cref="CourseMotion"/>'s pose each frame. The pylons'
 /// fabric ripple is drawn only, on <c>csky_time</c>. A touched course pylon is cut and regrows
-/// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. Everything is lit by the zone's
+/// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. A followed run's next gate
+/// carries a direction chevron and the gate after it a dim fill. Everything is lit by the zone's
 /// per-vertex sun and fogged as the faithful aircraft are, casts no shadow, and is sized and coloured to tune.
 /// </summary>
 public sealed partial class CourseVisuals : Node3D
 {
     private const float StartLengthM = 6f;
+
+    // The run's cues, all TUNE. The chevron's length is a share of its gate's aperture. Its reach
+    // across, bar width, block depth and slab thickness are shares of that length. The fade is how much
+    // of the following gate's dim fill the dither drops.
+    private const float ChevronShare = 0.25f;
+    private const float ChevronSpread = 0.7f;
+    private const float ChevronBar = 0.35f;
+    private const float ChevronDepth = 0.3f;
+    private const float ChevronSlab = 0.04f;
+    private const float HighlightFade = 0.75f;
+    private const float HighlightSlabM = 0.2f;
 
     // A mesh is centred on its own origin, so a column runs from minus half its height to plus half.
     // The ripple function is the one place a vertex moves: wave, a cut stump's sag, a falling top's
@@ -37,6 +50,7 @@ public sealed partial class CourseVisuals : Node3D
         uniform float drop_m = 0.0;
         uniform float tilt_rad = 0.0;
         uniform vec3 tilt_pivot = vec3(0.0);
+        uniform float fade = 0.0;
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
@@ -71,7 +85,8 @@ public sealed partial class CourseVisuals : Node3D
 
         void fragment() {
             float up = v_local.y + 0.5 * height_m;
-            if (up < clip_lo_m || up > clip_hi_m) {
+            float dither = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
+            if (up < clip_lo_m || up > clip_hi_m || dither < fade) {
                 discard;
             }
             float s = band_by_angle > 0.5 ? atan(v_local.z, v_local.x) / TAU + 0.5 : v_local.y / height_m + 0.5;
@@ -92,6 +107,10 @@ public sealed partial class CourseVisuals : Node3D
     private static readonly Vector3 Black = new(0.08f, 0.08f, 0.08f);
 
     private readonly List<(CourseGate Gate, Node3D Node, CutPylon[]? Pylons)> _gates = new();
+    private Course _course = null!;
+    private int[] _entryGates = System.Array.Empty<int>();
+    private StuntMission? _run;
+    private (Mesh Mesh, Transform3D Local)[] _fills = System.Array.Empty<(Mesh, Transform3D)>();
     private double _unclocked;
 
     private CourseVisuals()
@@ -102,11 +121,26 @@ public sealed partial class CourseVisuals : Node3D
     /// <summary>One node per pool gate, in pool order, each at its gate's current pose.</summary>
     public IReadOnlyList<Node3D> GateNodes => _gates.ConvertAll(g => g.Node);
 
+    /// <summary>The followed run's direction chevron on its next sequence entry's gate. Its apex, along
+    /// its local -Z, points the way that entry is flown. Hidden with nothing left to fly; null until
+    /// <see cref="Follow"/>.</summary>
+    public MeshInstance3D? Chevron { get; private set; }
+
+    /// <summary>The dim fill across the aperture of the gate after the next entry's. Hidden with no
+    /// entry after the next; null until <see cref="Follow"/>.</summary>
+    public MeshInstance3D? Highlight { get; private set; }
+
     /// <summary>The course's gates, posed at sim time 0, plus a cone at the start point along its
     /// heading when <paramref name="withStart"/>. The caller adds it to the world.</summary>
     public static CourseVisuals Build(Course course, bool withStart = false)
     {
-        var visuals = new CourseVisuals();
+        var visuals = new CourseVisuals { _course = course, _entryGates = new int[course.Sequence.Count] };
+        for (int i = 0; i < course.Sequence.Count; i++)
+        {
+            while (course.Gates[visuals._entryGates[i]].Id != course.Sequence[i].GateId)
+                visuals._entryGates[i]++; // Course.Parse refuses an entry naming no gate
+        }
+
         var ring = Material(Red, White, 8f, byAngle: true, 1f, 0f);
         var balloon = Material(Silver, Silver, 0f, byAngle: false, 1f, 0f);
         var tether = Material(Rope, Rope, 0f, byAngle: false, 1f, 0f);
@@ -152,15 +186,29 @@ public sealed partial class CourseVisuals : Node3D
                 pylon.Show(seconds);
             }
         }
+
+        if (_run is { } run && Chevron is { } chevron && Highlight is { } highlight)
+        {
+            int next = run.AllComplete ? -1 : run.CompletedCount;
+            PoseChevron(chevron, next, seconds);
+            PoseHighlight(highlight, next >= 0 && next + 1 < _entryGates.Length ? next + 1 : -1, seconds);
+        }
     }
 
     /// <summary>Cuts a course pylon on each of <paramref name="run"/>'s touches of one, at the run's sim
     /// time, and stands every pylon whole on its reset. Both only record, and <see cref="Pose"/> draws,
-    /// so a run outliving this node does no harm. Answers this node.</summary>
+    /// so a run outliving this node does no harm. It also adds the run's <see cref="Chevron"/> and
+    /// <see cref="Highlight"/>, which <see cref="Pose"/> moves with the run's next entry. Answers this node.</summary>
     public CourseVisuals Follow(StuntMission run)
     {
         run.ElementTouched += touch => Cut(touch.Gate, touch.Element, touch.PylonHeight, run.SimSeconds());
         run.RunReset += Restore;
+        _run = run;
+        _fills = _course.Gates.Select(Fill).ToArray();
+        Chevron = Cue("next_chevron", ChevronMesh(), 0f);
+        Highlight = Cue("after_highlight", _fills.Length > 0 ? _fills[0].Mesh : null, HighlightFade);
+        AddChild(Chevron);
+        AddChild(Highlight);
         return this;
     }
 
@@ -189,6 +237,93 @@ public sealed partial class CourseVisuals : Node3D
 
     public override void _Process(double delta) =>
         Pose(GameClock.Current?.Time ?? (_unclocked += delta));
+
+    // The aperture's middle in the gate frame: a pylon gate's half height, a ring's centre.
+    private static Vector3 ApertureCentre(CourseGate gate) =>
+        gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, 0.5f * gate.Height, 0f) : Vector3.Zero;
+
+    // A thin slab across the aperture, its clear opening only: a pylon gate's rectangle, a ring's disc.
+    private static (Mesh Mesh, Transform3D Local) Fill(CourseGate gate) =>
+        gate.Kind == CourseGateKind.PylonGate
+            ? (new BoxMesh { Size = new Vector3(gate.Width, gate.Height, HighlightSlabM) }, new Transform3D(Basis.Identity, ApertureCentre(gate)))
+            : (new CylinderMesh { TopRadius = 0.5f * gate.Diameter, BottomRadius = 0.5f * gate.Diameter, Height = HighlightSlabM, RadialSegments = 48, Rings = 1 },
+                new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2f), Vector3.Zero));
+
+    // A cue on the course shader, so no new shader compiles mid-flight. Yellow, as the start cone.
+    private static MeshInstance3D Cue(string name, Mesh? mesh, float fade)
+    {
+        var material = Material(Yellow, Yellow, 0f, byAngle: false, 1f, 0f);
+        material.SetShaderParameter("fade", fade);
+        return new MeshInstance3D
+        {
+            Name = name,
+            Mesh = mesh,
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+        };
+    }
+
+    // A unit chevron: a flat V block and an upright V slab sharing the axis. The block's inner walls
+    // face an eye on the approach, its top the eye above; the slab's sides face an eye beside it.
+    // Its arms end on z = 0 and its apex is at z = -(1 + ChevronBar).
+    private static ArrayMesh ChevronMesh()
+    {
+        Vector2[] outline =
+        {
+            new(1f, 0f), new(0f, ChevronSpread), new(-ChevronBar, ChevronSpread),
+            new(1f - ChevronBar, 0f), new(-ChevronBar, -ChevronSpread), new(0f, -ChevronSpread),
+        };
+        int[] triangles = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5 };
+        float turn = 0f; // twice the signed area, which says which side of each edge is outside
+        for (int i = 0; i < outline.Length; i++)
+        {
+            turn += outline[i].Cross(outline[(i + 1) % outline.Length]);
+        }
+
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        foreach (var (normal, depth) in new[] { (Vector3.Up, ChevronDepth), (Vector3.Right, ChevronSlab) })
+        {
+            var across = normal == Vector3.Up ? Vector3.Right : Vector3.Up;
+            Vector3 At(int i, float side) =>
+                (across * outline[i].Y) + (Vector3.Forward * (outline[i].X + ChevronBar)) + (normal * (0.5f * depth * side));
+            foreach (float side in new[] { 1f, -1f })
+            {
+                for (int t = 0; t < triangles.Length; t += 3)
+                {
+                    Face(st, normal * side, At(triangles[t], side), At(triangles[t + 1], side), At(triangles[t + 2], side));
+                }
+            }
+
+            for (int i = 0; i < outline.Length; i++)
+            {
+                int j = (i + 1) % outline.Length;
+                var edge = outline[j] - outline[i];
+                var outside = ((Vector3.Forward * edge.Y) - (across * edge.X)) * Mathf.Sign(turn);
+                Face(st, outside, At(i, 1f), At(j, 1f), At(j, -1f));
+                Face(st, outside, At(i, 1f), At(j, -1f), At(i, -1f));
+            }
+        }
+
+        return st.Commit();
+    }
+
+    // One triangle facing `normal`: Godot's front faces wind clockwise seen from their normal's side.
+    private static void Face(SurfaceTool st, Vector3 normal, Vector3 a, Vector3 b, Vector3 c)
+    {
+        normal = normal.Normalized();
+        if ((b - a).Cross(c - a).Dot(normal) > 0f)
+        {
+            (b, c) = (c, b);
+        }
+
+        foreach (var v in new[] { a, b, c })
+        {
+            st.SetNormal(normal);
+            st.AddVertex(v);
+        }
+    }
 
     private static ShaderMaterial Material(Vector3 baseSrgb, Vector3 bandSrgb, float bands, bool byAngle, float height, float ripple)
     {
@@ -274,6 +409,36 @@ public sealed partial class CourseVisuals : Node3D
             body.Transform = new Transform3D(turn, CourseGateShape.BalloonCentre(gate, i));
             node.AddChild(body);
         }
+    }
+
+    // The chevron lies wholly past the gate's plane on the flown side. The crossing then moves it on
+    // before an eye at the aircraft reaches it.
+    private void PoseChevron(MeshInstance3D chevron, int entry, double seconds)
+    {
+        chevron.Visible = entry >= 0;
+        if (entry < 0)
+        {
+            return;
+        }
+
+        var gate = _course.Gates[_entryGates[entry]];
+        float size = ChevronShare * (gate.Kind == CourseGateKind.PylonGate ? Mathf.Min(gate.Width, gate.Height) : gate.Diameter);
+        float turn = _course.Sequence[entry].Direction == GateDirection.Reverse ? Mathf.Pi : 0f;
+        var local = new Transform3D(new Basis(Vector3.Up, turn).Scaled(Vector3.One * size), ApertureCentre(gate));
+        chevron.Transform = CourseMotion.Pose(gate, seconds) * local;
+    }
+
+    private void PoseHighlight(MeshInstance3D highlight, int entry, double seconds)
+    {
+        highlight.Visible = entry >= 0;
+        if (entry < 0)
+        {
+            return;
+        }
+
+        int g = _entryGates[entry];
+        highlight.Mesh = _fills[g].Mesh;
+        highlight.Transform = CourseMotion.Pose(_course.Gates[g], seconds) * _fills[g].Local;
     }
 
     // One course pylon's cut: what was cut and when, written to its two materials only on a change.

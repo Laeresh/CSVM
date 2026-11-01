@@ -321,7 +321,7 @@ rows).
 - `src/Flight/Hud/HudFontTest.cs`, the `--hud-font-test` overlay: a known string in both variants, with a rule marking the width `Measure` reports.
 - `src/Flight/Hud/ImpactReticle.cs`, the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/Hud/EdgeMarker.cs`, the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
-- `src/Flight/Hud/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
+- `src/Flight/Hud/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow; text drawn through the canvas item, so a suite can draw a HUD frame.
 - `src/Flight/Hud/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/Hud/PromptLine.cs`, a control prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow: the auto-dock offer and the respawn prompt.
 - `src/Flight/Hud/FlightChat.cs`, one machine's in-flight chat, engine-free: the panel's five lines and ten seconds, and the entry a pilot types into.
@@ -342,7 +342,7 @@ rows).
 - `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
 - `src/Flight/Modes/StuntRunControl.cs`, a stunt seat's run control, engine-free: the tap/hold respawn split, the start count's stepping and the clock it holds, the pose a tap returns to.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
-- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; one per player.
+- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; a course run's GATE n/N line, penalty time and "+3 s" flash; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting; none on a course run.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
 - `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
@@ -353,7 +353,7 @@ rows).
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
 - `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
 - `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: pylon bases and taper, ring tube, balloons and tethers.
-- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing.
+- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, the run's chevron on its next gate and dim fill on the one after.
 - `src/Flight/Modes/CoursePylonCut.cs`, a cut course pylon's look on sim time: stump top and sag, the falling top's tip and drop, gone as it lands, whole again after 3 s.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.

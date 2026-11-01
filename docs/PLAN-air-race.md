@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Procedural course pylons, rings and balloons with idle animation
 12. ☑ Pylon cut: slice, sag, regrow
-13. ☐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
+13. ◐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
 
 ### Wave C, course editor lab
 
@@ -585,7 +585,57 @@ falling top is drawn (second instance or the same mesh clipped the other way).>
 **⚠ Traps.** The 3 s regrow time is TUNE. A rerun mid-regrow should meet a whole pylon <TODO:
 confirm with the user>.
 
-## B13 ☐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
+## B13 ◐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
+
+**Landed (look pending).** `StuntRunHud.cs` reads a course run (`Course != null`) in course words,
+Danger Zone runs unchanged. The status line is `CourseStatusLine`: `0:14.2    GATE 2/5    +6 s`, the
+clock, then the sequence entry to fly next counted from 1 (the last, `5/5`, once all are flown; the
+next entry reads right where the marker and chevron point), then the penalty total when there is
+any (`PenaltyCount` times `CourseElements.TouchPenaltySeconds`, already inside the clock). GATE is
+upper case to match the line's ZONES. The intro is `CourseIntro`, "Fly through every gate in
+order", standing until 5 s after the first entry since a course clock starts there. A crossing
+flashes `GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing) where a zone flashed `CLEARED`,
+and the finish banner reads COURSE COMPLETE, the time and `PENALTIES +6 s` when there are any. Each
+`ElementTouched` with `TimeAdded` shows a `PenaltyFlash`, "+3 s" in a penalty red on the line under
+the clock (free, since a course is solo) for the same 1.6 s as the cleared flash, summed while it
+shows ("+6 s"); a touch with no time added shows nothing. **Marker:** A3's `CollectTargets` already
+offers the next entry alone and it draws, but its line 1 read " [] -" from the course zone's empty
+label pair; `TargetPool` now passes an empty label as none, so the marker reads a blank line 1 and
+`Gate 2` (and `Gate 2` / `7 o'clock` at the edge). **World cues**, in `CourseVisuals.Follow(run)`:
+`Chevron`, a yellow 3D chevron (a flat V block 0.3 of its length deep and an upright V slab, so it
+reads from the side, above and below, and head-on as a bar with an upright stroke, which cannot
+show the way on its own: a face-on cue has no depth to point with), sized 0.25 of the aperture (a pylon gate's lesser side, a ring's diameter), lying
+wholly past the aperture's plane with its apex along the entry's flown way, so a Reverse entry's
+points against the gate's heading and the crossing moves it on before the eye reaches it; and
+`Highlight`, the gate after it filled across its clear opening by a thin slab dithered to a quarter
+(`fade` 0.75). `Pose` stands both at `CourseMotion.Pose * local` from the run's `CompletedCount`, so
+they ride a bobbing ring; both hide once the run is complete, the fill when no entry follows. Both
+are on the course shader with uniforms set, so no shader compiles mid-flight. A gate repeated in
+consecutive entries carries both cues at once. All sizes and the colour are TUNE. **Montage seam:**
+a suite's single frame never runs the deferred redraw, and `CanvasItem.Draw*` refuses outside
+`_Draw`, so `MarkerDraw.Text` and `TargetHud`'s box, tag and arrow now draw through the canvas
+item's own `RenderingServer` calls, the same calls `Draw*` makes. Not done here: the Danger Zone
+photograph (`StuntCapture`) still latches near course gates (A6's open note); that file is A5's.
+The Evidence below named `UI/Overlays/MarkerOverlay.cs`, which is the `--viewer` mount-marker
+overlay; the HUD's marker is `Flight/Hud/TargetHud.cs`.
+
+**Verified.** <pending orchestrator run>
+
+**Model recommendation.** A mid-tier model: string formatting, two world meshes on an existing
+shader and a suite; the judgement is the user's look call on the montage.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseHudTests"`
+(the status line, the course flashes, the "+3 s" flash's timing and sum, the marker's lines), then
+`.\scripts\RunTests.ps1 -Suite 'course-hud,course-visuals,course-launch,stunt-scores-scripted,stunt-target-cycle,stunt-respawn-tap-hold' -SkipUnits -SkipGoldens`.
+`course-hud` (windowed) reads the HUD text and both cues across every entry of a hand-made course,
+a touch before the first entry and one on the clock, the chevron riding a bobbing ring, the finish
+and a rerun; then it flies the shipped sample in a C1 `--det` session and writes
+`course-hud/montage.png`: the HUD approaching entry 2 (marker, status line, chevron, the fill on
+entry 3's gate), that ring's chevron from the side, the fill close, the "+3 s" flash after a brush
+of entry 3's left course pylon, the HUD approaching the reverse entry, and its chevron from the
+side. The look closes with the user's verdict on the montage and in flight.
+
+**Original approach (kept for reference).**
 
 **Goal.** The objective marker and edge arrow point at the next sequence entry; the status line
 shows `Gate n/N`, the clock and the penalty total; a "+3 s" flash shows on a touch; the next gate
@@ -602,11 +652,7 @@ the clock. `CollectTargets` already offers only the next entry, so the objective
 it. Until B13 the status line reads `ZONES n/N` and the flash `Gate n CLEARED`. The penalty total
 is `PenaltyCount` touches of `CourseElements.TouchPenaltySeconds` each, already inside `Elapsed`;
 the "+3 s" flash shows on `StuntMission.ElementTouched` when its `CourseTouch.TimeAdded` holds (it is
-false before the first entry and on the finishing step). <TODO: the rest.>
-
-**Model recommendation.** <TODO: not settled in the grilling.>
-
-**Verify.** <TODO: not settled in the grilling.>
+false before the first entry and on the finishing step). The rest is settled under **Landed** above.
 
 **⚠ Traps.** `CONTEXT.md` lists "waypoint marker" under `_Avoid_` for the HUD off-screen marker; use
 its term.

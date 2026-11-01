@@ -83,7 +83,7 @@ sites arrive through `objectives` under their record's flag, `objective` on the 
 Non-Aircraft, and a roster block's own flag marks its aeroplane's candidate. Sub-parts arrive through `subParts` only
 while `selectedWeapon` carries `LOCK_ON`; a gun emplacement is on no cycle. The gamez ancestor chain `CollectOwners`
 hands the `rating_biases` match, and a pool's own anchor name `NameOf` returns, are cached per destructible instance:
-each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. `TryTargetGeometry`, `TryRenderPosition` and `TargetLabel` read any target source's sim geometry, drawn position and log name for the AI's weapons, its acquisition and the HUD markers. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
+each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. A stunt zone with no label pair, a course's sequence entry, gets a blank line 1 and its `Gate n` name. `TryTargetGeometry`, `TryRenderPosition` and `TargetLabel` read any target source's sim geometry, drawn position and log name for the AI's weapons, its acquisition and the HUD markers. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/Weapons/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
@@ -799,7 +799,9 @@ reticle, the edge arrow with its tail stroke, and the centred text block with th
 variant an off-screen marker needs. Owns the marker blue and the drop shadow, while colour and
 scaled sizes stay with the caller, since each HUD scales through its own `HudMetrics.Scale`.
 Where a marker goes is `EdgeMarker`'s, which is the module to read next; this is only what it
-looks like.
+looks like. `Text`, and `TargetHud`'s box, tag and arrow, draw through the canvas item's own
+`RenderingServer` calls rather than `CanvasItem.Draw*`, which refuse outside `_Draw`: the drawn
+result is the same, and a suite (`course-hud`) can draw a HUD frame its single frame never redraws.
 
 ## src/Flight/Modes/StuntMission.cs
 Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list from a mission's
@@ -914,6 +916,7 @@ zones-cleared status line, in a race the live leaderboard on the line under it
 the one-shot intro banner, the zone-cleared flash, the completion banner (in a race this run
 against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). The status and leaderboard lines step aside while `StatusHiddenWhile` answers true, which `HumanFlightAdapter` sets to the seat's held scores. While the pane spectates a race, `WatchedRacer` names the racer watched on a third line (`WatchingLine`) and no banner, flash or count draws. It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
+A course run (`Course` set) reads in course words: `StatusLine` is `CourseStatusLine`, `0:14.2    GATE 2/5    +6 s` (the entry to fly next, then the penalty time when there is any), the intro is `CourseIntro`, the cleared flash `GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing), the completion banner COURSE COMPLETE with its penalty time, and each `ElementTouched` with `TimeAdded` shows a `PenaltyFlash` ("+3 s", summed while it shows) on the line under the clock. Danger Zone runs read as before. Coverage: `CSVM.Tests/CourseHudTests.cs`, suite `course-hud`.
 
 ## src/Flight/Modes/StuntCapture.cs
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
@@ -1026,12 +1029,12 @@ pylons, rims and balloons reads the same numbers. Read `CourseVisuals`.
 ## src/Flight/Modes/CourseVisuals.cs
 A course's gates drawn from Godot primitives to `CourseGateShape`'s dimensions: two tapered, banded
 course pylons per pylon gate, and per ring a striped torus under three tethered balloons.
-`Build` makes one node per pool gate, in pool order, plus an optional start cone;
-`Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
+`Build` makes one node per pool gate, in pool order, plus an optional start cone; `Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
 shader text, lit and fogged as the faithful aircraft, with the pylon ripple on `csky_time`. A course
 pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
 `ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
 `ElementTouched` (course pylons only) and restores on `RunReset`. Read `CoursePylonCut`.
+`Follow` also adds the run's two cues, which `Pose` moves on the run's next entry at the gate's motion pose: `Chevron`, a yellow 3D chevron (a flat V block and an upright V slab) wholly past the aperture's plane, its apex along the way the entry is flown, so a reverse entry's points against the gate's heading; and `Highlight`, a dithered yellow fill across the clear opening of the gate after it. Both draw on the course shader, so no shader compiles mid-flight.
 
 ## src/Flight/Modes/CoursePylonCut.cs
 A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and
