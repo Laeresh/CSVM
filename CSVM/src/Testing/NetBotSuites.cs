@@ -74,6 +74,12 @@ internal static class NetBotSuites
     // A routed kill's damage share, the debug kill key's own: far past any hull's pools.
     private const float LethalScale = 1e6f;
 
+    // How far from the held quarry the seeking bot starts, past the 2000 m attack radius. How far
+    // the other two aircraft are held, out of its way. Then its budget, a minute of sim.
+    private const float SeekRange = 3000f;
+    private const float SeekFarOffset = 20000f;
+    private const int SeekSteps = 3600;
+
     private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
 
     // The bot's militia: the Russians, who fly the Devastator as rusdevastator in the cccp livery.
@@ -133,6 +139,56 @@ internal static class NetBotSuites
             {
                 SpendsItsLife(ctx, spent);
             }
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    [Suite("net-bot-seeks",
+        "a host with two bots and a guest in one Deathmatch over a clean loopback: a bot set down "
+        + "3 km from the host's held plane, facing away and past its attack radius, turns back and "
+        + "its gunner takes the host's plane inside a minute of sim (#268); and the ABLE-TO-FAIL "
+        + "CONTROL, the same bot from the same start with the objective off, takes no target in as "
+        + "many steps")]
+    internal static void BotSeeksAFarEnemy(TestContext ctx)
+    {
+        var spec = NetCombatSuites.MatchSpec(ctx, out _);
+        var ambient = NetCombatSuites.Ambient.Save();
+        var ends = new List<NetCombatSuites.Ends>();
+        try
+        {
+            if (Field(ctx, spec, 5106, "seek", ends) is not { } peers)
+            {
+                return;
+            }
+
+            var host = peers[0];
+            var quarry = host.SeatRigs[HostSeat].Controller!;
+            var bot = host.SeatRigs[BotSeat].Controller!;
+            var guestCopy = host.SeatRigs[GuestSeat].Controller!;
+            var guestOwn = peers[1].SeatRigs[GuestSeat].Controller!;
+            var at = quarry.WorldPosition;
+            Hold(quarry, at);
+            Hold(host.SeatRigs[SecondBotSeat].Controller!, at + new Vector3(-SeekFarOffset, 0f, 0f));
+            Hold(guestOwn, at + new Vector3(0f, 0f, SeekFarOffset));
+            int settled = StepUntil(() => guestCopy.WorldPosition.DistanceTo(guestOwn.WorldPosition) < SettledGap, peers);
+
+            int steps = Seek(peers, bot, at, SeekSteps);
+            var target = bot.Pilot!.Gunner!.Target;
+            ctx.Check(ReferenceEquals(target, quarry),
+                $"a bot {SeekRange:0} m from the host's plane, facing away, takes it in {steps} step(s), {steps * GameClock.FixedDt:0.0} s ({TargetPool.TargetLabel(target)}, {bot.WorldPosition.DistanceTo(at):0} m off, guest settled in {settled} step(s))");
+
+            host.Dogfight!.BotObjective = false;
+            Seek(peers, bot, at, steps);
+            ctx.Check(bot.Pilot.Gunner.Target == null,
+                $"ABLE-TO-FAIL CONTROL: with the objective off the same bot from the same start takes no target in {steps} step(s) ({TargetPool.TargetLabel(bot.Pilot.Gunner.Target)}, {bot.WorldPosition.DistanceTo(at):0} m off)");
         }
         finally
         {
@@ -802,6 +858,36 @@ internal static class NetBotSuites
         }
 
         return best;
+    }
+
+    // Pins an aeroplane at a pose, by its owner's own respawn and the weapon lab's hold.
+    private static void Hold(FlightController plane, Vector3 at)
+    {
+        plane.RespawnAt(at, at + (Vector3.Right * 100f));
+        plane.ArmSpawnTimers();
+        plane.Held = true;
+    }
+
+    // Sets the bot down east of the quarry facing further east, its gunner armed and empty. Steps
+    // until it takes a target or the budget runs out, and answers the steps taken.
+    private static int Seek(GameSession[] peers, FlightController bot, Vector3 quarry, int budget)
+    {
+        var start = quarry + (Vector3.Right * SeekRange);
+        bot.RespawnAt(start, start + (Vector3.Right * 100f));
+        bot.ArmSpawnTimers();
+        var gunner = bot.Pilot!.Gunner!;
+        gunner.Target = null;
+        gunner.AutoTarget = true;
+        for (int step = 1; step <= budget; step++)
+        {
+            Lockstep(1, peers);
+            if (gunner.Target != null)
+            {
+                return step;
+            }
+        }
+
+        return budget;
     }
 
     // Steps both sessions until the condition holds, and answers how many steps that took, or

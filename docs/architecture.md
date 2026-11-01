@@ -261,6 +261,7 @@ rows).
 - `src/Flight/Ai/AiTargetRanking.cs`, the decoded target-ranking formula, minimised over weight, distance and objective bias, the deconfliction pick, and the two-scorer selector.
 - `src/Flight/Ai/GunnerAcquisition.cs`, the AI gunner's target acquisition: the decoded hold, the four-pool ranked sweep and the gasbag ordnance gate.
 - `src/Flight/Ai/AiWeaponsDrive.cs`, the AI's per-tick weapons drive: the gunner's acquisition and lead solve, then the rocketeer's pylon walk on the same target.
+- `src/Flight/Ai/DeathmatchBotObjective.cs`, where a Deathmatch bot with no target flies: the nearest live enemy aircraft at any range.
 - `src/Flight/Ai/CtfBotObjective.cs`, a Capture the Flag bot's order each step: carry home, chase the carrier, take a floating flag, defend or attack.
 - `src/Flight/Ai/StuntBotObjective.cs`, a stunt race bot's way round the course: steer for the next zone, run it on its ribbon, fluff by tier.
 - `src/Flight/Ai/ZvzBotObjective.cs`, a Zeppelin vs Zeppelin bot's target each step: its hull's attacker, its pursuer, then the other hull's parts by loadout.
