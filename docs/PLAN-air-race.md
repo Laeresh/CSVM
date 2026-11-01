@@ -148,7 +148,7 @@ course, course gate, pylon gate, course pylon, balloon ring and sequence entry. 
 rejected whole with a reason naming the field; an empty sequence parses, so the editor can save a
 course in progress, and A3 must refuse to run one.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -197,7 +197,7 @@ plane, so the count costs nothing per step. The aperture uses the pylons' centre
 clipping a pylon body is A4's touch, not a miss here. Danger Zone runs keep the side-blind
 `StuntGate.CrossedBy`, now pinned by a unit test.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -255,7 +255,7 @@ mission's `PLAYER_INIT` speed field (the Instant Action spawn rule, `docs/format
 and a tap with nothing flown go back to `FlightController._spawnPos`. A6 makes the spawn list
 `[course.Start]`, which keeps all of that. The run is not reachable in-engine until A6 wires it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -312,7 +312,7 @@ the course pylon's base. It fires before the first entry and on the finishing st
 `TimeAdded` false, so the cut still plays and the "+3 s" flash can stay off. A finished run tests
 nothing, since `Update` returns first; a Danger Zone run never tests touches.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -366,7 +366,7 @@ a course run (`Course != null`). The Danger Zone camera is the original's featur
 markers; on a course it would write one PNG per gate into the player's `screenshots/stunts`. No
 `StuntMission` change was needed.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: one key function threaded through three recorders, a
 guard in the camera, and a suite extension.
@@ -426,7 +426,7 @@ Both library reads worked in the engine: `res://` listing and loading the shippe
 game-folder file of the same name winning it. A course run's best key and its Danger Zone
 photograph are A5's.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: launch wiring along a seam A3 already cut, plus a
 scripted suite.
@@ -488,7 +488,7 @@ writes a C1 montage (close pylon gate, close ring, wide with the aircraft, a rin
 the pair's difference) to its scratch. Tests: `CSVM.Tests/CourseMotionTests.cs` and the suite, which
 also pins node counts and the drawn pose against the function.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: primitives, one shader and a pure function; the work
 that needs judgement is the user's look call.
@@ -556,7 +556,7 @@ whole mid-regrow), and writes `course-visuals/cut-montage.png` from a C1 flight:
 (tipping), 1.53 s (falling, just before landing), 1.68 s (just after it vanished), 2.3 s and 3.1 s
 after a cut at 13 m.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: one pure function, shader uniforms and a suite; the
 judgement is the user's look call on the montage.
@@ -631,7 +631,7 @@ the Danger Zone blurb, which D31 must replace or keep off a course launch. Not d
 Zone photograph (`StuntCapture`) is A5's. The Evidence below named `UI/Overlays/MarkerOverlay.cs`,
 which is the `--viewer` mount-marker overlay; the HUD's marker is `Flight/Hud/TargetHud.cs`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: string formatting, two world meshes on an existing
 shader and a suite; the judgement is the user's look call on the montage.
@@ -695,7 +695,7 @@ plus an amber box round the selected gate (`SelectionService.NewBoxInstance`/`Dr
 panel, and nothing is built before the first open. The world-triangle ground ray is the vegetation lab's, now built
 once per session for both labs (`GameSession`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -753,7 +753,7 @@ redraws on it. The gizmo should call `Draft.Update` from its drag and claim its 
 sequence panel should add its reorder and reuse operations to `CourseDraft` beside `Place` and `Delete`, so every edit
 still raises `Changed`. `CourseLab.Visuals.GateNodes[i]` is pool gate i's drawn node.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -808,7 +808,7 @@ While the freecam's RMB look holds the mouse captured, no handle is pressed or l
 the panel never reaches the lab, so a grab whose button is up is let go on the next motion. Each drag step is one
 `Draft.Update`, which keeps the sequence list, so no panel row is rebuilt mid-drag.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -863,7 +863,7 @@ arrow through its gate the way it is flown, so a gate flown both ways shows a do
 followed. **For C23:** selection stays on `CourseDraft` (`SelectedId`, `SelectedEntry`); a gizmo drag calls `Draft.Update`,
 which keeps the sequence list, so the rows are not rebuilt mid-drag. The overlay redraws on that `Changed` like the visuals.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -936,7 +936,7 @@ def, so the Instant Action stunt dialog's Danger Zone text never draws. The paus
 takes the course name through the same `Subject`. D33 makes the heading and the dropdown row the
 course file's title (`AIRFIELD OUT AND BACK`), the file name upper-cased where the file has none.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: a remake-only dropdown in an existing idiom, a launch
 field threaded through an existing seam, and a suite; the judgement is the user's look call.
@@ -1009,7 +1009,7 @@ draft's title in it while it has no focus. **Sample:** `C1/sample_out_and_back.j
 Danger Zones, Airfield Out and Back) and `d33-course-loadboard.png` (headed AIRFIELD OUT AND BACK)
 under `.scratch/air-race/d33/` of the plan worktree.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged plan branch at 82250965d passed: units 8085 passed, 0 failed, 6 skipped; engine 640 passed, 0 failed, 2 skipped, engine errors clean; goldens 38 shots hash-identical.
 
 **Model recommendation.** A mid-tier model: one optional field threaded through a parser, a lister
 and three display sites, with unit tests and suite extensions.
