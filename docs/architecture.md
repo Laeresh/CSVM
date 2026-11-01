@@ -286,7 +286,7 @@ rows).
 - `src/Flight/Camera/Spyglass.cs`, the spyglass's decoded rules, engine-free: the fog-derived range gate with its engage/release pair, the framing field of view, and the camera pose.
 - `src/Flight/Camera/SpyglassView.cs`, the spyglass picture: a square `SubViewport` on the shared world with a camera of its own, one per pane, rendering only while it is aimed.
 - `src/Flight/Camera/SpyglassSun.cs`, the spyglass discs' shadowless copy of the sun under Enhanced, on a layer only the disc cameras draw.
-- `src/Flight/Camera/SpectatorCamera.cs`, the `--freecam`/`--anim-lab` observation camera: RMB-look plus WASD/QE, no roll; `Frame`/`FollowNode` track an object.
+- `src/Flight/Camera/SpectatorCamera.cs`, the `--freecam`/`--anim-lab` observation camera: RMB-look plus WASD/QE, no roll; `Frame`/`FollowNode` track an object, `LookFrom` aims it from a point.
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
@@ -554,8 +554,9 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
-- `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag.
-- `src/UI/Labs/CourseDraft.cs`, the course lab's edited course and selected gate: ids, placement facing the camera, a ring's height above ground, delete, and the save target.
+- `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag, and edits the sequence in a side panel whose row click flies the camera there.
+- `src/UI/Labs/CourseDraft.cs`, the course lab's edited course, selected gate and selected entry: ids, placement facing the camera after the selected entry, a ring's height above ground, reorder, add again with a direction, flip, remove, delete, and the save target.
+- `src/UI/Labs/CourseSequenceOverlay.cs`, the course lab's world drawing of the sequence: entry numbers over each gate and a line through the gates in order, with direction arrows.
 - `src/UI/Labs/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/Labs/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
 - `src/UI/Labs/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.

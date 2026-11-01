@@ -1234,9 +1234,9 @@ dry-trigger cue resolves through `WeaponDefs.EmptyClipSound`, the `NO_AMMO_WARNI
 so neither path can hold a name of its own. Definitions: [../formats/sounds.md](../formats/sounds.md).
 
 ## src/Flight/Camera/SpectatorCamera.cs
-The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and
-pads through `Pads.For(_padDevices)`, every key and pad read resolving through
-`InputContext.Camera` (`src/Bindings/`). The lab additions are `Frame(Aabb)`, the `FollowNode`
+The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and pads through
+`Pads.For(_padDevices)`, every key and pad read resolving through `InputContext.Camera` (`src/Bindings/`). The lab
+additions are `Frame(Aabb)`, `LookFrom(eye, target)` (keeping the free look's yaw and pitch in step), the `FollowNode`
 orbit lock (released by any translation input, re-locked by the target key through `OrbitLock.Next`
 over `GameSession.LockCandidateAircraft`'s roster) and a public `Camera` accessor; while locked the
 orbit answers the right stick and the triggers as well as the mouse. It is also the pane a pilot

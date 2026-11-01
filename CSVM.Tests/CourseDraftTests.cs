@@ -119,6 +119,137 @@ public class CourseDraftTests
         Assert.Null(draft.Selected);
     }
 
+    [Fact]
+    public void PlacingInsertsAfterTheSelectedEntryAndSelectsTheNewOne()
+    {
+        var draft = Draft();
+        draft.Place(CourseGateKind.PylonGate, Vector3.Zero, 0f);
+        draft.Place(CourseGateKind.PylonGate, Vector3.Zero, 0f);
+        draft.SelectEntry(0);
+        draft.Place(CourseGateKind.BalloonRing, Vector3.Zero, 0f);
+        Assert.Equal(new[] { "p1", "r1", "p2" }, Ids(draft));
+        Assert.Equal((1, "r1"), (draft.SelectedEntry, draft.SelectedId));
+
+        // A gate selected alone, as a click on it in the world does, keeps the insertion point.
+        draft.Select("p2");
+        Assert.Equal(1, draft.SelectedEntry);
+        draft.Place(CourseGateKind.PylonGate, Vector3.Zero, 0f);
+        Assert.Equal(new[] { "p1", "r1", "p3", "p2" }, Ids(draft));
+
+        // With no entry selected it appends.
+        draft.SelectEntry(-1);
+        Assert.Equal((-1, (string?)null), (draft.SelectedEntry, draft.SelectedId));
+        draft.Place(CourseGateKind.PylonGate, Vector3.Zero, 0f);
+        Assert.Equal("p4", Ids(draft)[^1]);
+    }
+
+    [Fact]
+    public void MovingAnEntryStopsAtTheEndsAndTheSelectionFollowsIt()
+    {
+        var draft = Sequenced("a", "b", "c");
+        int changes = 0;
+        draft.Changed += () => changes++;
+        Assert.False(draft.MoveEntry(0, -1));
+        Assert.False(draft.MoveEntry(2, 1));
+        Assert.False(draft.MoveEntry(1, 2));
+        Assert.False(draft.MoveEntry(-1, 1));
+        Assert.Equal(0, changes);
+        Assert.True(draft.MoveEntry(2, -1));
+        Assert.Equal(new[] { "a", "c", "b" }, Ids(draft));
+        Assert.Equal((1, "c"), (draft.SelectedEntry, draft.SelectedId));
+        Assert.True(draft.MoveEntry(1, -1));
+        Assert.True(draft.MoveEntry(1, 1));
+        Assert.Equal(new[] { "c", "b", "a" }, Ids(draft));
+        Assert.Equal((2, "a"), (draft.SelectedEntry, draft.SelectedId));
+        Assert.Equal(3, changes);
+    }
+
+    [Fact]
+    public void AGateAddedAgainGoesAfterTheSelectedEntryWithItsDirection()
+    {
+        var draft = Sequenced("a", "b", "c");
+        draft.SelectEntry(2);
+        draft.Select("b");
+        Assert.True(draft.AddEntry("b", GateDirection.Reverse));
+        draft.Select("a");
+        Assert.True(draft.AddEntry("a", GateDirection.Reverse));
+        Assert.Equal(new[] { "a", "b", "c", "b", "a" }, Ids(draft));
+        Assert.Equal(new[] { GateDirection.Forward, GateDirection.Forward, GateDirection.Forward, GateDirection.Reverse, GateDirection.Reverse },
+            draft.Course.Sequence.Select(e => e.Direction));
+        Assert.Equal((4, "a"), (draft.SelectedEntry, draft.SelectedId));
+        Assert.False(draft.AddEntry("nope", GateDirection.Forward));
+        Assert.Equal("1, 5", CourseDraft.EntryNumbers(draft.Course, "a"));
+        Assert.Equal("2, 4", CourseDraft.EntryNumbers(draft.Course, "b"));
+        Assert.Equal("3", CourseDraft.EntryNumbers(draft.Course, "c"));
+        Assert.Equal(draft.Course.ToJson(), Course.Parse("C1", "t", draft.Course.ToJson(), out _)!.ToJson());
+    }
+
+    [Fact]
+    public void FlippingTurnsTheEntryAndItsFlownWay()
+    {
+        var draft = Sequenced("a", "b");
+        Assert.True(draft.Flip(1));
+        Assert.Equal(GateDirection.Reverse, draft.Course.Sequence[1].Direction);
+        Assert.Equal((1, "b"), (draft.SelectedEntry, draft.SelectedId));
+        var gate = draft.Course.Gates[1];
+        Assert.True(CourseDraft.FlownWay(gate, draft.Course.Sequence[1]).IsEqualApprox(-gate.Forward));
+        Assert.True(draft.Flip(1));
+        Assert.Equal(GateDirection.Forward, draft.Course.Sequence[1].Direction);
+        Assert.False(draft.Flip(2));
+    }
+
+    [Fact]
+    public void RemovingAnEntryKeepsTheGateAndSelectsTheEntryNowInItsPlace()
+    {
+        var draft = Sequenced("a", "b", "c");
+        Assert.True(draft.RemoveEntry(1));
+        Assert.Equal(new[] { "a", "c" }, Ids(draft));
+        Assert.Equal(3, draft.Course.Gates.Count);
+        Assert.Equal((1, "c"), (draft.SelectedEntry, draft.SelectedId));
+        Assert.True(draft.RemoveEntry(1));
+        Assert.Equal((0, "a"), (draft.SelectedEntry, draft.SelectedId));
+        Assert.True(draft.RemoveEntry(0));
+        Assert.Empty(draft.Course.Sequence);
+        Assert.Equal(-1, draft.SelectedEntry);
+        Assert.Equal("a", draft.SelectedId);
+        Assert.False(draft.RemoveEntry(0));
+        Assert.Equal(string.Empty, CourseDraft.EntryNumbers(draft.Course, "a"));
+    }
+
+    [Fact]
+    public void DeletingAGateFlownSeveralTimesKeepsTheSelectedEntryValid()
+    {
+        var draft = Sequenced("a", "b", "c");
+        draft.AddEntry("a", GateDirection.Reverse); // nothing selected: appended
+        draft.SelectEntry(1);
+        draft.AddEntry("a", GateDirection.Forward);
+        Assert.Equal(new[] { "a", "b", "a", "c", "a" }, Ids(draft));
+
+        // The selected entry (c, index 3) stays selected at its new place once every entry of a goes.
+        draft.SelectEntry(3);
+        Assert.True(draft.Delete("a"));
+        Assert.Equal(new[] { "b", "c" }, Ids(draft));
+        Assert.Equal((1, "c"), (draft.SelectedEntry, draft.SelectedId));
+
+        // An entry of the deleted gate takes the selection with it.
+        Assert.True(draft.Delete("c"));
+        Assert.Equal((-1, (string?)null), (draft.SelectedEntry, draft.SelectedId));
+        Assert.Equal(new[] { "b" }, Ids(draft));
+    }
+
+    [Fact]
+    public void LoadingClearsTheSelectedEntryAndCentresSitMidOpening()
+    {
+        var draft = Sequenced("a");
+        draft.SelectEntry(0);
+        draft.Load(draft.Course);
+        Assert.Equal((-1, (string?)null), (draft.SelectedEntry, draft.SelectedId));
+        var pylons = new CourseGate("p1", CourseGateKind.PylonGate, new Vector3(1f, 2f, 3f), 0f, 40f, 30f, 0f);
+        var ring = new CourseGate("r1", CourseGateKind.BalloonRing, new Vector3(1f, 52f, 3f), 0f, 0f, 0f, 40f);
+        Assert.Equal(new Vector3(1f, 17f, 3f), CourseDraft.Centre(pylons));
+        Assert.Equal(ring.Position, CourseDraft.Centre(ring));
+    }
+
     [Theory]
     [InlineData(true, true, CourseSource.Shipped)]
     [InlineData(true, false, CourseSource.Shipped)]
@@ -128,4 +259,12 @@ public class CourseDraftTests
         Assert.Equal(expected, CourseDraft.SaveTarget(editor, gameFolder));
 
     private static CourseDraft Draft() => new(CourseDraft.Empty("C1", "t", new SpawnPoint(Vector3.Zero, 0f)));
+
+    // A course of pylon gates with these ids, each flown once forward in that order, nothing selected.
+    private static CourseDraft Sequenced(params string[] ids) =>
+        new(new Course("C1", "t", default,
+            ids.Select((id, i) => new CourseGate(id, CourseGateKind.PylonGate, new Vector3(100f * i, 0f, 0f), 90f * i, 40f, 30f, 0f)).ToList(),
+            ids.Select(id => new SequenceEntry(id, GateDirection.Forward)).ToList()));
+
+    private static string[] Ids(CourseDraft draft) => draft.Course.Sequence.Select(e => e.GateId).ToArray();
 }

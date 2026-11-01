@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
 22. ◐ Click-to-place, adjustment sliders, start point
 23. ☐ 3D gizmo: three move arrows and a yaw ring
-24. ☐ Sequence panel, gate reuse with direction, world numbers and path line
+24. ◐ Sequence panel, gate reuse with direction, world numbers and path line
 
 ### Wave D, menu and follow-up
 
@@ -734,7 +734,7 @@ the click is left to the freecam's selection, so the two never fight; the course
 selection walks, so a freecam click never picks them. **Water:** the ground ray is `VegetationGround.RayHit` over
 `VegetationGround.Triangles`, which keeps every solid world polygon, the sea-level water sheet among them, so over open
 sea a pylon gate's base lands on y = 0, the sea surface (Decision 24), with no separate sea lookup.
-**Placing:** `Place` appends the gate with a forward sequence entry, so a course is flyable as placed, and selects it;
+**Placing:** `Place` adds the gate with a forward sequence entry after the selected entry (at the end with none, per C24), so a course is flyable as placed, and selects it;
 `PlaceStart` moves the start point. Ids are `p`/`r` and one past the highest number of that prefix in use (`NextId`).
 **Defaults (TUNE, `CourseDraft` constants):** pylon gate `PylonWidthM` 40 by `PylonHeightM` 30, ring `RingDiameterM`
 40 with its centre `RingAboveGroundM` 50 above the ground clicked (the sample's rings stand 50 and 55 m up), start
@@ -797,7 +797,35 @@ and the default sizes with their flight.
 **⚠ Traps.** Freecam already uses RMB look and left-click select; the gizmo's drag must not fight
 them.
 
-## C24 ☐ Sequence panel, gate reuse with direction, world numbers and path line
+## C24 ◐ Sequence panel, gate reuse with direction, world numbers and path line
+
+**Landed (look pending).** In `CourseLab.cs`, `CourseDraft.cs` and the new `CSVM/src/UI/Labs/CourseSequenceOverlay.cs`, with
+`SpectatorCamera.LookFrom` added for the camera flight. **Selection:** `CourseDraft.SelectedEntry` (or -1) beside
+`SelectedId` is the insertion point. `SelectEntry(i)` sets the entry and its gate; `Select(id)`, a world click on a gate, sets
+the gate alone and keeps the entry. So "select entry 3, click r1 in the world, Add again Reverse" puts r1 reversed fourth.
+**Edits** (each raises `Changed`): `Place` now inserts its forward entry after the selected entry (at the end with none) and
+selects it, so placing in a row still chains. `AddEntry(gate, direction)` inserts a pool gate again the same way.
+`MoveEntry(i, ±1)` refuses past either end, `Flip(i)` turns the direction, and `RemoveEntry(i)` keeps the gate in the pool and
+selects the entry now in that place, so several go in a row. Each selects the entry it leaves. `Delete` (C22) still drops every
+entry naming the gate and keeps the selected entry on the same entry among those left. **Panel:** a second panel, 280 px, left
+of the course panel, full height. It holds one flat button row per entry in a scroll container, `"3.  p2  pylon gate  reverse"`,
+the selected row amber. Below it: Up, Down, Flip, Remove, then "Add the selected gate again after the selected entry"
+Forward and Reverse, and a hint. The panel binds no keys. The rows are rebuilt only when `Course.Sequence` is
+a new list; a slider drag keeps the list instance. **Row click** (`ChooseEntry`): selects the entry and its gate and eases the
+camera (smoothstep, 0.6 s, TUNE) to an eye behind the gate on that entry's approach. It stands back 2.5 times the gate's largest
+size plus 30 m and 0.3 of that up, looking at the opening's middle. The eye moves through `SpectatorCamera.LookFrom`, which
+sets yaw and pitch so the next RMB drag starts from the new view; an RMB press or closing the lab cancels the ease. **World:**
+`CourseSequenceOverlay`, redrawn on every change, never per frame. One fixed-size `Label3D` per gate over the top of its drawn
+bounds carries "2, 5" for a gate flown twice, white, the selected gate's amber, drawn through the ground. One line-list
+`ImmediateMesh` on the selection box's unshaded through-everything material, cyan, joins the opening middles (`CourseDraft.Centre`:
+a pylon gate's half height, a ring's centre) in order. Each leg carries a two-barb arrowhead at its middle, and each entry a 30 m
+arrow through its gate the way it is flown, so a gate flown both ways shows a double head. The gates' metre of idle bob is not
+followed. **For C23:** selection stays on `CourseDraft` (`SelectedId`, `SelectedEntry`); a gizmo drag calls `Draft.Update`,
+which keeps the sequence list, so the rows are not rebuilt mid-drag. The overlay redraws on that `Changed` like the visuals.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A side panel lists the sequence in order; entries move up and down, a new gate inserts
 after the selected entry, a placed gate can be added again with a direction choice, and clicking a
@@ -806,13 +834,26 @@ in order.
 
 **Evidence (confidence: lead-only).** The grilling.
 
-**Approach.** <TODO.>
+**Approach.** Settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: list operations with unit tests, a panel on the lab's existing pattern, and a
+drawing on an existing overlay material.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseDraftTests"` (insert after the
+selected entry and append with none, a world-click gate selection keeping the insertion point, moves refused at both ends,
+add again with a direction, flip, remove keeping the gate, delete of a gate flown three times keeping the selected entry
+valid, load clearing it, entry numbers, centres), then the complete unit tests, then the `course-lab` suite. After C22's steps
+it presses row 2 and steps the ease to its end, checking r1's opening middle lands mid-screen. It places a gate with entry 1
+selected (it goes second), presses Up, clicks r1 in the world with p2's entry selected and presses Reverse, then adds p1
+reversed. It flips p2, adds and removes an entry, and gets `p1 r1 p2~ r1~ p1~`. It checks the rows, the labels ("1, 5", "2, 4",
+"3") and the line's 54 vertices, saves, reloads and reopens to the same sequence, photographs `course-lab/sequence.png`, then
+deletes r1 and checks both its entries, its rows and its label go. The look (panel layout, number size, line colour and arrow
+sizes) closes at the controls: the user orders a course in a real `--course-edit` session.
 
-**⚠ Traps.** A gate used twice shows two numbers; deleting a gate removes every entry that uses it.
+**⚠ Traps.** A gate used twice shows two numbers; deleting a gate removes every entry that uses it. A one-frame suite cannot
+photograph the numbers: `Label3D` shapes its text on a deferred call (`_shape` is not bound), so `sequence.png` shows the panel
+and the line only. An `ItemList` cannot draw in that photograph either: its `draw_style_box`/`draw_line` calls refuse a draw
+notification sent outside the frame's own draw, hence the button rows.
 
 # Wave D, menu and follow-up
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
@@ -13,11 +14,11 @@ namespace CSVM.UI.Labs;
 
 /// <summary>
 /// The course editor lab (Shift+F3), built in <c>--freecam</c> alone and opened at launch by
-/// <c>--course-edit</c>. A panel down the right edge lists the chapter's courses, opens one or starts a new
-/// one, and saves it. A left click on the world selects the course gate under the cursor. Off a gate it
-/// places the chosen kind on the ground, facing the camera's way. Holding the drag key moves the selected gate
-/// over the ground under the cursor. Every edit goes through <see cref="Draft"/>, and the course is drawn
-/// by <see cref="CourseVisuals"/>, rebuilt on each change; the sliders take no keyboard focus.
+/// <c>--course-edit</c>. A panel down the right edge lists, opens, starts and saves the chapter's courses, and
+/// a second one beside it edits the sequence. A left click on the world selects the course gate under the
+/// cursor. Off a gate it places the chosen kind on the ground, facing the camera's way. Holding the drag key
+/// moves the selected gate over the ground under the cursor. Every edit goes through <see cref="Draft"/>, and on
+/// each change <see cref="CourseVisuals"/> and <see cref="CourseSequenceOverlay"/> draw the course again.
 /// </summary>
 public sealed partial class CourseLab : Node
 {
@@ -29,6 +30,15 @@ public sealed partial class CourseLab : Node
 
     // A down ray for the ground under a point starts this high, above any chapter's terrain.
     private const float RayTopM = 20000f;
+
+    // A row click's flight, TUNE. It eases over this long to an eye behind the gate on the entry's approach.
+    // The eye stands back this share of the gate's largest size plus a margin, raised this share of that.
+    private const float FlySeconds = 0.6f;
+    private const float FlyBackShare = 2.5f;
+    private const float FlyBackM = 30f;
+    private const float FlyRise = 0.3f;
+
+    private const int SequenceWidth = 280;
 
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
     private static readonly Color Dim = new(0.62f, 0.62f, 0.68f);
@@ -49,12 +59,22 @@ public sealed partial class CourseLab : Node
     private Control? _pylonRows;
     private Control? _ringRows;
     private Label? _status;
+    private VBoxContainer? _sequence;
+    private IReadOnlyList<SequenceEntry>? _shownSequence;
+    private Button[] _entryButtons = Array.Empty<Button>();
+    private Button[] _addButtons = Array.Empty<Button>();
+    private CourseSequenceOverlay? _overlay;
     private string _note = "";
     private bool _open;
     private bool _syncing;
     private bool _dragging;
     private Vector2? _groundXz;
     private float _ground;
+    private float _flyT = -1f;
+    private Vector3 _flyFromEye;
+    private Vector3 _flyFromLook;
+    private Vector3 _flyEye;
+    private Vector3 _flyLook;
 
     /// <summary>A lab over <paramref name="chapter"/>'s courses in <paramref name="library"/>, saving to
     /// <paramref name="saveTarget"/> (null turns Save off). <paramref name="groundHit"/> rays the world's own
@@ -107,12 +127,41 @@ public sealed partial class CourseLab : Node
     /// <summary>The drawn course, rebuilt on every change; null until the lab first opens.</summary>
     public CourseVisuals? Visuals => _visuals;
 
+    /// <summary>The entry numbers and sequence line over the world; null until the lab first opens.</summary>
+    public CourseSequenceOverlay? Overlay => _overlay;
+
+    /// <summary>The freecam a row click flies, kept in step with the move; without one the camera is set directly.</summary>
+    public SpectatorCamera? Spectator { get; init; }
+
     public override void _Ready()
     {
         if (StartOpen)
         {
             Toggle();
         }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_flyT < 0f || GetViewport().GetCamera3D() is not { } camera)
+        {
+            return;
+        }
+
+        _flyT = Mathf.Min(1f, _flyT + ((float)delta / FlySeconds));
+        float s = Mathf.SmoothStep(0f, 1f, _flyT);
+        var eye = _flyFromEye.Lerp(_flyEye, s);
+        var look = _flyFromLook.Lerp(_flyLook, s);
+        if (Spectator != null)
+        {
+            Spectator.LookFrom(eye, look);
+        }
+        else
+        {
+            camera.LookAtFromPosition(eye, look, Vector3.Up);
+        }
+
+        _flyT = _flyT >= 1f ? -1f : _flyT;
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -128,6 +177,11 @@ public sealed partial class CourseLab : Node
         if (!_open)
         {
             return;
+        }
+
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+        {
+            _flyT = -1f; // a look drag takes the camera back; left unhandled for the freecam
         }
 
         if (@event is InputEventKey { Echo: false, Keycode: DragKey } key)
@@ -157,6 +211,7 @@ public sealed partial class CourseLab : Node
         _open = !_open;
         _layer!.Visible = _open;
         _dragging = false;
+        _flyT = -1f;
         if (first && (StartCourse == null || !Open(StartCourse)))
         {
             // A broken file keeps its name to itself, so a save cannot overwrite what failed to load.
@@ -170,6 +225,7 @@ public sealed partial class CourseLab : Node
         if (_visuals != null)
         {
             _visuals.Visible = _open;
+            _overlay!.Visible = _open;
         }
 
         if (_box != null)
@@ -269,6 +325,25 @@ public sealed partial class CourseLab : Node
     public float? GroundBelow(Vector3 point) =>
         _groundHit(new Vector3(point.X, RayTopM, point.Z), Vector3.Down)?.Y;
 
+    /// <summary>A sequence row's click: selects entry <paramref name="index"/> and its gate. The camera eases to an
+    /// eye behind the gate on that entry's approach, looking at the opening's middle.</summary>
+    public void ChooseEntry(int index)
+    {
+        Draft.SelectEntry(index);
+        if (Draft.SelectedEntry < 0 || Draft.Selected is not { } gate || GetViewport().GetCamera3D() is not { } camera)
+        {
+            return;
+        }
+
+        var centre = CourseDraft.Centre(gate);
+        float back = (FlyBackShare * Mathf.Max(gate.Width, Mathf.Max(gate.Height, gate.Diameter))) + FlyBackM;
+        _flyEye = centre - (CourseDraft.FlownWay(gate, Draft.Course.Sequence[index]) * back) + (Vector3.Up * (FlyRise * back));
+        _flyLook = centre;
+        _flyFromEye = camera.GlobalPosition;
+        _flyFromLook = camera.GlobalPosition - (camera.GlobalBasis.Z * camera.GlobalPosition.DistanceTo(centre));
+        _flyT = 0f;
+    }
+
     /// <summary>Deletes the selected gate and every sequence entry naming it.</summary>
     public void DeleteSelected()
     {
@@ -320,6 +395,12 @@ public sealed partial class CourseLab : Node
     }
 
     private static string Format(float v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static Button Named(Button button, string name)
+    {
+        button.Name = name;
+        return button;
+    }
 
     // The pool gate one of whose drawn parts' boxes a ray meets, the nearest box centre winning; null for none.
     private string? GateUnder(Vector3 from, Vector3 dir)
@@ -385,6 +466,14 @@ public sealed partial class CourseLab : Node
             _box.Visible = false;
         }
 
+        if (_overlay == null)
+        {
+            _overlay = new CourseSequenceOverlay();
+            AddChild(_overlay);
+        }
+
+        _overlay.Visible = _open;
+        _overlay.Draw(Draft.Course, _visuals.GateNodes, Draft.SelectedId);
         SyncPanel();
     }
 
@@ -487,9 +576,127 @@ public sealed partial class CourseLab : Node
         margin.AddChild(box);
         panel.AddChild(margin);
         root.AddChild(panel);
+        root.AddChild(BuildSequencePanel());
         _layer.AddChild(root);
         AddChild(_layer);
         RefreshList();
+    }
+
+    // The sequence panel, left of the course panel: the entries in order, the selected one the insertion point.
+    private PanelContainer BuildSequencePanel()
+    {
+        var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
+        panel.SetAnchorsPreset(Control.LayoutPreset.RightWide);
+        panel.OffsetLeft = -400 - SequenceWidth;
+        panel.OffsetRight = -400;
+        panel.OffsetTop = 40;
+        panel.OffsetBottom = -16;
+        var margin = new MarginContainer();
+        foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
+        {
+            margin.AddThemeConstantOverride(side, 8);
+        }
+
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 4);
+        box.AddChild(new Label { Text = "SEQUENCE", Modulate = Amber });
+        var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        _sequence = new VBoxContainer { Name = "sequence_rows", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _sequence.AddThemeConstantOverride("separation", 0);
+        scroll.AddChild(_sequence);
+        box.AddChild(scroll);
+
+        var entryRow = new HBoxContainer();
+        _entryButtons = new[]
+        {
+            Named(Btn("Up", () => Draft.MoveEntry(Draft.SelectedEntry, -1)), "entry_up"),
+            Named(Btn("Down", () => Draft.MoveEntry(Draft.SelectedEntry, 1)), "entry_down"),
+            Named(Btn("Flip", () => Draft.Flip(Draft.SelectedEntry)), "entry_flip"),
+            Named(Btn("Remove", () => Draft.RemoveEntry(Draft.SelectedEntry)), "entry_remove"),
+        };
+        foreach (var button in _entryButtons)
+        {
+            entryRow.AddChild(button);
+        }
+
+        box.AddChild(entryRow);
+        box.AddChild(Small("Add the selected gate again after the selected entry:"));
+        var addRow = new HBoxContainer();
+        _addButtons = new[]
+        {
+            Named(Btn("Forward", () => AddAgain(GateDirection.Forward)), "add_forward"),
+            Named(Btn("Reverse", () => AddAgain(GateDirection.Reverse)), "add_reverse"),
+        };
+        foreach (var button in _addButtons)
+        {
+            addRow.AddChild(button);
+        }
+
+        box.AddChild(addRow);
+        box.AddChild(Small("Click a row to select it and fly there. A placed gate's entry goes after the selected one; "
+            + "a click on a gate in the world keeps it. Remove takes the entry only; Delete gate takes every entry naming it.", Dim));
+        margin.AddChild(box);
+        panel.AddChild(margin);
+        return panel;
+    }
+
+    private void AddAgain(GateDirection direction)
+    {
+        if (Draft.SelectedId is { } id)
+        {
+            Draft.AddEntry(id, direction);
+        }
+    }
+
+    // The rows from the sequence, rebuilt only when it changed. An edit that leaves the sequence alone keeps its
+    // list instance, so a slider drag rebuilds no rows. The selected entry is the selected row.
+    private void SyncSequence()
+    {
+        if (_sequence == null)
+        {
+            return;
+        }
+
+        var course = Draft.Course;
+        if (!ReferenceEquals(_shownSequence, course.Sequence))
+        {
+            _shownSequence = course.Sequence;
+            foreach (var old in _sequence.GetChildren())
+            {
+                _sequence.RemoveChild(old);
+                old.QueueFree();
+            }
+
+            for (int i = 0; i < course.Sequence.Count; i++)
+            {
+                var entry = course.Sequence[i];
+                bool pylons = course.Gates.First(g => g.Id == entry.GateId).Kind == CourseGateKind.PylonGate;
+                int index = i;
+                var row = Btn($"{i + 1}.  {entry.GateId}  {(pylons ? "pylon gate" : "balloon ring")}  "
+                    + (entry.Direction == GateDirection.Forward ? "forward" : "reverse"), () => ChooseEntry(index));
+                row.Name = $"row_{i}";
+                row.Flat = true;
+                row.Alignment = HorizontalAlignment.Left;
+                row.AddThemeFontSizeOverride("font_size", 12);
+                _sequence.AddChild(row);
+            }
+        }
+
+        // A flat row draws no pressed box, so the selected one is told by its colour.
+        foreach (var row in _sequence.GetChildren().Cast<Button>())
+        {
+            row.Modulate = row.GetIndex() == Draft.SelectedEntry ? Amber : Colors.White;
+        }
+
+        foreach (var button in _entryButtons)
+        {
+            button.Disabled = Draft.SelectedEntry < 0;
+        }
+
+        foreach (var button in _addButtons)
+        {
+            button.Disabled = Draft.SelectedId == null;
+        }
     }
 
     // A slider over one field of the selected gate, applied as it moves.
@@ -573,6 +780,7 @@ public sealed partial class CourseLab : Node
             _syncing = false;
         }
 
+        SyncSequence();
         UpdateStatus();
     }
 

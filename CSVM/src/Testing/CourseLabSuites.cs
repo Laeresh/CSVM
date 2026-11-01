@@ -27,13 +27,20 @@ internal static class CourseLabSuites
     // A clicked point must lie on its camera ray, and stand on the ground there, within this.
     private const float OnM = 0.5f;
 
+    // West over the sample's first pylon gate, pitched down; the placing clicks are all on ground in view.
+    private static readonly Transform3D PlacingPose = new(
+        new Basis(Vector3.Up, Mathf.DegToRad(90f)) * new Basis(Vector3.Right, Mathf.DegToRad(-35f)), new Vector3(-5150f, 330f, -3861f));
+
     [Suite("course-lab",
         "--course-edit=C1/<name> opens the course lab on that course in a freecam; from rays through screen points "
         + "a click places pylon gates and a ring on the ground facing the camera's way, ids p1, p2, r1 flown forward "
         + "in placing order, and the start point; a click on a gate selects it; the ring's height-above-ground and "
         + "diameter sliders and a held drag move what they should; a pylon gate placed over the sea stands on the sea "
         + "surface; a delete drops the gate's sequence entries; Save writes the scratch root alone and the file "
-        + "reloads to the same course; the panel over the course is photographed")]
+        + "reloads to the same course; the panel over the course is photographed. The sequence panel: a row click "
+        + "selects its entry and flies the camera onto it, a placed gate's entry goes after the selected one, Up, "
+        + "Flip, Remove and Add again (reverse) edit the order, the world numbers and line follow, and the sequence "
+        + "saves and reloads; the panels over the numbered course are photographed")]
     internal static void CourseLabEdits(TestContext ctx)
     {
         var savedClock = GameClock.Current;
@@ -111,9 +118,7 @@ internal static class CourseLabSuites
         lab.New(Edited);
         var draft = lab.Draft;
 
-        // West over the sample's first pylon gate, pitched down, every click left of the panel.
-        camera.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(90f)) * new Basis(Vector3.Right, Mathf.DegToRad(-35f)),
-            new Vector3(-5150f, 330f, -3861f));
+        camera.GlobalTransform = PlacingPose;
         float heading = CourseDraft.HeadingOf(camera.GlobalBasis);
         ctx.Check(Mathf.IsEqualApprox(heading, 90f), $"the camera looks west, heading {heading:0.00}");
         var clicks = new[] { new Vector2(250f, 470f), new Vector2(620f, 470f), new Vector2(430f, 360f), new Vector2(430f, 620f) };
@@ -196,7 +201,108 @@ internal static class CourseLabSuites
             $"the lab opens it again from its list: {draft.Course.Name}, {draft.Course.Gates.Count} gates");
 
         Photograph(ctx, pane, camera, lab);
+        Sequence(ctx, pane, camera, lab, library);
     }
+
+    // The sequence panel through its own list and buttons, from the saved p1, r1 course flown in that order.
+    private static void Sequence(TestContext ctx, SubViewport pane, Camera3D camera, CourseLab lab, CourseLibrary library)
+    {
+        var draft = lab.Draft;
+        ctx.Check(Rows(lab) is [_, var second] && second.Contains("r1", StringComparison.Ordinal),
+            $"the sequence panel lists the two entries: {string.Join(" | ", Rows(lab))}");
+
+        // A row click selects its entry and gate and flies the camera onto the entry's approach to look at it.
+        camera.GlobalTransform = PlacingPose;
+        Press(lab, "row_1");
+        lab._Process(1.0);
+        var centre = CourseDraft.Centre(draft.Selected!);
+        var onScreen = camera.UnprojectPosition(centre);
+        ctx.Check(draft is { SelectedEntry: 1, SelectedId: "r1" } && !camera.IsPositionBehind(centre)
+                && onScreen.DistanceTo(new Vector2(PaneWidth, PaneHeight) / 2f) < 2f && camera.GlobalPosition.DistanceTo(centre) < 400f,
+            $"a click on row 2 selects r1 and the camera flies to look at it: centre at {onScreen} on screen, {camera.GlobalPosition.DistanceTo(centre):0} m away");
+
+        // A gate placed with entry 1 selected goes second, not last.
+        camera.GlobalTransform = PlacingPose;
+        draft.SelectEntry(0);
+        lab.Place = CourseLab.PlaceKind.PylonGate;
+        lab.ClickAt(new Vector2(150f, 600f));
+        ctx.Check(Ids(draft) == "p1 p2 r1" && draft is { SelectedEntry: 1, SelectedId: "p2" },
+            $"a pylon gate placed with entry 1 selected is flown second and selected: {Ids(draft)}, entry {draft.SelectedEntry}");
+
+        // Up moves r1 before p2; neither end moves past itself.
+        draft.SelectEntry(2);
+        Press(lab, "entry_up");
+        ctx.Check(Ids(draft) == "p1 r1 p2" && draft.SelectedEntry == 1 && !draft.MoveEntry(0, -1) && !draft.MoveEntry(2, 1),
+            $"Up moves r1 to second, and the ends stay put: {Ids(draft)}");
+
+        // With p2's entry selected, a click on r1 in the world keeps that entry as the insertion point. Adding r1
+        // and then p1 again reversed after it turns the course back.
+        draft.SelectEntry(2);
+        lab.ClickAt(camera.UnprojectPosition(draft.Course.Gates.First(g => g.Id == "r1").Position));
+        ctx.Check(draft is { SelectedId: "r1", SelectedEntry: 2 }, $"a world click on r1 selects it and keeps entry 3 selected: {draft.SelectedId}, entry {draft.SelectedEntry}");
+        Press(lab, "add_reverse");
+        draft.Select("p1");
+        Press(lab, "add_reverse");
+        ctx.Check(Ids(draft) == "p1 r1 p2 r1~ p1~", $"r1 and p1 added again reversed fly the course back: {Ids(draft)}");
+
+        draft.SelectEntry(2);
+        Press(lab, "entry_flip");
+        draft.SelectEntry(0);
+        Press(lab, "add_forward");
+        int pool = draft.Course.Gates.Count;
+        Press(lab, "entry_remove");
+        ctx.Check(Ids(draft) == "p1 r1 p2~ r1~ p1~" && draft.Course.Gates.Count == pool && draft is { SelectedEntry: 1, SelectedId: "r1" },
+            $"Flip turns p2, and Remove takes an added entry but leaves its gate: {Ids(draft)}, {draft.Course.Gates.Count} gates");
+        CheckDrawn(ctx, lab, "p1:1, 5 r1:2, 4 p2:3", 5, 4);
+
+        string? path = lab.Save();
+        var saved = draft.Course;
+        var back = new CourseLibrary(library.Shipped, library.GameFolder).Load(Chapter, Edited, out string error);
+        ctx.Check(path != null && back != null && back.Sequence.SequenceEqual(saved.Sequence) && back.Hash == saved.Hash,
+            $"the reordered sequence saves and reloads: {string.Join(", ", back?.Sequence ?? Array.Empty<SequenceEntry>())} {error}");
+        lab.New("scratch_other");
+        lab.Open(Edited);
+        CheckDrawn(ctx, lab, "p1:1, 5 r1:2, 4 p2:3", 5, 4);
+
+        // From east of the course, looking west and aimed to its right, so it sits left of the two panels.
+        // The entry numbers are not in it: a Label3D shapes its text on a deferred call a suite never reaches.
+        var mid = draft.Course.Gates.Aggregate(Vector3.Zero, (sum, g) => sum + CourseDraft.Centre(g)) / draft.Course.Gates.Count;
+        camera.LookAtFromPosition(mid + new Vector3(400f, 260f, 0f), mid + new Vector3(0f, 0f, -200f), Vector3.Up);
+        draft.SelectEntry(2);
+        Render(ctx, pane, lab, "sequence.png");
+
+        // Deleting r1 takes both its entries, and the panel and world follow.
+        draft.Select("r1");
+        lab.DeleteSelected();
+        ctx.Check(Ids(draft) == "p1 p2~ p1~", $"deleting r1 drops both its entries: {Ids(draft)}");
+        CheckDrawn(ctx, lab, "p1:1, 3 p2:2", 3, 2);
+    }
+
+    // The panel's rows, and the world's labels ("id:numbers" for the shown ones) and line, against the draft.
+    // Each entry draws an arrow through its gate and each leg between gates a line, both with a two-barb head.
+    private static void CheckDrawn(TestContext ctx, CourseLab lab, string labels, int entries, int legs)
+    {
+        var overlay = lab.Overlay!;
+        string shown = string.Join(" ", overlay.Labels.Select((l, i) => (l, i)).Where(p => p.l.Visible)
+            .Select(p => $"{lab.Draft.Course.Gates[p.i].Id}:{p.l.Text}"));
+        var mesh = (ImmediateMesh)overlay.Path.Mesh;
+        int vertices = mesh.GetSurfaceCount() == 1 ? mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length : 0;
+        var texts = Rows(lab);
+        bool rows = texts.Length == entries && Enumerable.Range(0, entries).All(i =>
+            texts[i].StartsWith($"{i + 1}.  {lab.Draft.Course.Sequence[i].GateId}  ", StringComparison.Ordinal));
+        ctx.Check(rows && shown == labels && vertices == 6 * (entries + legs),
+            $"the panel lists {entries} rows ({string.Join(" | ", texts)}), the gates carry {labels} ({shown}), the line has {6 * (entries + legs)} vertices ({vertices})");
+    }
+
+    private static void Press(CourseLab lab, string button) =>
+        ((Button)lab.FindChild(button, true, false)).EmitSignal(BaseButton.SignalName.Pressed);
+
+    // The sequence as ids, a reversed entry marked with a tilde.
+    private static string Ids(CourseDraft draft) =>
+        string.Join(" ", draft.Course.Sequence.Select(e => e.Direction == GateDirection.Forward ? e.GateId : e.GateId + "~"));
+
+    private static string[] Rows(CourseLab lab) =>
+        lab.FindChild("sequence_rows", true, false).GetChildren().Cast<Button>().Select(b => b.Text).ToArray();
 
     // The ground ray stops on the sea-level sheet over open sea, so a pylon gate placed there stands on the surface.
     private static void OverSea(TestContext ctx, Camera3D camera, CourseLab lab)
@@ -239,7 +345,13 @@ internal static class CourseLabSuites
         lab.Draft.Select("p1");
         lab.Save(); // again, so the status line shows the path written
         var p1 = lab.Draft.Selected!;
-        camera.LookAtFromPosition(p1.Position + new Vector3(260f, 140f, 120f), p1.Position + new Vector3(-150f, 20f, 0f), Vector3.Up);
+        camera.LookAtFromPosition(p1.Position + new Vector3(260f, 140f, 120f), p1.Position + new Vector3(-150f, 20f, -150f), Vector3.Up);
+        Render(ctx, pane, lab, "lab.png");
+    }
+
+    // The pane as it stands, the lab's panels laid out and drawn this frame, to a PNG in the suite's scratch.
+    private static void Render(TestContext ctx, SubViewport pane, CourseLab lab, string name)
+    {
         Settle(pane);
         foreach (var ui in lab.FindChildren("*", nameof(Control), true, false).Cast<Control>().Where(c => c.GetParent() is CanvasLayer))
         {
@@ -273,17 +385,23 @@ internal static class CourseLabSuites
 
         string dir = Path.Combine(ctx.ScratchDir, "course-lab");
         Directory.CreateDirectory(dir);
-        string png = Path.Combine(dir, "lab.png");
+        string png = Path.Combine(dir, name);
         image.SavePng(png);
         ctx.Note($"lab photograph {png}");
     }
 
     // A control draws on a deferred call a suite's one frame never reaches. Its draw notification is sent
-    // here instead, onto a cleared canvas item, parents first.
+    // here instead, onto a cleared canvas item, parents first. A scroll container's panel is drawn by a call that
+    // refuses a notification sent outside the frame's own draw, so only its rows are.
     private static void Draw(Control control)
     {
         RenderingServer.CanvasItemClear(control.GetCanvasItem());
-        control.Notification((int)CanvasItem.NotificationDraw);
+        RenderingServer.CanvasItemSetTransform(control.GetCanvasItem(), control.GetTransform());
+        if (control is not ScrollContainer)
+        {
+            control.Notification((int)CanvasItem.NotificationDraw);
+        }
+
         foreach (var child in control.GetChildren().OfType<Control>())
         {
             Draw(child);

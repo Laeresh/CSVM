@@ -95,16 +95,7 @@ public sealed partial class SpectatorCamera : Node
         _keyState = new SeatDeviceState(SeatPad, () => _padDevices, readsPads: false);
         _padState = new SeatDeviceState(SeatPad, () => _padDevices,
             sticks: sticks ?? StickDeviceState.Live(() => playerIndex));
-        _camera.Position = position;
-        var to = lookAt - position;
-        // Only the direction survives, not the distance, a --lookat point or a --direction
-        // projected one unit ahead both frame the same way.
-        if (to.LengthSquared() > 1e-6f)
-        {
-            _yaw = Mathf.Atan2(-to.X, -to.Z);
-            _pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f)), -PitchLimit, PitchLimit);
-        }
-        ApplyOrientation();
+        LookFrom(position, lookAt);
     }
 
     /// <summary>The camera this drives, exposed so the anim lab can project mouse-pick rays
@@ -146,11 +137,22 @@ public sealed partial class SpectatorCamera : Node
         var center = aabb.GetCenter();
         float radius = Mathf.Max(aabb.Size.Length() * 0.5f, 1f);
         float dist = radius / Mathf.Tan(Mathf.DegToRad(_camera.Fov * 0.5f)) * 1.3f;
-        var pos = center + new Vector3(0.4f, 0.45f, 1f).Normalized() * dist;
-        _camera.Position = pos;
-        var to = center - pos;
-        _yaw = Mathf.Atan2(-to.X, -to.Z);
-        _pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f)), -PitchLimit, PitchLimit);
+        LookFrom(center + new Vector3(0.4f, 0.45f, 1f).Normalized() * dist, center);
+    }
+
+    /// <summary>Stands the eye at <paramref name="position"/> aimed at <paramref name="lookAt"/>, keeping the
+    /// free look's yaw and pitch in step so the next look drag starts from this view.</summary>
+    public void LookFrom(Vector3 position, Vector3 lookAt)
+    {
+        _camera.Position = position;
+        var to = lookAt - position;
+        // Only the direction survives, not the distance, a --lookat point or a --direction
+        // projected one unit ahead both frame the same way.
+        if (to.LengthSquared() > 1e-6f)
+        {
+            _yaw = Mathf.Atan2(-to.X, -to.Z);
+            _pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f)), -PitchLimit, PitchLimit);
+        }
         ApplyOrientation();
     }
 

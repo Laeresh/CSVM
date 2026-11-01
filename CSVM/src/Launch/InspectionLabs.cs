@@ -420,6 +420,7 @@ internal sealed class InspectionLabs
         {
             StartOpen = spec.CourseEdit != null,
             StartCourse = spec.CourseEdit?.Name,
+            Spectator = Spectator,
         });
         Log.Info("ui", $"course lab ready (Shift+F3), save {target?.ToString() ?? "off, no game folder"}");
     }
