@@ -55,8 +55,7 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 ## src/Effects/Ocean.cs
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
 grid (Gerstner swell, drifting noise normals) replaces the sea-level base sheet and the surf ring over it, which step aside through
-`csky_ocean.gdshaderinc` only where the ocean draws; the sheet's colliders stay flat. One grid per zone-gate group, a priority
-level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake and turbulence sheets,
+`csky_ocean.gdshaderinc` only where the ocean draws; C1's painted sea tiles hide the same way, while the opaque painted ramp tiles fade by their own UV (`SceneBuilder.FadeCoasts`, fed the mask's profiles here); the sheet's colliders stay flat. One grid per zone-gate group, a priority level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake and turbulence sheets,
 which no pane draws while their hull holds a wake slot on the sim clock. Owns up to 16 ship slots, nearest the eye first: a calm zone over each
 waterline (`OceanCalmZone.cs`, `OceanMovers.cs`) and the track its wake rides (`OceanWakeTrack.cs`). The shader text is
 `OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; its material binds the mask, tint, lift, surf (`surf_tex`) and zone textures, read over one `mask_rect`. `Apply` takes a new sea live, recompiling only on

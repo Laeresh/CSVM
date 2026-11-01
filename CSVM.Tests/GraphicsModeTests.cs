@@ -1,3 +1,6 @@
+using System;
+using System.Linq;
+using System.Reflection;
 using CSVM.Session.World;
 using CSVM.Utils;
 using Xunit;
@@ -196,6 +199,110 @@ public class GraphicsModeTests
             GraphicsMode.Resolve("original");
             VegetationQualitySetting.Resolve(launched, null, null);
         }
+    }
+
+    /// <summary>A scissored painted coast's world shader is an unflagged surface's in both modes. Here
+    /// because the shader text follows the process-wide mode.</summary>
+    [Fact]
+    public void AScissoredPaintedCoastTakesNoFade()
+    {
+        try
+        {
+            GraphicsMode.Set(false);
+            Assert.Equal(WorldText(false, true, paintedCoast: false), WorldText(false, true, paintedCoast: true));
+            GraphicsMode.Set(true);
+            Assert.Equal(WorldText(false, true, paintedCoast: false), WorldText(false, true, paintedCoast: true));
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+        }
+    }
+
+    /// <summary>A painted coast fades along its own UV only while the ocean is on and never for a spyglass
+    /// disc. An opaque ramp fades by a dither, a blended strip by its alpha. Neither takes the mask hide, both
+    /// keep the matte arm, and under Original each text is an unflagged surface's.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APaintedCoastFadesByItsOwnUv(bool blend)
+    {
+        try
+        {
+            GraphicsMode.Set(false);
+            Assert.Equal(WorldText(blend, false, paintedCoast: false), WorldText(blend, false, paintedCoast: true));
+            GraphicsMode.Set(true);
+            string plain = WorldText(blend, false, paintedCoast: false);
+            string coast = WorldText(blend, false, paintedCoast: true);
+            Assert.Contains("uniform vec4 coast_fade = vec4(0.0);", coast);
+            Assert.Contains($"    if (csky_ocean_on > 0.5 && coast_fade.w > 0.0 && !{CSVM.Mech3.SceneBuilder.FlatSeaEye}) {{", coast);
+            Assert.Equal(!blend, coast.Contains("if (!csky_clutter_dither_keep(FRAGCOORD.xy, coast_keep)) { discard; }", StringComparison.Ordinal));
+            Assert.Equal(blend, coast.Contains("        ALPHA *= coast_keep;", StringComparison.Ordinal));
+            Assert.DoesNotContain("csky_ocean_hides_sea(", coast);
+            Assert.Contains("    ROUGHNESS = 1.0;", coast);
+            // Every unflagged line survives in order, so the fade adds lines and changes none.
+            var lines = coast.Split('\n');
+            int at = 0;
+            foreach (var line in plain.Split('\n'))
+            {
+                while (at < lines.Length && lines[at] != line)
+                    at++;
+                Assert.True(at < lines.Length, $"the coast text lost the line '{line.TrimEnd()}'");
+                at++;
+            }
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+        }
+    }
+
+    /// <summary>A sea tile's Original text is an unflagged water surface's. Its Enhanced arm, the base sheet's
+    /// mask hide, reads the water specular the unit-test host cannot build; graphics-coast-hide holds it.</summary>
+    [Fact]
+    public void APaintedSeaTileKeepsItsOriginalText()
+    {
+        try
+        {
+            GraphicsMode.Set(false);
+            Assert.Equal(WorldText(false, false, paintedCoast: false, water: true), WorldText(false, false, paintedCoast: true, water: true));
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+        }
+    }
+
+    /// <summary>The fade a profile gives a painted coast: its axis, water end and crossing. Its width is
+    /// the chosen share of the stretch from the crossing to the water end, the whole stretch.</summary>
+    [Fact]
+    public void ACoastFadeComesFromItsProfile()
+    {
+        var fade = CSVM.Mech3.SceneBuilder.CoastFade(new CSVM.Mech3.CoastProfile(true, true, 0.75f, 0.6f));
+        Assert.Equal(new Godot.Vector4(1f, 1f, 0.75f, 0.25f * CSVM.Mech3.SceneBuilder.CoastFadeShare), fade);
+        var strip = CSVM.Mech3.SceneBuilder.CoastFade(new CSVM.Mech3.CoastProfile(false, false, 0.25f, 0.1f));
+        Assert.Equal(new Godot.Vector4(0f, 0f, 0.25f, 0.25f * CSVM.Mech3.SceneBuilder.CoastFadeShare), strip);
+        Assert.Equal(1f, CSVM.Mech3.SceneBuilder.CoastFadeShare);
+        Assert.True(CSVM.Mech3.SceneBuilder.IsFadedStrip("beach1.tif"));
+        Assert.False(CSVM.Mech3.SceneBuilder.IsFadedStrip("shore1.tif") || CSVM.Mech3.SceneBuilder.IsFadedStrip("cliff01_trans2"));
+    }
+
+    // A lit, fogged, textured world surface, the painted coasts' case.
+    private static string WorldText(bool blend, bool scissor, bool paintedCoast, bool water = false)
+    {
+        var method = typeof(CSVM.Mech3.SceneBuilder).GetMethod("BiasShaderCode", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var args = method.GetParameters().Select(p => p.ParameterType == typeof(bool)
+            ? (object)(p.Name switch
+            {
+                "textured" or "lit" or "fogged" => true,
+                "blend" => blend,
+                "scissor" => scissor,
+                "paintedCoast" => paintedCoast,
+                "water" => water,
+                _ => false,
+            })
+            : Activator.CreateInstance(p.ParameterType)!).ToArray();
+        return (string)method.Invoke(null, args)!;
     }
 
     private static CSVM.Effects.WeatherState.ZoneWeather Zone(Godot.Color fog)

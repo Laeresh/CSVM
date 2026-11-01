@@ -50,6 +50,7 @@ its own predicate, because the colliders and the tile census read that classific
 | 6 | Where the waves stop on a texture whose colour fades with no step | **C1: at the rock overlay's edge**, `cliff01_trans2`'s alpha 0.5, so `water1_trans*` is sea up to the overlay; **C3's cliff tiles: where the colour first leaves the painted water** (the 10 % point, v 0.777 and 0.762). Alpha strips (`shore1`, `shore_trans`, `beach1`, `cliff01_trans2`) stop at alpha 0.5 on their water side. Chosen from a montage of the candidate lines on the textures |
 | 7 | C3's corner tile `cliff1_watertrans3`, whose water is a wedge no one-axis crossing places | **Left land, as today**: 36 polygons, 0.16 km², 7 % water texels; no two-dimensional water map |
 | 8 | Whether the water washes over the painted beach and rocks | **Yes, in this plan, with spray at the cliffs** (C23, C24). The swash is drawn opaque by the coast textures' own shader, not by a transparent ocean: a transparent ocean loses the depth write SSR and TAA read, and sorts against the alpha-blended strips |
+| 9 | How the coast textures give way to the waves | **By their own texture coordinate, not by the mask.** The mask still drives the waves. The alpha strips and C1's rock overlay take no hide and keep their own soft alpha over the waves, except that `beach1`'s alpha also fades past its crossing, thinning the grey haze its water side lays over the waves. C3's opaque cliff tiles fade out along their own UV by a dithered discard that TAA smooths, across the whole stretch from the crossing to their water edge. C1's sea tiles keep the base sheet's mask hide: discarded whole they open holes in the overlay's gaps, where the mask calls the ground land. The mask-driven hide on every coast had cut the painted fringe to sawteeth and staircases (C3's strip and cliffs, C2's decal); chosen from the C21 montages |
 
 ## ⚠ Read this before implementing anything
 
@@ -131,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the coast steps aside
 
-21. ☐ The painted tiles and strips carry the ocean hide, discarding only where the mask says sea (#270)
+21. ☑ The painted tiles and strips give way to the waves by their own texture coordinate, C1's sea tiles by the mask (#270)
 22. ☐ The look at the painted coasts in C1, C2 and C3, judged at the controls (#270)
 23. ☐ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
 24. ☐ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
@@ -473,6 +474,34 @@ before and after.
 # Wave C, the coast steps aside
 
 ## C21 ☐ The painted tiles and strips carry the ocean hide
+
+**Landed.** Decision 9, after a first build gave every painted coast the mask-driven hide and cut the
+painted fringe to sawteeth and staircases. `SceneBuilder.IsPaintedCoastTexture` sets a painted-coast
+flag (its own key bit, beside `oceanBase` and `oceanSurf`, never through `waterLit`, so sand and rock
+stay matte) that C23 can reuse. What a coast does follows from flags already in its key: C1's sea tiles
+take the base sheet's mask hide; C3's opaque cliff tiles fade out along their own UV past their
+crossing by a dithered discard (`csky_clutter_dither_keep`), across the whole stretch to their water
+edge (`CoastFadeShare` 1.0, the author's pick); `beach1`'s alpha fades the same way, thinning its grey
+haze over the waves; `shore1`, `shore_trans` and `cliff01_trans2` (the C2 decal and the C1 overlay) keep
+their authored alpha. The fade parameters (`uniform vec4 coast_fade`: axis, water end, crossing,
+width) come from the mask's own profiles through `SceneBuilder.FadeCoasts`, called by `Ocean.Create`
+after the bake, so the tiles and the waves place the same crossing. All of it runs only under Enhanced
+with the ocean on and keeps the FlatSeaEye exemption; the Original text is byte-identical.
+
+**Verified.** `dotnet build` 0 warnings; `dotnet test` 7968 passed, 0 failed, 6 skipped, with unit
+tests for the ramp's dither, the strip's alpha fade, the scissored strip taking none, the sea tile's
+Original text and the fade parameters from the profile. In-engine `graphics-coast-hide` (new, C1, C2
+and C3) and `graphics-ocean-switch` pass, engine errors clean: C1 17 coast materials, 13/13 sea tiles
+hiding, 4/4 overlay kept; C2 14/14 `beach1` faded, 6/6 `cliff01_trans2` kept; C3 14/14 cliff tiles
+faded, 18/18 strips kept; every land coast matte; no ocean at flat water; under Original no coast reads
+the ocean. Goldens: 36 held; `c1-lake-enhanced` (3b69049394b51460a410fe50a7351116) and
+`c1-rocket-hit-enhanced` (9f238982e54cde130e8ff794b77e2f0a) moved, pixel-identical on re-render, not
+re-pinned until D31. Montages at the six poses went to the author: C2's strip, beach and decal and C3's
+strip draw as before C21 or better, C3's cliff tiles give way along their gradient, C1's overlay rock
+lies over the waves. Owed to C22: the dither and the beach fade over frames (TAA, flicker), and the
+calm band at C1 and C3's cliffs.
+
+**Original approach (kept for reference).**
 
 **Goal.** Under Enhanced at `waves`, the water side of every painted tile and strip steps aside for the
 waves, and the land side keeps drawing.

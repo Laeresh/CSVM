@@ -122,6 +122,7 @@ public sealed partial class Ocean : Node3D
             return null;
         }
         double bakeMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        scene.FadeCoasts(mask.CoastProfiles);
         var baseTex = textures.Find(mask.BaseTexture);
 
         bool zoned = mask.ZoneTexture != null;

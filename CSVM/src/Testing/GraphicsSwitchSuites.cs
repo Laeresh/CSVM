@@ -71,6 +71,15 @@ internal static class GraphicsSwitchSuites
     // steinmann ship's hull.
     private static readonly string[] RampChapters = { "C2", "C5" };
 
+    // The painted coast textures each chapter lays (analysis/painted-coasts/FINDINGS.md). C1 has opaque tiles
+    // under a rock overlay pass, C2 a beach and a rock decal, C3 blended strips and opaque cliff tiles.
+    private static readonly (string Chapter, string[] Textures)[] PaintedCoastChapters =
+    {
+        ("C1", new[] { "cliff01_trans2", "water1_trans1", "water1_trans2" }),
+        ("C2", new[] { "beach1", "cliff01_trans2" }),
+        ("C3", new[] { "cliff1_watertrans", "cliff1_watertrans2", "shore1", "shore_trans" }),
+    };
+
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
@@ -1381,6 +1390,66 @@ internal static class GraphicsSwitchSuites
                 flat.Close();
             }
             ctx.WriteArtifact("test-graphics-ocean-switch.txt", report.ToString());
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-coast-hide",
+        "under Enhanced at water quality waves only C1's sea tiles among the painted coasts of C1, C2 and C3 carry "
+        + "the mask's hide, so they step aside wherever the ocean draws and their rock overlay never opens onto "
+        + "nothing; C3's opaque cliff tiles and C2's beach1 fade along their own UV with the fade the ocean mask's "
+        + "profile gives, and the other strips and the cliff01_trans2 rock edge keep their alpha with no fade; the land "
+        + "ones stay on the matte arm; at flat water no ocean stands, so nothing steps aside; switched to Original no "
+        + "coast material reads the ocean at all")]
+    internal static void CoastHideFollowsSwitch(TestContext ctx)
+    {
+        foreach (var (chapter, _) in PaintedCoastChapters)
+            RequireData(ctx, chapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        var report = new StringBuilder();
+        try
+        {
+            foreach (var (chapter, textures) in PaintedCoastChapters)
+            {
+                WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+                var rig = Open(ctx, enhanced: true, chapter: chapter);
+                try
+                {
+                    if (!rig.Built)
+                    {
+                        ctx.Check(false, $"the Enhanced {chapter} session builds");
+                        continue;
+                    }
+                    var enhanced = Coasts(rig, Effects.OceanMask.Live?.CoastProfiles);
+                    ctx.Check(rig.Session.Ocean?.Built == true, $"{chapter} at waves stands its ocean");
+                    ctx.Check(textures.All(t => enhanced.Textures.Any(n => n.StartsWith(t + " ", StringComparison.OrdinalIgnoreCase))),
+                        $"{chapter} builds a material for every painted coast texture it lays ({enhanced.Names}, {string.Join(",", textures)} expected)");
+                    ctx.Check(enhanced.Materials > 0 && enhanced.Hidden == 0,
+                        $"{chapter} under Enhanced: no painted coast but a sea tile carries the mask's hide ({enhanced})");
+                    ctx.Check(enhanced.SeaHidden == enhanced.Sea && enhanced.Faded == enhanced.Faders && enhanced.KeptWhole == enhanced.Kept,
+                        $"{chapter} under Enhanced: sea tiles hide where the ocean draws, ramps and beach1 fade by their UV, other strips keep their alpha ({enhanced})");
+                    ctx.Check(enhanced.Land > 0 && enhanced.Matte == enhanced.Land,
+                        $"{chapter} under Enhanced: every land coast material stays matte ({enhanced})");
+                    ApplyWater(rig, WaterQualitySetting.Flat);
+                    ctx.Check(rig.Session.Ocean?.Built != true && OceansUnder(ctx.Host) == 0,
+                        $"{chapter} at flat water stands no ocean, so the csky_ocean_on gate keeps every coast fragment");
+                    Switch(rig, false);
+                    var original = Coasts(rig, null);
+                    ctx.Check(original.Materials == enhanced.Materials && original.ReadsOcean == 0,
+                        $"{chapter} switched to Original: no painted coast material reads the ocean ({original})");
+                    report.AppendLine($"{chapter} enhanced  {enhanced}\n{chapter} original  {original}");
+                }
+                finally
+                {
+                    rig.Close();
+                }
+            }
+            ctx.WriteArtifact("test-graphics-coast-hide.txt", report.ToString());
         }
         finally
         {
@@ -3323,6 +3392,48 @@ internal static class GraphicsSwitchSuites
         ctx.Check(sea.Surf > 0 && sea.SurfHidden == (enhanced ? sea.Surf : 0),
             $"{what}: {(enhanced ? "every" : "no")} surf ring material carries the hide ({sea.SurfHidden} of {sea.Surf} hiding)");
 
+    // The painted coasts' materials as the world builder named them, with each texture's alpha arm. They are
+    // sorted into sea tiles, faders (opaque ramps and beach1) and kept strips, by how each gives way. A fader
+    // counts only with the fade `profiles` gives it. Also how many land ones keep the matte arm's roughness.
+    private static CoastReading Coasts(Rig rig, IReadOnlyDictionary<string, CoastProfile>? profiles)
+    {
+        var seen = new HashSet<ShaderMaterial>();
+        var textures = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        int hidden = 0, readsOcean = 0, sea = 0, seaHidden = 0, faders = 0, faded = 0, kept = 0, keptWhole = 0, land = 0, matte = 0;
+        foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            if (!Mech3.SceneBuilder.IsPaintedCoastTexture(texture) || !seen.Add(material))
+                continue;
+            string code = material.Shader?.Code ?? "";
+            string stem = System.IO.Path.GetFileNameWithoutExtension(texture);
+            string alpha = code.Contains("ALPHA_SCISSOR_THRESHOLD", StringComparison.Ordinal) ? "cutout"
+                : code.Contains("    ALPHA = ", StringComparison.Ordinal) ? "blended" : "opaque";
+            textures.Add($"{stem} {alpha}");
+            bool hides = code.Contains(HideCall, StringComparison.Ordinal);
+            readsOcean += code.Contains("csky_ocean", StringComparison.Ordinal) || code.Contains("coast_fade", StringComparison.Ordinal) ? 1 : 0;
+            if (TextureArchive.IsPaintedSeaTile(stem))
+            {
+                sea++;
+                seaHidden += hides ? 1 : 0;
+                continue;
+            }
+            hidden += hides ? 1 : 0;
+            land++;
+            matte += code.Contains("    ROUGHNESS = 1.0;", StringComparison.Ordinal) ? 1 : 0;
+            var fade = material.GetShaderParameter("coast_fade").AsVector4();
+            if (alpha != "opaque" && !Mech3.SceneBuilder.IsFadedStrip(stem))
+            {
+                kept++;
+                keptWhole += fade.W <= 0f ? 1 : 0;
+                continue;
+            }
+            faders++;
+            faded += code.Contains("coast_fade.w > 0.0", StringComparison.Ordinal) && fade.W > 0f
+                && profiles != null && profiles.TryGetValue(stem, out var profile) && fade == Mech3.SceneBuilder.CoastFade(profile) ? 1 : 0;
+        }
+        return new CoastReading(seen.Count, hidden, readsOcean, sea, seaHidden, faders, faded, kept, keptWhole, land, matte, textures);
+    }
+
     // The base sheet's materials as the world builder named them, by texture and shader text. Also
     // how many carry the hide and are drawn, and the surf ring's materials and how many of them hide.
     private static SeaReading Sea(Rig rig)
@@ -3721,6 +3832,16 @@ internal static class GraphicsSwitchSuites
     }
 
     private sealed record SheetReading(int Sampled, int Missed, int Casting, int Ramps, int RampMissed, float RampShortfall, Vector3? FlatSea, string Examples);
+
+    private sealed record CoastReading(int Materials, int Hidden, int ReadsOcean, int Sea, int SeaHidden, int Faders, int Faded,
+        int Kept, int KeptWhole, int Land, int Matte, IReadOnlyCollection<string> Textures)
+    {
+        public string Names => string.Join(",", Textures);
+
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Materials} painted coast material(s), {Hidden} other(s) with the mask hide, {ReadsOcean} reading the ocean; sea tiles {SeaHidden}/{Sea} hiding, "
+            + $"faders {Faded}/{Faders} faded by the profile, kept strips {KeptWhole}/{Kept} with no fade; {Land} land, {Matte} matte; {Names}");
+    }
 
     private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census, int Surf, int SurfHidden)
     {
