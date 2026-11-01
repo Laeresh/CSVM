@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the mask reads the painted coast
 
-11. ☐ A shore U per coast texture, read from the texture's own profile at bake time (#270)
+11. ☑ A shore U per coast texture, read from the texture's own profile at bake time (#270)
 12. ☐ A painted-coast kind in the mask: sea on the water side of the iso-line with surf coverage, shore on the land side (#270)
 13. ☐ The iso-line is a coastline segment for the exact shore distance (#270)
 
@@ -268,6 +268,24 @@ sea-level test makes a candidate.
 # Wave B, the mask reads the painted coast
 
 ## B11 ☐ A shore U per coast texture, read from the texture's own profile at bake time
+
+**Landed.** `CoastProfile` (`CSVM/src/Mech3/CoastProfile.cs`), an engine-free reduction of a texture's
+authored pixels to its coast axis, water end, crossing and fade. `TextureArchive.CoastProfileOf` caches
+it per texture and base sheet, reading the archive's own record (the pixels `FindImage(authored: true)`
+wraps), so an HD pack cannot move it. The painted coasts are the name list `PaintedCoastline` (`beach1`,
+`cliff01_trans2`, `cliff1_watertrans`, `cliff1_watertrans2`, `shore1`, `shore_trans`); C1's
+`water1_trans*` are `IsPaintedSeaTile`; `cliff1_watertrans3` and `shore1_end` (only on C4's raised lake,
+517 to 709 m) are not listed. `Ocean.Create` passes the archive into `OceanMask.Bake`, which fills
+`CoastProfiles` once the base sheet is chosen and logs each profile once.
+
+**Verified.** Each chapter's bake under Enhanced at `waves` logs, against the table below:
+C1 `cliff01_trans2` V, water 1, 0.602 (A2's row reading is 0.617, inside one 1/64 texel); C2 `beach1`
+V, 0, 0.121; C2 `cliff01_trans2` U, 0, 0.398, fade 0.422; C3 `cliff1_watertrans` V, 1, 0.781, fade
+0.658; `cliff1_watertrans2` V, 1, 0.768, fade 0.613; `shore1` U, 0, 0.184; `shore_trans` U, 0, 0.195.
+`CoastProfileTests` pins five synthetic cases and the seven real textures through `[GameFilesTheory]`
+rows that ran against the install. The complete battery runs on the merged tree at the wave's end.
+
+**Original approach (kept for reference).**
 
 **Goal.** Each painted-coast texture carries the coordinate, along whichever UV axis runs across the
 coast (U for C3's strips, V for C2's `beach1` and C3's cliff tiles), at which it crosses from water

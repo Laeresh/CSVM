@@ -117,6 +117,11 @@ internal sealed class OceanMask
 
     public int SolidTriangles { get; private set; }
 
+    /// <summary>Each painted coast's profile (<see cref="TextureArchive.CoastProfileOf"/>) by archive
+    /// name, read against <see cref="BaseTexture"/>. A texture this chapter's archive lacks, or whose
+    /// pixels give no crossing, is absent.</summary>
+    public Dictionary<string, CoastProfile> CoastProfiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The visual layer sets the base sheets are drawn on, one per zone group. The zone
     /// gate culls a whole group per camera, so the ocean over it draws on the same layers.</summary>
     public List<uint> ZoneLayers { get; } = new();
@@ -167,8 +172,9 @@ internal sealed class OceanMask
     /// <summary>Bakes the mask over the world under <paramref name="root"/>, or null when that world
     /// has no sea-level base sheet. It skips the subtrees in <paramref name="skip"/> and the
     /// <paramref name="movers"/> found to be hulls on the sea. The surfaces are read through
-    /// <paramref name="scene"/>, which holds the arrays it committed.</summary>
-    public static OceanMask? Bake(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
+    /// <paramref name="scene"/>, which holds the arrays it committed, and the painted coasts'
+    /// profiles through <paramref name="textures"/>.</summary>
+    public static OceanMask? Bake(Node3D root, SceneBuilder scene, TextureArchive textures, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         // The world is static. An ocean rebuilt over it, after a live switch or a Water Quality
         // change, reuses the first bake. The frame path never pays it twice.
@@ -181,7 +187,7 @@ internal sealed class OceanMask
                 kept.Mask.Timing = "reused";
             return kept.Mask;
         }
-        var mask = BakeNew(root, scene, skip, movers);
+        var mask = BakeNew(root, scene, textures, skip, movers);
         // ⚠ Do not drop this collection. Reading MeshInstance3D.Mesh mints a managed wrapper for
         // every mesh whose wrapper was already collected, and each holds its mesh until collected.
         // A short run that quits first leaves hundreds alive, and Godot's exit check aborts.
@@ -254,7 +260,7 @@ internal sealed class OceanMask
     private static float Red(Image image, int x, int y) =>
         Mathf.Round(image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1)).R * 255f);
 
-    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
+    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, TextureArchive textures, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         long t0 = Stopwatch.GetTimestamp();
         var names = new Dictionary<Material, string>();
@@ -274,6 +280,13 @@ internal sealed class OceanMask
                 best = count;
                 result.BaseTexture = name;
             }
+        }
+        foreach (var name in TextureArchive.PaintedCoasts)
+        {
+            if (textures.CoastProfileOf(name, result.BaseTexture) is not { } coast)
+                continue;
+            result.CoastProfiles[name] = coast;
+            Log.Info("world", $"ocean: coast profile {name} axis={(coast.AlongV ? "V" : "U")} water={(coast.WaterAtOne ? 1 : 0)} crossing={coast.Crossing:0.000} fade={coast.Fade:0.000}");
         }
         var uvSamples = walker.UvSamples;
         if (uvSamples.Count > 0)

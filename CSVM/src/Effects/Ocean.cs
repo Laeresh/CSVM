@@ -115,7 +115,7 @@ public sealed partial class Ocean : Node3D
         string maskPng)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        var mask = OceanMask.Bake(worldRoot, scene, skip, movers);
+        var mask = OceanMask.Bake(worldRoot, scene, textures, skip, movers);
         if (mask == null)
         {
             Log.Info("world", $"ocean: no sea-level base sheet, not built");

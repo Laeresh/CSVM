@@ -22,7 +22,16 @@ stored-name quirks (20-char truncation prefix match, the fork's trailing doubled
 `LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the texture
 header, the one reader that sees the `Simple` textures. The header also supplies the raw `RenderFlags` word, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
 `Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
-bias for `Launcher`. HD replacements are looked up by the set's `Archive` name (`c1/rtexture15`) and the texture's, never a path. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+bias for `Launcher`. HD replacements are looked up by the set's `Archive` name (`c1/rtexture15`) and the texture's, never a path. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. `CoastProfileOf` reads and caches a `PaintedCoasts` texture's `CoastProfile` off its authored record, never an HD replacement, against a base sheet's mean colour; `IsPaintedSeaTile` names C1's coast tiles, sea with no crossing. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+
+## src/Mech3/CoastProfile.cs
+Where a painted-coast texture crosses from water to land, engine-free over a `TextureImage`'s pixels: the UV axis whose
+column or row means vary most, the water end, the crossing and the fade from the 10 % to the 90 % point, each profile
+box-filtered over 5 texels and its ends averaged over 8. An alpha strip's water end is the transparent end whose colour
+is nearer the base sheet's mean, and it crosses at mean alpha 0.5, read only up to its opaque peak, as a strip may fade
+at both edges. An opaque ramp's water end is the end nearer that colour, and it crosses at the 10 % point of its colour
+distance normalised to its own two ends, since its painted water sits off the sheet's colour. `TextureArchive.CoastProfileOf`
+caches it; `CoastProfileTests`. Figures: `analysis/painted-coasts/FINDINGS.md`.
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
