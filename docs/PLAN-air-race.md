@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Course file format, loader for both sources, content hash, terms
 2. ☑ Gate apertures from course gates, with a directional crossing test
-3. ☐ Strict-order course run with a flying start
+3. ☑ Strict-order course run with a flying start
 4. ☐ Touch penalty, +3 s debounced, no collision
 5. ☐ Course bests keyed by layout hash, with penalty count
 6. ☐ `--course=<chapter>/<name>` launch under `--stunt`
@@ -226,7 +226,36 @@ battery shows only that nothing else moved.
 or transformed per step; it must be driven by the sim clock, not wall time, or goldens and replays
 move under load.
 
-## A3 ☐ Strict-order course run with a flying start
+## A3 ☑ Strict-order course run with a flying start
+
+**Landed.** A sequence mode inside `StuntMission`, not a separate run class:
+`StuntMission.ForCourse(course)` builds a run with one `StuntZone` per sequence entry (`DzName`
+`gateN`, `Description` `Gate N`, `PathName` the pool gate id, `Position` the gate's centre), so the
+HUD, rerun control, summary, scoreboard, race events and `ScoreStore` callers read it through the
+members they already use, and no consumer of the concrete `StuntMission` type (about forty files)
+had to move to an interface. Danger Zone code paths are unchanged: every course rule is a branch on
+`Course != null`. `Update` tests only entry `CompletedCount` through its pool gate's
+`CourseAperture`, so a crossing of any other gate does nothing and one segment advances at most one
+entry, which is what keeps a repeated gate from counting twice. The clock (`Tick`) stands until the
+first entry is crossed, which also raises `RunStarted`; the last entry completes the run and stops
+it as before. `CollectTargets` offers the next entry alone, so the objective marker already points
+at it. A tap's `ReturnPose` is the last flown gate's centre heading the way it was flown (each zone
+carries a one-point `StuntGate` marker nothing can cross, so the existing fallback path computes
+it); with nothing flown it is the start. A rerun (`Reset`) starts again at entry 0. An empty
+sequence is refused: `ForCourse` logs the reason and answers null, as `Load` does for a mission with
+no zones. **Motion seam:** `GateMotion`, a `Func<int, double, Transform3D>` (pool index into
+`Course.Gates`, sim seconds) defaulting to the identity, asked each step at `SimSeconds()`, which
+defaults to `GameClock.Current.Time`, the session sim clock. **Penalty hook:** `AddPenalty(seconds)`
+adds to a running clock and counts `PenaltyCount`; a run not started, complete or stopped takes
+none, and `Reset` clears it. **Spawn:** no new path. A Stunt run spawns from the IA1 `ia.json`
+spawn list through `SpawnPicker.ChooseSpawn`, on `SpawnPicker.StartState`'s throttle 1.0 and the
+mission's `PLAYER_INIT` speed field (the Instant Action spawn rule, `docs/formats/spawns.md`); a rerun
+and a tap with nothing flown go back to `FlightController._spawnPos`. A6 makes the spawn list
+`[course.Start]`, which keeps all of that. The run is not reachable in-engine until A6 wires it.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The plane spawns airborne at cruise speed at the course's start point; only the next
 sequence entry registers; the clock starts on the first entry and stops on the last; rerun respawns
@@ -240,11 +269,18 @@ start, reset and finish events (`StuntMission.cs:136-148`) and offers `ForAnothe
 
 **Approach.** <TODO: the seam. Either a sequence mode inside `StuntMission` or a separate run class
 raising the same events the HUD, rerun and score code consume; decide after reading those
-consumers.> Danger Zone runs keep their order-free rule and spawn-started clock.
+consumers.> Danger Zone runs keep their order-free rule and spawn-started clock. The seam is
+settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: a contained change to one engine-free class with unit
+tests; the session wiring is A6's.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseRunTests"`
+(in-order advance, out-of-order and wrong-way crossings ignored, a repeated gate once per crossing,
+the clock from the first entry to the last, reset to entry 0, an empty sequence refused, the motion
+asked at the sim time, the next entry the only target, the tap's return, the penalty hook, an
+independent copy), then the complete unit tests, whose Stunt tests show Danger Zone runs unchanged.
+No engine path builds a course run yet, so the battery shows only that nothing else moved.
 
 **⚠ Traps.** A gate repeated in the sequence must not register twice from one crossing.
 
@@ -259,6 +295,8 @@ HUD use.
 would take the normal crash damage, which Decision 5 rejects.
 
 **Approach.** Create no collider; test the plane against each element's volume per physics step.
+A3 landed the clock side: `StuntMission.AddPenalty(seconds)` adds to a running course clock and
+counts `PenaltyCount`, so a touch calls it with 3 s and raises A4's own touch event.
 <TODO: the volume shapes (capsule per pylon, torus distance for a rim, sphere per balloon) and the
 plane's extent used.>
 
@@ -278,7 +316,9 @@ penalties, with the penalty count beside it; editing a course starts a fresh boa
 keyed chapter, mission and plane (reported by an exploration agent, not re-read); `StuntSummary.cs`
 shows a finished run against the stored best.
 
-**Approach.** Extend the key for course runs; Danger Zone keys stay as they are. <TODO: the key
+**Approach.** Extend the key for course runs; Danger Zone keys stay as they are. A course run is a
+`StuntMission` whose `Course` is set (A3): `Course.Hash`, `Course.Chapter` and `Course.Name` give
+the key, `Elapsed` already includes penalties, and `PenaltyCount` is the count. <TODO: the key
 shape and whether old score files need a migration.>
 
 **Model recommendation.** <TODO: not settled in the grilling.>
@@ -295,7 +335,13 @@ shape and whether old score files need a migration.>
 as objectives (`docs/cli.md:166`); Stunt Flying flies the chapter's `IA1` world.
 
 **Approach.** <TODO: which mission world a course flies (IA1 assumed), and the flag's wiring and its
-`docs/cli.md` bullet within the bullet cap.>
+`docs/cli.md` bullet within the bullet cap.> The run side is A3's: in `GameSession`, where
+`StuntMission.Load` builds `stuntZones`, a resolved course builds `StuntMission.ForCourse(course)`
+instead (null for an empty sequence, already logged: fly free or refuse the launch), and B11's
+motion is bound as `GateMotion = (g, t) => <B11's function>(course.Gates[g], t)`. The spawn list
+`_spawnPicker.LoadSpawnList` answers is replaced by `[course.Start]` with spawn base 0, so
+`ChooseSpawn`, `StartState` (throttle 1.0, `PLAYER_INIT` speed), the rerun count's walk and every
+respawn land on the start point through the existing path.
 
 **Model recommendation.** <TODO: not settled in the grilling.>
 
@@ -352,7 +398,11 @@ carries a direction chevron in the world and the gate after it is dimly highligh
 are `Flight/Hud/EdgeMarker.cs`, `MarkerDraw.cs` and `UI/Overlays/MarkerOverlay.cs` (reported by an
 exploration agent, not re-read).
 
-**Approach.** <TODO: after A3's seam is chosen.>
+**Approach.** A3's seam: a course run is a `StuntMission` from `ForCourse`, one zone per sequence
+entry. The next entry is `Zones[CompletedCount]`, its gate `Course.Gates` by `PathName` (the pool
+id) with `Course.Sequence[CompletedCount].Direction`; `TotalCount` is the entry count and `Elapsed`
+the clock. `CollectTargets` already offers only the next entry, so the objective marker follows
+it. Until B13 the status line reads `ZONES n/N` and the flash `Gate n CLEARED`. <TODO: the rest.>
 
 **Model recommendation.** <TODO: not settled in the grilling.>
 

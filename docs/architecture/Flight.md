@@ -808,8 +808,8 @@ null where a mission authors none), `Update` requires both polygon-plane crossin
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
 `Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick), `RunReset` and `RunStopped` (`Stop`) feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
-apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
-rest of what a run draws, and `StuntScoreboard` for what it scores.
+apart from its logging. `ForCourse` builds the strict-order run over a `Course` (null for an empty sequence): one zone per sequence entry (`Gate n`), so every consumer above reads it unchanged, `Update` tests only entry `CompletedCount` through its `CourseAperture` at `GateMotion(pool index, SimSeconds())` (identity until wired; `SimSeconds` is `GameClock.Time`), the clock starts on the first entry, `CollectTargets` offers the next entry alone, `ReturnPose` is the last gate's centre, and `AddPenalty` adds to a running clock with `PenaltyCount`.
+Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the rest of what a run draws, and `StuntScoreboard` for what it scores. Coverage of the course run: `CSVM.Tests/CourseRunTests.cs`.
 
 ## src/Flight/Modes/StartCount.cs
 A run's start count, engine-free and one per seat: `Begin` takes the figures (`Rerun` is 3, 2, 1;

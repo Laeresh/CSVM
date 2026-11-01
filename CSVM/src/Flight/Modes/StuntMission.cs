@@ -107,7 +107,8 @@ public sealed class StuntGate
 /// <c>dzN</c>'s world position is a point marker in the chapter gamez, under the identity World
 /// root. Its display strings come from targets.json through the message table. Detection,
 /// completion and the objective-target feed (<see cref="CollectTargets"/>); the run HUD and timed
-/// scoring build on this.
+/// scoring build on this. A course run is built by <see cref="ForCourse"/> instead, in strict
+/// sequence order with one zone per sequence entry.
 /// </summary>
 public sealed class StuntMission
 {
@@ -127,11 +128,24 @@ public sealed class StuntMission
 
     private readonly List<StuntZone> _zones;
     private readonly HashSet<StuntGate> _crossedGates = new();
+
+    // A course run's apertures, one per pool gate, and each sequence entry's pool index. Empty on a
+    // Danger Zone run, which is how every course branch below knows which rule it runs.
+    private readonly CourseAperture[] _apertures = Array.Empty<CourseAperture>();
+    private readonly int[] _entryGates = Array.Empty<int>();
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
     private bool _clockStarted;
 
     private StuntMission(List<StuntZone> zones) => _zones = zones;
+
+    private StuntMission(List<StuntZone> zones, Course course, CourseAperture[] apertures, int[] entryGates)
+    {
+        _zones = zones;
+        Course = course;
+        _apertures = apertures;
+        _entryGates = entryGates;
+    }
 
     /// <summary>Fired once per zone the moment it is flown through (scoring records a split).</summary>
     public event Action<StuntZone>? ZoneCompleted;
@@ -139,7 +153,8 @@ public sealed class StuntMission
     /// <summary>Fired once when the last zone completes (stops the clock / shows the board).</summary>
     public event Action? RunCompleted;
 
-    /// <summary>Fired on the first <see cref="Tick"/> of a run, the step its clock starts.</summary>
+    /// <summary>Fired on the step a run's clock starts: its first <see cref="Tick"/>, or a course
+    /// run's crossing of its first entry.</summary>
     public event Action? RunStarted;
 
     /// <summary>Fired by <see cref="Reset"/>: the run so far is thrown away.</summary>
@@ -162,12 +177,30 @@ public sealed class StuntMission
     /// <summary>Elapsed run time, seconds. It starts at GO: a run behind a <see cref="StartCount"/>
     /// reads 0 until the count hands over. Once started the clock never stops: <see cref="Tick"/>
     /// advances it every physics frame, through the crash freeze, until the run is complete.
-    /// A tapped respawn keeps it, like the zones; a held one calls <see cref="Reset"/>.</summary>
+    /// A tapped respawn keeps it, like the zones; a held one calls <see cref="Reset"/>. A course
+    /// run's clock starts on crossing its first entry instead.</summary>
     public float Elapsed { get; private set; }
 
     /// <summary>The one-shot run-start line the marker HUD shows ("Fly through all the Danger
     /// Zones to win!"), resolved at load from the message table. Empty if the table is absent.</summary>
     public string IntroLine { get; private set; } = "";
+
+    /// <summary>The authored course this run flies in sequence order, or null on a Danger Zone run.
+    /// Each sequence entry is one <see cref="Zones"/> entry, so the next entry is
+    /// <see cref="CompletedCount"/>.</summary>
+    public Course? Course { get; }
+
+    /// <summary>Penalties added by <see cref="AddPenalty"/> this run; their time is in <see cref="Elapsed"/>.</summary>
+    public int PenaltyCount { get; private set; }
+
+    /// <summary>A course gate's idle motion in its own frame: pool index into
+    /// <see cref="Course.Gates"/> and sim seconds in, the <c>motion</c> of
+    /// <see cref="CourseAperture.CrossedBy"/> out. The drawn gate must use the same function at the
+    /// same time. Identity, a still gate, until the course's motion is wired in.</summary>
+    public Func<int, double, Transform3D> GateMotion { get; set; } = static (_, _) => Transform3D.Identity;
+
+    /// <summary>The sim seconds <see cref="GateMotion"/> is asked at: the session clock, never wall time.</summary>
+    public Func<double> SimSeconds { get; set; } = static () => GameClock.Current?.Time ?? 0.0;
 
     /// <summary>Builds the stunt run for a mission: reads its ia.json <c>dzones</c>, resolves each
     /// <c>dzN</c>'s world position from <paramref name="worldGamez"/> and its display strings from
@@ -235,6 +268,50 @@ public sealed class StuntMission
         return new StuntMission(zones) { IntroLine = messages.Get(IntroMsgKey) };
     }
 
+    /// <summary>The strict-order run over an authored course. Only the next sequence entry
+    /// registers, crossed through its gate the way the entry names. The clock starts on crossing
+    /// the first entry and stops on the last. Null, with the reason logged, for a course with an
+    /// empty sequence, which the editor may save but nobody can fly.</summary>
+    public static StuntMission? ForCourse(Course course)
+    {
+        if (course.Sequence.Count == 0)
+        {
+            Log.Warn("flight", $"course {course.Chapter}/{course.Name}: the sequence is empty, nothing to fly");
+            return null;
+        }
+
+        var apertures = new CourseAperture[course.Gates.Count];
+        for (int g = 0; g < apertures.Length; g++)
+            apertures[g] = new CourseAperture(course.Gates[g]);
+        var zones = new List<StuntZone>(course.Sequence.Count);
+        var entryGates = new int[course.Sequence.Count];
+        for (int i = 0; i < entryGates.Length; i++)
+        {
+            var entry = course.Sequence[i];
+            int g = 0;
+            while (course.Gates[g].Id != entry.GateId)
+                g++; // Course.Parse refuses an entry naming no gate
+            entryGates[i] = g;
+            var gate = course.Gates[g];
+            var centre = apertures[g].Rest * (gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, gate.Height / 2f, 0f) : Vector3.Zero);
+            // A one-point polygon nothing can cross: scoring is the aperture's, and this only gives
+            // ReturnPose the gate's centre and axis.
+            var marker = new StuntGate { Vertices = new[] { centre }, Center = centre, Normal = gate.Forward };
+            zones.Add(new StuntZone
+            {
+                DzName = $"gate{i + 1}",
+                PathName = gate.Id,
+                Position = centre,
+                GreenGate = marker,
+                RedGate = marker,
+                Description = $"Gate {i + 1}",
+            });
+        }
+
+        Log.Info("flight", $"course {course.Chapter}/{course.Name}: {zones.Count} sequence entries over {apertures.Length} gate(s)");
+        return new StuntMission(zones, course, apertures, entryGates);
+    }
+
     /// <summary>"m:ss.t" run-clock formatting, shared by the marker HUD status line and the
     /// scoreboard. Invariant culture so the decimal is always a period regardless of the
     /// player's system locale (a game clock, and deterministic across screenshot runs).</summary>
@@ -265,7 +342,9 @@ public sealed class StuntMission
                 Category = z.Category,
                 Help = z.Help,
             });
-        return new StuntMission(zones) { IntroLine = IntroLine };
+        return Course != null
+            ? new StuntMission(zones, Course, _apertures, _entryGates) { GateMotion = GateMotion, SimSeconds = SimSeconds }
+            : new StuntMission(zones) { IntroLine = IntroLine };
     }
 
     /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
@@ -279,6 +358,12 @@ public sealed class StuntMission
         {
             _lastPlanePos = planePos;
             _haveLastPlanePos = true;
+            return;
+        }
+        if (Course != null)
+        {
+            CrossNextEntry(planePos);
+            _lastPlanePos = planePos;
             return;
         }
         foreach (var z in _zones)
@@ -343,6 +428,8 @@ public sealed class StuntMission
             return;
         if (!_clockStarted)
         {
+            if (Course != null)
+                return; // a course clock starts on crossing the first entry, in Update
             _clockStarted = true;
             RunStarted?.Invoke();
         }
@@ -357,9 +444,11 @@ public sealed class StuntMission
     /// so one pane's pick cannot reach another's.</summary>
     public void CollectTargets(List<AimCandidate> into)
     {
-        foreach (var z in _zones)
+        for (int i = 0; i < _zones.Count; i++)
         {
-            if (z.Completed)
+            var z = _zones[i];
+            // A course offers only its next entry, the one gate that can register.
+            if (z.Completed || (Course != null && i != CompletedCount))
                 continue;
             into.Add(new AimCandidate
             {
@@ -392,6 +481,7 @@ public sealed class StuntMission
         CompletedCount = 0;
         AllComplete = false;
         Elapsed = 0f;
+        PenaltyCount = 0;
         _clockStarted = false;
         _crossedGates.Clear();
         _haveLastPlanePos = false;
@@ -408,6 +498,16 @@ public sealed class StuntMission
             return;
         Stopped = true;
         RunStopped?.Invoke();
+    }
+
+    /// <summary>Adds <paramref name="seconds"/> to a running clock and counts one penalty. A run
+    /// not started, complete or stopped takes none.</summary>
+    public void AddPenalty(float seconds)
+    {
+        if (!_clockStarted || AllComplete || Stopped)
+            return;
+        Elapsed += seconds;
+        PenaltyCount++;
     }
 
     /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with
@@ -626,6 +726,26 @@ public sealed class StuntMission
             return false;
         gate = new StuntGate { Vertices = vertices, Center = center, Normal = normal.Normalized() };
         return true;
+    }
+
+    // A course step tests the next entry alone. One segment thus advances at most one entry, and a
+    // repeated gate never counts twice from one crossing.
+    private void CrossNextEntry(Vector3 planePos)
+    {
+        int next = CompletedCount;
+        int g = _entryGates[next];
+        var direction = Course!.Sequence[next].Direction;
+        if (!_apertures[g].CrossedBy(_lastPlanePos, planePos, direction, GateMotion(g, SimSeconds()), out _))
+            return;
+        var z = _zones[next];
+        z.ExitGate = z.GreenGate;
+        z.ExitTravel = (planePos - _lastPlanePos).Normalized();
+        if (!_clockStarted)
+        {
+            _clockStarted = true;
+            RunStarted?.Invoke();
+        }
+        Complete(z);
     }
 
     private void Complete(StuntZone z)
