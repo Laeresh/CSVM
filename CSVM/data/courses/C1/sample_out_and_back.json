@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "start": {
+    "pos": [-4974, 179, -3861],
+    "heading": 90
+  },
+  "gates": [
+    { "id": "p1", "kind": "pylons", "pos": [-5374, 128, -3861], "heading": 90, "width": 40, "height": 30 },
+    { "id": "r1", "kind": "ring", "pos": [-5774, 210, -3941], "heading": 90, "diameter": 40 },
+    { "id": "p2", "kind": "pylons", "pos": [-6174, 136.5, -3801], "heading": 90, "width": 40, "height": 30 },
+    { "id": "r2", "kind": "ring", "pos": [-6574, 188, -3861], "heading": 90, "diameter": 40 }
+  ],
+  "sequence": [
+    { "gate": "p1", "dir": "forward" },
+    { "gate": "r1", "dir": "forward" },
+    { "gate": "p2", "dir": "forward" },
+    { "gate": "r2", "dir": "forward" },
+    { "gate": "r1", "dir": "reverse" }
+  ]
+}

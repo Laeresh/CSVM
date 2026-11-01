@@ -201,6 +201,57 @@ public class SessionSpecTests
         Assert.Contains(stuntThenVs.Warnings, w => w.Message.Contains("--vs beats --stunt"));
     }
 
+    /// <summary>`--course=` is a stunt run in its chapter's IA1 world, whatever chapter or mission
+    /// was asked for, with the chapter read case-blind.</summary>
+    [Fact]
+    public void CourseIsAStuntRunInItsChaptersInstantActionWorld()
+    {
+        var s = S("--chapter=C4", "--mission=M01", "--course=c2/loop");
+        Assert.Equal(SessionMode.Fly, s.Mode);
+        Assert.True(s.Stunt);
+        Assert.Equal(("C2", "loop"), s.Course);
+        Assert.Null(s.CourseRefusal);
+        Assert.Equal("C2", s.Chapter);
+        Assert.Equal("IA1", s.Mission);
+        Assert.Equal("stunt_flying", s.Scenario);
+    }
+
+    /// <summary>Authored courses are solo only, so every way of adding a pilot refuses the launch.
+    /// The world is left alone on a refusal.</summary>
+    [Theory]
+    [InlineData("--vs")]
+    [InlineData("--players=2")]
+    [InlineData("--plane=player_fury,player_bhawk")]
+    [InlineData("--vs-bots=1")]
+    [InlineData("--net-host=127.0.0.1:47600")]
+    [InlineData("--net-join=127.0.0.1:47600")]
+    [InlineData("--stage=empty")]
+    public void CourseRefusesAnyLaunchThatIsNotSolo(string other)
+    {
+        var s = S("--course=C2/loop", other);
+        Assert.NotNull(s.Course);
+        Assert.NotNull(s.CourseRefusal);
+        Assert.Equal("C1", s.Chapter);
+    }
+
+    [Theory]
+    [InlineData("--course=loop")]
+    [InlineData("--course=/loop")]
+    [InlineData("--course=C2/")]
+    public void CourseRefusesAValueThatIsNotChapterSlashName(string arg) =>
+        Assert.Contains("<chapter>/<name>", S(arg).CourseRefusal);
+
+    /// <summary>A mode that beats flight drops the course with the stunt run, rather than refuse.</summary>
+    [Fact]
+    public void CourseIsDroppedByAModeThatBeatsFlight()
+    {
+        var s = S("--freecam", "--course=C2/loop");
+        Assert.Null(s.Course);
+        Assert.Null(s.CourseRefusal);
+        Assert.Contains(s.Warnings, w => w.Message.Contains("--course"));
+        Assert.Null(S("--stunt").Course);
+    }
+
     [Fact]
     public void VsKillsAndVsTimeDefaultToFiveAndFive()
     {

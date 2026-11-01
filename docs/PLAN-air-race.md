@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ Strict-order course run with a flying start
 4. ☑ Touch penalty, +3 s debounced, no collision
 5. ☐ Course bests keyed by layout hash, with penalty count
-6. ☐ `--course=<chapter>/<name>` launch under `--stunt`
+6. ☑ `--course=<chapter>/<name>` launch under `--stunt`
 
 ### Wave B, look and HUD
 
@@ -362,7 +362,50 @@ shape and whether old score files need a migration.>
 
 **⚠ Traps.** Scripted runs and tests override the score store path; keep that true for course keys.
 
-## A6 ☐ `--course=<chapter>/<name>` launch under `--stunt`
+## A6 ☑ `--course=<chapter>/<name>` launch under `--stunt`
+
+**Landed.** `--course=<chapter>/<name>` implies `--stunt` and flies the chapter's IA1 world, where
+Stunt Flying flies, whatever `--chapter=` or `--mission=` say; the chapter is read case-blind.
+`SessionSpec` keeps `Course` and `CourseRefusal`: a value without both parts, `--vs`, a second
+pilot (`--players=`, a `--plane=` list), bots, `--net-host`/`--net-join` and `--stage=empty` each
+refuse (Decision 22), and a mode that beats flight drops the course with a warning. `GameSession`
+resolves it before the world build (`ResolveCourse`) through `CourseLibrary.ForLaunch(dataRoot,
+det)`. A refusal, a missing or broken file (the library's error text) or an empty sequence is
+logged as an error and quits with exit 1 rather than flying free, since the Danger Zones in its
+place would pass for the course. The run is `StuntMission.ForCourse(course)` with
+`GateMotion = (g, t) => CourseMotion.Offset(course.Gates[g], t)`, and it replaces
+`StuntMission.Load` in the stunt block; the spawn list is `[course.Start]`, so the spawn, rerun and
+respawn land on the start point through `SpawnPicker`, `--pos=` still first; and
+`CourseVisuals.Build(course)` joins the session's world root. The sample is
+`CSVM/data/courses/C1/sample_out_and_back.json`: from the first `stunt_flying` spawn (heading 90,
+west), pylon gate `p1` 400 m out, ring `r1` 800 m out and 80 m right, pylon gate `p2` 1200 m out
+and 60 m left, ring `r2` 1600 m out, then back through `r1` reversed. Pylons stand on the ground
+the suite's ray reads (128 m and 136.5 m), and the rings' centres sit 50 m and 55 m above it.
+Both library reads worked in the engine: `res://` listing and loading the shipped file, and a
+game-folder file of the same name winning it. Open for A5: a course run still records its best under
+the Danger Zone key `<chapter>/IA1/<plane>` (`HumanFlightAdapter`), so a played course run can
+overwrite a Danger Zone best until A5 keys it. Open for B13: the Danger Zone photograph
+(`StuntCapture`) still latches within 15 m of each gate centre on a course run.
+
+**Verified.** <pending orchestrator run>
+
+**Model recommendation.** A mid-tier model: launch wiring along a seam A3 already cut, plus a
+scripted suite.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~SessionSpecTests"`
+(the course's world, every solo refusal, a malformed value, a mode that drops it), then the complete
+unit tests, then `.\scripts\RunTests.ps1 -Suite 'course-launch,course-visuals,stunt-scores-scripted,stunt-respawn-tap-hold,stunt-start-count,stunt-target-cycle' -SkipUnits -SkipGoldens`.
+`course-launch` (headless) reads the sample through both sources, launches
+`--course=C1/sample_out_and_back --det`, checks the spawn on the start point, the drawn gates and a
+rerun to the start, then places the aircraft short of each gate and steps it through: the second
+entry's gate and the first gate backwards count nothing with the clock at 0, each entry then counts
+in order, the clock starts within two steps of the first, each crossed gate's drawn node stands at
+the pose its crossing is scored against (a ring away from rest), and the clock stops on the last.
+⚠ A `--det` session's clock advances only in its frame callback, so the suite steps
+`GameClock.BeginFrame` and the pilot's `SimStep` itself; `GameSession._PhysicsProcess` is a no-op
+there.
+
+**Original approach (kept for reference).**
 
 **Goal.** `--stunt --course=<chapter>/<name>` flies that course in its chapter's world.
 
@@ -377,10 +420,6 @@ motion is bound as `GateMotion = (g, t) => <B11's function>(course.Gates[g], t)`
 `_spawnPicker.LoadSpawnList` answers is replaced by `[course.Start]` with spawn base 0, so
 `ChooseSpawn`, `StartState` (throttle 1.0, `PLAYER_INIT` speed), the rerun count's walk and every
 respawn land on the start point through the existing path.
-
-**Model recommendation.** <TODO: not settled in the grilling.>
-
-**Verify.** <TODO: not settled in the grilling.>
 
 **⚠ Traps.** `--vs` beats `--stunt` by fixed precedence (`docs/cli.md:167`); define what `--course`
 does with `--vs` or `--players`.

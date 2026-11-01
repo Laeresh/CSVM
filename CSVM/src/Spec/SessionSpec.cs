@@ -175,6 +175,9 @@ public sealed record SessionSpec
     // arbitration below is the only thing entitled to turn them into one.
     private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _vsArg, _damageLabArg, _detArg;
 
+    // The raw --course= value, split and checked by ResolveCourse once the mode is settled.
+    private string? _courseArg;
+
     // The two lobby types the command line can ask for, as votes MissionType is resolved from.
     private bool _ctfArg, _zvzArg;
 
@@ -205,6 +208,14 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Flight plus the mission's danger zones, a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight.</summary>
     public bool Stunt { get; private set; }
+    /// <summary><b>Resolved.</b> <c>--course=&lt;chapter&gt;/&lt;name&gt;</c>, which implies <see cref="Stunt"/>:
+    /// the authored course a stunt run flies in place of the Danger Zones, in that chapter's IA1
+    /// world. Null when absent or dropped by a mode that beats flight. Loading it is
+    /// <c>GameSession</c>'s, through <see cref="Flight.Modes.CourseLibrary"/>.</summary>
+    public (string Chapter, string Name)? Course { get; private set; }
+    /// <summary><b>Resolved.</b> Why this launch may not fly <see cref="Course"/>, null when it may.
+    /// Authored courses are solo only. <c>GameSession</c> refuses the launch on it.</summary>
+    public string? CourseRefusal { get; private set; }
     /// <summary><b>Resolved.</b> Splitscreen free-for-all deathmatch ("Dogfight"), a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight, same as
     /// <see cref="Stunt"/>. <c>--vs</c> beats <c>--stunt</c> by fixed precedence when both are
@@ -1290,6 +1301,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--node=")) { s.NodeName = arg["--node=".Length..]; s.HasContentArg = true; }
             else if (arg == "--fly") { s._flyArg = true; s.HasContentArg = true; }
             else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
+            else if (arg.StartsWith("--course=")) { s._courseArg = arg["--course=".Length..]; s._stuntArg = true; s.HasContentArg = true; }
             else if (arg == "--vs") { s._vsArg = true; s.HasContentArg = true; }
             else if (arg == "--coop") { s.Coop = true; }
             else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); s.VsKillsExplicit = true; }
@@ -2799,6 +2811,7 @@ public sealed record SessionSpec
             Players = 1;
         }
         ResolveBots();
+        ResolveCourse();
         // The menu refuses to start a Dogfight below 2 joined pilots; the CLI has no join flow to
         // gate on, so it only warns and runs with whatever --players= asked for.
         if (Versus && Players + VsBots.Count < 2)
@@ -2860,6 +2873,38 @@ public sealed record SessionSpec
         {
             Warn("core", $"--vs-bot/--vs-bots: {VsBots.Count} bots and {Players} pilot(s) here pass the {Net.NetSeats.MaxPlayers}-seat field; seating the first {room}");
             VsBots = VsBots.Take(room).ToArray();
+        }
+    }
+
+    // An authored course is solo only: a guest may not have the host's course file, and bots fly
+    // no sequence. The course names its world, its chapter's IA1, where Stunt Flying flies.
+    private void ResolveCourse()
+    {
+        if (_courseArg is not { } arg)
+        {
+            return;
+        }
+
+        if (!Stunt && !Versus)
+        {
+            Warn("core", "--course flies a stunt run, and another mode won this session; ignoring it");
+            return;
+        }
+
+        int slash = arg.IndexOf('/');
+        Course = (arg[..Math.Max(slash, 0)].ToUpperInvariant(), arg[(slash + 1)..]);
+        CourseRefusal = slash <= 0 || slash == arg.Length - 1 ? $"'{arg}' is not <chapter>/<name>"
+            : Versus ? "--vs is a Dogfight, and authored courses are solo only"
+            : Players > 1 ? $"--players={Players}: authored courses are solo only"
+            : VsBots.Count > 0 ? "--vs-bot/--vs-bots race the run, and authored courses are solo only"
+            : NetHostPort != null || NetJoin != null ? "a network session, and authored courses are solo only"
+            : EmptyStage ? "--stage=empty has no chapter world to fly it over"
+            : null;
+        if (CourseRefusal == null)
+        {
+            Chapter = Course.Value.Chapter;
+            ChapterGiven = true;
+            Mission = "IA1";
         }
     }
 

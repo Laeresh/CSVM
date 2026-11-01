@@ -1004,7 +1004,9 @@ The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped
 `<dataRoot>/Courses/<chapter>/<name>.json` in the game folder, which wins a name clash. `List`
 names a chapter's courses, `Load` parses the winning file, `Save` writes one atomically into either
 root. `ForLaunch` reads no game folder under `--det`, as no HD pack is read; a test hands in OS
-paths instead. Read `Course` for the model.
+paths instead. `Launch/GameSession.cs` is its engine reader, for `--course=`, and the
+`course-launch` suite reads the shipped `C1/sample_out_and_back` through `res://` and a
+game-folder file of that name over it. Read `Course` for the model.
 
 ## src/Flight/Modes/CourseMotion.cs
 A course gate's idle motion as a pure function of the gate and the sim time in seconds. `Rest` is the
