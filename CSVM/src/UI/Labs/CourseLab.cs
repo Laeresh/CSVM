@@ -593,7 +593,15 @@ public sealed partial class CourseLab : Node
         box.AddChild(new Label { Text = $"COURSE LAB  {_chapter}", Modulate = Amber });
 
         var openRow = new HBoxContainer();
-        _courses = new OptionButton { Name = "course_list", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        // A long title or file name trims with an ellipsis instead of widening the panel off the screen.
+        _courses = new OptionButton
+        {
+            Name = "course_list",
+            FocusMode = Control.FocusModeEnum.None,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            ClipText = true,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+        };
         openRow.AddChild(_courses);
         openRow.AddChild(Btn("Open", () =>
         {
