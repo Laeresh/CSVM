@@ -49,6 +49,7 @@ its own predicate, because the colliders and the tile census read that classific
 | 5 | Whether C22 re-judges C1's look ramp | **Yes**, the same montage: `look_from` 55 beside 0; #270 does not name it, but it may hide the tile gap as C3's ramps do |
 | 6 | Where the waves stop on a texture whose colour fades with no step | **C1: at the rock overlay's edge**, `cliff01_trans2`'s alpha 0.5, so `water1_trans*` is sea up to the overlay; **C3's cliff tiles: where the colour first leaves the painted water** (the 10 % point, v 0.777 and 0.762). Alpha strips (`shore1`, `shore_trans`, `beach1`, `cliff01_trans2`) stop at alpha 0.5 on their water side. Chosen from a montage of the candidate lines on the textures |
 | 7 | C3's corner tile `cliff1_watertrans3`, whose water is a wedge no one-axis crossing places | **Left land, as today**: 36 polygons, 0.16 km², 7 % water texels; no two-dimensional water map |
+| 8 | Whether the water washes over the painted beach and rocks | **Yes, in this plan, with spray at the cliffs** (C23, C24). The swash is drawn opaque by the coast textures' own shader, not by a transparent ocean: a transparent ocean loses the depth write SSR and TAA read, and sorts against the alpha-blended strips |
 
 ## ⚠ Read this before implementing anything
 
@@ -56,7 +57,7 @@ its own predicate, because the colliders and the tile census read that classific
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | B12, B13, C21, D31 | The mask's gaps, the hide's gate and the golden coverage are read from the code and manifest; confirm the line numbers, then implement. |
 | **Direction sound, magnitude a judgement call** | B11 | The crossings are measured (Wave A); the rule that finds them in the pixels must reproduce those figures. |
-| **Leads only, no mechanism yet** | C22 | The author's look call. |
+| **Leads only, no mechanism yet** | C22, C23, C24 | The author's look calls; C23 and C24 are new effects whose mechanism is chosen in the item. |
 
 Wave A corrected #270 in five places; the data table below carries the corrections, and
 `analysis/painted-coasts/FINDINGS.md` holds the measurements:
@@ -132,6 +133,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ The painted tiles and strips carry the ocean hide, discarding only where the mask says sea (#270)
 22. ☐ The look at the painted coasts in C1, C2 and C3, judged at the controls (#270)
+23. ☐ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
+24. ☐ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
 
 ### Wave D, landing
 
@@ -142,7 +145,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 A1, A2 and A3 are read-only measurements and can run in parallel. B11 needs A2 for the opaque-tile
 case and A1 for the strips. B12 needs B11 and A3 (which polygons are candidates). B13 needs B12's
 per-triangle iso-line. C21 needs B12, since the hide reads the mask's sea channel under the tile. C22
-needs B13 and C21. D31 is last. File contention: B12 and B13 both edit `CSVM/src/Effects/OceanMask.cs`
+needs B13 and C21. C23 needs C22 (the waterline it washes over is settled first) and edits the same
+shader generator as C21, so it follows C21 and never runs beside it. C24 needs B13's coastline and
+C23's shared breaker timing. D31 is last, pinning the goldens over C23's and C24's verdicts. File contention: B12 and B13 both edit `CSVM/src/Effects/OceanMask.cs`
 and `OceanMaskRaster.cs`, and C21 edits `CSVM/src/Mech3/SceneBuilder.cs`'s ocean-material selection;
 never run B12, B13 and C21 in parallel worktrees.
 
@@ -460,6 +465,83 @@ SHOT-49: a line called an Enhanced defect is thresholded against the same pixels
 
 **⚠ Traps.** Judge the gap itself in the mask dump, not from the current look.
 
+## C23 ☐ Swash: each breaker runs up the painted sand and flat rocks
+
+**Goal.** Under Enhanced at `waves`, each breaker that reaches a painted coast runs on up the painted
+sand and flat painted rocks as a thin foam film over darkened, wet sand, then drains back before the
+next, in time with the surf's breaking lines. The waves' geometry still ends at the coastline.
+
+**Evidence (confidence: lead-only).**
+- The breakers' timing is the `arrive` phase in the ocean fragment (`CSVM/src/Effects/OceanShader.cs:361-366`),
+  a phase on the sim clock with a still noise bend, and the wash surges as each line reaches the land
+  (`SurfSurge`, `SurfSurgeLag`, `:216-219`, `:377`). It lives in the generated ocean shader, not in
+  the shared include.
+- The coast textures' shader already reads the mask through `csky_ocean.gdshaderinc` once C21 gives
+  them the hide; the include exposes the mask's sea channel by world XZ (`csky_ocean_sea`, `:18`).
+- The mask encodes a shore distance only for open sea; land texels read 0
+  (`CSVM/src/Effects/OceanMaskRaster.cs:454`), so nothing today says how far inland a land texel is.
+
+**Approach.** Three parts.
+1. The mask measures an inland distance from the coastline segments for land texels within a swash
+   reach, in a channel or texture of its own, beside the shore distance B13 makes exact.
+2. The breakers' phase moves from the generated ocean shader into the shared include, so the ocean and
+   the coast textures read one function and the swash arrives with the line that made it.
+3. In the coast textures' shader (C21's painted-coast flag), on the land side of the coastline, the
+   swash darkens the albedo toward wet sand and lays a foam film whose reach rises and falls with the
+   phase. It stays opaque.
+<TODO: the swash reach and the wet tint come from the author's montage verdict, not a guess>.
+
+**Model recommendation.** high: a new mask channel, a moved shader function both shaders share, and a
+look the author judges.
+
+**Verify.** The Original shader text stays byte-identical. At the B12 poses, a `--shots` sequence over
+one breaker cycle shows the film running up and draining (verification.md INSTR-81: an effect living
+over frames is never judged from a still; SHOT-12: frame the time-driven surface, then perturb time).
+The ocean's own surf is unchanged by the move, its golden `c1b-ocean-enhanced` hash-identical. The
+author's verdict at the controls.
+
+**⚠ Traps.**
+- Not a transparent ocean (decision 8).
+- Moving the phase must leave the ocean shader's output bit-identical: `c1b-ocean-enhanced` holding is
+  the check.
+- Every rate stays whole per the 3600 s clock wrap, as PLAN-shore-water C23 required of the surf's.
+- The swash must not draw over solids above the water, a pier or a hull; only painted-coast
+  textures at sea level take it.
+
+## C24 ☐ Spray where the breakers meet the cliffs
+
+**Goal.** Under Enhanced at `waves`, where a painted coast ends at a cliff (C1's and C2's `cliff01`
+rock faces, C3's `cliff1` at the cliff tiles' landward edge), each breaker that reaches the cliff
+throws spray up the face and falls back, in time with the swash.
+
+**Evidence (confidence: lead-only).**
+- The cliffs rise from the painted coasts' landward edge (A2: 101 `cliff01` polygons in C1 to 3 to
+  132 m, 31 in C2 to 64 to 111 m; A3: `cliff1` with a median 84 to 90 m at the cliff tiles).
+- The original game ships water-splash ring and spray effects, played from crash sequences and leveled
+  to world axes (`EffectCatalogue.CrashSurfaceLevelAnimNames`, applied at
+  `CSVM/src/Session/World/WorldEffectsFactory.cs:883-887`), drawn by the puffer emitters
+  (`PufferEmitterFactory`).
+- B13's coastline segments locate every coast edge in world XZ, and C23 puts the breakers' phase in
+  the shared include.
+
+**Approach.** Pick the coastline segments whose solid rises steeply above the water, and drive spray
+along them on the breakers' phase. Two candidate mechanisms, chosen in the item from a montage:
+the original's own water-splash spray sprites, emitted along those segments and timed to the phase;
+or a camera-facing spray sheet in a shader at the cliff foot. <TODO: the mechanism, its cost at C1's
+101 cliff faces, and whether quay walls take spray too, from the author's montage verdict>.
+
+**Model recommendation.** high: a new effect placed from the bake's data, with a performance budget and
+a look the author judges.
+
+**Verify.** A `--shots` sequence at the C2 and C1 poses over one breaker cycle, judged by the author;
+perf `gpu_ms` at the busiest cliff pose against the baseline (verification.md PERF-9: two unchanged
+pairs for noise, then A/B back to back). Original mode draws no spray.
+
+**⚠ Traps.**
+- Spray placed per segment multiplies with C1's many short harbour edges; budget it before tuning it.
+- The original's splash defs are authored for an impact, not a cycle; reuse their sprites, not their
+  one-shot timing.
+
 # Wave D, landing
 
 ## D31 ☐ Goldens re-pinned, the battery and perf green on the merged tree
@@ -477,7 +559,8 @@ golden. The Original coast shots are `c3-island` (`:44`), `c1b-night-sea` (`:23`
 
 **Approach.** Add three shots in `analysis/goldens/manifest.json` at the B12 dump poses: a C1 coast
 tile, C2's `beach1` and a C3 `shore1` strip, each `--det --graphics=enhanced --water-quality=waves`,
-with its `exercises` field stating what it shows. Pin them after C22's verdict. Then
+with its `exercises` field stating what it shows. Pin them after C22's, C23's and C24's verdicts;
+the swash and spray move with time, so each shot's frame count is part of its pin (GOLD-4). Then
 `.\scripts\RunTests.ps1` with `-Perf` on the merged tree; re-pin only the existing goldens whose move
 is the intended change.
 
