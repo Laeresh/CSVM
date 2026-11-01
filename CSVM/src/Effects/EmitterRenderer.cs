@@ -413,9 +413,16 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // and reset by Show, so neither half has to know the emitter's own packed indices.
     private sealed class Layer
     {
+        // Floats per instance in the engine's buffer: a 3x4 transform, the colour, then the custom data.
+        private const int Stride = 20;
+
         private MultiMeshInstance3D _mmi = null!;
         private MultiMesh _mm = null!;
         private int _written;
+
+        // The frame's instances, handed to the engine in one call by Publish. Three engine calls per
+        // particle cost a busy dogfight's opening seconds about 2.4 ms a frame.
+        private float[] _buffer = [];
 
         // The buffer's size and the count last published, kept here so a frame asks the engine
         // for neither.
@@ -441,6 +448,8 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 VisibleInstanceCount = 0,
             };
             layer._capacity = capacity;
+            layer._buffer = new float[capacity * Stride];
+            layer.KeepCpuCopy();
             layer._mmi = new MultiMeshInstance3D
             {
                 Multimesh = layer._mm,
@@ -468,6 +477,8 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 _shown = 0;
                 _mm.InstanceCount = capacity;
                 _capacity = capacity;
+                System.Array.Resize(ref _buffer, capacity * Stride);
+                KeepCpuCopy();
             }
         }
 
@@ -476,15 +487,36 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         {
             if (_mm == null || _written >= _capacity)
                 return;
-            int index = _written++;
-            _mm.SetInstanceTransform(index,
-                new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), position));
-            _mm.SetInstanceCustomData(index, new Color(frame, alpha, gain, shade));
-            _mm.SetInstanceColor(index, color);
+            int at = _written++ * Stride;
+            var b = _buffer;
+            // A uniform scale and an origin, row by row: the transform the per-instance write took.
+            b[at] = size;
+            b[at + 1] = 0f;
+            b[at + 2] = 0f;
+            b[at + 3] = position.X;
+            b[at + 4] = 0f;
+            b[at + 5] = size;
+            b[at + 6] = 0f;
+            b[at + 7] = position.Y;
+            b[at + 8] = 0f;
+            b[at + 9] = 0f;
+            b[at + 10] = size;
+            b[at + 11] = position.Z;
+            b[at + 12] = color.R;
+            b[at + 13] = color.G;
+            b[at + 14] = color.B;
+            b[at + 15] = color.A;
+            b[at + 16] = frame;
+            b[at + 17] = alpha;
+            b[at + 18] = gain;
+            b[at + 19] = shade;
         }
 
         public void Publish()
         {
+            // The buffer must cover the whole capacity; the slots past the cursor are not drawn.
+            if (_mm != null && _written > 0)
+                _mm.Buffer = _buffer;
             // Written only on a change: every idle emitter publishes 0 every frame, and each write
             // is an engine call.
             if (_mm != null && _written != _shown)
@@ -495,5 +527,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             Drawn = _written;
             _written = 0;
         }
+
+        // ⚠ Keep this after every allocation. One per-instance write gives the renderer a CPU copy,
+        // which keeps the bounds (the between-emitter sort key) over the visible instances alone.
+        private void KeepCpuCopy() => _mm.SetInstanceCustomData(0, default);
     }
 }

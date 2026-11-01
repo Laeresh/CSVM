@@ -609,6 +609,7 @@
     "menu-original-controls": 0.099,
     "menu-original-controls-seats": 0.1,
     "target-mission-list": 2.853,
+    "puffer-buffer-publish": 0.01,
     "puffer-fire-glow": 1.568,
     "puffer-smoke-sun": 1.109,
     "zeppelin-panel-swap": 1.425,

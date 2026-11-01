@@ -1837,6 +1837,59 @@ internal static class PufferSuites
         PufferFogFollowsSky(ctx);
     }
 
+    [Suite("puffer-buffer-publish",
+        "a frame's particles reach the engine as one buffer with each field in the slot the engine "
+        + "reads, and the stale slots past the frame's last particle stay out of the bounds the "
+        + "between-emitter sort keys on, before and after the list grows")]
+    internal static void PufferBufferPublish(TestContext ctx)
+    {
+        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+        image.Fill(Colors.White);
+        var renderer = new MultiMeshEmitterRenderer(TextureUpload.Create(image), 1, new[] { false },
+            softParticles: false);
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 2, cullMargin: 1f);
+            var mm = owner.GetChildren().OfType<MultiMeshInstance3D>().Single().Multimesh;
+            // The far particle of the first frame stays in the buffer past the second frame's cursor.
+            // The bounds are read before any slot: a slot read gives the engine a CPU copy itself.
+            renderer.Write(0, Vector3.Zero, 1f, 0f, 1f, Colors.White);
+            renderer.Write(1, new Vector3(-50f, 0f, 0f), 2f, 0f, 0.5f, Colors.White);
+            renderer.Show(2);
+            var tint = new Color(0.25f, 0.5f, 0.75f, 0.125f);
+            renderer.Write(0, new Vector3(1f, 2f, 3f), 4f, 0f, 0.75f, tint);
+            renderer.Show(1);
+            var bounds = mm.GetAabb();
+            ctx.Check(bounds.Position.X > -10f,
+                $"the bounds cover the drawn particle alone, not the stale slot at x -50, read {bounds}");
+            var xf = mm.GetInstanceTransform(0);
+            ctx.Check(xf.Origin == new Vector3(1f, 2f, 3f) && xf.Basis == Basis.Identity.Scaled(new Vector3(4f, 4f, 4f)),
+                $"the transform slot holds the particle's size and position, read {xf}");
+            ctx.Check(mm.GetInstanceColor(0) == tint, $"the colour slot holds the particle's ramp colour, read {mm.GetInstanceColor(0)}");
+            ctx.Check(mm.GetInstanceCustomData(0) == new Color(0f, 0.75f, 1f, 0f),
+                $"the custom slot holds frame, alpha, gain and shade, read {mm.GetInstanceCustomData(0)}");
+
+            // A grow reallocates the engine's buffer, which drops its CPU copy.
+            renderer.Grow(4);
+            for (int i = 0; i < 4; i++)
+                renderer.Write(i, new Vector3(i == 3 ? -50f : i, 0f, 0f), 1f, 0f, 1f, Colors.White);
+            renderer.Show(4);
+            renderer.Write(0, new Vector3(2f, 0f, 0f), 1f, 0f, 1f, Colors.White);
+            renderer.Show(1);
+            bounds = mm.GetAabb();
+            ctx.Check(bounds.Position.X > -10f,
+                $"a grown list's bounds cover its drawn particle alone, read {bounds}");
+            ctx.Check(mm.GetInstanceTransform(0).Origin == new Vector3(2f, 0f, 0f),
+                $"a grown list publishes into its slots, read {mm.GetInstanceTransform(0).Origin}");
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+    }
+
     [Suite("puffer-draw-order",
         "the frame's particles reach the renderer farthest-first against pane 0, so a young bright "
         + "sprite paints over an old dark one at the same site")]
