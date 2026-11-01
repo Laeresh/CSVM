@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
@@ -36,6 +37,9 @@ public sealed class VersusDirector
 
     private readonly SessionSpec _spec;
     private readonly Field _field;
+    // Every seat's aircraft, by seat, refilled each step for the Deathmatch bots' objective.
+    private readonly List<RivalPlane> _rivals = new();
+    private readonly BotOrderLog _botLog = new();
 
     // Built on the host alone in a network match, since two rotations diverge on first blood.
     // A guest holds none and takes every placement off the wire.
@@ -83,6 +87,11 @@ public sealed class VersusDirector
 
     /// <summary>Zeppelin vs Zeppelin's hulls, null outside a <c>--zvz</c> network match.</summary>
     internal ZeppelinVersusRuntime? ZvzPlay { get; private set; }
+
+    /// <summary>Whether a Deathmatch bot with no target flies at the nearest enemy
+    /// (<see cref="DeathmatchBotObjective"/>). Off, it holds its course until one comes in reach.
+    /// </summary>
+    internal bool BotObjective { get; set; } = true;
 
     /// <summary>The rearm bases, null in a match whose world holds none.</summary>
     internal RearmRuntime? RearmPlay { get; private set; }
@@ -400,6 +409,7 @@ public sealed class VersusDirector
         HoldTheEnd(dt);
         ZvzPlay?.StepBots(GameClock.Current?.Time ?? 0.0);
         Flags?.StepBots();
+        StepDeathmatchBots();
         if (_matchCadence is not { } cadence)
         {
             return;
@@ -831,6 +841,50 @@ public sealed class VersusDirector
                 : null;
             pilot.Watching = watched is { } w ? seatRigs[w].Controller : null;
             PostLivesLeft(match, seat, pilot);
+        }
+    }
+
+    // A Deathmatch bot whose gunner has nothing in reach flies at the nearest enemy, heading and
+    // height. Only the machine that flies a bot gives it a pilot, so only that one steers it. A bot
+    // breaking off to rearm has its gunner disengaged and keeps its own course (#268).
+    private void StepDeathmatchBots()
+    {
+        if (_spec.MissionType != DogfightMissionType.Deathmatch || !BotObjective || Match.Completed)
+        {
+            return;
+        }
+
+        var seatRigs = _field.SeatRigs;
+        _rivals.Clear();
+        foreach (var rig in seatRigs)
+        {
+            _rivals.Add(rig.Controller is { } plane && GodotObject.IsInstanceValid(plane)
+                ? new RivalPlane(plane.WorldPosition, plane.Team, plane is { Crashed: false, Destroyed: false, Inert: false })
+                : default);
+        }
+
+        for (int seat = 0; seat < seatRigs.Count; seat++)
+        {
+            if (seatRigs[seat].Controller is not { IsBotSeat: true, Crashed: false, Pilot: { Gunner: { AutoTarget: true, Disengaged: false, Target: null } } pilot } bot
+                || !GodotObject.IsInstanceValid(bot))
+            {
+                continue;
+            }
+
+            int rival = DeathmatchBotObjective.Nearest(bot.WorldPosition, bot.Team, _rivals);
+            if (rival < 0)
+            {
+                continue;
+            }
+
+            var at = _rivals[rival].Position;
+            pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(at - bot.WorldPosition);
+            pilot.TargetAltitude = at.Y;
+            string why = $"flies at seat {rival}";
+            if (_botLog.Admit(seat, why))
+            {
+                Log.Info("flight", $"deathmatch: bot seat {seat} {why}, {bot.WorldPosition.DistanceTo(at):0} m off");
+            }
         }
     }
 

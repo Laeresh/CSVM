@@ -670,7 +670,10 @@ nothing decoded says whom one prefers, and a bot seat's gunner is armed with
 `AiGunner.PlayersPreferred` off: `AiTargetRanking.Score` then weighs a person at the base 1.0, and
 a person and a bot at equal geometry rank alike. Every other pilot keeps the 0.7. The switch gates
 the weight alone: `IsHumanPiloted` and the `"player"` role in `primary_target` and `rating_biases`
-read as before, and a bot seat's gunner carries neither field.
+read as before, and a bot seat's gunner carries neither field. A Deathmatch bot whose gunner has
+nothing in reach flies at the nearest live enemy aircraft, heading and altitude, at any range
+(`Flight/Ai/DeathmatchBotObjective.cs`); without that it would hold its spawn course for the whole
+match, since nothing else turns it.
 
 The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
 candidate past the `attackRange` it is handed, and `GunnerAcquisition`, its

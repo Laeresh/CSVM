@@ -695,6 +695,13 @@ live gas bag; otherwise its guns take broadside cannons, then turrets, then engi
 `EnemyPilot` are the snapshots it reads. `Session/World/ZeppelinVersusRuntime.cs` feeds it on the
 host and writes the pick onto `AiGunner.Target`. Read `ZvzBotObjectiveTests.cs`.
 
+## src/Flight/Ai/DeathmatchBotObjective.cs
+Where a Deathmatch bot with no target flies, a remake-only rule decided each step and engine-free:
+the nearest live hostile aircraft at any range, so a bot started past its attack radius is not left
+on its spawn course. `RivalPlane` is the seat snapshot it reads. `Session/World/VersusDirector.cs`
+feeds it and writes the heading and altitude orders; the gunner's own sweep takes the aircraft once
+it is in reach. Read `DeathmatchBotObjectiveTests.cs`.
+
 ## src/Flight/Ai/CtfBotObjective.cs
 A Capture the Flag bot's order, a remake-only rule decided each step and engine-free: a carrier
 flies home, then a bot chases an enemy carrying its team's flag. On a team of three or more, the bot
