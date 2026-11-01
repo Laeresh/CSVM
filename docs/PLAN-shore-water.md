@@ -135,7 +135,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, landing
 
-31. ◐ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
+31. ☑ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
 
 ## Dependency and parallelism notes
 
@@ -606,7 +606,13 @@ period apart (1200 restarts per wrap, each restart's offset keyed modulo 1200). 
 `foam_holes` (four) and two mask reads. Shot at the golden and 45 m corner poses as 121-frame bursts (`--shots`,
 frames 120 to 240), and at C21's C2 stack pose for D and H.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The author flew C1B on the branch with H merged: "H looks good".
+`OceanShaderTests.TheSurfsChurnRunsWholePerWrap` holds every drifting noise to whole periods of its own repeat per
+wrap with the period argument equal to the drift, the warp to 90 turns, all ten `csky_time` rates whole and the surge
+reading the arrival phase; the Ocean and SeaState unit filter passes with the default fixture unchanged;
+graphics-ocean-switch, ocean-lab, ocean-harbour-ramp and ocean-wake pass with the engine errors clean; the golden pose
+at frame 120 gives the same pixmd5 in two single runs and as frame 120 of the burst. The complete battery on the
+merged tree is D31's, with the C1B golden re-pinned to C23 and C24 together.
 
 **Original approach (kept for reference).**
 
@@ -671,7 +677,13 @@ unchanged: C2 at 3,527 texels, C1B at 1,939 (a water tower in the sea, down by u
 island, up), C1 at 304 around its harbour tugs, tanker and docks (-2.5 to +10 m), C3 at 561, C5 at 10,240. The bake's
 `distance=` reads 33 ms in C2, 31 in C1B and 73 in C1 (22.5 before C24).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The Ocean and SeaState unit filter passes 174 of 174; graphics-ocean-switch, ocean-harbour-ramp,
+ocean-wake and ocean-lab pass with the engine errors clean; the mask dumps of the seven sea chapters are
+byte-identical across five launches; in the shots the waves run to C2's east quay, the mole and the pier faces where
+a band of flat water hugged them, and the C1 and C5 city frames are unchanged. The complete battery on the merged
+tree at 7aacfd64b: units 7942 passed, engine 632 passed, 37 goldens hash-identical and `c1b-ocean-enhanced` moved by
+C23 and C24 together, re-rendered pixel-identical and re-pinned under D31. The author has not flown the branch since
+C24 landed, so the look at C2's walls in a live flight is the one check the plan leaves with them.
 
 **Original approach (kept for reference).**
 
@@ -709,22 +721,24 @@ to under `RampTop`) and each crossing face's waterline. Bound solids by a lowest
 
 # Wave D, landing
 
-## D31 ◐ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
+## D31 ☑ Goldens re-pinned, the look judged at the controls in C1B and C2, perf and the full battery
 
-**Landed.** `c1b-ocean-enhanced` is pinned to the C22 look (`ae61d7a817ee5fc78bae3016a7e3e183`,
-its exercises text naming the waves calming to the land edge and the surf's lace and lines over the
-hidden ring); it was the only shot to move at any point of the run, once after Wave A and B11 (the
-ring hidden, the waves calming from the land) and once with C22, re-rendered pixel-identical each
-time. The complete battery on the branch at fde319ed6 with `-Perf`: build clean, units 7936 passed
-and 6 skipped for data, engine 632 passed and 2 skipped with the engine errors clean, goldens 38 of
-38 hash-identical, perf 8 of 8 scenarios recorded under Original graphics (no scenario flies a ring
-chapter under Enhanced, so the stage cannot read the surf; a single-launch `--perf` A/B at the C1B
-golden pose puts the surf's `gpu_ms` inside the launch noise, C22's Verified). The look was judged
-from montages at the author's screen for C21 and C22; the live flight is owed.
+**Landed.** `c1b-ocean-enhanced` is pinned to the finished look (`f9b336f4a0f7b7930ab7f137ee2f2aef`,
+its exercises text naming the waves calming to the land edge and the surf's churning lace and lines
+over the hidden ring); it was the only shot to move at any point of the run, after Wave A and B11
+(the ring hidden, the waves calming from the land), with C22, and with C23 and C24 together,
+re-rendered pixel-identical each time. The complete battery on the branch at 7aacfd64b with
+`-Perf`: build clean, units 7942 passed and 6 skipped for data, engine 632 passed and 2 skipped
+with the engine errors clean, goldens 37 of 38 hash-identical with the one move named above and
+re-pinned, perf 8 of 8 scenarios recorded under Original graphics with every `gpu_ms` at or under
+the C22 run's (no scenario flies a ring chapter under Enhanced, so the stage cannot read the surf; a
+single-launch `--perf` A/B at the C1B golden pose puts the surf's `gpu_ms` inside the launch noise,
+C22's Verified).
 
-**Verified.** <pending the author's flight: C1B along an island shore and C2 past the sea stack
-under Enhanced at waves, watching for shimmer, the lace's scale with altitude, the lines' pacing,
-and any hole or crest at the waterline>
+**Verified.** The author flew the branch under Enhanced at waves: C1B along the island shores with
+C23's H merged, "H looks good"; C2 past the stack and along the harbour, where the flat band at the
+walls became C24. C2's walls after C24 are judged from the shots alone; that flight is the one check
+the plan leaves with the author.
 
 **Original approach (kept for reference).**
 
