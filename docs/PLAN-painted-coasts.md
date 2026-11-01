@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ A shore U per coast texture, read from the texture's own profile at bake time (#270)
 12. ☑ A painted-coast kind in the mask: sea on the water side of the iso-line with surf coverage, solid on the land side (#270)
-13. ☐ The iso-line is a coastline segment for the exact shore distance (#270)
+13. ☑ The iso-line is a coastline segment for the exact shore distance (#270)
 
 ### Wave C, the coast steps aside
 
@@ -424,6 +424,26 @@ tiles) and A3 (C3 cliffs); A1 also records C2's two `beach1` poses with the same
 
 ## B13 ☐ The iso-line is a coastline segment for the exact shore distance
 
+**Landed.** `OceanMaskRaster.Coastline` adds each `Kind.Coast` triangle's waterline, where its stored
+seaward value crosses 0, as a segment (sea tiles never cross 0 and add none). A flat solid's coast
+edges keep only the parts that lie on no painted coast's water side, found through a 128 m bucket
+index, with the raster's own barycentric tolerance; the covered stretches are sorted and merged, so
+coast order cannot change a piece, and the coastline is built once for all bands. A rising solid on
+painted water keeps its foot. The same drop applies under C1's sea tiles, where flat land edges had cut
+the distance to 1.3 m some 30 m out.
+
+**Verified.** `dotnet test` 7963 passed, 0 failed, 6 skipped; new tests pin the exact distance to a
+diagonal strip's waterline (30° and 45°, within 0.5 m) and that coplanar land under a strip's water
+adds no coastline while a rock's foot does, in both triangle orders; the whole-image oracle includes
+both at 1, 5 and 12 bands, and fails with the drop switched off. Mask dumps before and after at the
+FINDINGS.md poses: R byte-identical; G shorter at 51,022 / 40,743 / 43,552 sea texels (C1 / C2 / C3,
+median 4.4 to 5 m) and longer at 150 / 0 / 7,807 where dropped land edges had stood; G grows from the
+painted waterline at every pose, and the vertical banding on C3's strips is gone. The distance pass,
+two runs each side on a noisy machine: C1 no change beyond noise, C2 +10 ms within its spread, C3
+about +24 ms against a 10 to 13 ms spread.
+
+**Original approach (kept for reference).**
+
 **Goal.** The shore distance in front of a painted coast is exact to the painted waterline, as it is to
 a land polygon's edge since PLAN-shore-water A2.
 
@@ -507,7 +527,13 @@ same for its look ramp (`look_from` 55, `look_full` 143) against `look_from` 0 (
 **Verify.** The author's verdict at the controls, after montages at each coast (verification.md
 SHOT-49: a line called an Enhanced defect is thresholded against the same pixels in Original first).
 
-**⚠ Traps.** Judge the gap itself in the mask dump, not from the current look.
+**⚠ Traps.**
+- Judge the gap itself in the mask dump, not from the current look.
+- In C3 a band of texels reading sea with a zero shore distance sits just seaward of some coasts:
+  about 30 m out at the cliff pose near x -5325, z -2660, and at a strip near x -11780, z -8452. They
+  are solids outside every painted-coast triangle, so the shore distance rises from the waterline and
+  falls back toward them, and the waves calm there. Name their source (flat land on the sheet, a
+  rising solid) from the mask dump and the scene before judging the look.
 
 ## C23 ☐ Swash: each breaker runs up the painted sand and flat rocks
 

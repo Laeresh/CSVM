@@ -53,6 +53,9 @@ internal static class OceanMaskRaster
     // so the linear filter reads the plane on both sides of it.
     private const double LiftReach = Cell * 1.5;
 
+    // The bucket edge in metres of the painted coasts' index, about their largest triangle's span.
+    private const float CoastBucket = 128f;
+
     // Below this many rows a band's halo costs more than its thread saves.
     private const int MinBandRows = 64;
 
@@ -147,6 +150,35 @@ internal static class OceanMaskRaster
         double s = len > 0.0 ? Math.Clamp((((px - ax) * dx) + ((pz - az) * dz)) / len, 0.0, 1.0) : 0.0;
         double ex = ax + (s * dx) - px, ez = az + (s * dz) - pz;
         return Math.Sqrt((ex * ex) + (ez * ez));
+    }
+
+    /// <summary>Appends to <paramref name="seg"/> the parts of a..b inside no painted coast's water
+    /// side among <paramref name="coasts"/>, four floats a part. The covered spans are sorted before
+    /// they merge, so neither the coasts' order nor a coast listed twice moves a part. The tests'
+    /// oracle passes every coast.</summary>
+    internal static void Uncovered(List<float> seg, float ax, float az, float bx, float bz, List<Tri> coasts)
+    {
+        var spans = new List<(double Lo, double Hi)>();
+        foreach (var c in coasts)
+        {
+            if (Covered(c, ax, az, bx, bz, out double lo, out double hi))
+                spans.Add((lo, hi));
+        }
+        if (spans.Count == 0)
+        {
+            seg.AddRange(new[] { ax, az, bx, bz });
+            return;
+        }
+        spans.Sort();
+        double at = 0.0;
+        foreach (var (lo, hi) in spans)
+        {
+            if (lo > at)
+                seg.AddRange(new[] { Along(ax, bx, at), Along(az, bz, at), Along(ax, bx, lo), Along(az, bz, lo) });
+            at = Math.Max(at, hi);
+        }
+        if (at < 1.0)
+            seg.AddRange(new[] { Along(ax, bx, at), Along(az, bz, at), bx, bz });
     }
 
     // Every triangle's texels within rows r0..r1, in list order. A later base triangle's tint wins
@@ -522,15 +554,33 @@ internal static class OceanMaskRaster
         }
     }
 
-    // The coastline in world XZ, four floats a segment: every coast edge of a solid. A face crossing the
-    // water's band adds its cut through y = 0, a pier's or a hull's waterline.
+    // The coastline in world XZ, four floats a segment: every coast edge of a solid and each painted
+    // coast's waterline. A face crossing the water's band adds its cut through y = 0, a pier's or a
+    // hull's waterline. Coplanar land under a painted coast's water side is sea in the mask. Its
+    // segments keep only their parts outside every water side, while a solid rising off that water
+    // keeps its foot.
     private static float[] Coastline(Tri[] tris)
     {
         var seg = new List<float>();
+        var water = WaterSides(tris);
+        var near = new List<Tri>();
         foreach (var t in tris)
         {
+            if (t.Kind == Kind.Coast)
+            {
+                // Negated, the land side (0 or below) is the side Cut reads as above the water. The
+                // raster drops a zero-area join, so its waterline is none.
+                if (Math.Abs(Area(t)) >= 1e-6f)
+                {
+                    Cut(seg, t.A, t.B, -t.Surf.X, -t.Surf.Y);
+                    Cut(seg, t.B, t.C, -t.Surf.Y, -t.Surf.Z);
+                    Cut(seg, t.C, t.A, -t.Surf.Z, -t.Surf.X);
+                }
+                continue;
+            }
             if (t.Kind != Kind.Solid)
                 continue;
+            int n = seg.Count;
             if (CoastEdge(t.A, t.B))
                 seg.AddRange(new[] { t.A.X, t.A.Z, t.B.X, t.B.Z });
             if (CoastEdge(t.B, t.C))
@@ -539,22 +589,122 @@ internal static class OceanMaskRaster
                 seg.AddRange(new[] { t.C.X, t.C.Z, t.A.X, t.A.Z });
             if (Math.Min(t.A.Y, Math.Min(t.B.Y, t.C.Y)) < -CoastBand && Math.Max(t.A.Y, Math.Max(t.B.Y, t.C.Y)) > CoastBand)
             {
-                Cut(seg, t.A, t.B);
-                Cut(seg, t.B, t.C);
-                Cut(seg, t.C, t.A);
+                Cut(seg, t.A, t.B, t.A.Y, t.B.Y);
+                Cut(seg, t.B, t.C, t.B.Y, t.C.Y);
+                Cut(seg, t.C, t.A, t.C.Y, t.A.Y);
             }
+            if (water.Count > 0 && seg.Count > n && IsFlat(t))
+                Uncover(seg, n, water, near);
         }
         return seg.ToArray();
     }
 
-    // The point where p..q crosses y = 0, if it does. Exactly two edges of a crossing face add one.
-    private static void Cut(List<float> seg, Vector3 p, Vector3 q)
+    // The point where p..q crosses 0 between its values pv and qv, if it does. Exactly two edges of a
+    // crossing face add one.
+    private static void Cut(List<float> seg, Vector3 p, Vector3 q, float pv, float qv)
     {
-        if ((p.Y < 0f) == (q.Y < 0f))
+        if ((pv < 0f) == (qv < 0f))
             return;
-        float s = p.Y / (p.Y - q.Y);
+        float s = pv / (pv - qv);
         seg.Add(p.X + ((q.X - p.X) * s));
         seg.Add(p.Z + ((q.Z - p.Z) * s));
+    }
+
+    // The raster's own signed area test, in its operation order.
+    private static float Area(in Tri t) => ((t.B.X - t.A.X) * (t.C.Z - t.A.Z)) - ((t.B.Z - t.A.Z) * (t.C.X - t.A.X));
+
+    // The painted coasts with a water side, under every bucket their box touches, so a segment tests
+    // only the coasts near it.
+    private static Dictionary<long, List<Tri>> WaterSides(Tri[] tris)
+    {
+        var water = new Dictionary<long, List<Tri>>();
+        foreach (var t in tris)
+        {
+            if (t.Kind != Kind.Coast || Math.Max(t.Surf.X, Math.Max(t.Surf.Y, t.Surf.Z)) <= 0f)
+                continue;
+            for (int z = Bucket(Math.Min(t.A.Z, Math.Min(t.B.Z, t.C.Z))); z <= Bucket(Math.Max(t.A.Z, Math.Max(t.B.Z, t.C.Z))); z++)
+            {
+                for (int x = Bucket(Math.Min(t.A.X, Math.Min(t.B.X, t.C.X))); x <= Bucket(Math.Max(t.A.X, Math.Max(t.B.X, t.C.X))); x++)
+                {
+                    if (!water.TryGetValue(Key(x, z), out var list))
+                        water[Key(x, z)] = list = new List<Tri>();
+                    list.Add(t);
+                }
+            }
+        }
+        return water;
+    }
+
+    private static int Bucket(float v) => (int)Math.Floor(v / CoastBucket);
+
+    private static long Key(int x, int z) => ((long)x << 32) | (uint)z;
+
+    // Replaces the segments from float n on by their parts outside the water sides near each.
+    private static void Uncover(List<float> seg, int n, Dictionary<long, List<Tri>> water, List<Tri> near)
+    {
+        var own = seg.GetRange(n, seg.Count - n);
+        seg.RemoveRange(n, seg.Count - n);
+        for (int s = 0; s < own.Count; s += 4)
+        {
+            float ax = own[s], az = own[s + 1], bx = own[s + 2], bz = own[s + 3];
+            near.Clear();
+            for (int z = Bucket(Math.Min(az, bz)); z <= Bucket(Math.Max(az, bz)); z++)
+            {
+                for (int x = Bucket(Math.Min(ax, bx)); x <= Bucket(Math.Max(ax, bx)); x++)
+                {
+                    if (water.TryGetValue(Key(x, z), out var list))
+                        near.AddRange(list);
+                }
+            }
+            Uncovered(seg, ax, az, bx, bz, near);
+        }
+    }
+
+    private static float Along(float a, float b, double s) => s == 0.0 ? a : (float)(a + (s * ((double)b - a)));
+
+    // The span of s in 0..1 where a + s (b - a) lies on c seaward of its waterline, within the
+    // raster's barycentric tolerance. The tolerance overlaps two coasts' spans along their shared edge,
+    // so no sliver of land edge survives there. A land edge along a water side's rim is dropped too,
+    // leaving it the chamfer from its texels.
+    private static bool Covered(in Tri c, float ax, float az, float bx, float bz, out double lo, out double hi)
+    {
+        lo = 0.0;
+        hi = 1.0;
+        if (Math.Max(c.Surf.X, Math.Max(c.Surf.Y, c.Surf.Z)) <= 0f
+            || Math.Max(ax, bx) < Math.Min(c.A.X, Math.Min(c.B.X, c.C.X)) || Math.Min(ax, bx) > Math.Max(c.A.X, Math.Max(c.B.X, c.C.X))
+            || Math.Max(az, bz) < Math.Min(c.A.Z, Math.Min(c.B.Z, c.C.Z)) || Math.Min(az, bz) > Math.Max(c.A.Z, Math.Max(c.B.Z, c.C.Z)))
+            return false;
+        double x0 = c.A.X, z0 = c.A.Z, x1 = c.B.X, z1 = c.B.Z, x2 = c.C.X, z2 = c.C.Z;
+        double area = ((x1 - x0) * (z2 - z0)) - ((z1 - z0) * (x2 - x0));
+        if (Math.Abs(area) < 1e-6)
+            return false;
+        // Each corner's weight, and so the seaward value, is linear along the segment.
+        double Wa(double px, double pz) => (((x1 - px) * (z2 - pz)) - ((z1 - pz) * (x2 - px))) / area;
+        double Wb(double px, double pz) => (((x2 - px) * (z0 - pz)) - ((z2 - pz) * (x0 - px))) / area;
+        double wa0 = Wa(ax, az), wb0 = Wb(ax, az), wa1 = Wa(bx, bz), wb1 = Wb(bx, bz);
+        double wc0 = 1.0 - wa0 - wb0, wc1 = 1.0 - wa1 - wb1;
+        Above(wa0, wa1, -1e-4, ref lo, ref hi);
+        Above(wb0, wb1, -1e-4, ref lo, ref hi);
+        Above(wc0, wc1, -1e-4, ref lo, ref hi);
+        Above((wa0 * c.Surf.X) + (wb0 * c.Surf.Y) + (wc0 * c.Surf.Z), (wa1 * c.Surf.X) + (wb1 * c.Surf.Y) + (wc1 * c.Surf.Z), 0.0, ref lo, ref hi);
+        return lo < hi;
+    }
+
+    // Narrows lo..hi to the s where f0 + s (f1 - f0) exceeds floor.
+    private static void Above(double f0, double f1, double floor, ref double lo, ref double hi)
+    {
+        double d = f1 - f0;
+        if (d == 0.0)
+        {
+            if (f0 <= floor)
+                hi = -1.0;
+            return;
+        }
+        double s = (floor - f0) / d;
+        if (d > 0.0)
+            lo = Math.Max(lo, s);
+        else
+            hi = Math.Min(hi, s);
     }
 
     // Lowers each open-sea texel of rows r0..r1 in dist (indexed from row e0) to its exact distance from
