@@ -901,6 +901,12 @@ void light() {{
         return stem.Equals("water1", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Whether a water texture is the authored surf ring along a coast (C1B's
+    /// <c>srf0001</c>..<c>srf0016</c> cycle, C2's <c>srf0001</c>). Its U runs from the land edge
+    /// to its seaward edge.</summary>
+    internal static bool IsSurfTexture(string texName) =>
+        texName.StartsWith("srf", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
     /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
     /// opaque sky sprite paints its backdrop in the sky's colour. Keying it lets the sky show up to
@@ -2242,7 +2248,9 @@ void light() {{
             }
             bool water = ClassifySurface(texName) == "water";
             bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase);
+            bool oceanSurf = water && IsSurfTexture(texName);
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
+                oceanSurf: oceanSurf);
             // The glTF export names its material from this, so a pack built from it maps back here.
             textured.ResourceName = texName;
             if (keyed != null)
@@ -2291,7 +2299,7 @@ void light() {{
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
         UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false,
-        bool replacement = false)
+        bool replacement = false, bool oceanSurf = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
@@ -2299,7 +2307,7 @@ void light() {{
             edgeClamp = UvClampAxes.None;
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
-            replacement));
+            replacement, oceanSurf));
         NoteAlpha(mat, blend, scissor);
         if (XrPreciseInterior)
             _interiorPlaced.Add(mat.GetInstanceId());
@@ -2335,16 +2343,18 @@ void light() {{
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
-    // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
-    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow.
+    // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage, 262144 race ghost, 524288 base sea. Then
+    // 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow, 33554432 surf ring.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false, bool water = false, bool oceanBase = false, bool replacement = false)
+        bool clutterFade = false, bool water = false, bool oceanBase = false, bool replacement = false,
+        bool oceanSurf = false)
     {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
         oceanBase &= water;
+        oceanSurf &= water;
         bool sunVertexLit = shaded && _sunVertexLit;
         bool raceGhost = shaded && RaceGhostShader;
         // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
@@ -2363,7 +2373,7 @@ void light() {{
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
             | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
-            | (NoShadowReceive ? 16777216 : 0);
+            | (NoShadowReceive ? 16777216 : 0) | (oceanSurf ? 33554432 : 0);
         bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
@@ -2371,7 +2381,7 @@ void light() {{
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
                 debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
-                noShadowReceive),
+                noShadowReceive, oceanSurf),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2386,7 +2396,7 @@ void light() {{
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
         bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
-        bool noShadowReceive = false)
+        bool noShadowReceive = false, bool oceanSurf = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2396,8 +2406,8 @@ void light() {{
         // ⚠ The water arm exists only inside the lit world arm, so original mode's shader text
         // cannot move.
         bool waterLit = worldLit && water;
-        // The sea-level base sheet steps aside while the wave ocean draws in its place.
-        bool oceanHide = waterLit && oceanBase;
+        // The sea-level base sheet and the surf ring over it step aside while the wave ocean draws in their place.
+        bool oceanHide = waterLit && (oceanBase || oceanSurf);
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
         bool sunLit = sunVertexLit && !GraphicsMode.Enhanced;
@@ -2585,7 +2595,7 @@ void vertex() {{
 
 void fragment() {{");
         }
-        // A spyglass disc draws no ocean (FlatSeaEye), so the sheet stays whole there.
+        // A spyglass disc draws no ocean (FlatSeaEye), so the sheet and the ring stay whole there.
         if (oceanHide)
             sb.AppendLine($"    if (!{FlatSeaEye} && csky_ocean_hides_sea(v_ocean_pos)) {{ discard; }}");
         if (clutterFade)

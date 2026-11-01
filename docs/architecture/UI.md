@@ -915,7 +915,7 @@ to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 
 ## src/UI/Labs/OceanLab.cs
 The ocean lab (Shift+F1), built by `InspectionLabs.BuildOceanLab` in `--freecam` on a sea chapter and nowhere else:
-a panel down the right edge with one slider per `Effects/SeaState.cs` field in its four groups, each with its value
+a panel down the right edge with one slider per `Effects/SeaState.cs` field in its five groups, each with its value
 and default. An edit reaches the session on release or a quarter second after a click, and the session hands it to
 the standing ocean and to any ocean a switch rebuilds. Reset to defaults, Revert to saved, and Save, which writes
 this chapter's differing fields through `Effects/OceanSeas.cs` into the source tree's file and is off in an

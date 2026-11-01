@@ -30,4 +30,21 @@ public class OceanBaseTextureTests
     [InlineData("beach1.tif")]
     [InlineData("")]
     public void CoastTilesSurfAndOverlaysAreNot(string texture) => Assert.False(SceneBuilder.IsOceanBaseTexture(texture));
+
+    // The surf ring is sea in the mask; C1's opaque coast tiles stay shore.
+    [Theory]
+    [InlineData("srf0001.tif")]
+    [InlineData("SRF0016.TIF")]
+    [InlineData("srf0001")]
+    public void TheSurfRingIsMatched(string texture) => Assert.True(SceneBuilder.IsSurfTexture(texture));
+
+    [Theory]
+    [InlineData("water1_trans1.tif")]
+    [InlineData("water1_trans2.tif")]
+    [InlineData("wtr00003.tif")]
+    [InlineData("water1.tif")]
+    [InlineData("wakefront1.tif")]
+    [InlineData("watersquirt.tif")]
+    [InlineData("")]
+    public void CoastTilesTheSheetAndWakesAreNotSurf(string texture) => Assert.False(SceneBuilder.IsSurfTexture(texture));
 }

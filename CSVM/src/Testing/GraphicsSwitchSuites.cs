@@ -1263,13 +1263,13 @@ internal static class GraphicsSwitchSuites
 
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
-        + "stands one ocean and every sea-level base sheet material carries the hide, which reads "
+        + "stands one ocean and every sea-level base sheet material and surf ring material carries the hide, which reads "
         + "that ocean's mask and steps aside only at the coverage the ocean discards below, and neither "
         + "the grid nor the hide acts for a spyglass disc's camera; "
         + "switched to Original the ocean leaves the tree, the mask globals return to their no-sea "
         + "defaults and the sheet carries a fresh Original "
-        + "build's text, with no hide; back to Enhanced exactly one ocean stands and the sheet "
-        + "carries a fresh Enhanced build's text; an Original build switched to Enhanced builds the "
+        + "build's text, with no hide on the sheet or the ring; back to Enhanced exactly one ocean stands, the ring hides "
+        + "again and the sheet carries a fresh Enhanced build's text; an Original build switched to Enhanced builds the "
         + "ocean; a closed session leaves no ocean in the tree, and a following Enhanced C2B session "
         + "at flat water quality builds none while its sheet still carries the hide")]
     internal static void OceanFollowsSwitch(TestContext ctx)
@@ -1304,8 +1304,10 @@ internal static class GraphicsSwitchSuites
             }
             ctx.Check(freshOriginal.Oceans == 0 && freshOriginal.Materials > 0 && freshOriginal.Drawn > 0 && freshOriginal.Hidden == 0,
                 $"an Original C1B build stands no ocean and its base sheet carries no hide ({freshOriginal})");
+            Ring(ctx, freshOriginal, enhanced: false, "an Original C1B build");
             ctx.Check(originalToEnhanced.Oceans == 1 && originalToEnhanced.Hidden == originalToEnhanced.Materials,
                 $"switched to Enhanced it builds the ocean and hides the sheet ({originalToEnhanced})");
+            Ring(ctx, originalToEnhanced, enhanced: true, "the Original build switched to Enhanced");
             Left(ctx, builtLive, "the Original build switched to Enhanced");
             report.AppendLine($"fresh original\n{freshOriginal.Print()}\noriginal switched to enhanced\n{originalToEnhanced.Print()}");
 
@@ -1323,6 +1325,7 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.Ocean?.Built == true && freshEnhanced.Materials > 0
                         && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
+                Ring(ctx, freshEnhanced, enhanced: true, "an Enhanced C1B build");
                 HideReadsTheMask(ctx, enhanced, builtFresh);
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
@@ -1336,6 +1339,7 @@ internal static class GraphicsSwitchSuites
                     $"switched to Original the ocean leaves the tree ({switchedOriginal}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(switchedOriginal.Hidden == 0 && switchedOriginal.Census == freshOriginal.Census,
                     $"and the base sheet carries a fresh Original build's text, with no hide ({switchedOriginal.Hidden} hiding)");
+                Ring(ctx, switchedOriginal, enhanced: false, "switched to Original");
                 ctx.Check(Effects.OceanMask.Live == null,
                     $"and the hide's mask globals hold their no-sea defaults again");
 
@@ -1346,6 +1350,7 @@ internal static class GraphicsSwitchSuites
                     $"back to Enhanced the ocean is built again, exactly once ({roundTrip}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(roundTrip.Hidden == roundTrip.Materials && roundTrip.Census == freshEnhanced.Census,
                     $"and the base sheet carries a fresh Enhanced build's text, hidden again ({roundTrip.Hidden} of {roundTrip.Materials} hiding)");
+                Ring(ctx, roundTrip, enhanced: true, "back to Enhanced");
                 ctx.Check(Effects.OceanMask.Live != null,
                     $"and the rebuilt ocean hands its mask to the hide again");
                 report.AppendLine($"fresh enhanced\n{freshEnhanced.Print()}\nswitched original\n{switchedOriginal.Print()}\nround trip\n{roundTrip.Print()}");
@@ -3313,15 +3318,23 @@ internal static class GraphicsSwitchSuites
         return false;
     }
 
+    // The surf ring steps aside with the sheet: every ring material carries the hide under Enhanced, none under Original.
+    private static void Ring(TestContext ctx, SeaReading sea, bool enhanced, string what) =>
+        ctx.Check(sea.Surf > 0 && sea.SurfHidden == (enhanced ? sea.Surf : 0),
+            $"{what}: {(enhanced ? "every" : "no")} surf ring material carries the hide ({sea.SurfHidden} of {sea.Surf} hiding)");
+
     // The base sheet's materials as the world builder named them, by texture and shader text. Also
-    // how many carry the hide and are drawn.
+    // how many carry the hide and are drawn, and the surf ring's materials and how many of them hide.
     private static SeaReading Sea(Rig rig)
     {
         var sheet = new HashSet<ShaderMaterial>();
+        var surf = new HashSet<ShaderMaterial>();
         var census = new SortedDictionary<string, int>(StringComparer.Ordinal);
-        int hidden = 0;
+        int hidden = 0, surfHidden = 0;
         foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
         {
+            if (Mech3.SceneBuilder.IsSurfTexture(texture) && surf.Add(material))
+                surfHidden += material.Shader?.Code?.Contains(HideCall, StringComparison.Ordinal) == true ? 1 : 0;
             if (!Mech3.SceneBuilder.IsOceanBaseTexture(texture) || !sheet.Add(material))
                 continue;
             string code = material.Shader?.Code ?? "";
@@ -3334,7 +3347,7 @@ internal static class GraphicsSwitchSuites
             if (node is GeometryInstance3D geometry && geometry.IsVisibleInTree())
                 drawn += Materials(geometry).Count(sheet.Contains);
         });
-        return new SeaReading(OceansUnder(rig.Session), sheet.Count, hidden, drawn, Print(census));
+        return new SeaReading(OceansUnder(rig.Session), sheet.Count, hidden, drawn, Print(census), surf.Count, surfHidden);
     }
 
     // The switch as the launcher makes it, then the steps a reading waits for.
@@ -3709,10 +3722,10 @@ internal static class GraphicsSwitchSuites
 
     private sealed record SheetReading(int Sampled, int Missed, int Casting, int Ramps, int RampMissed, float RampShortfall, Vector3? FlatSea, string Examples);
 
-    private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census)
+    private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census, int Surf, int SurfHidden)
     {
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
-            $"{Oceans} ocean(s), {Materials} base sheet material(s), {Hidden} hiding, {Drawn} drawn surface(s)");
+            $"{Oceans} ocean(s), {Materials} base sheet material(s), {Hidden} hiding, {Drawn} drawn surface(s), {Surf} surf ring material(s), {SurfHidden} hiding");
 
         public string Print() => $"  {this}\n  census {Census}";
     }

@@ -23,20 +23,20 @@ public sealed class OceanShaderTests
     /// <summary>The default sea's text with LF line endings, at each priority level and zone gate a mask
     /// can hand the generator. Each hash is the text the constants generated.</summary>
     [Theory]
-    [InlineData(-11, false, "97AC17A3CA9A06D54656B20E7376E8C7A8D772F57B04ED4F5099FC811307B442")]
-    [InlineData(-11, true, "3958E034416772D6865AD33A916C02842E174563133E368C5E995AC3DC0CBCE1")]
-    [InlineData(-2, false, "E54FC274E4FF004F2209B57CBB1EE80A9BC2B3FFF618B3D5464615DE280FBC61")]
-    [InlineData(-2, true, "00E60C2976926C521A692C8B9D73FE9BE4804525D1F3889B06349F079B2BE903")]
-    [InlineData(-1, false, "116AEF37753372DB5EF3D0034319E3E8747332EE1DFC8F77FE6D077B7C6EDD0A")]
-    [InlineData(-1, true, "F5C701CBA1AAC626B4B3A47F899E960A7D25F4A95890BCDE6FB5043890CF2B68")]
-    [InlineData(0, false, "5E85511BA721F14466C4FB4B9D6B92CCE4F43946D78391A60BDD8A1F60350459")]
-    [InlineData(0, true, "983461918E7CE9EBBDB52D89B5C02FED630866A13FE3465834AC7A427554CBDE")]
-    [InlineData(1, false, "89363A0645BE3ADEC0FBA61E5B06990012839559F3001275D707BCAAC062CB00")]
-    [InlineData(1, true, "5098C245404E1B9AFC5BA6A4E02CD5DA8CA8C56C07C1F3DC0A965B795BEEB87C")]
-    [InlineData(2, false, "9D13E11792D40FE8AA2BFDACC7CB9C554AC73E64B9F2B14646FAD535451CF8C1")]
-    [InlineData(2, true, "CB29774014362CA2EFCFAAEC15F5AD0E670314E35E910F3E0B9343D1252186DD")]
-    [InlineData(3, false, "D1E5A3AA1AF9AC34A8A57C4D00F30F7BF25E0C0D7424BD8568945C02B4BF5377")]
-    [InlineData(3, true, "A37D407F2B003EE69D7D5E8E487A222697244DE09457DD2AB095C7A9DA90AE53")]
+    [InlineData(-11, false, "5D59C0216F44CBBCBC2583FC6890019C5FFA54AC6BA76A9C7BD8CEE01BB7EFDB")]
+    [InlineData(-11, true, "F332F260CB171FDB3F967B54147108EC1414DAD92C347D89BFF1890D82218525")]
+    [InlineData(-2, false, "03C8D24929A7F8E1C7CC925BF71A647C259371272AEE89CE9879B9AA6E4A9E52")]
+    [InlineData(-2, true, "ECB7C46D120183E131B82A499A1FC1B210E7BB94A376E0BE8C32021B05498457")]
+    [InlineData(-1, false, "510ADC04610BBF8EB00C7B939D15A68221C4E387C5BE303D1269CBD976ED5FAA")]
+    [InlineData(-1, true, "39E2F446FBC14374688EC814BA93323ADCBAD0611B91F08CFCBBBF6CDACE0F67")]
+    [InlineData(0, false, "BA8AD7B30773E4FCE61FABAAB42834D26E1D2EF3EABB65CD25CD5105FD108E9B")]
+    [InlineData(0, true, "E8769663CCF5F6BEADB05A6ABA3ECFE0E5E99889BEA9627F7CE9D4589C00F0D7")]
+    [InlineData(1, false, "D2D3E9C2F6005EA0572AB8C5393DABC3AC3C5AD513F73F0AD6B0D6B9024734FC")]
+    [InlineData(1, true, "7CF5A8BCE7BA45FE7631E0C51B6A7CEA6A184BD7C19C584A4F60246DB45F81D5")]
+    [InlineData(2, false, "D24E8DCD9F1D96EBFB5A789E88FE21137E83578F99BB93AF06158305206818BD")]
+    [InlineData(2, true, "B8A9B1BD5AC1956E334E8D264060F3F5D0916809C260097A77A3DDE21654A7F7")]
+    [InlineData(3, false, "D517F67E508ADA9BCD771FEEC2D14E9900816AED47405E29E465F322CE399A01")]
+    [InlineData(3, true, "26EDCE7C44D59ED727F88E06684D53D988852911C982953747898B38E2173D55")]
     public void TheDefaultSeaWritesTheConstantsText(int level, bool zoned, string sha256)
     {
         string text = Lf(OceanShader.Code(SeaState.Default, level, zoned));
@@ -161,6 +161,58 @@ public sealed class OceanShaderTests
         Assert.Equal(1.0, OceanShader.DetailTurnsPerWrap(6f, 0.01f));
         Assert.Equal(0.0, OceanShader.DetailTurnsPerWrap(6f, 0f));
         Assert.Equal(1f, OceanShader.PatchPeriodsPerWrap(1e9f, 1.5f));
+        Assert.Equal(1f, OceanShader.SurfLinesPerWrap(40f, 0.001f));
+        Assert.Equal(0f, OceanShader.SurfLinesPerWrap(12f, 0f));
+    }
+
+    /// <summary>A sea with surf writes the surf into the foam, its lines passing a whole number per wrap at
+    /// about the set speed. Without surf the text holds none, and its spacing and speed leave the text alone.</summary>
+    [Theory]
+    [InlineData(0.7f, 0.6f, 12f, 1.5f, 450.0)]
+    [InlineData(0.8f, 0f, 12f, 1.5f, 450.0)]
+    [InlineData(0.3f, 0.9f, 10f, 2f, 720.0)]
+    [InlineData(0f, 0.5f, 7f, 1.3f, 669.0)]
+    public void ASeaWithSurfWritesItsLinesWholePerWrap(float wash, float lines, float spacing, float speed, double perWrap)
+    {
+        var sea = SeaState.Default with { SurfWash = wash, SurfLines = lines, SurfSpacing = spacing, SurfSpeed = speed };
+        string text = OceanShader.Code(sea, 0, true);
+        Assert.Contains("foam_mix = max(foam_mix, cover * surf_keep);", text);
+        var arrive = Regex.Match(text, @"float arrive = csky_time \* \(([0-9.]+) / 3600\.0\)");
+        var phase = Regex.Match(text, @"float cyc = m\.g \* ([0-9.]+) \+ arrive;");
+        Assert.True(arrive.Success && phase.Success, "the surf's phase is in the text");
+        Assert.Equal(160.0 / spacing, double.Parse(phase.Groups[1].Value, CultureInfo.InvariantCulture), 4);
+        double written = double.Parse(arrive.Groups[1].Value, CultureInfo.InvariantCulture);
+        AssertWhole(written, $"surf lines at {speed} m/s every {spacing} m");
+        Assert.Equal(perWrap, written);
+        Assert.InRange(written * spacing / Wrap, speed - (spacing / (2 * Wrap)), speed + (spacing / (2 * Wrap)));
+
+        string plain = OceanShader.Code(SeaState.Default, 0, true);
+        Assert.DoesNotContain("surf_keep", plain);
+        Assert.Equal(plain, OceanShader.Code(SeaState.Default with { SurfSpacing = spacing, SurfSpeed = speed + 1f }, 0, true));
+    }
+
+    /// <summary>The surf's foam moves only at whole rates per wrap. Every drifting noise drifts whole
+    /// periods of its own cells, the warp turns whole turns, and every other csky_time rate is whole.</summary>
+    [Fact]
+    public void TheSurfsChurnRunsWholePerWrap()
+    {
+        string text = OceanShader.Code(SeaState.Default with { SurfWash = 0.7f, SurfLines = 0.6f }, 0, true);
+        var drifts = Regex.Matches(text, @"- vec2\(csky_time \* \(([0-9.]+) / 3600\.0\), 0\.0\)(?: \+ vec2\([-0-9., ]+\))?, ([0-9.]+)\)");
+        Assert.Equal(8, drifts.Count);
+        foreach (Match m in drifts)
+        {
+            double periods = double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+            AssertWhole(periods, "a drifting noise's periods per wrap");
+            Assert.Equal(periods, double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+        }
+        var turn = Regex.Match(text, @"float turn = 6\.2831853 \* csky_time \* \(([0-9.]+) / 3600\.0\)");
+        Assert.True(turn.Success, "the warp's turn is in the text");
+        Assert.Equal(90.0, double.Parse(turn.Groups[1].Value, CultureInfo.InvariantCulture));
+        var rates = Regex.Matches(text, @"csky_time \* \(([0-9.]+) / 3600\.0\)");
+        Assert.Equal(10, rates.Count);
+        foreach (Match m in rates)
+            AssertWhole(double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), "a surf rate per wrap");
+        Assert.Contains("float surge = 0.25 * sin(6.2831853 * (arrive - 0.1));", text);
     }
 
     /// <summary>The shader reads csky_time, never Godot's TIME, at any sea: a network peer and a

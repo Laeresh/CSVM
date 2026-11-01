@@ -54,12 +54,12 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 
 ## src/Effects/Ocean.cs
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
-grid (Gerstner swell, drifting noise normals) replaces the sea-level base sheet, which steps aside through
-`csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. One grid per zone-gate group, a priority
+grid (Gerstner swell, drifting noise normals) replaces the sea-level base sheet and the surf ring over it, which step aside through
+`csky_ocean.gdshaderinc` only where the ocean draws; the sheet's colliders stay flat. One grid per zone-gate group, a priority
 level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake and turbulence sheets,
 which no pane draws while their hull holds a wake slot on the sim clock. Owns up to 16 ship slots, nearest the eye first: a calm zone over each
 waterline (`OceanCalmZone.cs`, `OceanMovers.cs`) and the track its wake rides (`OceanWakeTrack.cs`). The shader text is
-`OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; `Apply` takes a new sea live, recompiling only on
+`OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; its material binds the mask, tint, lift, surf (`surf_tex`) and zone textures, read over one `mask_rect`. `Apply` takes a new sea live, recompiling only on
 a text change. `Launch/OceanStage.cs` builds and drops it; `--debug-wake` sails a wake ship on an arc.
 
 ## src/Effects/OceanSeas.cs
@@ -73,19 +73,21 @@ key and its order, skipping comments as the read does, and refusing a file it ca
 ## src/Effects/OceanShader.cs
 The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
 tables, the bending field, the coast ramps and the open sea's tint, written as literals; at the defaults it is the
-ocean's tune byte for byte (`OceanShaderTests`), so nothing moves until a sea is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
-setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`. Every noise reads `sea_hash`, an integer
-hash of the cell, so no lattice line cuts it. `ship_wake` draws each moving hull's foam trail and the foam along its
+ocean's tune byte for byte (`OceanShaderTests`), so nothing moves until a sea is saved. Every swell omega, detail drift, patch drift and surf line rate is rounded to whole cycles per `csky_time` wrap at any
+setting. The swell's height is the swell ramp times one minus the surf coverage (`surf_tex`), zero where the authored ring is full against the land, which has no geometry below sea level to cover a trough; the wakes ride the ramp alone and the look (normals, foam, texture) its own ramp. A surf strength above zero writes the surf into the fragment's foam over the authored ring: a wash dense against the land (the shore distance holds it dense within one mask texel, where the filter blends the ring's coverage into the land's zero) and thinning seaward, its outline read through a noise warp so no mask texel shows, and breaking lines along the shore distance that run toward the land, a whole number per wrap (`SurfLinesPerWrap`), bent and broken by still noise, at their mean under the footprint fade. The whitecaps' lace breaks both at every distance, its cell whole octaves of theirs picked by the pixel's mean side. The foam moves on `csky_time` as the lines do: each lace octave's holes churn on a drifting noise field of its own scale, as the wake's foam churns, the wash's edge octaves drift apart, its coverage warp turns, and its density surges as each line reaches the land; every drift is whole periods of `foam_noise`'s repeat per wrap. The sheet's tint scales it; only the fog hands it back to the sheet. At the default zero strengths the text holds no surf.
+Height, foam strength and roughness stay uniforms, set by `Ocean.cs`. Every noise reads `sea_hash`, an integer hash of the cell, so no lattice line cuts it. `ship_wake` draws each moving hull's foam trail and the foam along its
 V's arms from its track uniforms, its lengths scaled by the square root of the hull's length; the V's Kelvin waves sit
 behind `WakeWaves`, which is off. `wake_foam` churns the trail's foam with the water's age, thins it with distance
 and laces it up close. `WakeSamples` is the track's sample count.
 
 ## src/Effects/SeaState.cs
-One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
+One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour, surf)
 with the ocean's tune as its default, and `Fields` naming each one's key, label, group, range and slider step for the
 file, the flag and the lab. `Clamped`, which every path into the shader takes, holds each value in range, sharpness
 times height at the fold limit (at the base group gain, so a grouped crest can still fold), and each coast ramp at
-least 4 m wide within the mask's 160 m reach. `Written` is the sea at the file's precision, rounded toward a bound
+least 4 m wide within the mask's 160 m reach, so the narrowest look runs 0 to 4 m. The look may start at the land (0 m) where the shore is solid; a chapter with opaque coast tiles keeps it a mask texel out (C1's 55 m), or the look meets the flat tile at a seam. The ramps measure the
+mask's shore distance, from the land edge under a surf ring, where the shader also holds the swell at zero by the surf
+coverage; C1B and C2 carry their own ramps in the file, their looks from 0 m (C2's full at 6 m). The surf's wash and line strengths default to zero, so only an entry that sets them (C1B, C2) draws surf. `Written` is the sea at the file's precision, rounded toward a bound
 it would otherwise pass. `WithOverrides` reads `--debug-ocean`. `SeaStateTests`. Read `OceanShader.cs` next.
 
 ## src/Effects/OceanCalmZone.cs
@@ -104,19 +106,20 @@ age taken from the travel since the newest sample so that frame pacing moves no 
 
 ## src/Effects/OceanMask.cs
 The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`), reused by every
-rebuild. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the sheet's baked tint, each texel's
-zone group where the sheet spans zone-gate layers, and the ramps: base-sheet triangles rising from sea level to under
-`RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp). A ramp is
-open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wake sheets (and the turbulence sheets under the same ships), tile size and
-lowest priority; hulls (`OceanMovers.cs`) stay out. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
-the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. `--dump-ocean-mask=` writes the mask and the tint.
+rebuild. Owns sea coverage, the shore distance (exact to the coastline, every solid edge the water reaches and every face's waterline; by texel to a coast tile or a solid off the water), the sheet's baked tint, each texel's
+zone group where the sheet spans zone-gate layers, the surf ring and the ramps. The ring (`SceneBuilder.IsSurfTexture`, the `srf*` strip at sea level in C1B and C2) is open sea with its authored coverage `1 - u`, 1 at the land edge and 0 at its seaward edge, so the shore distance under it runs from the land; other sea-level water off the sheet (C1's opaque `water1_trans` tiles) stays shore.
+A ramp is a base-sheet triangle rising from sea level to under `RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp), open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wake sheets (and the turbulence sheets under the same ships), tile size and
+lowest priority; hulls (`OceanMovers.cs`) stay out. A solid is a non-water triangle whose lowest corner stands under `OceanMaskRaster.SolidTop` (`RampTop` plus `HideHeight`); a bridge deck, a crane arm or a roof over the sea cannot touch the water and is no shore. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
+the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. The ring's coverage is its own R8 `SurfTexture` (one zero texel without a ring), read back by `SurfAt` as `LiftAt` reads the lift. `--dump-ocean-mask=` writes the mask, the tint and the surf.
 Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
 
 ## src/Effects/OceanMaskRaster.cs
-The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint, R8 zone and R8 ramp lift bytes out, with no engine
+The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint, R8 zone, R8 ramp lift and R8 surf bytes out, with no engine
 object touched. Owns the triangle fill, the shore distance pass, the off-sheet tint and the zone bytes (a seam
-between two groups, and a coast texel in the group of the sea beside it), and runs in row bands on the thread pool. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
-not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
+between two groups, and a coast texel in the group of the sea beside it), and runs in row bands on the thread pool. A `Kind.Surf`
+texel is open sea to the distance pass, draws in every zone group (`AnyZone`) as a `Kind.Edge` coast-tile texel does, takes no
+tint of its own, and writes the triangle's interpolated surf coverage into the surf plane, the highest where triangles overlap. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
+not lighten the sheet's edge. An open texel's shore distance is the nearer of two. One is exact, to the coastline, each segment written into the texels within `ShoreReach` of it in every band: every solid edge whose two corners lie from 0.25 m below sea level to under `RampTop` (a quay's foot on a harbour ramp, level or rising along it as C2's do), and the cut through y = 0 of every solid face reaching more than 0.25 m to either side of it (a pier's, a seawall's or a hull's waterline). The other is a chamfer from the coast tiles, the texels nothing covers, every texel centre a solid covers, and the corner texels of a solid off the water (no corner at sea level, no face across it, no edge the water reaches); a coast solid's corner texel does not seed, as its centre can lie in the sea, so the water beside a quay, a pier or a beach reads no texel staircase. Inland edges under `RampTop` add segments no sea texel is nearer to than the shore. A solid whose lowest corner stands at `SolidTop` or above marks nothing. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
 hold the banded bytes to a plain single pass.
 
 ## src/Effects/TerrainShadow.cs
