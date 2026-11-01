@@ -225,6 +225,8 @@ public static class ShadowQualitySetting
         {
             if (world.Sun is { } sun)
                 ApplyTo(sun, Sun, GraphicsMode.Enhanced, HardShadows);
+            // The painted shadow decals hide while the sun casts.
+            world.FollowSession();
         },
     };
 }

@@ -120,6 +120,7 @@ public sealed class WorldBuilder
         _scene.Cycler = Cycler;
         _scene.DebugClutterFlag = debugClutterFlag;
         _scene.HiddenAlpha = hiddenAlpha;
+        _scene.SplitsShadowDecals = true;
         // Keyed under Enhanced alone, whose tonemap and emissive scale move a backdrop off the sky's
         // colour so the quad shows. The faithful path draws it opaque, as the original does (no
         // colour key, docs/org/textures.md). Named in both modes so a live switch can swap it.

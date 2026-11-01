@@ -110,6 +110,17 @@ public sealed class SceneBuilder
 
     public static readonly StringName OpacityParam = "csky_opacity";
 
+    /// <summary>The original's painted cast shadows, by texture, in every chapter that has them. Each is
+    /// used only as a shadow; C2's <c>eiffel2</c> is the Eiffel Tower's. The grass huts' <c>dirtpatch</c>
+    /// sits straight under its hut and stays.</summary>
+    public static readonly IReadOnlySet<string> ShadowDecalTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "lkshad1", "lkshad2", "lkshad3", "lkshad4", "lkshad5", "lkshad6", "tethershadow",
+        "bldgshadow", "bldgshadow1", "abld_shadow", "planepass05", "eiffel2", "liberty_shadow",
+        "shadow_round", "shadow_square", "shadow2", "agyro_shadow", "firetruck_shadow",
+        "thin_shadow", "mptrailer_shadow", "sprucegoose9", "agyro_busshadow",
+    };
+
     /// <summary>Instance shader parameter the Danger Zone photograph arms on its own pilot's
     /// aircraft for the one frame it draws. Its xyz is the photograph's eye, and w is 1 while
     /// armed. A faithful aircraft surface then takes <c>csky_sun_fill_rgb</c> as its ambient half,
@@ -156,6 +167,10 @@ public sealed class SceneBuilder
     /// <summary>Meshes, by gamez mesh index, whose instances stay out of every shadow map. Set by
     /// the caller before building; null lets every mesh cast.</summary>
     public Func<int, bool>? CastsNoShadow;
+
+    /// <summary>Whether <see cref="ShadowDecalTextures"/> surfaces build into their own <c>decal</c>
+    /// instance. The world's builder only: an aircraft's stereo body twins copy its <c>mesh</c> alone.</summary>
+    public bool SplitsShadowDecals;
 
     /// <summary>Which transparency classes this builder leaves unbuilt (<c>--hide-alpha</c>,
     /// <c>docs/cli.md</c>). Set by the caller before building, like <see cref="DebugClutterFlag"/>,
@@ -430,6 +445,9 @@ void fragment() {
     // value, so a full level would tie a flagged face with a real priority-1 overlay, and the two
     // were measured to resolve every C5 overlap identically.
     private const float NoClutterLayerBias = DepthBiasPerLevel * 0.5f;
+
+    // Metres a shadow decal instance sorts nearer than its node's mesh, above float32 depth rounding.
+    private const float DecalSortingOffset = 0.05f;
     // Overlay passes (GameZPolygon.OverlayPasses) draw on the SAME triangles as their base pass
     // and must land in front of it. ⚠ Do not order them by surface rank instead: 97 of the 307
     // overlay-bearing models are already at SurfaceRankCap, where an appended overlay group shares
@@ -517,6 +535,9 @@ void fragment() {
     // a key component, so no opaque or scissored material is ever split in two.
     private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade), Material> _groundLayerCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
+    // A built mesh's painted shadow decal surfaces, split off it (ShadowDecalTextures).
+    private readonly Dictionary<ArrayMesh, ArrayMesh> _decalMeshes = new();
+    private readonly List<MeshInstance3D> _shadowDecals = new();
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, List<(string Name, string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
     private readonly Dictionary<(float Far, float Slope, float Blink), ShaderMaterial> _lightMaterialCache = new();
@@ -614,6 +635,14 @@ void fragment() {
     /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>, the
     /// ground the baked terrain shadow casts from (<c>Effects.TerrainShadow</c>).</summary>
     public List<MeshInstance3D> ShadowlessMeshes { get; } = new();
+
+    /// <summary>The <c>decal</c> instances drawing <see cref="ShadowDecalTextures"/>, beside their node's
+    /// <c>mesh</c>. Read by the suites.</summary>
+    public IReadOnlyList<MeshInstance3D> ShadowDecals => _shadowDecals;
+
+    /// <summary>Gets whether <see cref="ShadowDecals"/> are hidden; a decal built later takes it.</summary>
+    public bool ShadowDecalsHidden { get; private set; }
+
     public int ColliderCount { get; private set; }
 
     /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by
@@ -994,6 +1023,19 @@ void light() {{
         }
     }
 
+    /// <summary>Hides or shows every <see cref="ShadowDecals"/> instance, and returns whether that
+    /// changed anything. A decal's node keeps its own visibility, which the mission anims drive.</summary>
+    internal bool FollowShadowDecals(bool hidden)
+    {
+        if (hidden == ShadowDecalsHidden)
+            return false;
+        ShadowDecalsHidden = hidden;
+        _shadowDecals.RemoveAll(d => !GodotObject.IsInstanceValid(d));
+        foreach (var decal in _shadowDecals)
+            decal.Visible = !hidden;
+        return true;
+    }
+
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
     /// named <c>node_bias</c>, placed world, clutter decorations, map-edge tiles, comes from
     /// here, so the three cannot drift apart.</summary>
@@ -1359,6 +1401,30 @@ void light() {{
                     mi.Position = pivot;
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
+                // Its own instance, so the gate toggles it live and WorldMerge, which takes "mesh"
+                // alone, never folds it in. Our shadow maps stand for it, so it casts none itself.
+                // ponytail: a model pack replacement keeps any decal it carries in its own mesh.
+                if (_decalMeshes.TryGetValue(mesh, out var decalMesh))
+                {
+                    var decal = new MeshInstance3D
+                    {
+                        Mesh = decalMesh,
+                        Name = "decal",
+                        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                        Visible = !ShadowDecalsHidden,
+                        // Boxed as its node's mesh; this breaks the depth tie so it blends over it.
+                        SortingOffset = DecalSortingOffset,
+                    };
+                    if (zoneLayer != 0)
+                    {
+                        decal.Layers = zoneLayer;
+                        ZoneGatedMeshes[node.ZoneId]++;
+                    }
+                    decal.SetInstanceShaderParameter("node_bias", NodeBiasOf(node.Index));
+                    n3d.AddChild(decal);
+                    _shadowDecals.Add(decal);
+                    MeshInstanceCount++;
+                }
                 if (replacement != null)
                 {
                     ReplacedMeshCount++;
@@ -1926,6 +1992,7 @@ void light() {{
             return null;
 
         var arrayMesh = new ArrayMesh();
+        ArrayMesh? decalMesh = null;
         for (int rank = 0; rank < groups.Count; rank++)
         {
             var (materialIndex, priority, noClutter, doubleSided, pass, polys) = groups[rank];
@@ -1954,14 +2021,25 @@ void light() {{
             var arrays = st.CommitToArrays();
             if (arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length == 0)
                 continue;
-            arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-            arrayMesh.SurfaceSetMaterial(arrayMesh.GetSurfaceCount() - 1, surfaceMaterial);
+            // A clutter decoration's copy has no decal instance to carry one, so it keeps its own.
+            bool decal = SplitsShadowDecals && !clutterFade && !glowSprite && cylAxis == CylAxis.None && IsShadowDecal(materialIndex);
+            var target = decal ? decalMesh ??= new ArrayMesh() : arrayMesh;
+            target.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            target.SurfaceSetMaterial(target.GetSurfaceCount() - 1, surfaceMaterial);
             if (_fullbright)
             {
-                if (!_builtArrays.TryGetValue(arrayMesh, out var kept))
-                    _builtArrays[arrayMesh] = kept = new List<Godot.Collections.Array>();
+                if (!_builtArrays.TryGetValue(target, out var kept))
+                    _builtArrays[target] = kept = new List<Godot.Collections.Array>();
                 kept.Add(arrays);
             }
+        }
+        if (decalMesh != null)
+        {
+            // Both boxed as the whole mesh, so each blend sorts at the depth it had in one instance.
+            var whole = arrayMesh.GetSurfaceCount() > 0 ? arrayMesh.GetAabb().Merge(decalMesh.GetAabb()) : decalMesh.GetAabb();
+            arrayMesh.CustomAabb = whole;
+            decalMesh.CustomAabb = whole;
+            _decalMeshes[arrayMesh] = decalMesh;
         }
         return arrayMesh;
     }
@@ -1993,6 +2071,10 @@ void light() {{
         _scrollOverrides != null && _scrollOverrides.TryGetValue(meshIndex, out var rate)
             ? rate
             : mesh.TextureScroll;
+
+    private bool IsShadowDecal(int materialIndex) =>
+        materialIndex >= 0 && materialIndex < _gamez.Materials.Count
+        && ShadowDecalTextures.Contains(TextureStem(_gamez.Materials[materialIndex].TextureName));
 
     // A polygon the original draws nothing at all for: its material names a texture the retail data
     // lacks AND this chapter's archive cannot resolve it. Dropped before grouping, so no surface,

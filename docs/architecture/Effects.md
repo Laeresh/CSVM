@@ -103,8 +103,8 @@ age taken from the travel since the newest sample so that frame pacing moves no 
 `Ocean.cs` to pass as uniforms; a track shorter than `MinSegment` draws no wake. `OceanWakeTrackTests`.
 
 ## src/Effects/OceanMask.cs
-The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`), reused by every
-rebuild. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the sheet's baked tint, each texel's
+The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`) and shadow-decal
+state, since a drawn decal on the water reads as land (`SceneBuilder.ShadowDecalsHidden`), and reused by every rebuild. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the sheet's baked tint, each texel's
 zone group where the sheet spans zone-gate layers, and the ramps: base-sheet triangles rising from sea level to under
 `RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp). A ramp is
 open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wake sheets (and the turbulence sheets under the same ships), tile size and

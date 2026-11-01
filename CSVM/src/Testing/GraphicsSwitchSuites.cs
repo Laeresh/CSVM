@@ -42,6 +42,9 @@ internal static class GraphicsSwitchSuites
     // The chapter whose cliff shades the waterline below it under its low sun.
     private const string TerrainShadowChapter = "C3";
 
+    // C2's Eiffel Tower shadow decal (eiffel2 on g36353) lies on the water at y 0.00 to 0.04.
+    private const string DecalChapter = "C2";
+
     // C1's railway: its own polygons laid over the picked grassland and fields.
     private const string RailTexture = "gantry_tracks2.tif";
 
@@ -70,6 +73,9 @@ internal static class GraphicsSwitchSuites
     // The chapters whose base sheet rises off sea level: C2's harbour to a quay, C5's water to the
     // steinmann ship's hull.
     private static readonly string[] RampChapters = { "C2", "C5" };
+
+    // The middle of the eiffel2 polygon on g36353.
+    private static readonly Vector3 EiffelDecalCentre = new(-6282f, 0f, -3621f);
 
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
@@ -1257,6 +1263,71 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-shadow-decals",
+        "the original's painted shadow decals hide while our shadow maps draw: an Enhanced C2 build at Ultra "
+        + "Shadow Quality and waves stands the eiffel2 decal as its own hidden instance beside g36353's mesh, "
+        + "and the shore mask under it reads sea with a shore distance; a live Shadow Quality Off shows every "
+        + "decal and rebuilds the ocean, whose mask reads the decal as land again; back at Ultra the decals hide "
+        + "and the first bake is reused; switched to Original they draw, and back to Enhanced they hide")]
+    internal static void ShadowDecalsFollowShadows(TestContext ctx)
+    {
+        RequireData(ctx, DecalChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launchedWater = WaterQualitySetting.Word;
+        string launchedShadow = ShadowQualitySetting.Word;
+        try
+        {
+            ViewDistance.Set(null);
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            ShadowQualitySetting.Resolve(ShadowQualitySetting.Ultra, null, null);
+            var rig = Open(ctx, enhanced: true, chapter: DecalChapter);
+            try
+            {
+                var scene = rig.Session.WorldScene;
+                var eiffel = scene == null ? null : EiffelDecal(scene);
+                if (!rig.Built || scene == null || eiffel == null || Effects.OceanMask.Live == null)
+                {
+                    ctx.Check(false, $"the Enhanced {DecalChapter} session builds its ocean and the eiffel2 decal (built={rig.Built}, decal={eiffel != null}, mask={Effects.OceanMask.Live != null})");
+                    return;
+                }
+                var mesh = (eiffel.GetParent() as Node3D)?.GetNodeOrNull<MeshInstance3D>("mesh");
+                ctx.Check(mesh?.Mesh is { } own && !Wears(scene, own, "eiffel2") && own.GetSurfaceCount() > 0 && mesh.Visible,
+                    $"ABLE-TO-FAIL CONTROL: g36353's own mesh still draws its other surfaces and carries no eiffel2 ({mesh?.Mesh?.GetSurfaceCount() ?? -1} surface(s))");
+                ctx.Check(scene.ShadowDecals.Count > 0 && scene.ShadowDecals.All(d => !d.Visible),
+                    $"at Ultra every decal instance is hidden ({scene.ShadowDecals.Count(d => d.Visible)} of {scene.ShadowDecals.Count} drawn)");
+                var first = Effects.OceanMask.Live;
+                var (seaR, seaG) = MaskTexel(first, EiffelDecalCentre);
+                ctx.Check(seaR == 255 && seaG > 0, $"the mask under the hidden decal reads sea with a shore distance (R {seaR}, G {seaG})");
+
+                ApplyShadowQuality(rig, ShadowQualitySetting.Off);
+                var off = Effects.OceanMask.Live;
+                ctx.Check(scene.ShadowDecals.All(d => d.Visible), $"at Shadow Quality Off every decal draws");
+                var (offR, offG) = off == null ? (-1, -1) : MaskTexel(off, EiffelDecalCentre);
+                ctx.Check(off != null && off != first && rig.Session.Ocean?.Built == true && offG == 0,
+                    $"the ocean is rebuilt over the drawn decal, whose texels read land again (rebuilt={off != null && off != first}, R {offR}, G {offG})");
+
+                ApplyShadowQuality(rig, ShadowQualitySetting.Ultra);
+                ctx.Check(scene.ShadowDecals.All(d => !d.Visible) && Effects.OceanMask.Live == first && first.Timing == "reused",
+                    $"back at Ultra the decals hide and the first bake is reused (timing {Effects.OceanMask.Live?.Timing})");
+
+                Switch(rig, false);
+                ctx.Check(scene.ShadowDecals.All(d => d.Visible), $"switched to Original every decal draws");
+                Switch(rig, true);
+                ctx.Check(scene.ShadowDecals.All(d => !d.Visible), $"back to Enhanced they hide again");
+            }
+            finally
+            {
+                rig.Close();
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launchedWater, null, null);
+            ShadowQualitySetting.Resolve(launchedShadow, null, null);
             Restore(wasEnhanced);
         }
     }
@@ -3348,6 +3419,39 @@ internal static class GraphicsSwitchSuites
     {
         for (int i = 0; i < Steps; i++)
             rig.Session._PhysicsProcess(GameClock.FixedDt);
+    }
+
+    // A Shadow Quality word applied live, as an Options apply reaches a flight in progress.
+    private static void ApplyShadowQuality(Rig rig, string word)
+    {
+        ShadowQualitySetting.Resolve(word, null, null);
+        ShadowQualitySetting.Lookup.Apply?.Invoke(new LiveWorld(rig.Sun, rig.Session));
+        Step(rig);
+    }
+
+    private static MeshInstance3D? EiffelDecal(Mech3.SceneBuilder scene) =>
+        scene.ShadowDecals.FirstOrDefault(d => d.Mesh is { } m && Wears(scene, m, "eiffel2")
+            && d.GetParent()?.GetMeta(Mech3.AnimRuntime.NameMeta, "").AsString() == "g36353");
+
+    private static bool Wears(Mech3.SceneBuilder scene, Mesh mesh, string texture)
+    {
+        var names = scene.TexturedMaterials.ToDictionary(t => (Material)t.Material, t => t.TextureName);
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            if (mesh.SurfaceGetMaterial(s) is { } m && names.TryGetValue(m, out var name)
+                && string.Equals(System.IO.Path.GetFileNameWithoutExtension(name), texture, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    // The mask's red (sea coverage) and green (shore distance) bytes under a world point.
+    private static (int R, int G) MaskTexel(Effects.OceanMask mask, Vector3 world)
+    {
+        int x = (int)Math.Floor((world.X - mask.Origin.X) / Effects.OceanMask.Cell);
+        int y = (int)Math.Floor((world.Z - mask.Origin.Y) / Effects.OceanMask.Cell);
+        var c = mask.Image.GetPixel(x, y);
+        return ((int)Math.Round(c.R * 255f), (int)Math.Round(c.G * 255f));
     }
 
     // One flight session in its own pane, lit as the launcher lights one. The sun and the

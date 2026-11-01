@@ -160,15 +160,18 @@ internal sealed class OceanMask
     public static OceanMask? Bake(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         // The world is static. An ocean rebuilt over it, after a live switch or a Water Quality
-        // change, reuses the first bake. The frame path never pays it twice.
-        if (Baked.TryGetValue(scene, out var kept) && kept.Root == root && GodotObject.IsInstanceValid(root))
+        // change, reuses the first bake. The frame path never pays it twice. A shadow decal on the
+        // water reads as land while drawn, so each decal state has a bake of its own.
+        bool hidden = scene.ShadowDecalsHidden;
+        if (Baked.TryGetValue(scene, out var memo) && memo.Root == root && GodotObject.IsInstanceValid(root)
+            && memo.Masks.TryGetValue(hidden, out var kept))
         {
-            kept.Mask?.Wakes.RemoveAll(w => !GodotObject.IsInstanceValid(w));
-            kept.Mask?.MovingHulls.RemoveAll(h => !GodotObject.IsInstanceValid(h));
-            kept.Mask?.UnjudgedMovers.RemoveAll(h => !GodotObject.IsInstanceValid(h));
-            if (kept.Mask != null)
-                kept.Mask.Timing = "reused";
-            return kept.Mask;
+            kept?.Wakes.RemoveAll(w => !GodotObject.IsInstanceValid(w));
+            kept?.MovingHulls.RemoveAll(h => !GodotObject.IsInstanceValid(h));
+            kept?.UnjudgedMovers.RemoveAll(h => !GodotObject.IsInstanceValid(h));
+            if (kept != null)
+                kept.Timing = "reused";
+            return kept;
         }
         var mask = BakeNew(root, scene, skip, movers);
         // ⚠ Do not drop this collection. Reading MeshInstance3D.Mesh mints a managed wrapper for
@@ -179,7 +182,9 @@ internal sealed class OceanMask
         if (mask != null)
             mask.Timing += string.Create(CultureInfo.InvariantCulture,
                 $" gc={System.Diagnostics.Stopwatch.GetElapsedTime(gcStart).TotalMilliseconds:0}");
-        Baked.AddOrUpdate(scene, new Memo(root, mask));
+        if (memo == null || memo.Root != root)
+            Baked.AddOrUpdate(scene, memo = new Memo(root, new Dictionary<bool, OceanMask?>()));
+        memo.Masks[hidden] = mask;
         return mask;
     }
 
@@ -321,7 +326,7 @@ internal sealed class OceanMask
             : 0;
 
     // A world's bake, or null when it had no sea-level base sheet.
-    private sealed record Memo(Node3D Root, OceanMask? Mask);
+    private sealed record Memo(Node3D Root, Dictionary<bool, OceanMask?> Masks);
 
     // One pass over the world tree finds the wake sheets and lists the surfaces to read, in tree
     // order. The triangles are read after it, once every hull subtree is known and dropped.
