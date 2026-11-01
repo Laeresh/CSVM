@@ -37,8 +37,8 @@ public class CourseApertureTests
     }
 
     [Theory]
-    [InlineData(125f, 25f)] // beside a pylon, outside the 40 m width
-    [InlineData(100f, 41f)] // above the 30 m pylon tops
+    [InlineData(125f, 25f)] // beside a course pylon, outside the 40 m width
+    [InlineData(100f, 41f)] // above the 30 m course pylon tops
     [InlineData(100f, 9f)] // below the ground at the gate's base
     public void APylonGateMissIsNotACrossing(float x, float y) =>
         Assert.False(Pylons.CrossedBy(new(x, y, 5f), new(x, y, -5f), GateDirection.Forward, Still, out _));

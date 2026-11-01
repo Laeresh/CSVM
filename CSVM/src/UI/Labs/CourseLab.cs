@@ -64,6 +64,9 @@ public sealed partial class CourseLab : Node
     private Control? _pylonRows;
     private Control? _ringRows;
     private Label? _status;
+    private Button? _save;
+    private Label? _saveNote;
+    private CourseSource? _openedFrom;
     private VBoxContainer? _sequence;
     private IReadOnlyList<SequenceEntry>? _shownSequence;
     private Button[] _entryButtons = Array.Empty<Button>();
@@ -82,9 +85,10 @@ public sealed partial class CourseLab : Node
     private Vector3 _flyEye;
     private Vector3 _flyLook;
 
-    /// <summary>A lab over <paramref name="chapter"/>'s courses in <paramref name="library"/>, saving to
-    /// <paramref name="saveTarget"/> (null turns Save off). <paramref name="groundHit"/> rays the world's own
-    /// triangles, origin and direction in, nearest point out. A <c>--freecam</c> world builds no colliders.</summary>
+    /// <summary>A lab over <paramref name="chapter"/>'s courses in <paramref name="library"/>. A new or shipped
+    /// course saves to <paramref name="saveTarget"/>, and null turns Save off for them. The ground ray
+    /// <paramref name="groundHit"/> takes origin and direction and answers the nearest point on the world's own
+    /// triangles. A <c>--freecam</c> world builds no colliders.</summary>
     public CourseLab(string chapter, CourseLibrary library, CourseSource? saveTarget, Func<Vector3, Vector3, Vector3?> groundHit)
     {
         _chapter = chapter;
@@ -109,14 +113,18 @@ public sealed partial class CourseLab : Node
         StartPoint,
     }
 
-    /// <summary>The course being edited and its selected gate, the seam a later gizmo or sequence panel edits through.</summary>
+    /// <summary>The course being edited and its selected gate, which the panel and the gizmo edit through.</summary>
     public CourseDraft Draft { get; }
 
     /// <summary>Where courses are listed, opened and saved. A suite swaps in scratch roots.</summary>
     public CourseLibrary Library { get; set; }
 
-    /// <summary>The root Save writes under, or null where Save is off.</summary>
+    /// <summary>The root a new or shipped course saves under, or null where Save is off for them.</summary>
     public CourseSource? SaveTarget { get; set; }
+
+    /// <summary>The root Save writes the open course under, or null where Save is off. A course opened from
+    /// the game folder goes back there (<see cref="CourseDraft.SaveTarget(CourseSource?, CourseSource?, bool)"/>).</summary>
+    public CourseSource? Target => CourseDraft.SaveTarget(SaveTarget, _openedFrom, Library.GameFolder != null);
 
     /// <summary>What a left click on the ground places.</summary>
     public PlaceKind Place { get; set; } = PlaceKind.PylonGate;
@@ -308,6 +316,7 @@ public sealed partial class CourseLab : Node
         }
 
         _note = $"opened {_chapter}/{course.Name}";
+        _openedFrom = Library.List(_chapter).First(f => string.Equals(f.Name, course.Name, StringComparison.OrdinalIgnoreCase)).Source;
         Draft.Load(course);
         return true;
     }
@@ -318,6 +327,7 @@ public sealed partial class CourseLab : Node
         var camera = IsInsideTree() ? GetViewport().GetCamera3D() : null;
         var start = camera == null ? default : new SpawnPoint(camera.GlobalPosition, CourseDraft.HeadingOf(camera.GlobalBasis));
         _note = $"new course {_chapter}/{name}, its start at the camera until one is placed";
+        _openedFrom = null;
         Draft.Load(CourseDraft.Empty(_chapter, name, start));
     }
 
@@ -431,13 +441,13 @@ public sealed partial class CourseLab : Node
     }
 
     /// <summary>Writes the course, named from the name field and titled from the title field, under
-    /// <see cref="SaveTarget"/>. Returns the path written, or null where Save is off or the write
+    /// <see cref="Target"/>. Returns the path written, or null where Save is off or the write
     /// failed, the reason on the status line.</summary>
     public string? Save()
     {
-        if (SaveTarget is not { } target)
+        if (Target is not { } target)
         {
-            _note = "Save is off: this exported build reads no game folder (--det)";
+            _note = SaveOffReason();
             UpdateStatus();
             return null;
         }
@@ -653,16 +663,11 @@ public sealed partial class CourseLab : Node
         selected.AddChild(Btn("Delete gate", DeleteSelected));
         box.AddChild(selected);
 
-        var save = Btn(SaveTarget == CourseSource.GameFolder ? "Save to the game folder" : "Save to the shipped courses", () => Save());
-        save.Name = "save";
-        save.Disabled = SaveTarget == null;
-        box.AddChild(save);
-        box.AddChild(Small(SaveTarget switch
-        {
-            CourseSource.Shipped => $"Writes {_chapter}/<name>.json under CSVM/data/courses, the shipped courses (dev build).",
-            CourseSource.GameFolder => $"Writes {Library.GameFolder}/{_chapter}/<name>.json.",
-            _ => "Save is off: this exported build reads no game folder (--det).",
-        }, Dim));
+        _save = Btn("", () => Save());
+        _save.Name = "save";
+        box.AddChild(_save);
+        _saveNote = Small("", Dim);
+        box.AddChild(_saveNote);
         _status = Small("");
         box.AddChild(_status);
         box.AddChild(Small($"Left click a gate to select it · drag its arrows to move it and its ring to turn it (Ctrl snaps to {CourseGizmo.SnapDeg:0}°) · "
@@ -884,9 +889,22 @@ public sealed partial class CourseLab : Node
             _syncing = false;
         }
 
+        var target = Target;
+        _save!.Text = target == CourseSource.GameFolder ? "Save to the game folder" : "Save to the shipped courses";
+        _save.Disabled = target == null;
+        _saveNote!.Text = target switch
+        {
+            CourseSource.Shipped => $"Writes {_chapter}/<name>.json under CSVM/data/courses, the shipped courses (dev build).",
+            CourseSource.GameFolder => $"Writes {Library.GameFolder}/{_chapter}/<name>.json.",
+            _ => SaveOffReason() + ".",
+        };
         SyncSequence();
         UpdateStatus();
     }
+
+    private string SaveOffReason() => _openedFrom == CourseSource.GameFolder
+        ? "Save is off: this course is from the game folder, which this run does not read (--det)"
+        : "Save is off: this exported build reads no game folder (--det)";
 
     private void Show(string name, float v)
     {

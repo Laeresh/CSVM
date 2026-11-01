@@ -262,6 +262,18 @@ public class CourseDraftTests
     public void SaveGoesToTheShippedRootFromTheEditorAndTheGameFolderFromAnExport(bool editor, bool gameFolder, CourseSource? expected) =>
         Assert.Equal(expected, CourseDraft.SaveTarget(editor, gameFolder));
 
+    [Theory]
+    [InlineData(CourseSource.Shipped, CourseSource.GameFolder, true, CourseSource.GameFolder)] // a dev build saves it back
+    [InlineData(CourseSource.GameFolder, CourseSource.GameFolder, true, CourseSource.GameFolder)]
+    [InlineData(null, CourseSource.GameFolder, false, null)] // no game folder read, so Save is off
+    [InlineData(CourseSource.Shipped, CourseSource.Shipped, true, CourseSource.Shipped)]
+    [InlineData(CourseSource.GameFolder, CourseSource.Shipped, true, CourseSource.GameFolder)]
+    [InlineData(CourseSource.Shipped, null, true, CourseSource.Shipped)] // a new course
+    [InlineData(null, null, false, null)]
+    public void AGameFolderCourseSavesBackToTheGameFolderAndAnyOtherWhereTheBuildSaves(
+        CourseSource? build, CourseSource? openedFrom, bool gameFolder, CourseSource? expected) =>
+        Assert.Equal(expected, CourseDraft.SaveTarget(build, openedFrom, gameFolder));
+
     private static CourseDraft Draft() => new(CourseDraft.Empty("C1", "t", new SpawnPoint(Vector3.Zero, 0f)));
 
     // A course of pylon gates with these ids, each flown once forward in that order, nothing selected.

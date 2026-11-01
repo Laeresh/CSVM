@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 public class CourseRunTests
 {
     // Heading 0 faces -Z, so a Forward pass travels from +Z to -Z. The pylon gate's centre is 15 m
-    // up its 30 m pylons; the ring stands 200 m on at 50 m.
+    // up its 30 m course pylons; the ring stands 200 m on at 50 m.
     private static readonly CourseGate A = new("a", CourseGateKind.PylonGate, Vector3.Zero, 0f, 40f, 30f, 0f);
     private static readonly CourseGate B = new("b", CourseGateKind.BalloonRing, new Vector3(0f, 50f, -200f), 0f, 0f, 0f, 20f);
 

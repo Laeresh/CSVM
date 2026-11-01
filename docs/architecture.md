@@ -348,11 +348,11 @@ rows).
 - `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, a course run's under `course/` with its hash, penalty count and splits, faster runs only; a scripted run's store is a throwaway.
 - `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the optional display title, the JSON shape and the layout hash.
-- `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
+- `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon gate rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
 - `src/Flight/Modes/CourseElements.cs`, a course gate's touch volumes on `CourseGateShape`'s sizes (course pylon cones, ring rim tube, balloons), the +3 s penalty and the `CourseTouch` event record.
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
 - `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
-- `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: pylon bases and taper, ring tube, balloons and tethers.
+- `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: course pylon bases and taper, ring tube, balloons and tethers.
 - `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, a red cross on the run's next gate seen from its wrong side and a dim fill on the one after.
 - `src/Flight/Modes/CoursePylonCut.cs`, a cut course pylon's look on sim time: stump top and sag, the falling top's tip and drop, gone as it lands, whole again after 3 s.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.

@@ -986,7 +986,7 @@ the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course bes
 `CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
-A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its pylons from the
+A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its course pylons from the
 ground to their tops, or a balloon ring's 32-gon of its diameter, vertical and facing the gate's
 forward. `CrossedBy(from, to, direction, motion, out t)` counts a segment only when it travels the
 way the sequence entry names; `StuntGate.CrossedBy`, which Danger Zones keep calling, counts either
@@ -1027,13 +1027,13 @@ ring (`CourseVisuals`) and its scoring polygon both read it, so they cannot part
 Every dimension a course gate is drawn with, engine-free and in the gate's frame: the course pylons'
 bases (local x = ±width/2) and taper, a ring's tube (outside the diameter, the clear opening), and
 each balloon's way, tether anchor, length and centre. The meshes read it, and a touch test against
-pylons, rims and balloons reads the same numbers. Read `CourseVisuals`.
+course pylons, rims and balloons reads the same numbers. Read `CourseVisuals`.
 
 ## src/Flight/Modes/CourseVisuals.cs
 A course's gates drawn from Godot primitives to `CourseGateShape`'s dimensions: two tapered, banded
 course pylons per pylon gate, and per ring a striped torus under three tethered balloons.
 `Build` makes one node per pool gate, in pool order, plus an optional start cone; `Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
-shader text, lit and fogged as the faithful aircraft, with the pylon ripple on `csky_time`. A course
+shader text, lit and fogged as the faithful aircraft, with the course pylon ripple on `csky_time`. A course
 pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
 `ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
 `ElementTouched` (course pylons only) and restores on `RunReset`. Read `CoursePylonCut`.

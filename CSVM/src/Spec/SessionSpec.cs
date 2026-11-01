@@ -200,33 +200,33 @@ public sealed record SessionSpec
     /// <summary>A content-selecting arg was given, so the launchscreen is bypassed.</summary>
     public bool HasContentArg { get; private set; }
 
-    /// <summary><b>Resolved.</b> The one session shape, arbitrated from every flag that votes for
-    /// one: anim lab &gt; freecam &gt; viewer &gt; fly, with <c>--node=</c> forcing the viewer
-    /// unless the anim lab was asked for, and any content arg defaulting to flight.</summary>
+    /// <summary>Resolved. The one session shape, arbitrated from every flag that votes for
+    /// one: anim lab &gt; freecam &gt; viewer &gt; fly. The <c>--node=</c> flag forces the viewer
+    /// unless the anim lab was asked for. Any content arg defaults to flight.</summary>
     public SessionMode Mode { get; private set; } = SessionMode.Menu;
     public bool Fly => Mode == SessionMode.Fly;
     public bool Viewer => Mode == SessionMode.Viewer;
     public bool Freecam => Mode == SessionMode.Freecam;
     public bool AnimLab => Mode == SessionMode.AnimLab;
-    /// <summary><b>Resolved.</b> Flight plus the mission's danger zones, a modifier on
+    /// <summary>Resolved. Flight plus the mission's danger zones, a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight.</summary>
     public bool Stunt { get; private set; }
-    /// <summary><b>Resolved.</b> <c>--course=&lt;chapter&gt;/&lt;name&gt;</c>, which implies <see cref="Stunt"/>:
+    /// <summary>Resolved. <c>--course=&lt;chapter&gt;/&lt;name&gt;</c>, which implies <see cref="Stunt"/>:
     /// the authored course a stunt run flies in place of the Danger Zones, in that chapter's IA1
     /// world. Null when absent or dropped by a mode that beats flight. Loading it is
     /// <c>GameSession</c>'s, through <see cref="Flight.Modes.CourseLibrary"/>.</summary>
     public (string Chapter, string Name)? Course { get; private set; }
-    /// <summary><b>Resolved.</b> Why this launch may not fly <see cref="Course"/>, null when it may.
+    /// <summary>Resolved. Why this launch may not fly <see cref="Course"/>, null when it may.
     /// Authored courses are solo only. <c>GameSession</c> refuses the launch on it.</summary>
     public string? CourseRefusal { get; private set; }
-    /// <summary><b>Resolved.</b> <c>--course-edit=&lt;chapter&gt;[/&lt;name&gt;]</c>, which implies
+    /// <summary>Resolved. <c>--course-edit=&lt;chapter&gt;[/&lt;name&gt;]</c>, which implies
     /// <see cref="SessionMode.Freecam"/> over that chapter's IA1 world. The course lab opens on the
     /// named course, or a new one for a null <c>Name</c>. Null when absent or beaten by the anim lab.</summary>
     public (string Chapter, string? Name)? CourseEdit { get; private set; }
-    /// <summary><b>Resolved.</b> Splitscreen free-for-all deathmatch ("Dogfight"), a modifier on
+    /// <summary>Resolved. Splitscreen free-for-all deathmatch ("Dogfight"), a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight, same as
-    /// <see cref="Stunt"/>. <c>--vs</c> beats <c>--stunt</c> by fixed precedence when both are
-    /// given, with a warning, the two are not composable. The menu enforces
+    /// <see cref="Stunt"/>. The two are not composable: <c>--vs</c> beats <c>--stunt</c> by
+    /// fixed precedence when both are given, with a warning. The menu enforces
     /// <see cref="Players"/> &gt;= 2 before it will start a match; the CLI only warns.</summary>
     public bool Versus { get; private set; }
     /// <summary><c>--coop</c>: plain splitscreen free flight (no <see cref="Versus"/>, no Instant
@@ -297,9 +297,9 @@ public sealed record SessionSpec
     /// games on and joins by code through, beating the saved <c>netMasterServer</c> option. An
     /// empty or unreadable value is "" and turns the master server off. Null when absent.</summary>
     public string? MasterServer { get; private set; }
-    /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
+    /// <summary>Resolved. Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
-    /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
+    /// flown one). The modes that build no aircraft drop it. The lab itself is always
     /// built; this only decides whether it starts open or waits behind F19.</summary>
     public bool DamageLab { get; private set; }
     public bool ForceMenu { get; private set; }
@@ -373,9 +373,9 @@ public sealed record SessionSpec
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
         || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
-    /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
+    /// <summary>Resolved. The chapter world is built instead of a single parked plane.</summary>
     public bool WorldMode { get; private set; }
-    /// <summary><b>Resolved.</b> <c>--stage=empty</c> survived: no gamez at all, a generated grid
+    /// <summary>Resolved. <c>--stage=empty</c> survived: no gamez at all, a generated grid
     /// over a collidable ground plane.</summary>
     public bool EmptyStage { get; private set; }
 
@@ -388,11 +388,11 @@ public sealed record SessionSpec
     // ---- The world ----------------------------------------------------------------------------
 
     public string Chapter { get; private set; } = "C1";
-    /// <summary><b>Resolved.</b> A chapter world was asked for, by <c>--chapter</c>/<c>--chapter=</c>,
+    /// <summary>Resolved. A chapter world was asked for, by <c>--chapter</c>/<c>--chapter=</c>,
     /// or by <c>--node=</c>, whose subtree comes out of the chapter's gamez.</summary>
     public bool ChapterGiven { get; private set; }
     public string Mission { get; private set; } = "IA1";
-    /// <summary><b>Resolved.</b> Which instant-action scenario's spawn list to use. <c>--stunt</c>
+    /// <summary>Resolved. Which instant-action scenario's spawn list to use. <c>--stunt</c>
     /// forces "stunt_flying" and <c>--vs</c> forces "dogfight_ace", unless the tester pinned
     /// another one for a specific spawn.</summary>
     public string Scenario { get; private set; } = "zeppelin_run";
@@ -427,7 +427,7 @@ public sealed record SessionSpec
     /// in place of <c>user://stunt_scores.json</c>. Null when the flag was absent. Kept as the raw
     /// value; resolving it is <see cref="Flight.Modes.ScoreStore.ForSession(string, bool)"/>'s job.</summary>
     public string? ScoresPath { get; private set; }
-    /// <summary><b>Resolved.</b> This run's stunt bests are kept in memory and never saved. It holds
+    /// <summary>Resolved. This run's stunt bests are kept in memory and never saved. It holds
     /// for a pinned run (<see cref="Det"/>), a scripted one (<see cref="ScriptedBy"/>, even under
     /// <c>--no-det</c>) and synthetic splits (<see cref="DebugScoreboard"/>). The <c>--scores=</c>
     /// flag beats it. The player's record then holds only played runs, and a scripted board reads
@@ -562,7 +562,7 @@ public sealed record SessionSpec
     public string PlaneName { get; private set; } = DefaultPlane;
     /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named.</summary>
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
-    /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
+    /// <summary>Resolved. Splitscreen panes. A <c>--plane=</c> list of several states the
     /// count on its own; an explicit <c>--players=</c> still wins. Clamped to the rig's capacity,
     /// and back to 1 for any static view, splitscreen is a flight mode, it needs planes to fly.</summary>
     public int Players { get; private set; } = 1;
@@ -772,9 +772,9 @@ public sealed record SessionSpec
 
     /// <summary><c>--det</c> was passed outright, rather than implied.</summary>
     public bool DetExplicit => _detArg;
-    /// <summary><b>Resolved.</b> The deterministic bundle is on: fixed-dt clock, pinned master
-    /// seed, spawn 0, pinned liveries, no pads, no jitter. <c>--no-det</c> beats both the
-    /// implication and an explicit <c>--det</c>, there is one way to ask for wall-clock
+    /// <summary>Resolved. The deterministic bundle is on: fixed-dt clock, pinned master
+    /// seed, spawn 0, pinned liveries, no pads, no jitter. The <c>--no-det</c> flag beats both the
+    /// implication and an explicit <c>--det</c>. It is the one way to ask for wall-clock
     /// behaviour, whatever else is on the command line.</summary>
     public bool Det => !NoDet && (DetExplicit || ScriptedBy.Length > 0);
     public bool NoDet { get; private set; }
@@ -788,8 +788,8 @@ public sealed record SessionSpec
     /// <summary>The master seed when it is pinned, else null, the clock draw stays outside, or
     /// this type would not be a function of its args (and a baseline would differ from itself).</summary>
     public ulong? PinnedSeed => SeedPinned ? Seed ?? Rng.DefaultSeed : null;
-    /// <summary><b>Resolved.</b> <c>--spawn=N</c>; &lt; 0 means "random pick". <c>--det</c> pins it
-    /// to 0, a pinned CHOICE beats a pinned dice roll, since a seeded pick still moves when the
+    /// <summary>Resolved. <c>--spawn=N</c>; &lt; 0 means "random pick". <c>--det</c> pins it
+    /// to 0: a pinned CHOICE beats a pinned dice roll. A seeded pick still moves when the
     /// mission's spawn list grows. An explicit <c>--spawn=N</c> still wins.</summary>
     public int SpawnIndex { get; private set; } = -1;
     /// <summary><c>--no-pads</c> was passed. Nothing here touches <c>Pads.Disabled</c>.</summary>
@@ -797,46 +797,46 @@ public sealed record SessionSpec
     /// <summary>Whether every gamepad is ignored: asked for, or implied by the bundle, a stick
     /// with drift steers the free camera and nudges the flight model.</summary>
     public bool PadsDisabled => NoPads || Det;
-    /// <summary><b>Resolved.</b> Burst camera dither in degrees. Bursts default it on so
-    /// z-fighting flickers across frames; <c>--det</c> defaults it off instead, since
-    /// bit-identical frames are the one property a deterministic run is for.</summary>
+    /// <summary>Resolved. Burst camera dither in degrees. Bursts default it on so
+    /// z-fighting flickers across frames. Under <c>--det</c> it defaults off instead, since
+    /// bit-identical frames are what a deterministic run is for.</summary>
     public float JitterDeg { get; private set; } = -1f;
 
     // ---- Placement, as written on the command line --------------------------------------------
 
     public Vector3? Pos { get; private set; }
-    /// <summary><b>Resolved.</b> Normalised, and derived from <see cref="LookAt"/> in flight, a
+    /// <summary>Resolved. Normalised, and derived from <see cref="LookAt"/> in flight, a
     /// point converted against the eye. Null once a degenerate vector is dropped.</summary>
     public Vector3? Direction { get; private set; }
     /// <summary>A POINT, not a vector: the orbit view's pivot, and the freecam's aim when no
     /// <c>--pos</c> was given. The conversion to a direction is one-way and flight-only.</summary>
     public Vector3? LookAt { get; private set; }
-    /// <summary><b>Resolved.</b> Where the plane spawns: <c>--pos</c> routed here in flight, or the
+    /// <summary>Resolved. Where the plane spawns: <c>--pos</c> routed here in flight, or the
     /// deprecated <c>--spawn-at=</c>, or the empty stage's default.</summary>
     public Vector3? SpawnAt { get; private set; }
-    /// <summary><b>Resolved.</b> The nose direction there, <c>--direction</c> routed in flight, or
+    /// <summary>Resolved. The nose direction there, <c>--direction</c> routed in flight, or
     /// the deprecated <c>--spawn-dir=</c>.</summary>
     public Vector3? SpawnDir { get; private set; }
-    /// <summary><b>Resolved.</b> The camera eye: <c>--pos</c> routed here outside flight, or the
+    /// <summary>Resolved. The camera eye: <c>--pos</c> routed here outside flight, or the
     /// deprecated <c>--campos=</c> (which never places the plane, in any mode).</summary>
     public Vector3? CamPos { get; private set; }
-    /// <summary><b>Resolved.</b> The camera's aim, held apart from <see cref="LookAt"/> because a
+    /// <summary>Resolved. The camera's aim, held apart from <see cref="LookAt"/> because a
     /// direction names no pivot and the orbit view needs one.</summary>
     public Vector3? CamDir { get; private set; }
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--fov=</c> vertical angle in degrees for the free camera
+    /// <summary>Resolved. The <c>--fov=</c> vertical angle in degrees for the free camera
     /// of <c>--freecam</c>/<c>--anim-lab</c>, null for the decoded external base. It lets an F11
     /// line taken from a cockpit view reproduce that view's angle.</summary>
     public float? Fov { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase;
+    /// <summary>Resolved. The <c>--view=</c> numpad digit (0 = chase;
     /// <see cref="Flight.Camera.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--view=</c> SELECTED view mode, <c>chase</c> (the default),
-    /// <c>cockpit</c> or <c>nose</c>. Held apart from <see cref="View"/> because the two are
-    /// different things: a numpad digit is a momentary pose held for the run, this is the view the
-    /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
+    /// <summary>Resolved. The <c>--view=</c> SELECTED view mode, <c>chase</c> (the default),
+    /// <c>cockpit</c> or <c>nose</c>. Held apart from <see cref="View"/>: a numpad digit is a
+    /// momentary pose held for the run. This is the view the pilot flies in and the one the
+    /// cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
     public Flight.Camera.PilotViewMode ViewMode { get; private set; }
     /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
@@ -1045,15 +1045,15 @@ public sealed record SessionSpec
     /// process has switched.</summary>
     public string ShaderWarmup { get; private set; } = "auto";
 
-    /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
-    /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
-    /// drag, and flight has no cursor.</summary>
+    /// <summary>Resolved. Null outside <c>--freecam</c>/<c>--anim-lab</c>, the two
+    /// world-observation modes the shared selection lives in. The viewer's LMB is already the
+    /// orbit drag, and flight has no cursor.</summary>
     public string? DebugSelect { get; private set; }
-    /// <summary><b>Resolved.</b> Filtered to the node lab's token grammar
+    /// <summary>Resolved. Filtered to the node lab's token grammar
     /// (<see cref="ParseNodeLabSpec"/>), each dropped token a <c>ui</c> warning note, and null
     /// outside <c>--freecam</c>/<c>--anim-lab</c>. The lab reads it as already checked.</summary>
     public string? DebugNodeLab { get; private set; }
-    /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
+    /// <summary>Resolved. Same treatment as <see cref="DebugNodeLab"/>, through
     /// <see cref="ParseDamageScript"/>.</summary>
     public string? DebugDamage { get; private set; }
     /// <summary>Resolved. <c>--debug-ocean=&lt;field&gt;:&lt;value&gt;,...[,open]</c>: the ocean
@@ -1088,16 +1088,16 @@ public sealed record SessionSpec
     /// the first physics frame, the scripted twin of click-to-place. Set with no value to click
     /// the viewport centre, which is why the flag and its coordinates are separate fields.</summary>
     public bool WeaponClick { get; private set; }
-    /// <summary><b>Resolved.</b> The pixel <see cref="WeaponClick"/> names, or null for the
+    /// <summary>Resolved. The pixel <see cref="WeaponClick"/> names, or null for the
     /// viewport centre.</summary>
     public Vector2? WeaponClickAt { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>,aim</c> suffix: aim at the picked point without
+    /// <summary>Resolved. The <c>,aim</c> suffix: aim at the picked point without
     /// re-parking, the scripted twin of shift-click.</summary>
     public bool WeaponClickAimOnly { get; private set; }
     /// <summary><c>--weapon-target=x,y,z</c>: park the lab's aircraft facing that world point.</summary>
     public Vector3? WeaponTarget { get; private set; }
     /// <summary><c>--weapon-surface=&lt;registry name&gt;</c>: park facing the nearest collider
-    /// carrying that surface id. <b>Resolved</b>, a name outside the registry is warned about and
+    /// carrying that surface id. Resolved, a name outside the registry is warned about and
     /// dropped.</summary>
     public string? WeaponSurface { get; private set; }
     /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the lab's parking distance, 0 for the 90 m
@@ -1121,15 +1121,14 @@ public sealed record SessionSpec
     // ---- Map-edge continuation: the fold past the map boundary ---------------------------------
 
     /// <summary><c>--map-edge-block=N</c>: how many border cells deep the repeated block is.
-    /// <b>Null = not given</b>, which resolves to <c>MapEdgeExtender.DefaultBlockCells</c> for the
-    /// chapter (2 on C1/C2/C4, 1 elsewhere). Kept nullable rather than defaulted here
-    /// precisely so "the user asked for 2" stays distinguishable from "this chapter is 2", which a
-    /// plain int would erase. <c>MapEdgeExtender</c> clamps it to the chapter's grid, so an
+    /// Null = not given, which resolves to <c>MapEdgeExtender.DefaultBlockCells</c> for the
+    /// chapter (2 on C1/C2/C4, 1 elsewhere). It stays nullable, not defaulted here, so "the
+    /// user asked for 2" stays apart from "this chapter is 2". A plain int would erase that. <c>MapEdgeExtender</c> clamps it to the chapter's grid, so an
     /// out-of-range value is not an error.</summary>
     public int? MapEdgeBlock { get; private set; }
 
-    /// <summary><c>--map-edge-mode=mirror</c> turns this off. <b>True by default: repetition is
-    /// what the original does</b>, A/B'd at the controls. Alternating reflection is kept only as
+    /// <summary><c>--map-edge-mode=mirror</c> turns this off. True by default: repetition is
+    /// what the original does, A/B'd at the controls. Alternating reflection is kept only as
     /// something to look at.</summary>
     public bool MapEdgeRepeat { get; private set; } = true;
 

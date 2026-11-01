@@ -33,7 +33,7 @@ internal static class CourseVisualsSuites
         "a course's procedural gates build two course pylons per pylon gate and a ring, three balloons and "
         + "three tethers per balloon ring, every gate node standing at CourseMotion's pose for the sim time "
         + "it is posed at, on a shader reading csky_time and never TIME; a run's touch of a course pylon "
-        + "cuts that pylon alone at the touch's height, its top vanishing as it lands, whole again at the regrow time or on the run's reset; "
+        + "cuts that course pylon alone at the touch's height, its top vanishing as it lands, whole again at the regrow time or on the run's reset; "
         + "in a C1 flight they are photographed close, wide, a second apart and through a cut into montages")]
     internal static void CourseVisualsDraw(TestContext ctx)
     {
@@ -43,7 +43,7 @@ internal static class CourseVisualsSuites
     }
 
     // A run's real touch, brushing the left course pylon's outside from clear of the gate, drives the
-    // cut. The uniforms are read back from both pylons' materials at sim times around it.
+    // cut. The uniforms are read back from both course pylons' materials at sim times around it.
     private static void CheckCut(TestContext ctx)
     {
         var gate = new CourseGate("p", CourseGateKind.PylonGate, new Vector3(10f, 5f, -20f), 30f, PylonWidthM, PylonHeightM, 0f);
@@ -117,7 +117,7 @@ internal static class CourseVisualsSuites
             run.Reset();
             visuals.Pose(now + 0.3);
             ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(stump, "sag_m") == 0f && !top.Visible,
-                $"the run's reset stands the pylon whole mid-regrow");
+                $"the run's reset stands the course pylon whole mid-regrow");
         }
         finally
         {

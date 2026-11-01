@@ -55,7 +55,7 @@ exist in one player's game folder only) and bots taught the sequence; both are a
 | 16 | Ordering | **List panel plus a 3D path**; a placed gate can be added to the sequence again with a direction choice, so a course can turn around and fly back |
 | 17 | Start and clock | **Flying start** at an authored start point; the clock starts on crossing the first entry and stops on the last |
 | 18 | Test loop | **Save, then `--stunt --course=<chapter>/<name>`** or the menu |
-| 19 | Menu | **A Course option in Stunt Flying**; chapters with authored courses become eligible without Danger Zones (C1C, C2B) |
+| 19 | Menu | **A Course option in Stunt Flying**; chapters with authored courses become eligible without Danger Zones (C2B). C1C, which Instant Action does not list, keeps its courses on the command line (`--course=`) alone, by the user's decision |
 | 20 | Bests | **Keyed by chapter, course name, plane and a hash of the layout and sequence**; stored time includes penalties, with the penalty count beside it |
 | 21 | Race HUD | **Next gate and penalties**: marker on the next entry, `Gate n/N`, clock, penalty total, a "+3 s" flash, a direction chevron on the next gate, the gate after it dimly highlighted |
 | 22 | Multiplayer and bots | **Out of this plan**, filed as a follow-up |
@@ -800,7 +800,8 @@ selection walks, so a freecam click never picks them. **Water:** the ground ray 
 `VegetationGround.Triangles`, which keeps every solid world polygon, the sea-level water sheet among them, so over open
 sea a pylon gate's base lands on y = 0, the sea surface (Decision 24), with no separate sea lookup.
 **Placing:** `Place` adds the gate with a forward sequence entry after the selected entry (at the end with none, per C24), so a course is flyable as placed, and selects it;
-`PlaceStart` moves the start point. Ids are `p`/`r` and one past the highest number of that prefix in use (`NextId`).
+`PlaceStart` moves the start point, and **Start here (2 m ahead of the camera)** (`StartAtCamera`) sets it through
+`CourseDraft.SetStart` `StartAheadM` ahead of the camera on its level heading, at its height. Ids are `p`/`r` and one past the highest number of that prefix in use (`NextId`).
 **Defaults (TUNE, `CourseDraft` constants):** pylon gate `PylonWidthM` 40 by `PylonHeightM` 30, ring `RingDiameterM`
 40 with its centre `RingAboveGroundM` 50 above the ground clicked (the sample's rings stand 50 and 55 m up), start
 `StartAboveGroundM` 50 up. **Sliders** (selected gate, applied as they move): a pylon gate's width (5 to 200) and
@@ -976,11 +977,13 @@ instance `StuntOffered`, `AllowsEnvironment` and `MissionTypes` now count course
 clouds") offers Stunt Flying once it has a course; the static pair and `DangerZonesFor`, which the
 local lobby's Stunt Race reads, stay on the Danger Zones. `ApplyPreset` maps a preset's mission type
 by key, since a course can widen a chapter's list. **C1C is not an Instant Action environment** (the
-decoded seven-row dropdown omits it), so a C1C course flies from the command line alone; adding a
-row would invent an environment name. **Solo gate:** `OffersCourse(seats, bots)` holds for stunt
+decoded seven-row dropdown omits it), so a C1C course flies from the command line alone, by the user's
+decision; adding a row would invent an environment name. **Solo gate:** `OffersCourse(seats, bots)` holds for stunt
 flying with one seat and no bot row on the join board, so a second seat or a bot row withdraws the
 option and the run flies the Danger Zones (Race Time and Race Bots stay Danger-Zone-only); Instant
-Action has no network launch. **Launch:** a course leaves as `LaunchExit.Course` with no def, and
+Action has no network launch. A chapter with courses and no Danger Zones has nothing else to fly, so there
+Stunt Flying itself is offered only to that solo board: `SetBoard(seats, bots)`, which the screen calls on
+every build, feeds `StuntOffered` and moves the mission type off Stunt Flying when the board grows. **Launch:** a course leaves as `LaunchExit.Course` with no def, and
 `SessionSpec.FromMenu(..., course:)` sets the spec's own `--course=` argument and runs the same
 `ResolveCourse`, so the menu flies the course `--stunt --course=<chapter>/<name>` flies; a command
 line's own `--course=` no longer rides a later menu launch. `MenuReturnDestination.ForLaunch` names

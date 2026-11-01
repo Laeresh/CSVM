@@ -4,7 +4,7 @@ namespace CSVM.Flight.Modes;
 
 /// <summary>
 /// A course gate's scoring aperture, engine-free, standing vertical and facing
-/// <see cref="CourseGate.Forward"/>. A pylon gate's is the rectangle between its pylons, ground to
+/// <see cref="CourseGate.Forward"/>. A pylon gate's is the rectangle between its course pylons, ground to
 /// tops. A balloon ring's is a <see cref="RingSides"/>-gon of its diameter about its centre.
 /// The polygon stays in the gate's own frame and the segment is carried into it, so motion allocates nothing.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class CourseAperture
     public CourseAperture(CourseGate gate)
     {
         Gate = gate;
-        Rest = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(gate.Heading)), gate.Position);
+        Rest = CourseMotion.Rest(gate);
         Vector3[] vertices;
         if (gate.Kind == CourseGateKind.PylonGate)
         {

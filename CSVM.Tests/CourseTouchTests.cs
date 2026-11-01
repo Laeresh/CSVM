@@ -116,6 +116,17 @@ public class CourseTouchTests
     }
 
     [Fact]
+    public void AnElementTouchedBeforeAResetCountsAgainAfterIt()
+    {
+        var (run, touches) = Started();
+        run.Update(new Vector3(21f, 10f, 0f));
+        run.Reset();
+        run.Update(new Vector3(21f, 10f, 0f)); // the first step after a reset only seeds the segment
+        run.Update(new Vector3(21f, 10f, 0f));
+        Assert.Equal(2, touches.Count);
+    }
+
+    [Fact]
     public void ATouchBeforeTheFirstEntryOrOnTheFinishAddsNoTimeButStillFires()
     {
         var (run, touches) = Run();
@@ -173,7 +184,7 @@ public class CourseTouchTests
 
     private static void Pass(StuntMission run, CourseGate gate, float radius)
     {
-        var centre = gate.Position + (gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, gate.Height / 2f, 0f) : Vector3.Zero);
+        var centre = gate.Position + CourseGateShape.OpeningCentre(gate);
         run.Relocated();
         run.Update(centre - (gate.Forward * 5f), radius);
         run.Update(centre + (gate.Forward * 5f), radius);

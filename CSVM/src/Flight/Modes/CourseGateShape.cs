@@ -41,6 +41,10 @@ public static class CourseGateShape
     /// minus or plus half the width, on the gate's base.</summary>
     public static Vector3 PylonBase(CourseGate gate, int side) => new((side == 0 ? -0.5f : 0.5f) * gate.Width, 0f, 0f);
 
+    /// <summary>The middle of the gate's opening: a pylon gate's half height over its base, a ring's centre.</summary>
+    public static Vector3 OpeningCentre(CourseGate gate) =>
+        gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, 0.5f * gate.Height, 0f) : Vector3.Zero;
+
     public static float PylonBaseRadius(CourseGate gate) => PylonBaseShare * gate.Height;
 
     public static float PylonTopRadius(CourseGate gate) => PylonTopShare * gate.Height;

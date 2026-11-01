@@ -48,7 +48,7 @@ public sealed class ScoreStore
         run.Course is { } c ? $"course/{c.Chapter}/{c.Name}/{c.Hash}/{plane}" : $"{chapter}/{mission}/{plane}";
 
     /// <summary>The penalty count a run records beside its best: a course run's touches. A Danger
-    /// Zone run's is null, so its entry keeps its old shape.</summary>
+    /// Zone run's is null, and its entry carries no penalties.</summary>
     public static int? PenaltiesOf(StuntMission run) => run.Course != null ? run.PenaltyCount : null;
 
     /// <summary>The split times a run records beside its best: a course run's clock at each sequence
@@ -63,8 +63,8 @@ public sealed class ScoreStore
     /// which every Danger Zone key is.</summary>
     public int? GetPenalties(string key) => Field(key, "penalties")?.AsInt32();
 
-    /// <summary>The stored best's split at each sequence entry, or null for a key with none. No
-    /// Danger Zone key has any, nor a course best written before splits were stored.</summary>
+    /// <summary>The stored best's split at each sequence entry, or null for a key with none. A
+    /// Danger Zone key carries none, and neither does a course entry stored without them.</summary>
     public float[]? GetSplits(string key) =>
         Field(key, "splits")?.AsFloat32Array() is { Length: > 0 } splits ? splits : null;
 

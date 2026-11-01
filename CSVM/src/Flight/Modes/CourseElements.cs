@@ -27,7 +27,7 @@ public readonly record struct CourseTouch(
 /// </summary>
 public static class CourseElements
 {
-    /// <summary>Seconds one touch adds to the run, the Red Bull inflatable-pylon rule, not game data.</summary>
+    /// <summary>Seconds one touch adds to the run, the Red Bull rule for an inflatable course pylon, not game data.</summary>
     public const float TouchPenaltySeconds = 3f;
 
     /// <summary>How many elements a gate has. A pylon gate's are its course pylons, 0 left and 1

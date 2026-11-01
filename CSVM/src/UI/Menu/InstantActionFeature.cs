@@ -106,6 +106,10 @@ public sealed class InstantActionFeature : IMenuFeature
     private readonly Dictionary<string, IReadOnlyList<(string Name, string Title)>> _courses = new(StringComparer.Ordinal);
     private readonly InstantActionWaveSetup[] _waves = new InstantActionWaveSetup[WaveSlots];
 
+    // The join board as SetBoard last had it; solo until a presentation says otherwise.
+    private int _boardSeats = 1;
+    private int _boardBots;
+
     /// <summary>A feature whose environment defs come from <paramref name="loadBase"/>, called with
     /// a chapter code when an environment is confirmed. The loader's failure policy is its own;
     /// see <see cref="ForGameData"/> for the one the game uses. A chapter's authored courses, each a
@@ -146,7 +150,7 @@ public sealed class InstantActionFeature : IMenuFeature
     public InstantActionEnvironment Environment => EnvironmentRows[EnvironmentIndex];
 
     /// <summary>The mission types the picked environment offers in the dropdown order. Stunt flying
-    /// drops out where the chapter has neither Danger Zones nor an authored course.</summary>
+    /// drops out where <see cref="StuntOffered"/> says no.</summary>
     public IReadOnlyList<InstantActionMissionType> MissionTypes =>
         StuntOffered(Environment.Code) ? MissionTypeRows : MissionTypesFor(Environment.Code);
 
@@ -327,10 +331,23 @@ public sealed class InstantActionFeature : IMenuFeature
         return names;
     }
 
-    /// <summary>Whether a chapter offers stunt flying: it ships Danger Zones or has an authored course.
+    /// <summary>Whether a chapter offers stunt flying: it ships Danger Zones, or it has an authored course
+    /// and the board is solo. Solo is at most one seat and no bot row, as <see cref="SetBoard"/> last had them.
     /// The local lobby's Stunt Race reads <see cref="MenuChapters.DangerZonesFor"/> alone.</summary>
     public bool StuntOffered(string chapterCode) =>
-        MenuChapters.DangerZonesFor(chapterCode) || CoursesFor(chapterCode).Count > 0;
+        MenuChapters.DangerZonesFor(chapterCode) || (_boardSeats <= 1 && _boardBots == 0 && CoursesFor(chapterCode).Count > 0);
+
+    /// <summary>Takes the join board's seats and bot rows, which decide whether a chapter with courses and
+    /// no Danger Zones offers stunt flying. A presentation calls it on every build. The picked mission
+    /// type keeps its row where the list still has it, else wraps as <see cref="ConfirmEnvironment"/> does.</summary>
+    public void SetBoard(int seats, int bots)
+    {
+        string key = MissionType.Key;
+        (_boardSeats, _boardBots) = (seats, bots);
+        var types = MissionTypes;
+        int at = types.ToList().FindIndex(m => m.Key == key);
+        MissionTypeIndex = at >= 0 ? at : Wrap(MissionTypeIndex, types.Count);
+    }
 
     /// <summary><see cref="EnvironmentAllowed"/> with the authored courses counted.</summary>
     public bool AllowsEnvironment(int environmentIndex, string missionTypeKey) =>

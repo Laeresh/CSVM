@@ -9,7 +9,7 @@ namespace CSVM.Flight.Modes;
 /// <summary>
 /// A course's gates drawn from Godot primitives: two tapered, banded course pylons per pylon gate, a
 /// striped torus under tethered balloons per ring. One child node
-/// per pool gate, in pool order, stands at <see cref="CourseMotion"/>'s pose each frame. The pylons'
+/// per pool gate, in pool order, stands at <see cref="CourseMotion"/>'s pose each frame. The course pylons'
 /// fabric ripple is drawn only, on <c>csky_time</c>. A touched course pylon is cut and regrows
 /// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. A followed run's next gate
 /// carries a red cross while the aircraft is on its wrong side, the gate after it a dim fill. Everything is lit by the zone's
@@ -36,7 +36,7 @@ public sealed partial class CourseVisuals : Node3D
     // A mesh is centred on its own origin, so a column runs from minus half its height to plus half.
     // The ripple function is the one place a vertex moves: wave, a cut stump's sag, a falling top's
     // tip and drop. The bands and the cut's clip window read the undisplaced v_local. Both faces draw,
-    // the inside darker, so a cut pylon reads as a hollow tube.
+    // the inside darker, so a cut course pylon reads as a hollow tube.
     private const string ShaderCode = """
         shader_type spatial;
         render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled;
@@ -210,7 +210,7 @@ public sealed partial class CourseVisuals : Node3D
     }
 
     /// <summary>Cuts a course pylon on each of <paramref name="run"/>'s touches of one, at the run's sim
-    /// time, and stands every pylon whole on its reset. Both only record, and <see cref="Pose"/> draws,
+    /// time, and stands every course pylon whole on its reset. Both only record, and <see cref="Pose"/> draws,
     /// so a run outliving this node does no harm. It also adds the run's <see cref="Cross"/> and
     /// <see cref="Highlight"/>, which <see cref="Pose"/> moves with the run's next entry. Answers this node.</summary>
     public CourseVisuals Follow(StuntMission run)
@@ -253,14 +253,10 @@ public sealed partial class CourseVisuals : Node3D
     public override void _Process(double delta) =>
         Pose(GameClock.Current?.Time ?? (_unclocked += delta));
 
-    // The aperture's middle in the gate frame: a pylon gate's half height, a ring's centre.
-    private static Vector3 ApertureCentre(CourseGate gate) =>
-        gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, 0.5f * gate.Height, 0f) : Vector3.Zero;
-
     // A thin slab across the aperture, its clear opening only: a pylon gate's rectangle, a ring's disc.
     private static (Mesh Mesh, Transform3D Local) Fill(CourseGate gate) =>
         gate.Kind == CourseGateKind.PylonGate
-            ? (new BoxMesh { Size = new Vector3(gate.Width, gate.Height, HighlightSlabM) }, new Transform3D(Basis.Identity, ApertureCentre(gate)))
+            ? (new BoxMesh { Size = new Vector3(gate.Width, gate.Height, HighlightSlabM) }, new Transform3D(Basis.Identity, CourseGateShape.OpeningCentre(gate)))
             : (new CylinderMesh { TopRadius = 0.5f * gate.Diameter, BottomRadius = 0.5f * gate.Diameter, Height = HighlightSlabM, RadialSegments = 48, Rings = 1 },
                 new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2f), Vector3.Zero));
 
@@ -328,7 +324,7 @@ public sealed partial class CourseVisuals : Node3D
 
     // Every dimension is CourseGateShape's, which a touch test reads too. Each course pylon has its own
     // stump material and a hidden child on the same mesh for the falling top. So one cut moves one
-    // pylon. The top's margin covers it tipped flat.
+    // course pylon. The top's margin covers it tipped flat.
     private static CutPylon[] AddPylons(Node3D node, CourseGate gate)
     {
         var mesh = new CylinderMesh
@@ -405,12 +401,12 @@ public sealed partial class CourseVisuals : Node3D
         int g = _entryGates[entry];
         var gate = _course.Gates[g];
         var pose = CourseMotion.Pose(gate, seconds);
-        var from = (pose.AffineInverse() * plane) - ApertureCentre(gate);
+        var from = (pose.AffineInverse() * plane) - CourseGateShape.OpeningCentre(gate);
         bool reverse = _course.Sequence[entry].Direction == GateDirection.Reverse;
         _wrongSide = WrongSide(_wrongSide, reverse ? from.Z : -from.Z, from.Length());
         cross.Visible = _wrongSide;
         cross.Mesh = _crosses[g];
-        cross.Transform = pose * new Transform3D(Basis.Identity, ApertureCentre(gate));
+        cross.Transform = pose * new Transform3D(Basis.Identity, CourseGateShape.OpeningCentre(gate));
     }
 
     private void PoseHighlight(MeshInstance3D highlight, int entry, double seconds)

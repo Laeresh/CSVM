@@ -222,7 +222,8 @@ public sealed class StuntMission
     /// <summary>A course gate's idle motion in its own frame: pool index into
     /// <see cref="Course.Gates"/> and sim seconds in, the <c>motion</c> of
     /// <see cref="CourseAperture.CrossedBy"/> out. The drawn gate must use the same function at the
-    /// same time. Identity, a still gate, until the course's motion is wired in.</summary>
+    /// same time. The session sets it to <see cref="CourseMotion.Offset"/>; the default is the
+    /// identity, a still gate.</summary>
     public Func<int, double, Transform3D> GateMotion { get; set; } = static (_, _) => Transform3D.Identity;
 
     /// <summary>The sim seconds <see cref="GateMotion"/> is asked at: the session clock, never wall time.</summary>
@@ -319,7 +320,7 @@ public sealed class StuntMission
                 g++; // Course.Parse refuses an entry naming no gate
             entryGates[i] = g;
             var gate = course.Gates[g];
-            var centre = apertures[g].Rest * (gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, gate.Height / 2f, 0f) : Vector3.Zero);
+            var centre = apertures[g].Rest * CourseGateShape.OpeningCentre(gate);
             // A one-point polygon nothing can cross: scoring is the aperture's, and this only gives
             // ReturnPose the gate's centre and axis.
             var marker = new StuntGate { Vertices = new[] { centre }, Center = centre, Normal = gate.Forward };
@@ -416,8 +417,13 @@ public sealed class StuntMission
     }
 
     /// <summary>The pilot was placed rather than flown there, a respawn, so the next
-    /// <see cref="Update"/> starts a fresh segment instead of testing the jump against every gate.</summary>
-    public void Relocated() => _haveLastPlanePos = false;
+    /// <see cref="Update"/> starts a fresh segment instead of testing the jump against every gate.
+    /// The plane has left every touch volume, so an element entered again counts.</summary>
+    public void Relocated()
+    {
+        _haveLastPlanePos = false;
+        Array.Clear(_touching);
+    }
 
     /// <summary>Where a tap of respawn puts the pilot: on the route ribbon abeam the exit gate of
     /// the zone cleared last, the highest <see cref="StuntZone.CompletionOrder"/>. It heads along
@@ -512,7 +518,7 @@ public sealed class StuntMission
         PenaltyCount = 0;
         _clockStarted = false;
         _crossedGates.Clear();
-        _haveLastPlanePos = false;
+        Relocated();
         Stopped = false;
         RunReset?.Invoke();
     }

@@ -44,7 +44,8 @@ public sealed partial class CourseSequenceOverlay : Node3D
     public MeshInstance3D Path { get; }
 
     /// <summary>One label per pool gate in pool order (pooled, so a longer pool once leaves hidden extras),
-    /// shown when the sequence uses that gate.</summary>
+    /// shown when the sequence uses that gate. ⚠ Do not photograph their numbers in a one-frame suite;
+    /// <see cref="Label3D"/> shapes its text on a deferred call, so that frame draws none.</summary>
     public IReadOnlyList<Label3D> Labels => _labels;
 
     /// <summary>Draws <paramref name="course"/>'s sequence. <paramref name="gateNodes"/> are its drawn gates in

@@ -21,7 +21,7 @@ public readonly record struct PylonCutLook(float StumpTopM, float SagM, float Cu
 /// </summary>
 public static class CoursePylonCut
 {
-    /// <summary>Seconds from the cut until the pylon is whole.</summary>
+    /// <summary>Seconds from the cut until the course pylon is whole.</summary>
     public const double RegrowSeconds = 3.0;
 
     /// <summary>Seconds the stump stands at the cut before it regrows.</summary>
@@ -41,7 +41,7 @@ public static class CoursePylonCut
 
     public const float MaxTiltDeg = 70f;
 
-    /// <summary>A clip height beyond any pylon: the stump's top while whole, and a fresh cut's top.</summary>
+    /// <summary>A clip height beyond any course pylon: the stump's top while whole, and a fresh cut's top.</summary>
     public const float NoClipM = 1.0e6f;
 
     /// <summary>A whole course pylon: nothing clipped, no sag, no falling top.</summary>
@@ -66,7 +66,7 @@ public static class CoursePylonCut
     }
 
     /// <summary>The cut and falling top's reach for a touch at <paramref name="touchM"/>, given the
-    /// look at that moment. A cut pylon is cut again within what it has regrown, so nothing fallen falls
+    /// look at that moment. A cut course pylon is cut again within what it has regrown, so nothing fallen falls
     /// twice. A touch above its regrown stump drops nothing.</summary>
     public static (float Cut, float Top) Recut(float height, float touchM, PylonCutLook now) =>
         (Math.Clamp(touchM, 0f, Math.Min(height, now.StumpTopM)), now.StumpTopM);

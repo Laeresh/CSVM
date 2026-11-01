@@ -731,6 +731,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return;
         }
 
+        // A seat or bot row joining or leaving takes stunt flying off a chapter with courses alone.
+        _instantAction.SetBoard(_setup.Seats.Count, _setup.Bots.Count);
         string hidden = HiddenRemakeKey;
         bool orphaned = _iaOpen == hidden;
         if (orphaned)

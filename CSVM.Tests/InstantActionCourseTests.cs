@@ -103,6 +103,34 @@ public class InstantActionCourseTests
     }
 
     [Fact]
+    public void AChapterWithCoursesAloneOffersStuntFlyingOnlyToASoloBoard()
+    {
+        var ia = Feature(new Dictionary<string, string[]> { ["C2B"] = new[] { "cloud_loop" } });
+        ia.SelectEnvironment(1);
+        ia.ConfirmEnvironment();
+        ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
+
+        foreach (var (seats, bots) in new[] { (2, 0), (1, 1) })
+        {
+            ia.SetBoard(seats, bots);
+            Assert.False(ia.StuntOffered("C2B"));
+            Assert.False(ia.AllowsEnvironment(1, InstantActionFeature.StuntKey));
+            Assert.DoesNotContain(ia.MissionTypes, m => m.Key == InstantActionFeature.StuntKey);
+            Assert.NotEqual(InstantActionFeature.StuntKey, ia.MissionType.Key);
+            ia.SetBoard(1, 0);
+            Assert.True(ia.StuntOffered("C2B"));
+        }
+
+        // A chapter with Danger Zones offers it to any board.
+        ia.SelectEnvironment(0);
+        ia.ConfirmEnvironment();
+        ia.SelectMissionType(2);
+        ia.SetBoard(2, 1);
+        Assert.True(ia.StuntOffered("C1"));
+        Assert.Equal(InstantActionFeature.StuntKey, ia.MissionType.Key);
+    }
+
+    [Fact]
     public void ASoloCourseLeavesAsTheCourseWithNoDefAndASecondPilotOrABotFliesTheDangerZones()
     {
         var ia = StuntOnC1();

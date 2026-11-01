@@ -198,7 +198,7 @@ internal static class CourseLaunchSuites
     private static bool Through(FlightController plane, StuntMission run, Course course, SequenceEntry entry)
     {
         var gate = course.Gates.First(x => x.Id == entry.GateId);
-        var centre = gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, gate.Height / 2f, 0f) : Vector3.Zero;
+        var centre = CourseGateShape.OpeningCentre(gate);
         float lead = entry.Direction == GateDirection.Forward ? LeadM : -LeadM;
         var pose = CourseMotion.Pose(gate, run.SimSeconds());
         plane.RespawnAt(pose * (centre + (Vector3.Back * lead)), pose * (centre + (Vector3.Forward * lead)));

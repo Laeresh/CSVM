@@ -46,7 +46,7 @@ internal static class CourseLabSuites
         + "saves and reloads; the panels over the numbered course are photographed. The gizmo: a press on a handle "
         + "grabs it without placing or reselecting, the X and Y arrows move a ring along their axes and the heading ring "
         + "turns it (Ctrl snaps), with no sequence row rebuilt; a pylon gate has no Y arrow and stays on the ground; "
-        + "the selected ring with its gizmo is photographed")]
+        + "the selected ring with its gizmo is photographed. A course opened from the game folder saves back there")]
     internal static void CourseLabEdits(TestContext ctx)
     {
         var savedClock = GameClock.Current;
@@ -215,6 +215,19 @@ internal static class CourseLabSuites
         Photograph(ctx, pane, camera, lab);
         Gizmo(ctx, pane, camera, lab);
         Sequence(ctx, pane, camera, lab, library);
+
+        // A course opened from the game folder saves back there, though the build saves to the shipped root.
+        string fromGameFolder = Edited + "_game_folder";
+        library.Save(saved with { Name = fromGameFolder }, CourseSource.GameFolder);
+        bool opened = lab.Open(fromGameFolder);
+        string? backPath = lab.Save();
+        string gameFolderFile = Path.Combine(root, CourseLibrary.GameFolderName, Chapter, fromGameFolder + ".json");
+        string button = ((Button)lab.FindChild("save", true, false)).Text;
+        ctx.Check(opened && backPath != null && Path.GetFullPath(backPath) == Path.GetFullPath(gameFolderFile)
+                && !File.Exists(Path.Combine(root, "shipped", Chapter, fromGameFolder + ".json")) && button == "Save to the game folder",
+            $"a game-folder course saves back to the game folder, its button saying so: {backPath}, '{button}'");
+        lab.New("scratch_other");
+        ctx.Check(lab.Target == CourseSource.Shipped, $"a new course saves where the build saves: {lab.Target}");
     }
 
     // The gizmo pressed and dragged from screen points on its handles: r1's X and Y arrows and heading ring, then

@@ -8,12 +8,12 @@ namespace CSVM.UI.Labs;
 
 /// <summary>
 /// The course the course lab is editing, its selected gate and sequence entry. Every edit goes through here and raises
-/// <see cref="Changed"/>, so the lab's drawing and panel, and any later tool on the selection, follow one
+/// <see cref="Changed"/>, so the lab's drawing, panel, gizmo and sequence overlay follow one
 /// source. Engine-free: the lab hands in ground points and camera bases, and this decides what they become.
 /// </summary>
 public sealed class CourseDraft
 {
-    /// <summary>A new pylon gate's width and height, metres. TUNE: B11's montage sizes.</summary>
+    /// <summary>A new pylon gate's width and height, metres. TUNE.</summary>
     public const float PylonWidthM = 40f;
 
     public const float PylonHeightM = 30f;
@@ -91,6 +91,12 @@ public sealed class CourseDraft
     public static CourseSource? SaveTarget(bool editorBuild, bool hasGameFolder) =>
         editorBuild ? CourseSource.Shipped : hasGameFolder ? CourseSource.GameFolder : null;
 
+    /// <summary>Where a save of a course opened from <paramref name="openedFrom"/> goes. A game-folder course
+    /// goes back to the game folder, null when the launch reads none. A shipped or new (null) one goes to
+    /// <paramref name="buildTarget"/>, the build's <see cref="SaveTarget(bool, bool)"/>.</summary>
+    public static CourseSource? SaveTarget(CourseSource? buildTarget, CourseSource? openedFrom, bool hasGameFolder) =>
+        openedFrom == CourseSource.GameFolder ? (hasGameFolder ? CourseSource.GameFolder : null) : buildTarget;
+
     /// <summary><paramref name="gate"/> moved to stand over <paramref name="ground"/>. A pylon gate stands on it;
     /// a ring keeps its height above the ground, which was <paramref name="groundUnderOld"/> where it stood.</summary>
     public static CourseGate MovedTo(CourseGate gate, Vector3 ground, float groundUnderOld) =>
@@ -106,10 +112,9 @@ public sealed class CourseDraft
     public static CourseGate WithAboveGround(CourseGate ring, float aboveM, float groundY) =>
         ring with { Position = ring.Position with { Y = groundY + aboveM } };
 
-    /// <summary>The middle of <paramref name="gate"/>'s opening at rest: a pylon gate's half height over its base,
-    /// a ring's centre.</summary>
-    public static Vector3 Centre(CourseGate gate) =>
-        gate.Kind == CourseGateKind.PylonGate ? gate.Position + (Vector3.Up * (0.5f * gate.Height)) : gate.Position;
+    /// <summary>The middle of <paramref name="gate"/>'s opening at rest, in world space. The heading turns about
+    /// the vertical the centre stands on, so it is the position plus <see cref="CourseGateShape.OpeningCentre"/>.</summary>
+    public static Vector3 Centre(CourseGate gate) => gate.Position + CourseGateShape.OpeningCentre(gate);
 
     /// <summary>The horizontal way <paramref name="entry"/> flies through <paramref name="gate"/>.</summary>
     public static Vector3 FlownWay(CourseGate gate, SequenceEntry entry) =>

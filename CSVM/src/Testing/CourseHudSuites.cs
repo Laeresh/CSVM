@@ -170,8 +170,7 @@ internal static class CourseHudSuites
         return visuals.Cross!.Transform.Origin;
     }
 
-    private static Vector3 Centre(CourseGate gate) =>
-        gate.Kind == CourseGateKind.PylonGate ? new Vector3(0f, gate.Height / 2f, 0f) : Vector3.Zero;
+    private static Vector3 Centre(CourseGate gate) => CourseGateShape.OpeningCentre(gate);
 
     private static void Cross(StuntMission run, CourseGate gate, GateDirection direction, double now)
     {

@@ -462,7 +462,7 @@ file name where it has none; the pick and the launch carry the file name. A chap
 even without Danger Zones, and takes its first course; the local lobby's Stunt Race keeps to the
 Danger Zones. Authored courses are solo, so the option is offered only to one seat with no bot row
 on the join board (`InstantActionFeature.OffersCourse`); a second seat or a bot row withdraws it and
-the run flies the Danger Zones, the Race Time box and the Race Bots toggle staying Danger-Zone-only.
+the run flies the Danger Zones, the Race Time box and the Race Bots toggle staying Danger-Zone-only. A chapter with courses and no Danger Zones offers Stunt Flying itself only to that solo board (`InstantActionFeature.SetBoard`).
 A picked course leaves as `LaunchExit.Course` with no def, and `SessionSpec.FromMenu` settles it as
 `--stunt --course=<chapter>/<name>` is settled, so the menu and the command line fly the same
 course. A course the build cannot fly does not quit the process as the command line does: the

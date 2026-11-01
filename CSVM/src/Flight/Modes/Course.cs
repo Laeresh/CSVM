@@ -28,7 +28,7 @@ public enum GateDirection
 public readonly record struct SequenceEntry(string GateId, GateDirection Direction);
 
 /// <summary>One gate of a course's gate pool, in absolute world coordinates. A pylon gate's
-/// <see cref="Position"/> is its base midway between the pylons. A ring's is its centre, so its Y is
+/// <see cref="Position"/> is its base midway between the course pylons. A ring's is its centre, so its Y is
 /// the ring's height. <see cref="Heading"/> is yaw in degrees, as <see cref="SpawnPoint"/> has it.
 /// A pylon gate sizes by <see cref="Width"/> and <see cref="Height"/>, a ring by
 /// <see cref="Diameter"/>, and an unused size is 0.</summary>
