@@ -261,6 +261,14 @@ internal sealed class OceanMask
         return ms;
     }
 
+    /// <summary>Whether a triangle of no other kind is solid: anything not water reaching under
+    /// <see cref="OceanMaskRaster.SolidTop"/>, under 400 m tall. Painted
+    /// shallows lying flat on the sea mark nothing, so the sheet beneath stays open sea. They paint water,
+    /// and as a solid they calmed a band off every coast they edge.</summary>
+    internal static bool MarksSolid(string texture, bool water, float minY, float maxY) =>
+        !water && minY < OceanMaskRaster.SolidTop && maxY - minY < 400f
+        && !(TextureArchive.IsPaintedShallows(texture) && minY > -OceanMaskRaster.SeaLevelBand && maxY < OceanMaskRaster.SeaLevelBand);
+
     // The red byte of a texel, clamped to the edge as the include's fetch is.
     private static float Red(Image image, int x, int y) =>
         Mathf.Round(image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1)).R * 255f);
@@ -290,7 +298,7 @@ internal sealed class OceanMask
             if (textures.CoastProfileOf(name, result.BaseTexture) is not { } coast)
                 continue;
             result.CoastProfiles[name] = coast;
-            Log.Info("world", $"ocean: coast profile {name} axis={(coast.AlongV ? "V" : "U")} water={(coast.WaterAtOne ? 1 : 0)} crossing={coast.Crossing:0.000} fade={coast.Fade:0.000}");
+            Log.Info("world", $"ocean: coast profile {name} axis={(coast.AlongV ? "V" : "U")} water={(coast.WaterAtOne ? 1 : 0)} crossing={coast.Crossing:0.000} fade={coast.Fade:0.000} opaque={coast.Opaque:0.000}");
         }
         walker.Finish(result.CoastProfiles);
         double walkMs = Lap(ref t0);
@@ -447,7 +455,7 @@ internal sealed class OceanMask
                 }
                 else if (profiles.TryGetValue(c.Name, out var p))
                 {
-                    Tris[c.At] = t with { Surf = new Vector3(Seaward(p, c.A), Seaward(p, c.B), Seaward(p, c.C)) };
+                    Tris[c.At] = t with { Surf = new Vector3(Seaward(p, c.A), Seaward(p, c.B), Seaward(p, c.C)), Opaque = p.Opaque / Math.Max(p.Fade, MinFade) };
                 }
                 else
                 {
@@ -643,7 +651,7 @@ internal sealed class OceanMask
                     kind = Kind.Edge;
                     _result.EdgeTriangles++;
                 }
-                else if (!water && minY < OceanMaskRaster.SolidTop && maxY - minY < 400f)
+                else if (MarksSolid(stem, water, minY, maxY))
                 {
                     kind = Kind.Solid;
                     _result.SolidTriangles++;

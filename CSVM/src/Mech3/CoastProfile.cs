@@ -2,14 +2,14 @@ using System;
 
 namespace CSVM.Mech3;
 
-/// <summary>Where a painted-coast texture crosses from water to land, read off its authored pixels
-/// along the one UV axis they vary along. Engine-free; the rules and the figures they reproduce are
-/// in analysis/painted-coasts/FINDINGS.md.</summary>
+/// <summary>Where a painted-coast texture crosses from water to land along its one varying UV axis,
+/// engine-free; the rules and figures are in analysis/painted-coasts/FINDINGS.md.</summary>
 /// <param name="AlongV">True when V runs across the coast, false for U.</param>
 /// <param name="WaterAtOne">True when the water end is coordinate 1 of that axis, false for 0.</param>
 /// <param name="Crossing">The coordinate along the axis at which the water meets the land.</param>
 /// <param name="Fade">The width along the axis from the profile's 10 % point to its 90 % point.</param>
-public readonly record struct CoastProfile(bool AlongV, bool WaterAtOne, float Crossing, float Fade)
+/// <param name="Opaque">An alpha strip's width from its crossing landward to its 90 % alpha, 0 for a ramp</param>
+public readonly record struct CoastProfile(bool AlongV, bool WaterAtOne, float Crossing, float Fade, float Opaque = 0f)
 {
     // Texels averaged at each end of the profile, so one noisy texel cannot pick the water end.
     private const int EndTexels = 8;
@@ -82,7 +82,8 @@ public readonly record struct CoastProfile(bool AlongV, bool WaterAtOne, float C
         double c90 = Reach(s, 0.9, last) ?? last;
         double cross = alpha ? c50 : c10;
         double coord = (cross + 0.5) / n;
-        return new CoastProfile(alongV, waterAtOne, (float)(waterAtOne ? 1 - coord : coord), (float)((c90 - c10) / n));
+        return new CoastProfile(alongV, waterAtOne, (float)(waterAtOne ? 1 - coord : coord), (float)((c90 - c10) / n),
+            alpha ? (float)((c90 - c50) / n) : 0f);
     }
 
     /// <summary>The mean RGB of a texture's texels, the base sheet's colour the profile is read

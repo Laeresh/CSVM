@@ -905,6 +905,11 @@ public sealed class TextureArchive : IDisposable
     public static bool IsPaintedSeaTile(string materialTextureName) =>
         PaintedSeaTiles.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
 
+    /// <summary>True for a blended decal of painted shallows and foam laid flat on the sea: C3's
+    /// <c>shore2</c>. It paints water, though <c>ClassifySurface</c> calls it land.</summary>
+    public static bool IsPaintedShallows(string materialTextureName) =>
+        Path.GetFileNameWithoutExtension(materialTextureName).Equals("shore2", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The chapter's authored mip LOD bias, read from the boot scripts'
     /// <c>MipBias</c> lines and clamped like the original's own command. It is 0 without scripts or
     /// when the chapter authors none, which is every chapter but C5 (docs/org/textures.md).

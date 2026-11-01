@@ -59,9 +59,11 @@ internal static class OceanMaskRaster
     // Below this many rows a band's halo costs more than its thread saves.
     private const int MinBandRows = 64;
 
-    // A texel's painted-coast mark. The higher wins, so land wins where two coasts overlap.
+    // A texel's painted-coast mark. The higher wins, so land wins where two coasts overlap. Under is a
+    // strip's still translucent sand between its waterline and where it turns opaque.
     private const byte CoastWater = 1;
-    private const byte CoastLand = 2;
+    private const byte CoastUnder = 2;
+    private const byte CoastLand = 3;
 
     /// <summary>What a triangle marks: open sea, other water at sea level, the surf ring, a painted
     /// coast, or a solid near sea level. The surf ring is open sea with its authored coverage. A
@@ -214,7 +216,8 @@ internal static class OceanMaskRaster
     // A painted coast decides its texel once every triangle has marked it, so no triangle order
     // moves it. Its land side is solid over the tile or sheet beneath. Its water side is open sea
     // over the coplanar land under a strip, while a solid rising off the water keeps its marks. Where
-    // two coasts overlap, land wins.
+    // two coasts overlap, land wins. A strip's translucent sand is sea, so the ocean's edge lies under
+    // opaque sand. It seeds the distance as land did, which still runs from the waterline.
     private static void PaintedCoasts(Grid g, int r0, int r1)
     {
         for (int i = r0 * g.W; i < (r1 + 1) * g.W; i++)
@@ -225,11 +228,11 @@ internal static class OceanMaskRaster
                 g.Solid[i] = true;
                 g.Seed[i] = true;
             }
-            else if (g.Coast[i] == CoastWater)
+            else if (g.Coast[i] != 0)
             {
                 g.Sea[i] = 1;
                 g.Solid[i] = g.StandSolid[i];
-                g.Seed[i] = g.StandSeed[i];
+                g.Seed[i] = g.Coast[i] == CoastUnder || g.StandSeed[i];
                 g.Zone[i] = AnyZone;
                 if (g.CoastSurf[i] > g.Surf[i])
                     g.Surf[i] = g.CoastSurf[i];
@@ -424,17 +427,16 @@ internal static class OceanMaskRaster
                     case Kind.Coast:
                         // How far seaward of the painted waterline, in fade widths.
                         float sea = (t.Surf.X * w1) + (t.Surf.Y * w2) + (t.Surf.Z * w0);
-                        if (sea > 0f)
+                        byte mark = sea > 0f ? CoastWater : sea > -t.Opaque ? CoastUnder : CoastLand;
+                        if (mark > g.Coast[i])
+                            g.Coast[i] = mark;
+                        // The coverage saturates under the translucent sand, so the foam's texel edge lies under
+                        // opaque sand as the sea's does. Stopped at the waterline it drew a sawtooth.
+                        if (mark != CoastLand)
                         {
-                            if (g.Coast[i] == 0)
-                                g.Coast[i] = CoastWater;
                             byte cover = Channel(1f - sea);
                             if (cover > g.CoastSurf[i])
                                 g.CoastSurf[i] = cover;
-                        }
-                        else
-                        {
-                            g.Coast[i] = CoastLand;
                         }
                         break;
                     default:
@@ -789,13 +791,12 @@ internal static class OceanMaskRaster
         return dist;
     }
 
-    /// <summary>One world-space triangle. On the base sheet it carries its corners' stored vertex
-    /// colours and its mesh instance's zone group. A ramp is a base triangle rising off sea level:
-    /// its texels take <see cref="RampSea"/> and its plane lifts the ocean. A surf triangle carries
-    /// its corners' surf coverage (1 - u) in <see cref="Surf"/>'s X, Y and Z. A painted coast carries
-    /// there how far seaward of its painted waterline each corner lies, in widths of its fade. At 0
-    /// or below a texel is land; above, its coverage is 1 less that.</summary>
-    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default);
+    /// <summary>One world-space triangle. A base one carries its corners' stored colours and its zone
+    /// group; a ramp, rising off sea level, takes <see cref="RampSea"/> and lifts the ocean. A surf triangle carries its corners' coverage (1 - u) in <see cref="Surf"/>.
+    /// A painted coast carries there how far seaward of its waterline each corner lies, in fade widths,
+    /// its coverage 1 less that. Down to -<see cref="Opaque"/> it is sea with no distance and full
+    /// coverage, under a strip's translucent sand; below, land.</summary>
+    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default, float Opaque = 0f);
 
     /// <summary>The texel bytes of the mask, tint, zone group, lift and surf, and each pass's
     /// milliseconds over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore

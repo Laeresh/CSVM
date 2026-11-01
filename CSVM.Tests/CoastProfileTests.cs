@@ -34,6 +34,8 @@ public class CoastProfileTests
         Assert.False(p.Value.WaterAtOne);
         Near(16.5 / N, p.Value.Crossing);
         Near(12.8 / N, p.Value.Fade);
+        // The alpha reaches 90 % at texel 22.4, 6.4 past the crossing: there the strip turns opaque.
+        Near(6.4 / N, p.Value.Opaque);
 
         var mirrored = CoastProfile.Of(Image(N, 4, k => k < N / 2 ? sand : water, Alpha), Sheet);
         Assert.NotNull(mirrored);
@@ -72,6 +74,7 @@ public class CoastProfileTests
         Assert.True(p.Value.WaterAtOne);
         Near(1 - (19.7 / N), p.Value.Crossing);
         Near(25.6 / N, p.Value.Fade);
+        Assert.Equal(0f, p.Value.Opaque);
     }
 
     [Fact]

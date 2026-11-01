@@ -597,6 +597,87 @@ public class OceanMaskRasterTests
         AssertOrderFree(tris);
     }
 
+    // An alpha strip's waterline is at x = 64; it turns opaque half a 32 m fade landward, at x = 48.
+    // The sand between is sea with no distance and full surf, and land lies past x = 48. Seaward of the
+    // waterline the bytes are a strip's with no such sand.
+    [Fact]
+    public void AStripsTranslucentSandIsSeaWithNoDistance()
+    {
+        List<Tri> Scene(float opaque)
+        {
+            var tris = new List<Tri>();
+            AddQuad(tris, 0f, -512f, 1024f, Kind.Base, Colors.White);
+            AddQuad(tris, -1024f, -512f, 1024f, Kind.Solid, Colors.White);
+            AddStrip(tris, 0f, 128f, x => (x - 64f) / 32f, opaque);
+            var far = new Vector3(-512f, 0f, -512f);
+            tris.Add(new Tri(far, far + new Vector3(1f, 0f, 0f), far + new Vector3(0f, 0f, 1f), Kind.Base, Colors.White, Colors.White, Colors.White));
+            return tris;
+        }
+
+        var under = Scene(0.5f);
+        var r = OceanMaskRaster.Run(under.ToArray(), Mean, 3);
+        var bare = OceanMaskRaster.Run(Scene(0f).ToArray(), Mean, 3);
+        int row = (int)((4f - r.Origin.Y) / Cell);
+        int At(float x) => (row * r.Width) + (int)((x - r.Origin.X) / Cell);
+        foreach (float x in new[] { 4f, 28f, 44f })
+        {
+            Assert.Equal(0, r.Mask[2 * At(x)]);
+            Assert.Equal(0, r.Surf[At(x)]);
+        }
+        foreach (float x in new[] { 52f, 60f })
+        {
+            Assert.Equal(255, r.Mask[2 * At(x)]);
+            Assert.Equal(0, r.Mask[(2 * At(x)) + 1]);
+            Assert.Equal(255, r.Surf[At(x)]);
+            Assert.Equal(0, bare.Mask[2 * At(x)]);
+            Assert.Equal(0, bare.Surf[At(x)]);
+        }
+        for (float x = 68f; x < 400f; x += Cell)
+        {
+            Assert.Equal(bare.Mask[2 * At(x)], r.Mask[2 * At(x)]);
+            Assert.Equal(bare.Mask[(2 * At(x)) + 1], r.Mask[(2 * At(x)) + 1]);
+            Assert.Equal(bare.Surf[At(x)], r.Surf[At(x)]);
+        }
+        Assert.Equal((byte)Math.Round(36f / OceanMaskRaster.ShoreReach * 255f), r.Mask[(2 * At(100f)) + 1]);
+        AssertOrderFree(under);
+    }
+
+    // C3's painted shallows: a flat blended decal on the sea marks nothing. The sheet under it is open
+    // sea, reading its distance to the land at x = 0. A shallows triangle rising off the sea stays solid.
+    [Fact]
+    public void PaintedShallowsLyingFlatAreSeaAndRisingOnesSolid()
+    {
+        Assert.False(OceanMask.MarksSolid("shore2.tif", false, -0.17f, 0f));
+        Assert.True(OceanMask.MarksSolid("shore2.tif", false, 0f, 7.64f));
+        Assert.True(OceanMask.MarksSolid("sand128.tif", false, 0f, 0f));
+        Assert.False(OceanMask.MarksSolid("wtr00000.tif", true, 0f, 0f));
+        var tris = new List<Tri>();
+        AddQuad(tris, 0f, -512f, 1024f, Kind.Base, Colors.White);
+        AddQuad(tris, -1024f, -512f, 1024f, Kind.Solid, Colors.White);
+        void AddIfSolid(Vector3 a, Vector3 b, Vector3 c)
+        {
+            if (OceanMask.MarksSolid("shore2.tif", false, Math.Min(a.Y, Math.Min(b.Y, c.Y)), Math.Max(a.Y, Math.Max(b.Y, c.Y))))
+                tris.Add(new Tri(a, b, c, Kind.Solid, Colors.White, Colors.White, Colors.White));
+        }
+
+        // Flat shallows from x = 40 to 100, and a rising piece from x = 300 to 340.
+        AddIfSolid(new Vector3(40f, -0.17f, -64f), new Vector3(100f, 0f, -64f), new Vector3(100f, 0f, 64f));
+        AddIfSolid(new Vector3(40f, -0.17f, -64f), new Vector3(100f, 0f, 64f), new Vector3(40f, 0f, 64f));
+        AddIfSolid(new Vector3(300f, 0f, -64f), new Vector3(340f, 7.6f, -64f), new Vector3(340f, 7.6f, 64f));
+        AddIfSolid(new Vector3(300f, 0f, -64f), new Vector3(340f, 7.6f, 64f), new Vector3(300f, 0f, 64f));
+        Assert.Equal(6, tris.Count);
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 3);
+        int row = (int)((4f - r.Origin.Y) / Cell);
+        int At(float x) => (row * r.Width) + (int)((x - r.Origin.X) / Cell);
+        for (float x = 44f; x < 100f; x += Cell)
+        {
+            Assert.Equal(255, r.Mask[2 * At(x)]);
+            Assert.Equal((byte)Math.Round(x / OceanMaskRaster.ShoreReach * 255f), r.Mask[(2 * At(x)) + 1]);
+        }
+        Assert.Equal(255, r.Mask[2 * At(316f)]);
+        Assert.Equal(0, r.Mask[(2 * At(316f)) + 1]);
+    }
+
     // C1B-like: a sheet of 512 m base quads with baked colours, scattered edge water and surf ring
     // pieces. The solids run from slivers to large faces, some reaching past the sheet.
     private static List<Tri> Scene(Random rng)
@@ -634,12 +715,17 @@ public class OceanMaskRasterTests
         for (int i = 0; i < 200; i++)
             tris.Add(Scatter(rng, Kind.Surf, rng.NextSingle() * 80f) with { Surf = new Vector3(rng.NextSingle(), rng.NextSingle(), rng.NextSingle()) });
         // Painted coasts, their waterline crossing most of them, overlapping each other and every
-        // other kind; a fifth are sea tiles, water throughout.
+        // other kind; a fifth are sea tiles, water throughout. A third are alpha strips, sea under
+        // their translucent sand.
         float Seaward() => (rng.NextSingle() * 3f) - 1.5f;
         for (int i = 0; i < 300; i++)
         {
             var t = Scatter(rng, Kind.Coast, rng.NextSingle() * 200f);
-            tris.Add(t with { Surf = i % 5 == 0 ? new Vector3(2f, 2f, 2f) : new Vector3(Seaward(), Seaward(), Seaward()) });
+            tris.Add(t with
+            {
+                Surf = i % 5 == 0 ? new Vector3(2f, 2f, 2f) : new Vector3(Seaward(), Seaward(), Seaward()),
+                Opaque = i % 3 == 0 ? rng.NextSingle() * 1.2f : 0f,
+            });
         }
         // Faces crossing the water, cut at y = 0: half with no corner at sea level, half with one.
         for (int i = 0; i < 400; i++)
@@ -700,15 +786,16 @@ public class OceanMaskRasterTests
     }
 
     // A painted strip from x0 to x1 along z -512..512, each corner carrying seaward(x) fade widths.
-    private static void AddStrip(List<Tri> tris, float x0, float x1, Func<float, float> seaward)
+    // Its sand turns opaque `opaque` fade widths landward of its waterline.
+    private static void AddStrip(List<Tri> tris, float x0, float x1, Func<float, float> seaward, float opaque = 0f)
     {
         var a = new Vector3(x0, 0f, -512f);
         var b = new Vector3(x1, 0f, -512f);
         var d = new Vector3(x0, 0f, 512f);
         var e = new Vector3(x1, 0f, 512f);
         float s0 = seaward(x0), s1 = seaward(x1);
-        tris.Add(new Tri(a, b, e, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s1)));
-        tris.Add(new Tri(a, e, d, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s0)));
+        tris.Add(new Tri(a, b, e, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s1), Opaque: opaque));
+        tris.Add(new Tri(a, e, d, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s0), Opaque: opaque));
     }
 
     // The painted coasts' texels hold for the triangles in reverse order and at another band count.
@@ -756,20 +843,21 @@ public class OceanMaskRasterTests
         Array.Fill(tint, new Color(-1f, 0f, 0f));
         foreach (var t in tris)
             RasterReference(t, minX, minZ, w, h, sea, solid, seed, tint, surf, coast, coastSurf, standSolid, standSeed);
-        // A painted coast's land (2) is solid over anything, its water (1) open sea over all but a rising solid.
+        // A painted coast's land (3) is solid over anything, its water (1) open sea over all but a rising
+        // solid. A strip's translucent sand (2) is sea too, seeding the distance as land.
         for (int i = 0; i < w * h; i++)
         {
-            if (coast[i] == 2)
+            if (coast[i] == 3)
             {
                 sea[i] = 0;
                 solid[i] = true;
                 seed[i] = true;
             }
-            else if (coast[i] == 1)
+            else if (coast[i] != 0)
             {
                 sea[i] = 1;
                 solid[i] = standSolid[i];
-                seed[i] = standSeed[i];
+                seed[i] = coast[i] == 2 || standSeed[i];
                 surf[i] = Math.Max(surf[i], coastSurf[i]);
             }
         }
@@ -856,15 +944,10 @@ public class OceanMaskRasterTests
                     {
                         int i = (z * w) + x;
                         float s = (t.Surf.X * w1) + (t.Surf.Y * w2) + (t.Surf.Z * w0);
-                        if (s > 0f)
-                        {
-                            coast[i] = Math.Max(coast[i], (byte)1);
+                        byte mark = s > 0f ? (byte)1 : s > -t.Opaque ? (byte)2 : (byte)3;
+                        coast[i] = Math.Max(coast[i], mark);
+                        if (mark != 3)
                             coastSurf[i] = Math.Max(coastSurf[i], (byte)Math.Clamp(Math.Round((1f - s) * 255f), 0, 255));
-                        }
-                        else
-                        {
-                            coast[i] = 2;
-                        }
                     }
                 }
             }

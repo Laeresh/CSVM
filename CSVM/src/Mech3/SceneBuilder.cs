@@ -282,6 +282,10 @@ public sealed class SceneBuilder
     // spans (CoastFade). The whole stretch is the author's pick from a montage beside half of it.
     internal const float CoastFadeShare = 1.0f;
 
+    // Enhanced mode only: painted shallows' fade crossing, past every coordinate their UVs reach, so they
+    // fade out whole wherever the ocean draws (FadeFor). The procedural sea replaces the painted one.
+    internal const float ShallowsCrossing = 65536f;
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -800,11 +804,8 @@ void fragment() {
     {
         foreach (var (material, texture) in _texturedMaterials)
         {
-            if ((AlphaOf(material) == TransparencyClass.None || IsFadedStrip(texture))
-                && profiles.TryGetValue(System.IO.Path.GetFileNameWithoutExtension(texture), out var profile))
-            {
-                material.SetShaderParameter("coast_fade", CoastFade(profile));
-            }
+            if ((AlphaOf(material) == TransparencyClass.None || IsFadedStrip(texture)) && FadeFor(texture, profiles) is { } fade)
+                material.SetShaderParameter("coast_fade", fade);
         }
     }
 
@@ -926,23 +927,31 @@ void light() {{
     internal static bool IsSurfTexture(string texName) =>
         texName.StartsWith("srf", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Whether a texture is a coast painted into a flat tile or strip, the set the ocean
-    /// mask splits at its waterline (<see cref="TextureArchive.PaintedCoasts"/> and
-    /// <see cref="TextureArchive.IsPaintedSeaTile"/>). Land or water as <see cref="ClassifySurface"/> calls it.</summary>
+    /// <summary>Whether a texture is a flat painted coast that gives way to the waves. The ocean mask
+    /// splits these at their waterline (<see cref="TextureArchive.PaintedCoasts"/>,
+    /// <see cref="TextureArchive.IsPaintedSeaTile"/>); <see cref="TextureArchive.IsPaintedShallows"/> joins
+    /// them. Land or water as <see cref="ClassifySurface"/> calls it.</summary>
     internal static bool IsPaintedCoastTexture(string texName) =>
-        TextureArchive.IsPaintedSeaTile(texName)
+        TextureArchive.IsPaintedSeaTile(texName) || TextureArchive.IsPaintedShallows(texName)
         || TextureArchive.PaintedCoasts.Contains(System.IO.Path.GetFileNameWithoutExtension(texName), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Whether a painted alpha strip's alpha also fades past its crossing: C2's <c>beach1</c>, whose
-    /// painted water side lays a grey band over the waves. The author's pick from a montage; the other
-    /// strips and the rock overlay keep their authored alpha.</summary>
+    /// <summary>Whether a painted alpha strip's alpha also fades. C2's <c>beach1</c> fades past its crossing,
+    /// thinning the grey band its water side lays over the waves; C3's painted shallows fade whole. The
+    /// author's picks from montages; the other strips and the rock overlay keep their authored alpha.</summary>
     internal static bool IsFadedStrip(string texName) =>
-        System.IO.Path.GetFileNameWithoutExtension(texName).Equals("beach1", StringComparison.OrdinalIgnoreCase);
+        System.IO.Path.GetFileNameWithoutExtension(texName).Equals("beach1", StringComparison.OrdinalIgnoreCase)
+        || TextureArchive.IsPaintedShallows(texName);
 
     /// <summary>The <c>coast_fade</c> a profile gives a painted coast: axis, water end, crossing, then
     /// <see cref="CoastFadeShare"/> of the stretch from the crossing to the water end.</summary>
     internal static Vector4 CoastFade(CoastProfile p) =>
         new(p.AlongV ? 1f : 0f, p.WaterAtOne ? 1f : 0f, p.Crossing, CoastFadeShare * (p.WaterAtOne ? 1f - p.Crossing : p.Crossing));
+
+    /// <summary>The <c>coast_fade</c> a painted coast texture takes, or null for none. A profiled coast takes
+    /// its profile's; painted shallows one crossing at <see cref="ShallowsCrossing"/>, keeping nothing.</summary>
+    internal static Vector4? FadeFor(string texName, IReadOnlyDictionary<string, CoastProfile> profiles) =>
+        TextureArchive.IsPaintedShallows(texName) ? new Vector4(0f, 0f, ShallowsCrossing, 1f)
+        : profiles.TryGetValue(System.IO.Path.GetFileNameWithoutExtension(texName), out var p) ? CoastFade(p) : null;
 
     /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
     /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
@@ -2524,7 +2533,10 @@ void light() {{
             sb.AppendLine("varying vec3 v_ocean_pos;");
         // The fade's axis (1 for V), water end (1 for coordinate 1), crossing and width; width 0 keeps it whole.
         if (coastDither)
+        {
             sb.AppendLine(ClutterFadeInclude);
+            sb.AppendLine(TimeInclude);
+        }
         if (coastFade)
             sb.AppendLine("uniform vec4 coast_fade = vec4(0.0);");
         // The baked terrain shadow darkens the sun on every world-lit arm through a light() of its
@@ -2653,11 +2665,13 @@ void fragment() {{");
             + "        float coast_t = coast_fade.x > 0.5 ? UV.y : UV.x;\n"
             + "        float coast_sea = coast_fade.y > 0.5 ? coast_t - coast_fade.z : coast_fade.z - coast_t;\n"
             + "        float coast_keep = 1.0 - clamp(coast_sea / coast_fade.w, 0.0, 1.0);\n";
-        // Dithered rather than blended, so the opaque tile stays in the opaque pass; TAA smooths the pattern.
+        // Dithered rather than blended, so the opaque tile stays in the opaque pass. The pattern turns each
+        // sim step, so TAA averages it to a fade; a fixed one held a lattice in motion.
         if (coastDither)
         {
             sb.Append(coastKeep);
-            sb.AppendLine("        if (!csky_clutter_dither_keep(FRAGCOORD.xy, coast_keep)) { discard; }");
+            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"        if (!csky_clutter_dither_keep_frame(FRAGCOORD.xy, coast_keep, int(floor(csky_time * {MathF.Round(1f / CSVM.Utils.GameClock.FixedDt):0.0} + 0.5)))) {{ discard; }}"));
             sb.AppendLine("    }");
         }
         if (clutterFade)

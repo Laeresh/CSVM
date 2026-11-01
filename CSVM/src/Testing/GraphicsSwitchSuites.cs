@@ -72,12 +72,12 @@ internal static class GraphicsSwitchSuites
     private static readonly string[] RampChapters = { "C2", "C5" };
 
     // The painted coast textures each chapter lays (analysis/painted-coasts/FINDINGS.md). C1 has opaque tiles
-    // under a rock overlay pass, C2 a beach and a rock decal, C3 blended strips and opaque cliff tiles.
+    // under a rock overlay pass, C2 a beach and a rock decal, C3 blended strips, shallows and opaque cliff tiles.
     private static readonly (string Chapter, string[] Textures)[] PaintedCoastChapters =
     {
         ("C1", new[] { "cliff01_trans2", "water1_trans1", "water1_trans2" }),
         ("C2", new[] { "beach1", "cliff01_trans2" }),
-        ("C3", new[] { "cliff1_watertrans", "cliff1_watertrans2", "shore1", "shore_trans" }),
+        ("C3", new[] { "cliff1_watertrans", "cliff1_watertrans2", "shore1", "shore2", "shore_trans" }),
     };
 
     // Every shader text a reading met, by its census key, for the mismatch artifact.
@@ -1402,7 +1402,8 @@ internal static class GraphicsSwitchSuites
         "under Enhanced at water quality waves only C1's sea tiles among the painted coasts of C1, C2 and C3 carry "
         + "the mask's hide, so they step aside wherever the ocean draws and their rock overlay never opens onto "
         + "nothing; C3's opaque cliff tiles and C2's beach1 fade along their own UV with the fade the ocean mask's "
-        + "profile gives, and the other strips and the cliff01_trans2 rock edge keep their alpha with no fade; the land "
+        + "profile gives, C3's painted shallows (shore2) fade out whole, and the other strips and the cliff01_trans2 rock "
+        + "edge keep their alpha with no fade; the land "
         + "ones stay on the matte arm; at flat water no ocean stands, so nothing steps aside; switched to Original no "
         + "coast material reads the ocean at all")]
     internal static void CoastHideFollowsSwitch(TestContext ctx)
@@ -3429,7 +3430,7 @@ internal static class GraphicsSwitchSuites
             }
             faders++;
             faded += code.Contains("coast_fade.w > 0.0", StringComparison.Ordinal) && fade.W > 0f
-                && profiles != null && profiles.TryGetValue(stem, out var profile) && fade == Mech3.SceneBuilder.CoastFade(profile) ? 1 : 0;
+                && profiles != null && fade == Mech3.SceneBuilder.FadeFor(stem, profiles) ? 1 : 0;
         }
         return new CoastReading(seen.Count, hidden, readsOcean, sea, seaHidden, faders, faded, kept, keptWhole, land, matte, textures);
     }

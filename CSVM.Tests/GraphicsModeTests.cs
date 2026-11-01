@@ -236,7 +236,9 @@ public class GraphicsModeTests
             string coast = WorldText(blend, false, paintedCoast: true);
             Assert.Contains("uniform vec4 coast_fade = vec4(0.0);", coast);
             Assert.Contains($"    if (csky_ocean_on > 0.5 && coast_fade.w > 0.0 && !{CSVM.Mech3.SceneBuilder.FlatSeaEye}) {{", coast);
-            Assert.Equal(!blend, coast.Contains("if (!csky_clutter_dither_keep(FRAGCOORD.xy, coast_keep)) { discard; }", StringComparison.Ordinal));
+            Assert.Equal(!blend, coast.Contains("if (!csky_clutter_dither_keep_frame(FRAGCOORD.xy, coast_keep, int(floor(csky_time * 60.0 + 0.5)))) { discard; }", StringComparison.Ordinal));
+            Assert.Equal(!blend, coast.Contains(CSVM.Mech3.SceneBuilder.TimeInclude, StringComparison.Ordinal));
+            Assert.DoesNotContain("csky_clutter_dither_keep(FRAGCOORD.xy, coast_keep)", coast);
             Assert.Equal(blend, coast.Contains("        ALPHA *= coast_keep;", StringComparison.Ordinal));
             Assert.DoesNotContain("csky_ocean_hides_sea(", coast);
             Assert.Contains("    ROUGHNESS = 1.0;", coast);
@@ -285,6 +287,64 @@ public class GraphicsModeTests
         Assert.Equal(1f, CSVM.Mech3.SceneBuilder.CoastFadeShare);
         Assert.True(CSVM.Mech3.SceneBuilder.IsFadedStrip("beach1.tif"));
         Assert.False(CSVM.Mech3.SceneBuilder.IsFadedStrip("shore1.tif") || CSVM.Mech3.SceneBuilder.IsFadedStrip("cliff01_trans2"));
+    }
+
+    /// <summary>C3's painted shallows are a painted coast that fades out whole. With no profile they take a
+    /// crossing past every UV, so coast_keep is 0 at any coordinate the texture reaches.</summary>
+    [Fact]
+    public void PaintedShallowsFadeOutWhole()
+    {
+        var profiles = new System.Collections.Generic.Dictionary<string, CSVM.Mech3.CoastProfile>
+        {
+            ["shore1"] = new CSVM.Mech3.CoastProfile(false, false, 0.188f, 0.1f),
+        };
+        Assert.True(CSVM.Mech3.SceneBuilder.IsPaintedCoastTexture("shore2.tif") && CSVM.Mech3.SceneBuilder.IsFadedStrip("shore2.tif"));
+        var fade = CSVM.Mech3.SceneBuilder.FadeFor("shore2.tif", profiles);
+        Assert.NotNull(fade);
+        // The shader's own keep: 1 - clamp(sea / width), sea = crossing - u along U from a water end at 0.
+        foreach (float u in new[] { -4f, 0f, 0.5f, 1f, 8f })
+            Assert.Equal(0f, 1f - Math.Clamp((fade.Value.Z - u) / fade.Value.W, 0f, 1f));
+        Assert.Equal(CSVM.Mech3.SceneBuilder.CoastFade(profiles["shore1"]), CSVM.Mech3.SceneBuilder.FadeFor("shore1.tif", profiles));
+        Assert.Null(CSVM.Mech3.SceneBuilder.FadeFor("cliff1_watertrans3.tif", profiles));
+    }
+
+    /// <summary>The cliff tiles' per-frame dither, csky_clutter_dither_keep_frame spelled in C#. Each frame
+    /// keeps the ordered pattern's share of a 4x4 tile. Over 16 frames every pixel keeps exactly alpha's
+    /// share, what TAA's history averages to.</summary>
+    [Fact]
+    public void ThePerFrameDitherAveragesToItsAlpha()
+    {
+        static bool Keep(int x, int y, float alpha, int frame)
+        {
+            int v = (((x ^ y) & 1) << 3) | ((y & 1) << 2) | ((x ^ y) & 2) | ((y & 2) >> 1);
+            v = (v + (7 * (frame & 15))) & 15;
+            return alpha > (v + 0.5f) / 16f;
+        }
+
+        string include = System.IO.File.ReadAllText(System.IO.Path.Combine(TestData.RepoRoot, "CSVM", "shaders", "csky_clutter_fade.gdshaderinc"));
+        Assert.Contains("v = (v + 7 * (frame & 15)) & 15;", include);
+        for (int k = 0; k <= 16; k++)
+        {
+            float alpha = k / 16f;
+            for (int frame = 0; frame < 16; frame++)
+            {
+                int tile = 0;
+                for (int y = 0; y < 4; y++)
+                    for (int x = 0; x < 4; x++)
+                        tile += Keep(x, y, alpha, frame) ? 1 : 0;
+                Assert.Equal(k, tile);
+            }
+            for (int y = 0; y < 4; y++)
+            {
+                for (int x = 0; x < 4; x++)
+                {
+                    int kept = 0;
+                    for (int frame = 0; frame < 16; frame++)
+                        kept += Keep(x, y, alpha, frame) ? 1 : 0;
+                    Assert.Equal(k, kept);
+                }
+            }
+        }
     }
 
     // A lit, fogged, textured world surface, the painted coasts' case.

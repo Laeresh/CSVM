@@ -89,6 +89,16 @@ screenshot whose frame centre fell on the strip:
   `'--pos=-10133,150,-6870' '--lookat=-10027,0,-6976'` (15). In the second, the coplanar `terpat04`
   land draws over the beach's sand half with a hard straight edge.
 
+### C3's `shore2`, painted shallows on the sheet
+
+`shore2` is not the beach slope. It is a 128x128 RGBA decal of painted shallows and foam, blue-green,
+its alpha fading out at both U edges, drawn blended over the base sheet seaward of the strips. Of its
+1,035 triangles in C3, 1,033 are flat at y -0.17 to 0.00 m; 2 rise to 7.64 m. 1,015 of the flat ones lie
+outside every painted-coast triangle over the sheet, in 15 runs along the islands, a median 24 to 51 m off
+the mask's land (18,744 texels of 8 m, about 1.2 km²). `ClassifySurface` calls it land, so the mask read
+those runs as solid with zero shore distance, a calm band off the coasts. Neither C1 nor C2 lays it.
+Measured from an `OceanMask` triangle log against the `--dump-ocean-mask` texels.
+
 ## A2, C1's and C2's coast tiles
 
 Method: `python -I analysis/painted-coasts/a2_tiles.py <gamez dir> <texture dir> [profile.png]`, run

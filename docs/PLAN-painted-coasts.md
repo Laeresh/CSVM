@@ -51,6 +51,13 @@ its own predicate, because the colliders and the tile census read that classific
 | 7 | C3's corner tile `cliff1_watertrans3`, whose water is a wedge no one-axis crossing places | **Left land, as today**: 36 polygons, 0.16 km², 7 % water texels; no two-dimensional water map |
 | 8 | Whether the water washes over the painted beach and rocks | **Yes, in this plan, with spray at the cliffs** (C23, C24). The swash is drawn opaque by the coast textures' own shader, not by a transparent ocean: a transparent ocean loses the depth write SSR and TAA read, and sorts against the alpha-blended strips |
 | 9 | How the coast textures give way to the waves | **By their own texture coordinate, not by the mask.** The mask still drives the waves. The alpha strips and C1's rock overlay take no hide and keep their own soft alpha over the waves, except that `beach1`'s alpha also fades past its crossing, thinning the grey haze its water side lays over the waves. C3's opaque cliff tiles fade out along their own UV by a dithered discard that TAA smooths, across the whole stretch from the crossing to their water edge. C1's sea tiles keep the base sheet's mask hide: discarded whole they open holes in the overlay's gaps, where the mask calls the ground land. The mask-driven hide on every coast had cut the painted fringe to sawteeth and staircases (C3's strip and cliffs, C2's decal); chosen from the C21 montages |
+| 10 | C3's `shore2`, a flat blended decal of painted shallows and foam on the sheet, which the mask read as solid (a calm band 24 to 51 m off the coasts, 1,033 flat triangles in 15 runs) | **Sea in the mask, and under Enhanced with waves the decal fades out**, so the procedural surf replaces the painted shallows; its 2 rising triangles stay solid |
+| 11 | The cliff tiles' fixed 4x4 dither reads as a lattice in motion | **A dither that changes per frame**, which TAA averages into a smooth fade; the tiles stay opaque |
+| 12 | C3's near-shore ramps (decision 4) | **C1B's values: swell 8 to 48 m, look 0 to 24 m**, after tracing and fixing the soft dark patch the swell change showed 40 to 60 m off the strip pose |
+| 13 | C1's look ramp (decision 5) | **`look_from` 0**, `look_full` kept at 143 |
+| 14 | The ocean's 8 m mask-texel sawtooth where it meets the sheet at C2's beach | **Sea under the alpha strips' opaque part**: the mask keeps sea landward of the painted waterline out to where the strip turns opaque, so the ocean's texel edge lies under the strip's own sand; the shore distance still measures from the painted waterline |
+| 15 | What replaces `shore2`'s painted surf band at C3's cliffs once the decal fades (C3's sea had no procedural surf) | **C3 takes procedural surf**: `surf_wash` 0.7 and `surf_lines` 0.6, C1B's and C2's values, judged on a montage before landing |
+| 16 | The surf coverage's texel edge at the waterline, which kept C2's sawtooth after decision 14 | **The coverage fills the alpha strips' translucent sand**, saturated out to the opaque point, so the foam's edge lies under the strip's opaque part as the ocean's edge does |
 
 ## ⚠ Read this before implementing anything
 
@@ -89,7 +96,7 @@ scripts and the full figures are in `analysis/painted-coasts/`, and
 | C2 | `beach1` | 58 flat polygons at y = 0, 89 to 589 m along the coast and 117 to 333 m across; flat `terpat` land at y = 0 lies under its sand half, its edge near the strip's centre line (A1) | 256x128 RGBA: painted surf foam along the water edge, wet sand, then dry sand and rocks, the alpha fading out at both long edges; the alpha runs along V | land, so the waves stop at the strip's seaward edge, 65 m or more from the painted waterline |
 | C3 | `shore1` (487 polygons), `shore_trans` (55) | flat strips at y = 0, 17 to 116 m across (median 65 m); flat land at y = 0 lies under their sand half and its sea-level edge runs near their centre line, with only the base sheet under the water side (A1) | 128x256 and 128x128 RGBA along U, transparent at both edges: the painted waterline at U = 0.19 on the water side (U = 0), a foam band, then sand (A1) | land, so the waves stop at the strip's seaward edge and the strip draws over the flat sheet |
 | C3 | `cliff1_watertrans`, `cliff1_watertrans2`, `cliff1_watertrans3` | 258 polygons, 257 flat at y = 0 against the cliffs (p10 to p90 64 to 149 m across), their landward edge on the cliff's foot and seaward edge on the base sheet; one `cliff1_watertrans` polygon sits at 41 to 81 m and never meets the water (A3) | 128x128 RGB, opaque, water painted into the cliff base along V, 30 to 33 RGB from the base sheet's colour, fading over about 70 m with no step; `cliff1_watertrans3` is a corner tile with a water wedge (A3) | land |
-| C3 | `shore2` | the beach slope itself, rising to 7.6 m | RGBA sand and foam | land, correctly |
+| C3 | `shore2` | 1,035 triangles, 1,033 flat on the sheet just seaward of the painted foam, 2 rising (C22) | RGBA painted shallows and foam, alpha fading at both U edges | solid, a calm band 24 to 51 m off the coasts; sea under decision 10 |
 
 C2's authored `srf0001` ring (86 polygons) covers only the sea stack. C2's quays meet the `wtr` sheet
 with the 1.03 m harbour ramp, nothing painted, so the waves already run to the quay walls.
@@ -133,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, the coast steps aside
 
 21. ☑ The painted tiles and strips give way to the waves by their own texture coordinate, C1's sea tiles by the mask (#270)
-22. ☐ The look at the painted coasts in C1, C2 and C3, judged at the controls (#270)
+22. ☑ The look at the painted coasts in C1, C2 and C3, judged from montages, at the controls in the closing batch (#270)
 23. ☐ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
 24. ☐ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
 
@@ -539,6 +546,34 @@ in-engine suite that holds the hide's constants (`CSVM/src/Testing/GraphicsSwitc
   before the albedo sample, so it applies to either.
 
 ## C22 ☐ The look at the painted coasts, judged at the controls
+
+**Landed.** Decisions 10 to 16, from three rounds of montages. `shore2`'s flat triangles are open sea in
+the mask (`TextureArchive.IsPaintedShallows`, `OceanMask.MarksSolid`), its 2 rising triangles solid,
+and under Enhanced with the ocean on the decal fades out; C3's solid triangles fell from 4721 to 3688
+and the calm band off its coasts is gone. The cliff tiles dither by `csky_clutter_dither_keep_frame`,
+a threshold that shifts every frame on the shader clock, deterministic under `--det`. C3's sea takes
+C1B's ramps (swell 8 to 48 m, look 0 to 24 m) and procedural surf (`surf_wash` 0.7, `surf_lines` 0.6);
+C1's look ramp starts at 0. The soft dark patch the swell change showed was the baked terrain shadow
+treating the flat sea sheet as ground, so deep troughs read as shaded: `TerrainShadow.Triangles` now
+skips water and `shore2`. `CoastProfile.Opaque` (the crossing to the alpha's 90 % point: `shore1` 0.130,
+`beach1` 0.080, `cliff01_trans2` 0.216) keeps the mask sea, with zero shore distance and saturated surf
+coverage, under the alpha strips' translucent sand, so the ocean's and the foam's texel edges lie under
+the strip's opaque part; the coastline and the coverage seaward of the waterline are unchanged.
+
+**Verified.** `dotnet build` 0 warnings; `dotnet test` 7972 passed, 0 failed, 6 skipped, with unit tests
+for `shore2` (flat is sea, rising solid), the translucent sand (sea, zero distance, full coverage,
+order-free), the shallows' fade and the per-frame dither averaging to its alpha. `graphics-coast-hide`
+(now with `shore2`) and `graphics-ocean-switch` pass, engine errors clean. Montages at every pose went
+to the author, who approved: procedural foam along C3's strips and cliffs, the Enhanced-only dark rim
+at the cliff tiles (6 levels below both sides, absent in Original) turned into a foam peak, C2's
+sawtooth gone, C1's calm band and its diagonal edge gone, the C3 patch gone at frames 120 and 180.
+Still camera over a breaker cycle: no lattice, no flicker; under a random `--jitter` burst the
+per-frame pattern shows frame by frame, owed to the closing at-the-controls batch. Five Enhanced
+goldens moved, each pixel-identical on re-render, attributed by toggling each change: `c1-lake-enhanced`
+and `c1-rocket-hit-enhanced` to the terrain-shadow fix, C1's `look_from` 0 and the sand extension;
+`c1-cockpit-enhanced`, `c1-cockpit-xr-sim-enhanced` (at most 1 level per pixel) and `c1b-ocean-enhanced`
+to the terrain-shadow fix alone, the last losing about 145,000 pixels of self-shadow blotches on the
+sea. Re-pinned in D31.
 
 **Goal.** The author judges the waves meeting the painted foam in C1, C2 and C3.
 

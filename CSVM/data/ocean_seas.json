@@ -2,7 +2,7 @@
   "_about": "The Enhanced wave ocean's sea per chapter (src/Effects/OceanSeas.cs). Each entry holds only the fields that differ from the defaults, which are the ocean's own tune; an empty entry or a missing field takes the default. The field names, ranges and meanings are SeaState.Fields (src/Effects/SeaState.cs). The ocean lab (Shift+F1 in --freecam) writes one chapter's entry here when run from the source tree; --debug-ocean=<field>:<value>,... overrides it for one launch.",
   "C1": {
     "wind": 295,
-    "look_from": 55,
+    "look_from": 0,
     "look_full": 143
   },
   "C1B": {
@@ -51,10 +51,12 @@
     "length": 1.52,
     "wind": 249,
     "bend_m": 51,
-    "swell_from": 6,
-    "swell_full": 125,
-    "look_from": 8,
-    "look_full": 113
+    "swell_from": 8,
+    "swell_full": 48,
+    "look_from": 0,
+    "look_full": 24,
+    "surf_wash": 0.7,
+    "surf_lines": 0.6
   },
   "C5": {}
 }
