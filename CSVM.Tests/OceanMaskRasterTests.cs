@@ -27,7 +27,7 @@ public class OceanMaskRasterTests
     public void EveryBandCountMatchesTheWholeImagePass(int seed)
     {
         var tris = Scene(new Random(seed));
-        var (w, h, mask, tint, surf) = Reference(tris, Mean);
+        var (w, h, mask, tint, surf, inland) = Reference(tris, Mean);
         foreach (int bands in new[] { 1, 5, 12 })
         {
             var r = OceanMaskRaster.Run(tris.ToArray(), Mean, bands);
@@ -36,6 +36,7 @@ public class OceanMaskRasterTests
             Assert.True(mask.AsSpan().SequenceEqual(r.Mask), $"mask differs at {bands} bands");
             Assert.True(tint.AsSpan().SequenceEqual(r.Tint), $"tint differs at {bands} bands");
             Assert.True(surf.AsSpan().SequenceEqual(r.Surf), $"surf differs at {bands} bands");
+            Assert.True(inland.AsSpan().SequenceEqual(r.Inland), $"inland differs at {bands} bands");
         }
     }
 
@@ -566,6 +567,57 @@ public class OceanMaskRasterTests
         AssertOrderFree(tris);
     }
 
+    // The inland image at the same strip. A land-side texel reads its exact distance up from the painted
+    // waterline. A water-side texel reads it negated, saturating at InlandReach.
+    // The solid's coast edge 40 m inland is coastline too, so only the nearer half of the sand is read.
+    [Theory]
+    [InlineData(10000f, 5773.5f)]
+    [InlineData(8000f, 8000f)]
+    public void ADiagonalStripsSandReadsItsExactInlandDistance(float dx, float dz)
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
+        var o = new Vector3(-1.5f, 0f, 1.5f);
+        var along = new Vector3(dx, 0f, dz).Normalized() * 1600f;
+        var inland2 = new Vector2(-dz, dx).Normalized();
+        var inland = new Vector3(inland2.X, 0f, inland2.Y);
+        Vector3 sea0 = o - (inland * 40f) - along, sea1 = o - (inland * 40f) + along;
+        Vector3 land0 = o + (inland * 40f) - along, land1 = o + (inland * 40f) + along;
+        tris.Add(new Tri(sea0, sea1, land1, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(1.25f, 1.25f, -1.25f)));
+        tris.Add(new Tri(sea0, land1, land0, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(1.25f, -1.25f, -1.25f)));
+        tris.Add(new Tri(land0, land1, o + (inland * 6000f) + new Vector3(0f, 50f, 0f), Kind.Solid, Colors.White, Colors.White, Colors.White));
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 5);
+        float Metres(int x, int z) => ((r.Inland[(z * r.Width) + x] / 255f * 2f) - 1f) * OceanMaskRaster.InlandReach;
+        int land = 0, sea = 0;
+        for (int z = 0; z < r.Height; z++)
+        {
+            for (int x = 0; x < r.Width; x++)
+            {
+                var c = new Vector2(r.Origin.X + ((x + 0.5f) * Cell), r.Origin.Y + ((z + 0.5f) * Cell));
+                if (Math.Abs(c.X) >= 800f || Math.Abs(c.Y) >= 800f)
+                    continue;
+                // Metres landward of the waterline.
+                float d = ((c.X - o.X) * inland2.X) + ((c.Y - o.Z) * inland2.Y);
+                if (d > 1f && d < 18f)
+                {
+                    Assert.InRange(Metres(x, z), d - 0.5f, d + 0.5f);
+                    land++;
+                }
+                else if (d < -1f)
+                {
+                    float want = Math.Min(-d, OceanMaskRaster.InlandReach);
+                    Assert.InRange(Metres(x, z), -want - 0.5f, -want + 0.5f);
+                    sea += d > -OceanMaskRaster.InlandReach ? 1 : 0;
+                }
+            }
+        }
+        Assert.True(land > 300 && sea > 600, $"only {land} land and {sea} sea texels within reach");
+        Assert.Equal(128, OceanMaskRaster.InlandByte(true, 0f));
+        Assert.Equal(255, OceanMaskRaster.InlandByte(true, 1000f));
+        Assert.Equal(0, OceanMaskRaster.InlandByte(false, 1000f));
+        AssertOrderFree(tris);
+    }
+
     // The land's sea-level edge at x = 96 lies under the strip's painted water, which the mask makes
     // sea. It is no coastline: the sea there and beyond reads its distance to the waterline at x = 64.
     // A rock rising off that water keeps its foot at x = 104 as coastline.
@@ -631,6 +683,9 @@ public class OceanMaskRasterTests
             Assert.Equal(255, r.Surf[At(x)]);
             Assert.Equal(0, bare.Mask[2 * At(x)]);
             Assert.Equal(0, bare.Surf[At(x)]);
+            // Sea in the mask, yet landward of the waterline for the swash.
+            Assert.Equal(OceanMaskRaster.InlandByte(true, 64f - x), r.Inland[At(x)]);
+            Assert.Equal(r.Inland[At(x)], bare.Inland[At(x)]);
         }
         for (float x = 68f; x < 400f; x += Cell)
         {
@@ -807,10 +862,11 @@ public class OceanMaskRasterTests
         var back = OceanMaskRaster.Run(reversed.ToArray(), Mean, 7);
         Assert.True(one.Mask.AsSpan().SequenceEqual(back.Mask), "the mask moves with triangle order");
         Assert.True(one.Surf.AsSpan().SequenceEqual(back.Surf), "the surf moves with triangle order");
+        Assert.True(one.Inland.AsSpan().SequenceEqual(back.Inland), "the inland moves with triangle order");
     }
 
     // The whole-image pass: every texel of every triangle's box, one thread, one distance pass.
-    private static (int W, int H, byte[] Mask, byte[] Tint, byte[] Surf) Reference(List<Tri> tris, Color mean)
+    private static (int W, int H, byte[] Mask, byte[] Tint, byte[] Surf, byte[] Inland) Reference(List<Tri> tris, Color mean)
     {
         float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
         foreach (var t in tris)
@@ -861,11 +917,39 @@ public class OceanMaskRasterTests
                 surf[i] = Math.Max(surf[i], coastSurf[i]);
             }
         }
-        var dist = DistanceReference(tris, minX, minZ, sea, solid, seed, w, h);
+        var dist = DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out var segments);
+        // Land, a solid or a strip's translucent sand lies landward of the coastline. The inland image
+        // measures from the segments with an open-sea texel centre within one texel edge, over boxes wider
+        // than either reach.
+        bool Landward(int i) => sea[i] == 0 || solid[i] || coast[i] == 2;
+        var near = new double[w * h];
+        Array.Fill(near, double.PositiveInfinity);
+        foreach (var (p, q) in segments)
+        {
+            bool faces = false;
+            Each(p, q, 3f * Cell, (i, e) => faces |= sea[i] == 1 && !Landward(i) && e <= Cell);
+            if (faces)
+                Each(p, q, OceanMaskRaster.ShoreReach, (i, e) => near[i] = Math.Min(near[i], e));
+        }
+
+        void Each(Vector2 p, Vector2 q, float reach, Action<int, double> visit)
+        {
+            int x0 = Math.Max(0, (int)Math.Floor((Math.Min(p.X, q.X) - reach - minX) / Cell));
+            int x1 = Math.Min(w - 1, (int)Math.Ceiling((Math.Max(p.X, q.X) + reach - minX) / Cell));
+            int z0 = Math.Max(0, (int)Math.Floor((Math.Min(p.Y, q.Y) - reach - minZ) / Cell));
+            int z1 = Math.Min(h - 1, (int)Math.Ceiling((Math.Max(p.Y, q.Y) + reach - minZ) / Cell));
+            for (int z = z0; z <= z1; z++)
+            {
+                for (int x = x0; x <= x1; x++)
+                    visit((z * w) + x, OceanMaskRaster.Segment(minX + ((x + 0.5f) * Cell), minZ + ((z + 0.5f) * Cell), p.X, p.Y, q.X, q.Y));
+            }
+        }
         var mask = new byte[w * h * 2];
         var tintBytes = new byte[w * h * 3];
+        var inland = new byte[w * h];
         for (int i = 0; i < w * h; i++)
         {
+            inland[i] = OceanMaskRaster.InlandByte(Landward(i), (float)Math.Min(near[i], OceanMaskRaster.InlandReach));
             mask[2 * i] = sea[i] != 0 ? (byte)255 : (byte)0;
             mask[(2 * i) + 1] = (byte)Math.Round(Math.Min(dist[i], OceanMaskRaster.ShoreReach) / OceanMaskRaster.ShoreReach * 255f);
             var c = tint[i].R < 0f ? mean : tint[i];
@@ -898,7 +982,7 @@ public class OceanMaskRasterTests
                     dilated[(3 * ((z * w) + x)) + ch] = (byte)Math.Round(sum[ch] / (double)n, MidpointRounding.AwayFromZero);
             }
         }
-        return (w, h, mask, dilated, surf);
+        return (w, h, mask, dilated, surf, inland);
     }
 
     private static void RasterReference(Tri t, float minX, float minZ, int w, int h, byte[] sea, bool[] solid, bool[] seed, Color[] tint, byte[] surf, byte[] coast, byte[] coastSurf, bool[] standSolid, bool[] standSeed)
@@ -1044,8 +1128,13 @@ public class OceanMaskRasterTests
     // An open-sea texel's G is the nearer of two distances. One is the chamfer from the seeds: coast
     // tiles, texels nothing covers, centres a solid covers, a solid off the water's corners. The
     // other is exact, to every solid's coastline.
-    private static float[] DistanceReference(List<Tri> tris, float minX, float minZ, byte[] sea, bool[] solid, bool[] seed, int w, int h)
+    private static float[] DistanceReference(List<Tri> tris, float minX, float minZ, byte[] sea, bool[] solid, bool[] seed, int w, int h) =>
+        DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out _);
+
+    // The same, with every coastline segment it measured.
+    private static float[] DistanceReference(List<Tri> tris, float minX, float minZ, byte[] sea, bool[] solid, bool[] seed, int w, int h, out List<(Vector2 P, Vector2 Q)> all)
     {
+        all = new List<(Vector2 P, Vector2 Q)>();
         var exact = new double[w * h];
         Array.Fill(exact, double.PositiveInfinity);
         var coasts = tris.FindAll(t => t.Kind == Kind.Coast);
@@ -1060,6 +1149,7 @@ public class OceanMaskRasterTests
                 segs = Uncovered(Coastline(t), coasts);
             else
                 segs = Coastline(t);
+            all.AddRange(segs);
             foreach (var (p, q) in segs)
             {
                 // Every texel within reach of the segment, and some past it, which saturate either way.

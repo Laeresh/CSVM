@@ -242,6 +242,15 @@ public class GraphicsModeTests
             Assert.Equal(blend, coast.Contains("        ALPHA *= coast_keep;", StringComparison.Ordinal));
             Assert.DoesNotContain("csky_ocean_hides_sea(", coast);
             Assert.Contains("    ROUGHNESS = 1.0;", coast);
+            // The swash: only while the ocean stands, on a coast that takes it, never for a spyglass disc.
+            // At flat water no ocean stands, so csky_ocean_on keeps the albedo as it was.
+            Assert.Contains("uniform float coast_swash = 0.0;", coast);
+            Assert.Contains("    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;", coast);
+            Assert.Contains("    ALBEDO = col.rgb;\n"
+                + $"    if (csky_ocean_on > 0.5 && coast_swash > 0.5 && !{CSVM.Mech3.SceneBuilder.FlatSeaEye}) {{\n"
+                + "        ALBEDO = csky_ocean_swash(v_ocean_pos, ALBEDO, max(max(fwidth(v_ocean_pos.x), fwidth(v_ocean_pos.z)), 0.001));\n"
+                + "    }", coast.Replace("\r\n", "\n", StringComparison.Ordinal));
+            Assert.DoesNotContain("csky_ocean_swash(", plain);
             // Every unflagged line survives in order, so the fade adds lines and changes none.
             var lines = coast.Split('\n');
             int at = 0;
@@ -306,6 +315,23 @@ public class GraphicsModeTests
             Assert.Equal(0f, 1f - Math.Clamp((fade.Value.Z - u) / fade.Value.W, 0f, 1f));
         Assert.Equal(CSVM.Mech3.SceneBuilder.CoastFade(profiles["shore1"]), CSVM.Mech3.SceneBuilder.FadeFor("shore1.tif", profiles));
         Assert.Null(CSVM.Mech3.SceneBuilder.FadeFor("cliff1_watertrans3.tif", profiles));
+    }
+
+    /// <summary>Every profiled coast takes the swash on its land side; the painted shallows, the sea tiles and a
+    /// coast with no profile take none.</summary>
+    [Fact]
+    public void OnlyTheProfiledCoastsTakeTheSwash()
+    {
+        var profiles = new System.Collections.Generic.Dictionary<string, CSVM.Mech3.CoastProfile>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["shore1"] = new CSVM.Mech3.CoastProfile(false, false, 0.188f, 0.1f),
+            ["cliff01_trans2"] = new CSVM.Mech3.CoastProfile(false, false, 0.398f, 0.1f),
+        };
+        Assert.True(CSVM.Mech3.SceneBuilder.TakesSwash("shore1.tif", profiles));
+        Assert.True(CSVM.Mech3.SceneBuilder.TakesSwash("CLIFF01_TRANS2", profiles));
+        Assert.False(CSVM.Mech3.SceneBuilder.TakesSwash("shore2.tif", profiles));
+        Assert.False(CSVM.Mech3.SceneBuilder.TakesSwash("water1_trans1.tif", profiles));
+        Assert.False(CSVM.Mech3.SceneBuilder.TakesSwash("beach1.tif", profiles));
     }
 
     /// <summary>The cliff tiles' per-frame dither, csky_clutter_dither_keep_frame spelled in C#. Each frame

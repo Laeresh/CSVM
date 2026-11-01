@@ -58,6 +58,8 @@ its own predicate, because the colliders and the tile census read that classific
 | 14 | The ocean's 8 m mask-texel sawtooth where it meets the sheet at C2's beach | **Sea under the alpha strips' opaque part**: the mask keeps sea landward of the painted waterline out to where the strip turns opaque, so the ocean's texel edge lies under the strip's own sand; the shore distance still measures from the painted waterline |
 | 15 | What replaces `shore2`'s painted surf band at C3's cliffs once the decal fades (C3's sea had no procedural surf) | **C3 takes procedural surf**: `surf_wash` 0.7 and `surf_lines` 0.6, C1B's and C2's values, judged on a montage before landing |
 | 16 | The surf coverage's texel edge at the waterline, which kept C2's sawtooth after decision 14 | **The coverage fills the alpha strips' translucent sand**, saturated out to the opaque point, so the foam's edge lies under the strip's opaque part as the ocean's edge does |
+| 17 | How far the swash runs up the painted sand and rock | **12 m** (`OceanShader.SwashReach`), picked from contact sheets over a breaker cycle and reach strips at 6, 12 and 20 m |
+| 18 | C1, whose sea had no surf and so no breakers to time a swash to | **C1 takes procedural surf**, `surf_wash` 0.7 and `surf_lines` 0.6, so breakers and swash reach its cliff foot, judged on a montage before landing |
 
 ## ⚠ Read this before implementing anything
 
@@ -141,7 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ The painted tiles and strips give way to the waves by their own texture coordinate, C1's sea tiles by the mask (#270)
 22. ☑ The look at the painted coasts in C1, C2 and C3, judged from montages, at the controls in the closing batch (#270)
-23. ☐ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
+23. ☑ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
 24. ☐ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
 
 ### Wave D, landing
@@ -600,6 +602,34 @@ SHOT-49: a line called an Enhanced defect is thresholded against the same pixels
   rising solid) from the mask dump and the scene before judging the look.
 
 ## C23 ☐ Swash: each breaker runs up the painted sand and flat rocks
+
+**Landed.** The raster's `Inland` pass writes an R8 texture of each texel's exact signed distance to
+the nearest sea-facing coastline segment (one with open sea within 8 m, so painted land edges under a
+beach draw no rings), capped at `InlandReach` 32 m: 128 on the line, 255 at 32 m landward, 0 at 32 m
+seaward; land, solids and a strip's translucent sand read landward. It is a per-texel minimum per band,
+order-free, uploaded as the global `csky_ocean_inland` and dumped as `<name>.inland.png`. The breakers'
+phase, `csky_surf_arrive`, moved with `sea_hash` and `foam_noise` into `csky_ocean.gdshaderinc`; the
+ocean calls it with its own literal rate, and the coast shaders read the rate, whether the sea breaks
+surf, the reach and `InlandReach` from the global `csky_ocean_surf`, set by `Ocean` from
+`OceanShader.SurfGlobal`. `csky_ocean_swash` darkens the albedo toward wet sand and lays a foam film
+whose front climbs for 0.3 of a cycle from the line's arrival and drains for the rest, within ±0.5 m of
+sea level, on every profiled coast (`coast_swash`), not on C1's sea tiles or `shore2`. Reach 12 m, the
+author's pick (decision 17); C1 takes procedural surf so its overlay rock gets breakers and swash
+(decision 18). Enhanced with the ocean on only, FlatSeaEye exempt, the Original text byte-identical.
+
+**Verified.** `dotnet test` 7978 passed, 0 failed, 6 skipped, with tests for the signed inland
+distance (a 30° and 45° strip within 0.5 m, the whole-image oracle at 1, 5 and 12 bands), the shared
+phase (the include with the ocean's rate substituted equals the old line), the whole-per-wrap drift and
+the coast shader text under Enhanced, Original and flat. `graphics-coast-hide` and
+`graphics-ocean-switch` pass, engine errors clean, the suite reading the live inland image (16,284 /
+36,657 / 106,761 texels within reach in C1 / C2 / C3). `c1b-ocean-enhanced` held C22's hash
+36084ddde2162f8cef2fa6b57f6b1ee1: the moved phase leaves the ocean bit-identical. C1's surf moved
+`c1-lake-enhanced` (a99b427fc62be3a4d9c687ff419e6538) and `c1-rocket-hit-enhanced`
+(c6ebf47069d23d98c88eda492e1db4d0), each matching C22's frame with C1's surf removed. Contact sheets over
+a breaker cycle at C2's beach, C3's strip and cliff, and C1's cove, and the reach strips, went to the
+author, who approved. Bake, two runs: `inland=` C1 6.6/6.7, C2 9.1/7.5, C3 50.8/51.4 ms (C3's cost is
+the per-texel loop over its 2048x2048 mask under build contention; one quiet run read 17 ms); bake C1
+182/185, C2 179/173, C3 322/329 ms.
 
 **Goal.** Under Enhanced at `waves`, each breaker that reaches a painted coast runs on up the painted
 sand and flat painted rocks as a thin foam film over darkened, wet sand, then drains back before the

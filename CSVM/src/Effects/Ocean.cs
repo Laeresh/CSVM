@@ -35,6 +35,9 @@ public sealed partial class Ocean : Node3D
     private const float WaterlineBand = OceanMovers.WaterlineBand;
 
     private static readonly StringName ParamName = Param;
+
+    // The live sea's surf phase and swash, which the painted coasts read (OceanShader.SurfGlobal).
+    private static readonly StringName SurfName = "csky_ocean_surf";
     // The first band runs past the longest swell's full height, so no wave cuts from full at a step.
     private static readonly float[] BandEnds = { 1400f, 2800f, 11000f, 45000f };
 
@@ -99,6 +102,7 @@ public sealed partial class Ocean : Node3D
     public static void RegisterGlobal()
     {
         RenderingServer.GlobalShaderParameterAdd(Param, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        RenderingServer.GlobalShaderParameterAdd(SurfName, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         OceanMask.RegisterGlobals();
     }
 
@@ -197,7 +201,9 @@ public sealed partial class Ocean : Node3D
             if (err == Error.Ok)
                 err = mask.SurfImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".surf.png"));
             if (err == Error.Ok)
-                Log.Info("world", $"ocean: mask written to {maskPng} (with .tint.png and .surf.png)");
+                err = mask.InlandImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".inland.png"));
+            if (err == Error.Ok)
+                Log.Info("world", $"ocean: mask written to {maskPng} (with .tint.png, .surf.png and .inland.png)");
             else
                 Log.Error("world", $"--dump-ocean-mask: could not write {maskPng} ({err})");
         }
@@ -208,6 +214,7 @@ public sealed partial class Ocean : Node3D
     public override void _EnterTree()
     {
         _mask.Publish();
+        RenderingServer.GlobalShaderParameterSet(SurfName, OceanShader.SurfGlobal(Sea));
         RenderingServer.GlobalShaderParameterSet(ParamName, 1.0f);
     }
 
@@ -340,6 +347,7 @@ public sealed partial class Ocean : Node3D
         _material.SetShaderParameter("foam_strength", Sea.FoamStrength);
         _material.SetShaderParameter("rough_near", Sea.RoughNear);
         _material.SetShaderParameter("rough_far", Sea.RoughFar);
+        RenderingServer.GlobalShaderParameterSet(SurfName, OceanShader.SurfGlobal(Sea));
     }
 
     // The ocean draws a wake for each hull holding one of the first held slots. Those hulls' sheets

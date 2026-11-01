@@ -799,13 +799,16 @@ void fragment() {
 
     /// <summary>Gives each opaque painted-coast material, and each <see cref="IsFadedStrip"/> one, its fade
     /// along its own UV. The <paramref name="profiles"/> are the ones the ocean mask read against the
-    /// chapter's base sheet, so the coast and the waves place one crossing. Any other strip keeps its alpha.</summary>
+    /// chapter's base sheet, so the coast and the waves place one crossing. Any other strip keeps its alpha.
+    /// Every profiled coast takes the swash (<see cref="TakesSwash"/>).</summary>
     public void FadeCoasts(IReadOnlyDictionary<string, CoastProfile> profiles)
     {
         foreach (var (material, texture) in _texturedMaterials)
         {
             if ((AlphaOf(material) == TransparencyClass.None || IsFadedStrip(texture)) && FadeFor(texture, profiles) is { } fade)
                 material.SetShaderParameter("coast_fade", fade);
+            if (TakesSwash(texture, profiles))
+                material.SetShaderParameter("coast_swash", 1f);
         }
     }
 
@@ -941,6 +944,11 @@ void light() {{
     internal static bool IsFadedStrip(string texName) =>
         System.IO.Path.GetFileNameWithoutExtension(texName).Equals("beach1", StringComparison.OrdinalIgnoreCase)
         || TextureArchive.IsPaintedShallows(texName);
+
+    /// <summary>Whether a painted coast's land side takes the breakers' swash: every coast the mask profiled,
+    /// so its waterline is coastline. The painted shallows and the sea tiles are sea, and take none.</summary>
+    internal static bool TakesSwash(string texName, IReadOnlyDictionary<string, CoastProfile> profiles) =>
+        !TextureArchive.IsPaintedShallows(texName) && profiles.ContainsKey(System.IO.Path.GetFileNameWithoutExtension(texName));
 
     /// <summary>The <c>coast_fade</c> a profile gives a painted coast: axis, water end, crossing, then
     /// <see cref="CoastFadeShare"/> of the stretch from the crossing to the water end.</summary>
@@ -2463,6 +2471,9 @@ void light() {{
         // ⚠ Keep them off waterLit: their sand and rock are matte.
         bool coastFade = GraphicsMode.Enhanced && !shaded && paintedCoast && !water && textured && !scissor;
         bool coastDither = coastFade && !blend;
+        // Each breaker's swash runs up the land side of every coast that fades, opaque in the coast's own
+        // pass. The coast_swash uniform leaves out the painted shallows, which are sea.
+        bool swash = coastFade;
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
         bool sunLit = sunVertexLit && !GraphicsMode.Enhanced;
@@ -2529,8 +2540,10 @@ void light() {{
             sb.AppendLine(LightsInclude);
         if (oceanHide || coastFade)
             sb.AppendLine(OceanInclude);
-        if (oceanHide)
+        if (oceanHide || swash)
             sb.AppendLine("varying vec3 v_ocean_pos;");
+        if (swash)
+            sb.AppendLine("uniform float coast_swash = 0.0;");
         // The fade's axis (1 for V), water end (1 for coordinate 1), crossing and width; width 0 keeps it whole.
         if (coastDither)
         {
@@ -2610,7 +2623,7 @@ void light() {{
         // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
         // would stretch to its model origin. The colliders stay flat. The hide reads the ocean's mask
         // at the fragment's world X/Z, so a sheet shown after the bake still draws.
-        string oceanVertex = oceanHide ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
+        string oceanVertex = oceanHide || swash ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         string terrainVertex = terrainShadow ? "    v_terrain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
@@ -2705,6 +2718,13 @@ void fragment() {{");
             sb.AppendLine("    base_col *= albedo_color;");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
+        // The footprint is taken in the gate's uniform flow, never under the swash's own branches.
+        if (swash)
+        {
+            sb.AppendLine($"    if (csky_ocean_on > 0.5 && coast_swash > 0.5 && !{FlatSeaEye}) {{");
+            sb.AppendLine("        ALBEDO = csky_ocean_swash(v_ocean_pos, ALBEDO, max(max(fwidth(v_ocean_pos.x), fwidth(v_ocean_pos.z)), 0.001));");
+            sb.AppendLine("    }");
+        }
         // Per-mission SUNLIGHT dimming (world/deck/clutter), skipped for a model authored
         // `lighting: false`. Neither lit arm applies it: a real sun carries that energy there, and
         // a scalar on ALBEDO would dim the surface a second time.

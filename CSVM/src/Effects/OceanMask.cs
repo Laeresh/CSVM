@@ -44,6 +44,7 @@ internal sealed class OceanMask
     private static readonly StringName MaskParam = "csky_ocean_mask";
     private static readonly StringName ZoneParam = "csky_ocean_zone";
     private static readonly StringName RectParam = "csky_ocean_rect";
+    private static readonly StringName InlandParam = "csky_ocean_inland";
 
     // One bake per built world, held only as long as its builder lives.
     private static readonly ConditionalWeakTable<SceneBuilder, Memo> Baked = new();
@@ -52,6 +53,7 @@ internal sealed class OceanMask
     // steps aside nowhere, whatever csky_ocean_on reads.
     private static ImageTexture? _noSea;
     private static ImageTexture? _anyZone;
+    private static ImageTexture? _allSea;
 
     private OceanMask()
     {
@@ -83,6 +85,13 @@ internal sealed class OceanMask
 
     /// <summary>The surf texture's pixels, kept for <see cref="SurfAt"/> and <c>--dump-ocean-mask</c>.</summary>
     public Image SurfImage { get; private set; } = null!;
+
+    /// <summary>The signed distance from the coastline within <see cref="OceanMaskRaster.InlandReach"/>
+    /// (R8, <see cref="OceanMaskRaster.InlandByte"/>), over the mask's rect. The coast shaders' swash reads it.</summary>
+    public ImageTexture InlandTexture { get; private set; } = null!;
+
+    /// <summary>The inland texture's pixels, kept for <c>--dump-ocean-mask</c>.</summary>
+    public Image InlandImage { get; private set; } = null!;
 
     /// <summary>The world X/Z of the mask's first texel corner.</summary>
     public Vector2 Origin { get; private set; }
@@ -157,20 +166,23 @@ internal sealed class OceanMask
     {
         _noSea ??= TextureUpload.Create(1, 1, Image.Format.Rg8, new byte[] { 0, 0 });
         _anyZone ??= TextureUpload.Create(1, 1, Image.Format.R8, new[] { OceanMaskRaster.AnyZone });
+        _allSea ??= TextureUpload.Create(1, 1, Image.Format.R8, new byte[] { 0 });
         RenderingServer.GlobalShaderParameterAdd(MaskParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _noSea);
         RenderingServer.GlobalShaderParameterAdd(ZoneParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _anyZone);
         RenderingServer.GlobalShaderParameterAdd(RectParam, RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 0f, 1f, 1f));
+        RenderingServer.GlobalShaderParameterAdd(InlandParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _allSea);
     }
 
     /// <summary>Puts the defaults back, so the base sheet's hide steps aside nowhere.</summary>
     public static void Withdraw()
     {
         Live = null;
-        if (_noSea == null || _anyZone == null)
+        if (_noSea == null || _anyZone == null || _allSea == null)
             return;
         RenderingServer.GlobalShaderParameterSet(MaskParam, _noSea);
         RenderingServer.GlobalShaderParameterSet(ZoneParam, _anyZone);
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(0f, 0f, 1f, 1f));
+        RenderingServer.GlobalShaderParameterSet(InlandParam, _allSea);
     }
 
 
@@ -215,7 +227,13 @@ internal sealed class OceanMask
         RenderingServer.GlobalShaderParameterSet(MaskParam, Texture);
         RenderingServer.GlobalShaderParameterSet(ZoneParam, ZoneTexture ?? _anyZone);
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
+        RenderingServer.GlobalShaderParameterSet(InlandParam, InlandTexture);
     }
+
+    /// <summary>The signed metres from the coastline at a world X/Z, landward positive, filtered as
+    /// <c>csky_ocean_inland_at</c> reads the inland texture.</summary>
+    public float InlandAt(Vector3 world) =>
+        ((Filtered(InlandImage, world) * 2f) - 1f) * OceanMaskRaster.InlandReach;
 
     /// <summary>Whether the texel under a world point counts as sea, at the coverage the ocean draws
     /// from (<see cref="SeaThreshold"/>). A point off the mask is not sea.</summary>
@@ -336,9 +354,12 @@ internal sealed class OceanMask
             : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
         // Kept: SurfAt and --dump-ocean-mask read it after the upload.
         result.SurfTexture = TextureUpload.Create(result.SurfImage, callerKeeps: true);
+        // Kept: InlandAt and --dump-ocean-mask read it after the upload.
+        result.InlandImage = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Inland);
+        result.InlandTexture = TextureUpload.Create(result.InlandImage, callerKeeps: true);
         double uploadMs = Lap(ref t0);
         result.Timing = string.Create(CultureInfo.InvariantCulture,
-            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
+            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} inland={raster.InlandMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
         return result;
     }
 

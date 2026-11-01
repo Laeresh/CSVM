@@ -3,7 +3,9 @@
   "C1": {
     "wind": 295,
     "look_from": 0,
-    "look_full": 143
+    "look_full": 143,
+    "surf_wash": 0.7,
+    "surf_lines": 0.6
   },
   "C1B": {
     "height": 2,

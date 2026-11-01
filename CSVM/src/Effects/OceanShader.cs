@@ -183,11 +183,14 @@ public static class OceanShader
     // TUNE. Foam's roughness, which it takes in the share it covers, so it reflects no sky.
     private const float FoamRoughness = 0.6f;
 
-    // TUNE. The surf's lines bend by up to SurfBend radians over SurfBendCell metres, and break into
-    // lengths over SurfBreakCell metres.
-    private const float SurfBendCell = 40f;
-    private const float SurfBend = 5f;
+    // TUNE. The surf's lines break into lengths over SurfBreakCell metres. Their phase, with its bend, is
+    // csky_surf_arrive in csky_ocean.gdshaderinc, which the coasts' swash reads too.
     private const float SurfBreakCell = 20f;
+
+    // TUNE. How far up the painted sand and rocks each breaker's swash runs, in metres from the coastline.
+    // The author's pick from contact sheets and reach strips. The inland texture saturates at
+    // OceanMaskRaster.InlandReach, so the swash stops short of it.
+    private const float SwashReach = 12f;
 
     // TUNE. The wash reads the coverage displaced by up to SurfWarp metres of noise over two cells, so
     // its outline shows no 8 m mask texel. Its edge is ragged over two more. Metres throughout.
@@ -281,6 +284,17 @@ public static class OceanShader
     public static float SurfLinesPerWrap(float spacing, float speed) =>
         (float)Math.Max(speed > 0f ? 1.0 : 0.0, Math.Round(speed * ShaderTime.RolloverSecs / spacing));
 
+    /// <summary><c>csky_ocean_surf</c> for <paramref name="sea"/>, clamped first. X is the surf lines passing
+    /// a second, the rate the ocean's text writes. Y is 1 when the sea breaks surf, so its coasts take the
+    /// swash. Z is the swash's reach, W the inland texture's.</summary>
+    public static Vector4 SurfGlobal(SeaState sea)
+    {
+        sea = sea.Clamped();
+        bool surf = sea.SurfWash > 0f || sea.SurfLines > 0f;
+        return new Vector4(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed) / (float)ShaderTime.RolloverSecs, surf ? 1f : 0f,
+            Math.Min(SwashReach, OceanMaskRaster.InlandReach), OceanMaskRaster.InlandReach);
+    }
+
     /// <summary>The swell table's wavelengths as the sea scales them, longest first.</summary>
     public static IEnumerable<float> SwellLengths(SeaState sea)
     {
@@ -358,9 +372,9 @@ public static class OceanShader
     // widens the holes' edges. Taken here, where every fragment of the quad runs.
     float surf_fp = sqrt(length(dFdx(p)) * length(dFdy(p)));
     if (surf > 0.0 && surf_keep > 0.0) {
-        // The lines' phase in cycles where they reach the land. It rises with time, so along the shore
-        // distance each line runs toward the land; a still noise field bends it off the coast's offset.
-        float arrive = csky_time * " + PerSec(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed)) + @" + " + Literal(SurfBend / Mathf.Tau) + @" * foam_noise(p * " + Literal(1f / SurfBendCell) + @", 65536.0);
+        // The lines' phase in cycles where they reach the land, shared with the coasts' swash. It rises
+        // with time, so along the shore distance each line runs toward the land.
+        float arrive = csky_surf_arrive(p, " + PerSec(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed)) + @");
         float cyc = m.g * " + Literal(OceanMaskRaster.ShoreReach / sea.SurfSpacing) + @" + arrive;
         float lines = mix(" + Literal(SurfLineMean) + @", smoothstep(0.55, 0.95, sin(6.2831853 * cyc)), " + Fade(sea.SurfSpacing) + @")
             * smoothstep(-0.1, 0.25, " + Noise(SurfBreakCell, "-13.0, 29.0") + @") * smoothstep(0.0, 0.35, surf);
@@ -456,6 +470,8 @@ public static class OceanShader
         sb.AppendLine(SceneBuilder.TimeInclude);
         sb.AppendLine(SceneBuilder.AtmosphereInclude);
         sb.AppendLine(SceneBuilder.MipBiasInclude);
+        // The noise and the surf's phase the coasts' swash shares.
+        sb.AppendLine(SceneBuilder.OceanInclude);
         if (ShadowQualitySetting.TerrainShadows)
             sb.AppendLine(SceneBuilder.TerrainShadowInclude);
         sb.AppendLine("uniform sampler2D mask_tex : filter_linear, repeat_disable;");
@@ -501,20 +517,6 @@ float shore_swell(float g) {
 
 float shore_look(float g) {
     return smoothstep(" + Literal(sea.LookFrom / OceanMaskRaster.ShoreReach) + @", " + Literal(sea.LookFull / OceanMaskRaster.ShoreReach) + @", g);
-}
-
-// Two hashes in [0, 1] per integer cell (a PCG2D mix). It hashes the cell's integer coordinates
-// exactly, so every cell sharing a corner hashes it alike. A float hash of a large coordinate rounds
-// differently per call site and cuts the noise along straight lattice lines.
-vec2 sea_hash(vec2 c) {
-    uvec2 v = uvec2(ivec2(c)) * 1664525u + 1013904223u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    return vec2(v) * (1.0 / 4294967295.0);
 }
 
 // Two smooth value-noise channels in [-1, 1].
@@ -596,21 +598,6 @@ vec3 detail_noise(vec2 q) {
     float k = va - vb - vc + vd;
     return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k,
         ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
-}
-
-// Gradient noise at q, about -0.7 to 0.7, smooth across its cells. The cell's x repeats every
-// period cells. The half cell keeps the modulo exact, so no corner hashes differently in two cells.
-float foam_noise(vec2 q, float period) {
-    vec2 i = floor(q);
-    vec2 f = fract(q);
-    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    vec2 x = vec2(i.x, i.x + 1.0);
-    x -= period * floor((x + 0.5) / period);
-    float a = dot(sea_hash(vec2(x.x, i.y)) * 2.0 - 1.0, f);
-    float b = dot(sea_hash(vec2(x.y, i.y)) * 2.0 - 1.0, f - vec2(1.0, 0.0));
-    float c = dot(sea_hash(vec2(x.x, i.y + 1.0)) * 2.0 - 1.0, f - vec2(0.0, 1.0));
-    float d = dot(sea_hash(vec2(x.y, i.y + 1.0)) * 2.0 - 1.0, f - vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 // The holes in a sheet of foam: one round hole per jittered cell, each its own size. Returns the

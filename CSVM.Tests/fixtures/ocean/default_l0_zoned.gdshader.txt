@@ -3,6 +3,7 @@ render_mode skip_vertex_transform, cull_disabled;
 #include "res://shaders/csky_time.gdshaderinc"
 #include "res://shaders/csky_atmosphere.gdshaderinc"
 #include "res://shaders/csky_mip_bias.gdshaderinc"
+#include "res://shaders/csky_ocean.gdshaderinc"
 #include "res://shaders/csky_terrain_shadow.gdshaderinc"
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
 uniform vec4 mask_rect;
@@ -42,20 +43,6 @@ float shore_swell(float g) {
 
 float shore_look(float g) {
     return smoothstep(0.075, 0.4, g);
-}
-
-// Two hashes in [0, 1] per integer cell (a PCG2D mix). It hashes the cell's integer coordinates
-// exactly, so every cell sharing a corner hashes it alike. A float hash of a large coordinate rounds
-// differently per call site and cuts the noise along straight lattice lines.
-vec2 sea_hash(vec2 c) {
-    uvec2 v = uvec2(ivec2(c)) * 1664525u + 1013904223u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    return vec2(v) * (1.0 / 4294967295.0);
 }
 
 // Two smooth value-noise channels in [-1, 1].
@@ -137,21 +124,6 @@ vec3 detail_noise(vec2 q) {
     float k = va - vb - vc + vd;
     return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k,
         ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
-}
-
-// Gradient noise at q, about -0.7 to 0.7, smooth across its cells. The cell's x repeats every
-// period cells. The half cell keeps the modulo exact, so no corner hashes differently in two cells.
-float foam_noise(vec2 q, float period) {
-    vec2 i = floor(q);
-    vec2 f = fract(q);
-    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    vec2 x = vec2(i.x, i.x + 1.0);
-    x -= period * floor((x + 0.5) / period);
-    float a = dot(sea_hash(vec2(x.x, i.y)) * 2.0 - 1.0, f);
-    float b = dot(sea_hash(vec2(x.y, i.y)) * 2.0 - 1.0, f - vec2(1.0, 0.0));
-    float c = dot(sea_hash(vec2(x.x, i.y + 1.0)) * 2.0 - 1.0, f - vec2(0.0, 1.0));
-    float d = dot(sea_hash(vec2(x.y, i.y + 1.0)) * 2.0 - 1.0, f - vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 // The holes in a sheet of foam: one round hole per jittered cell, each its own size. Returns the

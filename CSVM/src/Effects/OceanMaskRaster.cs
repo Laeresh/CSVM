@@ -41,6 +41,10 @@ internal static class OceanMaskRaster
     /// is coplanar land, which a painted coast's water side clears.</summary>
     public const float SeaLevelBand = 0.5f;
 
+    /// <summary>The metres either side of the coastline the inland image measures before it saturates.
+    /// It bounds how far up the land a coast shader's swash can reach.</summary>
+    public const float InlandReach = 32f;
+
     // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
     // a chain of at most ShoreReach / Cell steps, so a band sees every chain its own rows can take.
     private const int Halo = (int)(ShoreReach / Cell) + 4;
@@ -106,6 +110,7 @@ internal static class OceanMaskRaster
         var mask = new byte[w * h * 2];
         var tint = new byte[w * h * 3];
         var lift = new byte[w * h];
+        var inland = new byte[w * h];
         int count = Math.Clamp(Math.Min(bands, h / MinBandRows), 1, h);
         int rows = (h + count - 1) / count;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -124,8 +129,19 @@ internal static class OceanMaskRaster
         var coast = Coastline(tris);
         Parallel.For(0, count, b => Encode(grid, coast, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
+        var shore = SeaFacing(grid, coast);
+        Parallel.For(0, count, b => Inland(grid, shore, b * rows, Math.Min(h, (b + 1) * rows) - 1, inland));
+        long t3 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf);
+        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf, inland, (t3 - t2) * tick);
+    }
+
+    /// <summary>The inland byte of a texel <paramref name="d"/> metres from the coastline: 128 on it,
+    /// rising to 255 at <see cref="InlandReach"/> landward and falling to 0 as far seaward.</summary>
+    internal static byte InlandByte(bool landward, float d)
+    {
+        float s = Math.Min(d, InlandReach) / (2f * InlandReach);
+        return Channel(landward ? 0.5f + s : 0.5f - s);
     }
 
     /// <summary>(byte)Math.Clamp(Math.Round(v * 255f), 0, 255), banker's rounding included, in float
@@ -741,6 +757,79 @@ internal static class OceanMaskRaster
         }
     }
 
+    // Whether a resolved texel lies on the land side of the coastline: land, a solid, or a strip's
+    // translucent sand. That sand is sea in the mask, yet landward of the painted waterline.
+    private static bool Landward(Grid g, int i) => g.Sea[i] == 0 || g.Solid[i] || g.Coast[i] == CoastUnder;
+
+    // The coastline segments with an open-sea texel centre within one Cell, read off the resolved grid. A
+    // flat land edge under a strip's sand is coastline to the shore distance, but no sea washes it.
+    private static float[] SeaFacing(Grid g, float[] coast)
+    {
+        var kept = new List<float>();
+        for (int s = 0; s < coast.Length; s += 4)
+        {
+            if (FacesSea(g, coast[s], coast[s + 1], coast[s + 2], coast[s + 3]))
+                kept.AddRange(new[] { coast[s], coast[s + 1], coast[s + 2], coast[s + 3] });
+        }
+        return kept.ToArray();
+    }
+
+    private static bool FacesSea(Grid g, float ax, float az, float bx, float bz)
+    {
+        int z0 = Math.Max(0, (int)Math.Floor((Math.Min(az, bz) - Cell - g.MinZ) / Cell));
+        int z1 = Math.Min(g.H - 1, (int)Math.Ceiling((Math.Max(az, bz) + Cell - g.MinZ) / Cell));
+        int x0 = Math.Max(0, (int)Math.Floor((Math.Min(ax, bx) - Cell - g.MinX) / Cell));
+        int x1 = Math.Min(g.W - 1, (int)Math.Ceiling((Math.Max(ax, bx) + Cell - g.MinX) / Cell));
+        for (int z = z0; z <= z1; z++)
+        {
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = (z * g.W) + x;
+                if (g.Sea[i] == 1 && !Landward(g, i)
+                    && Segment(g.MinX + ((x + 0.5f) * Cell), g.MinZ + ((z + 0.5f) * Cell), ax, az, bx, bz) <= Cell)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    // Rows r0..r1 of the inland image: each texel's exact distance to the nearest sea-facing segment
+    // within InlandReach, signed by its side. A minimum over segments, so no order or band count moves it.
+    private static void Inland(Grid g, float[] coast, int r0, int r1, byte[] inland)
+    {
+        int w = g.W;
+        float minX = g.MinX, minZ = g.MinZ;
+        var dist = new float[w * (r1 - r0 + 1)];
+        Array.Fill(dist, InlandReach);
+        for (int s = 0; s < coast.Length; s += 4)
+        {
+            float ax = coast[s], az = coast[s + 1], bx = coast[s + 2], bz = coast[s + 3];
+            int z0 = Math.Max(r0, (int)Math.Floor((Math.Min(az, bz) - InlandReach - minZ) / Cell));
+            int z1 = Math.Min(r1, (int)Math.Ceiling((Math.Max(az, bz) + InlandReach - minZ) / Cell));
+            int x0 = Math.Max(0, (int)Math.Floor((Math.Min(ax, bx) - InlandReach - minX) / Cell));
+            int x1 = Math.Min(w - 1, (int)Math.Ceiling((Math.Max(ax, bx) + InlandReach - minX) / Cell));
+            for (int z = z0; z <= z1; z++)
+            {
+                float pz = minZ + ((z + 0.5f) * Cell);
+                for (int x = x0; x <= x1; x++)
+                {
+                    int i = ((z - r0) * w) + x;
+                    float e = (float)Segment(minX + ((x + 0.5f) * Cell), pz, ax, az, bx, bz);
+                    if (e < dist[i])
+                        dist[i] = e;
+                }
+            }
+        }
+        for (int y = r0; y <= r1; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y * w) + x;
+                inland[i] = InlandByte(Landward(g, i), dist[((y - r0) * w) + x]);
+            }
+        }
+    }
+
     // Distance in metres to the nearest seed texel, by a two-pass chamfer over rows e0..e1, indexed
     // from row e0. A seed is a coast tile, a texel nothing covers, a centre a solid covers, or the
     // corner texel of a solid off the water. A coast solid's does not seed: its centre can lie in the sea.
@@ -803,9 +892,9 @@ internal static class OceanMaskRaster
     /// distance), the tint RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on water off the sheet
     /// and <see cref="SeamZone"/> on a seam between two groups. The lift is R8, the ocean's height
     /// over a ramp over <see cref="OceanMask.RampTop"/>. The surf is R8, the coverage of the surf
-    /// ring and the painted coasts' water sides, 0 off them.</summary>
+    /// ring and the painted coasts' water sides, 0 off them. The inland is R8 (<see cref="InlandByte"/>).</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
-        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift, byte[] Surf);
+        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift, byte[] Surf, byte[] Inland, double InlandMs);
 
     // The coverage both passes share. Each band writes only its own rows.
     private sealed class Grid
