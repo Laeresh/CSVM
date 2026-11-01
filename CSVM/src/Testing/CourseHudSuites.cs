@@ -14,7 +14,7 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>A course run's HUD and world cues. On a hand-made course the run HUD's words, its
-/// flashes, the chevron and the dim highlight are read across every entry and a touch. In a C1
+/// flashes, the wrong-side cross and the dim highlight are read across every entry and a touch. In a C1
 /// <c>--course=</c> flight the HUD and the cues are photographed into a montage for the user to judge.
 /// A suite's single frame never reaches the deferred redraw, so the montage calls the two HUD
 /// controls' own <c>_Draw</c> onto their cleared canvas items.</summary>
@@ -31,10 +31,11 @@ internal static class CourseHudSuites
     private const float TouchHeightM = 12f;
 
     [Suite("course-hud",
-        "a course run's HUD reads GATE n/N with the clock and penalty time, an intro line, a GATE n flash "
+        "a course run's HUD reads GATE n/N with the clock and penalty time, no intro line, a GATE n flash "
         + "with the split and a +3 s flash only for a touch that added time; its next entry's gate carries "
-        + "a chevron pointing the way that entry is flown, posed with the bobbing ring, and the gate after it "
-        + "a dim fill; in a C1 --course= flight the HUD, marker and cues are photographed into a montage")]
+        + "a red cross across its opening only while the aircraft is on its wrong side and "
+        + "in range, with a band against strobing, posed with the bobbing ring, and the gate after it a dim "
+        + "fill; in a C1 --course= flight the HUD, marker and cues are photographed into a montage")]
     internal static void CourseHud(TestContext ctx)
     {
         CheckRun(ctx);
@@ -59,9 +60,19 @@ internal static class CourseHudSuites
         try
         {
             visuals.Pose(now);
-            ctx.Check(StuntRunHud.StatusLine(run) == "0:00.0    GATE 1/3" && hud.IntroText == StuntRunHud.CourseIntro && hud.FlashLine == null,
-                $"before the first entry: '{StuntRunHud.StatusLine(run)}', intro '{hud.IntroText}'");
-            Cues(ctx, visuals, course, 0, now, "before the first entry");
+            ctx.Check(StuntRunHud.StatusLine(run) == "0:00.0    GATE 1/3" && run.IntroLine.Length == 0 && hud.FlashLine == null,
+                $"before the first entry: '{StuntRunHud.StatusLine(run)}', no intro line");
+            Cues(ctx, visuals, course, 0, now, "before the aircraft has a place", shown: false);
+            Place(run, visuals, p, new Vector3(0f, 0f, 60f), now);
+            Cues(ctx, visuals, course, 0, now, "60 m short of the first gate", shown: false);
+            Place(run, visuals, p, new Vector3(0f, 0f, -60f), now);
+            Cues(ctx, visuals, course, 0, now, "60 m past the first gate, its wrong side", shown: true);
+            Place(run, visuals, p, new Vector3(0f, 0f, 1f), now);
+            Cues(ctx, visuals, course, 0, now, "1 m back on the right side, inside the band", shown: true);
+            Place(run, visuals, p, new Vector3(0f, 0f, 3f), now);
+            Cues(ctx, visuals, course, 0, now, "3 m back on the right side", shown: false);
+            Place(run, visuals, p, new Vector3(0f, 0f, -900f), now);
+            Cues(ctx, visuals, course, 0, now, "900 m past the first gate, out of range", shown: false);
 
             Brush(run, p, now);
             ctx.Check(run.PenaltyCount == 0 && hud.PenaltyLine == null, $"a touch before the first entry adds no time and flashes nothing");
@@ -70,7 +81,7 @@ internal static class CourseHudSuites
             visuals.Pose(now);
             ctx.Check(hud.FlashLine == "GATE 1  0:00.0" && StuntRunHud.StatusLine(run) == "0:00.0    GATE 2/3",
                 $"entry 1 flashes '{hud.FlashLine}' and the line reads '{StuntRunHud.StatusLine(run)}'");
-            Cues(ctx, visuals, course, 1, now, "after entry 1");
+            Cues(ctx, visuals, course, 1, now, "after entry 1, short of the ring", shown: false);
 
             now += 2.0;
             run.Tick(2f);
@@ -82,23 +93,26 @@ internal static class CourseHudSuites
             hud._Process(0.7);
             ctx.Check(held == "+3 s" && hud.PenaltyLine == null && hud.FlashLine == null, $"both flashes stand 1.6 s: at 1 s '{held}', at 1.7 s '{hud.PenaltyLine}'");
 
-            // The ring bobs between the two times; the chevron rides with it.
-            var a = Chevron(visuals, now = 10.0);
-            var b = Chevron(visuals, now = 12.0);
+            // From the ring's wrong side. The ring bobs between the two times; the cross rides with it.
+            Place(run, visuals, r, new Vector3(0f, 0f, -60f), now = 10.0);
+            var a = CrossAt(visuals, now);
+            var b = CrossAt(visuals, now = 12.0);
             var expected = CourseMotion.Pose(r, 12.0).Origin;
-            ctx.Check(a.DistanceTo(b) > 0.05f && b.DistanceTo(expected) < 1e-3f,
-                $"the chevron rides the bobbing ring: moved {a.DistanceTo(b):0.000} m, {b.DistanceTo(expected):0.0000} m off the ring's pose");
+            ctx.Check(visuals.Cross!.Visible && a.DistanceTo(b) > 0.05f && b.DistanceTo(expected) < 1e-3f,
+                $"the cross rides the bobbing ring: moved {a.DistanceTo(b):0.000} m, {b.DistanceTo(expected):0.0000} m off the ring's pose");
 
             Cross(run, r, GateDirection.Forward, now);
             visuals.Pose(now);
-            Cues(ctx, visuals, course, 2, now, "after entry 2, the reverse entry next");
+            Cues(ctx, visuals, course, 2, now, "past the ring, the reverse entry's right side", shown: false);
+            Place(run, visuals, p, new Vector3(0f, 0f, 60f), now);
+            Cues(ctx, visuals, course, 2, now, "behind the pylon gate, the reverse entry's wrong side", shown: true);
             Cross(run, p, GateDirection.Reverse, now);
             visuals.Pose(now);
-            ctx.Check(run.AllComplete && !visuals.Chevron!.Visible && !visuals.Highlight!.Visible && StuntRunHud.StatusLine(run).Contains("GATE 3/3"),
+            ctx.Check(run.AllComplete && !visuals.Cross!.Visible && !visuals.Highlight!.Visible && StuntRunHud.StatusLine(run).Contains("GATE 3/3"),
                 $"the finished run shows no cue and reads '{StuntRunHud.StatusLine(run)}'");
             run.Reset();
             visuals.Pose(now);
-            Cues(ctx, visuals, course, 0, now, "after a rerun");
+            Cues(ctx, visuals, course, 0, now, "after a rerun", shown: false);
         }
         finally
         {
@@ -107,18 +121,29 @@ internal static class CourseHudSuites
         }
     }
 
-    // The chevron on entry `next`'s gate, apex along its flown way, and the dim fill on the entry after's.
-    private static void Cues(TestContext ctx, CourseVisuals visuals, Course course, int next, double now, string when)
+    // The red cross across entry `next`'s clear opening when `shown`, and the dim fill on the entry after's.
+    private static void Cues(TestContext ctx, CourseVisuals visuals, Course course, int next, double now, string when, bool shown)
     {
-        var chevron = visuals.Chevron!;
+        var cross = visuals.Cross!;
         var highlight = visuals.Highlight!;
         var entry = course.Sequence[next];
         var gate = course.Gates.First(g => g.Id == entry.GateId);
-        var pose = CourseMotion.Pose(gate, now);
-        var travel = (pose.Basis * Vector3.Forward).Normalized() * (entry.Direction == GateDirection.Forward ? 1f : -1f);
-        var apex = -chevron.Transform.Basis.Z.Normalized();
-        ctx.Check(chevron.Visible && chevron.Transform.Origin.DistanceTo(pose * Centre(gate)) < 1e-3f && apex.Dot(travel) > 0.999f,
-            $"{when}: the chevron stands in {gate.Id}'s aperture pointing {entry.Direction}: shown {chevron.Visible}, apex·travel {apex.Dot(travel):0.000}");
+        if (shown)
+        {
+            var pose = CourseMotion.Pose(gate, now);
+            var size = cross.Mesh?.GetAabb().Size ?? Vector3.Zero;
+            bool inside = gate.Kind == CourseGateKind.PylonGate
+                ? size.X <= gate.Width + 1e-3f && size.Y <= gate.Height + 1e-3f
+                : new Vector2(size.X, size.Y).Length() <= gate.Diameter + 0.01f;
+            ctx.Check(cross.Visible && inside && cross.Transform.Origin.DistanceTo(pose * Centre(gate)) < 1e-3f
+                    && cross.Transform.Basis.IsEqualApprox(pose.Basis),
+                $"{when}: the red cross stands across {gate.Id}'s opening in its plane: shown {cross.Visible}, {size.X:0.0} x {size.Y:0.0} m");
+        }
+        else
+        {
+            ctx.Check(!cross.Visible, $"{when}: no cross on {gate.Id}");
+        }
+
         if (next + 1 < course.Sequence.Count)
         {
             var after = course.Gates.First(g => g.Id == course.Sequence[next + 1].GateId);
@@ -131,10 +156,18 @@ internal static class CourseHudSuites
         }
     }
 
-    private static Vector3 Chevron(CourseVisuals visuals, double now)
+    // The aircraft's place, in the gate's frame from its aperture's middle, as the run's next step sees it.
+    private static void Place(StuntMission run, CourseVisuals visuals, CourseGate gate, Vector3 offset, double now)
+    {
+        run.Relocated();
+        run.Update(CourseMotion.Pose(gate, now) * (Centre(gate) + offset));
+        visuals.Pose(now);
+    }
+
+    private static Vector3 CrossAt(CourseVisuals visuals, double now)
     {
         visuals.Pose(now);
-        return visuals.Chevron!.Transform.Origin;
+        return visuals.Cross!.Transform.Origin;
     }
 
     private static Vector3 Centre(CourseGate gate) =>
@@ -160,7 +193,7 @@ internal static class CourseHudSuites
     }
 
     // The shipped sample flown in a C1 --det session. Its pane is photographed with the run HUD and
-    // the target HUD drawn, and the ring's chevron from the side both ways round.
+    // the target HUD drawn, and the wrong-side cross from the side.
     private static void Montage(TestContext ctx)
     {
         var savedClock = GameClock.Current;
@@ -266,14 +299,13 @@ internal static class CourseHudSuites
             var ring = Gate(1);
             Approach(plane, hud, run, ring, GateDirection.Forward, 220f);
             visuals.Pose(run.SimSeconds());
-            ctx.Check(run.CompletedCount == 1 && targets.Selected?.DisplayName == "Gate 2" && visuals.Chevron!.Visible,
-                $"approaching entry 2: selected '{targets.Selected?.DisplayName}', status '{StuntRunHud.StatusLine(run)}'");
+            ctx.Check(run.CompletedCount == 1 && targets.Selected?.DisplayName == "Gate 2" && !visuals.Cross!.Visible,
+                $"approaching entry 2 the right way, no cross: selected '{targets.Selected?.DisplayName}', status '{StuntRunHud.StatusLine(run)}'");
             if (!Shoot("hud-next-gate", pane, withHud: true))
             {
                 return;
             }
 
-            Shoot("side-ring-forward", Side(ring), withHud: false);
             var after = Gate(2);
             var afterPose = CourseMotion.Pose(after, run.SimSeconds());
             var fillView = Eye(ctx, pane, camera, afterPose * (Centre(after) + new Vector3(30f, 8f, 140f)), afterPose * Centre(after));
@@ -301,13 +333,20 @@ internal static class CourseHudSuites
             Shoot("hud-penalty", pane, withHud: true,
                 (pylonPose * new Vector3((-0.5f * pylons.Width) - 30f, 0.7f * pylons.Height, 70f), pylonPose * Centre(pylons)));
 
-            // (3) The last entry flies the ring back the other way.
+            // (3) The last entry flies the ring back the other way: first met from its wrong side, then
+            // from its right one.
             ctx.Check(Through(plane, hud, run, course, 2) && Through(plane, hud, run, course, 3), $"the sample's third and fourth entries count");
+            Approach(plane, hud, run, ring, GateDirection.Forward, 220f);
+            visuals.Pose(run.SimSeconds());
+            ctx.Check(run.CompletedCount == 4 && course.Sequence[4].Direction == GateDirection.Reverse && visuals.Cross!.Visible,
+                $"approaching the reverse entry from its wrong side, the cross shows: status '{StuntRunHud.StatusLine(run)}'");
+            Shoot("hud-wrong-side", pane, withHud: true);
+            Shoot("side-wrong-side", Side(ring), withHud: false);
             Approach(plane, hud, run, ring, GateDirection.Reverse, 220f);
-            ctx.Check(run.CompletedCount == 4 && course.Sequence[4].Direction == GateDirection.Reverse,
-                $"approaching the reverse entry: status '{StuntRunHud.StatusLine(run)}'");
+            visuals.Pose(run.SimSeconds());
+            ctx.Check(run.CompletedCount == 4 && !visuals.Cross!.Visible,
+                $"approaching the reverse entry from its right side, no cross");
             Shoot("hud-reverse", pane, withHud: true);
-            Shoot("side-ring-reverse", Side(ring), withHud: false);
 
             if (shots.Count > 0)
             {

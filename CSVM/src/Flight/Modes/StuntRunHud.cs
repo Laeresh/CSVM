@@ -17,9 +17,6 @@ namespace CSVM.Flight.Modes;
 /// objective, so there is one marker style and one cycle.</summary>
 public sealed partial class StuntRunHud : Control
 {
-    /// <summary>A course run's intro line. A course has no message-table line of its own.</summary>
-    public const string CourseIntro = "Fly through every gate in order";
-
     /// <summary>The time-attack race this pilot is flying in, or null in a solo run. Set, the
     /// leaderboard line draws and the all-zones-cleared banner reads this run against the
     /// pilot's best. Paired with <see cref="PlayerIndex"/>.</summary>
@@ -70,9 +67,6 @@ public sealed partial class StuntRunHud : Control
 
     /// <summary>The "+3 s" flash's text while it shows, else null. Only a course run raises it.</summary>
     public string? PenaltyLine => _penalty.Shown ? _penalty.Text : null;
-
-    /// <summary>The intro banner's text: the message table's line, or <see cref="CourseIntro"/> on a course.</summary>
-    public string IntroText => _mission.Course != null ? CourseIntro : _mission.IntroLine;
 
     /// <summary>What sends the status and leaderboard lines away while it answers true: the pane's
     /// held scores. Their Original text runs across the top of the pane. Null keeps them.</summary>
@@ -210,10 +204,10 @@ public sealed partial class StuntRunHud : Control
             return;
 
         // One-shot intro banner (fades over the last second of its window).
-        if (_mission.Elapsed < IntroDuration && !_mission.AllComplete && IntroText.Length > 0)
+        if (_mission.Elapsed < IntroDuration && !_mission.AllComplete && _mission.IntroLine.Length > 0)
         {
             float a = Mathf.Clamp(IntroDuration - _mission.Elapsed, 0f, 1f);
-            DrawLines(font, new Vector2(cx, Size.Y * 0.26f), new[] { IntroText },
+            DrawLines(font, new Vector2(cx, Size.Y * 0.26f), new[] { _mission.IntroLine },
                 bannerFont, new Color(HudBlue, a));
         }
 

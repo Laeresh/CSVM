@@ -12,23 +12,26 @@ namespace CSVM.Flight.Modes;
 /// per pool gate, in pool order, stands at <see cref="CourseMotion"/>'s pose each frame. The pylons'
 /// fabric ripple is drawn only, on <c>csky_time</c>. A touched course pylon is cut and regrows
 /// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. A followed run's next gate
-/// carries a direction chevron and the gate after it a dim fill. Everything is lit by the zone's
+/// carries a red cross while the aircraft is on its wrong side, the gate after it a dim fill. Everything is lit by the zone's
 /// per-vertex sun and fogged as the faithful aircraft are, casts no shadow, and is sized and coloured to tune.
 /// </summary>
 public sealed partial class CourseVisuals : Node3D
 {
     private const float StartLengthM = 6f;
 
-    // The run's cues, all TUNE. The chevron's length is a share of its gate's aperture. Its reach
-    // across, bar width, block depth and slab thickness are shares of that length. The fade is how much
-    // of the following gate's dim fill the dither drops.
-    private const float ChevronShare = 0.25f;
-    private const float ChevronSpread = 0.7f;
-    private const float ChevronBar = 0.35f;
-    private const float ChevronDepth = 0.3f;
-    private const float ChevronSlab = 0.04f;
+    // The run's cues, all TUNE. The cross's bar width is a share of its aperture's lesser side, and
+    // its bars are this deep. The fade is how much of the following gate's dim fill the dither drops.
+    private const float CrossBarShare = 0.03f;
+    private const float CrossDepthM = 0.3f;
     private const float HighlightFade = 0.75f;
     private const float HighlightSlabM = 0.2f;
+
+    // The wrong-side cross's gates, TUNE. It shows this far past the gate's plane and hides as far
+    // back before it, so a pass along the plane cannot strobe it. The range gate keeps it near the
+    // gate, with the same kind of band.
+    private const float WrongSideM = 2f;
+    private const float CrossShowRangeM = 800f;
+    private const float CrossHideRangeM = 1000f;
 
     // A mesh is centred on its own origin, so a column runs from minus half its height to plus half.
     // The ripple function is the one place a vertex moves: wave, a cut stump's sag, a falling top's
@@ -105,12 +108,16 @@ public sealed partial class CourseVisuals : Node3D
     private static readonly Vector3 Rope = new(0.2f, 0.19f, 0.17f);
     private static readonly Vector3 Yellow = new(0.95f, 0.78f, 0.1f);
     private static readonly Vector3 Black = new(0.08f, 0.08f, 0.08f);
+    private static readonly Vector3 CrossRed = new(1f, 0.08f, 0.06f); // the wrong-side cross, TUNE
 
     private readonly List<(CourseGate Gate, Node3D Node, CutPylon[]? Pylons)> _gates = new();
     private Course _course = null!;
     private int[] _entryGates = System.Array.Empty<int>();
     private StuntMission? _run;
     private (Mesh Mesh, Transform3D Local)[] _fills = System.Array.Empty<(Mesh, Transform3D)>();
+    private Mesh[] _crosses = System.Array.Empty<Mesh>();
+    private int _crossEntry = -1;
+    private bool _wrongSide;
     private double _unclocked;
 
     private CourseVisuals()
@@ -121,14 +128,21 @@ public sealed partial class CourseVisuals : Node3D
     /// <summary>One node per pool gate, in pool order, each at its gate's current pose.</summary>
     public IReadOnlyList<Node3D> GateNodes => _gates.ConvertAll(g => g.Node);
 
-    /// <summary>The followed run's direction chevron on its next sequence entry's gate. Its apex, along
-    /// its local -Z, points the way that entry is flown. Hidden with nothing left to fly; null until
-    /// <see cref="Follow"/>.</summary>
-    public MeshInstance3D? Chevron { get; private set; }
+    /// <summary>The followed run's red cross across its next sequence entry's clear opening, shown only
+    /// while the aircraft is on that entry's wrong side (<see cref="WrongSide"/>). Its node's origin is
+    /// the aperture's middle. Null until <see cref="Follow"/>.</summary>
+    public MeshInstance3D? Cross { get; private set; }
 
     /// <summary>The dim fill across the aperture of the gate after the next entry's. Hidden with no
     /// entry after the next; null until <see cref="Follow"/>.</summary>
     public MeshInstance3D? Highlight { get; private set; }
+
+    /// <summary>Whether the cross shows, given whether it showed. <paramref name="beyond"/> is how far
+    /// the aircraft is past the gate's plane along the entry's flown way. It is negative on the side
+    /// the entry is flown from. <paramref name="range"/> is the aircraft's distance from the aperture's
+    /// middle. Each test has a band, so neither strobes at its edge.</summary>
+    public static bool WrongSide(bool shown, float beyond, float range) =>
+        range <= (shown ? CrossHideRangeM : CrossShowRangeM) && beyond > (shown ? -WrongSideM : WrongSideM);
 
     /// <summary>The course's gates, posed at sim time 0, plus a cone at the start point along its
     /// heading when <paramref name="withStart"/>. The caller adds it to the world.</summary>
@@ -187,17 +201,17 @@ public sealed partial class CourseVisuals : Node3D
             }
         }
 
-        if (_run is { } run && Chevron is { } chevron && Highlight is { } highlight)
+        if (_run is { } run && Cross is { } cross && Highlight is { } highlight)
         {
             int next = run.AllComplete ? -1 : run.CompletedCount;
-            PoseChevron(chevron, next, seconds);
+            PoseCross(cross, next, seconds);
             PoseHighlight(highlight, next >= 0 && next + 1 < _entryGates.Length ? next + 1 : -1, seconds);
         }
     }
 
     /// <summary>Cuts a course pylon on each of <paramref name="run"/>'s touches of one, at the run's sim
     /// time, and stands every pylon whole on its reset. Both only record, and <see cref="Pose"/> draws,
-    /// so a run outliving this node does no harm. It also adds the run's <see cref="Chevron"/> and
+    /// so a run outliving this node does no harm. It also adds the run's <see cref="Cross"/> and
     /// <see cref="Highlight"/>, which <see cref="Pose"/> moves with the run's next entry. Answers this node.</summary>
     public CourseVisuals Follow(StuntMission run)
     {
@@ -205,9 +219,10 @@ public sealed partial class CourseVisuals : Node3D
         run.RunReset += Restore;
         _run = run;
         _fills = _course.Gates.Select(Fill).ToArray();
-        Chevron = Cue("next_chevron", ChevronMesh(), 0f);
-        Highlight = Cue("after_highlight", _fills.Length > 0 ? _fills[0].Mesh : null, HighlightFade);
-        AddChild(Chevron);
+        _crosses = _course.Gates.Select(CrossMesh).ToArray();
+        Cross = Cue("wrong_side_cross", null, CrossRed, 0f);
+        Highlight = Cue("after_highlight", null, Yellow, HighlightFade);
+        AddChild(Cross);
         AddChild(Highlight);
         return this;
     }
@@ -249,10 +264,10 @@ public sealed partial class CourseVisuals : Node3D
             : (new CylinderMesh { TopRadius = 0.5f * gate.Diameter, BottomRadius = 0.5f * gate.Diameter, Height = HighlightSlabM, RadialSegments = 48, Rings = 1 },
                 new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2f), Vector3.Zero));
 
-    // A cue on the course shader, so no new shader compiles mid-flight. Yellow, as the start cone.
-    private static MeshInstance3D Cue(string name, Mesh? mesh, float fade)
+    // A cue on the course shader, so no new shader compiles mid-flight.
+    private static MeshInstance3D Cue(string name, Mesh? mesh, Vector3 srgb, float fade)
     {
-        var material = Material(Yellow, Yellow, 0f, byAngle: false, 1f, 0f);
+        var material = Material(srgb, srgb, 0f, byAngle: false, 1f, 0f);
         material.SetShaderParameter("fade", fade);
         return new MeshInstance3D
         {
@@ -264,65 +279,27 @@ public sealed partial class CourseVisuals : Node3D
         };
     }
 
-    // A unit chevron: a flat V block and an upright V slab sharing the axis. The block's inner walls
-    // face an eye on the approach, its top the eye above; the slab's sides face an eye beside it.
-    // Its arms end on z = 0 and its apex is at z = -(1 + ChevronBar).
-    private static ArrayMesh ChevronMesh()
+    // Two bars corner to corner across the clear opening, about its middle. A pylon gate's span its
+    // rectangle between the course pylons' centrelines, a ring's cross its disc at 45 degrees. Closed
+    // boxes, so either side draws front faces.
+    private static Mesh CrossMesh(CourseGate gate)
     {
-        Vector2[] outline =
-        {
-            new(1f, 0f), new(0f, ChevronSpread), new(-ChevronBar, ChevronSpread),
-            new(1f - ChevronBar, 0f), new(-ChevronBar, -ChevronSpread), new(0f, -ChevronSpread),
-        };
-        int[] triangles = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5 };
-        float turn = 0f; // twice the signed area, which says which side of each edge is outside
-        for (int i = 0; i < outline.Length; i++)
-        {
-            turn += outline[i].Cross(outline[(i + 1) % outline.Length]);
-        }
-
+        bool pylons = gate.Kind == CourseGateKind.PylonGate;
+        float bar = CrossBarShare * (pylons ? Mathf.Min(gate.Width, gate.Height) : gate.Diameter);
+        float tilt = pylons ? Mathf.Atan2(gate.Height, gate.Width) : Mathf.Pi / 4f;
+        var (sin, cos) = Mathf.SinCos(tilt);
+        // The longest tilted bar whose corners stay inside the rectangle, or the ring's diameter less its width.
+        float length = pylons
+            ? Mathf.Min((gate.Width - (bar * sin)) / cos, (gate.Height - (bar * cos)) / sin)
+            : gate.Diameter - bar;
+        var box = new BoxMesh { Size = new Vector3(length, bar, CrossDepthM) };
         var st = new SurfaceTool();
-        st.Begin(Mesh.PrimitiveType.Triangles);
-        foreach (var (normal, depth) in new[] { (Vector3.Up, ChevronDepth), (Vector3.Right, ChevronSlab) })
+        foreach (float turn in new[] { tilt, -tilt })
         {
-            var across = normal == Vector3.Up ? Vector3.Right : Vector3.Up;
-            Vector3 At(int i, float side) =>
-                (across * outline[i].Y) + (Vector3.Forward * (outline[i].X + ChevronBar)) + (normal * (0.5f * depth * side));
-            foreach (float side in new[] { 1f, -1f })
-            {
-                for (int t = 0; t < triangles.Length; t += 3)
-                {
-                    Face(st, normal * side, At(triangles[t], side), At(triangles[t + 1], side), At(triangles[t + 2], side));
-                }
-            }
-
-            for (int i = 0; i < outline.Length; i++)
-            {
-                int j = (i + 1) % outline.Length;
-                var edge = outline[j] - outline[i];
-                var outside = ((Vector3.Forward * edge.Y) - (across * edge.X)) * Mathf.Sign(turn);
-                Face(st, outside, At(i, 1f), At(j, 1f), At(j, -1f));
-                Face(st, outside, At(i, 1f), At(j, -1f), At(i, -1f));
-            }
+            st.AppendFrom(box, 0, new Transform3D(new Basis(Vector3.Back, turn), Vector3.Zero));
         }
 
         return st.Commit();
-    }
-
-    // One triangle facing `normal`: Godot's front faces wind clockwise seen from their normal's side.
-    private static void Face(SurfaceTool st, Vector3 normal, Vector3 a, Vector3 b, Vector3 c)
-    {
-        normal = normal.Normalized();
-        if ((b - a).Cross(c - a).Dot(normal) > 0f)
-        {
-            (b, c) = (c, b);
-        }
-
-        foreach (var v in new[] { a, b, c })
-        {
-            st.SetNormal(normal);
-            st.AddVertex(v);
-        }
     }
 
     private static ShaderMaterial Material(Vector3 baseSrgb, Vector3 bandSrgb, float bands, bool byAngle, float height, float ripple)
@@ -411,21 +388,29 @@ public sealed partial class CourseVisuals : Node3D
         }
     }
 
-    // The chevron lies wholly past the gate's plane on the flown side. The crossing then moves it on
-    // before an eye at the aircraft reaches it.
-    private void PoseChevron(MeshInstance3D chevron, int entry, double seconds)
+    // A new entry starts hidden. Forward entries are flown along the gate's -Z.
+    private void PoseCross(MeshInstance3D cross, int entry, double seconds)
     {
-        chevron.Visible = entry >= 0;
-        if (entry < 0)
+        if (entry != _crossEntry)
         {
+            (_crossEntry, _wrongSide) = (entry, false);
+        }
+
+        if (entry < 0 || _run?.PlanePosition is not { } plane)
+        {
+            cross.Visible = _wrongSide = false;
             return;
         }
 
-        var gate = _course.Gates[_entryGates[entry]];
-        float size = ChevronShare * (gate.Kind == CourseGateKind.PylonGate ? Mathf.Min(gate.Width, gate.Height) : gate.Diameter);
-        float turn = _course.Sequence[entry].Direction == GateDirection.Reverse ? Mathf.Pi : 0f;
-        var local = new Transform3D(new Basis(Vector3.Up, turn).Scaled(Vector3.One * size), ApertureCentre(gate));
-        chevron.Transform = CourseMotion.Pose(gate, seconds) * local;
+        int g = _entryGates[entry];
+        var gate = _course.Gates[g];
+        var pose = CourseMotion.Pose(gate, seconds);
+        var from = (pose.AffineInverse() * plane) - ApertureCentre(gate);
+        bool reverse = _course.Sequence[entry].Direction == GateDirection.Reverse;
+        _wrongSide = WrongSide(_wrongSide, reverse ? from.Z : -from.Z, from.Length());
+        cross.Visible = _wrongSide;
+        cross.Mesh = _crosses[g];
+        cross.Transform = pose * new Transform3D(Basis.Identity, ApertureCentre(gate));
     }
 
     private void PoseHighlight(MeshInstance3D highlight, int entry, double seconds)

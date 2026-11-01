@@ -215,6 +215,10 @@ public sealed class StuntMission
     /// <summary>Penalties added by <see cref="AddPenalty"/> this run; their time is in <see cref="Elapsed"/>.</summary>
     public int PenaltyCount { get; private set; }
 
+    /// <summary>Where <see cref="Update"/> last had the plane, or null before its first step and after
+    /// <see cref="Relocated"/>. A course's wrong-side cross reads it.</summary>
+    public Vector3? PlanePosition => _haveLastPlanePos ? _lastPlanePos : null;
+
     /// <summary>A course gate's idle motion in its own frame: pool index into
     /// <see cref="Course.Gates"/> and sim seconds in, the <c>motion</c> of
     /// <see cref="CourseAperture.CrossedBy"/> out. The drawn gate must use the same function at the

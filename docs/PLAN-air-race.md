@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Procedural course pylons, rings and balloons with idle animation
 12. ☑ Pylon cut: slice, sag, regrow
-13. ◐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
+13. ☑ Race HUD: next gate, `Gate n/N`, penalties, wrong-side cross
 
 ### Wave C, course editor lab
 
@@ -585,39 +585,49 @@ falling top is drawn (second instance or the same mesh clipped the other way).>
 **⚠ Traps.** The 3 s regrow time is TUNE. A rerun mid-regrow should meet a whole pylon <TODO:
 confirm with the user>.
 
-## B13 ◐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
+## B13 ☑ Race HUD: next gate, `Gate n/N`, penalties, wrong-side cross
 
-**Landed (look pending).** `StuntRunHud.cs` reads a course run (`Course != null`) in course words,
+**Landed.** The user accepted the HUD from the C1 montage after two reworks (no chevron, a thin red wrong-side cross, no intro line), sizes and colours to be tuned in flight. `StuntRunHud.cs` reads a course run (`Course != null`) in course words,
 Danger Zone runs unchanged. The status line is `CourseStatusLine`: `0:14.2    GATE 2/5    +6 s`, the
 clock, then the sequence entry to fly next counted from 1 (the last, `5/5`, once all are flown; the
-next entry reads right where the marker and chevron point), then the penalty total when there is
-any (`PenaltyCount` times `CourseElements.TouchPenaltySeconds`, already inside the clock). GATE is
-upper case to match the line's ZONES. The intro is `CourseIntro`, "Fly through every gate in
-order", standing until 5 s after the first entry since a course clock starts there. A crossing
-flashes `GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing) where a zone flashed `CLEARED`,
-and the finish banner reads COURSE COMPLETE, the time and `PENALTIES +6 s` when there are any. Each
+next entry reads right where the marker points), then the penalty total when there is any
+(`PenaltyCount` times `CourseElements.TouchPenaltySeconds`, already inside the clock). GATE is
+upper case to match the line's ZONES. A course run has no intro line. A crossing flashes
+`GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing) where a zone flashed `CLEARED`, and the
+finish banner reads COURSE COMPLETE, the time and `PENALTIES +6 s` when there are any. Each
 `ElementTouched` with `TimeAdded` shows a `PenaltyFlash`, "+3 s" in a penalty red on the line under
 the clock (free, since a course is solo) for the same 1.6 s as the cleared flash, summed while it
 shows ("+6 s"); a touch with no time added shows nothing. **Marker:** A3's `CollectTargets` already
 offers the next entry alone and it draws, but its line 1 read " [] -" from the course zone's empty
 label pair; `TargetPool` now passes an empty label as none, so the marker reads a blank line 1 and
 `Gate 2` (and `Gate 2` / `7 o'clock` at the edge). **World cues**, in `CourseVisuals.Follow(run)`:
-`Chevron`, a yellow 3D chevron (a flat V block 0.3 of its length deep and an upright V slab, so it
-reads from the side, above and below, and head-on as a bar with an upright stroke, which cannot
-show the way on its own: a face-on cue has no depth to point with), sized 0.25 of the aperture (a pylon gate's lesser side, a ring's diameter), lying
-wholly past the aperture's plane with its apex along the entry's flown way, so a Reverse entry's
-points against the gate's heading and the crossing moves it on before the eye reaches it; and
-`Highlight`, the gate after it filled across its clear opening by a thin slab dithered to a quarter
-(`fade` 0.75). `Pose` stands both at `CourseMotion.Pose * local` from the run's `CompletedCount`, so
-they ride a bobbing ring; both hide once the run is complete, the fill when no entry follows. Both
-are on the course shader with uniforms set, so no shader compiles mid-flight. A gate repeated in
-consecutive entries carries both cues at once. All sizes and the colour are TUNE. **Montage seam:**
-a suite's single frame never runs the deferred redraw, and `CanvasItem.Draw*` refuses outside
-`_Draw`, so `MarkerDraw.Text` and `TargetHud`'s box, tag and arrow now draw through the canvas
-item's own `RenderingServer` calls, the same calls `Draw*` makes. Not done here: the Danger Zone
-photograph (`StuntCapture`) still latches near course gates (A6's open note); that file is A5's.
-The Evidence below named `UI/Overlays/MarkerOverlay.cs`, which is the `--viewer` mount-marker
-overlay; the HUD's marker is `Flight/Hud/TargetHud.cs`.
+`Cross`, a red X (two closed bars corner to corner, 0.08 of the opening's lesser side wide and
+0.6 m deep) across the next gate's clear opening, the rectangle between the course pylons'
+centrelines or the ring's disc at 45 degrees, shown only while the aircraft is on that entry's
+wrong side. **Wrong side:** the aircraft's position (`StuntMission.PlanePosition`, the last step's,
+a read-only accessor added for this) in the gate's frame at its motion pose, measured from the
+aperture's middle along the entry's flown way (local -Z forward, +Z reverse): more than 2 m past
+the gate's plane and within 800 m shows it; once shown it holds until 2 m back on the right side or
+beyond 1000 m (`WrongSide`), so a pass along the plane or at the range edge cannot strobe it. A new
+entry, a respawn (`Relocated`) and a rerun start hidden. The bars are closed, so the cross is seen
+from both sides while shown; nothing shows from the right side. `Highlight` fills the gate after
+the next across its clear opening with a thin slab dithered to a quarter (`fade` 0.75). `Pose`
+stands both at `CourseMotion.Pose * local` from the run's `CompletedCount`, so they ride a bobbing
+ring; both hide once the run is complete, the fill when no entry follows. Both are on the course
+shader with uniforms set, so no shader compiles mid-flight. All sizes and colours are TUNE.
+**Montage seam:** a suite's single frame never runs the deferred redraw, and `CanvasItem.Draw*`
+refuses outside `_Draw`, so `MarkerDraw.Text` and `TargetHud`'s box, tag and arrow now draw through
+the canvas item's own `RenderingServer` calls, the same calls `Draw*` makes. **The user's verdict on
+the first montage** (a yellow chevron on every next gate and a course intro line): "Remove the
+arrow, the flow of the course should show the direction. Or only when the player is on the wrong
+side of the gate. I don't think we need the explanation in the Hud. loading screen is enough." They
+chose a cue only from the wrong side, then a red cross in place of the chevron, and kept the dim
+fill. **Loading screen:** a `--course=` launch is a mode of ours, whose blackboard writes only the
+mode heading (`LaunchBoards.Subject`, FREE FLIGHT for `--stunt`) and has no description line, so no
+course line was added; an Instant Action Stunt Flying launch writes the original's own dialog texts,
+the Danger Zone blurb, which D31 must replace or keep off a course launch. Not done here: the Danger
+Zone photograph (`StuntCapture`) is A5's. The Evidence below named `UI/Overlays/MarkerOverlay.cs`,
+which is the `--viewer` mount-marker overlay; the HUD's marker is `Flight/Hud/TargetHud.cs`.
 
 **Verified.** <pending orchestrator run>
 
@@ -625,15 +635,19 @@ overlay; the HUD's marker is `Flight/Hud/TargetHud.cs`.
 shader and a suite; the judgement is the user's look call on the montage.
 
 **Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseHudTests"`
-(the status line, the course flashes, the "+3 s" flash's timing and sum, the marker's lines), then
-`.\scripts\RunTests.ps1 -Suite 'course-hud,course-visuals,course-launch,stunt-scores-scripted,stunt-target-cycle,stunt-respawn-tap-hold' -SkipUnits -SkipGoldens`.
-`course-hud` (windowed) reads the HUD text and both cues across every entry of a hand-made course,
-a touch before the first entry and one on the clock, the chevron riding a bobbing ring, the finish
-and a rerun; then it flies the shipped sample in a C1 `--det` session and writes
-`course-hud/montage.png`: the HUD approaching entry 2 (marker, status line, chevron, the fill on
-entry 3's gate), that ring's chevron from the side, the fill close, the "+3 s" flash after a brush
-of entry 3's left course pylon, the HUD approaching the reverse entry, and its chevron from the
-side. The look closes with the user's verdict on the montage and in flight.
+(the status line, the course flashes, the "+3 s" flash's timing and sum, the wrong-side bands, the
+marker's lines), then
+`.\scripts\RunTests.ps1 -Suite 'course-hud,course-visuals,course-launch,stunt-scores-scripted,stunt-target-cycle' -SkipUnits -SkipGoldens`.
+`course-hud` (windowed) reads the HUD text and both cues across every entry of a hand-made course:
+the cross hidden from the right side, shown from the wrong side across the opening in the gate's
+plane, held inside the band, hidden out of range, riding a bobbing ring, on a reverse entry's
+wrong side, and gone at the finish and on a rerun; a touch before the first entry and one on the
+clock. It then flies the shipped sample in a C1 `--det` session and writes
+`course-hud/montage.png`: the HUD approaching entry 2 the right way (no cross, the fill on entry 3's
+gate), the fill close, the "+3 s" flash after a brush outside entry 3's left course pylon (the
+aircraft is then past that gate, so its cross shows), the reverse entry approached from its wrong
+side with the cross, that cross from the side, and the reverse entry approached the right way. The
+look closes with the user's verdict on the montage and in flight.
 
 **Original approach (kept for reference).**
 

@@ -65,6 +65,21 @@ public class CourseHudTests
     }
 
     [Fact]
+    public void TheCrossShowsOnlyFromTheWrongSideWithABand()
+    {
+        Assert.False(CourseVisuals.WrongSide(false, -50f, 50f)); // the side the entry is flown from
+        Assert.False(CourseVisuals.WrongSide(false, 1f, 50f));   // past the plane, inside the band
+        Assert.True(CourseVisuals.WrongSide(false, 3f, 50f));
+        Assert.True(CourseVisuals.WrongSide(true, -1f, 50f));    // shown, it holds until well back
+        Assert.False(CourseVisuals.WrongSide(true, -3f, 50f));
+
+        Assert.False(CourseVisuals.WrongSide(false, 100f, 900f)); // too far to show
+        Assert.True(CourseVisuals.WrongSide(false, 100f, 700f));
+        Assert.True(CourseVisuals.WrongSide(true, 100f, 950f));   // shown, it holds a little further
+        Assert.False(CourseVisuals.WrongSide(true, 100f, 1100f));
+    }
+
+    [Fact]
     public void TheMarkerNamesTheNextEntryAndNoDangerZone()
     {
         var run = Run(Fwd(A), Fwd(B));

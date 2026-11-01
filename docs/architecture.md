@@ -353,7 +353,7 @@ rows).
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
 - `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
 - `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: pylon bases and taper, ring tube, balloons and tethers.
-- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, the run's chevron on its next gate and dim fill on the one after.
+- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, a red cross on the run's next gate seen from its wrong side and a dim fill on the one after.
 - `src/Flight/Modes/CoursePylonCut.cs`, a cut course pylon's look on sim time: stump top and sag, the falling top's tip and drop, gone as it lands, whole again after 3 s.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
