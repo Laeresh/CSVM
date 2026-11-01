@@ -350,6 +350,9 @@ rows).
 - `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the JSON shape and the layout hash.
 - `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
+- `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
+- `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: pylon bases and taper, ring tube, balloons and tethers.
+- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
 - `src/Flight/Modes/FlagMatch.cs`, Capture the Flag's rules, engine-free: the flags, the proximity asks and cooldowns, the host's decision, the drop and throw, the points.

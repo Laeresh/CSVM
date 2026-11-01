@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, look and HUD
 
-11. ☐ Procedural course pylons, rings and balloons with idle animation
+11. ◐ Procedural course pylons, rings and balloons with idle animation
 12. ☐ Pylon cut: slice, sag, regrow
 13. ☐ Race HUD: next gate, `Gate n/N`, penalties, direction chevron
 
@@ -352,7 +352,40 @@ does with `--vs` or `--players`.
 
 # Wave B, look and HUD
 
-## B11 ☐ Procedural course pylons, rings and balloons with idle animation
+## B11 ◐ Procedural course pylons, rings and balloons with idle animation
+
+**Landed (look pending).** `CSVM/src/Flight/Modes/CourseMotion.cs` is the motion: `Rest(gate)` is
+the gate frame A2 scores in (heading yaw, local -Z forward, the flown plane at local z = 0),
+`Offset(gate, seconds)` the motion in that frame (a ring bobs 1.0 m over 6 s, drifts 0.6 m in its
+own plane and rolls 2 degrees about its axis over 8.5 s; a pylon gate is the identity), and
+`Pose = Rest * Offset`. Phases hash from the gate id (FNV-1a plus murmur3's finaliser, so `g1` and
+`g2` do not move together). `CourseVisuals.cs` is the Node3D builder: `Build(course, withStart)` makes
+one node per pool gate, in pool order, and `Pose(seconds)` stands each at `CourseMotion.Pose`, which
+its `_Process` does from `GameClock.Current.Time`. Every dimension is in `CourseGateShape.cs`, in
+the gate frame, for the meshes and A4's touch volumes alike. A pylon gate's course pylons stand at
+local x = ±width/2, tapered cones (base radius 0.09 and top 0.025 of the height) banded red and
+white. A ring's diameter is its clear opening, the striped torus (tube radius 0.03 of the diameter,
+at least 0.5 m) lying outside it, under three balloons (radius 0.14 of the diameter) on tethers
+(0.45 of the diameter) fanned at -40, 0 and 40 degrees. One shader
+text lit by `csky_sun_rgb_at` and fogged as the faithful aircraft, casting no shadow; the ripple is a
+vertex wave on `csky_time` (the sim clock's global uniform), in one `ripple()` function, and the
+fragment reads the undisplaced local point `v_local`, so B12 adds its sag in `ripple()` and its clip
+on `v_local.y`. Every size and colour is TUNE and the look is the user's: the `course-visuals` suite
+writes a C1 montage (close pylon gate, close ring, wide with the aircraft, a ring one second apart and
+the pair's difference) to its scratch. Tests: `CSVM.Tests/CourseMotionTests.cs` and the suite, which
+also pins node counts and the drawn pose against the function.
+
+**Verified.** <pending orchestrator run>
+
+**Model recommendation.** A mid-tier model: primitives, one shader and a pure function; the work
+that needs judgement is the user's look call.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseMotionTests"`,
+then `.\scripts\RunTests.ps1 -Suite course-visuals -SkipUnits -SkipGoldens` (windowed, writes
+`course-visuals/montage.png` under the run's scratch), then the battery. The look closes with the
+user's verdict on the montage.
+
+**Original approach (kept for reference).**
 
 **Goal.** Course pylons, rings and the balloons holding each ring render in every chapter from
 Godot primitives; pylons ripple like fabric, balloons and rings bob and sway.

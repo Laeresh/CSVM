@@ -996,6 +996,28 @@ names a chapter's courses, `Load` parses the winning file, `Save` writes one ato
 root. `ForLaunch` reads no game folder under `--det`, as no HD pack is read; a test hands in OS
 paths instead. Read `Course` for the model.
 
+## src/Flight/Modes/CourseMotion.cs
+A course gate's idle motion as a pure function of the gate and the sim time in seconds. `Rest` is the
+gate's frame (heading yaw, local -Z forward, the flown plane at local z = 0); `Offset` is the motion
+in that frame, a bob, a drift in the ring's plane and a roll about its axis for a balloon ring, the
+identity for a pylon gate; `Pose` is `Rest * Offset`. Each gate's phases hash from its id. The drawn
+ring (`CourseVisuals`) and its scoring polygon both read it, so they cannot part. Read
+`CourseMotionTests.cs`.
+
+## src/Flight/Modes/CourseGateShape.cs
+Every dimension a course gate is drawn with, engine-free and in the gate's frame: the course pylons'
+bases (local x = ±width/2) and taper, a ring's tube (outside the diameter, the clear opening), and
+each balloon's way, tether anchor, length and centre. The meshes read it, and a touch test against
+pylons, rims and balloons reads the same numbers. Read `CourseVisuals`.
+
+## src/Flight/Modes/CourseVisuals.cs
+A course's gates drawn from Godot primitives to `CourseGateShape`'s dimensions: two tapered, banded
+course pylons per pylon gate, and per ring a striped torus under three tethered balloons.
+`Build` makes one node per pool gate, in pool order, plus an optional start cone;
+`Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
+shader text, lit and fogged as the faithful aircraft, with the pylon ripple on `csky_time`. Read
+`CourseMotion` and the `course-visuals` suite.
+
 ## src/Flight/Modes/StuntRace.cs
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
 `BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
