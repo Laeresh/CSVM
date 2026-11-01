@@ -25,6 +25,9 @@ public static class GameFileCopy
 
     private const int Chunk = 1 << 20;
 
+    // Waits between a refused rename's retries, 620 ms in all.
+    private static readonly int[] MoveRetryMs = { 20, 40, 80, 160, 320 };
+
     /// <summary>The game-relative files a copy holds: <c>strings.dll</c>, every
     /// <see cref="ZbdManifest.Expected"/> archive and <see cref="RofFiles.GamePaths"/>.</summary>
     public static IReadOnlyList<string> Files { get; } = new[] { Messages.GameFile }
@@ -145,7 +148,7 @@ public static class GameFileCopy
     {
         if (!Directory.Exists(target))
         {
-            Directory.Move(partial, target);
+            Move(partial, target);
             return;
         }
 
@@ -155,18 +158,36 @@ public static class GameFileCopy
             Directory.Delete(old, recursive: true);
         }
 
-        Directory.Move(target, old);
+        Move(target, old);
         try
         {
-            Directory.Move(partial, target);
+            Move(partial, target);
         }
         catch
         {
-            Directory.Move(old, target);
+            Move(old, target);
             throw;
         }
 
         TryDelete(old);
+    }
+
+    // A scanner or indexer briefly holding a fresh file makes Windows refuse the rename. Bounded,
+    // so a folder held open for good still ends in the error rather than a hung copy.
+    private static void Move(string from, string to)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(from, to);
+                return;
+            }
+            catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && attempt < MoveRetryMs.Length)
+            {
+                Thread.Sleep(MoveRetryMs[attempt]);
+            }
+        }
     }
 
     // Best effort, so cleanup never hides the failure that called it. Directory.Delete removes a
