@@ -38,10 +38,10 @@ public sealed partial class LoadBoard : Control
     /// blackboard. The mission type names the Instant Action dialog the blackboard writes, null for a
     /// mode of ours. The subject is the heading a mode of ours takes in place of a dialog. The sheet
     /// is the campaign screen's whole content, null where the extraction could not answer for it.
-    /// The briefing is a Dogfight's multiplayer dialog key.</summary>
+    /// The briefing is a Dogfight's multiplayer dialog key, and the note a mode of ours's line under its heading.</summary>
     public static LoadBoard Build(
         string dataRoot, Mech3.TextureSet rimage, ZrdrSet zrdr, Messages messages, bool campaign, string subject,
-        string? missionType, LoadSheet? sheet = null, string? briefing = null)
+        string? missionType, LoadSheet? sheet = null, string? briefing = null, string? note = null)
     {
         var board = new LoadBoard
         {
@@ -49,7 +49,7 @@ public sealed partial class LoadBoard : Control
             _rimage = rimage,
             _board = LoadScreens.For(
                 campaign, subject, missionType, zrdr, messages, sheet, pumped: true,
-                briefing: briefing),
+                briefing: briefing, note: note),
             _motion = LoadScreens.MotionFor(campaign, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,

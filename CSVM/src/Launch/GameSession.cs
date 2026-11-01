@@ -487,6 +487,10 @@ public partial class GameSession : Node3D
     /// suite reads the dogfight board and the pause board's Restart through them.</summary>
     internal SessionBoards? Boards => _boards;
 
+    /// <summary>Why a menu launch's course could not be flown, in the player's words, null when
+    /// nothing refused it. The launcher shows it in the menu the launch came from.</summary>
+    internal string? MenuRefusal { get; private set; }
+
     /// <summary>This session's own sim clock. Two sessions in one process share one
     /// <see cref="GameClock.Current"/>, so a suite driving both reads each end's here.</summary>
     internal GameClock? SimClock => _clock;
@@ -1394,7 +1398,8 @@ public partial class GameSession : Node3D
     }
 
     // --course=: the course from whichever source wins it, its run and its gate motion. A course
-    // this launch cannot fly quits with exit 1. Flying the Danger Zones instead would pass for it.
+    // this launch cannot fly fails the build, since the Danger Zones in its place would pass for
+    // it. A command line quits with exit 1; a menu launch leaves MenuRefusal for the menu to show.
     private bool ResolveCourse()
     {
         _courseRun = null;
@@ -1420,6 +1425,13 @@ public partial class GameSession : Node3D
                 _courseRun = run;
                 return true;
             }
+        }
+
+        if (_menuDriven)
+        {
+            MenuRefusal = $"The course {wanted.Chapter}/{wanted.Name} cannot be flown: {refusal}.";
+            Log.Warn("flight", $"course {wanted.Chapter}/{wanted.Name}: {refusal}; back to the menu");
+            return false;
         }
 
         Log.Error("flight", $"--course={wanted.Chapter}/{wanted.Name}: {refusal}; refusing the launch");

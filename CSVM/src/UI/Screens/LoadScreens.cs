@@ -154,8 +154,8 @@ public static class LoadScreens
     /// <summary>The board for one launch. The campaign flag picks the paper sheet, whole content
     /// <paramref name="sheet"/>. A Dogfight's <paramref name="briefing"/> key picks its multiplayer
     /// dialog. Otherwise the mission type names the blackboard's dialog, or is null for a mode of
-    /// ours, which writes <paramref name="subject"/> instead. A pumped board leaves the still
-    /// propeller out, for a moving layer that draws the cycle.
+    /// ours, which writes <paramref name="subject"/> and its <paramref name="note"/> instead. A pumped
+    /// board leaves the still propeller out, for a moving layer that draws the cycle.
     /// ⚠ Shown without that layer, a pumped board draws no propeller at all.</summary>
     public static ComposedBoard For(
         bool campaign,
@@ -165,12 +165,13 @@ public static class LoadScreens
         Messages messages,
         LoadSheet? sheet = null,
         bool pumped = false,
-        string? briefing = null) =>
+        string? briefing = null,
+        string? note = null) =>
         campaign
             ? CampaignSheet(sheet, pumped)
             : briefing != null && Briefing(briefing, zrdr, messages, pumped) is { } board
                 ? board
-                : Blackboard(Texts(missionType, subject, zrdr, messages), pumped);
+                : Blackboard(Texts(missionType, subject, zrdr, messages, note), pumped);
 
     /// <summary>The two moving pieces of one launch's screen, found once because a build reports
     /// its steps ten times a second and a composition is not worth redoing per step.</summary>
@@ -285,13 +286,20 @@ public static class LoadScreens
     /// <summary>The words one load screen writes. An Instant Action mission takes its dialog's four
     /// texts. Free flight is ours, so it takes the heading alone at the mode heading's authored
     /// place, no dialog's blurb being true of it. So does a Dogfight whose multiplayer dialog did
-    /// not read.</summary>
+    /// not read. A <paramref name="note"/> takes the blurb's place, face and wrap.</summary>
     public static IReadOnlyList<BoardLine> Texts(
-        string? missionType, string heading, ZrdrSet zrdr, Messages messages)
+        string? missionType, string heading, ZrdrSet zrdr, Messages messages, string? note = null)
     {
         if (LetterFor(missionType) is not { } letter)
         {
-            return new[] { new BoardLine(heading, 70f, 35f, 0f, TitleFace, BoardInk.Heading) };
+            var heads = new List<BoardLine> { new(heading, 70f, 35f, 0f, TitleFace, BoardInk.Heading) };
+            if (note != null)
+            {
+                // The blurb widget OBJ5's authored place and wrap (docs/org/loading-screen.md).
+                heads.Add(new BoardLine(note, 360f, 135f, 400f, BodyFace, BoardInk.Row, Leading: BodyLeading));
+            }
+
+            return heads;
         }
 
         return DialogTexts(zrdr, DialogFile, DialogPrefix + letter, messages);

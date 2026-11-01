@@ -58,6 +58,10 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>The lives stepper's cap.</summary>
     public const int MaxLives = 9;
 
+    /// <summary>The Course option's row for the original's own stunt run, offered where the
+    /// chapter ships Danger Zones.</summary>
+    public const string DangerZonesLabel = "Danger Zones";
+
     // The seven environments in the decoded dropdown order (FUN_004174d0), which is not the
     // alphabetic chapter order. C1C is the chapter Instant Action omits.
     private static readonly InstantActionEnvironment[] EnvironmentRows =
@@ -98,14 +102,18 @@ public sealed class InstantActionFeature : IMenuFeature
     private static readonly int[] RaceWindowRows = { 3, 5, 10, 15 };
 
     private readonly Func<string, InstantActionDef> _loadBase;
+    private readonly Func<string, IReadOnlyList<string>> _listCourses;
+    private readonly Dictionary<string, IReadOnlyList<string>> _courses = new(StringComparer.Ordinal);
     private readonly InstantActionWaveSetup[] _waves = new InstantActionWaveSetup[WaveSlots];
 
     /// <summary>A feature whose environment defs come from <paramref name="loadBase"/>, called with
     /// a chapter code when an environment is confirmed. The loader's failure policy is its own;
-    /// see <see cref="ForDataRoot"/> for the one the game uses.</summary>
-    public InstantActionFeature(Func<string, InstantActionDef> loadBase)
+    /// see <see cref="ForGameData"/> for the one the game uses. <paramref name="listCourses"/>
+    /// names a chapter's authored courses, none when it is null.</summary>
+    public InstantActionFeature(Func<string, InstantActionDef> loadBase, Func<string, IReadOnlyList<string>>? listCourses = null)
     {
         _loadBase = loadBase ?? throw new ArgumentNullException(nameof(loadBase));
+        _listCourses = listCourses ?? (_ => Array.Empty<string>());
         Discard();
     }
 
@@ -136,9 +144,34 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>The picked environment.</summary>
     public InstantActionEnvironment Environment => EnvironmentRows[EnvironmentIndex];
 
-    /// <summary>The mission types the picked environment offers, in the dropdown order: all four,
-    /// minus stunt flying where the chapter bars it (only the clouds).</summary>
-    public IReadOnlyList<InstantActionMissionType> MissionTypes => MissionTypesFor(Environment.Code);
+    /// <summary>The mission types the picked environment offers in the dropdown order. Stunt flying
+    /// drops out where the chapter has neither Danger Zones nor an authored course.</summary>
+    public IReadOnlyList<InstantActionMissionType> MissionTypes =>
+        StuntOffered(Environment.Code) ? MissionTypeRows : MissionTypesFor(Environment.Code);
+
+    /// <summary>The picked authored course's name, or null for the Danger Zones. A launch flies it
+    /// only where <see cref="LaunchCourse"/> answers it.</summary>
+    public string? Course { get; private set; }
+
+    /// <summary>The Course option's rows for the picked environment: <see cref="DangerZonesLabel"/>
+    /// where the chapter ships Danger Zones, then its courses by name.</summary>
+    public IReadOnlyList<string> CourseOptions
+    {
+        get
+        {
+            var rows = new List<string>();
+            if (MenuChapters.DangerZonesFor(Environment.Code))
+            {
+                rows.Add(DangerZonesLabel);
+            }
+
+            rows.AddRange(CoursesFor(Environment.Code));
+            return rows;
+        }
+    }
+
+    /// <summary>The picked row within <see cref="CourseOptions"/>.</summary>
+    public int CourseIndex => Course is { } name ? Math.Max(0, CourseOptions.ToList().IndexOf(name)) : 0;
 
     /// <summary>The picked mission type's row within <see cref="MissionTypes"/>. A presentation
     /// keeps it inside the list by confirming the environment after changing it.</summary>
@@ -199,22 +232,25 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>The feature the game runs: environment defs read from the chapter's own
     /// <c>IA1/ia.zrd</c> out of <paramref name="data"/>. A failed read falls back to the built-in
-    /// defaults with a warning rather than leaving the menu unable to proceed.</summary>
-    public static InstantActionFeature ForGameData(Spec.GameData data)
+    /// defaults with a warning rather than leaving the menu unable to proceed. The courses come from
+    /// <paramref name="listCourses"/>, as the constructor takes them.</summary>
+    public static InstantActionFeature ForGameData(Spec.GameData data, Func<string, IReadOnlyList<string>>? listCourses = null)
     {
         ArgumentNullException.ThrowIfNull(data);
-        return new InstantActionFeature(code =>
-        {
-            try
+        return new InstantActionFeature(
+            code =>
             {
-                return InstantAction.Load(data.LoadChapter(code, "IA1").MissionZrdr);
-            }
-            catch (Exception e)
-            {
-                Log.Warn("ui", $"instant action: '{code}/IA1' ia.zrd.json failed to load ({e.Message}); the ace and zeppelin fields use the built-in defaults");
-                return InstantAction.Defaults();
-            }
-        });
+                try
+                {
+                    return InstantAction.Load(data.LoadChapter(code, "IA1").MissionZrdr);
+                }
+                catch (Exception e)
+                {
+                    Log.Warn("ui", $"instant action: '{code}/IA1' ia.zrd.json failed to load ({e.Message}); the ace and zeppelin fields use the built-in defaults");
+                    return InstantAction.Defaults();
+                }
+            },
+            listCourses);
     }
 
     /// <summary>The mission types a chapter offers: all four, minus stunt flying where its
@@ -274,6 +310,43 @@ public sealed class InstantActionFeature : IMenuFeature
             count, $"{militia.Name} {aircraft}", aircraft, SkillRows[skillIndex], militia.AccentId);
     }
 
+    /// <summary>A chapter's authored course names, listed once per environment confirm.</summary>
+    public IReadOnlyList<string> CoursesFor(string chapterCode)
+    {
+        if (!_courses.TryGetValue(chapterCode, out var names))
+        {
+            names = _listCourses(chapterCode);
+            _courses[chapterCode] = names;
+        }
+
+        return names;
+    }
+
+    /// <summary>Whether a chapter offers stunt flying: it ships Danger Zones or has an authored course.
+    /// The local lobby's Stunt Race reads <see cref="MenuChapters.DangerZonesFor"/> alone.</summary>
+    public bool StuntOffered(string chapterCode) =>
+        MenuChapters.DangerZonesFor(chapterCode) || CoursesFor(chapterCode).Count > 0;
+
+    /// <summary><see cref="EnvironmentAllowed"/> with the authored courses counted.</summary>
+    public bool AllowsEnvironment(int environmentIndex, string missionTypeKey) =>
+        missionTypeKey != StuntKey || StuntOffered(EnvironmentRows[environmentIndex].Code);
+
+    /// <summary>Picks a row within <see cref="CourseOptions"/>.</summary>
+    public void SelectCourse(int index)
+    {
+        var rows = CourseOptions;
+        string row = rows[Index(index, rows.Count, nameof(index))];
+        Course = index == 0 && MenuChapters.DangerZonesFor(Environment.Code) ? null : row;
+    }
+
+    /// <summary>Whether the setup offers the Course option: stunt flying in a chapter with
+    /// courses, one seat and no bot row on the join board. Authored courses are solo.</summary>
+    public bool OffersCourse(int seats, int bots) =>
+        MissionType.Key == StuntKey && seats == 1 && bots == 0 && CoursesFor(Environment.Code).Count > 0;
+
+    /// <summary>The course a launch with these seats and bot rows flies, or null for the Danger Zones.</summary>
+    public string? LaunchCourse(int seats, int bots) => OffersCourse(seats, bots) ? Course : null;
+
     /// <summary>Picks an environment row. The mission type is not re-fitted until
     /// <see cref="ConfirmEnvironment"/>, so a cursor passing over the clouds changes nothing.</summary>
     public void SelectEnvironment(int index)
@@ -281,11 +354,24 @@ public sealed class InstantActionFeature : IMenuFeature
         EnvironmentIndex = Index(index, EnvironmentRows.Length, nameof(index));
     }
 
-    /// <summary>Settles the picked environment: wraps the mission type onto a row the environment
-    /// offers and loads the chapter's own def as the launch's base.</summary>
+    /// <summary>Settles the picked environment. It re-lists the courses and wraps the mission type
+    /// onto a row the environment offers. The picked course stays only where the chapter has it,
+    /// and a chapter with no Danger Zones takes its first. The chapter's own def becomes the base.</summary>
     public void ConfirmEnvironment()
     {
+        _courses.Clear();
         MissionTypeIndex = Wrap(MissionTypeIndex, MissionTypes.Count);
+        var names = CoursesFor(Environment.Code);
+        if (Course != null && !names.Contains(Course))
+        {
+            Course = null;
+        }
+
+        if (Course == null && !MenuChapters.DangerZonesFor(Environment.Code) && names.Count > 0)
+        {
+            Course = names[0];
+        }
+
         BaseDef = _loadBase(Environment.Code);
     }
 
@@ -423,7 +509,9 @@ public sealed class InstantActionFeature : IMenuFeature
         var applied = InstantActionPresets.Resolve(index, WaveSlots);
         PresetIndex = index;
         EnvironmentIndex = applied.EnvironmentIndex;
-        MissionTypeIndex = applied.MissionTypeIndex;
+        // The preset's index is into the Danger Zone list, which a chapter's courses can widen.
+        string key = MissionTypesFor(Environment.Code)[applied.MissionTypeIndex].Key;
+        MissionTypeIndex = Math.Max(0, MissionTypes.ToList().FindIndex(m => m.Key == key));
         PlayerPlaneIndex = applied.PlayerPlaneIndex;
         NumWingmen = applied.NumWingmen;
         if (applied.WingmanPlaneIndex is { } wingman)
@@ -494,7 +582,8 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>The typed exit for the confirmed seats, in seat order. It carries the environment's
     /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. A Stunt Flying
     /// run with <see cref="RaceBots"/> on carries the join board's <paramref name="bots"/>, which race
-    /// it; with it off they stay on the board. Throws when the gate is
+    /// it; with it off they stay on the board. A <see cref="LaunchCourse"/> exit carries the course
+    /// and no def, the launch <c>--stunt --course=</c> makes. Throws when the gate is
     /// closed or a seat names no plane, so a half-built launch cannot leave the menu.</summary>
     public LaunchExit BuildExit(IReadOnlyList<MenuSeatChoice> seats, string? playerPlane = null,
         IReadOnlyList<VsBotEntry>? bots = null)
@@ -513,6 +602,11 @@ public sealed class InstantActionFeature : IMenuFeature
             }
         }
 
+        if (LaunchCourse(seats.Count, bots?.Count ?? 0) is { } course)
+        {
+            return new LaunchExit(Environment.Code, seats, Mode, Course: course);
+        }
+
         int pilots = Pilots(seats.Count, bots?.Count ?? 0);
         var racers = pilots > seats.Count ? bots : null;
         return new LaunchExit(Environment.Code, seats, Mode, BuildDef(pilots, playerPlane),
@@ -520,7 +614,7 @@ public sealed class InstantActionFeature : IMenuFeature
     }
 
     /// <summary>Puts every field back to the screen's opening state. That is the first
-    /// environment, the ace duel, one life, the five-minute race window and no bots racing. The four waves are
+    /// environment, the ace duel, one life, the five-minute race window, the Danger Zones and no bots racing. The four waves are
     /// empty with their cursors on the first rows, and there are no wingmen, on the first airframe
     /// with the stock fit. The player takes the first airframe, with no preset and no base def.
     /// The option sets are not state and stay.</summary>
@@ -537,6 +631,7 @@ public sealed class InstantActionFeature : IMenuFeature
         PlayerPlaneIndex = 0;
         PresetIndex = -1;
         BaseDef = null;
+        Course = null;
         for (int i = 0; i < WaveSlots; i++)
         {
             _waves[i] = default;

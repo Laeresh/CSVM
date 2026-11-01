@@ -309,6 +309,7 @@
     "look-stick": 1.119,
     "look-stick-edge": 1.217,
     "menu-backdrop": 0.316,
+    "menu-instant-action-course": 1.5,
     "menu-join-board": 0.08,
     "menu-join-board-bots": 0.058,
     "menu-launch-return": 0.664,

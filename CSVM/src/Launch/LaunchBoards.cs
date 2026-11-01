@@ -20,11 +20,19 @@ namespace CSVM.Launch;
 /// </summary>
 internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 {
+    /// <summary>The load screen's line under an authored course's name, the rule the HUD leaves to it.</summary>
+    public const string CourseNote = "Fly through every gate in order.";
+
     /// <summary>What the load and pause screens call this flight. An Instant Action mission takes the
-    /// wizard's own name for it ("Attacking a Zeppelin"), anything else its mode. ⚠ Not ModeName,
-    /// that is the log file's internal tag ("fly", "stunt"), which is not a player's word.</summary>
+    /// wizard's own name for it ("Attacking a Zeppelin"), an authored course its name, anything else
+    /// its mode. ⚠ Not ModeName, that is the log file's internal tag ("fly", "stunt").</summary>
     public static string Subject(SessionSpec launch)
     {
+        if (FlownCourse(launch) is { } course)
+        {
+            return course;
+        }
+
         if (launch.IaDef is { } def)
         {
             return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
@@ -32,6 +40,10 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
         return launch.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
             : launch.Versus ? "Dogfight" : "Free Flight";
     }
+
+    /// <summary>The authored course's name the launch flies, or null.</summary>
+    public static string? FlownCourse(SessionSpec launch) =>
+        launch.Course is { } course && launch.CourseRefusal == null ? course.Name : null;
 
     /// <summary>The chapter and mode letter a Dogfight door's <c>:chapter:letter</c> suffix names.
     /// A suffix leaving either out names C1, or a Deathmatch with nobody on a team.</summary>
@@ -60,8 +72,10 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             : null;
         string? briefing = briefingKey
             ?? (campaign || missionType != null ? null : LaunchBriefing(teamedLobby));
+        // A course is ours too: its name heads the board, the one rule under it.
+        string? note = !campaign && FlownCourse(spec) != null ? CourseNote : null;
         var board = UI.Screens.LoadBoard.Build(
-            paths.DataRoot, paths.Data.Rimage, paths.Data.Zrdr, paths.Data.Messages, campaign, subject, missionType, sheet, briefing);
+            paths.DataRoot, paths.Data.Rimage, paths.Data.Zrdr, paths.Data.Messages, campaign, subject, missionType, sheet, briefing, note);
         if (briefing != null)
         {
             Log.Info("ui", $"load screen: {spec.Chapter} Dogfight reads {briefing}");

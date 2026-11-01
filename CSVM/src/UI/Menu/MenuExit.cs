@@ -88,7 +88,8 @@ public sealed record MenuNetLaunch(INetTransport Transport, bool IsHost);
 /// Dogfight alone adds the match rules; a null <paramref name="Match"/> leaves the command
 /// line's own kill target and time limit. A network match carries the open wire, null on every
 /// local launch. A local Dogfight carries the join board's bot rows in <paramref name="Bots"/>,
-/// seated after the panes; a network host's come from its lobby instead.</summary>
+/// seated after the panes; a network host's come from its lobby instead. A Stunt Flying launch of
+/// an authored course names it in <paramref name="Course"/>, flown as <c>--course=</c> flies it.</summary>
 public sealed record LaunchExit(
     string Chapter,
     IReadOnlyList<MenuSeatChoice> Seats,
@@ -97,7 +98,8 @@ public sealed record LaunchExit(
     VersusRules? Match = null,
     LoadoutChoice? WingmanLoadout = null,
     MenuNetLaunch? Net = null,
-    IReadOnlyList<VsBotEntry>? Bots = null) : MenuExit;
+    IReadOnlyList<VsBotEntry>? Bots = null,
+    string? Course = null) : MenuExit;
 
 /// <summary>A campaign mission launch: the seated profile's name, the <c>cm_sequence</c> story
 /// position, and one <see cref="MenuSeatChoice"/> per joined human in seat order. Seat 0 is the

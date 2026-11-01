@@ -2017,16 +2017,16 @@ public sealed record SessionSpec
 
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line <paramref name="cli"/>,
     /// never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
-    /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
+    /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead, and a <paramref name="course"/> is settled as <c>--course=</c> is. The vs arguments
     /// are a screen's rules, a Stunt Race's window among them, and <paramref name="bots"/> the
-    /// join board's rows a local Dogfight or stunt run seats. ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever <c>--mission</c> says.
-    /// The type is all a guest hears of the host's mission.</summary>
+    /// join board's rows a local Dogfight or stunt run seats. ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever <c>--mission</c> says,
+    /// the type being all a guest hears.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
         int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
         DogfightMissionType missionType = DogfightMissionType.Deathmatch, bool flagHomeToCapture = false,
-        IReadOnlyList<VsBotEntry>? bots = null)
+        IReadOnlyList<VsBotEntry>? bots = null, string? course = null)
     {
         var names = planeNodes.ToArray();
         var type = MenuType(missionType, mode, iaDef);
@@ -2034,8 +2034,12 @@ public sealed record SessionSpec
         bool race = type == DogfightMissionType.StuntRace;
         bool deathmatch = mode == MenuMode.Versus && type == DogfightMissionType.Deathmatch;
         bool stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt;
-        return cli with
+        var spec = cli with
         {
+            // The command line's own --course never rides a menu launch.
+            _courseArg = course == null ? null : $"{chapter}/{course}",
+            Course = null,
+            CourseRefusal = null,
             VsBots = (deathmatch || stunt) && bots != null ? bots.ToArray() : Array.Empty<VsBotEntry>(),
             MissionType = type,
             FlagHomeToCapture = ctf && flagHomeToCapture,
@@ -2077,6 +2081,8 @@ public sealed record SessionSpec
             IaWingmanLoadout = iaDef != null ? iaWingmanLoadout : null,
             StuntRaceMinutes = iaDef?.RaceWindowMinutes ?? (race ? vsTimeMinutes : null) ?? cli.StuntRaceMinutes,
         };
+        spec.ResolveCourse();
+        return spec;
     }
 
     /// <summary>The campaign cabin's FLY MISSION, <see cref="FromMenu"/>'s counterpart for a story

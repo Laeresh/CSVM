@@ -103,7 +103,7 @@ concrete members and composes them its own way.
 | Feature | Owns | Does not own |
 |---|---|---|
 | `FreeFlightFeature` | the chapter roster it offers, the chapter pick, the launch gate over the setup's seats, `BuildExit` | seats, aircraft, stores |
-| `InstantActionFeature` | every decoded option set, the environment, mission type, lives, four waves, wingmen and their fit, the player plane, presets, the base def, `BuildExit` | which screens the fields appear on, the wizard order |
+| `InstantActionFeature` | every decoded option set, the environment, mission type, lives, four waves, wingmen and their fit, the player plane, presets, the base def, Stunt Flying's Course option, `BuildExit` | which screens the fields appear on, the wizard order |
 | `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, a local Dogfight's mission rules (`MatchOptions`), `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
 | `HangarFeature` | one scratch build at a time over a `CustomPlaneStore` and an optional `IHangarWallet`, the three starts, the airframe pick with its changed-since gate and the defaults ask's three answers, the per-tab operations, the purchase gate in the original's words, `Commit`, `DeleteSaved`, the labels and name rules | the nine-screen walk or the tab bar, the dropdowns, the dialog idiom |
 | `ControlsFeature` | the seats it can edit and their staged keymaps, the context and action cursors, the capture and the steal it names first, `Accept`, `Cancel`, `ResetSeat` | which page the rows are split across, the tabs or columns they are drawn in, the join that raises a second seat's row |
@@ -442,7 +442,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 
 | Exit | Carries | The consumer's action |
 |---|---|---|
-| `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight, a `MenuNetLaunch` for a networked one | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
+| `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, or an authored `Course` name for a solo Stunt Flying course, a `VersusRules` for Dogfight, a `MenuNetLaunch` for a networked one | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
 | `OptionsApplyExit` | the graphics-mode and difficulty words, the six display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
@@ -453,6 +453,23 @@ these exits (`FreeFlightFeature.BuildExit`, `InstantActionFeature.BuildExit`,
 `PlayerSetupFeature.BuildExit`, `CampaignFeature.BuildExit`), so a presentation assembles no payload
 of its own beyond handing the feature the seats. The host hides the presentation before the sink
 runs, and a failed build shows the same instance again where it stood.
+
+Instant Action's Stunt Flying has a remake-only **Course** option. Its rows are "Danger Zones" (the
+original's run, the default) where the chapter ships them, then the chapter's authored courses by
+name from both course sources (`Flight/Modes/CourseLibrary.cs`, the game folder's winning a name; a
+`--det` run lists the shipped ones alone). A chapter with an authored course offers Stunt Flying
+even without Danger Zones, and takes its first course; the local lobby's Stunt Race keeps to the
+Danger Zones. Authored courses are solo, so the option is offered only to one seat with no bot row
+on the join board (`InstantActionFeature.OffersCourse`); a second seat or a bot row withdraws it and
+the run flies the Danger Zones, the Race Time box and the Race Bots toggle staying Danger-Zone-only.
+A picked course leaves as `LaunchExit.Course` with no def, and `SessionSpec.FromMenu` settles it as
+`--stunt --course=<chapter>/<name>` is settled, so the menu and the command line fly the same
+course. A course the build cannot fly does not quit the process as the command line does: the
+launcher returns to the screen the launch came from with the reason in Original's warning box.
+Original draws the option as a dropdown on the Race Bots line, the two never showing together, and
+a picked course blanks the wingman, enemy and Lives boxes, since a course run takes none of them.
+Its load screen is the blackboard headed by the course's name with "Fly through every gate in
+order." in the blurb's place, never the Instant Action stunt dialog's Danger Zone text.
 
 A local Dogfight's mission rules are the `PlayerSetupFeature`'s `MatchOptions`, the network lobby's own
 shape: the victory condition (Time, Score or both) with its two boxes, Limited Lives with its box and
@@ -478,7 +495,7 @@ when the menu comes back, said semantically; the hierarchy is closed:
 | Destination | Raised by | Original lands on |
 |---|---|---|
 | `TopLevel` | the cold start, a Free Flight or Dogfight sortie left early, a failed build, every switch | the top level with its list cursors kept and every pick dropped |
-| `InstantAction` | an Instant Action sortie left early | the Instant Action screen, over the setup that flew |
+| `InstantAction` | an Instant Action sortie or an authored course left early, and a course the build refused | the Instant Action screen, over the setup that flew |
 | `CabinReturn(profile)` | leaving a campaign screen for the cabin, and a campaign mission left early | the cabin over the named profile, re-read from the presentation's store |
 | `DebriefReturn(profile, missionSeq)` | a campaign mission's end, won or lost | the book on the flown mission |
 
@@ -549,6 +566,8 @@ plain shot of it can show), `instant-action:race-time` on stunt flying with the 
 Time box focused (shown only beside `--debug-join=1` or more, since a solo run has no race),
 `instant-action:race-bots` on stunt flying with a bot row put on the join board and the
 remake-only Race Bots toggle standing on and focused, the Race Time box on the lives box's line,
+`instant-action:course` on stunt flying on the airfield with the remake-only Course list standing
+open over the shipped sample course,
 `instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,

@@ -113,6 +113,191 @@ internal static class MenuInstantActionSuites
         }
     }
 
+    [Suite("menu-instant-action-course",
+        "Instant Action's Course option through Original's screen over the install's layout and the shipped "
+        + "courses alone: stunt flying on the airfield (C1) opens a Course list of Danger Zones then "
+        + "sample_out_and_back, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
+        + "Mission leaves as a LaunchExit naming the course with no def whose session spec matches "
+        + "--stunt --course=C1/sample_out_and_back on the course, chapter, mission, mode, pilots, plane, def and "
+        + "bots, a bot row on the join board withdraws the box and flies the Danger Zones, and a menu-driven "
+        + "session over a course no library holds fails its build with the reason for the menu rather than "
+        + "quitting, the return landing back on the Instant Action screen with that reason in its warning box")]
+    internal static void MenuInstantActionCourse(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string suite = "menu-instant-action-course";
+        var exits = new List<MenuExit>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var store = MenuSuiteHost.ScratchPlanes(ctx, suite);
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
+        {
+            Planes = store,
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        host.AddSeat(seat);
+        try
+        {
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var original = host.Active as OriginalPresentation;
+            var shell = original?.Shell;
+            var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+            var fit = BoardFit.For(size.X, size.Y);
+            if (shell == null || !EnterInstantAction(ctx, host, seat, shell, fit))
+            {
+                ctx.Check(false, $"Original stands up on its Instant Action screen");
+                return;
+            }
+
+            var ia = host.Features.Get<InstantActionFeature>();
+            if (CoursePicked(ctx, host, seat, shell, fit, ia, exits) is not { } exit)
+            {
+                return;
+            }
+
+            CourseWithdrawn(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), exits);
+            CourseRefused(ctx, host, shell, original!, exit);
+        }
+        finally
+        {
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, suite);
+        }
+    }
+
+    // Stunt flying on the airfield with the Course list open, the sample picked by a click and flown.
+    private static LaunchExit? CoursePicked(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, List<MenuExit> exits)
+    {
+        const string sample = "sample_out_and_back";
+        ctx.Check(shell.InstantAction.PoseCourse() && shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.CourseKey,
+            $"stunt flying opens the Course list ({ia.MissionType.Key}, {shell.InstantAction.OpenDropdown})");
+        var labels = shell.Rows.Select(r => r.Label).ToList();
+        ctx.Check(ia.Environment.Code == "C1" && labels.Count >= 2 && labels[0] == InstantActionFeature.DangerZonesLabel && labels.Contains(sample),
+            $"on the airfield the list is the Danger Zones then the chapter's courses ({ia.Environment.Code}: {string.Join(", ", labels)})");
+        var pick = shell.Rows.FirstOrDefault(r => r.Label == sample);
+        if (pick == null)
+        {
+            return null;
+        }
+
+        Click(host, seat, Pointer(fit, pick.X + 5f, pick.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(ia.Course == sample && shell.InstantAction.OpenDropdown == null && Row(shell, OriginalInstantActionScreen.CourseKey)?.Label == sample,
+            $"a click on the sample picks it and closes the list ({ia.Course}, {Row(shell, OriginalInstantActionScreen.CourseKey)?.Label})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.WingmenKey) is { Enabled: false } && Row(shell, "IA_D_NENEMY0") is { Enabled: false }
+                && Row(shell, OriginalInstantActionScreen.LivesKey) is { Enabled: false, Label: "" },
+            $"a course flies alone, so the wingman, enemy and lives boxes stand blank and inert");
+
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        int before = exits.Count;
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        if (exits.Count != before + 1 || exits[^1] is not LaunchExit exit)
+        {
+            ctx.Check(false, $"Fly Mission leaves as one LaunchExit ({exits.Count - before})");
+            return null;
+        }
+
+        ctx.Check(exit is { Chapter: "C1", Mode: MenuMode.Stunt, Course: sample, InstantAction: null, Bots: null, Seats.Count: 1 },
+            $"the exit names the course on C1 with no def ({exit.Chapter}, {exit.Course}, def {exit.InstantAction?.MissionType ?? "none"})");
+        string plane = exit.Seats[0].PlaneNode;
+        var menu = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), exit.Chapter, new[] { plane }, exit.Mode,
+            exit.InstantAction, bots: exit.Bots, course: exit.Course);
+        var cli = SessionSpec.Parse(new[] { "--stunt", $"--course=C1/{sample}", $"--plane={plane}" });
+        ctx.Check(menu.Course == cli.Course && menu.CourseRefusal == null && cli.CourseRefusal == null
+                && menu.Chapter == cli.Chapter && menu.Mission == cli.Mission && menu.Stunt && cli.Stunt && !menu.Versus
+                && menu.Players == cli.Players && menu.PlaneName == cli.PlaneName && menu.IaDef == cli.IaDef && menu.VsBots.Count == cli.VsBots.Count,
+            $"its session spec is the one --stunt --course= builds ({menu.Course}/{cli.Course}, {menu.Chapter}/{menu.Mission}, players {menu.Players}, plane {menu.PlaneName})");
+        ctx.Check(MenuReturnDestination.ForLaunch(exit) == MenuReturnDestination.InstantAction,
+            $"and it names the Instant Action screen as its return ({MenuReturnDestination.ForLaunch(exit).GetType().Name})");
+        return exit;
+    }
+
+    // A bot row on the join board takes the line from the Course box, and the launch flies the zones.
+    private static void CourseWithdrawn(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, PlayerSetupFeature setup, List<MenuExit> exits)
+    {
+        host.Show(MenuReturnDestination.InstantAction);
+        ctx.Check(setup.AddBot(), $"a bot row joins the board");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.CourseKey) is { Visible: false } && Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: true },
+            $"and the race toggle takes the Course box's line");
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(exits[^1] is LaunchExit { Course: null, InstantAction.MissionType: InstantActionFeature.StuntKey },
+            $"so Fly Mission flies the Danger Zones ({(exits[^1] as LaunchExit)?.Course ?? "no course"})");
+        setup.Bots.Remove(setup.Bots.Rows[0].Id);
+        host.Show(MenuReturnDestination.InstantAction);
+    }
+
+    // A menu-driven session over a course no library holds. Its build fails with the reason kept
+    // for the menu, and the run goes on (a Quit would end it). The launcher's failure path is then
+    // replayed: the exit's own return, and the reason in Original's warning box.
+    private static void CourseRefused(TestContext ctx, MenuHost host, OriginalShell shell, OriginalPresentation original, LaunchExit exit)
+    {
+        const string missing = "no_such_course";
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--det", "--mute", "--no-pads" }), exit.Chapter,
+            new[] { exit.Seats[0].PlaneNode }, exit.Mode, course: missing);
+        var pane = new Godot.SubViewport { Size = new Godot.Vector2I(64, 64), OwnWorld3D = true, RenderTargetUpdateMode = Godot.SubViewport.UpdateMode.Disabled };
+        var camera = new Godot.Camera3D();
+        var sun = new Godot.DirectionalLight3D();
+        pane.AddChild(camera);
+        pane.AddChild(sun);
+        ctx.Host.AddChild(pane);
+        var paths = new BasePaths(RepoRoot: ctx.RepoRoot, DataRoot: ctx.DataRoot) { Game = ctx.Game, Data = ctx.Data };
+        var savedClock = Utils.GameClock.Current;
+        var session = new Launch.GameSession(spec, new Launch.LauncherContext
+        {
+            Decode = ctx.Decode,
+            Paths = paths,
+            ProbeRunner = new Tooling.ProbeRunner(paths),
+            CaptureDirector = new Tooling.CaptureDirector(spec),
+            MasterSeed = 1,
+            Camera = camera,
+            Orbit = new Flight.Camera.OrbitCamera(camera),
+            Sun = sun,
+            Env = new Godot.Environment(),
+            MenuDriven = true,
+            MenuPads = null,
+            ExitSession = () => { },
+            RestartSession = () => { },
+        });
+        pane.AddChild(session);
+        string? refusal;
+        try
+        {
+            bool built = session.StartSession();
+            refusal = session.MenuRefusal;
+            ctx.Check(!built && refusal != null && refusal.Contains($"C1/{missing}", StringComparison.Ordinal),
+                $"a menu launch of a course no library holds fails its build with the reason kept ({built}: {refusal})");
+        }
+        finally
+        {
+            session.Free();
+            pane.Free();
+            Utils.GameClock.Current = savedClock;
+        }
+
+        if (refusal == null)
+        {
+            return;
+        }
+
+        host.Show(MenuReturnDestination.ForLaunch(exit));
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && original.RaiseWarning(refusal) && shell.Dialog?.Message == refusal,
+            $"the return lands on the Instant Action screen with the reason in the warning box ({shell.Screen}, {shell.Dialog?.Message})");
+    }
+
     // A name no player would type, distinct per run, inside the name screen's own character set.
     private static string ScratchName() => "Scratch " + Guid.NewGuid().ToString("N")[..8];
 

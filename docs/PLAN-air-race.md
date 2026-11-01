@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, menu and follow-up
 
-31. ☐ Course option in Stunt Flying
+31. ◐ Course option in Stunt Flying
 32. ☐ File the multiplayer and bots follow-up issue
 
 ## Dependency and parallelism notes
@@ -857,7 +857,64 @@ notification sent outside the frame's own draw, hence the button rows.
 
 # Wave D, menu and follow-up
 
-## D31 ☐ Course option in Stunt Flying
+## D31 ◐ Course option in Stunt Flying
+
+**Landed (look pending).** The menu's look is the user's: `d31-course-option.png` (the Stunt
+Flying setup on the airfield with the Course list open) and `d31-course-loadboard.png` (the load
+board for `C1/sample_out_and_back`) under `.scratch/air-race/d31/` of the plan worktree.
+**Feature** (`UI/Menu/InstantActionFeature.cs`): the constructor takes a course lister, the
+launcher's `CourseLibrary.ForLaunch(dataRoot, det)` names (`Launch/ProcessMenu.cs`) and a suite's
+the shipped root alone (`Testing/MenuSuiteHost.cs`), read once per `ConfirmEnvironment`.
+`CourseOptions` is "Danger Zones" where the chapter ships them, then its courses by name; `Course`
+is the pick (null for the zones), and a chapter without zones takes its first course. **Eligibility:**
+the real Stunt Flying gate was never `MenuChapters.For(Stunt)` (no production caller) but
+`InstantActionFeature.MissionTypesFor`/`EnvironmentAllowed` over `MenuChapters.DangerZonesFor`. The
+instance `StuntOffered`, `AllowsEnvironment` and `MissionTypes` now count courses, so C2B ("the
+clouds") offers Stunt Flying once it has a course; the static pair and `DangerZonesFor`, which the
+local lobby's Stunt Race reads, stay on the Danger Zones. `ApplyPreset` maps a preset's mission type
+by key, since a course can widen a chapter's list. **C1C is not an Instant Action environment** (the
+decoded seven-row dropdown omits it), so a C1C course flies from the command line alone; adding a
+row would invent an environment name. **Solo gate:** `OffersCourse(seats, bots)` holds for stunt
+flying with one seat and no bot row on the join board, so a second seat or a bot row withdraws the
+option and the run flies the Danger Zones (Race Time and Race Bots stay Danger-Zone-only); Instant
+Action has no network launch. **Launch:** a course leaves as `LaunchExit.Course` with no def, and
+`SessionSpec.FromMenu(..., course:)` sets the spec's own `--course=` argument and runs the same
+`ResolveCourse`, so the menu flies the course `--stunt --course=<chapter>/<name>` flies; a command
+line's own `--course=` no longer rides a later menu launch. `MenuReturnDestination.ForLaunch` names
+the Instant Action screen for a course exit. **Screen** (`OriginalInstantActionScreen.cs`): the
+Course box is a remake-only dropdown, 210 wide in the mission dropdown's column, on the Race Bots
+line (the two never show together), titled "Course:"; a picked course blanks the wingman, enemy and
+Lives boxes. `--menu=instant-action:course` (`PoseCourse`) stands it open. **Refusal:**
+`GameSession.ResolveCourse` in a menu-driven session no longer quits: it leaves the reason in
+`MenuRefusal` and fails the build, and the launcher's failed-build path returns to the exit's own
+destination, the Instant Action screen, raising that reason in Original's warning box instead of
+the generic failed-build text; a command line still quits with exit 1. **Load screen:**
+`LaunchBoards.Subject` names an authored course by its file name, and `LoadScreen` passes the note
+`CourseNote`, "Fly through every gate in order.", which `LoadScreens.Texts` writes in the stunt
+blurb's place (OBJ5: 360, 135, wrap 400, body face) under the heading; a course launch carries no
+def, so the Instant Action stunt dialog's Danger Zone text never draws. The pause sheet's heading
+takes the course name through the same `Subject`. The heading is the raw file stem upper-cased
+(`SAMPLE_OUT_AND_BACK`); prettifying it is the user's call.
+
+**Verified.** <pending orchestrator run>
+
+**Model recommendation.** A mid-tier model: a remake-only dropdown in an existing idiom, a launch
+field threaded through an existing seam, and a suite; the judgement is the user's look call.
+
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~InstantActionCourseTests|FullyQualifiedName~OriginalInstantActionTests"`
+(eligibility with courses, the rows, the solo rule, the exit and the spec it derives against the
+command line's, every preset's mission type kept, the load screen's two lines, and the screen's box,
+blanking and bot-row withdrawal), then the complete unit tests, then
+`.\scripts\RunTests.ps1 -Suite 'menu-instant-action-course,course-launch,menu-original-instant-action,menu-launch-return' -SkipUnits -SkipGoldens`.
+`menu-instant-action-course` (ci tier) drives Original's screen to stunt flying on the airfield, the
+Course list open, a click on `sample_out_and_back`, Fly Mission, and compares the spec the exit
+derives with `--stunt --course=C1/sample_out_and_back`'s; a bot row withdraws the box; then a
+menu-driven `GameSession` over a missing course fails its build with `MenuRefusal` and the run goes
+on, and the exit's return lands on the Instant Action screen with that reason in the warning box.
+The launcher's own three-line failure path is replayed there rather than driven, since no suite
+launches through the live `Launcher`. The look closes with the user's verdict on the two shots.
+
+**Original approach (kept for reference).**
 
 **Goal.** Instant Action > Stunt Flying offers a Course option: "Danger Zones" plus the chapter's
 authored courses by name; chapters with authored courses but no Danger Zones become eligible.
@@ -868,10 +925,6 @@ exploration agent). The menu contract is `docs/menu-presentations.md`; the launc
 `LaunchExit`.
 
 **Approach.** <TODO: after reading `InstantActionFeature` and `menu-presentations.md`.>
-
-**Model recommendation.** <TODO: not settled in the grilling.>
-
-**Verify.** <TODO: not settled in the grilling.>
 
 **⚠ Traps.** The original local lobby also reads `MenuChapters`; authored courses stay out of
 multiplayer (Decision 22).

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight.Hangar;
@@ -26,7 +27,9 @@ internal static class MenuSuiteHost
         NetPlayFeature? netDoor = null)
     {
         host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForGameData(data));
+        // The shipped courses alone: no suite may depend on a course one machine dropped in.
+        host.Features.Add(InstantActionFeature.ForGameData(data, chapter =>
+            new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, null).List(chapter).Select(f => f.Name).ToList()));
         host.Features.Add(new PlayerSetupFeature());
         // The hangar reads its labels and stock defaults as the launcher wires them: the langui
         // table, the stock fits and the root reader scope.
