@@ -858,18 +858,22 @@ public partial class GameSession : Node3D
             _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
         }
         var gamez = state.Gamez;
+        // The labs' ground under the cursor, built on the first ray, so a session that never asks never pays for it.
+        var ground = new Lazy<Vector3[]>(() =>
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var triangles = VegetationGround.Triangles(gamez);
+            Log.Info("ui", $"labs: {triangles.Length / 3} ground triangles in {watch.ElapsedMilliseconds} ms");
+            return triangles;
+        });
         if (_vegetation is { Clutter: { Vegetation: { } vegetation } clutter } stage)
         {
-            // Built on the paint tool's first ray, so a session that never paints never pays for it.
-            var ground = new Lazy<Vector3[]>(() =>
-            {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
-                var triangles = VegetationGround.Triangles(gamez);
-                Log.Info("ui", $"vegetation lab: {triangles.Length / 3} ground triangles in {watch.ElapsedMilliseconds} ms");
-                return triangles;
-            });
             _labs!.BuildVegetationLab(vegetation, stage.Apply, clutter.Mask, stage.Apply,
                 p => VegetationGround.LayersAt(gamez, p), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
+        }
+        if (gamez != null)
+        {
+            _labs!.BuildCourseLab(CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
         }
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,

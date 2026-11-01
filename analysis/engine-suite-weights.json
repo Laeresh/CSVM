@@ -166,6 +166,7 @@
     "cockpit-surface-hinges": 1.5,
     "cockpit-sun-bearing": 0.05,
     "course-hud": 9.0,
+    "course-lab": 9.0,
     "course-launch": 6.0,
     "course-visuals": 9.0,
     "crash-rig-anchors": 0.316,

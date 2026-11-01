@@ -105,8 +105,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, course editor lab
 
-21. ☐ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
-22. ☐ Click-to-place, adjustment sliders, start point
+21. ☑ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
+22. ◐ Click-to-place, adjustment sliders, start point
 23. ☐ 3D gizmo: three move arrows and a yaw ring
 24. ☐ Sequence panel, gate reuse with direction, world numbers and path line
 
@@ -673,7 +673,29 @@ its term.
 
 # Wave C, course editor lab
 
-## C21 ☐ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
+## C21 ☑ Editor lab shell: Shift+F3, `--course-edit`, load and save targets
+
+**Landed.** `CSVM/src/UI/Labs/CourseLab.cs`, built by `InspectionLabs.BuildCourseLab` in `--freecam` over a
+chapter world (not `--stage=empty`), with `CSVM/src/UI/Labs/CourseDraft.cs`, the engine-free edit model, and
+`CSVM.Tests/CourseDraftTests.cs`. Shift+F3 was free: plain F3 is the flight gun selector, which no freecam reads.
+`--course-edit=<chapter>[/<name>]` (`SessionSpec.CourseEdit`) implies `--freecam`, flies the chapter's IA1 world as
+`--course` does, and opens the lab at launch on the named course, or a new one without a name or when the file is
+missing. A broken file is reported and the lab starts `new_course`, so a save cannot overwrite it. The anim lab beats
+it with a warning. The panel (right edge, as the ocean and vegetation labs) lists the chapter's courses with their
+source, opens one, starts a new one from the name field with its start at the camera's pose, and saves.
+**Save target:** `CourseDraft.SaveTarget(OS.HasFeature("editor"), library.GameFolder != null)`: the editor build
+writes the shipped root (`CourseSource.Shipped`, `CSVM/data/courses/` through `GlobalizePath`), an exported build the
+game folder (`<dataRoot>/Courses`). An exported `--det` run has no game folder, so Save is disabled with a label
+saying why. An editor-build `--det` run still saves to the shipped root, since that root needs no game folder. The
+status line shows the path written. `CourseLibrary.cs` is unchanged. **Drawing:** every edit raises
+`CourseDraft.Changed`, on which the lab frees its `CourseVisuals.Build(course, withStart: true)` and builds it again,
+plus an amber box round the selected gate (`SelectionService.NewBoxInstance`/`DrawBox`). The visuals hide with the
+panel, and nothing is built before the first open. The world-triangle ground ray is the vegetation lab's, now built
+once per session for both labs (`GameSession`).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Shift+F3 under `--freecam`, or `--course-edit=<chapter>[/<name>]`, opens the course
 editor; it creates, opens and saves courses, to `CSVM/data/courses/` from the dev build and to
@@ -684,16 +706,54 @@ editor; it creates, opens and saves courses, to `CSVM/data/courses/` from the de
 exploration agent); labs are wired in `CSVM/src/Launch/InspectionLabs.cs` and build no UI until used.
 
 **Approach.** Follow the OceanLab pattern, but save in an exported build too, to the game folder.
-<TODO: confirm Shift+F3 is free.>
+Shift+F3 is settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: a lab on an existing pattern, a launch flag and a scripted suite.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseDraftTests|FullyQualifiedName~SessionSpecTests"`
+(the save target by build and game folder, `--course-edit` with and without a name, beaten by the anim lab, an empty
+chapter refused), then the complete unit tests, then
+`.\scripts\RunTests.ps1 -Suite 'course-lab,course-visuals,course-launch' -SkipUnits -SkipGoldens`. `course-lab`
+(windowed; headless drops only its photograph) launches `--course-edit=C1/sample_out_and_back --det`, checks the lab
+is open on the sample with its four gates drawn, swaps in a `CourseLibrary` over `ctx.ScratchDir` folders, and
+continues as C22's Verify says.
 
 **⚠ Traps.** No lab writes objects to a file yet, so there is no precedent to copy for the exported
 save path.
 
-## C22 ☐ Click-to-place, adjustment sliders, start point
+## C22 ◐ Click-to-place, adjustment sliders, start point
+
+**Landed (at the controls pending).** In `CourseLab.cs` and `CourseDraft.cs`. **Kind selector:** "Nothing (click
+selects)", pylon gate (the default), balloon ring, start point (`CourseLab.Place`). **Click:** a left click the panel
+does not take (`_UnhandledInput`, so it reaches the lab before the freecam's `SelectionService`) runs `ClickAt(screen)`.
+It first selects the course gate whose drawn parts' boxes the camera ray meets, the nearest box centre winning, whatever
+kind is armed. Off a gate it places the armed kind on the ground ray's hit, facing the camera: the heading is
+`CourseDraft.HeadingOf(camera basis)`, the view's yaw on `SpawnPoint`'s convention (the screen's up when looking
+straight down), so a gate placed from where the flyer would come is flown forward. With "Nothing" armed and no gate hit
+the click is left to the freecam's selection, so the two never fight; the course visuals sit outside the world root the
+selection walks, so a freecam click never picks them. **Water:** the ground ray is `VegetationGround.RayHit` over
+`VegetationGround.Triangles`, which keeps every solid world polygon, the sea-level water sheet among them, so over open
+sea a pylon gate's base lands on y = 0, the sea surface (Decision 24), with no separate sea lookup.
+**Placing:** `Place` appends the gate with a forward sequence entry, so a course is flyable as placed, and selects it;
+`PlaceStart` moves the start point. Ids are `p`/`r` and one past the highest number of that prefix in use (`NextId`).
+**Defaults (TUNE, `CourseDraft` constants):** pylon gate `PylonWidthM` 40 by `PylonHeightM` 30, ring `RingDiameterM`
+40 with its centre `RingAboveGroundM` 50 above the ground clicked (the sample's rings stand 50 and 55 m up), start
+`StartAboveGroundM` 50 up. **Sliders** (selected gate, applied as they move): a pylon gate's width (5 to 200) and
+height (5 to 120), a ring's height above ground (5 to 500) and diameter (5 to 200), and heading (-180 to 180) for
+both. The ring stores world Y; the height slider writes `WithAboveGround(ring, v, ground)` with the ground under the
+ring, sampled by a ray straight down (`GroundBelow`) and sampled again whenever the gate's X/Z moved. **Delete gate**
+removes the gate and every sequence entry naming it (`CourseDraft.Delete`). **Drag:** holding H (no freecam tool reads
+it; G is the graphics-mode toggle and M the mesh lab) moves the selected gate over the ground under the cursor on each
+mouse motion (`DragTo`, `CourseDraft.MovedTo`): a pylon gate stands on the hit, a ring keeps its height above ground.
+**Hooks for C23 and C24:** `CourseLab.Draft` is the seam. `Draft.Selected`/`SelectedId` is the selection,
+`Draft.Update(gate)` moves or turns a gate, `Draft.Changed` fires after every edit and selection change, and the lab
+redraws on it. The gizmo should call `Draft.Update` from its drag and claim its own clicks before `ClickAt`. The
+sequence panel should add its reorder and reuse operations to `CourseDraft` beside `Place` and `Delete`, so every edit
+still raises `Changed`. `CourseLab.Visuals.GateNodes[i]` is pool gate i's drawn node.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Left-click on the ground places the selected kind facing the camera; sliders set a pylon
 pair's width and height, a ring's height above ground and diameter, and heading; the start point is
@@ -702,11 +762,23 @@ placed the same way.
 **Evidence (confidence: lead-only).** WeaponLab already places by clicking a world surface (reported
 by an exploration agent, not re-read).
 
-**Approach.** <TODO: the ground pick over water (Decision 24 puts pylons on the sea surface).>
+**Approach.** The ground pick over water is settled under **Landed** above.
 
-**Model recommendation.** <TODO: not settled in the grilling.>
+**Model recommendation.** A mid-tier model: pure edit functions with unit tests, and lab wiring through the calls a
+scripted suite can drive.
 
-**Verify.** <TODO: not settled in the grilling.>
+**Verify.** `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~CourseDraftTests"` (ids, heading
+from a camera yaw and from straight down, placement with its forward entry and selection, the ring's height above
+ground stored as world Y, a move keeping that height and standing a pylon gate on the ground, a delete dropping every
+entry naming the gate), then the complete unit tests, then the `course-lab` suite. From rays through known screen
+points in the C1 freecam it places two pylon gates, a ring and the start point and checks each stands on the ground
+on its click's ray at the camera's heading. It selects p1 and r1 by clicking them with a kind armed, sets the ring's
+height-above-ground and diameter sliders through their `HSlider`s, and drags p1 and then the ring. Over open sea
+(found by down rays at y within 0.25 m of 0) a click places a pylon gate at y 0. It deletes p2, saves to the scratch
+shipped root (and checks nothing appeared in `CSVM/data/courses`), and reloads the file and reopens it through the
+lab to the same JSON and hash. It writes `course-lab/lab.png`, the panel with p1 selected over the course. The
+at-the-controls part closes with the user placing, dragging and saving a course in a real `--course-edit` session,
+and the default sizes with their flight.
 
 **⚠ Traps.** Default sizes are TUNE at the controls (Decision 25).
 

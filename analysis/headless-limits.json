@@ -35,6 +35,7 @@
     "xr-pointer": "aims the hand's laser at a pause board row laid out against the root viewport, which headless sizes at 64 px, so the row lies off the screen and the laser hits nothing"
   },
   "headlessDiffers": {
+    "course-lab": "photographs the course lab's panel over the edited course in a C1 freecam for the user, which headless renders nothing of, so the photograph drops out and every edit, save and reload check passes",
     "course-hud": "photographs the course HUD and its world cues in a C1 flight for the look's montage, which headless renders nothing of, so the montage drops out and the run, HUD text and cue checks pass",
     "course-visuals": "photographs the course gates in a C1 flight for the look's montage, which headless renders nothing of, so the photographed ring's pose check drops out and the rest pass; it also makes the course shader text no other suite makes",
     "build-stamp-icons": "lays the logs icon out against the window, which headless sizes at 64 px, so it asserts a layout no player sees",

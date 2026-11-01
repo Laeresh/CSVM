@@ -932,6 +932,24 @@ into the source tree's file, refuses a file it cannot parse and is off in an exp
 Save would write, so a slider dragged back reads as saved. No flag twins it; a suite drives `Set`, `SetSeed`, `RevertToSaved`.
 The paint tool takes a left click off the panel (`PaintTool`) and finds the ground under the cursor through the session's ground ray (`VegetationGround.RayHit` over the world's own triangles). ⚠ Never the physics ray: a `--freecam` world builds no colliders, so a collider ray hits nothing there. `Pick` gives the texture `Mech3/VegetationGround.cs` names under the hit (the coplanar layer that takes stamps, never a `no_clutter` overlay) the checked kinds through `VegetationEntry.WithPick`, applied at once; `Brush` dabs the session's `VegetationMask` while held (`Paint`, a radius and strength slider, `Thicken`, `Thin`, `Clear`, `Neutral`), names `vegetation/<chapter>.bin` in the entry, and hands the mask to its own callback on release (`ApplyMask`). While the brush is chosen, every mouse motion (`_Input`, before the panel takes it) stands a ring of the brush radius on the ground under the cursor (`Ring`): a 64-segment line strip at the hit's height, unshaded and drawn through the ground (`SelectionService.NewBoxInstance`), coloured by mode (Clear red, Thin amber, Thicken green, Neutral white) and tagged `SelectionService.OverlayMeta`. It hides off the brush, over the panel, over the sky and with the lab closed. Under Thicken a dim note says the stroke adds no original stamp, since the density rule only thins those. Save writes the mask before the entry; Revert restores both. Each tool is off when the session hands no mask, no texture lookup or no ground ray.
 
+## src/UI/Labs/CourseLab.cs
+The course editor lab (Shift+F3), built by `InspectionLabs.BuildCourseLab` in `--freecam` over a chapter world and opened at
+launch by `--course-edit`. A right-edge panel lists the chapter's courses (`CourseLibrary.List`), opens one, starts a new one
+from the name field (its start at the camera) and saves to `CourseDraft.SaveTarget`, showing the path written. A left click off
+the panel selects the course gate whose drawn part's box the ray meets, else places the chosen kind on the ground facing the
+camera's yaw, through the vegetation lab's world-triangle ray (no colliders in `--freecam`; over the sea it meets the sea-level
+sheet); with nothing to place the click falls through to the freecam's selection. Held H drags the selected gate over the
+ground. Sliders and Delete edit through `Draft`; on each `CourseDraft.Changed` the lab rebuilds its `CourseVisuals` and the
+selection's amber box. A gizmo or sequence panel edits through `Draft` and reads `SelectedId` the same way.
+
+## src/UI/Labs/CourseDraft.cs
+The course lab's edits, engine-free: the course being edited, its selected gate, and `Changed` after each edit. `Place`
+appends a default-sized gate (`PylonWidthM`, `PylonHeightM`, `RingDiameterM`, a ring `RingAboveGroundM` up, all TUNE) with a
+forward sequence entry and selects it; `PlaceStart` stands the start `StartAboveGroundM` up. Ids are `p` or `r` and one past
+the highest number in use. `HeadingOf` is a camera basis's yaw on `SpawnPoint`'s convention. A ring stores world Y, so
+`WithAboveGround` and `MovedTo` take the ground height the lab samples under it. `Delete` drops every sequence entry naming
+the gate. `SaveTarget` is the shipped root from the editor build, else the game folder, null without one (`--det`).
+
 ## src/UI/Labs/WorldDamageLab.cs
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
 the selection holds, each with live HP, and a slider with kill and reset on the one a weapon hit

@@ -252,6 +252,33 @@ public class SessionSpecTests
         Assert.Null(S("--stunt").Course);
     }
 
+    /// <summary>`--course-edit=` is the freecam over its chapter's IA1 world, with or without a course name.</summary>
+    [Theory]
+    [InlineData("--course-edit=c2/loop", "loop")]
+    [InlineData("--course-edit=C2", null)]
+    [InlineData("--course-edit=C2/", null)]
+    public void CourseEditIsTheFreecamInItsChaptersInstantActionWorld(string arg, string? name)
+    {
+        var s = S("--chapter=C4", "--mission=M01", "--fly", arg);
+        Assert.Equal(SessionMode.Freecam, s.Mode);
+        Assert.Equal(("C2", name), s.CourseEdit);
+        Assert.Equal("C2", s.Chapter);
+        Assert.Equal("IA1", s.Mission);
+    }
+
+    [Fact]
+    public void CourseEditIsDroppedByTheAnimLabAndRefusesAnEmptyChapter()
+    {
+        var lab = S("--anim-lab", "--course-edit=C2/loop");
+        Assert.Equal(SessionMode.AnimLab, lab.Mode);
+        Assert.Null(lab.CourseEdit);
+        Assert.Contains(lab.Warnings, w => w.Message.Contains("--course-edit"));
+        var empty = S("--course-edit=/loop");
+        Assert.Null(empty.CourseEdit);
+        Assert.Contains(empty.Warnings, w => w.Message.Contains("<chapter>[/<name>]"));
+        Assert.Null(S("--freecam").CourseEdit);
+    }
+
     [Fact]
     public void VsKillsAndVsTimeDefaultToFiveAndFive()
     {

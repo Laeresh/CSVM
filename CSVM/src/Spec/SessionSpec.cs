@@ -178,6 +178,9 @@ public sealed record SessionSpec
     // The raw --course= value, split and checked by ResolveCourse once the mode is settled.
     private string? _courseArg;
 
+    // The raw --course-edit= value, split by ResolveCourseEdit once the mode is settled.
+    private string? _courseEditArg;
+
     // The two lobby types the command line can ask for, as votes MissionType is resolved from.
     private bool _ctfArg, _zvzArg;
 
@@ -216,6 +219,10 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Why this launch may not fly <see cref="Course"/>, null when it may.
     /// Authored courses are solo only. <c>GameSession</c> refuses the launch on it.</summary>
     public string? CourseRefusal { get; private set; }
+    /// <summary><b>Resolved.</b> <c>--course-edit=&lt;chapter&gt;[/&lt;name&gt;]</c>, which implies
+    /// <see cref="SessionMode.Freecam"/> over that chapter's IA1 world. The course lab opens on the
+    /// named course, or a new one for a null <c>Name</c>. Null when absent or beaten by the anim lab.</summary>
+    public (string Chapter, string? Name)? CourseEdit { get; private set; }
     /// <summary><b>Resolved.</b> Splitscreen free-for-all deathmatch ("Dogfight"), a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight, same as
     /// <see cref="Stunt"/>. <c>--vs</c> beats <c>--stunt</c> by fixed precedence when both are
@@ -1302,6 +1309,7 @@ public sealed record SessionSpec
             else if (arg == "--fly") { s._flyArg = true; s.HasContentArg = true; }
             else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--course=")) { s._courseArg = arg["--course=".Length..]; s._stuntArg = true; s.HasContentArg = true; }
+            else if (arg.StartsWith("--course-edit=")) { s._courseEditArg = arg["--course-edit=".Length..]; s._freecamArg = true; s.HasContentArg = true; }
             else if (arg == "--vs") { s._vsArg = true; s.HasContentArg = true; }
             else if (arg == "--coop") { s.Coop = true; }
             else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); s.VsKillsExplicit = true; }
@@ -2812,6 +2820,7 @@ public sealed record SessionSpec
         }
         ResolveBots();
         ResolveCourse();
+        ResolveCourseEdit();
         // The menu refuses to start a Dogfight below 2 joined pilots; the CLI has no join flow to
         // gate on, so it only warns and runs with whatever --players= asked for.
         if (Versus && Players + VsBots.Count < 2)
@@ -2906,6 +2915,34 @@ public sealed record SessionSpec
             ChapterGiven = true;
             Mission = "IA1";
         }
+    }
+
+    // The course lab edits in the world a course is flown in, its chapter's IA1, as --course flies it.
+    private void ResolveCourseEdit()
+    {
+        if (_courseEditArg is not { } arg)
+        {
+            return;
+        }
+
+        if (!Freecam)
+        {
+            Warn("core", "--course-edit opens the --freecam course lab, and another mode won this session; ignoring it");
+            return;
+        }
+
+        int slash = arg.IndexOf('/');
+        string chapter = (slash < 0 ? arg : arg[..slash]).ToUpperInvariant();
+        if (chapter.Length == 0)
+        {
+            Warn("core", $"--course-edit='{arg}' is not <chapter>[/<name>]; ignoring it");
+            return;
+        }
+
+        CourseEdit = (chapter, slash < 0 || slash == arg.Length - 1 ? null : arg[(slash + 1)..]);
+        Chapter = chapter;
+        ChapterGiven = true;
+        Mission = "IA1";
     }
 
     // Routes `--pos`/`--direction` onto the per-mode plumbing (docs/cli.md "the placement pair"):
