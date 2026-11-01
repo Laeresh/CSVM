@@ -249,6 +249,10 @@ internal sealed class HumanRosterBindings
     /// builds none, so a seat flying a solo run has no board to hold it.</summary>
     public SoloStuntBoard? StuntBoard { get; init; }
 
+    /// <summary>A course best's stored splits by score key, read afresh from the session's store
+    /// on each call. Null shows no split delta.</summary>
+    public Func<string, float[]?>? BestSplits { get; init; }
+
     /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
     /// leaves it inert.</summary>
     public Action? ToggleGraphicsMode { get; init; }

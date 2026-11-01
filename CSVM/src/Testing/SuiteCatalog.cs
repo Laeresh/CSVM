@@ -128,6 +128,7 @@ public static class SuiteCatalog
         "launch-velocity-decay",
         "menu-backdrop",
         "menu-host-address",
+        "menu-instant-action-course",
         "menu-join-board",
         "menu-launch-return",
         "menu-original-boot",

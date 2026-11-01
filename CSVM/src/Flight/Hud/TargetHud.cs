@@ -847,10 +847,12 @@ public sealed partial class TargetHud : Control
         var (point, left, right) = ArrowHead(tip, dir, s);
         var off = new Vector2(1.5f, 1.5f) * s;
         float w = Mathf.Max(1f, RefShaftWidth * s);
-        into.DrawLine(tail + off, point + off, Shadow, w, antialiased: true);
-        into.DrawColoredPolygon(new[] { point + off, left + off, right + off }, Shadow);
-        into.DrawLine(tail, point, color, w, antialiased: true);
-        into.DrawColoredPolygon(new[] { point, left, right }, color);
+        // The canvas item's own calls, as MarkerDraw.Text, so a suite's frame can draw the arrow.
+        var item = into.GetCanvasItem();
+        RenderingServer.CanvasItemAddLine(item, tail + off, point + off, Shadow, w, antialiased: true);
+        RenderingServer.CanvasItemAddPolygon(item, new[] { point + off, left + off, right + off }, new[] { Shadow });
+        RenderingServer.CanvasItemAddLine(item, tail, point, color, w, antialiased: true);
+        RenderingServer.CanvasItemAddPolygon(item, new[] { point, left, right }, new[] { color });
     }
 
     // The target's framing radius: half the diagonal of its merged mesh box, which is what holds a
@@ -892,9 +894,11 @@ public sealed partial class TargetHud : Control
             var inward = new Vector2(side == 0 ? arm : -arm, 0f);
             var top = new Vector2(x, at.Y - hh);
             var bottom = new Vector2(x, at.Y + hh);
-            into.DrawLine(top, bottom, color, w, antialiased: true);
-            into.DrawLine(top, top + inward, color, w, antialiased: true);
-            into.DrawLine(bottom, bottom + inward, color, w, antialiased: true);
+            // The canvas item's own line, as MarkerDraw.Text, so a suite's frame can draw the box.
+            var item = into.GetCanvasItem();
+            RenderingServer.CanvasItemAddLine(item, top, bottom, color, w, antialiased: true);
+            RenderingServer.CanvasItemAddLine(item, top, top + inward, color, w, antialiased: true);
+            RenderingServer.CanvasItemAddLine(item, bottom, bottom + inward, color, w, antialiased: true);
         }
     }
 
@@ -903,8 +907,8 @@ public sealed partial class TargetHud : Control
         float w = font.GetStringSize(text, HorizontalAlignment.Left, -1f, fontSize).X;
         float h = font.GetHeight(fontSize);
         var p = new Vector2(center.X - w / 2f, center.Y - h / 2f + font.GetAscent(fontSize));
-        into.DrawString(font, p + Vector2.One, text, HorizontalAlignment.Left, -1f, fontSize, Shadow);
-        into.DrawString(font, p, text, HorizontalAlignment.Left, -1f, fontSize, color);
+        MarkerDraw.Text(into, font, p + Vector2.One, text, fontSize, Shadow);
+        MarkerDraw.Text(into, font, p, text, fontSize, color);
     }
 
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in

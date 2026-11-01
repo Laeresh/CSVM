@@ -121,11 +121,16 @@ public sealed class StuntCapture
     }
 
     /// <summary>Physics-frame test against this frame's committed plane position: latches the
-    /// markers the aircraft has just crossed into. The last test of a run is the first one that
-    /// finds it complete, which is the completing frame's, since the caller tests the run first on
-    /// every frame; a marker first entered after that is never photographed.</summary>
+    /// markers the aircraft has just crossed into, and never on a course run. The last test of a run is the first one that
+    /// finds it complete, the completing frame's, as the caller tests the run first. A marker first entered after that is never photographed.</summary>
     public void Update(Vector3 planePos)
     {
+        // The Danger Zone camera is the original's; a course run's gates are not its markers.
+        if (_run.Course != null)
+        {
+            return;
+        }
+
         // ⚠ Do not test past the completing frame. The original photographs inside a zone's own
         // first completion, so once every zone has completed nothing can photograph again
         // (docs/formats/campaign-screens.md, "The danger-zone slot").

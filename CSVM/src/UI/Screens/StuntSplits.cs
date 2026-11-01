@@ -66,7 +66,7 @@ public static class StuntSplits
         if (separatorBeforeTotal)
             body.AddChild(ResultsBoard.Separator(s));
         body.AddChild(ResultsBoard.Centered(ResultsBoard.Label(
-            $"TOTAL   {StuntMission.FormatTime(run.Total)}", (int)(TotalFont * s), TotalColor)));
+            run.TotalLine(), (int)(TotalFont * s), TotalColor)));
 
         if (run.NewBest)
         {

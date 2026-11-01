@@ -30,7 +30,7 @@ Names only, deliberately: a gloss here would be a second description of the same
 exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One flag, one description.
 
 **Modes and content, what gets built**
-`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--vs-bots` · `--vs-bot` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--scores` · `--play-anim` · `--movie` · `--presentation`
+`--viewer` · `--fly` · `--stunt` · `--course` · `--course-edit` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--vs-bots` · `--vs-bot` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--scores` · `--play-anim` · `--movie` · `--presentation`
 
 **Multiplayer, the wire a match flies over**
 `--net-host` · `--net-join` · `--net-shape` · `--net-port-base` · `--master-server`
@@ -100,8 +100,8 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
 section further down; `--perf` carries four further bullets for its other readouts, and
-`--dump-sticks` and `--menu` one more each. The counts reconcile as **211 index entries, 211 parser
-flags and 218 bullet lines**.
+`--dump-sticks` and `--menu` one more each. The counts reconcile as **212 index entries, 212 parser
+flags and 219 bullet lines**.
 
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world for deterministic weather, fog and edge screenshots. It hosts three labs, always built and needing no extra flag: the damage lab on **F19**, the livery lab on **L** and the mesh lab on **M**. All three start hidden, so an unadorned `--viewer` screenshot matches the pre-paint viewer. F19 toggles the damage lab as a whole, slider panel and HUD gauges together; the panel's own checkbox controls the gauges while it is up. **P** halts the simulation and **`.`** advances one frame)
@@ -164,6 +164,8 @@ flags and 218 bullet lines**.
 - `--node=<cs_name>` (in `--viewer`, the default for this flag, or `--anim-lab`, **build only the named gamez subtree** out of `--chapter=`'s world, with the camera auto-framed on it. Matching is on the source `cs_name` meta, never the sanitized Godot node name. Multiple matches are normal: the first is built, and the ambiguity is a warning. A name matching nothing lists the candidates containing it and quits cleanly (exit 0). The mission's interp script and the clutter are skipped, but the animation program still loads and binds. `--pos`/`--direction`/`--lookat` override the framing)
 - `--fly` (**the default**: free flight, a chapter world with skydome and plane, on the original's own keymap (`docs/controls.md`): the arrows pitch and roll, `,`/`.` rudder, `=`/`-` throttle and the digits set it outright, Backspace respawns, **Esc** (or gamepad Start) halts the sim and opens the pause board's Resume, Restart and Exit menu, where the chase camera free-orbits the frozen plane, and **`.`** advances one sim frame while halted. It defaults to C1; combine it with `--chapter=` for another. It spawns from the mission's `ia.json`, so see `--mission`/`--scenario`/`--spawn`)
 - `--stunt` (`--fly` plus the mission's Danger Zones (`ia.json` `dzones`) as fly-through objectives, spawning from the `stunt_flying` list, which it forces unless `--scenario=` is explicit. The objective marker HUD draws the marker, edge arrow and bearing with the run timer; completing every zone raises the results scoreboard, which halts the sim (**R** restarts). CLI only: the launchscreen's stunt row attaches an Instant Action mission instead. With `--players=N` it is a 5-minute time attack ranked by best run on the board it ends on; bests record under the solo key)
+- `--course=<chapter>/<name>` (**fly an authored air race course** in place of the Danger Zones: implies `--stunt`, over that chapter's IA1 world. The game folder's `<dataRoot>/Courses/<chapter>/<name>.json` wins over the shipped `CSVM/data/courses/` file, and `--det` reads only the shipped one. Spawn, rerun and respawn land on the course's start point unless `--pos=` is given. Solo only: `--vs`, a second pilot, bots, a network session or `--stage=empty` refuse the launch with exit 1, as does a missing, broken or empty course. `C1/sample_out_and_back` ships as a sample)
+- `--course-edit=<chapter>[/<name>]` (**open the course editor lab** (Shift+F3) at launch: implies `--freecam` over that chapter's IA1 world. With a name it opens that course, read as `--course` reads it, or starts a new one of that name; without, a new course. A left click selects a gate, else places the chosen gate or the start point on the ground facing the camera's way; hold **H** to drag the selected gate. Save writes `CSVM/data/courses/` from the dev build, `<dataRoot>/Courses/` from an exported one, and is off there under `--det`)
 - `--vs` (**"Dogfight" mode**: splitscreen free-for-all deathmatch, `--fly` plus the `dogfight_ace`
   spawn list unless `--scenario=` is explicit. It **beats `--stunt` by fixed precedence** rather
   than last-flag-wins, dropping stunt mode with a warning when both are given.
