@@ -564,7 +564,7 @@ void fragment() {
     private static string DepthScale(int level) =>
         (1.0 - (level * (double)SceneBuilder.DepthBiasPerLevel)).ToString("0.0######", CultureInfo.InvariantCulture);
 
-    // The open sea's colour: the texture's mean, times the sea's tint when it has one. An untinted
+    // The sea's colour: the texture's mean, times the sea's tint when it has one. An untinted
     // sea writes no tint term, so its text matches the defaults'.
     private static string OpenSeaColour(SeaState sea) =>
         "textureLod(albedo_tex, vec2(0.5), 16.0).rgb"
@@ -581,7 +581,6 @@ void fragment() {
         sb.AppendLine("render_mode skip_vertex_transform, cull_disabled;");
         sb.AppendLine(SceneBuilder.TimeInclude);
         sb.AppendLine(SceneBuilder.AtmosphereInclude);
-        sb.AppendLine(SceneBuilder.MipBiasInclude);
         // The noise and the surf's phase the coasts' swash shares.
         sb.AppendLine(SceneBuilder.OceanInclude);
         if (ShadowQualitySetting.TerrainShadows)
@@ -589,7 +588,6 @@ void fragment() {
         sb.AppendLine("uniform sampler2D mask_tex : filter_linear, repeat_disable;");
         sb.AppendLine("uniform vec4 mask_rect;");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
-        sb.AppendLine("uniform float tile_m = 32.0;");
         sb.AppendLine("uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D surf_tex : hint_default_black, filter_linear, repeat_disable;");
@@ -1027,19 +1025,18 @@ void fragment() {
     vec4 wake = ship_wake(p, vec2(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @") * footprint, footprint);
     n.xz -= wake.yz * " + Literal(WakeSlopeGain) + @";
     float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
-    // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
-    // against a coplanar coast tile. Rising with the fog, so the far sea fogs as the sheet does
-    // instead of showing darker, wavier water through it.
+    // How calm and smooth this fragment shades: flat normals, no foam, the sheet's roughness. The
+    // sea's look ramp fades the waves' look in from the shore. The fog hands the far sea back to a
+    // calm surface, rather than darker, wavier water showing through it.
     float sheet = max(1.0 - look, smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt));
     n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
-    // The open sea takes the texture's mean and the light alone varies it: a tiled texture reads as
-    // a lattice from the air. The last mip is the mean the GPU samples. At sheet = 1 the texture is
-    // the sheet's own mapping, so no seam shows where the ocean meets a coast tile.
+    // The sea takes the texture's mean at every distance and the light alone varies it: the tiled
+    // texture reads as a lattice from the air. The last mip is the mean the GPU samples.
     vec3 tex_mean = " + OpenSeaColour(sea) + @";
-    vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
+    vec3 col = tex_mean * tint;
     // Foam forms where the swell bunches the surface, its Jacobian below 1, which rides each crest.
     // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
     float bunch = (1.0 - ((1.0 - bx.x) * (1.0 - bz.y) - bz.x * bx.y)) / FOAM_JAC_SIGMA;

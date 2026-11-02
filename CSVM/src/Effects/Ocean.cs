@@ -143,7 +143,6 @@ public sealed partial class Ocean : Node3D
         material.SetShaderParameter("mask_rect", new Vector4(mask.Origin.X, mask.Origin.Y, 1f / mask.Size.X, 1f / mask.Size.Y));
         if (baseTex != null)
             material.SetShaderParameter("albedo_tex", baseTex);
-        material.SetShaderParameter("tile_m", mask.TileMetres);
         material.SetShaderParameter("tint_tex", mask.TintTexture);
         material.SetShaderParameter("lift_tex", mask.LiftTexture);
         material.SetShaderParameter("surf_tex", mask.SurfTexture);

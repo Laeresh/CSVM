@@ -23,20 +23,20 @@ public sealed class OceanShaderTests
     /// <summary>The default sea's text with LF line endings, at each priority level and zone gate a mask
     /// can hand the generator. Each hash is the text the constants generated.</summary>
     [Theory]
-    [InlineData(-11, false, "71FF21AEB062DD0999F1D3E14A45C6BEE8A16C8BA879BFE735F4B3A948338166")]
-    [InlineData(-11, true, "F8A5C316E545F98EC249AB352D5799F6B54E860A524B654B661BE111797DC82D")]
-    [InlineData(-2, false, "218B403A3DC46E354F508BEE19D55637F3DDEE492209B3D767061D1012F7A1BE")]
-    [InlineData(-2, true, "A0B451EF1FB25369D7679B68BE91AE7B2FA4CA8D722904E89479E4B65A33546C")]
-    [InlineData(-1, false, "20420050DCE9AD4C6A491809A15A9CA3B967AE67D358F7A51BA85956DE30C3D3")]
-    [InlineData(-1, true, "26271EA2B849EB49DC799D4AB24DAAC495F293C0AE05E11C198764298777489F")]
-    [InlineData(0, false, "C5D0FE6C96BE76FEA793103C8DF781CEE8ABFAE44DB0242A5F0108E740D86AB6")]
-    [InlineData(0, true, "0DA9D85FE5E9B4617F56B27771D34320F9B733C9E2E341649664F795C032CF4B")]
-    [InlineData(1, false, "11FBBBE23C29B199D275F7489A9BDFADBCE982B0A25159764CFC990A5DE533EE")]
-    [InlineData(1, true, "918606C4D02045FEE325DB07F56C1BBF9EA206556C0112C4C7E0CE2C7B5C3052")]
-    [InlineData(2, false, "56EE625E9FA97CEA3CC394B7FD7D8AD185FFFF7695459983A732A2F3E016C341")]
-    [InlineData(2, true, "69EFC642CA46ADFE1456D009AA133CE4A66E681EBF7399B2EA01085B9862A1A9")]
-    [InlineData(3, false, "2F8FD602A8708AB7DE9492CEBCA0836A0115BFC857F4F826ECC8A638AB2271AD")]
-    [InlineData(3, true, "3F8FCE9468EFEC3A298082CE6EBBDC1753C587851BF1CDB0BE6B963F18BEC991")]
+    [InlineData(-11, false, "31B2B4CCA306722C4FF6AC800DE5AABC8E84641C6EFB205E3B5129FFDB62529A")]
+    [InlineData(-11, true, "55430783BDBF233CAD527FA214DAAB098302D125CEC331762FFBFFF03F604ABA")]
+    [InlineData(-2, false, "D760757197EADFD4B36EAA9516313C0507DBA1369A86D657EABB7E0FC7D4825C")]
+    [InlineData(-2, true, "6F331AF8E0AC311D81D81CB97E86A1E20848F0F674EF54C7086EDD35F31A4CF8")]
+    [InlineData(-1, false, "A1D426043267A090641F3BC20CC88BFC0D47705493C4ECB5B321852399BB4ACB")]
+    [InlineData(-1, true, "838B2B528623DB0BC04C965F9096B2EBB3BAADF83064A9E0040EB3848D4AA030")]
+    [InlineData(0, false, "AFEF41C08B9B7B62BD34CA75B61EE1327576F2526EE6DD2F38765BA77F6D029C")]
+    [InlineData(0, true, "4B832C92E0D467F9594C12509BDA7EB975C0151D9B5A444B19CF13EF3099B316")]
+    [InlineData(1, false, "9D3B8972837FA2CBFE5DAC20CFCB54D89686AB87A3871DC60667CAB07E1B3514")]
+    [InlineData(1, true, "570767FC25A25C83A470CA90DB6A686C1968C73A2DD4AF850E4EFBCB722D0EF4")]
+    [InlineData(2, false, "65BEF191EAC3EDF3337BA02A47585228D067D939B2743EFAA4DB2AD675C6E467")]
+    [InlineData(2, true, "5945159FE12D65D22E562766E19B743777A9B8C148A76FACD93D8F871AB5CFB5")]
+    [InlineData(3, false, "6C27A8035138FDEACFFFC2FC98C3CBF54CB52DD02DF45F4F08168A2A0C0B76DF")]
+    [InlineData(3, true, "82E32D85C3261BDBD4989229EEC7A358B745B0F67BA62013FFEE49261E5CE010")]
     public void TheDefaultSeaWritesTheConstantsText(int level, bool zoned, string sha256)
     {
         string text = Lf(OceanShader.Code(SeaState.Default, level, zoned));
@@ -86,13 +86,17 @@ public sealed class OceanShaderTests
         Assert.NotEqual(OceanShader.Code(SeaState.Default, 0, false), OceanShader.Code(sea, 0, false));
     }
 
-    /// <summary>A tint multiplies the open sea's colour alone; an untinted sea writes no tint term.</summary>
+    /// <summary>The sea's colour is the texture's mean at every distance, shore and fog included, times the
+    /// sea's tint; an untinted sea writes no tint term. No tiled sample of the texture is left.</summary>
     [Fact]
-    public void ATintMultipliesTheOpenSeaOnly()
+    public void TheSeaTakesTheTexturesMeanEverywhere()
     {
         string tinted = OceanShader.Code(SeaState.Default with { TintR = 0.9f, TintG = 1f, TintB = 1.1f }, 0, false);
         Assert.Contains("vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb * vec3(0.9, 1.0, 1.1);", tinted);
-        Assert.Contains("vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb;", OceanShader.Code(SeaState.Default, 0, false));
+        string plain = OceanShader.Code(SeaState.Default, 0, false);
+        Assert.Contains("vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb;", plain);
+        Assert.Contains("vec3 col = tex_mean * tint;", plain);
+        Assert.Single(Regex.Matches(plain, "albedo_tex,"));
     }
 
     /// <summary>A length scale moves every wave's omega, which is rounded again so the csky_time

@@ -102,6 +102,36 @@ internal static class OceanMaskRaster
     /// <summary>The band count the bake uses on this machine.</summary>
     public static int DefaultBands => Math.Clamp(System.Environment.ProcessorCount, 1, 16);
 
+    /// <summary>Gives every base-sheet corner under one of <paramref name="covers"/> (indices into
+    /// <paramref name="tris"/>, on its edge included) the sRGB tint <paramref name="mean"/>, in place. An
+    /// opaque sea tile hid the sheet's corners beneath it, some baked near black. The ocean draws
+    /// there, so their colour would spread across the sheet's large triangles as dark wedges.</summary>
+    public static void TintUnder(Tri[] tris, IReadOnlyList<int> covers, Color mean)
+    {
+        bool Hidden(Vector3 p)
+        {
+            foreach (int c in covers)
+            {
+                var t = tris[c];
+                float area = ((t.B.X - t.A.X) * (t.C.Z - t.A.Z)) - ((t.B.Z - t.A.Z) * (t.C.X - t.A.X));
+                if (Math.Abs(area) < 1e-6f)
+                    continue;
+                float wa = (((t.B.X - p.X) * (t.C.Z - p.Z)) - ((t.B.Z - p.Z) * (t.C.X - p.X))) / area;
+                float wb = (((t.C.X - p.X) * (t.A.Z - p.Z)) - ((t.C.Z - p.Z) * (t.A.X - p.X))) / area;
+                if (wa >= -1e-3f && wb >= -1e-3f && 1f - wa - wb >= -1e-3f)
+                    return true;
+            }
+            return false;
+        }
+
+        for (int i = 0; i < tris.Length; i++)
+        {
+            var t = tris[i];
+            if (t.Kind == Kind.Base)
+                tris[i] = t with { CA = Hidden(t.A) ? mean : t.CA, CB = Hidden(t.B) ? mean : t.CB, CC = Hidden(t.C) ? mean : t.CC };
+        }
+    }
+
     /// <summary>Rasterises <paramref name="tris"/> into a mask over the water triangles'
     /// extent. <paramref name="mean"/> is the sRGB tint every texel off the base sheet takes.</summary>
     public static Result Run(Tri[] tris, Color mean, int bands)
@@ -782,17 +812,34 @@ internal static class OceanMaskRaster
     // translucent sand. That sand is sea in the mask, yet landward of the painted waterline.
     private static bool Landward(Grid g, int i) => g.Sea[i] == 0 || g.Solid[i] || g.Coast[i] == CoastUnder;
 
-    // The coastline segments with an open-sea texel centre within one Cell, read off the resolved grid. A
-    // flat land edge under a strip's sand is coastline to the shore distance, but no sea washes it.
-    // In order, so the first `kept` floats are the sea-facing ones of the first `painted`.
+    // The parts of the coastline segments with an open-sea texel centre within one Cell, read off the
+    // resolved grid, in pieces of half a Cell. A flat land edge under a strip's sand is coastline to the
+    // shore distance, but no sea washes it. ⚠ Keep it per piece: an inland edge of flat land touching the
+    // sea at one end carries the swash along all of it. In order, so the first `kept` floats are the
+    // sea-facing parts of the first `painted`.
     private static float[] SeaFacing(Grid g, float[] coast, int painted, out int kept)
     {
         var list = new List<float>();
         kept = 0;
         for (int s = 0; s < coast.Length; s += 4)
         {
-            if (FacesSea(g, coast[s], coast[s + 1], coast[s + 2], coast[s + 3]))
-                list.AddRange(new[] { coast[s], coast[s + 1], coast[s + 2], coast[s + 3] });
+            float ax = coast[s], az = coast[s + 1], bx = coast[s + 2], bz = coast[s + 3];
+            int pieces = Math.Max(1, (int)Math.Ceiling(new Vector2(bx - ax, bz - az).Length() / (0.5f * Cell)));
+            int from = -1;
+            for (int p = 0; p <= pieces; p++)
+            {
+                bool wet = p < pieces && FacesSea(g, Along(ax, bx, (double)p / pieces), Along(az, bz, (double)p / pieces),
+                    Along(ax, bx, (double)(p + 1) / pieces), Along(az, bz, (double)(p + 1) / pieces));
+                if (wet && from < 0)
+                {
+                    from = p;
+                }
+                else if (!wet && from >= 0)
+                {
+                    list.AddRange(new[] { Along(ax, bx, (double)from / pieces), Along(az, bz, (double)from / pieces), Along(ax, bx, (double)p / pieces), Along(az, bz, (double)p / pieces) });
+                    from = -1;
+                }
+            }
             if (s + 4 == painted)
                 kept = list.Count;
         }

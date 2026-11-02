@@ -63,6 +63,7 @@ its own predicate, because the colliders and the tile census read that classific
 | 19 | How the cliff spray is drawn | **The original's water-splash sprites** (`hg_splasher`'s `splasher` puffer, retuned from an impact to a breaker), picked from contact sheets over a breaker cycle beside a camera-facing shader sheet, which stays opt-in as `--coast-spray=sheet` |
 | 20 | C3's cliffs, which stand 50 to 130 m behind the painted waterline | **No spray in C3**, off for the whole chapter in its sea (`"spray": 0` in `ocean_seas.json`): at its cliff feet the spray landed in the forest, far from the surf line |
 | 21 | Whether quay walls and bare rock off the painted coasts take spray | **Cliffs only.** The bare sites spray only with `--coast-spray=…,quays` |
+| 22 | The base sheet's tint at corners hidden under the tiles the ocean replaces, which spread straight-edged wedges into the visible sea | **The sheet corners under C1's sea tiles take the open sea's mean tint** (`OceanMaskRaster.TintUnder`). This departs from Original's authored inlet darkening, because the ocean shows what the tiles covered. C3's cliff tiles are not included yet; see C25 |
 | 23 | How C3's opaque cliff tiles give way to the ocean | **Blended by alpha over 25 m seaward of the painted waterline**, measured by world distance from the inland image, as C2's beach blends, not dithered and not along each polygon's V; picked over 12 m and over the per-frame dither (C26) |
 | 24 | Where the swash ends on C3's cliff tiles | **It fades out over 4 m past the coastline**, since the tile still draws near-opaque there and a stop on the line showed one triangle's straight waterline; a carry as long as the 25 m blend filled the mask's sea pockets inside the tiles with foam (C26) |
 
@@ -150,6 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ The look at the painted coasts in C1, C2 and C3, judged from montages, at the controls in the closing batch (#270)
 23. ☑ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
 24. ☑ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
+25. ☑ The new ocean replaces the old water look completely under Enhanced at waves (#270)
 26. ☑ C3's cliff tiles blend out by world distance from the waterline, as the beach does (#270)
 
 ### Wave D, landing
@@ -728,6 +730,97 @@ pairs for noise, then A/B back to back). Original mode draws no spray.
 - Spray placed per segment multiplies with C1's many short harbour edges; budget it before tuning it.
 - The original's splash defs are authored for an impact, not a cycle; reuse their sprites, not their
   one-shot timing.
+
+## C25 ☑ The new ocean replaces the old water look completely under Enhanced at waves
+
+**Verified.** The author held C25 on the C1 coast colour and passed it once the straight-edged wedges were traced to the sheet tint under C1's sea tiles and gone in the before/after at the author's pose and a sea-tile pose (decision 22); the switch montage at the author's pose rules out sun shadow, the sea tiles drawing, the look band, TerrainShadow, `sheet` and SSR. The C2 inland swash fringe at the author's C2 pose is gone, and Original renders pixel-identical at the author's C1 pose. The C3 extension of the tint rule was weighed from the tint data alone and left out: C3's bright ring runs on under the alpha strips, which showed it in Original, and moving only the cliff tiles' corners cut straight notches. `dotnet test` 7,980 passed, 0 failed; `RunTests.ps1 -Suite graphics-coast-hide,graphics-ocean-switch` green with engine errors clean. Owed: a render of C3 with the tint forced white beside the current one, and the golden rerun naming each hash the tint fix moves, both blocked when the machine stopped creating GPU devices; they go to D31.
+
+**Source.** The author, flying C1 under Enhanced at waves: "disable the repeating water texture,
+because it does not look good", and then "can we replace it with the new ocean completely now that
+we have waves that go up to the shore". On C2: "there is a second waterline behind the beach where
+the vegetation is starting. Can we remove that."
+
+**Goal.** Under Enhanced at `waves` the old water look goes: the ocean draws no tiled sample of the
+base texture at any distance, its colour is the texture's mean times the sea's tint, and no water
+look the ocean does not draw shows behind a painted beach. What old water still draws is listed per
+chapter, with why the ocean cannot take it.
+
+**Evidence (confidence: traced).**
+- The ocean blended the base texture, tiled every `tile_m` (32 m in C1), wherever it shaded as the
+  flat sheet: `col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint`, with
+  `sheet = max(1 - look, smoothstep(0, 0.25, fog_amt))`. PLAN-enhanced-ocean C25 added it so the ocean
+  matched a coplanar coast tile at the shore and the sheet in the fog band; C22's `look_from` 0 ran
+  that shore band to C1's cliffs.
+- The coplanar tiles it matched are gone: no chapter's mask holds a `Kind.Edge` texel at the sea
+  except two triangles at the foot of C3's raised-lake chute (`edge_tris` C1 0, C1B 0, C1C 0, C2 0,
+  C2B 0, C3 2, C5 0). C1's sea tiles take the mask hide; the painted strips keep their own alpha over
+  the waves.
+- At the author's C1 pose (5120x1440) the texture drew a fine, low-contrast grain in the 143 m look
+  band along the cliffs: forced to its mean, 13,300 pixels move by more than 4 levels, none by more
+  than 16, all inside that band. The pale flecks across the open sea stay with the texture gone; by
+  their shape they are whitecaps, which this item leaves alone (not toggled).
+- C2's second waterline is the swash: with the sea's surf off (`--debug-ocean=surf_wash:0,surf_lines:0`)
+  its fringe goes, and the grey band behind the dry sand stays, as it does under Original and Enhanced
+  flat. That band is `beach1`'s own painted rocks fading out over the land. The fringe traced inland
+  edges of the flat `terpat` land at y = 0: `OceanMaskRaster.SeaFacing` kept a whole segment when any
+  point of it lay within a texel edge of open sea, so a 500 m land edge touching the harbour channel at
+  one end carried the swash along its whole length, up to 110 m inland. The same rule removes a
+  smaller inland swash at a C3 strip (948 pixels at the C3 pose).
+- The large straight-edged dark shapes on C1's sea along the cliffs (a wedge in the left inlet, a
+  dark area in the right bay) are the base sheet's baked vertex colour, which the ocean multiplies
+  in as its tint. Switched one at a time at the author's pose, only the tint forced white removes
+  them. Sun shadows off removes a different set, the cliffs' own shadow strips. TerrainShadow, SSR,
+  the sea tiles (drawn magenta, they show only slivers at the cliff foot), `sheet` and the look
+  factor (0 or 1) leave the shapes in place. Original shows the same wedges. The tint mask falls
+  to about G 130 in the inlets, against 255 in the open sea: the sheet's corners there lie under C1's opaque sea tiles,
+  and the colour interpolates from them across the sheet's large triangles into the open sea.
+- The other chapters, by the sheet corners under each painted coast, against the corners under none
+  (mean of R, G and B): C1B, C1C, C2B and C5 have no painted coast, so nothing changes. C2's corners lie
+  only under `beach1` (120, all 255, against an open median of 128) and the `cliff01_trans2` decal (121,
+  median 94); both are alpha strips that kept their soft alpha in Original, so those corners showed
+  through, and neither is replaced. C3's opaque cliff tiles cover 728 corners (`cliff1_watertrans` 160,
+  `cliff1_watertrans2` 568, median 255) against an open median of 185, and its alpha strips cover 422
+  more, also at 255. The bright band is one authored ring along every C3 coast, visible through the
+  strips in Original. Giving the cliff tiles' corners the mean moves 187,184 sea texels of the tint by
+  more than 4 levels, and in the tint image cuts straight-edged notches where the cliff tiles meet the
+  strips. That is the shape this rule exists to remove, so C3 is left as it is until a render settles it.
+
+**Approach.**
+1. The ocean's colour is `tex_mean * tint` everywhere. `sheet` keeps the normals' flattening, the
+   foam's fade and the roughness: the sea's look ramp still fades the waves' look in from the shore,
+   and the fog still calms the far sea. `tile_m` and the mip-bias include leave the shader.
+2. `SeaFacing` keeps only the half-texel pieces of each segment with open sea within a texel edge, so
+   the swash runs only where the sea meets the land.
+3. `OceanMaskRaster.TintUnder` gives every base-sheet corner under a painted sea tile (its edge
+   included) the sheet's mean tint before the raster, so the ocean over a sea-tile texel and the open
+   sea beyond it take the open sea's tint (decision 22). Under Original and flat water no ocean or
+   mask is built.
+
+**Old water still drawn under Enhanced at waves.**
+
+| Chapter | What | Why the ocean does not draw it |
+|---|---|---|
+| C1 | `river1`, `river2` (the inland river), `falls`, `falls1`, `falls_edge` (the waterfall) | Above sea level, and not classed as water; the ocean is one surface at y = 0 |
+| C1B, C1C, C2B | none | |
+| C2 | the harbour ramp's 3 base triangles to 1.03 m | Drawn: the ocean rises over them with the ramp lift |
+| C3 | 31 base-texture triangles of the raised lake and its chute, -6 to 13.17 m, 2 of them `Kind.Edge` at its foot; `falls-128`; `cliff1_watertrans3`'s painted water wedge (decision 7) | The lake stands 13 m above the sea; a second ocean at its own height is a separate item |
+| C5 | the 12 ramp triangles to 3.03 m under the steinmann ship | Drawn: the ramp lift |
+| all | the flat sheet a spyglass disc sees (`SceneBuilder.FlatSeaEye`) | By design |
+
+The mask's rect covers every base-sheet polygon (C1 to 12.3 km, C3 and C5 to 16.4 km), and the grid
+reaches 45 km, so no base sheet lies past the ocean's reach.
+
+**Verify.** `OceanShaderTests` pin the colour line and the single texture fetch; the default text's
+hashes and fixture move with it. `OceanMaskRasterTests` hold an inland edge touching the sea at its
+ends to no swash halfway along, the whole-image oracle follows the per-piece rule, and a sheet corner
+under a sea tile (or on its edge) takes the mean while one off it keeps its own. Before | after
+montages at the author's pose, six chapters and a far foggy view, and at C2's beach.
+
+**⚠ Traps.**
+- Do not drop `sheet`: it still drives the normals, the foam and the roughness at the shore and in the
+  fog. Only the colour stops reading it.
+- The inland image's segment test is per piece, not per segment; the shore distance's segments are
+  unchanged.
 
 ## C26 ☑ C3's cliff tiles blend out by world distance from the waterline
 

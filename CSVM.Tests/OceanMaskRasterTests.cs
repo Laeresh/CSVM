@@ -663,6 +663,42 @@ public class OceanMaskRasterTests
         AssertOrderFree(tris);
     }
 
+    // A sea tile over one corner of a sheet triangle, that corner baked dark. The corner takes the mean,
+    // so no dark wedge spreads from it. A corner on a tile's edge counts; one off the tiles keeps its own.
+    [Fact]
+    public void ASheetCornerUnderASeaTileTakesTheMeanTint()
+    {
+        var dark = new Color(0f, 0.5f, 0.6f);
+        var own = new Color(0.9f, 1f, 1f);
+        var tris = new[]
+        {
+            new Tri(new Vector3(0f, 0f, 0f), new Vector3(400f, 0f, 0f), new Vector3(0f, 0f, 400f), Kind.Base, dark, own, own),
+            new Tri(new Vector3(-50f, 0f, -50f), new Vector3(100f, 0f, -50f), new Vector3(-50f, 0f, 100f), Kind.Coast, Colors.White, Colors.White, Colors.White),
+            new Tri(new Vector3(400f, 0f, -50f), new Vector3(450f, 0f, 0f), new Vector3(400f, 0f, 50f), Kind.Coast, Colors.White, Colors.White, Colors.White),
+        };
+        OceanMaskRaster.TintUnder(tris, new[] { 1, 2 }, Mean);
+        Assert.Equal(Mean, tris[0].CA);
+        Assert.Equal(Mean, tris[0].CB);
+        Assert.Equal(own, tris[0].CC);
+        Assert.Equal(Colors.White, tris[1].CA);
+    }
+
+    // A flat island at sea level from x = 0 to 1024 on the sheet. Its quad's inland diagonal joins two
+    // corners on the sea. Only its ends beside the sea are coastline to the swash. The
+    // land halfway along it reads no distance; the shore at x = 0 does.
+    [Fact]
+    public void AnInlandEdgeTouchingTheSeaAtItsEndsIsNoCoastlineAlongItsLength()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
+        AddQuad(tris, 0f, -512f, 1024f, Kind.Solid, Colors.White);
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 3);
+        int At(float x, float z) => ((int)((z - r.Origin.Y) / Cell) * r.Width) + (int)((x - r.Origin.X) / Cell);
+        Assert.Equal(OceanMaskRaster.InlandByte(true, OceanMaskRaster.InlandReach), r.Inland[At(512f, 0f)]);
+        Assert.Equal(OceanMaskRaster.InlandByte(true, 4f), r.Inland[At(4f, 0f)]);
+        AssertOrderFree(tris);
+    }
+
     // The land's sea-level edge at x = 96 lies under the strip's painted water, which the mask makes
     // sea. It is no coastline: the sea there and beyond reads its distance to the waterline at x = 64.
     // A rock rising off that water keeps its foot at x = 104 as coastline.
@@ -972,17 +1008,32 @@ public class OceanMaskRasterTests
         }
         var dist = DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out var segments);
         // Land, a solid or a strip's translucent sand lies landward of the coastline. The inland image
-        // measures from the segments with an open-sea texel centre within one texel edge, over boxes wider
-        // than either reach.
+        // measures from the runs of half-texel pieces with an open-sea texel centre within one texel edge,
+        // over boxes wider than either reach.
         bool Landward(int i) => sea[i] == 0 || solid[i] || coast[i] == 2;
         var near = new double[w * h];
         Array.Fill(near, double.PositiveInfinity);
+        static float Along(float a, float b, double s) => s == 0.0 ? a : (float)(a + (s * ((double)b - a)));
+        Vector2 At(Vector2 p, Vector2 q, int k, int n) => new(Along(p.X, q.X, (double)k / n), Along(p.Y, q.Y, (double)k / n));
         foreach (var (p, q) in segments)
         {
-            bool faces = false;
-            Each(p, q, 3f * Cell, (i, e) => faces |= sea[i] == 1 && !Landward(i) && e <= Cell);
-            if (faces)
-                Each(p, q, OceanMaskRaster.ShoreReach, (i, e) => near[i] = Math.Min(near[i], e));
+            int n = Math.Max(1, (int)Math.Ceiling((q - p).Length() / (0.5f * Cell)));
+            int from = -1;
+            for (int k = 0; k <= n; k++)
+            {
+                bool faces = false;
+                if (k < n)
+                    Each(At(p, q, k, n), At(p, q, k + 1, n), 3f * Cell, (i, e) => faces |= sea[i] == 1 && !Landward(i) && e <= Cell);
+                if (faces && from < 0)
+                {
+                    from = k;
+                }
+                else if (!faces && from >= 0)
+                {
+                    Each(At(p, q, from, n), At(p, q, k, n), OceanMaskRaster.ShoreReach, (i, e) => near[i] = Math.Min(near[i], e));
+                    from = -1;
+                }
+            }
         }
 
         void Each(Vector2 p, Vector2 q, float reach, Action<int, double> visit)

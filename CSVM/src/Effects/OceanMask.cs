@@ -340,7 +340,9 @@ internal sealed class OceanMask
             int cn = walker.ColorCount;
             vertexColor = new Color((float)(walker.R / cn), (float)(walker.G / cn), (float)(walker.B / cn)).SrgbToLinear();
         }
-        var raster = OceanMaskRaster.Run(walker.Tris.ToArray(), vertexColor.LinearToSrgb(), OceanMaskRaster.DefaultBands);
+        var tris = walker.Tris.ToArray();
+        OceanMaskRaster.TintUnder(tris, walker.SeaTiles, vertexColor.LinearToSrgb());
+        var raster = OceanMaskRaster.Run(tris, vertexColor.LinearToSrgb(), OceanMaskRaster.DefaultBands);
         Lap(ref t0);
         result.Width = raster.Width;
         result.Height = raster.Height;
@@ -451,6 +453,9 @@ internal sealed class OceanMask
         }
 
         public List<Tri> Tris { get; } = new();
+
+        // The painted sea tiles' triangles, indices into Tris.
+        public List<int> SeaTiles { get; } = new();
 
         public List<float> UvSamples { get; } = new();
 
@@ -672,6 +677,8 @@ internal sealed class OceanMask
                 {
                     // Its waterline waits for the profiles, read once the base sheet is known.
                     kind = Kind.Coast;
+                    if (seaTile)
+                        SeaTiles.Add(Tris.Count);
                     _coasts.Add(new PendingCoast(Tris.Count, stem, water, uv.Length > 0 ? uv[i0] : default, uv.Length > 0 ? uv[i1] : default, uv.Length > 0 ? uv[i2] : default));
                 }
                 else if (water && (seaLevel || (isBase && foot)))

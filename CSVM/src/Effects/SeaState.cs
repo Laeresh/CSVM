@@ -47,7 +47,7 @@ public sealed record SeaState
         new("swell_full", "Swell ramp full (m)", Coast, 16f, OceanMaskRaster.ShoreReach, 1f, s => s.SwellFull, (s, v) => s with { SwellFull = v },
             "the mask stops at 160 m; farther needs a rebake"),
         new("look_from", "Look ramp from (m)", Coast, 0f, OceanMaskRaster.ShoreReach - RampGap, 1f, s => s.LookFrom, (s, v) => s with { LookFrom = v },
-            "0 runs the look to a solid shore; keep a texel where an opaque coast tile meets the sea"),
+            "0 runs the look to the land"),
         new("look_full", "Look ramp full (m)", Coast, RampGap, OceanMaskRaster.ShoreReach, 1f, s => s.LookFull, (s, v) => s with { LookFull = v }),
         new("tint_r", "Tint red", Coast, 0.5f, 1.5f, 0.01f, s => s.TintR, (s, v) => s with { TintR = v }),
         new("tint_g", "Tint green", Coast, 0.5f, 1.5f, 0.01f, s => s.TintG, (s, v) => s with { TintG = v }),
@@ -117,16 +117,14 @@ public sealed record SeaState
     /// <summary>TUNE. Where the swell reaches full height, at most the mask's reach.</summary>
     public float SwellFull { get; init; } = OceanMaskRaster.ShoreReach;
 
-    /// <summary>TUNE. Metres from the shore over which the look (slope, chop, foam, texture) fades in. Where
-    /// an opaque coast tile meets the sea it wants at least one mask texel. The ocean then matches the
-    /// flat sheet over the texel the linear filter blends into the tile. A solid shore has no such
-    /// seam, since the sheet is hidden there, so 0 runs the look to the land.</summary>
+    /// <summary>TUNE. Metres from the shore over which the look (slope, chop, foam) fades in. 0 runs it
+    /// to the land.</summary>
     public float LookFrom { get; init; } = 12f;
 
     /// <summary>TUNE. Where the look is full.</summary>
     public float LookFull { get; init; } = 64f;
 
-    /// <summary>A multiplier on the open sea's colour, red channel. The shore keeps the sheet's own.</summary>
+    /// <summary>A multiplier on the sea's colour, red channel.</summary>
     public float TintR { get; init; } = 1f;
 
     /// <summary>The open sea's colour multiplier, green channel.</summary>
