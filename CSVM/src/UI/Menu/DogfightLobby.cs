@@ -126,6 +126,7 @@ public sealed class DogfightLobby
     private readonly Dictionary<int, DogfightRosterMessage> _rosterSent = new();
     private readonly Dictionary<int, LobbyPlaneRulesMessage> _rulesSent = new();
     private readonly Dictionary<int, LobbyTeamsMessage> _teamsSent = new();
+    private readonly Dictionary<int, LobbyCourseMessage> _courseSent = new();
     private readonly List<PlaneRefusal> _refusals = new();
     private readonly NetTeamBook _teams;
     private readonly DogfightBots _bots = new();
@@ -141,6 +142,11 @@ public sealed class DogfightLobby
 
     // How many seats flew when this machine marked Ready. A change in them clears the mark.
     private int _readySeats;
+    // The host's course and its word, null until a course was first picked. A guest's parse of the
+    // word it last heard, kept until another arrives.
+    private Flight.Modes.Course? _course;
+    private LobbyCourseMessage? _courseWord;
+    private (LobbyCourseMessage Word, Flight.Modes.Course? Course, string Refusal)? _heard;
     private string[] _launchNames = Array.Empty<string>();
     private DogfightScore[] _scores = Array.Empty<DogfightScore>();
     private RaceTableRow[] _raceScores = Array.Empty<RaceTableRow>();
@@ -274,6 +280,17 @@ public sealed class DogfightLobby
     public DogfightOptionsMessage Options => IsHost
         ? _options with { HostLandsOnScores = Shown }
         : _wire.DogfightOptions ?? _options with { Epoch = 0 };
+
+    /// <summary>The course a Stunt Race flies here, null for the Danger Zones. The host reads its own
+    /// pick. A guest reads the host's course once its JSON parses and matches the hash it came with.</summary>
+    public Flight.Modes.Course? Course => IsHost ? _course : Heard().Course;
+
+    /// <summary>Why a guest refused the host's course, empty when it took it or heard none.</summary>
+    public string CourseRefusal => IsHost ? "" : Heard().Refusal;
+
+    /// <summary>The course word every machine's launch builds its run from: the host's own, or the
+    /// one a guest holds. Null for the Danger Zones.</summary>
+    public LobbyCourseMessage? CourseWord => IsHost ? (_course == null ? null : _courseWord) : _wire.Course;
 
     /// <summary>The stock airframe this pilot picked, an index into the eleven.</summary>
     public byte Airframe => _picks[0].Airframe;
@@ -633,6 +650,37 @@ public sealed class DogfightLobby
     /// on 0 lives and a pilot on 0 counts as alive after its first death.</summary>
     public static int ClampLives(int lives) => Math.Clamp(lives, 1, MaxLives);
 
+    /// <summary>Whether <paramref name="course"/> goes on the wire in one lobby message, the test that
+    /// leaves an oversize course out of the lobby's course list.</summary>
+    public static bool CourseFits(Flight.Modes.Course course) => WordFor(0, course).Fits;
+
+    /// <summary>The word that carries <paramref name="course"/> under round <paramref name="epoch"/>.</summary>
+    public static LobbyCourseMessage WordFor(byte epoch, Flight.Modes.Course course) =>
+        new(epoch, course.Chapter, course.Name, course.Hash, course.ToJson());
+
+    /// <summary>The course a host's <paramref name="word"/> carries, or null with the one refusal a
+    /// lobby and a launch both show. Refused: no word, a word naming a course other than
+    /// <paramref name="wanted"/> (a lobby passes none), and JSON that does not parse or hash as sent.</summary>
+    public static Flight.Modes.Course? CourseOf(LobbyCourseMessage? word, (string Chapter, string Name)? wanted, out string refusal)
+    {
+        if (word is not { } sent)
+        {
+            refusal = "the host's course has not arrived";
+            return null;
+        }
+
+        if (wanted is { } launch && (!string.Equals(sent.Chapter, launch.Chapter, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(sent.Name, launch.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            refusal = $"the host's course is {sent.Chapter}/{sent.Name}";
+            return null;
+        }
+
+        var course = Flight.Modes.Course.FromWire(sent.Chapter, sent.Name, sent.Hash, sent.Json, out string error);
+        refusal = course == null ? $"the host's course {sent.Chapter}/{sent.Name} is refused: {error}" : "";
+        return course;
+    }
+
     /// <summary>The lobby notice of one team event, the original's langui 10503 to 10505 lines.
     /// </summary>
     public static string TeamLine(NetTeamEventKind kind, string player, string team) => kind switch
@@ -715,6 +763,28 @@ public sealed class DogfightLobby
     /// Flag.</summary>
     public bool SetFlagHomeToCapture(bool required) =>
         IsCtf(_options) && Change(_options with { FlagHomeToCapture = required });
+
+    /// <summary>Picks <paramref name="course"/> for a Stunt Race, null for the Danger Zones. A new
+    /// course starts a new round and goes to every guest, and to each one that joins later. Refused
+    /// on a guest and for a course past the message's limit.</summary>
+    public bool SetCourse(Flight.Modes.Course? course)
+    {
+        if (!IsHost || (course != null && !CourseFits(course)))
+        {
+            return false;
+        }
+
+        if (course == null ? _course == null : _course != null && WordFor(0, course) == WordFor(0, _course))
+        {
+            return true;
+        }
+
+        _course = course;
+        _options = _options with { Epoch = NextEpoch() };
+        _ready = false;
+        _courseWord = course == null ? LobbyCourseMessage.None(_options.Epoch) : WordFor(_options.Epoch, course);
+        return true;
+    }
 
     /// <summary>Creates a team under <paramref name="name"/> with this pilot its captain. A guest
     /// asks its host. Refused while this pilot is Ready or on a team, and for a blank name.</summary>
@@ -1333,6 +1403,24 @@ public sealed class DogfightLobby
     // Round 0 is a guest's "heard nothing", so the count wraps past it.
     private byte NextEpoch() => (byte)(_options.Epoch == byte.MaxValue ? 1 : _options.Epoch + 1);
 
+    // A guest parses each word once, when it differs from the last one heard.
+    private (Flight.Modes.Course? Course, string Refusal) Heard()
+    {
+        if (_wire.Course is not { } word)
+        {
+            return (null, "");
+        }
+
+        if (_heard is not { } heard || heard.Word != word)
+        {
+            var course = CourseOf(word, null, out string refusal);
+            heard = (word, course, refusal);
+            _heard = heard;
+        }
+
+        return (heard.Course, heard.Refusal);
+    }
+
     private string OwnName() => NetSeats.ShownName(_name(), IsHost);
 
     private void Add(LobbyChatMessage line)
@@ -1483,6 +1571,13 @@ public sealed class DogfightLobby
                 _rulesSent[peer] = rules;
             }
 
+            // The course goes before its round's options, so a Ready under that round heard it.
+            if (_courseWord is { } course && (!_courseSent.TryGetValue(peer, out var had) || had != course))
+            {
+                _wire.Tell(peer, course);
+                _courseSent[peer] = course;
+            }
+
             if (!_optionsSent.TryGetValue(peer, out var sent) || sent != Options)
             {
                 _wire.Tell(peer, Options);
@@ -1514,6 +1609,7 @@ public sealed class DogfightLobby
                 _rosterSent.Remove(gone);
                 _rulesSent.Remove(gone);
                 _teamsSent.Remove(gone);
+                _courseSent.Remove(gone);
             }
         }
     }

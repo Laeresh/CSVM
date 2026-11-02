@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace CSVM.Net;
 
@@ -92,6 +93,84 @@ public readonly record struct DogfightOptionsMessage(
         writer.WriteUInt16(0);
         return writer.Close();
     }
+}
+
+/// <summary>
+/// A Stunt Race host's course as one guest reads it, under the round the host picked it in. The
+/// chapter and name are the file's path, the id every machine keys the course by. Then come its
+/// <c>Course.Hash</c> and the course file's JSON whole. The host sends it to each guest when it
+/// picks a course and to each guest that joins. An empty name is the host's word that it flies the
+/// Danger Zones. Kept in the lobby, its width following its text up to <see cref="MaxSize"/>.
+/// </summary>
+public readonly record struct LobbyCourseMessage(byte Epoch, string Chapter, string Name, string Hash, string Json)
+    : INetMessage<LobbyCourseMessage>
+{
+    /// <summary>The widest message, header included, which the header's 16-bit length bounds. Both
+    /// carriers deliver a reliable payload this wide whole (the <c>enet-transport</c> and
+    /// <c>webrtc-transport</c> suites send one), so a course over it is never offered.</summary>
+    public const int MaxSize = ushort.MaxValue;
+
+    // The header, the round and the four strings' counts.
+    private const int FixedBytes = NetMessage.HeaderBytes + 1 + (4 * 2);
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.LobbyCourse;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>Whether this is the host's word that it flies no course.</summary>
+    public bool IsNone => string.IsNullOrEmpty(Name);
+
+    /// <summary>The bytes this message takes on the wire, header included. A default message's
+    /// missing strings write as empty ones.</summary>
+    public int Size => FixedBytes + Bytes(Chapter) + Bytes(Name) + Bytes(Hash) + Bytes(Json);
+
+    /// <summary>Whether this message is no wider than <see cref="MaxSize"/>, so it can be sent.</summary>
+    public bool Fits => Size <= MaxSize;
+
+    /// <summary>The host's word, under round <paramref name="epoch"/>, that it flies no course.</summary>
+    public static LobbyCourseMessage None(byte epoch) => new(epoch, "", "", "", "");
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out LobbyCourseMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Valid || reader.Type != Type || reader.Length < FixedBytes)
+            return false;
+
+        byte epoch = reader.ReadByte();
+        string chapter = reader.ReadString();
+        string name = reader.ReadString();
+        string hash = reader.ReadString();
+        string json = reader.ReadString();
+        if (!reader.Valid || reader.Position != reader.Length)
+            return false;
+
+        message = new LobbyCourseMessage(epoch, chapter, name, hash, json);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>⚠ Throws on a message past <see cref="MaxSize"/>: its counts would wrap.</remarks>
+    public int Write(Span<byte> into)
+    {
+        if (!Fits)
+        {
+            throw new InvalidOperationException($"a course message of {Size} bytes passes the {MaxSize}-byte limit");
+        }
+
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Epoch);
+        writer.WriteString(Chapter ?? "");
+        writer.WriteString(Name ?? "");
+        writer.WriteString(Hash ?? "");
+        writer.WriteString(Json ?? "");
+        return writer.Close();
+    }
+
+    private static int Bytes(string? text) => text == null ? 0 : Encoding.UTF8.GetByteCount(text);
 }
 
 /// <summary>One row of a Dogfight lobby's player list: the pilot's name, its stock airframe, its

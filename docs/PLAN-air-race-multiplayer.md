@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, the course on the wire
 
-1. ☐ The host's lobby sends its course to every guest, and each machine builds the run from that copy (#277)
+1. ☑ The host's lobby sends its course to every guest, and each machine builds the run from that copy (#277)
 2. ☐ The network race carries a course run: variable-length splits, penalty times, score keys (#277)
 
 ### Wave B, course bots
@@ -103,7 +103,27 @@ parallel.
 
 # Wave A, the course on the wire
 
-## A1 ☐ The host's lobby sends its course to every guest, and each machine builds the run from that copy
+## A1 ☑ The host's lobby sends its course to every guest, and each machine builds the run from that copy
+
+**Landed.** A Stunt Race host's course travels as `LobbyCourseMessage` (`0x6C`, reliable, host to
+each guest: round, chapter, name, `Course.Hash`, the JSON whole; an empty name is the Danger
+Zones), in `CSVM/src/Net/NetDogfightMessages.cs` over a counted UTF-8 field added to
+`NetMessageWriter.cs`. `DogfightLobby.SetCourse` is the host's pick: a new round, the word sent
+ahead of that round's options to every guest and to each one seated later, refused on a guest and
+for a course `DogfightLobby.CourseFits` leaves out. `NetLobby.Course` holds a guest's word (a host
+that advertises takes none), and `DogfightLobby.Course` is the guest's copy once
+`DogfightLobby.CourseOf` parses it and the hash matches (`CourseRefusal` says why not); the launch
+runs the same check. `LauncherContext.NetCourse` (wired by `NetFlight.WithNet` from
+`DogfightLobby.CourseWord` on every machine of a lobby flight) reaches `SessionNet.HostCourse`, and
+`GameSession.ResolveCourse` builds the run from that word in place of the library; a guest keeps
+it through `CourseLibrary.SaveIfAbsent`, which never overwrites a same-named file. The limit is
+`LobbyCourseMessage.MaxSize`, the header's 65535 bytes; the WebRTC data channel carries a
+262140-byte payload and refuses a 262144-byte one, so the header is the binding cap on both
+carriers. The network refusal in `SessionSpec.CourseRefusal` stands (C22 lifts it).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A guest who lacks the host's course file, or holds a different file under the same name,
 flies the host's course: the course reaches the guest in the lobby, the launch builds every

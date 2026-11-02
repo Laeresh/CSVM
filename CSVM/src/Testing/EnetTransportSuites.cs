@@ -64,7 +64,8 @@ internal static class EnetTransportSuites
         "the shipped ENet carrier hosts and joins itself over 127.0.0.1 inside one process: the "
         + "carrier selection hands this build that socket, each "
         + "end is told the other joined, nothing arrives until a step runs, a reliable payload "
-        + "round trips on its own channel with its bytes and its sender intact, an "
+        + "round trips on its own channel with its bytes and its sender intact, one as wide as the "
+        + "lobby's course message at its limit lands whole, an "
         + "unreliable-sequenced burst is never delivered behind a newer payload, a plain "
         + "unreliable payload carries, and a hang-up empties both rosters and swallows the sends "
         + "that follow it")]
@@ -580,6 +581,15 @@ internal static class EnetTransportSuites
         bool returned = back != null && back.Peer == 1 && back.Channel == 3 && back.Bytes.SequenceEqual(answer);
         ctx.Check(returned,
             $"and the answer reaches the guest the same way (peer {back?.Peer}, channel {back?.Channel}, {back?.Bytes.Length} of {answer.Length} bytes)");
+
+        // The lobby's widest message, a course at its limit, crosses as one reliable payload.
+        atGuest.Payloads.Clear();
+        byte[] widest = Payload(0x3C, LobbyCourseMessage.MaxSize);
+        host.Send(guestPeer, widest, NetReliability.Reliable, channel: 0);
+        Pump(host, guest, () => atGuest.Payloads.Count > 0);
+        var course = atGuest.Payloads.FirstOrDefault();
+        ctx.Check(course != null && course.Bytes.SequenceEqual(widest),
+            $"a reliable payload as wide as the lobby's course message at its limit lands whole ({course?.Bytes.Length} of {widest.Length} bytes)");
     }
 
     private static void SequencedBurst(TestContext ctx, EnetTransport host, EnetTransport guest,

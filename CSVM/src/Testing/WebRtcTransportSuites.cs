@@ -21,7 +21,8 @@ internal static class WebRtcTransportSuites
         "the WebRTC carrier hosts and joins itself in one process through an in-process master: the "
         + "host lists and is given a code, a guest joining by it is numbered 2 and both ends are told "
         + "the other joined, the guest closes its master socket once linked, a reliable payload round "
-        + "trips on its own channel, a sequenced burst is never delivered behind a newer payload, a "
+        + "trips on its own channel, one as wide as the lobby's course message at its limit lands "
+        + "whole, a sequenced burst is never delivered behind a newer payload, a "
         + "plain unreliable payload carries, a hang-up drops the guest's link with a reason, and a "
         + "code nobody listed fails the join with the master's reason")]
     internal static void HostAndJoinThroughALoopbackMaster(TestContext ctx)
@@ -73,6 +74,16 @@ internal static class WebRtcTransportSuites
             ctx.Check(atHost.Payloads.Count == 1 && atHost.Payloads[0].Peer == 2 && atHost.Payloads[0].Channel == NetChannels.Events
                 && atHost.Payloads[0].Bytes.SequenceEqual(new byte[] { 1, 2, 3 }),
                 $"a reliable payload lands at the host with its sender, channel and bytes ({atHost.Payloads.Count})");
+
+            // A data channel refuses a frame past 256 KiB, where ENet fragments any, so the lobby's
+            // widest message is sent whole here too.
+            var widest = new byte[LobbyCourseMessage.MaxSize];
+            new Random(5).NextBytes(widest);
+            host.Send(2, widest, NetReliability.Reliable, NetChannels.Events);
+            Pump(host, guest, () => atGuest.Payloads.Count > 0);
+            ctx.Check(atGuest.Payloads.Count == 1 && atGuest.Payloads[0].Bytes.SequenceEqual(widest),
+                $"a reliable payload as wide as the lobby's course message at its limit lands whole ({atGuest.Payloads.FirstOrDefault().Bytes?.Length ?? 0} of {widest.Length} bytes)");
+            atGuest.Payloads.Clear();
 
             int channel = NetChannels.ForSeat(1);
             for (int i = 0; i < 20; i++)

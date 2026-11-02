@@ -405,7 +405,7 @@ above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
 the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
-line and race call at `0x67` to `0x6A` ("Stunt race" below), and the lobby's co-op persisted object at `0x6B`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+line and race call at `0x67` to `0x6A` ("Stunt race" below), and the lobby's co-op persisted object at `0x6B`, and a Stunt Race host's course at `0x6C` ("Dogfight lobby" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -1258,7 +1258,7 @@ machine builds each of those seats as that guest's, and the guest flies one pane
 
 ### Dogfight lobby
 
-The Multiplayer Lobby runs over five more lobby messages, minted at `0x53` to `0x55`, `0x5D` and `0x5E`, and the two of "Lobby teams" below, with a
+The Multiplayer Lobby runs over six more lobby messages, minted at `0x53` to `0x55`, `0x5D`, `0x5E` and `0x6C`, and the two of "Lobby teams" below, with a
 guest's plane and Ready riding the co-op pick at `0x51` under the lobby's own round. None reaches a
 session.
 
@@ -1269,6 +1269,7 @@ session.
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 40 bytes at 4, the line in 84 bytes at 44 (128 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (each of its seats' picks) and host to each guest (every seat, at launch) | seat at 4 (a guest's own seat from `0xFF` for its first down to `0xFC` for its fourth, a launch seat below `0xFC`), flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
+| `0x6C` | Stunt Race course | reliable, host to each guest | round at 4, then four strings, each a 16-bit byte count and that many bytes of UTF-8: the chapter, the name (the file's stem, empty for the Danger Zones), `Course.Hash` and the course file's JSON (at most 65535 bytes in all) |
 
 Any option change advances the round and clears every Ready, the host's own included, so a player
 is never launched on options it did not see. A guest's changed pick clears that guest's own Ready,
@@ -1290,6 +1291,20 @@ window. No wire version guards the value: two builds play together only on the s
 provided the type ships in a minor release. A build without it, given type 3, would name no type,
 describe the lobby as Zeppelin vs Zeppelin and fly a Deathmatch on `MP1` while its host races, so
 type 3 must not reach a patch release of a minor that lacks it.
+
+**An authored course for the race.** A host that picks an authored course sends `0x6C` to every
+guest, and to each guest seated later, ahead of that round's options; the pick starts a round as an
+option does, and an empty name is its word that the race flies the Danger Zones again. A guest
+parses the JSON and takes it only when its gates hash to the hash sent, and a lobby flight's
+launch builds every machine's run from that one copy, the host's included, never from a local file
+of the same name. A guest with no file of that name, shipped or in its game folder, keeps the copy
+at `<dataRoot>/Courses/<chapter>/<name>.json`; a same-named file is never overwritten, and a best
+records under the host course's hash either way. The name is the id the course is keyed by; its
+title is display only. The message is the one lobby message whose width follows its text, capped
+at the header's 65535 bytes. ENet fragments a large reliable packet; the WebRTC carrier's data
+channel carries a 262140-byte payload behind its four-byte frame and refuses a 262144-byte one, a
+256 KiB frame cap. The header's cap is thus the binding one on both carriers, and a course wider
+than it is never offered.
 
 A custom plane crosses whole, where the original's player data leaves out the engine, the armour
 and the hardpoints. The shooter decides a hit here, so every copy of a plane needs its owner's hit

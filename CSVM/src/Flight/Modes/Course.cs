@@ -160,6 +160,21 @@ public sealed record Course(
         }
     }
 
+    /// <summary>The course a host sent as <paramref name="json"/> under <paramref name="chapter"/> and
+    /// <paramref name="name"/>, or null with the reason. The JSON must parse, and its <see cref="Hash"/>
+    /// must be the <paramref name="hash"/> it was sent with.</summary>
+    public static Course? FromWire(string chapter, string name, string hash, string json, out string error)
+    {
+        var course = Parse(chapter, name, json, out error);
+        if (course != null && !string.Equals(course.Hash, hash, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"its gates hash to {course.Hash}, not the {hash} the host sent";
+            return null;
+        }
+
+        return course;
+    }
+
     /// <summary>The course as indented JSON, the shape <see cref="Parse"/> reads. The top level holds
     /// <c>version</c>, <c>title</c> where one is set, <c>start</c> {<c>pos</c>, <c>heading</c>},
     /// <c>gates</c> and <c>sequence</c>.

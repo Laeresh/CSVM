@@ -349,6 +349,7 @@ internal sealed class NetFlight
         NetSeatBuild = _coopFlight || _lobbyFlight ? SeatBuild : null,
         NetCoopWingman = _coopFlight && !_isHost && Door is { } coopDoor ? () => coopDoor.CoopWingman : null,
         NetCoopPersisted = _coopFlight && !_isHost && Door is { } logDoor ? () => logDoor.CoopPersisted : null,
+        NetCourse = _lobbyFlight && Door?.Dogfight is { } courseLobby ? () => courseLobby.CourseWord : null,
         NetTeamNames = _lobbyFlight && Door?.Dogfight is { } teamLobby ? SeatFields.TeamNames(teamLobby.Teams) : null,
         VersusLobbyLanding = _lobbyFlight && LandsOnScores(_isHost, Door?.Dogfight) ? lobbyLanding : null,
     };

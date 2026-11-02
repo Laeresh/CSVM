@@ -143,6 +143,8 @@ public partial class GameSession : Node3D
     // Base (chapter-independent) paths, settled by the Launcher and handed in via the context.
     // StartSession reads them each build and recomputes the chapter-dependent paths from the spec.
     private readonly BasePaths _paths;
+    // The launch context's course library, null for the data root's.
+    private readonly CourseLibrary? _courses;
     private readonly DecodeCache? _decode;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
     // --destroy= probe wrappers below delegate to it (see src/Tooling/ProbeRunner.cs).
@@ -345,6 +347,7 @@ public partial class GameSession : Node3D
         _spec = CampaignDirector.ResolveSeatedPlane(
             ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.Paths.Data.Zrdr), ctx.Paths.Data));
         _paths = ctx.Paths;
+        _courses = ctx.Courses;
         _decode = ctx.Decode;
         _probeRunner = ctx.ProbeRunner;
         _captureDirector = ctx.CaptureDirector;
@@ -877,7 +880,7 @@ public partial class GameSession : Node3D
         }
         if (gamez != null)
         {
-            _labs!.BuildCourseLab(CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
+            _labs!.BuildCourseLab(Courses(), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
         }
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
@@ -1397,9 +1400,10 @@ public partial class GameSession : Node3D
         }
     }
 
-    // --course=: the course from whichever source wins it, its run and its gate motion. A course
-    // this launch cannot fly fails the build, since the Danger Zones in its place would pass for
-    // it. A command line quits with exit 1; a menu launch leaves MenuRefusal for the menu to show.
+    // --course=: the course (a lobby host's word, else the library's winning file), its run and its
+    // gate motion. A course this launch cannot fly fails the build, since the Danger Zones in its
+    // place would pass for it. A command line quits with exit 1; a menu launch leaves MenuRefusal
+    // for the menu to show.
     private bool ResolveCourse()
     {
         _courseRun = null;
@@ -1411,7 +1415,11 @@ public partial class GameSession : Node3D
         string? refusal = _spec.CourseRefusal;
         if (refusal == null)
         {
-            if (CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det).Load(wanted.Chapter, wanted.Name, out string error) is not { } course)
+            var library = Courses();
+            var course = _wire.HostCourse is { } held
+                ? HostsCourse(held(), wanted, library, out string error)
+                : library.Load(wanted.Chapter, wanted.Name, out error);
+            if (course == null)
             {
                 refusal = error;
             }
@@ -1437,6 +1445,21 @@ public partial class GameSession : Node3D
         Log.Error("flight", $"--course={wanted.Chapter}/{wanted.Name}: {refusal}; refusing the launch");
         GetTree().Quit(1);
         return false;
+    }
+
+    private CourseLibrary Courses() => _courses ?? CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det);
+
+    // A lobby flight flies the host's word on every machine, never a local file of the same name.
+    // A guest with no file of that name keeps the course in its game folder.
+    private Course? HostsCourse(Net.LobbyCourseMessage? word, (string Chapter, string Name) wanted, CourseLibrary library, out string error)
+    {
+        var course = UI.Menu.DogfightLobby.CourseOf(word, wanted, out error);
+        if (course != null && _wire.Link is { IsHost: false })
+        {
+            library.SaveIfAbsent(course);
+        }
+
+        return course;
     }
 
     // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is built, so

@@ -350,7 +350,7 @@ rows).
 - `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the optional display title, the JSON shape and the layout hash.
 - `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon gate rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
 - `src/Flight/Modes/CourseElements.cs`, a course gate's touch volumes on `CourseGateShape`'s sizes (course pylon cones, ring rim tube, balloons), the +3 s penalty and the `CourseTouch` event record.
-- `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
+- `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load, save, and a network host's course kept where no file of its name stands.
 - `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
 - `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: course pylon bases and taper, ring tube, balloons and tethers.
 - `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, a red cross on the run's next gate seen from its wrong side and a dim fill on the one after.
@@ -1069,11 +1069,11 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
 - `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
-- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, the team action and team list, and Capture the Flag's ask and flag table.
+- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, the team action and team list, a Stunt Race host's course, and Capture the Flag's ask and flag table.
 - `src/Net/NetRaceMessages.cs`, a network stunt race's messages: an owner's run report to the host, the host's race clock, and one racer's leaderboard line with its splits.
 - `src/Net/NetTeams.cs`, the team core every team mode shares: a host's free-form named teams and the team launch check.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
-- `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.
+- `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text and one counted string form.
 - `src/Net/NetClockSlew.cs`, a guest's offset onto host time, walked to each fresh reading over a bounded window rather than written, with one-way readings read forward by half the measured round trip.
 - `src/Net/NetClockPing.cs`, the guest's question and the host's answer that measure the round trip, asked every ten seconds as the original's ping is.
 - `src/Net/NetHandshake.cs`, what a host hands a joining guest before either flies: the master seed every stream derives from, and the host's session clock at send.

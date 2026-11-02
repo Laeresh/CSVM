@@ -110,6 +110,15 @@ public ref struct NetMessageWriter
 
         _at += bytes;
     }
+
+    /// <summary>Appends <paramref name="value"/> as UTF-8 behind its 16-bit byte count, the one
+    /// field form whose width follows its text. The caller sizes the buffer for it.</summary>
+    public void WriteString(string value)
+    {
+        int count = Encoding.UTF8.GetBytes(value, _buffer[(_at + 2)..]);
+        BinaryPrimitives.WriteUInt16LittleEndian(_buffer[_at..], checked((ushort)count));
+        _at += 2 + count;
+    }
 }
 
 /// <summary>
@@ -221,5 +230,28 @@ public ref struct NetMessageReader
         Span<char> chars = stackalloc char[text.Length];
         int count = Encoding.UTF8.GetChars(text, chars);
         return new string(chars[..count]);
+    }
+
+    /// <summary>Reads a field <see cref="NetMessageWriter.WriteString"/> wrote. A count that runs
+    /// past the declared length, or bytes that are not UTF-8, clear <see cref="Valid"/> and read as
+    /// empty. What reads back thus re-encodes to the same bytes.</summary>
+    public string ReadString()
+    {
+        if (!Valid || _at + 2 > Length)
+        {
+            Valid = false;
+            return "";
+        }
+
+        int count = ReadUInt16();
+        if (_at + count > Length || !System.Text.Unicode.Utf8.IsValid(_buffer.Slice(_at, count)))
+        {
+            Valid = false;
+            return "";
+        }
+
+        string text = Encoding.UTF8.GetString(_buffer.Slice(_at, count));
+        _at += count;
+        return text;
     }
 }

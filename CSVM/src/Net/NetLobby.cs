@@ -48,8 +48,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
     private readonly List<(int Peer, LobbyTeamActionMessage Action)> _teamActions = new();
 
-    // Wide enough for the widest lobby message, the Dogfight team list.
-    private readonly byte[] _scratch = new byte[Math.Max(DogfightRosterMessage.Size, LobbyTeamsMessage.Size)];
+    // Wide enough for the widest lobby message, a course at its limit.
+    private readonly byte[] _scratch = new byte[Math.Max(Math.Max(DogfightRosterMessage.Size, LobbyTeamsMessage.Size), LobbyCourseMessage.MaxSize)];
     private INetTransportListener? _listener;
     private SessionAdvertMessage? _advertising;
 
@@ -173,6 +173,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 
     /// <summary>The Dogfight host's latest team list, or null while none has arrived.</summary>
     public LobbyTeamsMessage? Teams { get; private set; }
+
+    /// <summary>The Stunt Race host's latest course, or null while none has arrived and once the
+    /// host's word is that it flies the Danger Zones.</summary>
+    public LobbyCourseMessage? Course { get; private set; }
 
     /// <summary>The advert this end hands out, or null while it hands out none.</summary>
     public SessionAdvertMessage? Advertising => _advertising;
@@ -676,13 +680,25 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         return true;
     }
 
-    // The Dogfight lobby's six messages. A chat or team action inbox past the held depth drops its
+    // The Dogfight lobby's seven messages. A chat or team action inbox past the held depth drops its
     // oldest entry, so a lobby nobody reads cannot grow without bound.
     private bool TakeDogfight(int peer, ReadOnlySpan<byte> payload)
     {
         if (DogfightOptionsMessage.TryRead(payload, out var options))
         {
             DogfightOptions = options;
+            return true;
+        }
+
+        // ⚠ Only a guest takes a course, and a guest is linked to its host alone. A host that
+        // advertises drops one, so no guest can push a course through it.
+        if (LobbyCourseMessage.TryRead(payload, out var course))
+        {
+            if (_advertising == null)
+            {
+                Course = course.IsNone ? null : course;
+            }
+
             return true;
         }
 

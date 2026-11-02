@@ -111,20 +111,49 @@ public sealed class CourseLibrary
         ArgumentNullException.ThrowIfNull(course);
         string root = (target == CourseSource.Shipped ? Shipped : GameFolder)
             ?? throw new InvalidOperationException("this library reads no game folder");
-        foreach (string part in new[] { course.Chapter, course.Name })
-        {
-            if (part.Length == 0 || part.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
-            {
-                throw new ArgumentException($"course chapter and name must be file names, got \"{part}\"");
-            }
-        }
-
+        RequireFileNames(course);
         string folder = System.IO.Path.Combine(root.Contains("://") ? Globalize(root) : root, course.Chapter);
         Directory.CreateDirectory(folder);
         string path = System.IO.Path.Combine(folder, course.Name + Extension);
         AtomicFile.WriteAllText(path, course.ToJson());
         Log.Info("flight", $"course saved: {course.Chapter}/{course.Name} -> {path}");
         return path;
+    }
+
+    /// <summary>Keeps a host's <paramref name="course"/> in the game folder when neither root has a
+    /// file of its name in its chapter, and returns the path written. Null when one stands, when
+    /// the library reads no game folder, or when the write failed, which is logged.
+    /// ⚠ A same-named file is never overwritten, whatever it holds.</summary>
+    public string? SaveIfAbsent(Course course)
+    {
+        ArgumentNullException.ThrowIfNull(course);
+        try
+        {
+            // ⚠ Checked before the listing, which would otherwise read outside the root for a host's "..".
+            RequireFileNames(course);
+            if (GameFolder is null || List(course.Chapter).Any(f => string.Equals(f.Name, course.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return null;
+            }
+
+            return Save(course, CourseSource.GameFolder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Log.Warn("flight", $"course {course.Chapter}/{course.Name}: not kept in the game folder ({e.Message})");
+            return null;
+        }
+    }
+
+    private static void RequireFileNames(Course course)
+    {
+        foreach (string part in new[] { course.Chapter, course.Name })
+        {
+            if (part.Length == 0 || part is "." or ".." || part.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
+            {
+                throw new ArgumentException($"course chapter and name must be file names, got \"{part}\"");
+            }
+        }
     }
 
     private static IEnumerable<string> Names(string folder)
