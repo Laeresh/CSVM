@@ -1116,12 +1116,12 @@ public partial class GameSession : Node3D
         // so the launch frame carries only what puts the aeroplane in the world; this is where the
         // rest of it lands, on the frames after.
         _flightRoster?.PumpDeferredCrashRigs();
-        // Entities switched off as unplaced but since moved off the world origin are put back: a
-        // motion starting is the proof a definition owns them. ⚠ Do not defer this once instead of
-        // polling, and keep it on wall time: an OnCall definition can start its motion at any time.
+        // Entities switched off as unplaced but since moved off the world origin are put back. ⚠ Poll,
+        // never defer once: an OnCall definition can start its motion at any time. Wall time live;
+        // --det counts sim time, so a golden restores on the same frame on every machine.
         if (_unplacedWatch != null)
         {
-            _unplacedRecheck += delta;
+            _unplacedRecheck += _spec.Det && _clock != null ? _clock.FrameDt : delta;
             if (_unplacedRecheck >= 1.0)
             {
                 _unplacedRecheck = 0.0;
