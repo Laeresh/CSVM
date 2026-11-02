@@ -63,7 +63,7 @@ its own predicate, because the colliders and the tile census read that classific
 | 19 | How the cliff spray is drawn | **The original's water-splash sprites** (`hg_splasher`'s `splasher` puffer, retuned from an impact to a breaker), picked from contact sheets over a breaker cycle beside a camera-facing shader sheet, which stays opt-in as `--coast-spray=sheet` |
 | 20 | C3's cliffs, which stand 50 to 130 m behind the painted waterline | **No spray in C3**, off for the whole chapter in its sea (`"spray": 0` in `ocean_seas.json`): at its cliff feet the spray landed in the forest, far from the surf line |
 | 21 | Whether quay walls and bare rock off the painted coasts take spray | **Cliffs only.** The bare sites spray only with `--coast-spray=…,quays` |
-| 22 | The base sheet's tint at corners hidden under the tiles the ocean replaces, which spread straight-edged wedges into the visible sea | **The sheet corners under C1's sea tiles take the open sea's mean tint** (`OceanMaskRaster.TintUnder`). This departs from Original's authored inlet darkening, because the ocean shows what the tiles covered. C3's cliff tiles are not included yet; see C25 |
+| 22 | The base sheet's tint at corners hidden under the tiles the ocean replaces, which spread straight-edged wedges into the visible sea | **The sheet corners under C1's sea tiles take the open sea's mean tint** (`OceanMaskRaster.TintUnder`). This departs from Original's authored inlet darkening, because the ocean shows what the tiles covered. C3's cliff tiles stay out: C3's bright tint ring runs on under the alpha strips, and moving only the cliff tiles' corners darkens the near-shore sea and notches it where they meet the strips (C25, rendered in D31) |
 | 23 | How C3's opaque cliff tiles give way to the ocean | **Blended by alpha over 25 m seaward of the painted waterline**, measured by world distance from the inland image, as C2's beach blends, not dithered and not along each polygon's V; picked over 12 m and over the per-frame dither (C26) |
 | 24 | Where the swash ends on C3's cliff tiles | **It fades out over 4 m past the coastline**, since the tile still draws near-opaque there and a stop on the line showed one triangle's straight waterline; a carry as long as the 25 m blend filled the mask's sea pockets inside the tiles with foam (C26) |
 
@@ -156,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, landing
 
-31. ☐ Goldens re-pinned where the Enhanced look moves, the battery and perf green on the merged tree (#270)
+31. ☑ Goldens re-pinned where the Enhanced look moves, the battery and perf green on the merged tree (#270)
 
 ## Dependency and parallelism notes
 
@@ -783,7 +783,13 @@ chapter, with why the ocean cannot take it.
   more, also at 255. The bright band is one authored ring along every C3 coast, visible through the
   strips in Original. Giving the cliff tiles' corners the mean moves 187,184 sea texels of the tint by
   more than 4 levels, and in the tint image cuts straight-edged notches where the cliff tiles meet the
-  strips. That is the shape this rule exists to remove, so C3 is left as it is until a render settles it.
+  strips. That is the shape this rule exists to remove.
+- A render confirms the current rule: at the author's C3 pose and the first A3 cliff pose,
+  rendered current, tint forced white and with the cliff tiles' corners taking the mean,
+  C3's sea shows no straight-edged tint shape today, while the
+  extended rule darkens the near-shore sea over 17 to 18 % of each frame and draws a stepped,
+  notched edge where the cliff tiles' corners meet the strips', seen through the strips' water side
+  at the A3 pose (D31).
 
 **Approach.**
 1. The ocean's colour is `tex_mean * tint` everywhere. `sheet` keeps the normals' flattening, the
@@ -891,7 +897,61 @@ cliff poses and C2's beach, two widths, and frames over time at the author's pos
 
 # Wave D, landing
 
-## D31 ☐ Goldens re-pinned, the battery and perf green on the merged tree
+## D31 ☑ Goldens re-pinned, the battery and perf green on the merged tree
+
+**Verified.** The author saw the three new frames and the C3 tint montage, and ruled that `c2-city` stays pinned at c530a830 with its pacing defect filed as #282, not re-pinned. The complete battery with `-Perf` on the tree merged with main is green but for `c2-city`, and a goldens-only rerun on the re-pinned manifest holds 40 of 41. Perf holds: no scene stays above its baseline on an unchanged rerun (PERF-7), and the perf scenes run under Original, which this plan leaves byte-identical.
+
+**Landed.** Three Enhanced `--water-quality=waves` goldens pin the painted coasts at frame 120:
+`c1-coast-enhanced` (`water1_trans1`'s pose in C1's waterfall cove: the sea tiles stepping aside,
+breakers and swash on the rock overlay at the cliff foot, the spray puffs), `c2-beach-enhanced`
+(`beach1`'s first A1 pose: the strip's alpha fade over the waves, the surf and the swash on the sand)
+and `c3-coast-enhanced` (the author's C3 pose: a strip and a cliff tile, the 25 m blend and the
+swash). Each can fail (GOLD-18, METHOD-9): `--coast-spray=off` moves 2.22 % of the C1 frame by more
+than 4 levels, surf off (`--debug-ocean=surf_wash:0,surf_lines:0`) moves 5.69, 29.05 and 8.84 % of
+the C1, C2 and C3 frames, and `CoastRampMetres` at 12 m moves 13.22 % of the C3 frame. Each rendered
+one hash in three launches, one of them beside the battery's engine stage. Frame 120 against 121
+differs on 22.45, 19.51 and 24.26 % of the pixels.
+
+Five Enhanced goldens are re-pinned, each pixel-identical on the battery's re-render:
+
+| Golden | Old | New | Cause |
+|---|---|---|---|
+| `c1-lake-enhanced` | 9bff994b | 16ed21c4 | C22's terrain-shadow fix, look ramp and sand extension, C23's C1 surf, C24's spray (off: 1.16 % of the frame), C25's colour and `TintUnder` (off: 14.07 %, at most 26 levels, the cove's sea) |
+| `c1-rocket-hit-enhanced` | 1e12fb46 | f7e36dca | The same chain; spray and the tint each move it by at most 3 and 1 levels |
+| `c1b-ocean-enhanced` | f9b336f4 | db71ea00 | C22's terrain-shadow fix and C25's colour, C25's recorded hash; the tint leaves it |
+| `c1-cockpit-enhanced` | df5b6ee7 | 3e6f399b | C22's terrain-shadow fix and the later sea changes (C23's surf, C25's colour), not split further; spray and tint leave it |
+| `c1-cockpit-xr-sim-enhanced` | 6279deb5 | dc28876c | As `c1-cockpit-enhanced` |
+
+The two cockpit pins are main's #272 re-pins, so C22's recorded 926b90ad and 16a31671, measured
+before #272 merged in, no longer apply. Main's polygon patches move none of these: with C1's entries
+emptied the four C1 shots render the same hashes, and no Original golden moved. `c2-city` moved
+(c530a830 to 4c212470, 116 pixels: a sailboat and a car absent) and is not re-pinned: its frame
+depends on wall-clock pacing. `GameSession`'s unplaced-entity recheck runs on wall time once a
+second, and on this machine the 120 sim frames now finish before it first fires, so the 17 route
+vehicles and boats stay switched off; the same render at 095789b2d gives 4c212470, and Godot's
+`--frame-delay 20` brings back the restore and c530a830.
+
+The complete battery with `-Perf`: units 8,144 passed, 0 failed, 6 skipped; engine 641 passed, 0
+failed, 2 skipped, engine errors clean; goldens 41, 35 held and 6 moved, every Original golden but
+`c2-city` held; perf 8/8. A goldens-only rerun on the re-pinned manifest holds 40 of 41, `c2-city`
+the one move. Hitch is opt-in and ran beside the perf rerun: its inject check saw no hitch
+line, an awareness item that does not gate. `gpu_ms` medians (Original), first run and an unchanged
+rerun, against the starting tree's baseline:
+
+| Scene | Baseline | Run | Rerun |
+|---|---|---|---|
+| empty-stage | 0.13 | 0.1 | 0.1 |
+| c1-flight | 0.725 | 0.2 | 0.215 |
+| c2b-water | 0.155 | 0.1 | 0.09 |
+| c4-terrain | 1.105 | 0.25 | 0.26 |
+| c2m02-hollywood | 0.94 | 0.325 | 0.295 |
+| c5-city | 1.7 | 1.675 | 1.67 |
+| c1-cockpit-xr-sim | 3.075 | 3.15 | 3.07 |
+| c5-city-xr-sim | 6.62 | 6.63 | 6.615 |
+
+Two scenes read over the baseline on the first run, `c1-cockpit-xr-sim` by 0.075 ms and
+`c5-city-xr-sim` by 0.01 ms, and neither reproduces on the rerun (PERF-7). The perf scenes run under
+Original, which this plan leaves byte-identical.
 
 **Goal.** Three new Enhanced `--water-quality=waves` goldens pin the finished painted coasts, one per
 chapter (decision 3); the Enhanced goldens that move are re-pinned; the complete battery and perf are
