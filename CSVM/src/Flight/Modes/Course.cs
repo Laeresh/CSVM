@@ -37,6 +37,9 @@ public sealed record CourseGate(
 {
     /// <summary>The horizontal way a <see cref="GateDirection.Forward"/> crossing travels.</summary>
     public Vector3 Forward => new Basis(Vector3.Up, Mathf.DegToRad(Heading)) * Vector3.Forward;
+
+    /// <summary>The horizontal way an entry flown <paramref name="direction"/> crosses this gate.</summary>
+    public Vector3 FlownWay(GateDirection direction) => direction == GateDirection.Forward ? Forward : -Forward;
 }
 
 /// <summary>

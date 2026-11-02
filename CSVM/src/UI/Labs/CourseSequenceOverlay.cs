@@ -63,7 +63,7 @@ public sealed partial class CourseSequenceOverlay : Node3D
             {
                 var gate = course.Gates.First(g => g.Id == entry.GateId);
                 var centre = CourseDraft.Centre(gate);
-                var way = CourseDraft.FlownWay(gate, entry);
+                var way = gate.FlownWay(entry.Direction);
                 Line(mesh, centre - (way * CrossArrowM), centre + (way * CrossArrowM));
                 Head(mesh, centre + (way * CrossArrowM), way);
                 if (previous is { } from && from.DistanceTo(centre) > MinLegM)

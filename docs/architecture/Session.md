@@ -248,7 +248,8 @@ The stunt race bots a machine flies, built by `StuntRaceDirector.Wire` beside th
 `Flight/Ai/StuntBotObjective.cs` per bot seat with a run of the course, stepped ahead of the seats.
 It decides every zone end's run once at build, against the built world, for every bot.
 It steers each bot for its next zone, starts the ribbon run, and starts a completed run again while
-the window is open. The run's own gate test counts every zone, so the race and a network host hear a
+the window is open. On a course each entry's `Route` is its own line, so the bots fly the sequence
+in order and shoot what blocks a line as they do a zone's route; a `StuntBotStart.Join` order locks onto the line at once. The run's own gate test counts every zone, so the race and a network host hear a
 bot as any seat. Each bot's approach is drawn on its seat's own seeded stream, apart from the fluffs.
 `BotObjective` turns the objective off. Rule: [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots".
 

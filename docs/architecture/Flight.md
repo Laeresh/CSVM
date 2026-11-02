@@ -501,7 +501,7 @@ Decode: [../org/aiPilot.md](../org/aiPilot.md). Read `AiPilot.cs` next.
 The decoded danger-zone run ([../org/aiPilot.md](../org/aiPilot.md) "The danger-zone run"),
 engine-free: `DangerZoneRibbon` is one `dzpathN` route as the original builds it, the polygon's
 vertices joined by cubics parameterised in metres plus the lane table (`NearestTo` finds the cursor
-abeam a point, and `WithLeadIn` adds a stunt race bot's straight before an entry); `DangerZoneRun`
+abeam a point, `WithLeadIn` adds a stunt race bot's straight before an entry, and `ForEntry` builds a course entry's remake-only line, `IsCourseEntry`, with its `Opening`, moved by its gate's live `Drift`); `DangerZoneRun`
 is a pilot's cursor on it, entered from the nearer end, walking the segments either way and `Done`
 past the exit; `DangerZoneRail` is the state-5 integrator that writes the pose off the ribbon in
 place of the flight model, closing the residual offset, banking into the bend and settling on cruise. Every constant is read out of the image and named at its declaration. Pinned by
@@ -713,10 +713,10 @@ fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host.
 ## src/Flight/Ai/StuntBotObjective.cs
 One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
 nearest open zone first, a steer onto the bot's own line into its nearer ribbon end (`Approach`,
-drawn by `Spread`), and in the approach cone the zone handed to
-`AiPilot.FlyDangerZone`, the campaign racers' approach and rail. Where the rail misses the gates
+drawn by `Spread`), and in the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers' approach and rail. Where the rail misses the gates
 (`RailClears`) the route gains a straight lead-in (`LeadInFor`), refused where the world blocks
-it; `RunsFrom` decides every zone end once for the session's bots. Its tier sets `CruiseThrottle`
+it; `RunsFrom` decides every zone end once for the session's bots. On a course it takes the next
+entry alone, one way, its line taking no row, and may join the line at once (`StuntBotStart.Join`). Its tier sets `CruiseThrottle`
 and the odds of a fluff. `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
 [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots"; read `StuntBotObjectiveTests.cs`.
 
@@ -810,7 +810,7 @@ null where a mission authors none), `Update` requires both polygon-plane crossin
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
 `Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick), `RunReset` and `RunStopped` (`Stop`) feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
-apart from its logging. `ForCourse` builds the strict-order run over a `Course` (null for an empty sequence): one zone per sequence entry (`Gate n`), so every consumer above reads it unchanged, `Update` tests only entry `CompletedCount` through its `CourseAperture` at `GateMotion(pool index, SimSeconds())` (identity until wired; `SimSeconds` is `GameClock.Time`), the clock starts on the first entry, `CollectTargets` offers the next entry alone, `ReturnPose` is the last gate's centre, and `AddPenalty` adds to a running clock with `PenaltyCount`. Each course step also tests every gate's `CourseElements` touch volumes, at the same motion, against a sphere of the `planeRadius` `Update` is passed (`FlightController` passes `AircraftBody.BoundRadius`): a per-gate bounding-sphere reject, then each element, debounced per element by an inside flag, so a touch counts on entering and again only after leaving. A touch calls `AddPenalty(TouchPenaltySeconds)` and raises `ElementTouched` with a `CourseTouch`, also before the first entry and on the finishing step, where no time is added. A finished run tests nothing; a Danger Zone run never tests touches. `PlanePosition` is where the last step had the plane, which `CourseVisuals`' wrong-side cross reads.
+apart from its logging. `ForCourse` builds the strict-order run over a `Course` (null for an empty sequence): one zone per sequence entry (`Gate n`), so every consumer above reads it unchanged, `Update` tests only entry `CompletedCount` through its `CourseAperture` at `GateMotion(pool index, SimSeconds())` (identity until wired; `SimSeconds` is `GameClock.Time`), the clock starts on the first entry, `CollectTargets` offers the next entry alone, each entry's `Route` is a line through its gate's opening the way it is flown (`EntryLeadInM` before, `EntryRunOutM` past, both remake-only, following `GateMotion` at `SimSeconds()`) for a race bot to ride, `ReturnPose` is the last gate's centre on that line, and `AddPenalty` adds to a running clock with `PenaltyCount`. Each course step also tests every gate's `CourseElements` touch volumes, at the same motion, against a sphere of the `planeRadius` `Update` is passed (`FlightController` passes `AircraftBody.BoundRadius`): a per-gate bounding-sphere reject, then each element, debounced per element by an inside flag, so a touch counts on entering and again only after leaving. A touch calls `AddPenalty(TouchPenaltySeconds)` and raises `ElementTouched` with a `CourseTouch`, also before the first entry and on the finishing step, where no time is added. A finished run tests nothing; a Danger Zone run never tests touches. `PlanePosition` is where the last step had the plane, which `CourseVisuals`' wrong-side cross reads.
 Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the rest of what a run draws, and `StuntScoreboard` for what it scores. Coverage of the course run: `CSVM.Tests/CourseRunTests.cs`.
 
 ## src/Flight/Modes/StartCount.cs
@@ -977,13 +977,13 @@ own; internal overloads let a suite name the file, `stunt-scores-scripted` pins 
 
 ## src/Flight/Modes/Course.cs
 One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon gate or a balloon ring, world position,
-heading and sizes), the `SequenceEntry` list naming pool gates by id with a `GateDirection` (a gate may repeat), and the
-start point as a `SpawnPoint`. Chapter and name come from the file's path; the name is the id everywhere (`--course=`,
-`--course-edit=`, the library, the score key), and the optional `title`, a string, is what a player sees (`DisplayName`,
-the name where it is blank). `Parse` reads a file or rejects it whole with the reason, `ToJson` writes the same shape,
-`FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, and `Hash` digests pool, sequence and start
-but not the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course bests, so a retitle keeps them.
-Read `CourseLibrary` for where the files live.
+heading and sizes, with `FlownWay` the way an entry crosses it), the `SequenceEntry` list naming pool gates by id with a
+`GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come from the file's path;
+the name is the id everywhere (`--course=`, `--course-edit=`, the library, the score key), and the optional `title`, a
+string, is what a player sees (`DisplayName`, the name where it is blank). `Parse` reads a file or rejects it whole,
+`ToJson` writes the same shape, `FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, and `Hash`
+digests pool, sequence and start but not the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course
+bests, so a retitle keeps them. Read `CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
 A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its course pylons from the

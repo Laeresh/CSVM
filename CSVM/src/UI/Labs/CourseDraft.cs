@@ -116,10 +116,6 @@ public sealed class CourseDraft
     /// the vertical the centre stands on, so it is the position plus <see cref="CourseGateShape.OpeningCentre"/>.</summary>
     public static Vector3 Centre(CourseGate gate) => gate.Position + CourseGateShape.OpeningCentre(gate);
 
-    /// <summary>The horizontal way <paramref name="entry"/> flies through <paramref name="gate"/>.</summary>
-    public static Vector3 FlownWay(CourseGate gate, SequenceEntry entry) =>
-        entry.Direction == GateDirection.Forward ? gate.Forward : -gate.Forward;
-
     /// <summary>The 1-based numbers of the sequence entries naming <paramref name="gateId"/>, as "2, 5"; empty
     /// when none does.</summary>
     public static string EntryNumbers(Course course, string gateId) =>

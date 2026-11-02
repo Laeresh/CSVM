@@ -130,6 +130,54 @@ public class CourseRunTests
     }
 
     [Fact]
+    public void EachEntryHasALineThroughItsOpeningTheWayItIsFlownThatFollowsTheGate()
+    {
+        var run = Run(Fwd(A), Rev(B));
+        var gateLine = run.Zones[0].Route!;
+        var ringLine = run.Zones[1].Route!;
+        Assert.True(gateLine.IsCourseEntry && ringLine.IsCourseEntry);
+        Assert.True(gateLine.End(false).IsEqualApprox(new Vector3(0f, 15f, StuntMission.EntryLeadInM)), $"{gateLine.End(false)}");
+        Assert.True(gateLine.End(true).IsEqualApprox(new Vector3(0f, 15f, -StuntMission.EntryRunOutM)), $"{gateLine.End(true)}");
+        Assert.True(gateLine.Opening!.Value.IsEqualApprox(new Vector3(0f, 15f, 0f)), $"{gateLine.Opening}");
+
+        // The reverse entry runs against the ring's heading, through its centre.
+        Assert.True(ringLine.End(false).IsEqualApprox(B.Position + new Vector3(0f, 0f, -StuntMission.EntryLeadInM)), $"{ringLine.End(false)}");
+        Assert.True(ringLine.Opening!.Value.IsEqualApprox(B.Position), $"{ringLine.Opening}");
+
+        // The line stands where the gate does at the sim time, as the aperture does.
+        double now = 0;
+        run.SimSeconds = () => now;
+        run.GateMotion = (g, seconds) => new Transform3D(Basis.Identity, new Vector3((float)seconds, 2f, 0f));
+        now = 3;
+        Assert.True(ringLine.End(false).IsEqualApprox(B.Position + new Vector3(3f, 2f, -StuntMission.EntryLeadInM)), $"{ringLine.End(false)}");
+
+        // A copy lays its own lines, which read its own motion: set apart, the two lines part.
+        var copy = run.ForAnotherPlayer();
+        var copied = copy.Zones[1].Route!;
+        Assert.NotSame(ringLine, copied);
+        copy.GateMotion = (g, seconds) => Transform3D.Identity;
+        Assert.True(copied.Opening!.Value.IsEqualApprox(B.Position), $"{copied.Opening}");
+        Assert.True(ringLine.Opening!.Value.IsEqualApprox(B.Position + new Vector3(3f, 2f, 0f)), $"{ringLine.Opening}");
+    }
+
+    [Fact]
+    public void ATapAfterAMovingRingReturnsToWhereTheRingStandsNotItsRest()
+    {
+        var run = Run(Fwd(B));
+        var moved = new Vector3(1f, 0.5f, 0f);
+        run.GateMotion = (g, seconds) => new Transform3D(Basis.Identity, moved);
+        var centre = B.Position + moved;
+        run.Relocated();
+        run.Update(centre + new Vector3(0f, 0f, 5f));
+        run.Update(centre - new Vector3(0f, 0f, 5f));
+        Assert.Equal(1, run.CompletedCount);
+
+        var (pos, heading) = run.ReturnPose()!.Value;
+        Assert.True(pos.IsEqualApprox(centre), $"{pos}");
+        Assert.True(heading.IsEqualApprox(B.Forward), $"{heading}");
+    }
+
+    [Fact]
     public void OnlyTheNextEntryIsOfferedAsATarget()
     {
         var run = Run(Fwd(A), Fwd(B));

@@ -90,6 +90,7 @@ internal sealed class StuntRaceBots
             if (seats[seat].Controller is { IsBotSeat: true, Pilot: { } pilot, Stunt: { } run } bot)
             {
                 // Every run's zones share the course's routes, so one bot's run keys the table for all.
+                // A course entry's line is its own run and takes no row.
                 if (runs == null)
                 {
                     lead = bot;
@@ -143,7 +144,11 @@ internal sealed class StuntRaceBots
 
             var order = BotObjective ? objective.Decide(run.Zones, at, bot.WorldVelocity, pilot.ZoneRun != null)
                 : new StuntBotOrder(StuntBotLeg.None, -1, at, false, BotOrderLog.ObjectiveOff);
-            if (order.StartsRun)
+            if (order.Start == StuntBotStart.Join)
+            {
+                pilot.RejoinDangerZone(order.Ribbon!, at, bot.GlobalTransform.Basis.Orthonormalized(), bot.WorldVelocity, "race bot joins the entry's line");
+            }
+            else if (order.Start == StuntBotStart.Approach)
             {
                 pilot.FlyDangerZone(order.Ribbon!, order.FarEnd, at, "race bot");
             }

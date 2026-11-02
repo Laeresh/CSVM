@@ -49,6 +49,7 @@ are remake-only, so no item has an original-game value to decode.
 | 8 | Whether race bots fire on a course | **Shoot blockers**: run the Danger Zone blocking-structure cast along each synthetic ribbon and shoot what it strikes. |
 | 9 | Instant Action layout once Course and Race Bots both show | **Race Bots beside Race Time** on the first free line, the Course box alone on the second. The user judges the look from a screenshot. |
 | 10 | The network lobby's course choice | **A Course dropdown in the host's Mission Options**, shown for Stunt Race in a chapter with courses: Danger Zones first, then shipped and game-folder courses by title, any over the size limit left out. Guests see the host's pick read-only, by title. The user judges the look from a screenshot. |
+| 11 | How a course bot gets onto an entry's line when gates stand 250 to 400 m apart, closer than the Danger Zone approach reaches (B11) | **Join at once**: a bot within the 105 m lock range of the line, at least 150 m short of the opening and heading within 30 degrees of the line, rides it from where it is (`AiPilot.RejoinDangerZone`) instead of coming round to its start. Without it, two ace bots cleared 2 and 5 of `C2/Hollywood_Track_1`'s 19 entries in a 16-minute window. The 150 m is remake-only. Owed: the user's approval. |
 
 ## Ground rules
 
@@ -81,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, course bots
 
-11. ☐ Stunt race bots fly a course's sequence on synthetic ribbons, through moving rings (#277)
+11. ☑ Stunt race bots fly a course's sequence on synthetic ribbons, through moving rings (#277)
 
 ### Wave C, open the gates
 
@@ -206,7 +207,36 @@ course key. The existing Danger Zone network race suites stay green.
 
 # Wave B, course bots
 
-## B11 ☐ Stunt race bots fly a course's sequence on synthetic ribbons, through moving rings
+## B11 ☑ Stunt race bots fly a course's sequence on synthetic ribbons, through moving rings
+
+**Landed.** `StuntMission.ForCourse` gives every sequence entry a `Route`: a straight line through its
+gate's opening the way the entry is flown, from `EntryLeadInM` (250 m) short of the opening's centre
+to `EntryRunOutM` (60 m) past it, both declared remake-only. `DangerZoneRibbon.ForEntry` builds it
+`IsCourseEntry`, with an `Opening` and a `Drift` that reads its own run's `GateMotion` at
+`SimSeconds()` on every point, so a ring's line moves with the ring; each run, a `ForAnotherPlayer`
+copy included, lays its own lines. `StuntBotObjective` takes only the first open entry when its line
+is a course entry's, always from the first vertex (`EndFrom`), and `RunsFrom` gives such a line no
+row, so the table never offers a far end. Course gates stand closer than the Danger Zone cone's
+reach, so a bot past a line's start also joins it at once (`StuntBotStart.Join`,
+`AiPilot.RejoinDangerZone`) when it is within lock range of the line, at least `JoinRailM` (150 m,
+remake-only) short of the opening and tracking along it; a course fluff passes over the gate. The way
+an entry crosses its gate is `CourseGate.FlownWay`. `FlyDangerZone`, `Blocking`/`Targets`, `Rejoin`
+and the order log read the line unchanged; `ReturnPose` finds the gate's centre on it, where a
+moving ring stands rather than its rest. No reader of `StuntZone.Route`
+outside the bots and `ReturnPose` exists: the HUD, marker, `StuntCapture` and `ScoreStore` key off
+`run.Course`. Files: `Flight/Modes/DangerZoneRibbon.cs`, `Flight/Modes/StuntMission.cs`,
+`Flight/Modes/Course.cs` (`CourseGate.FlownWay`, which the course lab reads too),
+`Flight/Ai/StuntBotObjective.cs`, `Session/World/StuntRaceBots.cs` (the join's dispatch), suites
+`stunt-race-bot-course` and `stunt-race-bot-course-blocker` in `Testing/StuntRaceBotSuites.cs`, unit
+tests in `CourseRunTests` and `StuntBotObjectiveTests`, docs `org/aiPilot.md` "Stunt race bots" item 7.
+For C21: the launch seats bots on a course once `SessionSpec.CourseRefusal` stops refusing
+`VsBots`; nothing else is needed, since `StuntRaceDirector.Wire` builds `StuntRaceBots.For` from the
+seats' course runs. The two suites seat their bots past the refusal by reflection in `CourseRace`,
+which C21 replaces with the plain `bots:` argument.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A race bot on a course flies the next sequence entry through its gate the way the entry
 names (a reverse entry from the other side), keeps up with a moving ring, shoots what blocks its

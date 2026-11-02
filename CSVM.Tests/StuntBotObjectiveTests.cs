@@ -318,6 +318,49 @@ public class StuntBotObjectiveTests
     }
 
     [Fact]
+    public void ACourseBotTakesTheNextEntryFromItsFirstVertexOnly()
+    {
+        // Two pylon gates 2 km apart, the first flown against its heading: its line runs south. By the
+        // second entry the bot still takes the first. Nearer the first line's last vertex, it enters from its first.
+        var near = new CourseGate("near", CourseGateKind.PylonGate, new Vector3(0, 0, 0), 0f, 40f, 30f, 0f);
+        var next = new CourseGate("next", CourseGateKind.PylonGate, new Vector3(0, 0, -2000), 0f, 40f, 30f, 0f);
+        var run = StuntMission.ForCourse(new Course("c1", "test", new SpawnPoint(Vector3.Zero, 0f), new[] { near, next },
+            new[] { new SequenceEntry("near", GateDirection.Reverse), new SequenceEntry("next", GateDirection.Forward) }))!;
+        var zones = run.Zones;
+        var table = StuntBotObjective.RunsFrom(zones, blocked: null);
+        Assert.Empty(table);
+
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Runs = table };
+        var at = new Vector3(0, 15, -1950);
+        Assert.True(bot.Decide(zones, at, North, zoneRun: false) is { Zone: 0, FarEnd: false });
+        bot.Returned();
+        Assert.True(bot.Decide(zones, new Vector3(0, 15, 300), North, zoneRun: false) is { Zone: 0, FarEnd: false });
+
+        // In the reverse entry's cone, north of the gate flying south, the run starts at its line's
+        // first vertex and flies it southward.
+        bot.Returned();
+        var start = new Vector3(0, 15, -StuntMission.EntryLeadInM - 400);
+        var flies = bot.Decide(zones, start, -North, zoneRun: false);
+        Assert.True(flies is { Leg: StuntBotLeg.Run, StartsRun: true, Zone: 0, FarEnd: false });
+        Assert.Same(zones[0].Route, flies.Ribbon);
+        Assert.True(flies.Ribbon!.EndTangentInto(false).Normalized().IsEqualApprox(Vector3.Back));
+
+        // Beside the line past its start, far enough short of the gate, it joins the line at once.
+        bot.Returned();
+        var beside = new Vector3(30, 15, -StuntBotObjective.JoinRailM - 50);
+        Assert.True(bot.Decide(zones, beside, -North, zoneRun: false) is { Start: StuntBotStart.Join, Zone: 0 });
+
+        // ABLE-TO-FAIL CONTROL: closer to the gate than the rail needs, it does not.
+        bot.Returned();
+        Assert.True(bot.Decide(zones, beside + new Vector3(0, 0, 100), -North, zoneRun: false) is { StartsRun: false });
+
+        // ABLE-TO-FAIL CONTROL: once the first entry is flown the next is the pick.
+        zones[0].Completed = true;
+        bot.Returned();
+        Assert.True(bot.Decide(zones, at, North, zoneRun: false) is { Zone: 1, FarEnd: false });
+    }
+
+    [Fact]
     public void NearestReadsTheRunAPickTakesARefusedEndIncluded()
     {
         // The first zone's nearer end is refused, so its run enters from the far end, whose lead-in

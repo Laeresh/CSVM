@@ -6,6 +6,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Net;
@@ -48,6 +49,13 @@ internal static class StuntRaceBotSuites
     // it is given to clear that zone, seconds.
     private const float ShieldedStartM = 400f;
     private const float ShieldedSeconds = 120f;
+
+    // The shipped course the course suites fly, in its chapter.
+    private const string CourseChapter = "C2";
+    private const string CourseName = "Hollywood_Track_1";
+
+    // How far past the struck structure the suite course's gate stands, metres: inside an entry's lead-in.
+    private const float BlockerGapM = 60f;
 
     [Suite("stunt-race-bot",
         "a local stunt race of one pane and one ace bot over the run chapter's IA1 course: the launch seats "
@@ -348,6 +356,233 @@ internal static class StuntRaceBotSuites
         }
     }
 
+    [Suite("stunt-race-bot-course",
+        "a local stunt race of one pane and two ace bots on the shipped C2/Hollywood_Track_1 course, its sim "
+        + "clock advancing every step: the race flies the shipped file and each entry's line takes no row of "
+        + "the run table, which offers no far end; each bot clears every entry in sequence order, each the "
+        + "way the entry names, and crosses both balloon rings while they stand away from rest; each "
+        + "completes a run inside the window and starts another while it is open")]
+    internal static void BotsFlyACourseInOrder(TestContext ctx)
+    {
+        const string cell = "course";
+        string chapter = Course(ctx, CourseChapter);
+        var spec = CourseRace(ctx, chapter, new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign), new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Rival));
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
+        if (roster is not { Length: 3 })
+        {
+            ctx.Check(false, $"[{cell}] the local launch seats a pane and two bots ({roster?.Length ?? 0} seat(s))");
+            return;
+        }
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end.Session;
+            var seats = end.Built ? session.SeatRigs.Select(r => r.Controller).ToArray() : Array.Empty<FlightController?>();
+            if (session.RaceDirector is not { Race: { } race, Bots: { } bots }
+                || seats is not [_, { Stunt: { Course: { } course } firstRun } first, { Stunt: { } secondRun, IsBotSeat: true } second])
+            {
+                ctx.Check(false, $"[{cell}] the session builds a race of a pane and two bots, each on its own run of the course");
+                return;
+            }
+
+            var shipped = new CourseLibrary(CourseLibrary.ShippedRoot, null).Load(chapter, CourseName, out string error);
+            ctx.Check(shipped != null && course.Name == CourseName && course.Hash == shipped.Hash,
+                $"[{cell}] the race flies the shipped {chapter}/{CourseName}, {course.Sequence.Count} entries (hash {course.Hash}, shipped {shipped?.Hash} {error})");
+            var table = StuntBotObjective.RunsFrom(firstRun.Zones, blocked: null);
+            ctx.Check(bots.RunsSawWorld && firstRun.Zones.All(z => z.Route is { IsCourseEntry: true }) && table.Count == 0,
+                $"[{cell}] every entry has its own line, which takes no row of the run table ({table.Count} rows), and the table's world ray struck the built world");
+            LinesClear(ctx, firstRun, first);
+
+            var start = GameClock.Current?.Time ?? 0.0;
+            var watched = new[] { Watch(first, firstRun, course), Watch(second, secondRun, course) };
+            var racers = new[] { race.Of(BotSeat)!, race.Of(BotSeat + 1)! };
+            int limit = Steps(race.WindowSeconds + StuntRace.FinalRunCap);
+            int steps = 0;
+            while (racers.Any(r => r.RunsFinished == 0) && steps < limit)
+            {
+                StepTimed(session, ++steps);
+            }
+
+            double clock = (GameClock.Current?.Time ?? 0.0) - start;
+            ctx.Check(clock > 60.0, $"ABLE-TO-FAIL CONTROL: [{cell}] the sim clock the rings move on advanced {clock:0.0} s over {steps} steps");
+            for (int b = 0; b < racers.Length; b++)
+            {
+                var w = watched[b];
+                ctx.Note($"[{cell}] {racers[b].Callsign}: entries in the order cleared {string.Join(", ", w.Order)}, best {Time(racers[b])}, {steps} steps");
+                ctx.Check(racers[b].RunsFinished >= 1 && w.Order.Count >= course.Sequence.Count && w.OutOfOrder == 0,
+                    $"[{cell}] {racers[b].Callsign} completes a run of all {course.Sequence.Count} entries in sequence order (best {Time(racers[b])}, {w.Order.Count} cleared, {w.OutOfOrder} out of order)");
+                ctx.Check(w.WrongWay == 0, $"[{cell}] {racers[b].Callsign} crosses every entry the way it names ({w.WrongWay} the other way)");
+                ctx.Check(w.Rings >= 2 && w.RingsMoved == w.Rings,
+                    $"[{cell}] {racers[b].Callsign} crosses the balloon rings while they stand away from rest ({w.RingsMoved} of {w.Rings} ring crossings moved)");
+            }
+
+            int rerun = 0;
+            while (racers.Any(r => r.RunsStarted < 2) && race.MayStartRun && rerun < Steps(WaitSeconds))
+            {
+                StepTimed(session, ++rerun);
+            }
+
+            ctx.Check(racers.All(r => r.RunsStarted >= 2),
+                $"[{cell}] once done each bot starts another run while the window is open ({string.Join("/", racers.Select(r => r.RunsStarted))} started, window open {race.MayStartRun})");
+        }
+        finally
+        {
+            end.Close();
+            ambient.Restore();
+        }
+    }
+
+    [Suite("stunt-race-bot-course-blocker",
+        "a local C2 stunt race of one pane and one ace bot, the bot handed a suite course of one reverse entry "
+        + "whose line runs through a weapon-hit structure a Danger Zone route runs into: the line's cast strikes "
+        + "the structure and the bot's targets hold it; ABLE-TO-FAIL CONTROL: the gate crossed along its "
+        + "heading counts nothing; started out along the line, the bot's own rounds destroy the structure and "
+        + "it crosses the gate against its heading, the way the entry names")]
+    internal static void ACourseBotShootsWhatBlocksItsLine(TestContext ctx)
+    {
+        const string cell = "course blocker";
+        string chapter = Course(ctx, CourseChapter);
+        var spec = CourseRace(ctx, chapter, new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign));
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
+        var zones = StuntMission.Load(ctx.ChapterGamez(chapter)!, ctx.MissionZrdr(chapter, SessionSpec.StuntRaceMission), ctx.Data.Messages);
+        if (roster is not { Length: 2 } || zones == null)
+        {
+            ctx.Check(false, $"[{cell}] the local launch seats a pane and a bot, and {chapter}'s Danger Zones load");
+            return;
+        }
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end.Session;
+            var bot = end.Built && session.SeatRigs.Count > BotSeat ? session.SeatRigs[BotSeat].Controller : null;
+            if (session.RaceDirector?.Race is not { } race || bot is not { Stunt: not null, Destructibles: { } structures })
+            {
+                ctx.Check(false, $"[{cell}] the session builds a race whose bot flies a run of the course");
+                return;
+            }
+
+            int steps = 0;
+            while (!(race.Phase == StuntRacePhase.Open && race.Of(BotSeat)!.InRun) && steps < Steps(WaitSeconds))
+            {
+                StepTimed(session, ++steps);
+            }
+
+            // A structure a Danger Zone route runs into, struck on its damage node from the route's near end.
+            var pick = zones.Zones.Where(z => z.Route != null && StuntRaceBots.Unseen(z.Route, false, structures, bot.WorldStruckAlong) == null)
+                .Select(z => (Route: z.Route!, Struck: StuntRaceBots.Blocking(z.Route!, structures, bot.WorldStruckAlong).FirstOrDefault()))
+                .FirstOrDefault(p => p.Struck != null);
+            if (pick.Struck is not { } target || !TargetPool.TryTargetGeometry(target, out var at, out _, out _, out bool live) || !live)
+            {
+                ctx.Check(false, $"[{cell}] a {chapter} Danger Zone route runs into a live weapon-hit structure");
+                return;
+            }
+
+            var (course, way) = BlockedCourse(chapter, pick.Route, at);
+            var run = StuntMission.ForCourse(course)!;
+            run.GateMotion = (g, seconds) => CourseMotion.Offset(course.Gates[g], seconds);
+            var line = run.Zones[0].Route!;
+            var targets = StuntRaceBots.Targets(run.Zones[0], structures, bot.WorldStruckAlong);
+            ctx.Check(StuntRaceBots.Blocking(line, structures, bot.WorldStruckAlong).Contains(target) && targets.Contains(target),
+                $"[{cell}] the reverse entry's line runs into '{target.Def.Name}' and the bot's targets hold it ({string.Join(", ", targets.Select(s => s.Def.Name))})");
+
+            var centre = line.Opening!.Value;
+            run.Update(centre + (way * 5f));
+            run.Update(centre - (way * 5f));
+            ctx.Check(run.CompletedCount == 0, $"ABLE-TO-FAIL CONTROL: [{cell}] the gate crossed along its heading counts nothing ({run.CompletedCount} entries)");
+            run.Relocated();
+
+            Vector3? travel = null;
+            run.ZoneCompleted += zone => travel = zone.ExitTravel;
+            bot.Stunt = run;
+            bot.RespawnAt(line.End(false) - (way * ShieldedStartM), line.End(false));
+            int flown = 0;
+            int crashes = 0;
+            bool wasDown = false;
+            while (travel == null && flown < Steps(ShieldedSeconds))
+            {
+                StepTimed(session, ++flown);
+                crashes += bot.Crashed && !wasDown ? 1 : 0;
+                wasDown = bot.Crashed;
+            }
+
+            bool shot = target.Status == DestructibleRegistry.State.Destroyed && target.LastShooter == bot.PlayerIndex;
+            ctx.Check(shot, $"[{cell}] the bot's own rounds destroy '{target.Def.Name}' ({target.Status} by {target.LastShooter}, {flown} steps, {crashes} crash(es))");
+            ctx.Check(travel is { } t && t.Dot(way) > 0f,
+                $"[{cell}] the bot crosses the gate against its heading, the way the reverse entry names ({(travel == null ? "not crossed" : $"travel along the line {travel.Value.Dot(way):0.00}")}, {flown} steps)");
+        }
+        finally
+        {
+            end.Close();
+            ambient.Restore();
+        }
+    }
+
+    // A solo course race's spec over the shipped course, with the given bots seated on it.
+    private static SessionSpec CourseRace(TestContext ctx, string chapter, params VsBotEntry[] bots)
+    {
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace, course: CourseName);
+
+        // The launch refuses race bots on a course, so they are seated on the solo spec it admits.
+        typeof(SessionSpec).GetProperty(nameof(SessionSpec.VsBots))!.SetValue(spec, bots);
+        ctx.Check(spec is { Course: not null, CourseRefusal: null, Stunt: true, VsBots.Count: > 0 },
+            $"the course race spec flies {spec.Course} with {spec.VsBots.Count} bot(s), refusal {spec.CourseRefusal ?? "none"}");
+        return spec;
+    }
+
+    // A one-gate course whose reverse entry's line runs back along `route` through `struck`. Its pylon
+    // gate stands BlockerGapM past the route point nearest it, level. Answers the course and its way.
+    private static (Course Course, Vector3 Way) BlockedCourse(string chapter, DangerZoneRibbon route, Vector3 struck)
+    {
+        var (segment, t) = route.NearestTo(struck);
+        var tangent = route.TangentAt(segment, t);
+        var way = new Vector3(tangent.X, 0f, tangent.Z).Normalized();
+        var centre = route.PointAt(segment, t) + (way * BlockerGapM);
+        const float height = 30f;
+        float heading = Mathf.RadToDeg(Mathf.Atan2(way.X, way.Z)); // Forward is then -way
+        var gate = new CourseGate("blocked", CourseGateKind.PylonGate, centre - new Vector3(0f, height / 2f, 0f), heading, 40f, height, 0f);
+        var course = new Course(chapter, "suite_blocked", new SpawnPoint(centre - (way * 1000f), heading), new[] { gate },
+            new[] { new SequenceEntry(gate.Id, GateDirection.Reverse) });
+        return (course, way);
+    }
+
+    // Each entry's line from its first vertex to its gate, probed through the built world. A note, since
+    // a bot may still clear a gate whose straight clips a roof.
+    private static void LinesClear(TestContext ctx, StuntMission run, FlightController bot)
+    {
+        var probed = run.Zones.Select(z => z.Route!).Select(l => (l.Name, Blocked: bot.WorldBlocksLine(l.End(false), l.Opening!.Value)));
+        ctx.Note($"[course] entry lines from their first vertex to the gate: {string.Join(", ", probed.Select(p => $"{p.Name} {(p.Blocked ? "BLOCKED" : "clear")}"))}");
+    }
+
+    // A bot run's entries as they are cleared: the order, the way each was crossed, and where each
+    // balloon ring stood against rest.
+    private static Crossings Watch(FlightController bot, StuntMission run, Course course)
+    {
+        var seen = new Crossings();
+        run.ZoneCompleted += zone =>
+        {
+            int i = run.Zones.ToList().IndexOf(zone);
+            var entry = course.Sequence[i];
+            int g = course.Gates.ToList().FindIndex(x => x.Id == entry.GateId);
+            var gate = course.Gates[g];
+            seen.Order.Add($"{zone.DzName}:{gate.Id}@{zone.CompletedAt:0.0}");
+            seen.OutOfOrder += i == zone.CompletionOrder ? 0 : 1;
+            var way = gate.FlownWay(entry.Direction);
+            seen.WrongWay += zone.ExitTravel.Dot(way) > 0f ? 0 : 1;
+            if (gate.Kind == CourseGateKind.BalloonRing)
+            {
+                seen.Rings++;
+                var live = CourseMotion.Rest(gate) * run.GateMotion(g, run.SimSeconds());
+                seen.RingsMoved += live.Origin.DistanceTo(gate.Position) > 0.05f ? 1 : 0;
+            }
+        };
+        return seen;
+    }
+
     // The live structures any zone's bots shoot: those its route runs into, and any optional target.
     private static List<DestructibleRegistry.Instance> Targets(StuntMission run, FlightController bot) =>
         bot.Destructibles is { } structures
@@ -606,6 +841,13 @@ internal static class StuntRaceBotSuites
 
     private static int Steps(float seconds) => Mathf.RoundToInt(seconds / GameClock.FixedDt);
 
+    // A step with the session clock advanced first, as a frame does: a course gate moves on it.
+    private static void StepTimed(GameSession session, int step)
+    {
+        GameClock.Current?.BeginFrame(GameClock.FixedDt);
+        Step(session, step);
+    }
+
     private static string Time(Racer racer) => racer.BestTime is { } best ? StuntMission.FormatTime(best) : "none";
 
     // The world's animation advances too, which opens the hangar doors the courses fly through. A
@@ -631,5 +873,19 @@ internal static class StuntRaceBotSuites
                 PhysicsServer3D.BodySetState(body.GetRid(), PhysicsServer3D.BodyState.Transform, body.GlobalTransform);
             }
         }
+    }
+
+    // One bot run's entries as they are cleared (Watch).
+    private sealed class Crossings
+    {
+        public List<string> Order { get; } = new();
+
+        public int OutOfOrder { get; set; }
+
+        public int WrongWay { get; set; }
+
+        public int Rings { get; set; }
+
+        public int RingsMoved { get; set; }
     }
 }

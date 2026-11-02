@@ -23,12 +23,29 @@ public enum StuntBotLeg
     Fluff,
 }
 
+/// <summary>How a stunt race bot's order starts a run, if it does.</summary>
+public enum StuntBotStart
+{
+    /// <summary>It starts none.</summary>
+    None,
+
+    /// <summary>The pilot approaches the ribbon's entry and locks on there (<see cref="AiPilot.FlyDangerZone"/>).</summary>
+    Approach,
+
+    /// <summary>The pilot locks onto a course entry's line where it passes nearest, at once
+    /// (<see cref="AiPilot.RejoinDangerZone"/>).</summary>
+    Join,
+}
+
 /// <summary>A stunt race bot's order: its leg, the course index of its zone and the point it steers
 /// for. A run also names the ribbon end it enters from.</summary>
 public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 Point, bool FarEnd, string Why)
 {
-    /// <summary>Whether this step starts a run, which the pilot takes as its danger-zone run.</summary>
-    public bool StartsRun { get; init; }
+    /// <summary>How this step starts a run, which the pilot takes as its danger-zone run.</summary>
+    public StuntBotStart Start { get; init; }
+
+    /// <summary>Whether this step starts a run, either way.</summary>
+    public bool StartsRun => Start != StuntBotStart.None;
 
     /// <summary>The ribbon a started run flies: the zone's route, with a lead-in before its entry where
     /// the zone needs one (<see cref="StuntBotObjective.LeadInFor"/>).</summary>
@@ -37,11 +54,12 @@ public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 P
 
 /// <summary>
 /// One stunt race bot's way round the course, a remake-only rule, since the original seats no bots.
-/// It takes next the open zone whose lead-in point is nearest, and holds it until a try ends or a
-/// return. Between zones it steers freely for that point, short of the zone's nearer ribbon end.
-/// Inside the approach cone it hands the zone to the pilot, which runs it on its <c>dzpathN</c>
-/// ribbon as a campaign racer does. Its tier sets its cruise throttle and the odds of fluffing a
-/// zone, passing over its entry and coming round again. Values: docs/org/aiPilot.md "Stunt race bots".
+/// It takes next the open zone whose lead-in point is nearest, or a course's next entry, and holds it
+/// until a try ends. Between zones it steers freely for
+/// that point, short of the zone's nearer ribbon end. Inside the approach cone it hands the zone to the
+/// pilot, which runs it on its <c>dzpathN</c> ribbon as a campaign racer does. Its tier sets its cruise
+/// throttle and the odds of fluffing a zone, passing over its entry and coming round again. Values:
+/// docs/org/aiPilot.md "Stunt race bots".
 /// </summary>
 public sealed class StuntBotObjective
 {
@@ -100,6 +118,13 @@ public sealed class StuntBotObjective
     /// the 90 degree order. A bot going round turns in no nearer the entry than the shortest lead-in plus
     /// this width. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float UTurnWidthM = 375f;
+
+    /// <summary>Remake-only rule: the least of a course entry's line a bot joins short of its gate,
+    /// metres. The rail closes a lock-range offset within it, so the bot meets the gate on the line.</summary>
+    public const float JoinRailM = 150f;
+
+    // How finely a join looks for the line's nearest point, metres.
+    private const float JoinSearchStepM = 5f;
 
     // Remake-only rule: the sine of the bearing off the track's reverse inside which an aim counts as
     // dead astern, 30 degrees. Rule: docs/org/aiPilot.md "Stunt race bots".
@@ -212,13 +237,14 @@ public sealed class StuntBotObjective
 
     /// <summary>The ribbon a run flies from each end of each routed zone in <paramref name="zones"/>.
     /// It is the route with <see cref="LeadInFor"/>'s lead-in, or null where that end is refused. The
-    /// decision does not depend on the bot, so a session makes it once for every bot.</summary>
+    /// decision does not depend on the bot, so a session makes it once for every bot. A course entry's
+    /// line takes no row: it is its own run, from its first vertex only.</summary>
     public static RunTable RunsFrom(IEnumerable<StuntZone> zones, Func<Vector3, Vector3, bool>? blocked)
     {
         var ends = new RunTable();
         foreach (var zone in zones)
         {
-            if (zone.Route is not { } ribbon)
+            if (zone.Route is not { } ribbon || ribbon.IsCourseEntry)
             {
                 continue;
             }
@@ -303,11 +329,14 @@ public sealed class StuntBotObjective
         var entry = _route!.End(_farEnd);
         var into = Into(_route, _farEnd);
         float along = Flat(entry - at).Dot(into);
+
+        // A course entry's fluff passes over its gate, since a bot may join its line past the line's start.
+        var over = _route.Opening ?? entry;
         if (_fluffing)
         {
-            if (along > 0f)
+            if (Flat(over - at).Dot(into) > 0f)
             {
-                return new StuntBotOrder(StuntBotLeg.Fluff, next, entry + (Vector3.Up * FluffAboveM), _farEnd, "fluffs the zone");
+                return new StuntBotOrder(StuntBotLeg.Fluff, next, over + (Vector3.Up * FluffAboveM), _farEnd, "fluffs the zone");
             }
 
             // Past the entry: the next try, from whichever end is nearer now.
@@ -318,16 +347,23 @@ public sealed class StuntBotObjective
             along = Flat(entry - at).Dot(into);
         }
 
-        if (InCone(entry, into, along, at, velocity))
+        var start = InCone(entry, into, along, at, velocity) ? StuntBotStart.Approach
+            : CanJoin(_route, at, velocity) ? StuntBotStart.Join
+            : StuntBotStart.None;
+        if (start != StuntBotStart.None)
         {
             if (_rng.NextDouble() < FluffChance)
             {
                 _fluffing = true;
-                return new StuntBotOrder(StuntBotLeg.Fluff, next, entry + (Vector3.Up * FluffAboveM), _farEnd, "fluffs the zone");
+                return new StuntBotOrder(StuntBotLeg.Fluff, next, over + (Vector3.Up * FluffAboveM), _farEnd, "fluffs the zone");
             }
 
             _running = true;
-            return new StuntBotOrder(StuntBotLeg.Run, next, entry, _farEnd, "flies the zone") { StartsRun = true, Ribbon = _route };
+            return new StuntBotOrder(StuntBotLeg.Run, next, entry, _farEnd, start == StuntBotStart.Join ? "joins the entry's line" : "flies the zone")
+            {
+                Start = start,
+                Ribbon = _route,
+            };
         }
 
         var leadIn = LeadInPoint(entry, into);
@@ -351,6 +387,22 @@ public sealed class StuntBotObjective
     {
         var into = Flat(ribbon.EndTangentInto(farEnd));
         return into.LengthSquared() > 1e-6f ? into.Normalized() : Vector3.Zero;
+    }
+
+    // A course entry's line, the bot within lock range of it and JoinRailM or more short of its opening.
+    // It must track along the line inside the cone's angle. The rail can then take it at once.
+    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity)
+    {
+        var into = Into(line, false);
+        var track = Flat(velocity);
+        if (line.Opening is not { } opening || into.LengthSquared() < 1e-6f || Flat(opening - at).Dot(into) < JoinRailM
+            || track.Dot(into) < Mathf.Cos(Mathf.DegToRad(ConeHalfAngleDeg)) * track.Length())
+        {
+            return false;
+        }
+
+        var (segment, t) = line.NearestTo(at, JoinSearchStepM);
+        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM;
     }
 
     // Short of the entry inside the cone's reach and angle, and tracking toward it.
@@ -451,6 +503,12 @@ public sealed class StuntBotObjective
                 continue;
             }
 
+            // A course scores its next entry alone, the first open one.
+            if (ribbon.IsCourseEntry)
+            {
+                return i;
+            }
+
             var (far, route) = EndFrom(ribbon, at);
             float sq = at.DistanceSquaredTo(LeadInPoint(route.End(far), Into(route, far)));
             if (sq < bestSq)
@@ -473,8 +531,14 @@ public sealed class StuntBotObjective
 
     // The ribbon end nearer `at`, or the other when only that one is open, and the route its run
     // flies from there. A refused or shut end is closed. With both closed it is the nearer end's own route.
+    // ⚠ Never offer a course entry's far end, whatever is nearer or shut; it is flown one way.
     private (bool Far, DangerZoneRibbon Route) EndFrom(DangerZoneRibbon ribbon, Vector3 at)
     {
+        if (ribbon.IsCourseEntry)
+        {
+            return (false, ribbon);
+        }
+
         bool far = NearerEnd(ribbon, at);
         if (!Open(ribbon, far) && Open(ribbon, !far))
         {

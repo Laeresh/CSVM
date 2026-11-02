@@ -949,8 +949,8 @@ all TUNE) with a forward entry after the selected entry, or at the end, selectin
 either way round. `Select` sets the gate alone, so a world click keeps the insertion point; `SelectEntry` sets both.
 `MoveEntry`, `Flip`, `RemoveEntry` (the gate stays) and `Delete` (every entry naming the gate) keep the selected entry valid.
 Ids are `p`/`r` and one past the highest in use. `HeadingOf` is a camera basis's yaw on `SpawnPoint`'s convention; a ring
-stores world Y, so `WithAboveGround`/`MovedTo` take the ground under it. `Centre`, `FlownWay` and `EntryNumbers` ("2, 5")
-feed the overlay. `SaveTarget` is the shipped root from the editor build, else the game folder, null without one (`--det`); its overload sends a course opened from the game folder back there, Save off without one. `Rename` sets the file name, `Retitle` the title players see.
+stores world Y, so `WithAboveGround`/`MovedTo` take the ground under it. `Centre`, `EntryNumbers` ("2, 5") and
+`CourseGate.FlownWay` feed the overlay. `SaveTarget` is the shipped root from the editor build, else the game folder, null without one (`--det`); its overload sends a course opened from the game folder back there, Save off without one. `Rename` sets the file name, `Retitle` the title players see.
 
 ## src/UI/Labs/CourseSequenceOverlay.cs
 The course lab's drawing of the sequence over the world, redrawn on every `CourseDraft.Changed`. One `Label3D` per pool
