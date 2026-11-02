@@ -66,6 +66,7 @@ its own predicate, because the colliders and the tile census read that classific
 | 22 | The base sheet's tint at corners hidden under the tiles the ocean replaces, which spread straight-edged wedges into the visible sea | **The sheet corners under C1's sea tiles take the open sea's mean tint** (`OceanMaskRaster.TintUnder`). This departs from Original's authored inlet darkening, because the ocean shows what the tiles covered. C3's cliff tiles stay out: C3's bright tint ring runs on under the alpha strips, and moving only the cliff tiles' corners darkens the near-shore sea and notches it where they meet the strips (C25, rendered in D31) |
 | 23 | How C3's opaque cliff tiles give way to the ocean | **Blended by alpha over 25 m seaward of the painted waterline**, measured by world distance from the inland image, as C2's beach blends, not dithered and not along each polygon's V; picked over 12 m and over the per-frame dither (C26) |
 | 24 | Where the swash ends on C3's cliff tiles | **It fades out over 4 m past the coastline**, since the tile still draws near-opaque there and a stop on the line showed one triangle's straight waterline; a carry as long as the 25 m blend filled the mask's sea pockets inside the tiles with foam (C26) |
+| 25 | Whether breakwaters and quay walls standing on a beach take spray | **No, not by default; only natural cliff faces spray** (`cliff01`, `cliff1`, `TextureArchive.IsCliffRock`). C2's `stacktop` breakwaters where they cross `beach1` become bare sites, which spray only with `--coast-spray=…,quays`, as decision 21's quays do (C27) |
 
 ## ⚠ Read this before implementing anything
 
@@ -153,6 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ☑ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
 25. ☑ The new ocean replaces the old water look completely under Enhanced at waves (#270)
 26. ☑ C3's cliff tiles blend out by world distance from the waterline, as the beach does (#270)
+27. ☑ C2's beach takes the swash and the breakwaters throw no spray (#270)
 
 ### Wave D, landing
 
@@ -894,6 +896,62 @@ cliff poses and C2's beach, two widths, and frames over time at the author's pos
   waterline than `CoastRampMetres` (A3's p10 widths put it near 14 m on `cliff1_watertrans` and 20 m
   on `cliff1_watertrans2`), the tile ends before its alpha reaches 0. No such edge showed at the
   poses checked; a wider width makes it likelier.
+
+## C27 ☑ C2's beach takes the swash and the breakwaters throw no spray
+
+**Verified.** The author found both defects flying C2 at the breakwaters (x -6400, z -3173) and passed the fix from the before/after crop and a breaker cycle at that pose, the D31 beach pose and C1's cove (decision 25). A bisect over C23 to D31 with the swash painted magenta shows the waterline swash drew at every commit under beach1's translucent sand, so no commit lost it. `dotnet test` 8,145 passed, 0 failed; `RunTests.ps1 -Suite graphics-coast-hide,graphics-ocean-switch` green with engine errors clean. Re-pinned by the swash starting at the opaque line, the spray rule moving none (rendered apart): c1-lake-enhanced 16ed21c4 to c0513e67, c1-rocket-hit-enhanced f7e36dca to 13daf16d, c1-coast-enhanced 0b42cc66 to 31846dea, c2-beach-enhanced 48a38fb5 to aa1f45fa, each pixel-identical on re-render; `c2-city` stays the pacing defect #282.
+
+**Source.** The author, flying C2 under Enhanced at waves (freecam at x -6400, y 172, z -3173, looking
+down the harbour channel between the two rock breakwaters): "c2 no wave wash on the sand. the quay has
+some breakers and wave wash on the side of the beach, see screenshot".
+
+**Cause (confidence: traced).**
+- The swash on `beach1` never ran up the sand that shows. Rendered at the author's pose and at
+  `c2-beach-enhanced`'s pose with the film painted magenta and the wet tint green, at C23 (4c8112afd),
+  C24 (61e79a4c8), C26 (ff9973c2e), C25 (1331023fd) and D31 (c859d4a84), the waterline swash is the
+  same faint line inside the surf at every commit. It is drawn, from the painted waterline, across the
+  strip's translucent sand: `beach1` turns opaque 0.08 of its V past its crossing, 9 to 27 m at its
+  polygons' scales, its gamma-blended alpha 0.21 at the crossing and about 0.8 at the opaque line, and
+  the ocean and its foam draw under that sand to the opaque line (decisions 14 and 16). The 12 m reach
+  ends before the sand turns opaque.
+- What the author's pose lost at C25 is the inland fringe: at C23, C24 and C26 a broad swash band ran
+  along the edges of the flat `terpat` land on the opaque sand, the only swash that read on the sand
+  there. C25's per-piece `SeaFacing` removed it as the false waterline it was. Neither C25's
+  `SeaFacing`, C26's `csky_ocean_swash_on` nor the inland image's sign cut the waterline swash: the
+  inland image crosses 128 at the painted waterline along the whole beach.
+- The puffs at the breakwaters are C24's cliff spray: C2's breakwaters are `stacktop` faces 8 m high,
+  and their feet cross `beach1` (11 sites on each, x -6430 and -6144), so they met the cliff rule of a
+  steep foot within 2 m of a painted coast with a water side.
+
+**Landed.** The inland image measures from each painted coast's opaque line, where the sea the mask
+draws under a strip ends (`OceanMaskRaster.Coastline`'s `opaque` segments, the cut at `Surf` =
+-`Opaque`; the waterline itself on a coast with no translucent sand). A strip's translucent sand reads
+seaward there (`Landward`'s `under` off for the inland image and its sea-facing test), so the 12 m swash
+climbs the opaque sand. The shore distance and the spray's waterline distance still measure from the
+painted waterline. C3's opaque cliff tiles have no translucent sand, so their blend and swash are
+unchanged; C1's rock overlay and C3's strips take the same shift. The spray's cliff rule takes only
+natural cliff rock (`Tri.Cliff`, set from `TextureArchive.IsCliffRock`: `cliff01`, `cliff1`); a
+breakwater or a quay wall on a beach is a bare site, which sprays only with `,quays` (decision 25).
+Cliff and bare sites: C1 1,826 and 31 (from 1,827 and 31), C2 731 and 772 (from 753 and 751; C24
+recorded 755 before C25's `SeaFacing`), C3 22 and 771 (from 201 and 769; C3's former sites stood
+mostly on `forest1-128` slopes, and its sea sprays nothing).
+
+**Goal.** Under Enhanced at waves the swash runs up `beach1`'s sand along the whole beach at the
+author's pose, the breakwaters crossing the beach throw no spray by default, and C1's and C2's natural
+cliffs keep theirs.
+
+**Verify.** `OceanMaskRasterTests`: a strip's inland distance runs from its opaque line while the shore
+distance runs from its waterline, the whole-image oracle measures the inland image from the opaque
+lines, and a breakwater wall on the painted coast takes bare sites only. `graphics-coast-hide` holds no
+cliff site within 400 m of C2's harbour mouth. Before | after frames over a breaker cycle at the
+author's pose, at `c2-beach-enhanced`'s pose and at C1's cove, and the C25 fringe pose after. The
+inland change alone, with the old spray rule, renders the moved goldens' new hashes, so the spray rule
+moves none of them.
+
+**⚠ Traps.**
+- Do not bring back C2's inland fringe: the opaque lines go through the same per-piece `SeaFacing`.
+- The shore distance (the mask's G) stays exact to the painted waterline (decision 14); only the
+  inland image moves.
 
 # Wave D, landing
 

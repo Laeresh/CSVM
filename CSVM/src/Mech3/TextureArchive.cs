@@ -910,6 +910,11 @@ public sealed class TextureArchive : IDisposable
     public static bool IsPaintedShallows(string materialTextureName) =>
         Path.GetFileNameWithoutExtension(materialTextureName).Equals("shore2", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>True for natural cliff rock: C1's and C2's <c>cliff01</c>, C3's <c>cliff1</c>. C2's
+    /// breakwaters are <c>stacktop</c>, so they throw no cliff spray where they cross the beach.</summary>
+    public static bool IsCliffRock(string materialTextureName) =>
+        Path.GetFileNameWithoutExtension(materialTextureName).StartsWith("cliff", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The chapter's authored mip LOD bias, read from the boot scripts'
     /// <c>MipBias</c> lines and clamped like the original's own command. It is 0 without scripts or
     /// when the chapter authors none, which is every chapter but C5 (docs/org/textures.md).

@@ -1481,7 +1481,7 @@ internal static class GraphicsSwitchSuites
         + "edge keep their alpha with no fade; the land "
         + "ones stay on the matte arm; every profiled coast takes the breakers' swash and shore2 none, over a live inland "
         + "image measuring land texels from the coastline; in C1 and C2 one cliff spray stands under the ocean at its cliff sites, no bare "
-        + "ones, active only while the sea breaks surf, and C3's sea turns it off; at flat water no ocean or spray stands, so nothing steps aside "
+        + "ones, none on C2's breakwaters across the beach, active only while the sea breaks surf, and C3's sea turns it off; at flat water no ocean or spray stands, so nothing steps aside "
         + "and the cliff tiles' alpha stays 1; switched to Original no coast material reads the ocean at all, the cliff tiles write no alpha "
         + "and no spray stands, at waves too")]
     internal static void CoastHideFollowsSwitch(TestContext ctx)
@@ -1534,6 +1534,13 @@ internal static class GraphicsSwitchSuites
                         int cliffs = Effects.OceanMask.Live?.Spray.Count(s => !s.Bare) ?? -1;
                         ctx.Check(spray is { Drawn: Effects.CoastSpray.Default, Sites: > 0, Active: true } && spray.GetParent() is Effects.Ocean && spray.Sites == cliffs,
                             $"{chapter} under Enhanced at waves: one cliff spray under the ocean, drawing {Effects.CoastSpray.Default} at its cliff sites alone, no bare ones ({sprays.Count} sprays, {spray?.Sites ?? 0} of {cliffs} cliff sites)");
+                        if (chapter == "C2")
+                        {
+                            // The harbour breakwaters' stacktop stone crosses beach1 at x -6430 and -6144; C2's cliff01 stands west of x -8300.
+                            var harbour = new Vector2(-6300f, -3350f);
+                            int atHarbour = Effects.OceanMask.Live?.Spray.Count(s => !s.Bare && s.At.DistanceTo(harbour) < 400f) ?? -1;
+                            ctx.Check(atHarbour == 0, $"C2: the breakwaters crossing the beach take no cliff site, being no cliff rock ({atHarbour} within 400 m of the harbour mouth)");
+                        }
                     }
                     if (spray != null && rig.Session.Ocean?.Ocean is { } ocean)
                     {

@@ -570,8 +570,8 @@ public class OceanMaskRasterTests
 
     // The spray pick. A cliff on a painted coast 20 m behind its waterline takes sites along its foot. Each
     // faces the sea and stands at least 9 m from the next. A low wall, a gentle slope and a cliff 20 m past the
-    // coast's landward edge take none. A quay wall off every painted coast takes sites marked bare. No
-    // triangle order moves a site.
+    // coast's landward edge take none. A quay wall off every painted coast takes sites marked bare, and so
+    // does a breakwater on the painted coast, being no cliff rock. No triangle order moves a site.
     [Fact]
     public void TheSpraySitesStandAtTheSteepFeetBehindTheSea()
     {
@@ -579,6 +579,7 @@ public class OceanMaskRasterTests
         AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
         AddStrip(tris, 0f, 80f, x => (40f - x) / 32f);
         Wall(tris, 60f, -400f, 400f, 40f);
+        Wall(tris, 20f, 420f, 500f, 8f, cliff: false);
         Wall(tris, 70f, -400f, 400f, OceanMaskRaster.SprayRise - 2f);
         tris.Add(new Tri(new Vector3(50f, 0f, -300f), new Vector3(50f, 0f, 300f), new Vector3(90f, 20f, 300f), Kind.Solid, Colors.White, Colors.White, Colors.White));
         Wall(tris, -300f, -100f, 100f, 10f);
@@ -596,10 +597,11 @@ public class OceanMaskRasterTests
             Assert.InRange(s.Seaward.X, -1.001f, -0.999f);
             Assert.InRange(s.Behind, 19.5f, 20.5f);
         });
-        Assert.InRange(bare.Count, 15, 20);
+        Assert.InRange(bare.Count(s => s.At.X == -300f), 15, 20);
+        Assert.InRange(bare.Count(s => s.At.X == 20f), 6, 8);
         Assert.All(bare, s =>
         {
-            Assert.Equal(-300f, s.At.X, 2);
+            Assert.True(s.At.X == -300f || s.At.X == 20f, $"a bare site at x {s.At.X}");
             Assert.InRange(Math.Abs(s.Seaward.X), 0.999f, 1.001f);
         });
         for (int i = 0; i < r.Spray.Length; i++)
@@ -660,6 +662,26 @@ public class OceanMaskRasterTests
         Assert.Equal(128, OceanMaskRaster.InlandByte(true, 0f));
         Assert.Equal(255, OceanMaskRaster.InlandByte(true, 1000f));
         Assert.Equal(0, OceanMaskRaster.InlandByte(false, 1000f));
+        AssertOrderFree(tris);
+    }
+
+    // A strip whose sand turns opaque 16 m landward of its painted waterline at x = 40. The inland image
+    // measures from that opaque line at x = 56, where the sea the mask draws ends. Its translucent sand
+    // reads seaward, so the swash climbs the opaque sand. The shore distance still runs from x = 40.
+    [Fact]
+    public void AStripsInlandDistanceRunsFromItsOpaqueLine()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
+        AddStrip(tris, 0f, 80f, x => (40f - x) / 32f, opaque: 0.5f);
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 3);
+        int At(float x) => ((int)((0f - r.Origin.Y) / Cell) * r.Width) + (int)((x - r.Origin.X) / Cell);
+        float Metres(float x) => ((r.Inland[At(x)] / 255f * 2f) - 1f) * OceanMaskRaster.InlandReach;
+        Assert.InRange(Metres(60f), 3.5f, 4.5f);
+        Assert.InRange(Metres(68f), 11.5f, 12.5f);
+        Assert.InRange(Metres(52f), -4.5f, -3.5f);
+        Assert.InRange(Metres(36f), -20.5f, -19.5f);
+        Assert.InRange(r.Mask[(2 * At(28f)) + 1] / 255f * OceanMaskRaster.ShoreReach, 11f, 13f);
         AssertOrderFree(tris);
     }
 
@@ -731,8 +753,8 @@ public class OceanMaskRasterTests
     }
 
     // An alpha strip's waterline is at x = 64; it turns opaque half a 32 m fade landward, at x = 48.
-    // The sand between is sea with no distance and full surf, and land lies past x = 48. Seaward of the
-    // waterline the bytes are a strip's with no such sand.
+    // The sand between is sea with no distance and full surf, seaward of the swash's opaque line, and land
+    // lies past x = 48. Seaward of the waterline the bytes are a strip's with no such sand.
     [Fact]
     public void AStripsTranslucentSandIsSeaWithNoDistance()
     {
@@ -764,9 +786,9 @@ public class OceanMaskRasterTests
             Assert.Equal(255, r.Surf[At(x)]);
             Assert.Equal(0, bare.Mask[2 * At(x)]);
             Assert.Equal(0, bare.Surf[At(x)]);
-            // Sea in the mask, yet landward of the waterline for the swash.
-            Assert.Equal(OceanMaskRaster.InlandByte(true, 64f - x), r.Inland[At(x)]);
-            Assert.Equal(r.Inland[At(x)], bare.Inland[At(x)]);
+            // Sea in the mask, so seaward of the opaque line the swash runs from; without the sand, land.
+            Assert.Equal(OceanMaskRaster.InlandByte(false, x - 48f), r.Inland[At(x)]);
+            Assert.Equal(OceanMaskRaster.InlandByte(true, 64f - x), bare.Inland[At(x)]);
         }
         for (float x = 68f; x < 400f; x += Cell)
         {
@@ -934,12 +956,13 @@ public class OceanMaskRasterTests
         tris.Add(new Tri(a, e, d, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s0), Opaque: opaque));
     }
 
-    // An upright wall at x from z0 to z1, rising h from sea level, as two solid triangles.
-    private static void Wall(List<Tri> tris, float x, float z0, float z1, float h)
+    // An upright wall at x from z0 to z1, rising h from sea level, as two solid triangles. They are cliff
+    // rock unless cliff is false, as a breakwater's stone is.
+    private static void Wall(List<Tri> tris, float x, float z0, float z1, float h, bool cliff = true)
     {
         Vector3 a = new(x, 0f, z0), b = new(x, 0f, z1), c = new(x, h, z1), d = new(x, h, z0);
-        tris.Add(new Tri(a, b, c, Kind.Solid, Colors.White, Colors.White, Colors.White));
-        tris.Add(new Tri(a, c, d, Kind.Solid, Colors.White, Colors.White, Colors.White));
+        tris.Add(new Tri(a, b, c, Kind.Solid, Colors.White, Colors.White, Colors.White, Cliff: cliff));
+        tris.Add(new Tri(a, c, d, Kind.Solid, Colors.White, Colors.White, Colors.White, Cliff: cliff));
     }
 
     // The painted coasts' texels hold for the triangles in reverse order and at another band count.
@@ -1006,11 +1029,11 @@ public class OceanMaskRasterTests
                 surf[i] = Math.Max(surf[i], coastSurf[i]);
             }
         }
-        var dist = DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out var segments);
-        // Land, a solid or a strip's translucent sand lies landward of the coastline. The inland image
-        // measures from the runs of half-texel pieces with an open-sea texel centre within one texel edge,
-        // over boxes wider than either reach.
-        bool Landward(int i) => sea[i] == 0 || solid[i] || coast[i] == 2;
+        var dist = DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out _, out var segments);
+        // Land or a solid lies landward of the swash's coastline, a strip's translucent sand seaward. The inland
+        // image measures from the runs of half-texel pieces with an open-sea texel centre within one texel
+        // edge, over boxes wider than either reach.
+        bool Landward(int i) => sea[i] == 0 || solid[i];
         var near = new double[w * h];
         Array.Fill(near, double.PositiveInfinity);
         static float Along(float a, float b, double s) => s == 0.0 ? a : (float)(a + (s * ((double)b - a)));
@@ -1198,14 +1221,15 @@ public class OceanMaskRasterTests
         return seg;
     }
 
-    // A painted coast's waterline: where its seaward value crosses 0, on a triangle the raster draws.
-    private static List<(Vector2 P, Vector2 Q)> Waterline(Tri t)
+    // A painted coast's waterline: where its seaward value crosses 0, on a triangle the raster draws. With
+    // its Opaque as shift, the line where it turns opaque.
+    private static List<(Vector2 P, Vector2 Q)> Waterline(Tri t, float shift = 0f)
     {
         var seg = new List<(Vector2, Vector2)>();
         if (Math.Abs(Cross(new Vector2(t.B.X - t.A.X, t.B.Z - t.A.Z), new Vector2(t.C.X - t.A.X, t.C.Z - t.A.Z))) < 1e-6f)
             return seg;
         var cut = new List<Vector2>();
-        foreach (var (p, q, vp, vq) in new[] { (t.A, t.B, t.Surf.X, t.Surf.Y), (t.B, t.C, t.Surf.Y, t.Surf.Z), (t.C, t.A, t.Surf.Z, t.Surf.X) })
+        foreach (var (p, q, vp, vq) in new[] { (t.A, t.B, t.Surf.X + shift, t.Surf.Y + shift), (t.B, t.C, t.Surf.Y + shift, t.Surf.Z + shift), (t.C, t.A, t.Surf.Z + shift, t.Surf.X + shift) })
         {
             if ((vp > 0f) == (vq > 0f))
                 continue;
@@ -1233,12 +1257,14 @@ public class OceanMaskRasterTests
     // tiles, texels nothing covers, centres a solid covers, a solid off the water's corners. The
     // other is exact, to every solid's coastline.
     private static float[] DistanceReference(List<Tri> tris, float minX, float minZ, byte[] sea, bool[] solid, bool[] seed, int w, int h) =>
-        DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out _);
+        DistanceReference(tris, minX, minZ, sea, solid, seed, w, h, out _, out _);
 
-    // The same, with every coastline segment it measured.
-    private static float[] DistanceReference(List<Tri> tris, float minX, float minZ, byte[] sea, bool[] solid, bool[] seed, int w, int h, out List<(Vector2 P, Vector2 Q)> all)
+    // The same, with every coastline segment it measured, and the swash's: the painted coasts' opaque lines
+    // in place of their waterlines.
+    private static float[] DistanceReference(List<Tri> tris, float minX, float minZ, byte[] sea, bool[] solid, bool[] seed, int w, int h, out List<(Vector2 P, Vector2 Q)> all, out List<(Vector2 P, Vector2 Q)> wash)
     {
         all = new List<(Vector2 P, Vector2 Q)>();
+        wash = new List<(Vector2 P, Vector2 Q)>();
         var exact = new double[w * h];
         Array.Fill(exact, double.PositiveInfinity);
         var coasts = tris.FindAll(t => t.Kind == Kind.Coast);
@@ -1254,6 +1280,7 @@ public class OceanMaskRasterTests
             else
                 segs = Coastline(t);
             all.AddRange(segs);
+            wash.AddRange(t.Kind == Kind.Coast ? Waterline(t, t.Opaque) : segs);
             foreach (var (p, q) in segs)
             {
                 // Every texel within reach of the segment, and some past it, which saturate either way.

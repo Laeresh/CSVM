@@ -702,7 +702,8 @@ internal sealed class OceanMask
                 // U runs 0 at the land edge to 1 at the ring's seaward edge, the texture's alpha gradient.
                 var surf = kind == Kind.Surf && uv.Length > 0
                     ? new Vector3(1f - uv[i0].X, 1f - uv[i1].X, 1f - uv[i2].X) : default;
-                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp, surf));
+                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp, surf,
+                    Cliff: kind == Kind.Solid && TextureArchive.IsCliffRock(stem)));
                 _triMovers.Add(movers);
             }
         }

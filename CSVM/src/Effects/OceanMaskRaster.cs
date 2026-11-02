@@ -173,11 +173,17 @@ internal static class OceanMaskRaster
         Parallel.For(0, count, b => Dilate(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, tint));
         Parallel.For(0, count, b => Seam(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1));
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var coast = Coastline(tris, out int painted);
+        var coast = Coastline(tris, out int painted, out float[] opaque);
         Parallel.For(0, count, b => Encode(grid, coast, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var shore = SeaFacing(grid, coast, painted, out int paintedShore);
-        Parallel.For(0, count, b => Inland(grid, shore, b * rows, Math.Min(h, (b + 1) * rows) - 1, inland));
+        var shore = SeaFacing(grid, coast, painted, true, out int paintedShore);
+        // The swash runs from the strips' opaque lines, where the sea the mask draws ends. From the waterline it
+        // stayed on the translucent sand, under which the waves and their foam draw.
+        var washed = new float[opaque.Length + coast.Length - painted];
+        opaque.CopyTo(washed, 0);
+        Array.Copy(coast, painted, washed, opaque.Length, coast.Length - painted);
+        var wash = SeaFacing(grid, washed, opaque.Length, false, out _);
+        Parallel.For(0, count, b => Inland(grid, wash, b * rows, Math.Min(h, (b + 1) * rows) - 1, inland));
         long t3 = System.Diagnostics.Stopwatch.GetTimestamp();
         var spray = SpraySites(tris, grid, shore, paintedShore);
         long t4 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -623,14 +629,13 @@ internal static class OceanMaskRaster
     }
 
     // The coastline in world XZ, four floats a segment: every coast edge of a solid and each painted
-    // coast's waterline. A face crossing the water's band adds its cut through y = 0, a pier's or a
-    // hull's waterline. Coplanar land under a painted coast's water side is sea in the mask. Its
-    // segments keep only their parts outside every water side, while a solid rising off that water
-    // keeps its foot.
-    // The painted waterlines come first, the first `painted` floats, so the spray pick can tell them apart.
-    private static float[] Coastline(Tri[] tris, out int painted)
+    // coast's waterline, first (`painted` floats). A face crossing the water's band adds its cut through
+    // y = 0. Coplanar land under a painted coast's water side keeps only its parts outside every water
+    // side. The opaque array holds each painted coast's line where it turns opaque, where a strip's sea ends.
+    private static float[] Coastline(Tri[] tris, out int painted, out float[] opaque)
     {
         var seg = new List<float>();
+        var edge = new List<float>();
         var water = WaterSides(tris);
         var near = new List<Tri>();
         foreach (var t in tris)
@@ -642,8 +647,12 @@ internal static class OceanMaskRaster
                 Cut(seg, t.A, t.B, -t.Surf.X, -t.Surf.Y);
                 Cut(seg, t.B, t.C, -t.Surf.Y, -t.Surf.Z);
                 Cut(seg, t.C, t.A, -t.Surf.Z, -t.Surf.X);
+                Cut(edge, t.A, t.B, -t.Surf.X - t.Opaque, -t.Surf.Y - t.Opaque);
+                Cut(edge, t.B, t.C, -t.Surf.Y - t.Opaque, -t.Surf.Z - t.Opaque);
+                Cut(edge, t.C, t.A, -t.Surf.Z - t.Opaque, -t.Surf.X - t.Opaque);
             }
         }
+        opaque = edge.ToArray();
         painted = seg.Count;
         foreach (var t in tris)
         {
@@ -808,16 +817,17 @@ internal static class OceanMaskRaster
         }
     }
 
-    // Whether a resolved texel lies on the land side of the coastline: land, a solid, or a strip's
-    // translucent sand. That sand is sea in the mask, yet landward of the painted waterline.
-    private static bool Landward(Grid g, int i) => g.Sea[i] == 0 || g.Solid[i] || g.Coast[i] == CoastUnder;
+    // Whether a resolved texel lies on the land side of the coastline: land, a solid, or, with `under`, a
+    // strip's translucent sand. That sand is sea in the mask, landward of the painted waterline but
+    // seaward of the strip's opaque line.
+    private static bool Landward(Grid g, int i, bool under) => g.Sea[i] == 0 || g.Solid[i] || (under && g.Coast[i] == CoastUnder);
 
     // The parts of the coastline segments with an open-sea texel centre within one Cell, read off the
     // resolved grid, in pieces of half a Cell. A flat land edge under a strip's sand is coastline to the
     // shore distance, but no sea washes it. ⚠ Keep it per piece: an inland edge of flat land touching the
     // sea at one end carries the swash along all of it. In order, so the first `kept` floats are the
     // sea-facing parts of the first `painted`.
-    private static float[] SeaFacing(Grid g, float[] coast, int painted, out int kept)
+    private static float[] SeaFacing(Grid g, float[] coast, int painted, bool under, out int kept)
     {
         var list = new List<float>();
         kept = 0;
@@ -828,7 +838,7 @@ internal static class OceanMaskRaster
             int from = -1;
             for (int p = 0; p <= pieces; p++)
             {
-                bool wet = p < pieces && FacesSea(g, Along(ax, bx, (double)p / pieces), Along(az, bz, (double)p / pieces),
+                bool wet = p < pieces && FacesSea(g, under, Along(ax, bx, (double)p / pieces), Along(az, bz, (double)p / pieces),
                     Along(ax, bx, (double)(p + 1) / pieces), Along(az, bz, (double)(p + 1) / pieces));
                 if (wet && from < 0)
                 {
@@ -847,10 +857,11 @@ internal static class OceanMaskRaster
     }
 
     // Where the breakers throw spray: points along the foot of each solid face rising SprayRise or more
-    // at over 45 degrees from under SolidTop. A cliff's foot stands on a painted coast with a water side,
-    // within SprayReach of a sea-facing painted waterline (the first `painted` floats of shore). A bare
-    // one (a quay, rock off every painted coast) stands within a Cell of an open-sea texel centre. Sorted,
-    // then thinned in that order, so no triangle order moves a site.
+    // at over 45 degrees from under SolidTop. A cliff's foot is natural cliff rock (Tri.Cliff) on a
+    // painted coast with a water side. It stands within SprayReach of a sea-facing painted waterline (the
+    // first `painted` floats of shore). A bare one (a quay, a breakwater across a beach, rock off every painted
+    // coast) stands within a Cell of an open-sea texel centre. Sorted, then thinned in that order, so no
+    // triangle order moves a site.
     private static SpraySite[] SpraySites(Tri[] tris, Grid g, float[] shore, int painted)
     {
         var index = new Dictionary<long, List<int>>();
@@ -878,12 +889,12 @@ internal static class OceanMaskRaster
             var face = new Vector2(n.X, n.Z).Normalized();
             int feet = (t.A.Y < SolidTop ? 1 : 0) + (t.B.Y < SolidTop ? 1 : 0) + (t.C.Y < SolidTop ? 1 : 0);
             if (feet == 1)
-                Site(t.A.Y < SolidTop ? t.A : t.B.Y < SolidTop ? t.B : t.C, face);
+                Site(t.A.Y < SolidTop ? t.A : t.B.Y < SolidTop ? t.B : t.C, face, t.Cliff);
             else
             {
-                Foot(t.A, t.B, face);
-                Foot(t.B, t.C, face);
-                Foot(t.C, t.A, face);
+                Foot(t.A, t.B, face, t.Cliff);
+                Foot(t.B, t.C, face, t.Cliff);
+                Foot(t.C, t.A, face, t.Cliff);
             }
         }
         found.Sort((p, q) => p.At.X != q.At.X ? p.At.X.CompareTo(q.At.X) : p.At.Y != q.At.Y ? p.At.Y.CompareTo(q.At.Y)
@@ -909,16 +920,16 @@ internal static class OceanMaskRaster
         }
         return kept.ToArray();
 
-        void Foot(Vector3 p, Vector3 q, Vector2 face)
+        void Foot(Vector3 p, Vector3 q, Vector2 face, bool cliff)
         {
             if (p.Y >= SolidTop || q.Y >= SolidTop)
                 return;
             int k = Math.Max(1, (int)Math.Ceiling(new Vector2(q.X - p.X, q.Z - p.Z).Length() / SpraySpacing));
             for (int i = 0; i < k; i++)
-                Site(p.Lerp(q, (i + 0.5f) / k), face);
+                Site(p.Lerp(q, (i + 0.5f) / k), face, cliff);
         }
 
-        void Site(Vector3 p, Vector2 face)
+        void Site(Vector3 p, Vector2 face, bool cliff)
         {
             double best = double.MaxValue;
             var at = new Vector2(p.X, p.Z);
@@ -935,7 +946,8 @@ internal static class OceanMaskRaster
                     }
                 }
             }
-            bool bare = best > SprayReach || !OnPaintedCoast(p);
+            // A breakwater or quay wall standing on a beach is bare: only natural cliff rock sprays by default.
+            bool bare = !cliff || best > SprayReach || !OnPaintedCoast(p);
             // A bare foot stands on the water itself, open sea a Cell out from one side of its face. So does
             // a cliff's foot at its own waterline, which has no other direction to the sea.
             if (bare || away.Length() < 1f)
@@ -985,10 +997,10 @@ internal static class OceanMaskRaster
     private static bool OpenSea(Grid g, float x, float z)
     {
         int ix = (int)Math.Floor((x - g.MinX) / Cell), iz = (int)Math.Floor((z - g.MinZ) / Cell);
-        return ix >= 0 && iz >= 0 && ix < g.W && iz < g.H && g.Sea[(iz * g.W) + ix] == 1 && !Landward(g, (iz * g.W) + ix);
+        return ix >= 0 && iz >= 0 && ix < g.W && iz < g.H && g.Sea[(iz * g.W) + ix] == 1 && !Landward(g, (iz * g.W) + ix, true);
     }
 
-    private static bool FacesSea(Grid g, float ax, float az, float bx, float bz)
+    private static bool FacesSea(Grid g, bool under, float ax, float az, float bx, float bz)
     {
         int z0 = Math.Max(0, (int)Math.Floor((Math.Min(az, bz) - Cell - g.MinZ) / Cell));
         int z1 = Math.Min(g.H - 1, (int)Math.Ceiling((Math.Max(az, bz) + Cell - g.MinZ) / Cell));
@@ -999,7 +1011,7 @@ internal static class OceanMaskRaster
             for (int x = x0; x <= x1; x++)
             {
                 int i = (z * g.W) + x;
-                if (g.Sea[i] == 1 && !Landward(g, i)
+                if (g.Sea[i] == 1 && !Landward(g, i, under)
                     && Segment(g.MinX + ((x + 0.5f) * Cell), g.MinZ + ((z + 0.5f) * Cell), ax, az, bx, bz) <= Cell)
                     return true;
             }
@@ -1039,7 +1051,7 @@ internal static class OceanMaskRaster
             for (int x = 0; x < w; x++)
             {
                 int i = (y * w) + x;
-                inland[i] = InlandByte(Landward(g, i), dist[((y - r0) * w) + x]);
+                inland[i] = InlandByte(Landward(g, i, false), dist[((y - r0) * w) + x]);
             }
         }
     }
@@ -1098,8 +1110,9 @@ internal static class OceanMaskRaster
     /// group; a ramp, rising off sea level, takes <see cref="RampSea"/> and lifts the ocean. A surf triangle carries its corners' coverage (1 - u) in <see cref="Surf"/>.
     /// A painted coast carries there how far seaward of its waterline each corner lies, in fade widths,
     /// its coverage 1 less that. Down to -<see cref="Opaque"/> it is sea with no distance and full
-    /// coverage, under a strip's translucent sand; below, land.</summary>
-    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default, float Opaque = 0f);
+    /// coverage, under a strip's translucent sand; below, land. <see cref="Cliff"/> marks natural cliff rock
+    /// (<see cref="Mech3.TextureArchive.IsCliffRock"/>). Only its foot on a painted coast sprays.</summary>
+    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default, float Opaque = 0f, bool Cliff = false);
 
     /// <summary>A point on a cliff's or a bare solid's foot where the breakers throw spray. Seaward is
     /// the unit direction to the sea, Behind a cliff's metres to its painted waterline (0 when bare).</summary>
