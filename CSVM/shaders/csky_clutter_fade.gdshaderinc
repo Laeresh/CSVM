@@ -109,19 +109,4 @@ bool csky_clutter_dither_keep(vec2 fragcoord, float alpha) {
     return alpha > (float(v) + 0.5) / 16.0;
 }
 
-// The same dither with its thresholds turned every frame: `frame` steps each pixel's rank by 7, which
-// visits all 16 in 16 frames, so TAA's history averages the pattern into the alpha instead of holding
-// a screen-locked lattice. Each frame keeps the ordered pattern's even spread. `frame` must come from
-// the shader clock (csky_time), so a fixed-step run stays a function of its frame count.
-bool csky_clutter_dither_keep_frame(vec2 fragcoord, float alpha, int frame) {
-    if (alpha >= 0.996) {
-        return true;
-    }
-    int x = int(fragcoord.x) & 3;
-    int y = int(fragcoord.y) & 3;
-    int v = (((x ^ y) & 1) << 3) | ((y & 1) << 2) | ((x ^ y) & 2) | ((y & 2) >> 1);
-    v = (v + 7 * (frame & 15)) & 15;
-    return alpha > (float(v) + 0.5) / 16.0;
-}
-
 #endif

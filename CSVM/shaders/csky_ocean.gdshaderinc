@@ -97,15 +97,19 @@ const float CSKY_SWASH_COVER = 0.8;
 // A painted coast's albedo under the swash, at a fragment `world` drawn at a footprint of metres per
 // pixel. On the land side of the coastline within the reach, each breaker runs up as a foam film over
 // wet sand and drains before the next. Sea-level fragments only, so a pier or a hull takes none.
-vec3 csky_ocean_swash(vec3 world, vec3 albedo, float footprint) {
+// Past the coastline the film keeps its value at the line, fading out over `seaward` metres: a coast
+// that still draws there (an opaque ramp blending out) shows no cut along the line.
+vec3 csky_ocean_swash_on(vec3 world, vec3 albedo, float footprint, float seaward) {
     float reach = csky_ocean_surf.z;
     if (csky_ocean_surf.y < 0.5 || abs(world.y) >= 0.5) {
         return albedo;
     }
     float d = csky_ocean_inland_at(world.xz);
-    if (d <= 0.0 || d >= reach) {
+    if (d <= -seaward || d >= reach) {
         return albedo;
     }
+    float carry = seaward > 0.0 ? smoothstep(-seaward, 0.0, d) : 1.0;
+    d = max(d, 0.0);
     // Cycles since the line's crest (sin(2 pi cyc) at its peak) reached the coastline.
     float s = fract(csky_surf_arrive(world.xz, csky_ocean_surf.x) - 0.25);
     // TUNE. The run-up climbs for 0.3 of a cycle, the backwash drains for the rest.
@@ -121,8 +125,13 @@ vec3 csky_ocean_swash(vec3 world, vec3 albedo, float footprint) {
     // pixel spans too much of a cell to show it without shimmer.
     float n = foam_noise(world.xz * 0.625 - vec2(csky_time * (900.0 / 3600.0), 0.0), 900.0);
     float lace = mix(0.5, smoothstep(0.0, 0.3, n + 0.4 * density - 0.1), smoothstep(4.0, 9.0, 1.6 / footprint));
-    vec3 col = albedo * mix(vec3(1.0), CSKY_SWASH_WET, wet);
-    return mix(col, CSKY_SWASH_FOAM, CSKY_SWASH_COVER * density * lace);
+    vec3 col = albedo * mix(vec3(1.0), CSKY_SWASH_WET, wet * carry);
+    return mix(col, CSKY_SWASH_FOAM, CSKY_SWASH_COVER * density * lace * carry);
+}
+
+// The swash ending at the coastline, for a coast that draws nothing past it.
+vec3 csky_ocean_swash(vec3 world, vec3 albedo, float footprint) {
+    return csky_ocean_swash_on(world, albedo, footprint, 0.0);
 }
 
 // Whether any texel the filter reads at a world X/Z is a ramp's open sea (OceanMaskRaster.RampSea).

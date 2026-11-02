@@ -219,13 +219,14 @@ public class GraphicsModeTests
         }
     }
 
-    /// <summary>A painted coast fades along its own UV only while the ocean is on and never for a spyglass
-    /// disc. An opaque ramp fades by a dither, a blended strip by its alpha. Neither takes the mask hide, both
-    /// keep the matte arm, and under Original each text is an unflagged surface's.</summary>
+    /// <summary>A painted coast fades only while the ocean is on and never for a spyglass disc. A blended strip's
+    /// alpha falls along its own UV. An opaque ramp blends out by the inland image's world distance off the
+    /// waterline, with no dither, keeping its land side in the depth prepass. Neither takes the mask hide,
+    /// both keep the matte arm, and under Original each text is an unflagged surface's.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void APaintedCoastFadesByItsOwnUv(bool blend)
+    public void APaintedCoastFadesOverTheWaves(bool blend)
     {
         try
         {
@@ -234,25 +235,35 @@ public class GraphicsModeTests
             GraphicsMode.Set(true);
             string plain = WorldText(blend, false, paintedCoast: false);
             string coast = WorldText(blend, false, paintedCoast: true);
-            Assert.Contains("uniform vec4 coast_fade = vec4(0.0);", coast);
-            Assert.Contains($"    if (csky_ocean_on > 0.5 && coast_fade.w > 0.0 && !{CSVM.Mech3.SceneBuilder.FlatSeaEye}) {{", coast);
-            Assert.Equal(!blend, coast.Contains("if (!csky_clutter_dither_keep_frame(FRAGCOORD.xy, coast_keep, int(floor(csky_time * 60.0 + 0.5)))) { discard; }", StringComparison.Ordinal));
-            Assert.Equal(!blend, coast.Contains(CSVM.Mech3.SceneBuilder.TimeInclude, StringComparison.Ordinal));
-            Assert.DoesNotContain("csky_clutter_dither_keep(FRAGCOORD.xy, coast_keep)", coast);
+            string eye = CSVM.Mech3.SceneBuilder.FlatSeaEye;
+            Assert.Equal(blend, coast.Contains("uniform vec4 coast_fade = vec4(0.0);", StringComparison.Ordinal));
+            Assert.Equal(blend, coast.Contains($"    if (csky_ocean_on > 0.5 && coast_fade.w > 0.0 && !{eye}) {{", StringComparison.Ordinal));
             Assert.Equal(blend, coast.Contains("        ALPHA *= coast_keep;", StringComparison.Ordinal));
+            Assert.Equal(!blend, coast.Contains("uniform float coast_reach = 0.0;", StringComparison.Ordinal));
+            Assert.Equal(!blend, coast.Contains(", depth_prepass_alpha;", StringComparison.Ordinal));
+            Assert.Equal(!blend, coast.Replace("\r\n", "\n", StringComparison.Ordinal).Contains(
+                $"    if (csky_ocean_on > 0.5 && coast_reach > 0.0 && !{eye}) {{\n"
+                + "        ALPHA = smoothstep(-coast_reach, 0.0, csky_ocean_inland_at(v_ocean_pos.xz));\n"
+                + "    }", StringComparison.Ordinal));
+            Assert.DoesNotContain("dither", coast);
+            Assert.DoesNotContain("discard", coast);
             Assert.DoesNotContain("csky_ocean_hides_sea(", coast);
             Assert.Contains("    ROUGHNESS = 1.0;", coast);
             // The swash: only while the ocean stands, on a coast that takes it, never for a spyglass disc.
             // At flat water no ocean stands, so csky_ocean_on keeps the albedo as it was.
             Assert.Contains("uniform float coast_swash = 0.0;", coast);
             Assert.Contains("    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;", coast);
+            // A ramp's film fades out past the coastline instead of stopping on it, so no cut runs along the line.
+            Assert.Equal(4f, CSVM.Mech3.SceneBuilder.CoastSwashCarry);
+            string footprint = "max(max(fwidth(v_ocean_pos.x), fwidth(v_ocean_pos.z)), 0.001)";
             Assert.Contains("    ALBEDO = col.rgb;\n"
                 + $"    if (csky_ocean_on > 0.5 && coast_swash > 0.5 && !{CSVM.Mech3.SceneBuilder.FlatSeaEye}) {{\n"
-                + "        ALBEDO = csky_ocean_swash(v_ocean_pos, ALBEDO, max(max(fwidth(v_ocean_pos.x), fwidth(v_ocean_pos.z)), 0.001));\n"
+                + (blend ? $"        ALBEDO = csky_ocean_swash(v_ocean_pos, ALBEDO, {footprint});\n"
+                    : $"        ALBEDO = csky_ocean_swash_on(v_ocean_pos, ALBEDO, {footprint}, 4.0);\n")
                 + "    }", coast.Replace("\r\n", "\n", StringComparison.Ordinal));
-            Assert.DoesNotContain("csky_ocean_swash(", plain);
-            // Every unflagged line survives in order, so the fade adds lines and changes none.
-            var lines = coast.Split('\n');
+            Assert.DoesNotContain("csky_ocean_swash", plain);
+            // Every unflagged line survives in order, so the fade adds lines and changes none but the ramp's render mode.
+            var lines = coast.Replace(", depth_prepass_alpha;", ";", StringComparison.Ordinal).Split('\n');
             int at = 0;
             foreach (var line in plain.Split('\n'))
             {
@@ -334,43 +345,46 @@ public class GraphicsModeTests
         Assert.False(CSVM.Mech3.SceneBuilder.TakesSwash("beach1.tif", profiles));
     }
 
-    /// <summary>The cliff tiles' per-frame dither, csky_clutter_dither_keep_frame spelled in C#. Each frame
-    /// keeps the ordered pattern's share of a 4x4 tile. Over 16 frames every pixel keeps exactly alpha's
-    /// share, what TAA's history averages to.</summary>
+    /// <summary>The ramp's blend read through the inland image, the shader's bilinear read and smoothstep spelled
+    /// in C#. Off a straight coast at 30 degrees the 8 m texels hold its exact signed distance, which is linear.
+    /// The bilinear read reproduces it up to the byte's rounding, so the ramp shows no texel across the fade.
+    /// The fade ends inside the image's reach.</summary>
     [Fact]
-    public void ThePerFrameDitherAveragesToItsAlpha()
+    public void TheRampsBlendHidesTheInlandTexels()
     {
-        static bool Keep(int x, int y, float alpha, int frame)
+        const float cell = CSVM.Effects.OceanMaskRaster.Cell, reach = CSVM.Effects.OceanMaskRaster.InlandReach;
+        const float width = CSVM.Mech3.SceneBuilder.CoastRampMetres;
+        Assert.InRange(width, cell, reach);
+        float nx = MathF.Sin(MathF.PI / 6f), nz = MathF.Cos(MathF.PI / 6f);
+        float Signed(float x, float z) => (x * nx) + (z * nz) + 3.3f;
+        float Texel(int i, int j)
         {
-            int v = (((x ^ y) & 1) << 3) | ((y & 1) << 2) | ((x ^ y) & 2) | ((y & 2) >> 1);
-            v = (v + (7 * (frame & 15))) & 15;
-            return alpha > (v + 0.5f) / 16f;
+            float d = Signed((i + 0.5f) * cell, (j + 0.5f) * cell);
+            return CSVM.Effects.OceanMaskRaster.InlandByte(d > 0f, MathF.Abs(d)) / 255f;
         }
 
-        string include = System.IO.File.ReadAllText(System.IO.Path.Combine(TestData.RepoRoot, "CSVM", "shaders", "csky_clutter_fade.gdshaderinc"));
-        Assert.Contains("v = (v + 7 * (frame & 15)) & 15;", include);
-        for (int k = 0; k <= 16; k++)
+        static float Ramp(float d, float w)
         {
-            float alpha = k / 16f;
-            for (int frame = 0; frame < 16; frame++)
+            float t = Math.Clamp((d + w) / w, 0f, 1f);
+            return t * t * (3f - (2f * t));
+        }
+
+        float worst = 0f;
+        for (float x = -40f; x <= 40f; x += 0.37f)
+        {
+            for (float z = -40f; z <= 40f; z += 0.41f)
             {
-                int tile = 0;
-                for (int y = 0; y < 4; y++)
-                    for (int x = 0; x < 4; x++)
-                        tile += Keep(x, y, alpha, frame) ? 1 : 0;
-                Assert.Equal(k, tile);
-            }
-            for (int y = 0; y < 4; y++)
-            {
-                for (int x = 0; x < 4; x++)
-                {
-                    int kept = 0;
-                    for (int frame = 0; frame < 16; frame++)
-                        kept += Keep(x, y, alpha, frame) ? 1 : 0;
-                    Assert.Equal(k, kept);
-                }
+                float tx = (x / cell) - 0.5f, tz = (z / cell) - 0.5f;
+                int i = (int)MathF.Floor(tx), j = (int)MathF.Floor(tz);
+                float fx = tx - i, fz = tz - j;
+                float v = float.Lerp(float.Lerp(Texel(i, j), Texel(i + 1, j), fx), float.Lerp(Texel(i, j + 1), Texel(i + 1, j + 1), fx), fz);
+                float read = ((v * 2f) - 1f) * reach;
+                float exact = Math.Clamp(Signed(x, z), -reach, reach);
+                worst = MathF.Max(worst, MathF.Abs(Ramp(read, width) - Ramp(exact, width)));
             }
         }
+        // A byte step is 0.25 m; the ramp's steepest slope is 1.5 / width per metre.
+        Assert.True(worst < 1.5f / width * 0.2f, $"the ramp read through the texels strays {worst:0.0000} from the exact one");
     }
 
     // A lit, fogged, textured world surface, the painted coasts' case.

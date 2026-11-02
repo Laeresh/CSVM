@@ -63,6 +63,8 @@ its own predicate, because the colliders and the tile census read that classific
 | 19 | How the cliff spray is drawn | **The original's water-splash sprites** (`hg_splasher`'s `splasher` puffer, retuned from an impact to a breaker), picked from contact sheets over a breaker cycle beside a camera-facing shader sheet, which stays opt-in as `--coast-spray=sheet` |
 | 20 | C3's cliffs, which stand 50 to 130 m behind the painted waterline | **No spray in C3**, off for the whole chapter in its sea (`"spray": 0` in `ocean_seas.json`): at its cliff feet the spray landed in the forest, far from the surf line |
 | 21 | Whether quay walls and bare rock off the painted coasts take spray | **Cliffs only.** The bare sites spray only with `--coast-spray=…,quays` |
+| 23 | How C3's opaque cliff tiles give way to the ocean | **Blended by alpha over 25 m seaward of the painted waterline**, measured by world distance from the inland image, as C2's beach blends, not dithered and not along each polygon's V; picked over 12 m and over the per-frame dither (C26) |
+| 24 | Where the swash ends on C3's cliff tiles | **It fades out over 4 m past the coastline**, since the tile still draws near-opaque there and a stop on the line showed one triangle's straight waterline; a carry as long as the 25 m blend filled the mask's sea pockets inside the tiles with foam (C26) |
 
 ## ⚠ Read this before implementing anything
 
@@ -148,6 +150,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ The look at the painted coasts in C1, C2 and C3, judged from montages, at the controls in the closing batch (#270)
 23. ☑ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
 24. ☑ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
+26. ☑ C3's cliff tiles blend out by world distance from the waterline, as the beach does (#270)
 
 ### Wave D, landing
 
@@ -725,6 +728,73 @@ pairs for noise, then A/B back to back). Original mode draws no spray.
 - Spray placed per segment multiplies with C1's many short harbour edges; budget it before tuning it.
 - The original's splash defs are authored for an impact, not a cycle; reuse their sprites, not their
   one-shot timing.
+
+## C26 ☑ C3's cliff tiles blend out by world distance from the waterline
+
+**Verified.** The author picked the 25 m blend over the dither and over 12 m at the author's pose and the A3 cliff poses, and the 4 m swash carry from a before/after zoom where the foam had stopped on a straight line (decisions 23 and 24). Eight consecutive frames at the author's pose show no flicker: the mean frame-to-frame change in the fade region is 0.26 to 0.68 levels, against 0.69 to 0.84 under the dither. C1's cove and C2's beach render pixel-identical. `graphics-coast-hide` reads C3's ramps 14/14 blending under Enhanced and 14/14 opaque under Original; RunTests' unit run 7,979 passed, 0 failed; `RunTests.ps1 -Suite graphics-coast-hide,graphics-ocean-switch` green with engine errors clean. No golden is in C3 at waves, so none moves by this item. The fade in flight goes into the closing at-the-controls batch.
+
+**Landed.** `cliff1_watertrans` and `cliff1_watertrans2` blend out by their world distance seaward of
+the painted waterline, read from the inland image: alpha 1 on the land side, a smoothstep to 0 at
+`SceneBuilder.CoastRampMetres` (25 m, TUNE, the whole crossing-to-water-edge stretch at
+`cliff1_watertrans`'s median scale; 12 m rendered beside it for the author). Under Enhanced the ramp's
+text writes that alpha, so the tile draws in the transparent pass with `depth_prepass_alpha` at
+`CoastRampRenderPriority`, one below the ground layer; `FadeCoasts` sets `coast_reach` on each ramp
+the mask profiled. The per-frame dither `csky_clutter_dither_keep_frame` and its test are removed;
+`csky_clutter_dither_keep` stays for the clutter, ground cover, canopy and race ghost. `beach1` keeps
+its UV fade; the same world-distance fade on it is rendered beside it at the A1 beach pose for the
+author's call. The swash on the ramps no longer stops along the coastline: at the author's pose the
+foam had ended on a straight line where the inland image crosses 0, the waterline segment of a
+`cliff1_watertrans2` triangle (node `g28615`, model 782), with the ramp still near opaque past it, so
+nothing met the foam. The ramps call `csky_ocean_swash_on`, which holds the film's value at the line
+and fades it out over `SceneBuilder.CoastSwashCarry` (4 m, TUNE) seaward; a carry as long as the blend
+filled the small sea pockets the mask reads inside the cliff tiles with foam. The strips keep
+`csky_ocean_swash`, which ends at the line as before, and C1's cove and C2's beach render
+pixel-identical. The swash still runs on the tiles' land side.
+Under Original the tiles' text writes no alpha and is unchanged; at flat water the gate keeps alpha 1,
+but the tile still draws in the transparent pass, so the frame is not pixel-identical to the opaque
+tile: at the author's pose 0.8 % of the pixels, all on the tiles, move by more than 4 levels (at most
+31), with no visible change.
+
+**Source.** The author, flying C3 close to the cliff tiles (freecam at x -4652, y 52, z -3426): the
+dithered fade is distracting, it reads as noise, and it jumps at polygon edges in straight lines. The
+author chose to fade the cliff tiles the way C2's beach fades: blended by alpha, not dithered, and
+measured by world-space distance from the painted waterline, not by UV, so the fade is continuous
+across polygons.
+
+**Goal.** Under Enhanced with the ocean on, `cliff1_watertrans` and `cliff1_watertrans2` are opaque on
+the land side of the painted waterline and blend smoothly to nothing seaward of it, with no dither and
+no step where two polygons meet.
+
+**Evidence (confidence: traced).** The straight cuts come from decision 9's fade following each
+polygon's own V: the cliff polygons stretch V from about 60 m to over 800 m per unit (A3), so
+neighbours fade over different widths and meet at a step along their shared edge. C23's inland image
+(`csky_ocean_inland`, 8 m texels, bilinear) already holds each texel's exact signed distance to the
+nearest sea-facing coastline segment, which for the cliff tiles is their profile's crossing (B13).
+
+**Approach.** The ramp's Enhanced text writes `ALPHA = smoothstep(-coast_reach, 0.0, d)`, d the inland
+image's metres at the fragment, behind the same gate as before (`csky_ocean_on`, `coast_reach > 0`, the
+FlatSeaEye exemption). Writing an alpha moves the tile into the transparent pass, so it takes
+`depth_prepass_alpha` (its land side still writes depth and normals for the screen-space passes) and a
+render priority one below the ground layer, so every strip and decal laid over it composites on top as
+it did over the opaque tile. `coast_reach` (`SceneBuilder.CoastRampMetres`, TUNE) is set by
+`FadeCoasts` on each profiled ramp. The per-frame dither, `csky_clutter_dither_keep_frame`, had no
+other user and is removed. The Original text writes no alpha and is unchanged.
+
+**Verify.** Unit tests on the ramp's text under Enhanced and Original, and the ramp read through the
+inland bytes against the exact distance; `graphics-coast-hide` reads the cliff tiles blended under
+Enhanced with waves and opaque under Original and at flat; montages at the author's pose, the A3
+cliff poses and C2's beach, two widths, and frames over time at the author's pose.
+
+**⚠ Traps.**
+- The inland image saturates at `OceanMaskRaster.InlandReach` (32 m), so the fade cannot be wider.
+- A blended surface that writes no depth would let a coplanar strip drawn before it vanish under it;
+  the priority below the ground layer and the depth prepass keep the overlap order. At the author's
+  pose, the top view and a `shore_trans` overlap the ramp at the ground layer's own priority rendered
+  pixel-identical, so the lower priority guarantees the order rather than fixing a seen artefact.
+- A fixed width in metres can outrun a narrow tile: where a polygon's water edge lies nearer the
+  waterline than `CoastRampMetres` (A3's p10 widths put it near 14 m on `cliff1_watertrans` and 20 m
+  on `cliff1_watertrans2`), the tile ends before its alpha reaches 0. No such edge showed at the
+  poses checked; a wider width makes it likelier.
 
 # Wave D, landing
 
