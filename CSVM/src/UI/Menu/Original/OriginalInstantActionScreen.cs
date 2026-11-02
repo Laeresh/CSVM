@@ -90,6 +90,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// whether those bots race the run.</summary>
     public const string RaceBotsKey = "IA_D_RACEBOTS";
 
+    /// <summary>The remake-only Course dropdown, the Danger Zones or an authored course. It shows for
+    /// a solo stunt run in a chapter with courses.</summary>
+    public const string CourseKey = "IA_D_COURSE";
+
     /// <summary>The layout section the loadout screen is composed from.</summary>
     public const string LoadoutSection = "OrdinanceLayout";
 
@@ -156,6 +160,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // stack's next clear one after the lives box's, read the same way.
     private const float RaceBotsWidth = 60f;
     private const string RaceBotsLabelText = "Race Bots:";
+
+    // The Course box, on the race toggle's line, the two never showing together: a bot row on the
+    // join board withdraws the courses. As wide as the mission dropdown, a course name being free text.
+    private const float CourseWidth = 210f;
+    private const string CourseLabelText = "Course:";
 
     // A widget's size when the layout row is missing or its art cannot be measured.
     private const float FallbackItemHeight = 18f;
@@ -380,6 +389,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return true;
     }
 
+    /// <summary>Stands the screen on stunt flying with the Course list open, for a scripted pose.
+    /// False where <see cref="PoseRaceTime"/> answers false or the setup offers no course.</summary>
+    public bool PoseCourse() => PoseRaceTime() && OpenDropdownOn(CourseKey);
+
     /// <summary>Opens the Weapon Loadout for the seat the radio pair names. That is the wingmen's
     /// airframe and shared fit, or the picked pilot row and seat 0's fit. A build edits its own
     /// purchased fit. The picks standing on entry are remembered for CANCEL.</summary>
@@ -579,6 +592,12 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // Whether the race toggle shows: stunt flying with bot rows the toggle could seat.
     private bool RaceBotsShown => _instantAction.MissionType.Key == InstantActionFeature.StuntKey && _setup.Bots.Count > 0;
 
+    // Whether the Course box shows: the feature's solo rule over the seats and the board's bot rows.
+    private bool CourseShown => _instantAction.OffersCourse(_setup.Seats.Count, _setup.Bots.Count);
+
+    // Whether a launch now flies an authored course, which takes no waves, wingmen or lives.
+    private bool CourseFlown => _instantAction.LaunchCourse(_setup.Seats.Count, _setup.Bots.Count) != null;
+
     // The remake-only box the page hides right now, exactly one of the two. A race spends no
     // lives, so the lives box gives way while the race time box shows.
     private string HiddenRemakeKey => RaceTimeShown ? LivesKey : RaceTimeKey;
@@ -712,6 +731,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return;
         }
 
+        // A seat or bot row joining or leaving takes stunt flying off a chapter with courses alone.
+        _instantAction.SetBoard(_setup.Seats.Count, _setup.Bots.Count);
         string hidden = HiddenRemakeKey;
         bool orphaned = _iaOpen == hidden;
         if (orphaned)
@@ -792,6 +813,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return OriginalDropLists.Over(key, null, list.Items, RaceBotsBox(screen));
         }
 
+        if (key == CourseKey)
+        {
+            return OriginalDropLists.Over(key, null, list.Items, CourseBox(screen));
+        }
+
         return screen.Widget(key) is { } open
             ? OriginalDropLists.Over(key, open, list.Items, DropBox(open), list.Allowed)
             : null;
@@ -842,15 +868,18 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         {
             int setup = rows.Count;
             AddDropdown(screen, rows, PlayerPlaneKey);
-            // The race blanks the wingman boxes too: its AI would not keep weapons off.
-            AddDropdown(screen, rows, WingmenKey, live: !RaceTimeShown);
-            AddDropdown(screen, rows, WingmanPlaneKey, live: !RaceTimeShown && _instantAction.NumWingmen > 0);
+            // The race blanks the wingman boxes too: its AI would not keep weapons off. A course
+            // flies alone, as --course does.
+            bool wingmen = !RaceTimeShown && !CourseFlown;
+            AddDropdown(screen, rows, WingmenKey, live: wingmen);
+            AddDropdown(screen, rows, WingmanPlaneKey, live: wingmen && _instantAction.NumWingmen > 0);
             AddLives(screen, rows);
             AddDropdown(screen, rows, MissionKey);
             AddDropdown(screen, rows, EnvironmentKey);
             AddWave(screen, rows, 0);
             AddRemakeRow(screen, rows, setup, RaceTimeKey, RaceTimeDropdown(), RaceTimeBox(screen), RaceTimeShown);
             AddRemakeRow(screen, rows, setup, RaceBotsKey, RaceBotsDropdown(), RaceBotsBox(screen), RaceBotsShown);
+            AddRemakeRow(screen, rows, setup, CourseKey, CourseDropdown(), CourseBox(screen), CourseShown);
         }
         else
         {
@@ -880,9 +909,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         var list = LivesDropdown();
         var box = LivesBox(screen);
         bool shown = HiddenRemakeKey != LivesKey;
-        string value = shown ? list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)] : string.Empty;
+        // A course run spends no lives, so the box stands blank and inert as a wave box does.
+        bool live = shown && !CourseFlown;
+        string value = live ? list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)] : string.Empty;
         rows.Add(new OriginalRow(LivesKey, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
-            shown, shown ? 1 : -1, LivesArrow(screen), shown));
+            live, shown ? 1 : -1, LivesArrow(screen), shown));
     }
 
     // The race time box and the race toggle, remake-only controls in the lives box's idiom.
@@ -915,6 +946,13 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return new DropdownList(RaceBotsRows, ia.RaceBots ? 1 : 0, _ => true, i => ia.RaceBots = i == 1);
     }
 
+    // The Course list: the feature's rows, the Danger Zones first where the chapter ships them.
+    private DropdownList CourseDropdown()
+    {
+        var ia = _instantAction;
+        return new DropdownList(ia.CourseOptions, ia.CourseIndex, _ => true, ia.SelectCourse);
+    }
+
     // The race time list: the window lengths in their order, written with their unit.
     private DropdownList RaceTimeDropdown()
     {
@@ -928,6 +966,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private (float X, float Y, float Width, float Height) RaceTimeBox(MenuLayoutScreen screen) => RemakeBox(screen, 0, RaceTimeWidth);
 
     private (float X, float Y, float Width, float Height) RaceBotsBox(MenuLayoutScreen screen) => RemakeBox(screen, 1, RaceBotsWidth);
+
+    private (float X, float Y, float Width, float Height) CourseBox(MenuLayoutScreen screen) => RemakeBox(screen, 1, CourseWidth);
 
     // A remake-only box's rectangle takes the mission dropdown's left edge and item height. The
     // row therefore stands in the setup column at the height every other box there draws. Its line
@@ -994,7 +1034,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // would fill.
     private void AddWave(MenuLayoutScreen screen, List<OriginalRow> rows, int wave)
     {
-        bool counted = !_instantAction.TakesNoWaves(Pilots);
+        bool counted = !_instantAction.TakesNoWaves(Pilots) && !CourseFlown;
         bool configured = counted && _instantAction.Waves[wave].Count > 0;
         string n = wave.ToString(CultureInfo.InvariantCulture);
         AddDropdown(screen, rows, WaveKeyPrefixes[0] + n, live: counted);
@@ -1132,6 +1172,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 });
             case RaceBotsKey:
                 return RaceBotsShown ? RaceBotsDropdown() : null;
+            case CourseKey:
+                return CourseShown ? CourseDropdown() : null;
             case LivesKey:
             case RaceTimeKey:
                 // Hidden, a box is no dropdown at all, so no scripted open or sideways step can
@@ -1139,7 +1181,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 return key == HiddenRemakeKey ? null : key == LivesKey ? LivesDropdown() : RaceTimeDropdown();
             case EnvironmentKey:
                 return new DropdownList(Names(InstantActionFeature.Environments, e => e.Name), ia.EnvironmentIndex,
-                    i => InstantActionFeature.EnvironmentAllowed(i, ia.MissionType.Key), i =>
+                    i => ia.AllowsEnvironment(i, ia.MissionType.Key), i =>
                     {
                         ia.SelectEnvironment(i);
                         ia.ConfirmEnvironment();
@@ -1388,6 +1430,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 lines.Add(new BoardLine(RaceBotsLabelText, LivesTitleX(screen), RaceBotsBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
             }
 
+            if (CourseShown)
+            {
+                lines.Add(new BoardLine(CourseLabelText, LivesTitleX(screen), CourseBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+            }
+
             AddText(screen, lines, "IA_T_ENEMY0", LabelFont);
             AddText(screen, lines, "IA_T_CONTINUED", InstructionFont);
         }
@@ -1507,8 +1554,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, HoveredRowR, HoveredRowG, HoveredRowB));
             }
 
+            // A marquee line, so a value wider than its row (a long course title) keeps to the row.
             panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
-                item.Enabled ? BoardInk.Row : BoardInk.Detail, i));
+                item.Enabled ? BoardInk.Row : BoardInk.Detail, i)
+            { Marquee = true });
         }
 
         if (OpenInstantActionDrop(screen) is { } drop && OriginalDropLists.Window(drop, _iaListTop, StripSize) is { } window
@@ -1570,8 +1619,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                     layers.Pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
                 }
 
+                // A marquee line: a plain one wider than the box would wrap below it.
                 lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
-                    focused ? BoardInk.RowFocused : BoardInk.Row, index));
+                    focused ? BoardInk.RowFocused : BoardInk.Row, index)
+                { Marquee = true });
                 break;
             case OriginalRowKind.Radio when row.Art != null:
                 // An eight-state strip: the four button states unmarked, then the same four marked.

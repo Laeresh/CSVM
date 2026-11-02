@@ -563,7 +563,7 @@ contracts keep the roster from taking all of `SessionSpec` or exposing either as
 leaving its required dependencies explicit at the production seam. `HumanRosterBindings.RigCount`
 counts SEATS, guests on other machines included, and `NetSeats` is that roster indexed by seat,
 empty outside a network match, `SeatLeft` says which guest's seat has left it, and `SeatFit` is a co-op seat's loadout. `SoloStuntBoard` is how a
-solo stunt run gets its results board without the roster naming a screen. `FlightWorldBindings.Racing` is the session's race flag, which both assemblers read. Read `FlightRoster.cs` next.
+solo stunt run gets its results board without the roster naming a screen, and `BestSplits` how a course run's HUD reads the stored best's splits without the roster holding the score store. `FlightWorldBindings.Racing` is the session's race flag, which both assemblers read. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/CrashRigQueue.cs
 The session's queue of crash rigs whose aeroplane is already flying. A mid-flight AI introduction is

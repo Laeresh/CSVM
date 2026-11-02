@@ -260,6 +260,9 @@ public partial class GameSession : Node3D
     // The stunt race (--stunt with several pilots), its bots, spectators and reruns
     // (src/Session/World/StuntRaceDirector.cs), built ahead of the roster. Null outside a race.
     private StuntRaceDirector? _raceDirector;
+    // The --course= run, built by ResolveCourse before the world so a refusal builds nothing. It
+    // replaces the Danger Zone run and the spawn list. Null outside a course launch.
+    private StuntMission? _courseRun;
     // Who is holding the sim clock and why, shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
@@ -484,6 +487,10 @@ public partial class GameSession : Node3D
     /// suite reads the dogfight board and the pause board's Restart through them.</summary>
     internal SessionBoards? Boards => _boards;
 
+    /// <summary>Why a menu launch's course could not be flown, in the player's words, null when
+    /// nothing refused it. The launcher shows it in the menu the launch came from.</summary>
+    internal string? MenuRefusal { get; private set; }
+
     /// <summary>This session's own sim clock. Two sessions in one process share one
     /// <see cref="GameClock.Current"/>, so a suite driving both reads each end's here.</summary>
     internal GameClock? SimClock => _clock;
@@ -678,6 +685,11 @@ public partial class GameSession : Node3D
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
+        if (!ResolveCourse())
+        {
+            return false;
+        }
+
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
         _campaign = CampaignDirector.TryCreate(_spec, _paths.Data.Zrdr, state.MissionZrdr, _wire.CoopWingman, _wire.CoopPersisted);
         if (_campaign is { } campaign)
@@ -851,18 +863,22 @@ public partial class GameSession : Node3D
             _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
         }
         var gamez = state.Gamez;
+        // The labs' ground under the cursor, built on the first ray, so a session that never asks never pays for it.
+        var ground = new Lazy<Vector3[]>(() =>
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var triangles = VegetationGround.Triangles(gamez);
+            Log.Info("ui", $"labs: {triangles.Length / 3} ground triangles in {watch.ElapsedMilliseconds} ms");
+            return triangles;
+        });
         if (_vegetation is { Clutter: { Vegetation: { } vegetation } clutter } stage)
         {
-            // Built on the paint tool's first ray, so a session that never paints never pays for it.
-            var ground = new Lazy<Vector3[]>(() =>
-            {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
-                var triangles = VegetationGround.Triangles(gamez);
-                Log.Info("ui", $"vegetation lab: {triangles.Length / 3} ground triangles in {watch.ElapsedMilliseconds} ms");
-                return triangles;
-            });
             _labs!.BuildVegetationLab(vegetation, stage.Apply, clutter.Mask, stage.Apply,
                 p => VegetationGround.LayersAt(gamez, p), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
+        }
+        if (gamez != null)
+        {
+            _labs!.BuildCourseLab(CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
         }
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
@@ -1380,6 +1396,48 @@ public partial class GameSession : Node3D
         {
             _sessionTextures = archives.Textures;
         }
+    }
+
+    // --course=: the course from whichever source wins it, its run and its gate motion. A course
+    // this launch cannot fly fails the build, since the Danger Zones in its place would pass for
+    // it. A command line quits with exit 1; a menu launch leaves MenuRefusal for the menu to show.
+    private bool ResolveCourse()
+    {
+        _courseRun = null;
+        if (_spec.Course is not { } wanted)
+        {
+            return true;
+        }
+
+        string? refusal = _spec.CourseRefusal;
+        if (refusal == null)
+        {
+            if (CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det).Load(wanted.Chapter, wanted.Name, out string error) is not { } course)
+            {
+                refusal = error;
+            }
+            else if (StuntMission.ForCourse(course) is not { } run)
+            {
+                refusal = "its sequence is empty";
+            }
+            else
+            {
+                run.GateMotion = (g, t) => CourseMotion.Offset(course.Gates[g], t);
+                _courseRun = run;
+                return true;
+            }
+        }
+
+        if (_menuDriven)
+        {
+            MenuRefusal = $"The course {wanted.Chapter}/{wanted.Name} cannot be flown: {refusal}.";
+            Log.Warn("flight", $"course {wanted.Chapter}/{wanted.Name}: {refusal}; back to the menu");
+            return false;
+        }
+
+        Log.Error("flight", $"--course={wanted.Chapter}/{wanted.Name}: {refusal}; refusing the launch");
+        GetTree().Quit(1);
+        return false;
     }
 
     // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is built, so
@@ -1910,7 +1968,10 @@ public partial class GameSession : Node3D
         _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
         // A team Dogfight walks its teams' blocks of the whole table instead of the free-for-all's.
         _spawnPicker.SeatTeams = VersusDirector.SpawnTeams(_spec, _wire.Seats);
-        var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdr, iaScenario);
+        // A course flies from its start point alone. The spawn, every rerun and every respawn land
+        // there through the list walk, on the Instant Action start state.
+        var spawnList = _courseRun?.Course is { } flownCourse ? new List<SpawnPoint> { flownCourse.Start }
+            : _spawnPicker.LoadSpawnList(state.MissionZrdr, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
         _spawnPicker.PlanTeams(spawnList, spawnBase);
 
@@ -1993,7 +2054,14 @@ public partial class GameSession : Node3D
         }
         else if (wantStunt)
         {
-            stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
+            stuntZones = _courseRun ?? StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
+            if (_courseRun?.Course is { } course)
+            {
+                // The gates drawn where they are scored: both read CourseMotion on the sim clock. A
+                // touched course pylon is cut, and a rerun stands them whole.
+                _worldRoot!.AddChild(CourseVisuals.Build(course).Follow(_courseRun));
+            }
+
             if (stuntZones == null)
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B), a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
@@ -2135,6 +2203,7 @@ public partial class GameSession : Node3D
             PadAssignment = padAssignment,
             PauseState = _pauseState!,
             StuntBoard = boards.BuildSoloStuntBoard,
+            BestSplits = key => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway).GetSplits(key),
             ToggleGraphicsMode = _toggleGraphicsMode,
             RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,

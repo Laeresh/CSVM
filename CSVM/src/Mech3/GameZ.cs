@@ -41,6 +41,10 @@ public struct GameZLight
 /// </summary>
 public sealed class GameZ
 {
+    /// <summary>The shipped polygon fixes: per chapter, polygons whose authored priority ties a coplanar
+    /// layer the original z-fights with. Keys beginning with <c>_</c> are prose.</summary>
+    public const string PolygonPatchesPath = "res://data/polygon_patches.json";
+
     // The original's surface-type registry, restricted to the labels mech3ax's extraction has
     // ever emitted over the shipped install (analysis/surface-classification/FINDINGS.md,
     // 2026-08-11): the `soil` field is a bulk-read raw dword from the material record, and
@@ -115,6 +119,88 @@ public sealed class GameZ
         using (var s = Open("textures.json")) gz.ParseTextures(s);
         using (var s = Open("materials.json")) gz.ParseMaterials(s);
         return gz;
+    }
+
+    /// <summary>Applies <see cref="PolygonPatchesPath"/> to <paramref name="chapter"/>, logging what it did.
+    /// Idempotent, so a held gamez built twice is patched once in effect.</summary>
+    public int ApplyShippedPolygonPatches(string chapter)
+    {
+        if (!Godot.FileAccess.FileExists(PolygonPatchesPath))
+            return 0;
+        var warnings = new List<string>();
+        int applied = ApplyPolygonPatches(chapter, Godot.FileAccess.GetFileAsString(PolygonPatchesPath), warnings);
+        foreach (var w in warnings)
+            Utils.Log.Warn("world", $"polygon patches: {w}");
+        if (applied > 0)
+            Utils.Log.Info("world", $"polygon patches: {applied} polygon(s) of {chapter} take a new priority");
+        return applied;
+    }
+
+    /// <summary>Sets the priority of each polygon <paramref name="json"/> lists under <paramref name="chapter"/>,
+    /// an entry being <c>{node, polygon, texture, priority}</c> with <c>polygon</c> the index in the node's mesh.
+    /// An entry whose node, polygon or texture does not match only warns, so a different install is never
+    /// patched blind. Returns the polygons patched.</summary>
+    public int ApplyPolygonPatches(string chapter, string json, List<string> warnings)
+    {
+        JsonElement entries = default;
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (string.Equals(p.Name, chapter, StringComparison.OrdinalIgnoreCase))
+                    entries = p.Value.Clone();
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            warnings.Add($"not readable JSON ({ex.Message}), nothing patched");
+            return 0;
+        }
+
+        if (entries.ValueKind != JsonValueKind.Array)
+            return 0;
+        int applied = 0;
+        foreach (var e in entries.EnumerateArray())
+        {
+            string node, texture;
+            int index, priority;
+            try
+            {
+                node = e.GetProperty("node").GetString() ?? "";
+                index = e.GetProperty("polygon").GetInt32();
+                texture = e.GetProperty("texture").GetString() ?? "";
+                priority = e.GetProperty("priority").GetInt32();
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or FormatException)
+            {
+                warnings.Add($"{chapter}: entry {e} lacks node, polygon, texture or priority, skipped");
+                continue;
+            }
+
+            int hits = 0;
+            var meshes = new HashSet<int>();
+            foreach (var n in Nodes)
+            {
+                if (n.Name != node || n.MeshIndex < 0 || n.MeshIndex >= Meshes.Count || !meshes.Add(n.MeshIndex))
+                    continue;
+                var polys = Meshes[n.MeshIndex].Polygons;
+                if (index < 0 || index >= polys.Count)
+                    continue;
+                var poly = polys[index];
+                int m = poly.MaterialIndex;
+                if (m < 0 || m >= Materials.Count || !string.Equals(Materials[m].TextureName, texture, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                poly.Priority = priority;
+                hits++;
+            }
+
+            if (hits == 0)
+                warnings.Add($"{chapter}: no polygon {index} wearing {texture} on a node named {node}, skipped");
+            applied += hits;
+        }
+
+        return applied;
     }
 
     /// <summary>The mesh is a level-editor gizmo, not scenery: one flat-coloured triangle with no

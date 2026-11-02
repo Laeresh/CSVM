@@ -11,9 +11,9 @@ public readonly record struct MenuChapter(string Code, bool DangerZones);
 /// <summary>
 /// The eight chapter worlds every non-campaign mode picks from, in code order. The lettered codes
 /// are separate terrain databases, not lighting variants (docs/formats/spawns.md). Danger Zones
-/// marks the chapters whose <c>ia.json</c> ships a <c>dzones</c> list; Stunt Flying offers only
-/// those, since a stunt run elsewhere would be an empty free flight. Shared so that no feature
-/// and no presentation carries a second copy of the roster or of the flag.
+/// marks the chapters whose <c>ia.json</c> ships a <c>dzones</c> list. Instant Action's Stunt Flying
+/// also counts a chapter's authored courses. Shared so that no feature and no presentation carries
+/// a second copy of the roster or of the flag.
 /// </summary>
 public static class MenuChapters
 {
@@ -35,7 +35,7 @@ public static class MenuChapters
     public static IReadOnlyList<MenuChapter> All => Rows;
 
     /// <summary>The roster a mode offers: Stunt Flying only the chapters with Danger Zones, every
-    /// other mode all eight.</summary>
+    /// other mode all eight. Authored courses are the Instant Action feature's to add.</summary>
     public static IReadOnlyList<MenuChapter> For(MenuMode mode) =>
         mode == MenuMode.Stunt ? WithDangerZones : All;
 

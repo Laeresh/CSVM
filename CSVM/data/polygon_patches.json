@@ -1,0 +1,8 @@
+{
+  "_about": "Polygons whose authored draw priority ties a coplanar layer drawn after them, which the original z-fights on. Each entry raises one polygon (its index in the node's mesh) so it draws on top in both graphics modes; the texture guards against patching a different install.",
+  "C1": [
+    { "node": "a7", "polygon": 3, "texture": "gantry_tracks2.tif", "priority": 1, "_why": "rail under terpat03 poly 21" },
+    { "node": "a8", "polygon": 0, "texture": "gantry_tracks2.tif", "priority": 1, "_why": "rail under terpat03 polys 37, 38" },
+    { "node": "a8", "polygon": 62, "texture": "arcroad01.tif", "priority": 1, "_why": "ring road under grass1 polys 66, 67" }
+  ]
+}

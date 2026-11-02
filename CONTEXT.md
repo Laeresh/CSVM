@@ -261,6 +261,38 @@ The round live picture of the selected target drawn at its edge marker while the
 screen and inside the range gate. The picture alone is the **disc**.
 _Avoid_: zoom window, magnifier, picture-in-picture, scope
 
+## Air race courses
+
+**Course**:
+An authored air race layout for one chapter, one file per course: a gate pool, a sequence, and a
+start point. Remake-only content flown under Stunt Flying, distinct from the Danger Zones the
+original authors. Its file name is its id; its optional title is the name a player sees, the file
+name standing in where it has none.
+_Avoid_: track, route (a `dzpathN` ribbon is a route), circuit, map
+
+**Course gate**:
+One fly-through element of a course's gate pool: a pylon gate or a balloon ring, placed once and
+named by its id however often the sequence uses it.
+_Avoid_: gate alone where a Danger Zone aperture could be meant, checkpoint, waypoint
+
+**Pylon gate**:
+A course gate made of two course pylons standing a width apart on the ground or the sea.
+_Avoid_: pylon pair, air gate
+
+**Course pylon**:
+One inflatable column of a pylon gate. Never "pylon" alone: a pylon is a weapon hardpoint
+(`MarkerKind.Pylon`).
+_Avoid_: pylon, post, cone, tower
+
+**Balloon ring**:
+A course gate made of a vertical ring held up by balloons.
+_Avoid_: hoop, loop, ring gate
+
+**Sequence entry**:
+One step of a course's sequence: the course gate it names and the direction it is flown through,
+forward along the gate's heading or reverse. A gate may have several.
+_Avoid_: checkpoint, lap, waypoint, gate index
+
 ## Code layout
 
 **Family**:

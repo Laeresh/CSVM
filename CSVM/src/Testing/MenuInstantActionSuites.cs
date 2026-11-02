@@ -19,6 +19,10 @@ namespace CSVM.Testing;
 /// </summary>
 internal static class MenuInstantActionSuites
 {
+    // A course a player titled at length, as the course lab lets them.
+    private const string LongCourse = "long_title_slalom";
+    private const string LongTitle = "The Grand Hollywoodland Studio Lot Slalom and Harbour Climb Run";
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -111,6 +115,272 @@ internal static class MenuInstantActionSuites
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-instant-action");
         }
+    }
+
+    [Suite("menu-instant-action-course",
+        "Instant Action's Course option through Original's screen over the install's layout, the shipped "
+        + "courses and a scratch copy of the sample titled far wider than the Course box: that title stays on one line "
+        + "inside its box both as an open list row and picked in the closed box; "
+        + "stunt flying on the airfield (C1) opens a Course list of Danger Zones then "
+        + "sample_out_and_back by its title, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
+        + "Mission leaves as a LaunchExit naming the course by file name with no def whose session spec matches "
+        + "--stunt --course=C1/sample_out_and_back on the course, chapter, mission, mode, pilots, plane, def and "
+        + "bots, the load and pause boards' heading is the title, a bot row on the join board withdraws the box and "
+        + "flies the Danger Zones, and a menu-driven "
+        + "session over a course no library holds fails its build with the reason for the menu rather than "
+        + "quitting, the return landing back on the Instant Action screen with that reason in its warning box")]
+    internal static void MenuInstantActionCourse(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string suite = "menu-instant-action-course";
+        var exits = new List<MenuExit>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var store = MenuSuiteHost.ScratchPlanes(ctx, suite);
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
+        {
+            Planes = store,
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data, courses: LongTitledLibrary(ctx, suite));
+        host.AddSeat(seat);
+        try
+        {
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var original = host.Active as OriginalPresentation;
+            var shell = original?.Shell;
+            var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+            var fit = BoardFit.For(size.X, size.Y);
+            if (shell == null || !EnterInstantAction(ctx, host, seat, shell, fit))
+            {
+                ctx.Check(false, $"Original stands up on its Instant Action screen");
+                return;
+            }
+
+            var ia = host.Features.Get<InstantActionFeature>();
+            CourseLongTitle(ctx, host, seat, shell, fit, ia);
+            if (CoursePicked(ctx, host, seat, shell, fit, ia, exits) is not { } exit)
+            {
+                return;
+            }
+
+            CourseWithdrawn(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), exits);
+            CourseRefused(ctx, host, shell, original!, exit);
+        }
+        finally
+        {
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, suite);
+        }
+    }
+
+    // The shipped courses plus, in the suite's scratch game folder, the sample under a title far wider than the Course box.
+    private static Flight.Modes.CourseLibrary LongTitledLibrary(TestContext ctx, string suite)
+    {
+        string folder = System.IO.Path.Combine(ctx.ScratchDir, suite, Flight.Modes.CourseLibrary.GameFolderName);
+        if (System.IO.Directory.Exists(folder))
+        {
+            System.IO.Directory.Delete(folder, recursive: true);
+        }
+
+        var library = new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, folder);
+        if (library.Load("C1", "sample_out_and_back", out string error) is { } sample)
+        {
+            library.Save(sample with { Name = LongCourse, Title = LongTitle }, Flight.Modes.CourseSource.GameFolder);
+        }
+        else
+        {
+            ctx.Check(false, $"the shipped sample loads to copy under a long title ({error})");
+        }
+
+        return library;
+    }
+
+    // A title far wider than the Course box, in the open list and then closed in the box. Each stays
+    // on one line inside its box, clipped and scrolling as the lobby's long names do.
+    private static void CourseLongTitle(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
+    {
+        ctx.Check(shell.InstantAction.PoseCourse(), $"stunt flying opens the Course list ({ia.MissionType.Key})");
+        var item = shell.Rows.FirstOrDefault(r => r.Label == LongTitle);
+        StaysInBox(ctx, "the open list's row", shell.Compose().Overlays.SelectMany(p => p.Lines).FirstOrDefault(l => l.Text == LongTitle), item);
+        if (item == null)
+        {
+            return;
+        }
+
+        Click(host, seat, Pointer(fit, item.X + 5f, item.Y + 5f, pressed: true, clicked: true));
+        var box = Row(shell, OriginalInstantActionScreen.CourseKey);
+        ctx.Check(ia.Course == LongCourse && box?.Label == LongTitle, $"a click picks the long-titled course ({ia.Course})");
+        StaysInBox(ctx, "the closed Course box", shell.Compose().Lines.FirstOrDefault(l => l.Text == LongTitle), box);
+        // Back to the Danger Zones, so the steps after start where a fresh screen does.
+        ia.SelectCourse(0);
+    }
+
+    // The title drawn whole is wider than its box, so the check can fail. A plain line wraps onto the
+    // rows below; a marquee line stays on one, clipped to its box.
+    private static void StaysInBox(TestContext ctx, string what, BoardLine? line, OriginalRow? box)
+    {
+        ctx.Check(line != null && box != null, $"{what} draws the long title");
+        if (line == null || box == null)
+        {
+            return;
+        }
+
+        // At the authored page size: the suite's own viewport is no window a pilot sizes.
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            var measure = ComposedBoardView.MeasureBox(fit, view.GetThemeDefaultFont(), line.Size);
+            var one = measure(line.Text, 100000f);
+            var wrapped = measure(line.Text, line.Width);
+            ctx.Check(one.X > line.Width,
+                $"ABLE-TO-FAIL CONTROL: drawn whole, the title is wider than {what}'s text ({one.X:0.0} against {line.Width:0})");
+            float right = line.X + (line.Marquee ? line.Width : wrapped.X);
+            ctx.Check((line.Marquee || wrapped.Y <= one.Y) && line.X >= box.X && right <= box.X + box.Width,
+                $"{what} keeps the title on one line inside its box (marquee {line.Marquee}, {wrapped.Y:0.0} px tall against one line's {one.Y:0.0}, {line.X:0.0} to {right:0.0} inside {box.X:0} to {box.X + box.Width:0})");
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    // Stunt flying on the airfield with the Course list open, the sample picked by a click and flown.
+    private static LaunchExit? CoursePicked(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, List<MenuExit> exits)
+    {
+        const string sample = "sample_out_and_back";
+        const string title = "Airfield Out and Back";
+        ctx.Check(shell.InstantAction.PoseCourse() && shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.CourseKey,
+            $"stunt flying opens the Course list ({ia.MissionType.Key}, {shell.InstantAction.OpenDropdown})");
+        var labels = shell.Rows.Select(r => r.Label).ToList();
+        ctx.Check(ia.Environment.Code == "C1" && labels.Count >= 2 && labels[0] == InstantActionFeature.DangerZonesLabel && labels.Contains(title),
+            $"on the airfield the list is the Danger Zones then the chapter's courses by their titles ({ia.Environment.Code}: {string.Join(", ", labels)})");
+        var pick = shell.Rows.FirstOrDefault(r => r.Label == title);
+        if (pick == null)
+        {
+            return null;
+        }
+
+        Click(host, seat, Pointer(fit, pick.X + 5f, pick.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(ia.Course == sample && shell.InstantAction.OpenDropdown == null && Row(shell, OriginalInstantActionScreen.CourseKey)?.Label == title,
+            $"a click on the sample picks it and closes the list ({ia.Course}, {Row(shell, OriginalInstantActionScreen.CourseKey)?.Label})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.WingmenKey) is { Enabled: false } && Row(shell, "IA_D_NENEMY0") is { Enabled: false }
+                && Row(shell, OriginalInstantActionScreen.LivesKey) is { Enabled: false, Label: "" },
+            $"a course flies alone, so the wingman, enemy and lives boxes stand blank and inert");
+
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        int before = exits.Count;
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        if (exits.Count != before + 1 || exits[^1] is not LaunchExit exit)
+        {
+            ctx.Check(false, $"Fly Mission leaves as one LaunchExit ({exits.Count - before})");
+            return null;
+        }
+
+        ctx.Check(exit is { Chapter: "C1", Mode: MenuMode.Stunt, Course: sample, InstantAction: null, Bots: null, Seats.Count: 1 },
+            $"the exit names the course on C1 with no def ({exit.Chapter}, {exit.Course}, def {exit.InstantAction?.MissionType ?? "none"})");
+        string plane = exit.Seats[0].PlaneNode;
+        var menu = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), exit.Chapter, new[] { plane }, exit.Mode,
+            exit.InstantAction, bots: exit.Bots, course: exit.Course);
+        var cli = SessionSpec.Parse(new[] { "--stunt", $"--course=C1/{sample}", $"--plane={plane}" });
+        ctx.Check(menu.Course == cli.Course && menu.CourseRefusal == null && cli.CourseRefusal == null
+                && menu.Chapter == cli.Chapter && menu.Mission == cli.Mission && menu.Stunt && cli.Stunt && !menu.Versus
+                && menu.Players == cli.Players && menu.PlaneName == cli.PlaneName && menu.IaDef == cli.IaDef && menu.VsBots.Count == cli.VsBots.Count,
+            $"its session spec is the one --stunt --course= builds ({menu.Course}/{cli.Course}, {menu.Chapter}/{menu.Mission}, players {menu.Players}, plane {menu.PlaneName})");
+        ctx.Check(MenuReturnDestination.ForLaunch(exit) == MenuReturnDestination.InstantAction,
+            $"and it names the Instant Action screen as its return ({MenuReturnDestination.ForLaunch(exit).GetType().Name})");
+        // --det keeps a game-folder course of the same name out, as the shipped list above is.
+        string heading = Launch.LaunchBoards.Subject(SessionSpec.Parse(new[] { "--det", $"--course=C1/{sample}" }), ctx.DataRoot);
+        ctx.Check(heading == title, $"the load and pause boards head the flight with the course's title ({heading})");
+        return exit;
+    }
+
+    // A bot row on the join board takes the line from the Course box, and the launch flies the zones.
+    private static void CourseWithdrawn(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, PlayerSetupFeature setup, List<MenuExit> exits)
+    {
+        host.Show(MenuReturnDestination.InstantAction);
+        ctx.Check(setup.AddBot(), $"a bot row joins the board");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.CourseKey) is { Visible: false } && Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: true },
+            $"and the race toggle takes the Course box's line");
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(exits[^1] is LaunchExit { Course: null, InstantAction.MissionType: InstantActionFeature.StuntKey },
+            $"so Fly Mission flies the Danger Zones ({(exits[^1] as LaunchExit)?.Course ?? "no course"})");
+        setup.Bots.Remove(setup.Bots.Rows[0].Id);
+        host.Show(MenuReturnDestination.InstantAction);
+    }
+
+    // A menu-driven session over a course no library holds. Its build fails with the reason kept
+    // for the menu, and the run goes on (a Quit would end it). The launcher's failure path is then
+    // replayed: the exit's own return, and the reason in Original's warning box.
+    private static void CourseRefused(TestContext ctx, MenuHost host, OriginalShell shell, OriginalPresentation original, LaunchExit exit)
+    {
+        const string missing = "no_such_course";
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--det", "--mute", "--no-pads" }), exit.Chapter,
+            new[] { exit.Seats[0].PlaneNode }, exit.Mode, course: missing);
+        var pane = new Godot.SubViewport { Size = new Godot.Vector2I(64, 64), OwnWorld3D = true, RenderTargetUpdateMode = Godot.SubViewport.UpdateMode.Disabled };
+        var camera = new Godot.Camera3D();
+        var sun = new Godot.DirectionalLight3D();
+        pane.AddChild(camera);
+        pane.AddChild(sun);
+        ctx.Host.AddChild(pane);
+        var paths = new BasePaths(RepoRoot: ctx.RepoRoot, DataRoot: ctx.DataRoot) { Game = ctx.Game, Data = ctx.Data };
+        var savedClock = Utils.GameClock.Current;
+        var session = new Launch.GameSession(spec, new Launch.LauncherContext
+        {
+            Decode = ctx.Decode,
+            Paths = paths,
+            ProbeRunner = new Tooling.ProbeRunner(paths),
+            CaptureDirector = new Tooling.CaptureDirector(spec),
+            MasterSeed = 1,
+            Camera = camera,
+            Orbit = new Flight.Camera.OrbitCamera(camera),
+            Sun = sun,
+            Env = new Godot.Environment(),
+            MenuDriven = true,
+            MenuPads = null,
+            ExitSession = () => { },
+            RestartSession = () => { },
+        });
+        pane.AddChild(session);
+        string? refusal;
+        try
+        {
+            bool built = session.StartSession();
+            refusal = session.MenuRefusal;
+            ctx.Check(!built && refusal != null && refusal.Contains($"C1/{missing}", StringComparison.Ordinal),
+                $"a menu launch of a course no library holds fails its build with the reason kept ({built}: {refusal})");
+        }
+        finally
+        {
+            session.Free();
+            pane.Free();
+            Utils.GameClock.Current = savedClock;
+        }
+
+        if (refusal == null)
+        {
+            return;
+        }
+
+        host.Show(MenuReturnDestination.ForLaunch(exit));
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && original.RaiseWarning(refusal) && shell.Dialog?.Message == refusal,
+            $"the return lands on the Instant Action screen with the reason in the warning box ({shell.Screen}, {shell.Dialog?.Message})");
     }
 
     // A name no player would type, distinct per run, inside the name screen's own character set.

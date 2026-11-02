@@ -2387,8 +2387,8 @@ public partial class FlightController : Node3D
         if (IsHumanPiloted)
             _rumble.Overspeed(speedRatio > 1f, GameClock.Current?.Time ?? 0.0);
 
-        // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
-        Stunt?.Update(_model.Position);
+        // Stunt run: the gate tests, and a course's touch volumes, against this frame's committed position.
+        Stunt?.Update(_model.Position, Body?.BoundRadius ?? 0f);
 
         // The camera latch reads the same committed position, after the run's own test, so a
         // photograph and the zone it completes land on one frame.

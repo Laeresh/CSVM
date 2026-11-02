@@ -287,7 +287,7 @@ rows).
 - `src/Flight/Camera/Spyglass.cs`, the spyglass's decoded rules, engine-free: the fog-derived range gate with its engage/release pair, the framing field of view, and the camera pose.
 - `src/Flight/Camera/SpyglassView.cs`, the spyglass picture: a square `SubViewport` on the shared world with a camera of its own, one per pane, rendering only while it is aimed.
 - `src/Flight/Camera/SpyglassSun.cs`, the spyglass discs' shadowless copy of the sun under Enhanced, on a layer only the disc cameras draw.
-- `src/Flight/Camera/SpectatorCamera.cs`, the `--freecam`/`--anim-lab` observation camera: RMB-look plus WASD/QE, no roll; `Frame`/`FollowNode` track an object.
+- `src/Flight/Camera/SpectatorCamera.cs`, the `--freecam`/`--anim-lab` observation camera: RMB-look plus WASD/QE, no roll; `Frame`/`FollowNode` track an object, `LookFrom` aims it from a point.
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
@@ -322,7 +322,7 @@ rows).
 - `src/Flight/Hud/HudFontTest.cs`, the `--hud-font-test` overlay: a known string in both variants, with a rule marking the width `Measure` reports.
 - `src/Flight/Hud/ImpactReticle.cs`, the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/Hud/EdgeMarker.cs`, the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
-- `src/Flight/Hud/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
+- `src/Flight/Hud/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow; text drawn through the canvas item, so a suite can draw a HUD frame.
 - `src/Flight/Hud/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/Hud/PromptLine.cs`, a control prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow: the auto-dock offer and the respawn prompt.
 - `src/Flight/Hud/FlightChat.cs`, one machine's in-flight chat, engine-free: the panel's five lines and ten seconds, and the entry a pilot types into.
@@ -339,15 +339,23 @@ rows).
 - `src/Flight/Modes/DangerZoneRibbon.cs`, one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
 - `src/Flight/Modes/DangerZoneRibbons.cs`, a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
 - `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, a multiplayer `net.zrd` table by block, or objectives.json PLAYER_INIT as fallback.
-- `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
+- `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot; `ForCourse` makes the strict-order course run, with its debounced touch penalty and `ElementTouched`.
 - `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
 - `src/Flight/Modes/StuntRunControl.cs`, a stunt seat's run control, engine-free: the tap/hold respawn split, the start count's stepping and the clock it holds, the pose a tap returns to.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
-- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; one per player.
-- `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
+- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; a course run's GATE n/N line, penalty time, "+3 s" flash and split delta to the best run; one per player.
+- `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting; none on a course run.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
 - `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
-- `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only; a scripted run's store is a throwaway.
+- `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, a course run's under `course/` with its hash, penalty count and splits, faster runs only; a scripted run's store is a throwaway.
+- `src/Flight/Modes/Course.cs`, one air race course, engine-free: gate pool, sequence entries with direction, start point, the optional display title, the JSON shape and the layout hash.
+- `src/Flight/Modes/CourseAperture.cs`, a course gate's scoring aperture: pylon gate rectangle or ring polygon, a directional crossing test, placed by the gate's idle motion.
+- `src/Flight/Modes/CourseElements.cs`, a course gate's touch volumes on `CourseGateShape`'s sizes (course pylon cones, ring rim tube, balloons), the +3 s penalty and the `CourseTouch` event record.
+- `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load and save.
+- `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
+- `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: course pylon bases and taper, ring tube, balloons and tethers.
+- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, a red cross on the run's next gate seen from its wrong side and a dim fill on the one after.
+- `src/Flight/Modes/CoursePylonCut.cs`, a cut course pylon's look on sim time: stump top and sag, the falling top's tip and drop, gone as it lands, whole again after 3 s.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
 - `src/Flight/Modes/FlagMatch.cs`, Capture the Flag's rules, engine-free: the flags, the proximity asks and cooldowns, the host's decision, the drop and throw, the points.
@@ -498,7 +506,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/BootSequence.cs`, `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
 - `src/UI/Screens/BootCard.cs`, the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/Screens/LoadBoard.cs`, the node that hangs the load screen over a build, tracking the window until the world appears.
-- `src/UI/Screens/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
+- `src/UI/Screens/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts, or a course's title and rule.
 - `src/UI/Screens/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/UI/Screens/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/Screens/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
@@ -548,6 +556,10 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
+- `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag, and edits the sequence in a side panel whose row click flies the camera there.
+- `src/UI/Labs/CourseDraft.cs`, the course lab's edited course, selected gate and selected entry: ids, placement facing the camera after the selected entry, a ring's height above ground, reorder, add again with a direction, flip, remove, delete, and the save target.
+- `src/UI/Labs/CourseSequenceOverlay.cs`, the course lab's world drawing of the sequence: entry numbers over each gate and a line through the gates in order, with direction arrows.
+- `src/UI/Labs/CourseGizmo.cs`, the course lab's runtime gizmo on the selected gate: world X, Y and Z move arrows and a heading ring, picked in screen space and drawn at one screen size through the ground.
 - `src/UI/Labs/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/Labs/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
 - `src/UI/Labs/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.
@@ -582,7 +594,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/CampaignAidProfiles.cs`, the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
 - `src/UI/Menu/MenuIdleSource.cs`, a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
-- `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
+- `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def, and Stunt Flying's solo Course option.
 - `src/UI/Menu/NetPlayFeature.cs`, the multiplayer door as a shared feature: the port and address, the socket, the link readouts, the session advert, the wire a launch takes.
 - `src/UI/Menu/NetIdentity.cs`, the door's answers from the Game and Player Information boxes: callsign, voice, game name, cap, password and listing, the last two for one session.
 - `src/UI/Menu/InternetDoor.cs`, the door's master server link: the internet games list, the join by code, a host's listing with its code and why there is none.

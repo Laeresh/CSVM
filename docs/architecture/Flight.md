@@ -83,7 +83,7 @@ sites arrive through `objectives` under their record's flag, `objective` on the 
 Non-Aircraft, and a roster block's own flag marks its aeroplane's candidate. Sub-parts arrive through `subParts` only
 while `selectedWeapon` carries `LOCK_ON`; a gun emplacement is on no cycle. The gamez ancestor chain `CollectOwners`
 hands the `rating_biases` match, and a pool's own anchor name `NameOf` returns, are cached per destructible instance:
-each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. `TryTargetGeometry`, `TryRenderPosition` and `TargetLabel` read any target source's sim geometry, drawn position and log name for the AI's weapons, its acquisition and the HUD markers. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
+each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. A stunt zone with no label pair, a course's sequence entry, gets a blank line 1 and its `Gate n` name. `TryTargetGeometry`, `TryRenderPosition` and `TargetLabel` read any target source's sim geometry, drawn position and log name for the AI's weapons, its acquisition and the HUD markers. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/Weapons/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
@@ -799,7 +799,9 @@ reticle, the edge arrow with its tail stroke, and the centred text block with th
 variant an off-screen marker needs. Owns the marker blue and the drop shadow, while colour and
 scaled sizes stay with the caller, since each HUD scales through its own `HudMetrics.Scale`.
 Where a marker goes is `EdgeMarker`'s, which is the module to read next; this is only what it
-looks like.
+looks like. `Text`, and `TargetHud`'s box, tag and arrow, draw through the canvas item's own
+`RenderingServer` calls rather than `CanvasItem.Draw*`, which refuse outside `_Draw`: the drawn
+result is the same, and a suite (`course-hud`) can draw a HUD frame its single frame never redraws.
 
 ## src/Flight/Modes/StuntMission.cs
 Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list from a mission's
@@ -808,8 +810,8 @@ null where a mission authors none), `Update` requires both polygon-plane crossin
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
 `Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick), `RunReset` and `RunStopped` (`Stop`) feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
-apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
-rest of what a run draws, and `StuntScoreboard` for what it scores.
+apart from its logging. `ForCourse` builds the strict-order run over a `Course` (null for an empty sequence): one zone per sequence entry (`Gate n`), so every consumer above reads it unchanged, `Update` tests only entry `CompletedCount` through its `CourseAperture` at `GateMotion(pool index, SimSeconds())` (identity until wired; `SimSeconds` is `GameClock.Time`), the clock starts on the first entry, `CollectTargets` offers the next entry alone, `ReturnPose` is the last gate's centre, and `AddPenalty` adds to a running clock with `PenaltyCount`. Each course step also tests every gate's `CourseElements` touch volumes, at the same motion, against a sphere of the `planeRadius` `Update` is passed (`FlightController` passes `AircraftBody.BoundRadius`): a per-gate bounding-sphere reject, then each element, debounced per element by an inside flag, so a touch counts on entering and again only after leaving. A touch calls `AddPenalty(TouchPenaltySeconds)` and raises `ElementTouched` with a `CourseTouch`, also before the first entry and on the finishing step, where no time is added. A finished run tests nothing; a Danger Zone run never tests touches. `PlanePosition` is where the last step had the plane, which `CourseVisuals`' wrong-side cross reads.
+Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the rest of what a run draws, and `StuntScoreboard` for what it scores. Coverage of the course run: `CSVM.Tests/CourseRunTests.cs`.
 
 ## src/Flight/Modes/StartCount.cs
 A run's start count, engine-free and one per seat: `Begin` takes the figures (`Rerun` is 3, 2, 1;
@@ -833,7 +835,8 @@ cue). Coverage: `CSVM.Tests/StuntRunControlTests.cs`, suite `stunt-start-count`.
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
 compared against and whether it set a new one. `Lines` flattens the table to text, one line per
-zone in the order flown, then the total (opening with `TotalLabel`) and the best comparison, so the
+zone in the order flown, then the total (`TotalLine`, opening with `TotalLabel` and, on a course
+run, ending with its penalty count) and the best comparison, so the
 Instant Action wrap-up can carry it past the session. The boards draw the same table through
 `UI/Screens/StuntSplits.cs`.
 
@@ -913,16 +916,17 @@ zones-cleared status line, in a race the live leaderboard on the line under it
 the one-shot intro banner, the zone-cleared flash, the completion banner (in a race this run
 against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). The status and leaderboard lines step aside while `StatusHiddenWhile` answers true, which `HumanFlightAdapter` sets to the seat's held scores. While the pane spectates a race, `WatchedRacer` names the racer watched on a third line (`WatchingLine`) and no banner, flash or count draws. It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
+A course run (`Course` set) reads in course words: `StatusLine` is `CourseStatusLine`, `0:14.2    GATE 2/5    +6 s` (the entry to fly next, then the penalty time when there is any), there is no intro line (a course run's `IntroLine` is empty), the cleared flash `GATE 2  0:14.2` (`ClearedFlash`, the clock at the crossing, then `-0.8` or `+1.3` from `SplitDelta` against the stored best's split there, tinted the penalty red when `Behind`; `BestSplits`, set by `HumanFlightAdapter`, is read at each run's first entry, so a rerun after a new record compares against it), the completion banner COURSE COMPLETE with its penalty time, and each `ElementTouched` with `TimeAdded` shows a `PenaltyFlash` ("+3 s", summed while it shows) on the line under the clock. Danger Zone runs read as before. Coverage: `CSVM.Tests/CourseHudTests.cs`, suite `course-hud`.
 
 ## src/Flight/Modes/StuntCapture.cs
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
 latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
 marker centre, lingering or a later pass latching nothing; the run's completing frame is the last
-tested. A latch counts the shot, fires the `snd_dangerzone_camera` sting, raises `ShotLatched` and
-requests the pane. The frame lands later on a worker, which writes the PNG named by chapter,
-marker and run clock into `screenshots/stunts/` and the thumbnail; `Settle` completes the record
-on the main thread and raises `ShotLanded`. The pixels come from the caller's `PaneRequest`
-(`DangerZonePhotograph` live, the pane headless, a synthetic frame in a suite).
+tested, and a course run (`StuntMission.Course`) latches nothing. A latch counts the shot, fires the
+`snd_dangerzone_camera` sting, raises `ShotLatched` and requests the pane. A worker writes the
+landed frame as a PNG named by chapter, marker and run clock into `screenshots/stunts/` with the
+thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`. The pixels come
+from the caller's `PaneRequest` (`DangerZonePhotograph` live, the pane headless, a suite's own).
 
 ## src/Flight/Modes/FlagMatch.cs
 Capture the Flag's rules, engine-free: one flag per lobby team with its home, held, at home or
@@ -962,14 +966,86 @@ latched until it is outside all of them; `NearestServing` is the base a bot's re
 `docs/org/multiplayer-rearm.md`.
 
 ## src/Flight/Modes/ScoreStore.cs
-Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
-`chapter/mission/plane`, with `GetBest` and `RecordIfBest`, which never worsens a record and
-answers whether the run was a new best. A session takes its store from
-`ForSession(spec.ScoresPath, spec.ScoresThrowaway)`: the `--scores=` file, an in-memory throwaway
-that never saves when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run,
-`--debug-scoreboard`), else the player's own file. The internal overloads let a suite name the
-file instead; `stunt-scores-scripted` pins the choice.
-`CustomPlaneStore` is the same file-backed shape for a heavier record.
+Stunt best-time persistence: one JSON object in `user://stunt_scores.json`, with `GetBest` and
+`RecordIfBest`, which never worsens a record and answers whether the run was a new best. `KeyFor` is
+every recorder's key: `chapter/mission/plane`, or a course run's `course/<chapter>/<name>/<Course.Hash>/<plane>`,
+a namespace no Danger Zone key shares, so old files load unchanged; the name in it makes a rename a
+fresh board, as an edit is. A course entry adds `penalties` (`PenaltiesOf`, `GetPenalties`) and `splits`, the clock at each sequence entry (`SplitsOf`, `GetSplits`, null for an entry written before splits). A session's
+store is `ForSession(spec.ScoresPath, spec.ScoresThrowaway)`: the `--scores=` file, an in-memory throwaway
+when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run, `--debug-scoreboard`), else the player's
+own; internal overloads let a suite name the file, `stunt-scores-scripted` pins it. `CustomPlaneStore` is the same shape.
+
+## src/Flight/Modes/Course.cs
+One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon gate or a balloon ring, world position,
+heading and sizes), the `SequenceEntry` list naming pool gates by id with a `GateDirection` (a gate may repeat), and the
+start point as a `SpawnPoint`. Chapter and name come from the file's path, and the name is the id everywhere (`--course=`,
+`--course-edit=`, the library, the score key). The optional `title` is what a player sees: `DisplayName` is the title, or
+the name where it is absent or blank; a non-string title is a format error. `Parse` reads a file or rejects it whole with
+the reason, `ToJson` writes the same shape (its doc lists the fields), and `Hash` digests pool, sequence and start but not
+the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course bests, so a retitle keeps them. Read
+`CourseLibrary` for where the files live.
+
+## src/Flight/Modes/CourseAperture.cs
+A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its course pylons from the
+ground to their tops, or a balloon ring's 32-gon of its diameter, vertical and facing the gate's
+forward. `CrossedBy(from, to, direction, motion, out t)` counts a segment only when it travels the
+way the sequence entry names; `StuntGate.CrossedBy`, which Danger Zones keep calling, counts either
+side. The polygon lives in the gate's frame as a `StuntGate` and the segment is carried into it
+through `Rest * motion`, `motion` being the gate's idle motion as a `Transform3D` in its own frame
+(the identity at rest), so a bobbing ring scores where it is drawn without a per-step allocation.
+The inscribed 32-gon falls short of the circle by under 0.5 % of the radius.
+
+## src/Flight/Modes/CourseElements.cs
+A course gate's touch volumes, engine-free, in the gate's frame so they move with its drawn motion.
+Every size is `CourseGateShape`'s, the one the meshes read: a course pylon is its tapered cone from
+`PylonBase`, a ring rim the `TubeRadius` tube about the `TubeCentreline` circle, a balloon the
+upright-stretched sphere at `BalloonCentre` (its nearest point is taken in squashed space, a few
+percent off the exact one). None is a collider, so a touch deals no crash damage. `CourseTouch` is
+`StuntMission.ElementTouched`'s record (pool index, `CourseElement`, balloon, world contact point,
+height up a course pylon, whether time was added); `TouchPenaltySeconds` is the 3 s Red Bull rule,
+not game data. Coverage: `CSVM.Tests/CourseTouchTests.cs`.
+
+## src/Flight/Modes/CourseLibrary.cs
+The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped and
+`<dataRoot>/Courses/<chapter>/<name>.json` in the game folder, which wins a name clash. `List`
+names a chapter's courses, `Load` parses the winning file, `Save` writes one atomically into either
+root, and `DisplayName(chapter, name)` is the winning file's title for the menu, the boards and the
+lab's list, the name where the file is missing, broken or untitled. `ForLaunch` reads no game folder under `--det`, as no HD pack is read; a test hands in OS
+paths instead. `Launch/GameSession.cs` is its engine reader, for `--course=`, and the
+`course-launch` suite reads the shipped `C1/sample_out_and_back` through `res://` and a
+game-folder file of that name over it. Read `Course` for the model.
+
+## src/Flight/Modes/CourseMotion.cs
+A course gate's idle motion as a pure function of the gate and the sim time in seconds. `Rest` is the
+gate's frame (heading yaw, local -Z forward, the flown plane at local z = 0); `Offset` is the motion
+in that frame, a bob, a drift in the ring's plane and a roll about its axis for a balloon ring, the
+identity for a pylon gate; `Pose` is `Rest * Offset`. Each gate's phases hash from its id. The drawn
+ring (`CourseVisuals`) and its scoring polygon both read it, so they cannot part. Read
+`CourseMotionTests.cs`.
+
+## src/Flight/Modes/CourseGateShape.cs
+Every dimension a course gate is drawn with, engine-free and in the gate's frame: the course pylons'
+bases (local x = ±width/2) and taper, a ring's tube (outside the diameter, the clear opening), and
+each balloon's way, tether anchor, length and centre. The meshes read it, and a touch test against
+course pylons, rims and balloons reads the same numbers. Read `CourseVisuals`.
+
+## src/Flight/Modes/CourseVisuals.cs
+A course's gates drawn from Godot primitives to `CourseGateShape`'s dimensions: two tapered, banded
+course pylons per pylon gate, and per ring a striped torus under three tethered balloons.
+`Build` makes one node per pool gate, in pool order, plus an optional start cone; `Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
+shader text, lit and fogged as the faithful aircraft, with the course pylon ripple on `csky_time`. A course
+pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
+`ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
+`ElementTouched` (course pylons only) and restores on `RunReset`. Read `CoursePylonCut`.
+`Follow` also adds the run's two cues, which `Pose` moves on the run's next entry at the gate's motion pose: `Cross`, a red X of two closed bars across the next gate's clear opening, shown only while the aircraft (`StuntMission.PlanePosition`) is on that entry's wrong side (`WrongSide`: more than 2 m past the gate's plane along the flown way and within 800 m, held until 2 m back and out to 1000 m), seen from both sides while shown; and `Highlight`, a dithered yellow fill across the clear opening of the gate after it. Both draw on the course shader, so no shader compiles mid-flight.
+
+## src/Flight/Modes/CoursePylonCut.cs
+A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and
+the seconds since the cut: the stump's top and sag, the falling top's outward tip and drop, which
+hides it as its foot reaches the ground, whole before the cut and from `RegrowSeconds` (3 s) on. `Recut` keeps a
+second cut within what has regrown, so nothing fallen falls twice. Ages are doubles from the sim
+clock, so `csky_time`'s 3600 s wrap never reaches them. Every time and share is a look tuned at the
+controls. Read `CoursePylonCutTests.cs`.
 
 ## src/Flight/Modes/StuntRace.cs
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
@@ -1161,9 +1237,9 @@ dry-trigger cue resolves through `WeaponDefs.EmptyClipSound`, the `NO_AMMO_WARNI
 so neither path can hold a name of its own. Definitions: [../formats/sounds.md](../formats/sounds.md).
 
 ## src/Flight/Camera/SpectatorCamera.cs
-The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and
-pads through `Pads.For(_padDevices)`, every key and pad read resolving through
-`InputContext.Camera` (`src/Bindings/`). The lab additions are `Frame(Aabb)`, the `FollowNode`
+The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and pads through
+`Pads.For(_padDevices)`, every key and pad read resolving through `InputContext.Camera` (`src/Bindings/`). The lab
+additions are `Frame(Aabb)`, `LookFrom(eye, target)` (keeping the free look's yaw and pitch in step), the `FollowNode`
 orbit lock (released by any translation input, re-locked by the target key through `OrbitLock.Next`
 over `GameSession.LockCandidateAircraft`'s roster) and a public `Camera` accessor; while locked the
 orbit answers the right stick and the triggers as well as the mouse. It is also the pane a pilot

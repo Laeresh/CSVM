@@ -1218,13 +1218,16 @@ public partial class Launcher : Node3D
         {
             return; // a CLI launch leaves the log to tell the story, as it always did
         }
-        ReturnToMenu(MenuReturnDestination.TopLevel);
+        // A refused course goes back to the screen it was picked on, its reason in the box.
+        string? refusal = _session?.MenuRefusal;
+        var destination = refusal != null ? _exitDestination : MenuReturnDestination.TopLevel;
+        ReturnToMenu(destination);
         // Original says so in its warning box. Without the box its top level shows bare, which
         // reads as a misclick.
-        Log.Warn("ui", $"menu: the build failed, back at the top level of {_menu.Host?.Selected}");
+        Log.Warn("ui", $"menu: the build failed, back at {destination.GetType().Name} of {_menu.Host?.Selected}");
         if (_menu.Host?.Active is UI.Menu.Original.OriginalPresentation original)
         {
-            original.RaiseWarning(FailedBuildWarning());
+            original.RaiseWarning(refusal ?? FailedBuildWarning());
         }
     }
 
@@ -1769,7 +1772,7 @@ public partial class Launcher : Node3D
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
-            launch.Match?.FlagHomeToCapture == true, launch.Bots);
+            launch.Match?.FlagHomeToCapture == true, launch.Bots, launch.Course);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
