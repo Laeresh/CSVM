@@ -215,6 +215,39 @@ public sealed class OceanShaderTests
         Assert.Contains("float surge = 0.25 * sin(6.2831853 * (arrive - 0.1));", text);
     }
 
+    /// <summary>The cliff spray's C# phase is the include's. The body it mirrors is unchanged. The noise is
+    /// zero on its lattice and continuous across a cell edge, and the phase gains a cycle a line.</summary>
+    [Fact]
+    public void TheSpraysPhaseMirrorsTheInclude()
+    {
+        string include = File.ReadAllText(Path.Combine(TestData.RepoRoot, "CSVM", "shaders", "csky_ocean.gdshaderinc"));
+        Assert.Contains("return csky_time * lines_per_sec + 0.795775 * foam_noise(p * 0.025, 65536.0);", include);
+        Assert.Contains("uvec2 v = uvec2(ivec2(c)) * 1664525u + 1013904223u;", include);
+        Assert.Equal(0f, OceanShader.FoamNoise(3f, -7f, 65536f));
+        float peak = 0f;
+        for (int i = 0; i < 400; i++)
+        {
+            float y = (i * 0.173f) - 30f, n = OceanShader.FoamNoise(5f - 1e-4f, y, 65536f);
+            Assert.InRange(n - OceanShader.FoamNoise(5f + 1e-4f, y, 65536f), -2e-3f, 2e-3f);
+            peak = Math.Max(peak, Math.Abs(OceanShader.FoamNoise(i * 0.37f, y, 65536f)));
+        }
+        Assert.InRange(peak, 0.1f, 1f);
+        float rate = 450f / 3600f, a = OceanShader.SurfArrive(-7845f, -3350f, 100f, rate);
+        Assert.Equal(a + 1f, OceanShader.SurfArrive(-7845f, -3350f, 108f, rate), 3);
+    }
+
+    /// <summary>The spray sheet draws only with the ocean standing (csky_ocean_on, 0 under Original and at
+    /// flat water) and the sea breaking surf. It never draws in a spyglass disc, and keeps the surf's phase.</summary>
+    [Fact]
+    public void TheSpraySheetIsGatedAndTimedByTheSurf()
+    {
+        string text = OceanShader.SprayCode();
+        Assert.Contains(CSVM.Mech3.SceneBuilder.OceanInclude, text);
+        Assert.Contains($"if (csky_ocean_on < 0.5 || csky_ocean_surf.y < 0.5 || {CSVM.Mech3.SceneBuilder.FlatSeaEye} || v_s > GONE) {{", text);
+        Assert.Contains("v_s = fract(csky_surf_arrive(origin.xz, csky_ocean_surf.x) - 0.25 - LAG);", text);
+        Assert.DoesNotContain("TIME", text.Replace("csky_time", "", StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
     /// <summary>The surf's phase is one function in the shared include, which the ocean and the coasts' swash
     /// both call. Its body with the ocean's rate put in is the line the ocean wrote before the move, so the
     /// ocean's pixels hold. The rate the coasts read is the ocean's own.</summary>

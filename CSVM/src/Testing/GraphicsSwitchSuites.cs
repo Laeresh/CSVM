@@ -1476,8 +1476,9 @@ internal static class GraphicsSwitchSuites
         + "profile gives, C3's painted shallows (shore2) fade out whole, and the other strips and the cliff01_trans2 rock "
         + "edge keep their alpha with no fade; the land "
         + "ones stay on the matte arm; every profiled coast takes the breakers' swash and shore2 none, over a live inland "
-        + "image measuring land texels from the coastline; at flat water no ocean stands, so nothing steps aside; switched to Original no "
-        + "coast material reads the ocean at all")]
+        + "image measuring land texels from the coastline; in C1 and C2 one cliff spray stands under the ocean at its cliff sites, no bare "
+        + "ones, active only while the sea breaks surf, and C3's sea turns it off; at flat water no ocean or spray stands, so nothing steps aside; switched to Original no "
+        + "coast material reads the ocean at all and no spray stands, at waves too")]
     internal static void CoastHideFollowsSwitch(TestContext ctx)
     {
         foreach (var (chapter, _) in PaintedCoastChapters)
@@ -1513,13 +1514,38 @@ internal static class GraphicsSwitchSuites
                     int inland = InlandTexels(Effects.OceanMask.Live);
                     ctx.Check(inland > 0, $"{chapter}: the live mask's inland image measures {inland} land texel(s) within its reach of the coastline");
                     report.AppendLine(string.Create(CultureInfo.InvariantCulture, $"{chapter} inland texels within reach {inland}"));
+                    var sprays = Sprays(ctx.Host);
+                    var spray = sprays.Count == 1 ? sprays[0] : null;
+                    // C3's sea turns the spray off: its cliffs stand far behind the painted waterline.
+                    if (chapter == "C3")
+                    {
+                        ctx.Check(!sprays.Exists(s => s.Active) && rig.Session.Ocean?.Ocean?.Sea.Sprays == false,
+                            $"C3 under Enhanced at waves: its sea turns the cliff spray off, so none is active ({sprays.Count} sprays)");
+                    }
+                    else
+                    {
+                        int cliffs = Effects.OceanMask.Live?.Spray.Count(s => !s.Bare) ?? -1;
+                        ctx.Check(spray is { Drawn: Effects.CoastSpray.Default, Sites: > 0, Active: true } && spray.GetParent() is Effects.Ocean && spray.Sites == cliffs,
+                            $"{chapter} under Enhanced at waves: one cliff spray under the ocean, drawing {Effects.CoastSpray.Default} at its cliff sites alone, no bare ones ({sprays.Count} sprays, {spray?.Sites ?? 0} of {cliffs} cliff sites)");
+                    }
+                    if (spray != null && rig.Session.Ocean?.Ocean is { } ocean)
+                    {
+                        var sea = ocean.Sea;
+                        ocean.Apply(sea with { SurfWash = 0f, SurfLines = 0f });
+                        bool calm = !spray.Active;
+                        ocean.Apply(sea);
+                        ctx.Check(calm && spray.Active, $"{chapter}: a sea breaking no surf throws no spray, and its surf back throws it again");
+                        report.AppendLine(string.Create(CultureInfo.InvariantCulture, $"{chapter} spray sites {spray.Sites}"));
+                    }
                     ApplyWater(rig, WaterQualitySetting.Flat);
-                    ctx.Check(rig.Session.Ocean?.Built != true && OceansUnder(ctx.Host) == 0,
-                        $"{chapter} at flat water stands no ocean, so the csky_ocean_on gate keeps every coast fragment");
+                    ctx.Check(rig.Session.Ocean?.Built != true && OceansUnder(ctx.Host) == 0 && Sprays(ctx.Host).Count == 0,
+                        $"{chapter} at flat water stands no ocean and no spray, so the csky_ocean_on gate keeps every coast fragment");
                     Switch(rig, false);
                     var original = Coasts(rig, null);
                     ctx.Check(original.Materials == enhanced.Materials && original.ReadsOcean == 0 && original.Swashing == 0,
                         $"{chapter} switched to Original: no painted coast material reads the ocean ({original})");
+                    ApplyWater(rig, WaterQualitySetting.Waves);
+                    ctx.Check(Sprays(ctx.Host).Count == 0, $"{chapter} under Original at waves: no cliff spray stands");
                     report.AppendLine($"{chapter} enhanced  {enhanced}\n{chapter} original  {original}");
                 }
                 finally
@@ -3012,6 +3038,17 @@ internal static class GraphicsSwitchSuites
                 count++;
         });
         return count;
+    }
+
+    private static List<Effects.CoastSpray> Sprays(Node root)
+    {
+        var found = new List<Effects.CoastSpray>();
+        Walk(root, node =>
+        {
+            if (node is Effects.CoastSpray spray && spray.IsInsideTree())
+                found.Add(spray);
+        });
+        return found;
     }
 
     private static Effects.Ocean? FirstOcean(Node root)

@@ -60,6 +60,8 @@ public sealed record SeaState
         new("surf_spacing_m", "Line spacing (m)", Surf, 4f, 40f, 1f, s => s.SurfSpacing, (s, v) => s with { SurfSpacing = v }),
         new("surf_speed_mps", "Line speed (m/s)", Surf, 0f, 5f, 0.1f, s => s.SurfSpeed, (s, v) => s with { SurfSpeed = v },
             "steps by whole lines per csky_time wrap"),
+        new("spray", "Cliff spray", Surf, 0f, 1f, 1f, s => s.Spray, (s, v) => s with { Spray = v },
+            "1 throws spray up the cliffs behind the painted coasts as each line arrives, 0 none"),
     };
 
     // The lab's groups, in the order its panel shows them.
@@ -151,6 +153,13 @@ public sealed record SeaState
 
     /// <summary>TUNE. The lines' speed toward the land in m/s, rounded to whole lines per <c>csky_time</c> wrap.</summary>
     public float SurfSpeed { get; init; } = 1.5f;
+
+    /// <summary>Whether the surf throws spray up the cliffs (<see cref="CoastSpray"/>), 1 or 0. C3 sets 0:
+    /// its cliffs stand 50 to 130 m behind the painted waterline, and its spray landed in the forest.</summary>
+    public float Spray { get; init; } = 1f;
+
+    /// <summary>Whether <see cref="Spray"/> is on.</summary>
+    public bool Sprays => Spray >= 0.5f;
 
     /// <summary>Whether the open sea's colour is tinted at all. An untinted sea writes no tint term.</summary>
     public bool Tinted => TintR != 1f || TintG != 1f || TintB != 1f;

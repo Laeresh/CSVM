@@ -97,6 +97,9 @@ public sealed partial class Ocean : Node3D
     /// wake. Read by the suites.</summary>
     internal IReadOnlyList<Node3D> WakeSheets => _wakes;
 
+    /// <summary>The shore mask this ocean draws over.</summary>
+    internal OceanMask Mask => _mask;
+
     /// <summary>Declares the switch and the mask globals the base sheet's hide reads. Must run before
     /// the first shader that reads them is built.</summary>
     public static void RegisterGlobal()

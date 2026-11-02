@@ -469,6 +469,10 @@ public sealed record SessionSpec
     /// mask as a PNG when it builds; empty for none. See <c>docs/cli.md</c>.</summary>
     public string OceanMaskPath { get; private set; } = "";
 
+    /// <summary><c>--coast-spray=&lt;word&gt;</c>: how the wave ocean's cliff spray draws
+    /// (<see cref="Effects.CoastSpray.Parse"/>); empty for the default. See <c>docs/cli.md</c>.</summary>
+    public string CoastSpray { get; private set; } = "";
+
     /// <summary><c>--terrain-shadows=on|off</c>: whether Enhanced bakes the terrain's sun shadow
     /// (<see cref="Effects.TerrainShadow"/>), the A/B lever; on unless said otherwise. See <c>docs/cli.md</c>.</summary>
     public bool TerrainShadows { get; private set; } = true;
@@ -1743,6 +1747,7 @@ public sealed record SessionSpec
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
             else if (arg == "--no-ocean") { s.SkippedPasses |= EnhancedPasses.Ocean; }
             else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
+            else if (arg.StartsWith("--coast-spray=")) { s.CoastSpray = arg["--coast-spray=".Length..]; }
             else if (arg is "--terrain-shadows=on" or "--terrain-shadows=off") { s.TerrainShadows = arg.EndsWith("on", StringComparison.Ordinal); }
             else if (arg.StartsWith("--dump-terrain-shadow=")) { s.TerrainShadowPath = arg["--dump-terrain-shadow=".Length..]; }
             else if (arg.StartsWith("--terrain-shadow-cell=")) { s.TerrainShadowCell = float.TryParse(arg["--terrain-shadow-cell=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out float cell) ? Math.Clamp(cell, 2f, 64f) : s.TerrainShadowCell; }

@@ -846,7 +846,8 @@ public partial class GameSession : Node3D
         FollowTerrainShadow();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
-            var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles);
+            var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
+                state.Zrdr, _ambience);
             _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
         }
         var gamez = state.Gamez;

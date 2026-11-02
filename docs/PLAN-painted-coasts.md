@@ -60,6 +60,9 @@ its own predicate, because the colliders and the tile census read that classific
 | 16 | The surf coverage's texel edge at the waterline, which kept C2's sawtooth after decision 14 | **The coverage fills the alpha strips' translucent sand**, saturated out to the opaque point, so the foam's edge lies under the strip's opaque part as the ocean's edge does |
 | 17 | How far the swash runs up the painted sand and rock | **12 m** (`OceanShader.SwashReach`), picked from contact sheets over a breaker cycle and reach strips at 6, 12 and 20 m |
 | 18 | C1, whose sea had no surf and so no breakers to time a swash to | **C1 takes procedural surf**, `surf_wash` 0.7 and `surf_lines` 0.6, so breakers and swash reach its cliff foot, judged on a montage before landing |
+| 19 | How the cliff spray is drawn | **The original's water-splash sprites** (`hg_splasher`'s `splasher` puffer, retuned from an impact to a breaker), picked from contact sheets over a breaker cycle beside a camera-facing shader sheet, which stays opt-in as `--coast-spray=sheet` |
+| 20 | C3's cliffs, which stand 50 to 130 m behind the painted waterline | **No spray in C3**, off for the whole chapter in its sea (`"spray": 0` in `ocean_seas.json`): at its cliff feet the spray landed in the forest, far from the surf line |
+| 21 | Whether quay walls and bare rock off the painted coasts take spray | **Cliffs only.** The bare sites spray only with `--coast-spray=…,quays` |
 
 ## ⚠ Read this before implementing anything
 
@@ -144,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ The painted tiles and strips give way to the waves by their own texture coordinate, C1's sea tiles by the mask (#270)
 22. ☑ The look at the painted coasts in C1, C2 and C3, judged from montages, at the controls in the closing batch (#270)
 23. ☑ Swash: each breaker runs up the painted sand and flat rocks as a wet film and foam, drawn by the coast textures' own shader (#270)
-24. ☐ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
+24. ☑ Spray where the breakers meet the cliffs rising from the painted coasts (#270)
 
 ### Wave D, landing
 
@@ -672,7 +675,24 @@ author's verdict at the controls.
 - The swash must not draw over solids above the water, a pier or a hull; only painted-coast
   textures at sea level take it.
 
-## C24 ☐ Spray where the breakers meet the cliffs
+## C24 ☑ Spray where the breakers meet the cliffs
+
+**Verified.** The author picked the sprites from contact sheets over one breaker cycle at the C1 cove, beside the shader sheet and spray off, and ruled C3 off and quays out from the C3 and C2 city-quay sheets (decisions 19 to 21). `graphics-coast-hide` holds C1 1,827 and C2 755 active cliff sites, none in C3, none under Original or at flat water; full `dotnet test` 7,982 passed, 0 failed; `RunTests.ps1 -Suite graphics-coast-hide,graphics-ocean-switch` green with engine errors clean. c1-lake-enhanced (to 2c0ac6a0) and c1-rocket-hit-enhanced (to 308e72c2) move by the C1 spray alone and return to their C23 hashes under `--coast-spray=off`; they wait for D31. The spray in flight goes into the closing at-the-controls batch.
+
+**Landed.** The raster picks spray sites (`OceanMaskRaster.SpraySites`): points 12 m apart (TUNE) along
+the foot, under `SolidTop`, of every solid face rising 6 m or more at over 45°. A cliff's foot stands
+within 2 m of a painted coast with a water side and within 160 m (`ShoreReach`) of a sea-facing painted
+waterline; a bare foot (a quay, rock off every painted coast) has open sea a texel out from its face.
+Sorted, then thinned, so no triangle order moves a site. Cliff and bare sites: C1 1,827 and 31, C2 755
+and 750, C3 201 and 769. C1's and C2's cliffs stand 8 to 24 m behind their waterline, C3's 50 to 130 m.
+`Effects/CoastSpray`, a child of the ocean, fires each site when the surf's phase starts a cycle there
+(`OceanShader.SurfArrive`, `csky_surf_arrive` in C#): the original's `splasher` sprites, retuned TUNE
+(8 a batch, 0.3 s, 16 m/s, 1 to 2.4 s life), from a pool of 24 on their own `Rng.CoastSpray` stream
+within 1,200 m of a pane (decision 19). `--coast-spray=sheet` draws a camera-facing shader sheet on the
+same phase instead, `off` none. Cliffs only by default; `,quays` adds the bare sites (decision 21). The
+sea's `spray` field turns it off by chapter, 0 in C3 (decision 20). Enhanced at waves only, while the sea
+breaks surf; Original builds none. Cost, `gpu_ms` medians A/B after unchanged pairs: sprites +0.00 to
++0.09 ms, the sheet +0.00 to +0.02 ms at C1's cove, harbour and a pose inside the spray.
 
 **Goal.** Under Enhanced at `waves`, where a painted coast ends at a cliff (C1's and C2's `cliff01`
 rock faces, C3's `cliff1` at the cliff tiles' landward edge), each breaker that reaches the cliff
@@ -691,8 +711,8 @@ throws spray up the face and falls back, in time with the swash.
 **Approach.** Pick the coastline segments whose solid rises steeply above the water, and drive spray
 along them on the breakers' phase. Two candidate mechanisms, chosen in the item from a montage:
 the original's own water-splash spray sprites, emitted along those segments and timed to the phase;
-or a camera-facing spray sheet in a shader at the cliff foot. <TODO: the mechanism, its cost at C1's
-101 cliff faces, and whether quay walls take spray too, from the author's montage verdict>.
+or a camera-facing spray sheet in a shader at the cliff foot. The author picked the sprites, no C3 and
+no quays (decisions 19 to 21).
 
 **Model recommendation.** high: a new effect placed from the bake's data, with a performance budget and
 a look the author judges.

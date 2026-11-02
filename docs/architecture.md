@@ -386,6 +386,7 @@ rows).
 - `src/Effects/EmitterRenderer.cs`, the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/Ocean.cs`, the Enhanced wave ocean on every chapter with a sea at y = 0: a camera-centred Gerstner grid in place of the flat sea-level sheet.
+- `src/Effects/CoastSpray.cs`, the Enhanced spray each breaker throws up the cliffs behind the painted coasts, at the mask's spray sites.
 - `src/Effects/OceanCalmZone.cs`, one ship's calm zone on the wave ocean: a box along the hull's heading over its waterline.
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.

@@ -93,6 +93,9 @@ internal sealed class OceanMask
     /// <summary>The inland texture's pixels, kept for <c>--dump-ocean-mask</c>.</summary>
     public Image InlandImage { get; private set; } = null!;
 
+    /// <summary>Where the breakers throw spray at the cliffs and bare solids (<see cref="CoastSpray"/>).</summary>
+    public OceanMaskRaster.SpraySite[] Spray { get; private set; } = Array.Empty<OceanMaskRaster.SpraySite>();
+
     /// <summary>The world X/Z of the mask's first texel corner.</summary>
     public Vector2 Origin { get; private set; }
 
@@ -362,9 +365,10 @@ internal sealed class OceanMask
         // Kept: InlandAt and --dump-ocean-mask read it after the upload.
         result.InlandImage = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Inland);
         result.InlandTexture = TextureUpload.Create(result.InlandImage, callerKeeps: true);
+        result.Spray = raster.Spray;
         double uploadMs = Lap(ref t0);
         result.Timing = string.Create(CultureInfo.InvariantCulture,
-            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} inland={raster.InlandMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
+            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} inland={raster.InlandMs:0.0} spray={raster.SprayMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
         return result;
     }
 

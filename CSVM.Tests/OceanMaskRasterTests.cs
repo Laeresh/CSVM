@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Effects;
 using Godot;
 using Xunit;
@@ -567,6 +568,50 @@ public class OceanMaskRasterTests
         AssertOrderFree(tris);
     }
 
+    // The spray pick. A cliff on a painted coast 20 m behind its waterline takes sites along its foot. Each
+    // faces the sea and stands at least 9 m from the next. A low wall, a gentle slope and a cliff 20 m past the
+    // coast's landward edge take none. A quay wall off every painted coast takes sites marked bare. No
+    // triangle order moves a site.
+    [Fact]
+    public void TheSpraySitesStandAtTheSteepFeetBehindTheSea()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
+        AddStrip(tris, 0f, 80f, x => (40f - x) / 32f);
+        Wall(tris, 60f, -400f, 400f, 40f);
+        Wall(tris, 70f, -400f, 400f, OceanMaskRaster.SprayRise - 2f);
+        tris.Add(new Tri(new Vector3(50f, 0f, -300f), new Vector3(50f, 0f, 300f), new Vector3(90f, 20f, 300f), Kind.Solid, Colors.White, Colors.White, Colors.White));
+        Wall(tris, -300f, -100f, 100f, 10f);
+        Vector3 l0 = new(80f, 0f, -512f), l1 = new(200f, 0f, -512f), l2 = new(200f, 0f, 512f), l3 = new(80f, 0f, 512f);
+        tris.Add(new Tri(l0, l1, l2, Kind.Solid, Colors.White, Colors.White, Colors.White));
+        tris.Add(new Tri(l0, l2, l3, Kind.Solid, Colors.White, Colors.White, Colors.White));
+        Wall(tris, 100f, -400f, 400f, 40f);
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 5);
+        var cliff = r.Spray.Where(s => !s.Bare).ToList();
+        var bare = r.Spray.Where(s => s.Bare).ToList();
+        Assert.InRange(cliff.Count, 60, 70);
+        Assert.All(cliff, s =>
+        {
+            Assert.Equal(60f, s.At.X, 2);
+            Assert.InRange(s.Seaward.X, -1.001f, -0.999f);
+            Assert.InRange(s.Behind, 19.5f, 20.5f);
+        });
+        Assert.InRange(bare.Count, 15, 20);
+        Assert.All(bare, s =>
+        {
+            Assert.Equal(-300f, s.At.X, 2);
+            Assert.InRange(Math.Abs(s.Seaward.X), 0.999f, 1.001f);
+        });
+        for (int i = 0; i < r.Spray.Length; i++)
+        {
+            for (int j = i + 1; j < r.Spray.Length; j++)
+                Assert.True(r.Spray[i].At.DistanceTo(r.Spray[j].At) >= OceanMaskRaster.SpraySpacing * 0.75f, $"sites {i} and {j} stand closer than the spacing allows");
+        }
+        var reversed = new List<Tri>(tris);
+        reversed.Reverse();
+        Assert.Equal(r.Spray, OceanMaskRaster.Run(reversed.ToArray(), Mean, 1).Spray);
+    }
+
     // The inland image at the same strip. A land-side texel reads its exact distance up from the painted
     // waterline. A water-side texel reads it negated, saturating at InlandReach.
     // The solid's coast edge 40 m inland is coastline too, so only the nearer half of the sand is read.
@@ -851,6 +896,14 @@ public class OceanMaskRasterTests
         float s0 = seaward(x0), s1 = seaward(x1);
         tris.Add(new Tri(a, b, e, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s1), Opaque: opaque));
         tris.Add(new Tri(a, e, d, Kind.Coast, Colors.White, Colors.White, Colors.White, Surf: new Vector3(s0, s1, s0), Opaque: opaque));
+    }
+
+    // An upright wall at x from z0 to z1, rising h from sea level, as two solid triangles.
+    private static void Wall(List<Tri> tris, float x, float z0, float z1, float h)
+    {
+        Vector3 a = new(x, 0f, z0), b = new(x, 0f, z1), c = new(x, h, z1), d = new(x, h, z0);
+        tris.Add(new Tri(a, b, c, Kind.Solid, Colors.White, Colors.White, Colors.White));
+        tris.Add(new Tri(a, c, d, Kind.Solid, Colors.White, Colors.White, Colors.White));
     }
 
     // The painted coasts' texels hold for the triangles in reverse order and at another band count.

@@ -45,6 +45,23 @@ internal static class OceanMaskRaster
     /// It bounds how far up the land a coast shader's swash can reach.</summary>
     public const float InlandReach = 32f;
 
+    /// <summary>How far a solid face rises over its foot, at over 45 degrees, to throw spray.</summary>
+    public const float SprayRise = 6f;
+
+    /// <summary>How far behind a sea-facing painted waterline a cliff's foot may stand to take spray: the
+    /// shore distance's own reach. C3's cliffs stand 50 to 130 m behind theirs, C1's and C2's 8 to 24 m.</summary>
+    public const float SprayReach = ShoreReach;
+
+    /// <summary>How near a painted coast with a water side a cliff's foot stands. The cliffs rising off
+    /// C1's, C2's and C3's painted coasts stand within 1 m of them.</summary>
+    public const float SprayFootGap = 2f;
+
+    /// <summary>TUNE. The metres between spray sites along the cliffs.</summary>
+    public const float SpraySpacing = 12f;
+
+    // A face is steep while its normal's vertical part stays under this: over 45 degrees.
+    private const float SprayCos = 0.70710677f;
+
     // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
     // a chain of at most ShoreReach / Cell steps, so a band sees every chain its own rows can take.
     private const int Halo = (int)(ShoreReach / Cell) + 4;
@@ -126,14 +143,17 @@ internal static class OceanMaskRaster
         Parallel.For(0, count, b => Dilate(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, tint));
         Parallel.For(0, count, b => Seam(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1));
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var coast = Coastline(tris);
+        var coast = Coastline(tris, out int painted);
         Parallel.For(0, count, b => Encode(grid, coast, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var shore = SeaFacing(grid, coast);
+        var shore = SeaFacing(grid, coast, painted, out int paintedShore);
         Parallel.For(0, count, b => Inland(grid, shore, b * rows, Math.Min(h, (b + 1) * rows) - 1, inland));
         long t3 = System.Diagnostics.Stopwatch.GetTimestamp();
+        var spray = SpraySites(tris, grid, shore, paintedShore);
+        long t4 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf, inland, (t3 - t2) * tick);
+        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf, inland, (t3 - t2) * tick,
+            spray, (t4 - t3) * tick);
     }
 
     /// <summary>The inland byte of a texel <paramref name="d"/> metres from the coastline: 128 on it,
@@ -577,25 +597,26 @@ internal static class OceanMaskRaster
     // hull's waterline. Coplanar land under a painted coast's water side is sea in the mask. Its
     // segments keep only their parts outside every water side, while a solid rising off that water
     // keeps its foot.
-    private static float[] Coastline(Tri[] tris)
+    // The painted waterlines come first, the first `painted` floats, so the spray pick can tell them apart.
+    private static float[] Coastline(Tri[] tris, out int painted)
     {
         var seg = new List<float>();
         var water = WaterSides(tris);
         var near = new List<Tri>();
         foreach (var t in tris)
         {
-            if (t.Kind == Kind.Coast)
+            // Negated, the land side (0 or below) is the side Cut reads as above the water. The
+            // raster drops a zero-area join, so its waterline is none.
+            if (t.Kind == Kind.Coast && Math.Abs(Area(t)) >= 1e-6f)
             {
-                // Negated, the land side (0 or below) is the side Cut reads as above the water. The
-                // raster drops a zero-area join, so its waterline is none.
-                if (Math.Abs(Area(t)) >= 1e-6f)
-                {
-                    Cut(seg, t.A, t.B, -t.Surf.X, -t.Surf.Y);
-                    Cut(seg, t.B, t.C, -t.Surf.Y, -t.Surf.Z);
-                    Cut(seg, t.C, t.A, -t.Surf.Z, -t.Surf.X);
-                }
-                continue;
+                Cut(seg, t.A, t.B, -t.Surf.X, -t.Surf.Y);
+                Cut(seg, t.B, t.C, -t.Surf.Y, -t.Surf.Z);
+                Cut(seg, t.C, t.A, -t.Surf.Z, -t.Surf.X);
             }
+        }
+        painted = seg.Count;
+        foreach (var t in tris)
+        {
             if (t.Kind != Kind.Solid)
                 continue;
             int n = seg.Count;
@@ -763,15 +784,161 @@ internal static class OceanMaskRaster
 
     // The coastline segments with an open-sea texel centre within one Cell, read off the resolved grid. A
     // flat land edge under a strip's sand is coastline to the shore distance, but no sea washes it.
-    private static float[] SeaFacing(Grid g, float[] coast)
+    // In order, so the first `kept` floats are the sea-facing ones of the first `painted`.
+    private static float[] SeaFacing(Grid g, float[] coast, int painted, out int kept)
     {
-        var kept = new List<float>();
+        var list = new List<float>();
+        kept = 0;
         for (int s = 0; s < coast.Length; s += 4)
         {
             if (FacesSea(g, coast[s], coast[s + 1], coast[s + 2], coast[s + 3]))
-                kept.AddRange(new[] { coast[s], coast[s + 1], coast[s + 2], coast[s + 3] });
+                list.AddRange(new[] { coast[s], coast[s + 1], coast[s + 2], coast[s + 3] });
+            if (s + 4 == painted)
+                kept = list.Count;
+        }
+        return list.ToArray();
+    }
+
+    // Where the breakers throw spray: points along the foot of each solid face rising SprayRise or more
+    // at over 45 degrees from under SolidTop. A cliff's foot stands on a painted coast with a water side,
+    // within SprayReach of a sea-facing painted waterline (the first `painted` floats of shore). A bare
+    // one (a quay, rock off every painted coast) stands within a Cell of an open-sea texel centre. Sorted,
+    // then thinned in that order, so no triangle order moves a site.
+    private static SpraySite[] SpraySites(Tri[] tris, Grid g, float[] shore, int painted)
+    {
+        var index = new Dictionary<long, List<int>>();
+        for (int s = 0; s < painted; s += 4)
+        {
+            for (int z = Bucket(Math.Min(shore[s + 1], shore[s + 3]) - SprayReach); z <= Bucket(Math.Max(shore[s + 1], shore[s + 3]) + SprayReach); z++)
+            {
+                for (int x = Bucket(Math.Min(shore[s], shore[s + 2]) - SprayReach); x <= Bucket(Math.Max(shore[s], shore[s + 2]) + SprayReach); x++)
+                {
+                    if (!index.TryGetValue(Key(x, z), out var list))
+                        index[Key(x, z)] = list = new List<int>();
+                    list.Add(s);
+                }
+            }
+        }
+        var water = WaterSides(tris);
+        var found = new List<SpraySite>();
+        foreach (var t in tris)
+        {
+            float lo = Math.Min(t.A.Y, Math.Min(t.B.Y, t.C.Y)), hi = Math.Max(t.A.Y, Math.Max(t.B.Y, t.C.Y));
+            var n = (t.B - t.A).Cross(t.C - t.A);
+            float len = n.Length();
+            if (t.Kind != Kind.Solid || hi - lo < SprayRise || len < 1e-6f || Math.Abs(n.Y) > SprayCos * len)
+                continue;
+            var face = new Vector2(n.X, n.Z).Normalized();
+            int feet = (t.A.Y < SolidTop ? 1 : 0) + (t.B.Y < SolidTop ? 1 : 0) + (t.C.Y < SolidTop ? 1 : 0);
+            if (feet == 1)
+                Site(t.A.Y < SolidTop ? t.A : t.B.Y < SolidTop ? t.B : t.C, face);
+            else
+            {
+                Foot(t.A, t.B, face);
+                Foot(t.B, t.C, face);
+                Foot(t.C, t.A, face);
+            }
+        }
+        found.Sort((p, q) => p.At.X != q.At.X ? p.At.X.CompareTo(q.At.X) : p.At.Y != q.At.Y ? p.At.Y.CompareTo(q.At.Y)
+            : p.Seaward.X != q.Seaward.X ? p.Seaward.X.CompareTo(q.Seaward.X) : p.Seaward.Y.CompareTo(q.Seaward.Y));
+        var kept = new List<SpraySite>();
+        var near = new Dictionary<long, List<Vector2>>();
+        float r = SpraySpacing * 0.75f;
+        foreach (var site in found)
+        {
+            int cx = (int)Math.Floor(site.At.X / r), cz = (int)Math.Floor(site.At.Y / r);
+            bool close = false;
+            for (int z = cz - 1; z <= cz + 1 && !close; z++)
+            {
+                for (int x = cx - 1; x <= cx + 1 && !close; x++)
+                    close = near.TryGetValue(Key(x, z), out var list) && list.Exists(p => p.DistanceTo(site.At) < r);
+            }
+            if (close)
+                continue;
+            if (!near.TryGetValue(Key(cx, cz), out var cell))
+                near[Key(cx, cz)] = cell = new List<Vector2>();
+            cell.Add(site.At);
+            kept.Add(site);
         }
         return kept.ToArray();
+
+        void Foot(Vector3 p, Vector3 q, Vector2 face)
+        {
+            if (p.Y >= SolidTop || q.Y >= SolidTop)
+                return;
+            int k = Math.Max(1, (int)Math.Ceiling(new Vector2(q.X - p.X, q.Z - p.Z).Length() / SpraySpacing));
+            for (int i = 0; i < k; i++)
+                Site(p.Lerp(q, (i + 0.5f) / k), face);
+        }
+
+        void Site(Vector3 p, Vector2 face)
+        {
+            double best = double.MaxValue;
+            var at = new Vector2(p.X, p.Z);
+            var away = Vector2.Zero;
+            if (index.TryGetValue(Key(Bucket(p.X), Bucket(p.Z)), out var list))
+            {
+                foreach (int s in list)
+                {
+                    double d = Segment(p.X, p.Z, shore[s], shore[s + 1], shore[s + 2], shore[s + 3]);
+                    if (d < best)
+                    {
+                        best = d;
+                        away = Nearest(p, shore, s) - at;
+                    }
+                }
+            }
+            bool bare = best > SprayReach || !OnPaintedCoast(p);
+            // A bare foot stands on the water itself, open sea a Cell out from one side of its face. So does
+            // a cliff's foot at its own waterline, which has no other direction to the sea.
+            if (bare || away.Length() < 1f)
+            {
+                bool front = OpenSea(g, p.X + (face.X * Cell), p.Z + (face.Y * Cell));
+                if (bare && !front && !OpenSea(g, p.X - (face.X * Cell), p.Z - (face.Y * Cell)))
+                    return;
+                away = front ? face : -face;
+            }
+            found.Add(new SpraySite(at, away.Normalized(), bare ? 0f : (float)best, bare));
+        }
+
+        bool OnPaintedCoast(Vector3 p)
+        {
+            if (water.TryGetValue(Key(Bucket(p.X), Bucket(p.Z)), out var coasts))
+            {
+                foreach (var c in coasts)
+                {
+                    if (TriDistance(p.X, p.Z, c) <= SprayFootGap)
+                        return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    // The metres from (px, pz) to triangle t in plan, 0 inside it.
+    private static double TriDistance(double px, double pz, in Tri t)
+    {
+        double Side(Vector3 a, Vector3 b) => ((b.X - a.X) * (pz - a.Z)) - ((b.Z - a.Z) * (px - a.X));
+        double ab = Side(t.A, t.B), bc = Side(t.B, t.C), ca = Side(t.C, t.A);
+        if ((ab >= 0 && bc >= 0 && ca >= 0) || (ab <= 0 && bc <= 0 && ca <= 0))
+            return 0.0;
+        return Math.Min(Segment(px, pz, t.A.X, t.A.Z, t.B.X, t.B.Z),
+            Math.Min(Segment(px, pz, t.B.X, t.B.Z, t.C.X, t.C.Z), Segment(px, pz, t.C.X, t.C.Z, t.A.X, t.A.Z)));
+    }
+
+    // The point of shore segment s nearest p.
+    private static Vector2 Nearest(Vector3 p, float[] shore, int s)
+    {
+        var a = new Vector2(shore[s], shore[s + 1]);
+        var ab = new Vector2(shore[s + 2], shore[s + 3]) - a;
+        float l = ab.LengthSquared();
+        return a + (ab * (l > 0f ? Math.Clamp((new Vector2(p.X, p.Z) - a).Dot(ab) / l, 0f, 1f) : 0f));
+    }
+
+    private static bool OpenSea(Grid g, float x, float z)
+    {
+        int ix = (int)Math.Floor((x - g.MinX) / Cell), iz = (int)Math.Floor((z - g.MinZ) / Cell);
+        return ix >= 0 && iz >= 0 && ix < g.W && iz < g.H && g.Sea[(iz * g.W) + ix] == 1 && !Landward(g, (iz * g.W) + ix);
     }
 
     private static bool FacesSea(Grid g, float ax, float az, float bx, float bz)
@@ -887,14 +1054,20 @@ internal static class OceanMaskRaster
     /// coverage, under a strip's translucent sand; below, land.</summary>
     public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false, Vector3 Surf = default, float Opaque = 0f);
 
+    /// <summary>A point on a cliff's or a bare solid's foot where the breakers throw spray. Seaward is
+    /// the unit direction to the sea, Behind a cliff's metres to its painted waterline (0 when bare).</summary>
+    public readonly record struct SpraySite(Vector2 At, Vector2 Seaward, float Behind, bool Bare);
+
     /// <summary>The texel bytes of the mask, tint, zone group, lift and surf, and each pass's
     /// milliseconds over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore
     /// distance), the tint RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on water off the sheet
     /// and <see cref="SeamZone"/> on a seam between two groups. The lift is R8, the ocean's height
     /// over a ramp over <see cref="OceanMask.RampTop"/>. The surf is R8, the coverage of the surf
-    /// ring and the painted coasts' water sides, 0 off them. The inland is R8 (<see cref="InlandByte"/>).</summary>
+    /// ring and the painted coasts' water sides, 0 off them. The inland is R8 (<see cref="InlandByte"/>),
+    /// the spray sites sorted by X, then Z.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
-        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift, byte[] Surf, byte[] Inland, double InlandMs);
+        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift, byte[] Surf, byte[] Inland, double InlandMs,
+        SpraySite[] Spray, double SprayMs);
 
     // The coverage both passes share. Each band writes only its own rows.
     private sealed class Grid

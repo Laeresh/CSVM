@@ -86,8 +86,9 @@ public sealed partial class Puffer : Node3D
     private static readonly ConditionalWeakTable<TextureArchive, Dictionary<string, (ImageTexture Atlas, bool DiesDark)>> AtlasCache = new();
 
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
-    // puffer stream, so a run repeats and two emitters still scatter independently.
-    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
+    // puffer stream, so a run repeats and two emitters still scatter independently. Drawn in Init, the
+    // step after construction, so an emitter on a stream of its own leaves the puffer stream's series.
+    private System.Random _rng = null!;
 
     // Dev-tunable BaseSize multipliers, one per spawn path (burst = SpawnBatch, trail and sustain
     // = SpawnSustained by way of TrailAdvance / SustainAt). Read once per emitter at Init; --det drops
@@ -210,12 +211,12 @@ public sealed partial class Puffer : Node3D
     internal float FirePhase { get; set; }
 
     /// <summary>Builds an emitter for <paramref name="state"/>, loading its texture frames into an
-    /// atlas; null if a frame is missing. <paramref name="activeDuration"/> is the burst duration
-    /// (ignored by DISTANCE_INTERVAL states). <paramref name="sustained"/> selects continuous
-    /// emission over a burst. <paramref name="softParticles"/> null takes the measured default (see
-    /// <see cref="SmokeLuminance"/>). <paramref name="ambience"/> null is still air.</summary>
+    /// atlas; null if a frame is missing. The burst lasts <paramref name="activeDuration"/> (ignored by
+    /// DISTANCE_INTERVAL states). With <paramref name="sustained"/> it emits continuously instead. A null
+    /// <paramref name="softParticles"/> takes the measured default (see <see cref="SmokeLuminance"/>).
+    /// A null <paramref name="ambience"/> is still air. The scatter draws <paramref name="stream"/>.</summary>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
-        bool sustained = false, bool? softParticles = null, EffectAmbience? ambience = null)
+        bool sustained = false, bool? softParticles = null, EffectAmbience? ambience = null, string stream = Rng.Puffer)
     {
         bool sequenced = state.TextureSequence.Count > 0;
         var frameNames = sequenced
@@ -243,7 +244,7 @@ public sealed partial class Puffer : Node3D
         var puffer = new Puffer();
         puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count, additive,
             softParticles ?? !(state.Colors.Count > 0 || diesDark), fire, smoke),
-            activeDuration, sustained, ambience, fireColumns: fire);
+            activeDuration, sustained, ambience, fireColumns: fire, stream: stream);
         return puffer;
     }
 
@@ -802,8 +803,9 @@ public sealed partial class Puffer : Node3D
 
     private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
         bool sustained, EffectAmbience? ambience = null, PufferFadeSwitches? fade = null,
-        bool[]? fireColumns = null)
+        bool[]? fireColumns = null, string stream = Rng.Puffer)
     {
+        _rng = Rng.NewSystemRandom(stream);
         _state = state;
         _renderer = renderer;
         _ambience = ambience ?? EffectAmbience.Still;

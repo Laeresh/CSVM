@@ -58,7 +58,8 @@
     "look_from": 0,
     "look_full": 24,
     "surf_wash": 0.7,
-    "surf_lines": 0.6
+    "surf_lines": 0.6,
+    "spray": 0
   },
   "C5": {}
 }
