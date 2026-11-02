@@ -34,12 +34,53 @@ internal static class CourseVisualsSuites
         + "three tethers per balloon ring, every gate node standing at CourseMotion's pose for the sim time "
         + "it is posed at, on a shader reading csky_time and never TIME; a run's touch of a course pylon "
         + "cuts that course pylon alone at the touch's height, its top vanishing as it lands, whole again at the regrow time or on the run's reset; "
+        + "with two seats' runs followed, seat 1's cut stands through seat 0's rerun and is whole on seat 1's own; "
         + "in a C1 flight they are photographed close, wide, a second apart and through a cut into montages")]
     internal static void CourseVisualsDraw(TestContext ctx)
     {
         CheckBuild(ctx);
         CheckCut(ctx);
+        CheckSeats(ctx);
         Montage(ctx);
+    }
+
+    // Two seats' runs tracked by one drawing, the cues on seat 0's. Seat 1 brushes the left course pylon; seat 0's rerun
+    // leaves that cut standing, and seat 1's own rerun stands it whole.
+    private static void CheckSeats(TestContext ctx)
+    {
+        var gate = new CourseGate("p", CourseGateKind.PylonGate, new Vector3(10f, 5f, -20f), 30f, PylonWidthM, PylonHeightM, 0f);
+        var course = new Course(Chapter, "seats", new SpawnPoint(new Vector3(0f, 100f, 0f), 0f), new[] { gate },
+            new[] { new SequenceEntry("p", GateDirection.Forward) });
+        double now = 0.0;
+        var seat0 = StuntMission.ForCourse(course)!;
+        seat0.SimSeconds = () => now;
+        var seat1 = seat0.ForAnotherPlayer();
+        var visuals = CourseVisuals.Build(course).Follow(seat0).TrackCuts(seat1);
+        ctx.Host.AddChild(visuals);
+        try
+        {
+            var stump = (ShaderMaterial)visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_left").MaterialOverride;
+            float Top() => stump.GetShaderParameter("clip_hi_m").AsSingle();
+            var rest = CourseMotion.Rest(gate);
+            float radius = Mathf.Lerp(CourseGateShape.PylonBaseRadius(gate), CourseGateShape.PylonTopRadius(gate), TouchHeightM / PylonHeightM);
+            seat1.Update(rest * new Vector3((-0.5f * PylonWidthM) - radius - 10f, TouchHeightM, 0.3f), 1f);
+            now = TouchAt;
+            seat1.Update(rest * new Vector3((-0.5f * PylonWidthM) - radius - 0.5f, TouchHeightM, 0.3f), 1f);
+            visuals.Pose(now + 0.1);
+            ctx.Check(Top() < PylonHeightM, $"seat 1's touch cuts the course pylon at {Top():0.00} m");
+            seat0.Reset();
+            visuals.Pose(now + 0.2);
+            ctx.Check(Top() < PylonHeightM, $"seat 0's rerun leaves seat 1's cut standing at {Top():0.00} m");
+            seat1.Reset();
+            visuals.Pose(now + 0.3);
+            ctx.Check(Top() == CoursePylonCut.NoClipM, $"seat 1's rerun stands its cut whole ({Top():0.00} m)");
+            ctx.Check(visuals.Cross != null && visuals.FindChildren("wrong_side_cross", "", false, false).Count == 1,
+                $"tracking a second run adds no second cross");
+        }
+        finally
+        {
+            visuals.Free();
+        }
     }
 
     // A run's real touch, brushing the left course pylon's outside from clear of the gate, drives the
@@ -103,8 +144,8 @@ internal static class CourseVisualsSuites
             ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(stump, "sag_m") == 0f && !top.Visible,
                 $"whole at {CoursePylonCut.RegrowSeconds} s");
 
-            visuals.Cut(0, CourseElement.RingRim, TouchHeightM, TouchAt + 4.0);
-            visuals.Cut(0, CourseElement.Balloon, TouchHeightM, TouchAt + 4.0);
+            visuals.Cut(0, CourseElement.RingRim, TouchHeightM, TouchAt + 4.0, run);
+            visuals.Cut(0, CourseElement.Balloon, TouchHeightM, TouchAt + 4.0, run);
             visuals.Pose(TouchAt + 4.0);
             ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(right, "clip_hi_m") == CoursePylonCut.NoClipM,
                 $"a rim or balloon touch cuts nothing");
@@ -289,7 +330,7 @@ internal static class CourseVisualsSuites
             // and the stump regrows and stands whole.
             double cutAt = t0 + 5.0;
             double lands = Math.Sqrt(2.0 * CutHeightM / CoursePylonCut.FallAccel);
-            visuals.Cut(0, CourseElement.LeftCoursePylon, CutHeightM, cutAt);
+            visuals.Cut(0, CourseElement.LeftCoursePylon, CutHeightM, cutAt, StuntMission.ForCourse(course)!);
             var leftBase = CourseMotion.Rest(pylons) * CourseGateShape.PylonBase(pylons, 0);
             var cutEye = leftBase - (f * 45f) - (r * 30f) + (Vector3.Up * 10f);
             var cutLook = leftBase + (Vector3.Up * 12f);

@@ -570,6 +570,7 @@ internal sealed class HumanFlightAdapter
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt = run;
+            _human.TrackRun?.Invoke(run);
             run.LogTag = tag; // "P2 " in a race, one shared world, four runs
             controller.DebugCompleteStunt = _policy.DebugScoreboard;
             // This pilot's own unflown zones, on their own target cycle. Bound per controller
@@ -642,6 +643,7 @@ internal sealed class HumanFlightAdapter
             var run = _human.StuntZones.ForAnotherPlayer();
             run.LogTag = tag;
             controller.Stunt = run;
+            _human.TrackRun?.Invoke(run);
             controller.Race = botRace;
             controller.RerunCount = _human.RerunCount;
             // Nobody presses R for it, so a crash returns it to its last zone unattended.

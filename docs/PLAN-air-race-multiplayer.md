@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, open the gates
 
-21. ☐ `--course=` with a second local pilot and with race bots; pylon cuts per local seat (#277)
+21. ☑ `--course=` with a second local pilot and with race bots; pylon cuts per local seat (#277)
 22. ☐ `--course=` in a network session, and the Course dropdown in the lobby's Mission Options (#277)
 23. ☐ Instant Action offers the Course box with more seats and bot rows (#277)
 
@@ -297,7 +297,32 @@ bot suites stay green.
 
 # Wave C, open the gates
 
-## C21 ☐ `--course=` with a second local pilot and with race bots; pylon cuts per local seat
+## C21 ☑ `--course=` with a second local pilot and with race bots; pylon cuts per local seat
+
+**Landed.** `SessionSpec.CourseRefusal` no longer refuses `--players>1`, a `--plane=` list or
+`--vs-bot`/`--vs-bots`; it still refuses `--vs`, a network session (C22 lifts it) and
+`--stage=empty`. `FromMenu(..., bots:, course:)` with several seats builds the spec the command line
+does (`InstantActionCourseTests`): `Course` the pick, `Chapter` the course's, `Mission` IA1, `Stunt`,
+`Players` the seat count, `VsBots` the rows, no refusal, so C23 needs only the menu gate and layout.
+Every pane and every bot flown here races its own `ForAnotherPlayer` run in one `StuntRace`.
+`CourseVisuals.TrackCuts` is called once per run this machine flies, through the new
+`HumanRosterBindings.TrackRun` that `HumanFlightAdapter` invokes for each pane's and each local
+bot's run (never a remote seat's), in place of `GameSession` following `_courseRun` alone. The last
+seat to cut a course pylon owns it, and a run's `RunReset` restores only the course pylons it owns:
+A cuts, B recuts, A reruns and it stays cut; B reruns and it stands. Once the roster is built,
+`GameSession` hands the first pane's run to `CourseVisuals.ShowCues` for the wrong-side cross and
+the highlight, whatever order the seats were built in; `Follow` stays the solo pair of both.
+Files: `Spec/SessionSpec.cs`, `Flight/Modes/CourseVisuals.cs`, `Launch/GameSession.cs`,
+`Session/Roster/FlightRosterInputs.cs`, `Session/Roster/HumanFlightAdapter.cs`; suites
+`course-race-local` (new, `CourseLaunchSuites`, with a bot's rerun restoring its own cut),
+`course-visuals` (two seats' cuts), `stunt-race-bot-course`/`-blocker` (plain `bots:` spec, the
+reflection gone), and `Testing/CourseFlight.cs` (placement flying shared with `net-course-from-host`);
+unit tests in `SessionSpecTests` and `InstantActionCourseTests`; docs `cli.md`, architecture Spec,
+Launch, Flight, Session. In split screen the cues follow the first pane only (follow-up issue).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `--stunt --course=<chapter>/<name>` launches with `--players>1` and with `--vs-bot`/
 `--vs-bots`, every seat flying its own run of the course in one race, and the drawn pylons show the

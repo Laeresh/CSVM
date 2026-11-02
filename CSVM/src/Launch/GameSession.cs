@@ -2064,6 +2064,7 @@ public partial class GameSession : Node3D
         // Stunt run: the mission's danger-zone objectives, positions resolved against this chapter
         // world's gamez. Parsed once for the session; each player then races an independent copy.
         StuntMission? stuntZones = null;
+        CourseVisuals? courseVisuals = null;
         StuntRace? race = null;
         // An Instant Action stunt_flying mission IS a stunt run: the mission type asks for the
         // zones, so --stunt is not the tester's flag to remember on an --ia= launch.
@@ -2078,9 +2079,11 @@ public partial class GameSession : Node3D
             stuntZones = _courseRun ?? StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
             if (_courseRun?.Course is { } course)
             {
-                // The gates drawn where they are scored: both read CourseMotion on the sim clock. A
-                // touched course pylon is cut, and a rerun stands them whole.
-                _worldRoot!.AddChild(CourseVisuals.Build(course).Follow(_courseRun));
+                // The gates drawn where they are scored: both read CourseMotion on the sim clock. The
+                // roster hands it every run flown here to track: a touch cuts a course pylon, and the
+                // run's rerun stands its own cuts whole.
+                courseVisuals = CourseVisuals.Build(course);
+                _worldRoot!.AddChild(courseVisuals);
             }
 
             if (stuntZones == null)
@@ -2230,6 +2233,7 @@ public partial class GameSession : Node3D
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
+            TrackRun = courseVisuals == null ? null : run => courseVisuals.TrackCuts(run),
             RerunCount = rerunCount,
             FirstStartCount = firstCount,
             MenuSounds = rerunCount != null ? MenuSounds() : null,
@@ -2246,6 +2250,12 @@ public partial class GameSession : Node3D
             _worldEffectsFactory, _worldRoot!, aircraftResources, worldBindings, humanBindings,
             flightStarts);
         var rosterBuild = flightRoster.BuildPlayers(_seatRigs);
+        // The course's cues follow this machine's first pane, whatever order the seats were built in.
+        if (courseVisuals != null && _rigs.FirstOrDefault()?.Controller?.Stunt is { } paneRun)
+        {
+            courseVisuals.ShowCues(paneRun);
+        }
+
         state.MeshInstances += rosterBuild.MeshInstances;
         state.What += rosterBuild.SummarySuffix;
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may

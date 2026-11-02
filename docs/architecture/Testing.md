@@ -136,6 +136,11 @@ chapter world; under `--synthetic-data` they are the `effects` family's invented
 The readings the bot suites share: lifting a pilot clear of the ground, the spawn-table entry a
 placed aeroplane stands on, the Dogfight's ranked board as one line, and a pane's message stack.
 
+## src/Testing/CourseFlight.cs
+A course flown by placement in built sessions, which the local and network course race suites
+share: `Through` sets an aircraft 8 m short of an entry's gate at its pose now and steps every
+session until the run counts the entry, and `Until` steps them until a condition holds.
+
 ## src/Testing/MenuSuiteHost.cs
 What a menu suite's host is built from. `AddFeatures` registers the same Free Flight, Instant
 Action, player-setup, hangar, campaign and controls features the launcher wires, beside a silent

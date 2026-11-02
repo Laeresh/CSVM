@@ -264,6 +264,10 @@ internal sealed class HumanRosterBindings
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }
 
+    /// <summary>Handed every run this machine flies, each pane's and each bot's, never a remote
+    /// seat's: the drawn course tracks their course pylon cuts. Null with no course drawn.</summary>
+    public Action<StuntMission>? TrackRun { get; init; }
+
     /// <summary>The count a stunt run reruns behind, solo or in a race, or null for none.
     /// ⚠ Null under <c>--det</c>, so a scripted run stays byte-identical.</summary>
     public IReadOnlyList<StartCountPhase>? RerunCount { get; init; }

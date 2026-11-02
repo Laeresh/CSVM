@@ -521,14 +521,11 @@ internal static class StuntRaceBotSuites
         }
     }
 
-    // A solo course race's spec over the shipped course, with the given bots seated on it.
+    // A course race's spec over the shipped course, one pane and the given bots, as the menu builds it.
     private static SessionSpec CourseRace(TestContext ctx, string chapter, params VsBotEntry[] bots)
     {
         var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
-            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace, course: CourseName);
-
-        // The launch refuses race bots on a course, so they are seated on the solo spec it admits.
-        typeof(SessionSpec).GetProperty(nameof(SessionSpec.VsBots))!.SetValue(spec, bots);
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace, bots: bots, course: CourseName);
         ctx.Check(spec is { Course: not null, CourseRefusal: null, Stunt: true, VsBots.Count: > 0 },
             $"the course race spec flies {spec.Course} with {spec.VsBots.Count} bot(s), refusal {spec.CourseRefusal ?? "none"}");
         return spec;

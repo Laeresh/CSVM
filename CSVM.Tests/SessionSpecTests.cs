@@ -216,22 +216,35 @@ public class SessionSpecTests
         Assert.Equal("stunt_flying", s.Scenario);
     }
 
-    /// <summary>Authored courses are solo only, so every way of adding a pilot refuses the launch.
-    /// The world is left alone on a refusal.</summary>
+    /// <summary>A course is a stunt run on this machine's seats, so a Dogfight, a network session and
+    /// the bare stage refuse the launch. The world is left alone on a refusal.</summary>
     [Theory]
     [InlineData("--vs")]
-    [InlineData("--players=2")]
-    [InlineData("--plane=player_fury,player_bhawk")]
-    [InlineData("--vs-bots=1")]
     [InlineData("--net-host=127.0.0.1:47600")]
     [InlineData("--net-join=127.0.0.1:47600")]
     [InlineData("--stage=empty")]
-    public void CourseRefusesAnyLaunchThatIsNotSolo(string other)
+    public void CourseRefusesADogfightANetworkSessionAndTheBareStage(string other)
     {
         var s = S("--course=C2/loop", other);
         Assert.NotNull(s.Course);
         Assert.NotNull(s.CourseRefusal);
         Assert.Equal("C1", s.Chapter);
+    }
+
+    /// <summary>A second local pilot and race bots each fly a run of the course in one race.</summary>
+    [Theory]
+    [InlineData("--players=2")]
+    [InlineData("--plane=player_fury,player_bhawk")]
+    [InlineData("--vs-bots=1")]
+    [InlineData("--vs-bot=player_fury:skill=ace")]
+    public void CourseFliesWithLocalPilotsAndRaceBots(string other)
+    {
+        var s = S("--course=C2/loop", other);
+        Assert.Equal(("C2", "loop"), s.Course);
+        Assert.Null(s.CourseRefusal);
+        Assert.Equal("C2", s.Chapter);
+        Assert.Equal("IA1", s.Mission);
+        Assert.Equal(2, s.Players + s.VsBots.Count);
     }
 
     [Theory]

@@ -130,11 +130,11 @@ public sealed partial class CourseVisuals : Node3D
 
     /// <summary>The followed run's red cross across its next sequence entry's clear opening, shown only
     /// while the aircraft is on that entry's wrong side (<see cref="WrongSide"/>). Its node's origin is
-    /// the aperture's middle. Null until <see cref="Follow"/>.</summary>
+    /// the aperture's middle. Null until <see cref="ShowCues"/>.</summary>
     public MeshInstance3D? Cross { get; private set; }
 
     /// <summary>The dim fill across the aperture of the gate after the next entry's. Hidden with no
-    /// entry after the next; null until <see cref="Follow"/>.</summary>
+    /// entry after the next; null until <see cref="ShowCues"/>.</summary>
     public MeshInstance3D? Highlight { get; private set; }
 
     /// <summary>Whether the cross shows, given whether it showed. <paramref name="beyond"/> is how far
@@ -209,15 +209,31 @@ public sealed partial class CourseVisuals : Node3D
         }
     }
 
+    /// <summary>A solo run's whole binding: <see cref="TrackCuts"/> and <see cref="ShowCues"/> on the
+    /// one run. Answers this node.</summary>
+    public CourseVisuals Follow(StuntMission run) => TrackCuts(run).ShowCues(run);
+
     /// <summary>Cuts a course pylon on each of <paramref name="run"/>'s touches of one, at the run's sim
-    /// time, and stands every course pylon whole on its reset. Both only record, and <see cref="Pose"/> draws,
-    /// so a run outliving this node does no harm. It also adds the run's <see cref="Cross"/> and
-    /// <see cref="Highlight"/>, which <see cref="Pose"/> moves with the run's next entry. Answers this node.</summary>
-    public CourseVisuals Follow(StuntMission run)
+    /// time. Its rerun stands whole every course pylon it cut last. Both only record, and <see cref="Pose"/>
+    /// draws, so a run outliving this node does no harm. Called once per run this machine flies, every
+    /// pane's and every bot's. Answers this node.</summary>
+    public CourseVisuals TrackCuts(StuntMission run)
     {
-        run.ElementTouched += touch => Cut(touch.Gate, touch.Element, touch.PylonHeight, run.SimSeconds());
-        run.RunReset += Restore;
+        run.ElementTouched += touch => Cut(touch.Gate, touch.Element, touch.PylonHeight, run.SimSeconds(), run);
+        run.RunReset += () => Restore(run);
+        return this;
+    }
+
+    /// <summary>The <see cref="Cross"/> and <see cref="Highlight"/>, which <see cref="Pose"/> moves
+    /// with <paramref name="run"/>'s next entry. A later call moves them to another run. Answers this node.</summary>
+    public CourseVisuals ShowCues(StuntMission run)
+    {
         _run = run;
+        if (Cross != null)
+        {
+            return this;
+        }
+
         _fills = _course.Gates.Select(Fill).ToArray();
         _crosses = _course.Gates.Select(CrossMesh).ToArray();
         Cross = Cue("wrong_side_cross", null, CrossRed, 0f);
@@ -229,23 +245,25 @@ public sealed partial class CourseVisuals : Node3D
 
     /// <summary>Cuts pool gate <paramref name="gate"/>'s course pylon <paramref name="element"/> at
     /// <paramref name="heightM"/> above its base, at <paramref name="seconds"/> of sim time. Any other
-    /// element, a rim or a balloon, cuts nothing.</summary>
-    public void Cut(int gate, CourseElement element, float heightM, double seconds)
+    /// element, a rim or a balloon, cuts nothing. The cut is <paramref name="by"/>'s until another run
+    /// cuts that course pylon again.</summary>
+    public void Cut(int gate, CourseElement element, float heightM, double seconds, StuntMission by)
     {
         if (element is CourseElement.LeftCoursePylon or CourseElement.RightCoursePylon && _gates[gate].Pylons is { } pylons)
         {
-            pylons[element == CourseElement.LeftCoursePylon ? 0 : 1].Cut(heightM, seconds);
+            pylons[element == CourseElement.LeftCoursePylon ? 0 : 1].Cut(heightM, seconds, by);
         }
     }
 
-    /// <summary>Every course pylon whole from the next <see cref="Pose"/> on, mid-regrow or not.</summary>
-    public void Restore()
+    /// <summary>Every course pylon <paramref name="by"/> cut last whole from the next <see cref="Pose"/>
+    /// on, mid-regrow or not.</summary>
+    public void Restore(StuntMission by)
     {
         foreach (var (_, _, pylons) in _gates)
         {
             foreach (var pylon in pylons ?? System.Array.Empty<CutPylon>())
             {
-                pylon.Restore();
+                pylon.Restore(by);
             }
         }
     }
@@ -430,14 +448,22 @@ public sealed partial class CourseVisuals : Node3D
         private float _cut;
         private float _top;
         private PylonCutLook? _drawn;
+        private StuntMission? _by;
 
-        public void Cut(float heightM, double seconds)
+        public void Cut(float heightM, double seconds, StuntMission by)
         {
             (_cut, _top) = CoursePylonCut.Recut(gate.Height, heightM, Look(seconds));
             _at = seconds;
+            _by = by;
         }
 
-        public void Restore() => _at = double.NaN;
+        public void Restore(StuntMission by)
+        {
+            if (by == _by)
+            {
+                _at = double.NaN;
+            }
+        }
 
         public void Show(double seconds)
         {

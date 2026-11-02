@@ -179,12 +179,31 @@ public class InstantActionCourseTests
     }
 
     [Fact]
+    public void AMenuCourseWithTwoSeatsAndABotRowIsTheSpecTheCommandLineBuilds()
+    {
+        var bot = new VsBotEntry("player_kestrel", Net.NetBotSkill.Ace, 0, "Bot 1");
+        var menu = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), "C1", new[] { "player_fury", "player_bhawk" },
+            MenuMode.Stunt, bots: new[] { bot }, course: Sample);
+        var cli = SessionSpec.Parse(new[] { "--stunt", $"--course=C1/{Sample}", "--plane=player_fury,player_bhawk", "--vs-bot=player_kestrel:skill=ace" });
+
+        Assert.Null(menu.CourseRefusal);
+        Assert.Null(cli.CourseRefusal);
+        Assert.Equal(cli.Course, menu.Course);
+        Assert.Equal(cli.Chapter, menu.Chapter);
+        Assert.Equal(cli.Mission, menu.Mission);
+        Assert.Equal(cli.Stunt, menu.Stunt);
+        Assert.Equal(cli.Players, menu.Players);
+        Assert.Equal(2, menu.Players);
+        Assert.Equal(cli.VsBots.Select(b => (b.Plane, b.Skill)), menu.VsBots.Select(b => (b.Plane, b.Skill)));
+    }
+
+    [Fact]
     public void AMenuCourseKeepsTheCommandLinesRefusalsAndTheCommandLinesCourseRidesNoMenuLaunch()
     {
         var bare = SessionSpec.Parse(Array.Empty<string>());
-        var two = SessionSpec.FromMenu(bare, "C1", new[] { "player_fury", "player_kestrel" }, MenuMode.Stunt, course: Sample);
-        Assert.Equal(("C1", Sample), two.Course);
-        Assert.NotNull(two.CourseRefusal);
+        var bareStage = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--stage=empty" }), "C1", new[] { "player_fury" }, MenuMode.Stunt, course: Sample);
+        Assert.Equal(("C1", Sample), bareStage.Course);
+        Assert.NotNull(bareStage.CourseRefusal);
 
         var flown = SessionSpec.Parse(new[] { $"--course=C1/{Sample}" });
         Assert.NotNull(flown.Course);

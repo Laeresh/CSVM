@@ -217,7 +217,8 @@ public sealed record SessionSpec
     /// <c>GameSession</c>'s, through <see cref="Flight.Modes.CourseLibrary"/>.</summary>
     public (string Chapter, string Name)? Course { get; private set; }
     /// <summary>Resolved. Why this launch may not fly <see cref="Course"/>, null when it may.
-    /// Authored courses are solo only. <c>GameSession</c> refuses the launch on it.</summary>
+    /// It flies split screen and with race bots, never as a Dogfight or a network session.
+    /// <c>GameSession</c> refuses the launch on it.</summary>
     public string? CourseRefusal { get; private set; }
     /// <summary>Resolved. <c>--course-edit=&lt;chapter&gt;[/&lt;name&gt;]</c>, which implies
     /// <see cref="SessionMode.Freecam"/> over that chapter's IA1 world. The course lab opens on the
@@ -2890,8 +2891,8 @@ public sealed record SessionSpec
         }
     }
 
-    // An authored course is solo only: a guest may not have the host's course file, and bots fly
-    // no sequence. The course names its world, its chapter's IA1, where Stunt Flying flies.
+    // An authored course flies on this machine's seats, every local pilot and bot on a run of its
+    // own; a network session is refused. The course names its world, its chapter's IA1.
     private void ResolveCourse()
     {
         if (_courseArg is not { } arg)
@@ -2908,10 +2909,8 @@ public sealed record SessionSpec
         int slash = arg.IndexOf('/');
         Course = (arg[..Math.Max(slash, 0)].ToUpperInvariant(), arg[(slash + 1)..]);
         CourseRefusal = slash <= 0 || slash == arg.Length - 1 ? $"'{arg}' is not <chapter>/<name>"
-            : Versus ? "--vs is a Dogfight, and authored courses are solo only"
-            : Players > 1 ? $"--players={Players}: authored courses are solo only"
-            : VsBots.Count > 0 ? "--vs-bot/--vs-bots race the run, and authored courses are solo only"
-            : NetHostPort != null || NetJoin != null ? "a network session, and authored courses are solo only"
+            : Versus ? "--vs is a Dogfight, and an authored course is a stunt run"
+            : NetHostPort != null || NetJoin != null ? "a network session, and authored courses fly on local seats only"
             : EmptyStage ? "--stage=empty has no chapter world to fly it over"
             : null;
         if (CourseRefusal == null)
