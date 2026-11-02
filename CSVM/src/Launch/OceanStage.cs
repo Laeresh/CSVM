@@ -23,12 +23,15 @@ internal sealed class OceanStage
     // The world runtime whose motions say which hulls the ocean follows.
     private readonly AnimRuntime? _runtime;
     private readonly Func<SurfaceVehicleRuntime?> _vessels;
+    // The cliff spray's splasher and the wind and cameras its sprites read.
+    private readonly ZrdrSet _zrdr;
+    private readonly EffectAmbience _ambience;
 
     /// <summary>The stage over one session's chapter. It resolves the sea and builds the ocean if the
     /// standing mode and word ask for waves. The roster hulls come and go, so the stage reads
     /// <paramref name="vessels"/> at each build and each frame.</summary>
     public OceanStage(SessionSpec spec, Node3D plane, SceneBuilder? worldScene, TextureArchive? textures,
-        AnimRuntime? runtime, Func<SurfaceVehicleRuntime?> vessels)
+        AnimRuntime? runtime, Func<SurfaceVehicleRuntime?> vessels, ZrdrSet zrdr, EffectAmbience ambience)
     {
         _spec = spec;
         _plane = plane;
@@ -36,6 +39,8 @@ internal sealed class OceanStage
         _textures = textures;
         _runtime = runtime;
         _vessels = vessels;
+        _zrdr = zrdr;
+        _ambience = ambience;
         // The chapter's sea from the shipped file, under any --debug-ocean overrides. A chapter with no entry draws the defaults.
         Saved = OceanSeas.Load().For(spec.Chapter);
         Sea = Saved.WithOverrides(spec.DebugOcean);
@@ -98,6 +103,8 @@ internal sealed class OceanStage
         if (Ocean != null)
         {
             Ocean.DebugDrive = _spec.DebugWake;
+            if (CoastSpray.Create(Ocean, Ocean.Mask, _spec.CoastSpray, _zrdr, _textures, _ambience) is { } spray)
+                Ocean.AddChild(spray);
             _plane.AddChild(Ocean);
         }
     }

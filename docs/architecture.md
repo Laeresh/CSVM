@@ -37,6 +37,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 
 - `src/Mech3/GameZ.cs`, the GameZ model and its reader of unzbd's output (zip or dir, the fork's shape): nodes/models/materials/textures JSON → C# objects.
 - `src/Mech3/TextureArchive.cs`, texture lookup over one decoded archive: resolves the name quirks, classifies each texture's alpha (soft vs hard).
+- `src/Mech3/CoastProfile.cs`, engine-free: where a painted-coast texture crosses from water to land along one UV axis, read off its authored pixels.
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/HdModelMeshes.cs`, a model pack's replacement mesh for a gamez node, imported once per pack key with its winding reversed back.
 - `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
@@ -393,6 +394,7 @@ rows).
 - `src/Effects/EmitterRenderer.cs`, the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/Ocean.cs`, the Enhanced wave ocean on every chapter with a sea at y = 0: a camera-centred Gerstner grid in place of the flat sea-level sheet.
+- `src/Effects/CoastSpray.cs`, the Enhanced spray each breaker throws up the cliffs behind the painted coasts, at the mask's spray sites.
 - `src/Effects/OceanCalmZone.cs`, one ship's calm zone on the wave ocean: a box along the hull's heading over its waterline.
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.

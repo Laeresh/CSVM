@@ -226,9 +226,17 @@ internal sealed partial class TerrainShadow : Node
             Log.Error("world", $"--dump-terrain-shadow: could not write {path} ({err})");
     }
 
-    // The world-space corners of every surface of the meshes the builder set casting no shadow.
+    // The world-space corners of every surface of the meshes the builder set casting no shadow, but
+    // the sea's. The flat sheet cast its line one texel's drop under sea level. A wave trough below that
+    // read as shaded, a dark patch on open water.
     private static Vector3[] Triangles(SceneBuilder scene)
     {
+        var sea = new HashSet<Material>();
+        foreach (var (material, texture) in scene.TexturedMaterials)
+        {
+            if (IsSea(texture))
+                sea.Add(material);
+        }
         var tris = new List<Vector3>();
         foreach (var mi in scene.ShadowlessMeshes)
         {
@@ -239,6 +247,8 @@ internal sealed partial class TerrainShadow : Node
             var xf = mi.GlobalTransform;
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
+                if (mesh.SurfaceGetMaterial(s) is { } material && sea.Contains(material))
+                    continue;
                 var arrays = scene.SurfaceArrays(mesh, s);
                 var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
                 var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil
@@ -250,6 +260,10 @@ internal sealed partial class TerrainShadow : Node
         }
         return tris.ToArray();
     }
+
+    // Water, and the painted shallows laid on it, which the ocean's own waves stand in for.
+    private static bool IsSea(string texture) =>
+        SceneBuilder.ClassifySurface(texture) == "water" || TextureArchive.IsPaintedShallows(texture);
 
     // One orientation's texture and the direction toward its sun.
     private sealed record Baked(ImageTexture Texture, Vector3 Sun);

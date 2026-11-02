@@ -24,6 +24,10 @@ public static class OceanShader
     /// the wake (<see cref="OceanWakeTrack"/>): its position, a lead along its heading, then samples.</summary>
     public const int WakeSamples = 12;
 
+    /// <summary>TUNE. The cliff spray sheet's width and height in metres. Both mechanisms stand the spray
+    /// SprayLead metres seaward of the foot and start it SprayLag cycles after the crest arrives.</summary>
+    public const float SprayWidth = 20f, SprayHeight = 16f, SprayLead = 4f, SprayLag = 0f;
+
     // Remake-only rule: set by the look. The wake's Kelvin waves are off until they are retuned. Off, the
     // shader draws a hull's foam trail and arm foam but no V of waves, in height or in shading.
     private const bool WakeWaves = false;
@@ -183,11 +187,14 @@ public static class OceanShader
     // TUNE. Foam's roughness, which it takes in the share it covers, so it reflects no sky.
     private const float FoamRoughness = 0.6f;
 
-    // TUNE. The surf's lines bend by up to SurfBend radians over SurfBendCell metres, and break into
-    // lengths over SurfBreakCell metres.
-    private const float SurfBendCell = 40f;
-    private const float SurfBend = 5f;
+    // TUNE. The surf's lines break into lengths over SurfBreakCell metres. Their phase, with its bend, is
+    // csky_surf_arrive in csky_ocean.gdshaderinc, which the coasts' swash reads too.
     private const float SurfBreakCell = 20f;
+
+    // TUNE. How far up the painted sand and rocks each breaker's swash runs, in metres from the coastline.
+    // The author's pick from contact sheets and reach strips. The inland texture saturates at
+    // OceanMaskRaster.InlandReach, so the swash stops short of it.
+    private const float SwashReach = 12f;
 
     // TUNE. The wash reads the coverage displaced by up to SurfWarp metres of noise over two cells, so
     // its outline shows no 8 m mask texel. Its edge is ragged over two more. Metres throughout.
@@ -281,6 +288,107 @@ public static class OceanShader
     public static float SurfLinesPerWrap(float spacing, float speed) =>
         (float)Math.Max(speed > 0f ? 1.0 : 0.0, Math.Round(speed * ShaderTime.RolloverSecs / spacing));
 
+    /// <summary><c>csky_ocean_surf</c> for <paramref name="sea"/>, clamped first. X is the surf lines passing
+    /// a second, the rate the ocean's text writes. Y is 1 when the sea breaks surf, so its coasts take the
+    /// swash. Z is the swash's reach, W the inland texture's.</summary>
+    public static Vector4 SurfGlobal(SeaState sea)
+    {
+        sea = sea.Clamped();
+        bool surf = sea.SurfWash > 0f || sea.SurfLines > 0f;
+        return new Vector4(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed) / (float)ShaderTime.RolloverSecs, surf ? 1f : 0f,
+            Math.Min(SwashReach, OceanMaskRaster.InlandReach), OceanMaskRaster.InlandReach);
+    }
+
+    /// <summary>The cliff spray's sheet (<see cref="CoastSpray"/>), one upright quad per site in a MultiMesh
+    /// whose custom data holds the site's seaward direction. Each breaker raises it on the surf's phase.</summary>
+    public static string SprayCode() => @"shader_type spatial;
+render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
+#include ""res://shaders/csky_srgb.gdshaderinc""
+#include ""res://shaders/csky_atmosphere.gdshaderinc""
+#include ""res://shaders/csky_ocean.gdshaderinc""
+
+uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
+
+// TUNE. The sheet's width and height and how far seaward of the foot it stands, in metres. It starts
+// LAG cycles after the crest reaches the coastline, climbs for RISE and is gone at GONE.
+const float WIDTH = " + Literal(SprayWidth) + @";
+const float HEIGHT = " + Literal(SprayHeight) + @";
+const float LEAD = " + Literal(SprayLead) + @";
+const float LAG = " + Literal(SprayLag) + @";
+const float RISE = 0.12;
+const float GONE = 0.5;
+
+varying float v_s;
+varying vec2 v_q;
+varying float v_seed;
+
+void vertex() {
+    vec3 origin = MODEL_MATRIX[3].xyz;
+    v_s = fract(csky_surf_arrive(origin.xz, csky_ocean_surf.x) - 0.25 - LAG);
+    vec3 foot = origin + vec3(INSTANCE_CUSTOM.x, 0.0, INSTANCE_CUSTOM.y) * LEAD;
+    // Upright, turned about the vertical to face the eye.
+    vec2 eye = CAMERA_POSITION_WORLD.xz - foot.xz;
+    vec2 side = normalize(vec2(-eye.y, eye.x) + vec2(1e-4, 0.0));
+    v_q = vec2(VERTEX.x * WIDTH, (VERTEX.y + 0.5) * HEIGHT);
+    v_seed = fract(dot(origin.xz, vec2(0.0137, 0.0261))) * 64.0;
+    MODELVIEW_MATRIX = VIEW_MATRIX;
+    VERTEX = foot + vec3(side.x * v_q.x, v_q.y, side.y * v_q.x);
+    // No ocean, no surf, a spyglass disc or the calm between breakers. Every vertex goes to one point
+    // behind the eye, so the clipper drops the quad before a fragment.
+    if (csky_ocean_on < 0.5 || csky_ocean_surf.y < 0.5 || " + SceneBuilder.FlatSeaEye + @" || v_s > GONE) {
+        MODELVIEW_MATRIX = mat4(1.0);
+        VERTEX = vec3(0.0, 0.0, 1.0);
+    }
+}
+
+void fragment() {
+    float s = v_s;
+    // The crest climbs for RISE of a cycle, then sinks back as it thins.
+    float climb = s < RISE ? 1.0 - (1.0 - s / RISE) * (1.0 - s / RISE) : 1.0 - 0.7 * pow((s - RISE) / (GONE - RISE), 2.0);
+    float fade = 1.0 - smoothstep(RISE, GONE, s);
+    // Ragged columns of water, two still noise octaves lifted as the crest climbs.
+    float n = foam_noise(vec2(v_q.x * 0.35 + v_seed, v_q.y * 0.18 - s * 6.0), 65536.0)
+        + 0.5 * foam_noise(vec2(v_q.x * 0.9 - v_seed, v_q.y * 0.5 - s * 9.0), 65536.0);
+    // TUNE. Each site's crest stands 0.6 to 1.1 of HEIGHT, thins upward and frays at its top and sides.
+    float tall = HEIGHT * (0.6 + 0.5 * fract(v_seed * 0.37));
+    float top = tall * climb * (0.75 + 0.35 * n);
+    float body = (1.0 - smoothstep(top - 6.0, top, v_q.y)) * mix(1.0, 0.3, clamp(v_q.y / max(top, 0.1), 0.0, 1.0));
+    float sides = 1.0 - smoothstep(0.1 * WIDTH, 0.5 * WIDTH, abs(v_q.x) * (1.0 + 0.4 * n));
+    float lace = smoothstep(-0.3, 0.5, 1.4 * n + 0.3 * (1.0 - v_q.y / tall));
+    // Fades into whatever it meets, the cliff or the water, over 2 m of depth.
+    float scene_raw = texture(depth_texture, SCREEN_UV).r;
+    vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
+    float soft = clamp((VERTEX.z - unproj.z / unproj.w) / 2.0, 0.0, 1.0);
+    // The splasher's own grey (200 of 255), dimmed with the world's light, then fogged.
+    vec3 world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    ALBEDO = csky_srgb_to_linear(vec3(200.0 / 255.0)) * csky_world_light_at(CAMERA_POSITION_WORLD);
+    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_amount(world, CAMERA_POSITION_WORLD));
+    ALPHA = 0.75 * body * sides * lace * fade * soft;
+}
+";
+
+    /// <summary><c>csky_surf_arrive</c> in C#: the breaking lines' phase in cycles where they reach the
+    /// land at world X/Z (<paramref name="x"/>, <paramref name="z"/>), at shader time <paramref name="time"/>.</summary>
+    public static float SurfArrive(float x, float z, float time, float linesPerSec) =>
+        (time * linesPerSec) + (0.795775f * FoamNoise(x * 0.025f, z * 0.025f, 65536f));
+
+    /// <summary><c>foam_noise</c> in C#, its cell's x repeating every <paramref name="period"/> cells.</summary>
+    public static float FoamNoise(float qx, float qy, float period)
+    {
+        float ix = MathF.Floor(qx), iy = MathF.Floor(qy), fx = qx - ix, fy = qy - iy;
+        float ux = fx * fx * fx * ((fx * ((fx * 6f) - 15f)) + 10f), uy = fy * fy * fy * ((fy * ((fy * 6f) - 15f)) + 10f);
+        float x0 = ix - (period * MathF.Floor((ix + 0.5f) / period)), x1 = ix + 1f - (period * MathF.Floor((ix + 1.5f) / period));
+        float Corner(float cx, float cy, float dx, float dy)
+        {
+            var (hx, hy) = SeaHash(cx, cy);
+            return (((hx * 2f) - 1f) * dx) + (((hy * 2f) - 1f) * dy);
+        }
+        float a = Corner(x0, iy, fx, fy), b = Corner(x1, iy, fx - 1f, fy);
+        float c = Corner(x0, iy + 1f, fx, fy - 1f), d = Corner(x1, iy + 1f, fx - 1f, fy - 1f);
+        float ab = a + ((b - a) * ux), cd = c + ((d - c) * ux);
+        return ab + ((cd - ab) * uy);
+    }
+
     /// <summary>The swell table's wavelengths as the sea scales them, longest first.</summary>
     public static IEnumerable<float> SwellLengths(SeaState sea)
     {
@@ -289,6 +397,24 @@ public static class OceanShader
     }
 
     private static string Literal(float v) => v.ToString("0.0#####", CultureInfo.InvariantCulture);
+
+    // sea_hash in C#: the PCG2D mix of the cell's integer coordinates, wrapping as the shader's uints do.
+    private static (float X, float Y) SeaHash(float cx, float cy)
+    {
+        unchecked
+        {
+            uint vx = ((uint)(int)cx * 1664525u) + 1013904223u, vy = ((uint)(int)cy * 1664525u) + 1013904223u;
+            vx += vy * 1664525u;
+            vy += vx * 1664525u;
+            vx ^= vx >> 16;
+            vy ^= vy >> 16;
+            vx += vy * 1664525u;
+            vy += vx * 1664525u;
+            vx ^= vx >> 16;
+            vy ^= vy >> 16;
+            return (vx * (1f / 4294967295f), vy * (1f / 4294967295f));
+        }
+    }
 
     // vec4(drift dir.x, dir.z, 1 / cell, drift in cells per second) per detail layer, and vec2
     // grouping weights, a golden angle on per layer. The drift is a whole number of DetailPeriods
@@ -358,9 +484,9 @@ public static class OceanShader
     // widens the holes' edges. Taken here, where every fragment of the quad runs.
     float surf_fp = sqrt(length(dFdx(p)) * length(dFdy(p)));
     if (surf > 0.0 && surf_keep > 0.0) {
-        // The lines' phase in cycles where they reach the land. It rises with time, so along the shore
-        // distance each line runs toward the land; a still noise field bends it off the coast's offset.
-        float arrive = csky_time * " + PerSec(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed)) + @" + " + Literal(SurfBend / Mathf.Tau) + @" * foam_noise(p * " + Literal(1f / SurfBendCell) + @", 65536.0);
+        // The lines' phase in cycles where they reach the land, shared with the coasts' swash. It rises
+        // with time, so along the shore distance each line runs toward the land.
+        float arrive = csky_surf_arrive(p, " + PerSec(SurfLinesPerWrap(sea.SurfSpacing, sea.SurfSpeed)) + @");
         float cyc = m.g * " + Literal(OceanMaskRaster.ShoreReach / sea.SurfSpacing) + @" + arrive;
         float lines = mix(" + Literal(SurfLineMean) + @", smoothstep(0.55, 0.95, sin(6.2831853 * cyc)), " + Fade(sea.SurfSpacing) + @")
             * smoothstep(-0.1, 0.25, " + Noise(SurfBreakCell, "-13.0, 29.0") + @") * smoothstep(0.0, 0.35, surf);
@@ -438,7 +564,7 @@ public static class OceanShader
     private static string DepthScale(int level) =>
         (1.0 - (level * (double)SceneBuilder.DepthBiasPerLevel)).ToString("0.0######", CultureInfo.InvariantCulture);
 
-    // The open sea's colour: the texture's mean, times the sea's tint when it has one. An untinted
+    // The sea's colour: the texture's mean, times the sea's tint when it has one. An untinted
     // sea writes no tint term, so its text matches the defaults'.
     private static string OpenSeaColour(SeaState sea) =>
         "textureLod(albedo_tex, vec2(0.5), 16.0).rgb"
@@ -455,13 +581,13 @@ public static class OceanShader
         sb.AppendLine("render_mode skip_vertex_transform, cull_disabled;");
         sb.AppendLine(SceneBuilder.TimeInclude);
         sb.AppendLine(SceneBuilder.AtmosphereInclude);
-        sb.AppendLine(SceneBuilder.MipBiasInclude);
+        // The noise and the surf's phase the coasts' swash shares.
+        sb.AppendLine(SceneBuilder.OceanInclude);
         if (ShadowQualitySetting.TerrainShadows)
             sb.AppendLine(SceneBuilder.TerrainShadowInclude);
         sb.AppendLine("uniform sampler2D mask_tex : filter_linear, repeat_disable;");
         sb.AppendLine("uniform vec4 mask_rect;");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
-        sb.AppendLine("uniform float tile_m = 32.0;");
         sb.AppendLine("uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D surf_tex : hint_default_black, filter_linear, repeat_disable;");
@@ -501,20 +627,6 @@ float shore_swell(float g) {
 
 float shore_look(float g) {
     return smoothstep(" + Literal(sea.LookFrom / OceanMaskRaster.ShoreReach) + @", " + Literal(sea.LookFull / OceanMaskRaster.ShoreReach) + @", g);
-}
-
-// Two hashes in [0, 1] per integer cell (a PCG2D mix). It hashes the cell's integer coordinates
-// exactly, so every cell sharing a corner hashes it alike. A float hash of a large coordinate rounds
-// differently per call site and cuts the noise along straight lattice lines.
-vec2 sea_hash(vec2 c) {
-    uvec2 v = uvec2(ivec2(c)) * 1664525u + 1013904223u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    return vec2(v) * (1.0 / 4294967295.0);
 }
 
 // Two smooth value-noise channels in [-1, 1].
@@ -596,21 +708,6 @@ vec3 detail_noise(vec2 q) {
     float k = va - vb - vc + vd;
     return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k,
         ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
-}
-
-// Gradient noise at q, about -0.7 to 0.7, smooth across its cells. The cell's x repeats every
-// period cells. The half cell keeps the modulo exact, so no corner hashes differently in two cells.
-float foam_noise(vec2 q, float period) {
-    vec2 i = floor(q);
-    vec2 f = fract(q);
-    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    vec2 x = vec2(i.x, i.x + 1.0);
-    x -= period * floor((x + 0.5) / period);
-    float a = dot(sea_hash(vec2(x.x, i.y)) * 2.0 - 1.0, f);
-    float b = dot(sea_hash(vec2(x.y, i.y)) * 2.0 - 1.0, f - vec2(1.0, 0.0));
-    float c = dot(sea_hash(vec2(x.x, i.y + 1.0)) * 2.0 - 1.0, f - vec2(0.0, 1.0));
-    float d = dot(sea_hash(vec2(x.y, i.y + 1.0)) * 2.0 - 1.0, f - vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 // The holes in a sheet of foam: one round hole per jittered cell, each its own size. Returns the
@@ -928,19 +1025,18 @@ void fragment() {
     vec4 wake = ship_wake(p, vec2(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @") * footprint, footprint);
     n.xz -= wake.yz * " + Literal(WakeSlopeGain) + @";
     float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
-    // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
-    // against a coplanar coast tile. Rising with the fog, so the far sea fogs as the sheet does
-    // instead of showing darker, wavier water through it.
+    // How calm and smooth this fragment shades: flat normals, no foam, the sheet's roughness. The
+    // sea's look ramp fades the waves' look in from the shore. The fog hands the far sea back to a
+    // calm surface, rather than darker, wavier water showing through it.
     float sheet = max(1.0 - look, smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt));
     n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
-    // The open sea takes the texture's mean and the light alone varies it: a tiled texture reads as
-    // a lattice from the air. The last mip is the mean the GPU samples. At sheet = 1 the texture is
-    // the sheet's own mapping, so no seam shows where the ocean meets a coast tile.
+    // The sea takes the texture's mean at every distance and the light alone varies it: the tiled
+    // texture reads as a lattice from the air. The last mip is the mean the GPU samples.
     vec3 tex_mean = " + OpenSeaColour(sea) + @";
-    vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
+    vec3 col = tex_mean * tint;
     // Foam forms where the swell bunches the surface, its Jacobian below 1, which rides each crest.
     // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
     float bunch = (1.0 - ((1.0 - bx.x) * (1.0 - bz.y) - bz.x * bx.y)) / FOAM_JAC_SIGMA;

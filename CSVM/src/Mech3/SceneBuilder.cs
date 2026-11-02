@@ -76,6 +76,10 @@ public sealed class SceneBuilder
     /// centre, and a strip sorted nearer paints over the card's soft edge.</summary>
     public const int GroundLayerRenderPriority = -1;
 
+    /// <summary>The render priority of an opaque painted ramp, which Enhanced blends out over the waves. Below
+    /// the ground layer, so it draws before every strip and decal laid over it, as it did opaque.</summary>
+    public const int CoastRampRenderPriority = GroundLayerRenderPriority - 1;
+
     /// <summary>Meta key a collider carries when its surface class is water or buildings.
     /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
     public static readonly StringName SurfaceMeta = "csky_surface";
@@ -292,6 +296,24 @@ public sealed class SceneBuilder
     // The wave ocean shades toward both where it calms (Effects/Ocean.cs).
     internal const float WaterRoughness = 0.25f;
     internal const float WaterSpecular = 0.5f;
+
+    // Enhanced mode only: the share of a painted strip's stretch from crossing to water edge that its fade
+    // spans (CoastFade). The whole stretch is the author's pick from a montage beside half of it.
+    internal const float CoastFadeShare = 1.0f;
+
+    // Enhanced mode only: the metres seaward of the waterline over which an opaque painted ramp blends out.
+    // TUNE: the whole stretch from crossing to water edge at cliff1_watertrans's median scale. The inland
+    // image saturates at OceanMaskRaster.InlandReach, so the fade cannot run past it.
+    internal const float CoastRampMetres = 25f;
+
+    // Enhanced mode only: the metres past the coastline over which an opaque ramp's swash fades. The film
+    // then ends softly instead of along the straight line. TUNE: short, as a longer carry fills the small sea
+    // pockets the mask reads inside the cliff tiles with foam.
+    internal const float CoastSwashCarry = 4f;
+
+    // Enhanced mode only: painted shallows' fade crossing, past every coordinate their UVs reach, so they
+    // fade out whole wherever the ocean draws (FadeFor). The procedural sea replaces the painted one.
+    internal const float ShallowsCrossing = 65536f;
 
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
@@ -818,6 +840,24 @@ void fragment() {
         BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided, forceLit,
             zoneGate, applyActive);
 
+    /// <summary>Gives each profiled opaque painted-coast material its blend by world distance off the
+    /// waterline (<see cref="CoastRampMetres"/>), and each <see cref="IsFadedStrip"/> one its fade along its
+    /// own UV. The <paramref name="profiles"/> are the ones the ocean mask read against the chapter's base
+    /// sheet, so the coast and the waves place one crossing. Any other strip keeps its alpha. Every profiled
+    /// coast takes the swash (<see cref="TakesSwash"/>).</summary>
+    public void FadeCoasts(IReadOnlyDictionary<string, CoastProfile> profiles)
+    {
+        foreach (var (material, texture) in _texturedMaterials)
+        {
+            if (AlphaOf(material) == TransparencyClass.None && profiles.ContainsKey(System.IO.Path.GetFileNameWithoutExtension(texture)))
+                material.SetShaderParameter("coast_reach", CoastRampMetres);
+            else if (IsFadedStrip(texture) && FadeFor(texture, profiles) is { } fade)
+                material.SetShaderParameter("coast_fade", fade);
+            if (TakesSwash(texture, profiles))
+                material.SetShaderParameter("coast_swash", 1f);
+        }
+    }
+
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
     /// substitute closure reads a mutable painter, so changing the scheme and calling this
@@ -935,6 +975,37 @@ void light() {{
     /// to its seaward edge.</summary>
     internal static bool IsSurfTexture(string texName) =>
         texName.StartsWith("srf", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether a texture is a flat painted coast that gives way to the waves. The ocean mask
+    /// splits these at their waterline (<see cref="TextureArchive.PaintedCoasts"/>,
+    /// <see cref="TextureArchive.IsPaintedSeaTile"/>); <see cref="TextureArchive.IsPaintedShallows"/> joins
+    /// them. Land or water as <see cref="ClassifySurface"/> calls it.</summary>
+    internal static bool IsPaintedCoastTexture(string texName) =>
+        TextureArchive.IsPaintedSeaTile(texName) || TextureArchive.IsPaintedShallows(texName)
+        || TextureArchive.PaintedCoasts.Contains(System.IO.Path.GetFileNameWithoutExtension(texName), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether a painted alpha strip's alpha also fades. C2's <c>beach1</c> fades past its crossing,
+    /// thinning the grey band its water side lays over the waves; C3's painted shallows fade whole. The
+    /// author's picks from montages; the other strips and the rock overlay keep their authored alpha.</summary>
+    internal static bool IsFadedStrip(string texName) =>
+        System.IO.Path.GetFileNameWithoutExtension(texName).Equals("beach1", StringComparison.OrdinalIgnoreCase)
+        || TextureArchive.IsPaintedShallows(texName);
+
+    /// <summary>Whether a painted coast's land side takes the breakers' swash: every coast the mask profiled,
+    /// so its waterline is coastline. The painted shallows and the sea tiles are sea, and take none.</summary>
+    internal static bool TakesSwash(string texName, IReadOnlyDictionary<string, CoastProfile> profiles) =>
+        !TextureArchive.IsPaintedShallows(texName) && profiles.ContainsKey(System.IO.Path.GetFileNameWithoutExtension(texName));
+
+    /// <summary>The <c>coast_fade</c> a profile gives a painted coast: axis, water end, crossing, then
+    /// <see cref="CoastFadeShare"/> of the stretch from the crossing to the water end.</summary>
+    internal static Vector4 CoastFade(CoastProfile p) =>
+        new(p.AlongV ? 1f : 0f, p.WaterAtOne ? 1f : 0f, p.Crossing, CoastFadeShare * (p.WaterAtOne ? 1f - p.Crossing : p.Crossing));
+
+    /// <summary>The <c>coast_fade</c> a painted coast texture takes, or null for none. A profiled coast takes
+    /// its profile's; painted shallows one crossing at <see cref="ShallowsCrossing"/>, keeping nothing.</summary>
+    internal static Vector4? FadeFor(string texName, IReadOnlyDictionary<string, CoastProfile> profiles) =>
+        TextureArchive.IsPaintedShallows(texName) ? new Vector4(0f, 0f, ShallowsCrossing, 1f)
+        : profiles.TryGetValue(System.IO.Path.GetFileNameWithoutExtension(texName), out var p) ? CoastFade(p) : null;
 
     /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
     /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
@@ -2331,8 +2402,12 @@ void light() {{
             bool water = ClassifySurface(texName) == "water";
             bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
             bool oceanSurf = water && IsSurfTexture(texName);
+            bool paintedCoast = IsPaintedCoastTexture(texName);
             var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
-                oceanSurf: oceanSurf);
+                oceanSurf: oceanSurf, paintedCoast: paintedCoast);
+            // Opaque under Original, where a priority only orders the opaque pass.
+            if (paintedCoast && !water && !blend && !scissor)
+                textured.RenderPriority = CoastRampRenderPriority;
             // The glTF export names its material from this, so a pack built from it maps back here.
             textured.ResourceName = texName;
             if (keyed != null)
@@ -2381,7 +2456,7 @@ void light() {{
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
         UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false,
-        bool replacement = false, bool oceanSurf = false)
+        bool replacement = false, bool oceanSurf = false, bool paintedCoast = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
@@ -2389,7 +2464,7 @@ void light() {{
             edgeClamp = UvClampAxes.None;
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
-            replacement, oceanSurf));
+            replacement, oceanSurf, paintedCoast));
         NoteAlpha(mat, blend, scissor);
         if (XrPreciseInterior)
             _interiorPlaced.Add(mat.GetInstanceId());
@@ -2426,17 +2501,19 @@ void light() {{
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage, 262144 race ghost, 524288 base sea. Then
-    // 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow, 33554432 surf ring.
+    // 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow, 33554432 surf ring, 67108864 painted coast.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false, bool oceanBase = false, bool replacement = false,
-        bool oceanSurf = false)
+        bool oceanSurf = false, bool paintedCoast = false)
     {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
         oceanBase &= water;
         oceanSurf &= water;
+        // A painted coast is land as often as water, so its hide stands apart from the water arm.
+        paintedCoast &= !shaded;
         bool sunVertexLit = shaded && _sunVertexLit;
         bool raceGhost = shaded && RaceGhostShader;
         // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
@@ -2455,7 +2532,7 @@ void light() {{
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
             | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
-            | (NoShadowReceive ? 16777216 : 0) | (oceanSurf ? 33554432 : 0);
+            | (NoShadowReceive ? 16777216 : 0) | (oceanSurf ? 33554432 : 0) | (paintedCoast ? 67108864 : 0);
         bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
@@ -2463,7 +2540,7 @@ void light() {{
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
                 debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
-                noShadowReceive, oceanSurf),
+                noShadowReceive, oceanSurf, paintedCoast),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2478,7 +2555,7 @@ void light() {{
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
         bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
-        bool noShadowReceive = false, bool oceanSurf = false)
+        bool noShadowReceive = false, bool oceanSurf = false, bool paintedCoast = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2488,8 +2565,18 @@ void light() {{
         // ⚠ The water arm exists only inside the lit world arm, so original mode's shader text
         // cannot move.
         bool waterLit = worldLit && water;
-        // The sea-level base sheet and the surf ring over it step aside while the wave ocean draws in their place.
-        bool oceanHide = waterLit && (oceanBase || oceanSurf);
+        // The sea-level base sheet, the surf ring over it and C1's painted sea tiles step aside while the
+        // wave ocean draws in their place. A sea tile hides only where the ocean draws, or its rock overlay's
+        // gaps would open onto nothing.
+        bool oceanHide = waterLit && (oceanBase || oceanSurf || paintedCoast);
+        // The other painted coasts give way by their own painting, never by the mask's triangle-edged cut. A
+        // strip fades along its UV; an opaque ramp by world distance off the waterline, so neighbours agree.
+        // ⚠ Keep them off waterLit: their sand and rock are matte.
+        bool coastFade = GraphicsMode.Enhanced && !shaded && paintedCoast && !water && textured && !scissor;
+        bool coastRamp = coastFade && !blend;
+        // Each breaker's swash runs up the land side of every coast that fades, opaque in the coast's own
+        // pass. The coast_swash uniform leaves out the painted shallows, which are sea.
+        bool swash = coastFade;
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
         bool sunLit = sunVertexLit && !GraphicsMode.Enhanced;
@@ -2513,6 +2600,9 @@ void light() {{
         // A part under the interior draws in the transparent pass and still sorts its own faces.
         if (underInterior)
             sb.Append(", depth_draw_always");
+        // A ramp's land side, alpha 1, still writes the depth and normals the screen-space passes read.
+        if (coastRamp)
+            sb.Append(", depth_prepass_alpha");
         sb.AppendLine(";");
         // The stereo interior marks what it covers, so the whiteout leaves even its far wings
         // clear. A blended surface does not: the world behind the glass whitens.
@@ -2554,11 +2644,18 @@ void light() {{
         bool pointLit = lit && (fullbright || sunLit);
         if (pointLit)
             sb.AppendLine(LightsInclude);
-        if (oceanHide)
-        {
+        if (oceanHide || coastFade)
             sb.AppendLine(OceanInclude);
+        if (oceanHide || swash)
             sb.AppendLine("varying vec3 v_ocean_pos;");
-        }
+        if (swash)
+            sb.AppendLine("uniform float coast_swash = 0.0;");
+        // A strip's fade: axis (1 for V), water end (1 for coordinate 1), crossing and width. A ramp's: metres
+        // seaward. Width 0 keeps either whole.
+        if (coastRamp)
+            sb.AppendLine("uniform float coast_reach = 0.0;");
+        else if (coastFade)
+            sb.AppendLine("uniform vec4 coast_fade = vec4(0.0);");
         // The baked terrain shadow darkens the sun on every world-lit arm through a light() of its
         // own. The stereo interior's model frame is the XR origin's, not the world's, so it stays out.
         bool terrainShadow = worldLit && !xrInterior && ShadowQualitySetting.TerrainShadows;
@@ -2630,7 +2727,7 @@ void light() {{
         // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
         // would stretch to its model origin. The colliders stay flat. The hide reads the ocean's mask
         // at the fragment's world X/Z, so a sheet shown after the bake still draws.
-        string oceanVertex = oceanHide ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
+        string oceanVertex = oceanHide || swash ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         string terrainVertex = terrainShadow ? "    v_terrain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
@@ -2677,7 +2774,7 @@ void vertex() {{
 
 void fragment() {{");
         }
-        // A spyglass disc draws no ocean (FlatSeaEye), so the sheet and the ring stay whole there.
+        // A spyglass disc draws no ocean (FlatSeaEye), so the sheet, the ring and the painted coasts stay whole there.
         if (oceanHide)
             sb.AppendLine($"    if (!{FlatSeaEye} && csky_ocean_hides_sea(v_ocean_pos)) {{ discard; }}");
         if (clutterFade)
@@ -2711,6 +2808,17 @@ void fragment() {{");
             sb.AppendLine("    base_col *= albedo_color;");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
+        // The footprint is taken in the gate's uniform flow, never under the swash's own branches. A ramp
+        // still draws past the coastline, so its film fades out there (CoastSwashCarry) instead of stopping.
+        if (swash)
+        {
+            sb.AppendLine($"    if (csky_ocean_on > 0.5 && coast_swash > 0.5 && !{FlatSeaEye}) {{");
+            sb.AppendLine(coastRamp
+                ? "        ALBEDO = csky_ocean_swash_on(v_ocean_pos, ALBEDO, max(max(fwidth(v_ocean_pos.x), fwidth(v_ocean_pos.z)), 0.001), "
+                    + CoastSwashCarry.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + ");"
+                : "        ALBEDO = csky_ocean_swash(v_ocean_pos, ALBEDO, max(max(fwidth(v_ocean_pos.x), fwidth(v_ocean_pos.z)), 0.001));");
+            sb.AppendLine("    }");
+        }
         // Per-mission SUNLIGHT dimming (world/deck/clutter), skipped for a model authored
         // `lighting: false`. Neither lit arm applies it: a real sun carries that energy there, and
         // a scalar on ALBEDO would dim the surface a second time.
@@ -2771,6 +2879,24 @@ void fragment() {{");
                 : $"    ALPHA = col.a{OpacityTerm};");
         else if (underInterior)
             sb.AppendLine("    ALPHA = 1.0;");
+        // How much of a strip stays at this fragment, 1 at its crossing and 0 a fade width seaward.
+        if (coastFade && blend)
+        {
+            sb.Append($"    if (csky_ocean_on > 0.5 && coast_fade.w > 0.0 && !{FlatSeaEye}) {{\n"
+                + "        float coast_t = coast_fade.x > 0.5 ? UV.y : UV.x;\n"
+                + "        float coast_sea = coast_fade.y > 0.5 ? coast_t - coast_fade.z : coast_fade.z - coast_t;\n"
+                + "        float coast_keep = 1.0 - clamp(coast_sea / coast_fade.w, 0.0, 1.0);\n");
+            sb.AppendLine("        ALPHA *= coast_keep;");
+            sb.AppendLine("    }");
+        }
+        // A ramp: 1 on the land side, falling smoothly to 0 coast_reach seaward. The inland image is linear in a
+        // straight coast's distance, so its bilinear read is exact there and its texels never show.
+        if (coastRamp)
+        {
+            sb.AppendLine($"    if (csky_ocean_on > 0.5 && coast_reach > 0.0 && !{FlatSeaEye}) {{");
+            sb.AppendLine("        ALPHA = smoothstep(-coast_reach, 0.0, csky_ocean_inland_at(v_ocean_pos.xz));");
+            sb.AppendLine("    }");
+        }
         if (scissor)
             sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)

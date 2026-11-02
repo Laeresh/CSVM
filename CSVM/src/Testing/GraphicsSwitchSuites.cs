@@ -57,6 +57,9 @@ internal static class GraphicsSwitchSuites
     // The call in the base sheet's fragment-stage discard. The include line alone never matches it.
     private const string HideCall = "csky_ocean_hides_sea(";
 
+    // The opaque ramp's blend by world distance off the waterline, as the world shader writes it.
+    private const string RampLine = "ALPHA = smoothstep(-coast_reach, 0.0, csky_ocean_inland_at(v_ocean_pos.xz));";
+
     // Where the hide and its mask globals are declared.
     private const string OceanIncludePath = "res://shaders/csky_ocean.gdshaderinc";
 
@@ -73,6 +76,15 @@ internal static class GraphicsSwitchSuites
     // The chapters whose base sheet rises off sea level: C2's harbour to a quay, C5's water to the
     // steinmann ship's hull.
     private static readonly string[] RampChapters = { "C2", "C5" };
+
+    // The painted coast textures each chapter lays (analysis/painted-coasts/FINDINGS.md). C1 has opaque tiles
+    // under a rock overlay pass, C2 a beach and a rock decal, C3 blended strips, shallows and opaque cliff tiles.
+    private static readonly (string Chapter, string[] Textures)[] PaintedCoastChapters =
+    {
+        ("C1", new[] { "cliff01_trans2", "water1_trans1", "water1_trans2" }),
+        ("C2", new[] { "beach1", "cliff01_trans2" }),
+        ("C3", new[] { "cliff1_watertrans", "cliff1_watertrans2", "shore1", "shore2", "shore_trans" }),
+    };
 
     // The middle of the eiffel2 polygon on g36353.
     private static readonly Vector3 EiffelDecalCentre = new(-6282f, 0f, -3621f);
@@ -1452,6 +1464,112 @@ internal static class GraphicsSwitchSuites
                 flat.Close();
             }
             ctx.WriteArtifact("test-graphics-ocean-switch.txt", report.ToString());
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-coast-hide",
+        "under Enhanced at water quality waves only C1's sea tiles among the painted coasts of C1, C2 and C3 carry "
+        + "the mask's hide, so they step aside wherever the ocean draws and their rock overlay never opens onto "
+        + "nothing; C3's opaque cliff tiles blend out by world distance seaward of the waterline (the inland image), "
+        + "drawn just below the ground layer with a depth prepass for their land side, and C2's beach1 fades along its own "
+        + "UV with the fade the ocean mask's profile gives, C3's painted shallows (shore2) fade out whole, and the other strips and the cliff01_trans2 rock "
+        + "edge keep their alpha with no fade; the land "
+        + "ones stay on the matte arm; every profiled coast takes the breakers' swash and shore2 none, over a live inland "
+        + "image measuring land texels from the coastline; in C1 and C2 one cliff spray stands under the ocean at its cliff sites, no bare "
+        + "ones, none on C2's breakwaters across the beach, active only while the sea breaks surf, and C3's sea turns it off; at flat water no ocean or spray stands, so nothing steps aside "
+        + "and the cliff tiles' alpha stays 1; switched to Original no coast material reads the ocean at all, the cliff tiles write no alpha "
+        + "and no spray stands, at waves too")]
+    internal static void CoastHideFollowsSwitch(TestContext ctx)
+    {
+        foreach (var (chapter, _) in PaintedCoastChapters)
+            RequireData(ctx, chapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        var report = new StringBuilder();
+        try
+        {
+            foreach (var (chapter, textures) in PaintedCoastChapters)
+            {
+                WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+                var rig = Open(ctx, enhanced: true, chapter: chapter);
+                try
+                {
+                    if (!rig.Built)
+                    {
+                        ctx.Check(false, $"the Enhanced {chapter} session builds");
+                        continue;
+                    }
+                    var enhanced = Coasts(rig, Effects.OceanMask.Live?.CoastProfiles);
+                    ctx.Check(rig.Session.Ocean?.Built == true, $"{chapter} at waves stands its ocean");
+                    ctx.Check(textures.All(t => enhanced.Textures.Any(n => n.StartsWith(t + " ", StringComparison.OrdinalIgnoreCase))),
+                        $"{chapter} builds a material for every painted coast texture it lays ({enhanced.Names}, {string.Join(",", textures)} expected)");
+                    ctx.Check(enhanced.Materials > 0 && enhanced.Hidden == 0,
+                        $"{chapter} under Enhanced: no painted coast but a sea tile carries the mask's hide ({enhanced})");
+                    ctx.Check(enhanced.SeaHidden == enhanced.Sea && enhanced.Faded == enhanced.Faders && enhanced.KeptWhole == enhanced.Kept,
+                        $"{chapter} under Enhanced: sea tiles hide where the ocean draws, beach1 and shore2 fade by their UV, other strips keep their alpha ({enhanced})");
+                    ctx.Check(enhanced.Ramps == (chapter == "C3" ? enhanced.RampsBlended : 0) && (chapter != "C3" || enhanced.Ramps > 0),
+                        $"{chapter} under Enhanced with waves: every cliff tile blends out by world distance off the waterline, below the ground layer ({enhanced})");
+                    ctx.Check(enhanced.Land > 0 && enhanced.Matte == enhanced.Land,
+                        $"{chapter} under Enhanced: every land coast material stays matte ({enhanced})");
+                    ctx.Check(enhanced.Swashing > 0 && enhanced.SwashRight == enhanced.Land,
+                        $"{chapter} under Enhanced: every profiled coast takes the swash and the painted shallows none ({enhanced})");
+                    int inland = InlandTexels(Effects.OceanMask.Live);
+                    ctx.Check(inland > 0, $"{chapter}: the live mask's inland image measures {inland} land texel(s) within its reach of the coastline");
+                    report.AppendLine(string.Create(CultureInfo.InvariantCulture, $"{chapter} inland texels within reach {inland}"));
+                    var sprays = Sprays(ctx.Host);
+                    var spray = sprays.Count == 1 ? sprays[0] : null;
+                    // C3's sea turns the spray off: its cliffs stand far behind the painted waterline.
+                    if (chapter == "C3")
+                    {
+                        ctx.Check(!sprays.Exists(s => s.Active) && rig.Session.Ocean?.Ocean?.Sea.Sprays == false,
+                            $"C3 under Enhanced at waves: its sea turns the cliff spray off, so none is active ({sprays.Count} sprays)");
+                    }
+                    else
+                    {
+                        int cliffs = Effects.OceanMask.Live?.Spray.Count(s => !s.Bare) ?? -1;
+                        ctx.Check(spray is { Drawn: Effects.CoastSpray.Default, Sites: > 0, Active: true } && spray.GetParent() is Effects.Ocean && spray.Sites == cliffs,
+                            $"{chapter} under Enhanced at waves: one cliff spray under the ocean, drawing {Effects.CoastSpray.Default} at its cliff sites alone, no bare ones ({sprays.Count} sprays, {spray?.Sites ?? 0} of {cliffs} cliff sites)");
+                        if (chapter == "C2")
+                        {
+                            // The harbour breakwaters' stacktop stone crosses beach1 at x -6430 and -6144; C2's cliff01 stands west of x -8300.
+                            var harbour = new Vector2(-6300f, -3350f);
+                            int atHarbour = Effects.OceanMask.Live?.Spray.Count(s => !s.Bare && s.At.DistanceTo(harbour) < 400f) ?? -1;
+                            ctx.Check(atHarbour == 0, $"C2: the breakwaters crossing the beach take no cliff site, being no cliff rock ({atHarbour} within 400 m of the harbour mouth)");
+                        }
+                    }
+                    if (spray != null && rig.Session.Ocean?.Ocean is { } ocean)
+                    {
+                        var sea = ocean.Sea;
+                        ocean.Apply(sea with { SurfWash = 0f, SurfLines = 0f });
+                        bool calm = !spray.Active;
+                        ocean.Apply(sea);
+                        ctx.Check(calm && spray.Active, $"{chapter}: a sea breaking no surf throws no spray, and its surf back throws it again");
+                        report.AppendLine(string.Create(CultureInfo.InvariantCulture, $"{chapter} spray sites {spray.Sites}"));
+                    }
+                    ApplyWater(rig, WaterQualitySetting.Flat);
+                    ctx.Check(rig.Session.Ocean?.Built != true && OceansUnder(ctx.Host) == 0 && Sprays(ctx.Host).Count == 0,
+                        $"{chapter} at flat water stands no ocean and no spray, so the csky_ocean_on gate keeps every coast fragment and each cliff tile's alpha at 1");
+                    Switch(rig, false);
+                    var original = Coasts(rig, null);
+                    ctx.Check(original.Materials == enhanced.Materials && original.ReadsOcean == 0 && original.Swashing == 0,
+                        $"{chapter} switched to Original: no painted coast material reads the ocean ({original})");
+                    ctx.Check(original.Ramps == enhanced.Ramps && original.RampsOpaque == original.Ramps,
+                        $"{chapter} switched to Original: every cliff tile's text writes no alpha, so it draws opaque ({original})");
+                    ApplyWater(rig, WaterQualitySetting.Waves);
+                    ctx.Check(Sprays(ctx.Host).Count == 0, $"{chapter} under Original at waves: no cliff spray stands");
+                    report.AppendLine($"{chapter} enhanced  {enhanced}\n{chapter} original  {original}");
+                }
+                finally
+                {
+                    rig.Close();
+                }
+            }
+            ctx.WriteArtifact("test-graphics-coast-hide.txt", report.ToString());
         }
         finally
         {
@@ -2938,6 +3056,17 @@ internal static class GraphicsSwitchSuites
         return count;
     }
 
+    private static List<Effects.CoastSpray> Sprays(Node root)
+    {
+        var found = new List<Effects.CoastSpray>();
+        Walk(root, node =>
+        {
+            if (node is Effects.CoastSpray spray && spray.IsInsideTree())
+                found.Add(spray);
+        });
+        return found;
+    }
+
     private static Effects.Ocean? FirstOcean(Node root)
     {
         Effects.Ocean? found = null;
@@ -3394,6 +3523,78 @@ internal static class GraphicsSwitchSuites
         ctx.Check(sea.Surf > 0 && sea.SurfHidden == (enhanced ? sea.Surf : 0),
             $"{what}: {(enhanced ? "every" : "no")} surf ring material carries the hide ({sea.SurfHidden} of {sea.Surf} hiding)");
 
+    // The land texels the inland image puts within its reach of the coastline, neither on it nor saturated.
+    private static int InlandTexels(Effects.OceanMask? mask)
+    {
+        if (mask?.InlandImage is not { } image)
+            return 0;
+        int n = 0;
+        foreach (byte b in image.GetData())
+            n += b > 128 && b < 255 ? 1 : 0;
+        return n;
+    }
+
+    // The painted coasts' materials as the world builder named them, with each texture's alpha arm. They are
+    // sorted into sea tiles, ramps (the opaque verdicts), strip faders (beach1, shore2) and kept strips, by how
+    // each gives way. A ramp blends by world distance only with its reach, depth prepass and priority below the
+    // ground layer. It is opaque when its text writes no alpha. A strip fader counts only with the fade
+    // `profiles` gives it. Also how many land ones keep the matte arm's roughness.
+    private static CoastReading Coasts(Rig rig, IReadOnlyDictionary<string, CoastProfile>? profiles)
+    {
+        var seen = new HashSet<ShaderMaterial>();
+        var textures = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        int hidden = 0, readsOcean = 0, sea = 0, seaHidden = 0, faders = 0, faded = 0, kept = 0, keptWhole = 0, land = 0, matte = 0, swashing = 0, swashRight = 0;
+        int ramps = 0, rampsBlended = 0, rampsOpaque = 0;
+        foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            if (!Mech3.SceneBuilder.IsPaintedCoastTexture(texture) || !seen.Add(material))
+                continue;
+            string code = material.Shader?.Code ?? "";
+            string stem = System.IO.Path.GetFileNameWithoutExtension(texture);
+            bool ramp = rig.Session.WorldScene!.AlphaOf(material) == Mech3.SceneBuilder.TransparencyClass.None && !TextureArchive.IsPaintedSeaTile(stem);
+            string alpha = code.Contains("ALPHA_SCISSOR_THRESHOLD", StringComparison.Ordinal) ? "cutout"
+                : ramp ? "ramp"
+                : code.Contains("    ALPHA = ", StringComparison.Ordinal) ? "blended" : "opaque";
+            textures.Add($"{stem} {alpha}");
+            bool hides = code.Contains(HideCall, StringComparison.Ordinal);
+            readsOcean += code.Contains("csky_ocean", StringComparison.Ordinal) || code.Contains("coast_fade", StringComparison.Ordinal) ? 1 : 0;
+            if (TextureArchive.IsPaintedSeaTile(stem))
+            {
+                sea++;
+                seaHidden += hides ? 1 : 0;
+                continue;
+            }
+            hidden += hides ? 1 : 0;
+            land++;
+            matte += code.Contains("    ROUGHNESS = 1.0;", StringComparison.Ordinal) ? 1 : 0;
+            // A coast swashes when its text calls the swash and its material switches it on.
+            bool swashes = code.Contains("ALBEDO = csky_ocean_swash", StringComparison.Ordinal) && material.GetShaderParameter("coast_swash").AsSingle() > 0.5f;
+            swashing += swashes ? 1 : 0;
+            swashRight += profiles != null && swashes == Mech3.SceneBuilder.TakesSwash(stem, profiles) ? 1 : 0;
+            if (ramp)
+            {
+                ramps++;
+                rampsBlended += code.Contains(RampLine, StringComparison.Ordinal) && code.Contains(", depth_prepass_alpha;", StringComparison.Ordinal)
+                    && material.GetShaderParameter("coast_reach").AsSingle() == Mech3.SceneBuilder.CoastRampMetres
+                    && material.RenderPriority == Mech3.SceneBuilder.CoastRampRenderPriority ? 1 : 0;
+                rampsOpaque += !code.Contains("ALPHA", StringComparison.Ordinal) ? 1 : 0;
+                continue;
+            }
+            var fade = material.GetShaderParameter("coast_fade").AsVector4();
+            if (alpha != "opaque" && !Mech3.SceneBuilder.IsFadedStrip(stem))
+            {
+                kept++;
+                keptWhole += fade.W <= 0f ? 1 : 0;
+                continue;
+            }
+            faders++;
+            faded += code.Contains("coast_fade.w > 0.0", StringComparison.Ordinal) && fade.W > 0f
+                && profiles != null && fade == Mech3.SceneBuilder.FadeFor(stem, profiles) ? 1 : 0;
+        }
+        return new CoastReading(seen.Count, hidden, readsOcean, sea, seaHidden, faders, faded, kept, keptWhole, land, matte, textures, swashing, swashRight,
+            ramps, rampsBlended, rampsOpaque);
+    }
+
     // The base sheet's materials as the world builder named them, by texture and shader text. Also
     // how many carry the hide and are drawn, and the surf ring's materials and how many of them hide.
     private static SeaReading Sea(Rig rig)
@@ -3825,6 +4026,19 @@ internal static class GraphicsSwitchSuites
     }
 
     private sealed record SheetReading(int Sampled, int Missed, int Casting, int Ramps, int RampMissed, float RampShortfall, Vector3? FlatSea, string Examples);
+
+    private sealed record CoastReading(int Materials, int Hidden, int ReadsOcean, int Sea, int SeaHidden, int Faders, int Faded,
+        int Kept, int KeptWhole, int Land, int Matte, IReadOnlyCollection<string> Textures, int Swashing, int SwashRight,
+        int Ramps, int RampsBlended, int RampsOpaque)
+    {
+        public string Names => string.Join(",", Textures);
+
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Materials} painted coast material(s), {Hidden} other(s) with the mask hide, {ReadsOcean} reading the ocean; sea tiles {SeaHidden}/{Sea} hiding, "
+            + $"ramps {RampsBlended}/{Ramps} blending by distance and {RampsOpaque}/{Ramps} opaque, "
+            + $"strip faders {Faded}/{Faders} faded by the profile, kept strips {KeptWhole}/{Kept} with no fade; {Land} land, {Matte} matte; "
+            + $"{Swashing} swashing, {SwashRight}/{Land} as their profile says; {Names}");
+    }
 
     private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census, int Surf, int SurfHidden)
     {

@@ -35,6 +35,9 @@ public sealed partial class Ocean : Node3D
     private const float WaterlineBand = OceanMovers.WaterlineBand;
 
     private static readonly StringName ParamName = Param;
+
+    // The live sea's surf phase and swash, which the painted coasts read (OceanShader.SurfGlobal).
+    private static readonly StringName SurfName = "csky_ocean_surf";
     // The first band runs past the longest swell's full height, so no wave cuts from full at a step.
     private static readonly float[] BandEnds = { 1400f, 2800f, 11000f, 45000f };
 
@@ -94,11 +97,15 @@ public sealed partial class Ocean : Node3D
     /// wake. Read by the suites.</summary>
     internal IReadOnlyList<Node3D> WakeSheets => _wakes;
 
+    /// <summary>The shore mask this ocean draws over.</summary>
+    internal OceanMask Mask => _mask;
+
     /// <summary>Declares the switch and the mask globals the base sheet's hide reads. Must run before
     /// the first shader that reads them is built.</summary>
     public static void RegisterGlobal()
     {
         RenderingServer.GlobalShaderParameterAdd(Param, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        RenderingServer.GlobalShaderParameterAdd(SurfName, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         OceanMask.RegisterGlobals();
     }
 
@@ -115,13 +122,14 @@ public sealed partial class Ocean : Node3D
         string maskPng)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        var mask = OceanMask.Bake(worldRoot, scene, skip, movers);
+        var mask = OceanMask.Bake(worldRoot, scene, textures, skip, movers);
         if (mask == null)
         {
             Log.Info("world", $"ocean: no sea-level base sheet, not built");
             return null;
         }
         double bakeMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        scene.FadeCoasts(mask.CoastProfiles);
         var baseTex = textures.Find(mask.BaseTexture);
 
         bool zoned = mask.ZoneTexture != null;
@@ -135,7 +143,6 @@ public sealed partial class Ocean : Node3D
         material.SetShaderParameter("mask_rect", new Vector4(mask.Origin.X, mask.Origin.Y, 1f / mask.Size.X, 1f / mask.Size.Y));
         if (baseTex != null)
             material.SetShaderParameter("albedo_tex", baseTex);
-        material.SetShaderParameter("tile_m", mask.TileMetres);
         material.SetShaderParameter("tint_tex", mask.TintTexture);
         material.SetShaderParameter("lift_tex", mask.LiftTexture);
         material.SetShaderParameter("surf_tex", mask.SurfTexture);
@@ -166,7 +173,7 @@ public sealed partial class Ocean : Node3D
             ocean.AddChild(instance);
         }
         double ms = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} surf_tris={mask.SurfTriangles} surf={mask.SurfImage.GetWidth()}x{mask.SurfImage.GetHeight()} ramp_tris={mask.RampTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} movers={movers.Count} moving_hulls={mask.MovingHulls.Count} unjudged={mask.UnjudgedMovers.Count} hull_tris={mask.MovingHullTriangles} ms={ms:0} bake={bakeMs:0} ({mask.Timing}) sea={sea.Describe()}");
+        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} surf_tris={mask.SurfTriangles} coast_tris={mask.CoastTriangles} surf={mask.SurfImage.GetWidth()}x{mask.SurfImage.GetHeight()} ramp_tris={mask.RampTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} movers={movers.Count} moving_hulls={mask.MovingHulls.Count} unjudged={mask.UnjudgedMovers.Count} hull_tris={mask.MovingHullTriangles} ms={ms:0} bake={bakeMs:0} ({mask.Timing}) sea={sea.Describe()}");
         foreach (var hull in mask.MovingHulls)
         {
             var p = hull.GlobalPosition;
@@ -196,7 +203,9 @@ public sealed partial class Ocean : Node3D
             if (err == Error.Ok)
                 err = mask.SurfImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".surf.png"));
             if (err == Error.Ok)
-                Log.Info("world", $"ocean: mask written to {maskPng} (with .tint.png and .surf.png)");
+                err = mask.InlandImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".inland.png"));
+            if (err == Error.Ok)
+                Log.Info("world", $"ocean: mask written to {maskPng} (with .tint.png, .surf.png and .inland.png)");
             else
                 Log.Error("world", $"--dump-ocean-mask: could not write {maskPng} ({err})");
         }
@@ -207,6 +216,7 @@ public sealed partial class Ocean : Node3D
     public override void _EnterTree()
     {
         _mask.Publish();
+        RenderingServer.GlobalShaderParameterSet(SurfName, OceanShader.SurfGlobal(Sea));
         RenderingServer.GlobalShaderParameterSet(ParamName, 1.0f);
     }
 
@@ -339,6 +349,7 @@ public sealed partial class Ocean : Node3D
         _material.SetShaderParameter("foam_strength", Sea.FoamStrength);
         _material.SetShaderParameter("rough_near", Sea.RoughNear);
         _material.SetShaderParameter("rough_far", Sea.RoughFar);
+        RenderingServer.GlobalShaderParameterSet(SurfName, OceanShader.SurfGlobal(Sea));
     }
 
     // The ocean draws a wake for each hull holding one of the first held slots. Those hulls' sheets

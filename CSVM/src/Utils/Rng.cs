@@ -54,6 +54,9 @@ public static class Rng
     // Rng.Precip, because the field is built only under the enhanced presentation. A shared stream
     // would make the faithful path's rain scatter depend on which graphics mode ran.
     public const string WindStreaks = "windstreaks";
+    // The Enhanced cliff spray's emitters (Effects.CoastSpray). Its own stream, not Puffer's, for
+    // WindStreaks' reason: built under Enhanced alone, it would move every later puffer's scatter.
+    public const string CoastSpray = "coastspray";
     // The mission's global wind gust (WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a
