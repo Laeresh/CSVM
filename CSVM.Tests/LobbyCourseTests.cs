@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Net;
 using CSVM.UI.Menu;
@@ -189,6 +190,11 @@ public sealed class LobbyCourseTests
         Assert.False(guests[0].SetCourse(course));
         Assert.True(DogfightLobby.CourseFits(course));
         Assert.Null(host.CourseWord);
+
+        // A run longer than a racer line's splits is refused; the longest one fits.
+        var entry = course.Sequence[0];
+        Assert.False(host.SetCourse(course with { Sequence = Enumerable.Repeat(entry, RaceStandingMessage.MaxZones + 1).ToList() }));
+        Assert.True(DogfightLobby.CourseFits(course with { Sequence = Enumerable.Repeat(entry, RaceStandingMessage.MaxZones).ToList() }));
 
         // A word whose JSON does not hash as sent reaches the guest's lobby but flies nothing.
         wires[0].Tell(1, DogfightLobby.WordFor(1, course) with { Hash = "0000000000000000" });

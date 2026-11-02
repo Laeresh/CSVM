@@ -650,9 +650,10 @@ public sealed class DogfightLobby
     /// on 0 lives and a pilot on 0 counts as alive after its first death.</summary>
     public static int ClampLives(int lives) => Math.Clamp(lives, 1, MaxLives);
 
-    /// <summary>Whether <paramref name="course"/> goes on the wire in one lobby message, the test that
-    /// leaves an oversize course out of the lobby's course list.</summary>
-    public static bool CourseFits(Flight.Modes.Course course) => WordFor(0, course).Fits;
+    /// <summary>Whether <paramref name="course"/> goes on the wire in one lobby message and its run in
+    /// one racer line. An oversize course is left out of the lobby's course list.</summary>
+    public static bool CourseFits(Flight.Modes.Course course) =>
+        RaceStandingMessage.Carries(course.Sequence.Count) && WordFor(0, course).Fits;
 
     /// <summary>The word that carries <paramref name="course"/> under round <paramref name="epoch"/>.</summary>
     public static LobbyCourseMessage WordFor(byte epoch, Flight.Modes.Course course) =>
@@ -766,7 +767,7 @@ public sealed class DogfightLobby
 
     /// <summary>Picks <paramref name="course"/> for a Stunt Race, null for the Danger Zones. A new
     /// course starts a new round and goes to every guest, and to each one that joins later. Refused
-    /// on a guest and for a course past the message's limit.</summary>
+    /// on a guest and for a course <see cref="CourseFits"/> leaves out.</summary>
     public bool SetCourse(Flight.Modes.Course? course)
     {
         if (!IsHost || (course != null && !CourseFits(course)))

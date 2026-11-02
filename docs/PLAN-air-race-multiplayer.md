@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, the course on the wire
 
 1. ☑ The host's lobby sends its course to every guest, and each machine builds the run from that copy (#277)
-2. ☐ The network race carries a course run: variable-length splits, penalty times, score keys (#277)
+2. ☑ The network race carries a course run: variable-length splits, penalty times, score keys (#277)
 
 ### Wave B, course bots
 
@@ -169,7 +169,22 @@ byte past it. Tests read only `ctx.ScratchDir` as the game folder.
 - Measure the size limit on `WebRtcTransport`, not only ENet: ENet fragments a large reliable
   packet, a WebRTC data channel may not.
 
-## A2 ☐ The network race carries a course run: variable-length splits, penalty times, score keys
+## A2 ☑ The network race carries a course run: variable-length splits, penalty times, score keys
+
+**Landed.** `RaceStandingMessage` (`CSVM/src/Net/NetRaceMessages.cs`) carries exactly as many
+splits as its count byte says, 24 bytes plus 4 per split, up to `MaxZones` (255, 1044 bytes); a
+line whose declared length is not its count's is refused. `NetSession.SendBufferBytes` is 2048 so
+the widest line fits. A network launch refuses a course of more than 255 entries with the reason
+(`GameSession.ResolveCourse`), and `DogfightLobby.CourseFits` leaves one out of the lobby. No
+penalty field: penalty seconds are inside every run time and split. Each machine records its own
+pilots' bests under `ScoreStore.KeyFor`'s course key, and `StuntCapture` stays off on a course run
+on the network path, both unchanged and now checked by the `net-course-long-race` suite
+(`CSVM/src/Testing/NetCourseSuites.cs`) on a 30-entry course built in the scratch game folder.
+`docs/org/multiplayer-messages.md` ("Stunt race") gives the layout.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A network Stunt Race on a course shows every racer's splits, penalty-inclusive run times
 and best-run board on every machine, for a sequence of up to 255 entries.

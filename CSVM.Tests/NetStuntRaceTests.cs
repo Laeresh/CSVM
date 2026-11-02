@@ -32,7 +32,7 @@ public sealed class NetStuntRaceTests
             Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(type));
         }
 
-        var bytes = new byte[RaceStandingMessage.Size];
+        var bytes = new byte[RaceStandingMessage.MaxSize];
         var run = new RaceRunMessage(3, NetRaceRun.Zone, 2, 1, 7, 12.5f);
         Assert.Equal(16, run.Write(bytes));
         Assert.Equal(new byte[] { 3, 2, 2, 1, 7, 0, 0, 0 }, bytes[4..12]);
@@ -52,19 +52,59 @@ public sealed class NetStuntRaceTests
 
         var line = new RaceStandingMessage(1, 2, inRun: true, completed: true, 5, 3, 41.25f, 12f, 3, 1,
             new[] { 10f, RaceStandingMessage.NoSplit, 41.25f });
-        Assert.Equal(120, line.Write(bytes));
+        Assert.Equal(36, line.Write(bytes));
         Assert.Equal(new byte[] { 1, 3, 2, 3, 5, 0, 3, 0 }, bytes[4..12]);
         Assert.Equal(41.25f, BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(12)));
         Assert.Equal(new byte[] { 3, 1 }, bytes[20..22]);
         Assert.Equal(RaceStandingMessage.NoSplit, BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(28)));
-        Assert.True(RaceStandingMessage.TryRead(bytes, out var lineBack));
+        Assert.True(RaceStandingMessage.TryRead(bytes.AsSpan(0, 36), out var lineBack));
         Assert.Equal(line, lineBack);
-        Assert.False(RaceStandingMessage.TryRead(bytes.AsSpan(0, 119), out _));
+        Assert.False(RaceStandingMessage.TryRead(bytes.AsSpan(0, 35), out _));
+    }
 
-        // ABLE-TO-FAIL CONTROL: a line past the widest course is cut, not overrun.
-        var wide = new RaceStandingMessage(0, 0, false, false, 0, 0, 0f, 0f, 0, 0, new float[40]);
+    [Theory]
+    [InlineData(0)]
+    [InlineData(24)]
+    [InlineData(25)]
+    [InlineData(255)]
+    public void ARacerLineCarriesExactlyAsManySplitsAsItsCount(int count)
+    {
+        var splits = Enumerable.Range(0, count).Select(i => i % 7 == 3 ? RaceStandingMessage.NoSplit : 1.5f * (i + 1)).ToArray();
+        var line = new RaceStandingMessage(2, 1, inRun: false, completed: true, 4, 2, 99.5f, 99.5f, (byte)count, 0, splits);
+        var bytes = new byte[RaceStandingMessage.MaxSize + 8];
+
+        int length = line.Write(bytes);
+
+        Assert.Equal(24 + (4 * count), length);
+        Assert.Equal(length, line.Size);
+        Assert.Equal(count, bytes[7]);
+        Assert.True(RaceStandingMessage.TryRead(bytes.AsSpan(0, length), out var back));
+        Assert.Equal(line, back);
+        Assert.Equal(splits, back.Splits);
+        Assert.True(RaceStandingMessage.MaxSize <= NetSession.SendBufferBytes);
+
+        // ABLE-TO-FAIL CONTROL: a count that names one split more, or one fewer, than the line holds
+        // is refused, whichever way the header's length is told.
+        bytes[7] = (byte)(count + 1);
+        Assert.False(RaceStandingMessage.TryRead(bytes.AsSpan(0, length), out _));
+        if (count > 0)
+        {
+            bytes[7] = (byte)(count - 1);
+            Assert.False(RaceStandingMessage.TryRead(bytes.AsSpan(0, length), out _));
+        }
+
+        bytes[7] = (byte)count;
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(2), (ushort)(length + 4));
+        Assert.False(RaceStandingMessage.TryRead(bytes.AsSpan(0, length + 4), out _));
+        Assert.False(RaceStandingMessage.TryRead(bytes.AsSpan(0, RaceStandingMessage.FixedSize - 1), out _));
+    }
+
+    [Fact]
+    public void ARacerLinePastTheZoneBoundIsCutNotOverrun()
+    {
+        var wide = new RaceStandingMessage(0, 0, false, false, 0, 0, 0f, 0f, 0, 0, new float[300]);
         Assert.Equal(RaceStandingMessage.MaxZones, wide.Splits.Count);
-        Assert.Equal(120, wide.Write(bytes));
+        Assert.Equal(RaceStandingMessage.MaxSize, wide.Write(new byte[RaceStandingMessage.MaxSize]));
     }
 
     [Fact]
@@ -304,7 +344,7 @@ public sealed class NetStuntRaceTests
     {
         Assert.Equal(0x6A, (int)NetMessageType.RaceCall);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.RaceCall));
-        var bytes = new byte[RaceStandingMessage.Size];
+        var bytes = new byte[RaceStandingMessage.MaxSize];
         var call = new RaceCallMessage(NetRaceCall.Lobby, 3);
         Assert.Equal(8, call.Write(bytes));
         Assert.Equal(new byte[] { 2, 3, 0, 0 }, bytes[4..8]);
@@ -314,9 +354,9 @@ public sealed class NetStuntRaceTests
         Assert.Equal(new[] { 1, 2, 3 }, new[] { NetRaceCall.Rerun, NetRaceCall.Lobby, NetRaceCall.Leave }.Select(c => (int)c));
 
         var line = new RaceStandingMessage(1, 0, inRun: false, completed: true, 2, 1, 9f, 9f, 3, 0, new[] { 3f, 6f, 9f }, left: true);
-        Assert.Equal(120, line.Write(bytes));
+        Assert.Equal(36, line.Write(bytes));
         Assert.Equal(0x06, bytes[5]);
-        Assert.True(RaceStandingMessage.TryRead(bytes, out var lineBack));
+        Assert.True(RaceStandingMessage.TryRead(bytes.AsSpan(0, 36), out var lineBack));
         Assert.True(lineBack.Left);
         Assert.Equal(line, lineBack);
 
@@ -454,7 +494,7 @@ public sealed class NetStuntRaceTests
     private static byte[] Bytes<T>(in T message)
         where T : struct, INetMessage<T>
     {
-        var bytes = new byte[RaceStandingMessage.Size];
+        var bytes = new byte[RaceStandingMessage.MaxSize];
         int length = message.Write(bytes);
         return bytes.AsSpan(0, length).ToArray();
     }

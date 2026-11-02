@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Bindings;
@@ -1417,11 +1418,16 @@ public partial class GameSession : Node3D
         {
             var library = Courses();
             var course = _wire.HostCourse is { } held
-                ? HostsCourse(held(), wanted, library, out string error)
+                ? UI.Menu.DogfightLobby.CourseOf(held(), wanted, out string error)
                 : library.Load(wanted.Chapter, wanted.Name, out error);
             if (course == null)
             {
                 refusal = error;
+            }
+            else if (_wire.Link != null && !Net.RaceStandingMessage.Carries(course.Sequence.Count))
+            {
+                refusal = string.Create(CultureInfo.InvariantCulture,
+                    $"its {course.Sequence.Count} sequence entries pass the {Net.RaceStandingMessage.MaxZones} a network race carries");
             }
             else if (StuntMission.ForCourse(course) is not { } run)
             {
@@ -1429,6 +1435,12 @@ public partial class GameSession : Node3D
             }
             else
             {
+                // A lobby guest keeps the host's course in its game folder, never over a same-named file.
+                if (_wire.HostCourse != null && _wire.Link is { IsHost: false })
+                {
+                    library.SaveIfAbsent(course);
+                }
+
                 run.GateMotion = (g, t) => CourseMotion.Offset(course.Gates[g], t);
                 _courseRun = run;
                 return true;
@@ -1448,19 +1460,6 @@ public partial class GameSession : Node3D
     }
 
     private CourseLibrary Courses() => _courses ?? CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det);
-
-    // A lobby flight flies the host's word on every machine, never a local file of the same name.
-    // A guest with no file of that name keeps the course in its game folder.
-    private Course? HostsCourse(Net.LobbyCourseMessage? word, (string Chapter, string Name) wanted, CourseLibrary library, out string error)
-    {
-        var course = UI.Menu.DogfightLobby.CourseOf(word, wanted, out error);
-        if (course != null && _wire.Link is { IsHost: false })
-        {
-            library.SaveIfAbsent(course);
-        }
-
-        return course;
-    }
 
     // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is built, so
     // a miss reports its candidates and quits instead of half-building a world. Returns false if

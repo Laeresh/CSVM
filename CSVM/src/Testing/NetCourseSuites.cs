@@ -72,6 +72,59 @@ internal static class NetCourseSuites
         }
     }
 
+    [Suite("net-course-long-race",
+        "a two-machine Stunt Race over a 100 ms loopback on a 30-entry course built in the scratch game "
+        + "folder: both seats fly it whole, the guest with a touch penalty; every split of both racers "
+        + "stands on the guest's board as the host decided it, the guest's penalty-inclusive time reads "
+        + "the same on both machines, each machine records its own best under the course key and takes "
+        + "no Danger Zone photograph; a 256-entry course is refused for a network race with the reason")]
+    internal static void ALongCourseRunCrossesWhole(TestContext ctx)
+    {
+        var missionZrdr = ctx.MissionZrdr(Chapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{Chapter}/{SessionSpec.StuntRaceMission} zrdr");
+
+        if (new CourseLibrary(CourseLibrary.ShippedRoot, null).Load(Chapter, Sample, out string error) is not { } sample)
+        {
+            ctx.Check(false, $"the shipped course {Chapter}/{Sample} loads ({error})");
+            return;
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, "net-course", "long");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        // The out-and-back flown six times over, written to the host's scratch game folder.
+        string game = Path.Combine(root, CourseLibrary.GameFolderName);
+        var authored = sample with { Name = "long_out_and_back", Sequence = Enumerable.Repeat(sample.Sequence, 6).SelectMany(s => s).ToList() };
+        Directory.CreateDirectory(Path.Combine(game, Chapter));
+        File.WriteAllText(Path.Combine(game, Chapter, authored.Name + ".json"), authored.ToJson());
+        Directory.CreateDirectory(Path.Combine(root, "shipped"));
+        var hostLibrary = new CourseLibrary(Path.Combine(root, "shipped"), game);
+        if (hostLibrary.Load(Chapter, authored.Name, out error) is not { } course)
+        {
+            ctx.Check(false, $"the scratch course {Chapter}/{authored.Name} loads ({error})");
+            return;
+        }
+
+        ctx.Check(course.Sequence.Count > 24 && course.Hash == authored.Hash,
+            $"the scratch course loads with more than 24 entries ({course.Sequence.Count})");
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            LongRace(ctx, root, course, hostLibrary);
+            TooLong(ctx, root, sample);
+        }
+        finally
+        {
+            ambient.Restore();
+        }
+    }
+
     private static void Race(TestContext ctx, string cell, Course course, LobbyCourseMessage word, string? ownJson, int seed)
     {
         string root = Path.Combine(ctx.ScratchDir, "net-course", cell);
@@ -190,15 +243,106 @@ internal static class NetCourseSuites
         }
     }
 
+    private static void LongRace(TestContext ctx, string root, Course course, CourseLibrary hostLibrary)
+    {
+        var word = DogfightLobby.WordFor(1, course);
+        var specs = new[] { Spec(root, 0, course), Spec(root, 1, course) };
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.1, 0.0, 0.0), new Random(9605));
+        var ends = new List<NetCombatSuites.Ends>();
+        try
+        {
+            ends.Add(NetCombatSuites.Ends.Open(ctx, specs[0], mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(2, specs[0]),
+                course: () => word, courses: hostLibrary));
+            ends.Add(NetCombatSuites.Ends.Open(ctx, specs[1], mesh[1], isHost: false, HostSeed + 1, null,
+                course: () => word, courses: new CourseLibrary(Path.Combine(root, "shipped"), Path.Combine(root, "guest"))));
+            var peers = ends.Select(e => e.Session).ToArray();
+            if (!ends.All(e => e.Built)
+                || peers[0].SeatRigs[0].Controller is not { Stunt: { } hostRun, Race: { } hostRace } host
+                || peers[1].SeatRigs[1].Controller is not { Stunt: { } guestRun, Race: { } guestRace } guest)
+            {
+                ctx.Check(false, $"two sessions build the course race and each seat races a course run ({string.Join(", ", ends.Select(e => e.Built))})");
+                return;
+            }
+
+            host.UseKeyboard = false;
+            host.PadDevices = Array.Empty<int>();
+            bool opened = Until(peers, () => hostRace.MayStartRun);
+            int hostCrossed = course.Sequence.Count(entry => Through(peers, host, hostRun, course, entry));
+            FlyGuestRun(ctx, "long", peers, guest, guestRun, guestRace, course, penaltyAt: 10);
+            bool back = Until(peers, () => guestRace.Of(0)?.BestTime != null);
+            ctx.Check(opened && hostCrossed == course.Sequence.Count && back,
+                $"the host's seat flies every entry and its run reaches the guest's board (window open {opened}, {hostCrossed} of {course.Sequence.Count}, back {back})");
+
+            for (int seat = 0; seat < 2; seat++)
+            {
+                var hostSplits = hostRace.Of(seat)?.Line().Splits ?? Array.Empty<float?>();
+                var guestSplits = guestRace.Of(seat)?.Line().Splits ?? Array.Empty<float?>();
+                ctx.Check(guestSplits.Count == course.Sequence.Count && guestSplits.All(s => s != null) && guestSplits.SequenceEqual(hostSplits),
+                    $"seat {seat}'s every split stands on the guest's board as the host holds it ({guestSplits.Count(s => s != null)} of {course.Sequence.Count}, last {Seconds(guestSplits.LastOrDefault())} against {Seconds(hostSplits.LastOrDefault())})");
+            }
+
+            float? onHost = hostRace.Of(1)?.BestTime;
+            float? onGuest = guestRace.Of(1)?.BestTime;
+            ctx.Check(guestRun.PenaltyCount == 1 && onHost == guestRun.Elapsed && onGuest == guestRun.Elapsed,
+                $"the guest's time with its touch penalty reads the same on both machines ({guestRun.PenaltyCount} penalty, run {Seconds(guestRun.Elapsed)}, host board {Seconds(onHost)}, guest board {Seconds(onGuest)})");
+
+            string prefix = $"course/{course.Chapter}/{course.Name}/{course.Hash}/";
+            var keyed = new[] { (Race: hostRace, Seat: 0, Run: hostRun), (Race: guestRace, Seat: 1, Run: guestRun) };
+            for (int machine = 0; machine < 2; machine++)
+            {
+                var (race, seat, run) = keyed[machine];
+                string key = race.Of(seat)?.ScoreKey ?? "";
+                float? best = ScoreStore.Load(Path.Combine(root, $"scores{machine}.json")).GetBest(key);
+                ctx.Check(key.StartsWith(prefix, StringComparison.Ordinal) && best == run.Elapsed,
+                    $"machine {machine} records its seat's best under the course key ('{key}', best {Seconds(best)} for a {Seconds(run.Elapsed)} run)");
+            }
+
+            int shots = (host.StuntShots?.Count ?? 0) + (guest.StuntShots?.Count ?? 0);
+            ctx.Check(shots == 0, $"neither machine takes a Danger Zone photograph on the course ({shots})");
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+        }
+    }
+
+    // One entry past what a racer line carries: the network launch is refused with the reason.
+    private static void TooLong(TestContext ctx, string root, Course sample)
+    {
+        int count = RaceStandingMessage.MaxZones + 1;
+        var course = sample with
+        {
+            Name = "too_long",
+            Sequence = Enumerable.Range(0, count).Select(i => sample.Sequence[i % sample.Sequence.Count]).ToList(),
+        };
+        var spec = Spec(root, 0, course);
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.1, 0.0, 0.0), new Random(9606));
+        var end = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(2, spec),
+            exitSession: () => { }, course: () => DogfightLobby.WordFor(1, course), courses: new CourseLibrary(CourseLibrary.ShippedRoot, null));
+        try
+        {
+            string? refusal = end.Session.MenuRefusal;
+            ctx.Check(!end.Built && refusal?.Contains($"its {count} sequence entries pass the {RaceStandingMessage.MaxZones} a network race carries", StringComparison.Ordinal) == true,
+                $"a {count}-entry course is refused for a network race ({end.Built}: '{refusal}')");
+        }
+        finally
+        {
+            end.Close();
+        }
+    }
+
     // A lobby launch's Stunt Race on the course, each machine with its own scores file.
     private static SessionSpec Spec(string root, int machine, Course course) =>
         SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--scores={Path.Combine(root, $"scores{machine}.json")}" }),
             course.Chapter, new[] { Plane }, MenuMode.Stunt, vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: course.Name);
 
     // The guest's run, every entry flown through the host's gate once the window opens, until the
-    // host's line brings its best back.
+    // host's line brings its best back. A touch penalty lands once penaltyAt entries are crossed.
     private static void FlyGuestRun(TestContext ctx, string cell, GameSession[] peers, FlightController guest, StuntMission run,
-        StuntRace race, Course course)
+        StuntRace race, Course course, int penaltyAt = 0)
     {
         guest.UseKeyboard = false;
         guest.PadDevices = Array.Empty<int>();
@@ -207,6 +351,10 @@ internal static class NetCourseSuites
         foreach (var entry in course.Sequence)
         {
             crossed += Through(peers, guest, run, course, entry) ? 1 : 0;
+            if (penaltyAt > 0 && crossed == penaltyAt && run.PenaltyCount == 0)
+            {
+                run.AddPenalty(CourseElements.TouchPenaltySeconds);
+            }
         }
 
         bool back = Until(peers, () => race.Of(1)?.BestTime != null);

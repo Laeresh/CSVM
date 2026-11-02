@@ -911,7 +911,7 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 |---|---|---|---|
 | `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4), course zone at 6 (`0xFF` for none), window at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
 | `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), window at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
-| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), window at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
+| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), window at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then exactly as many splits of 4 bytes as the count says, the ranking run's, -1 for a zone it never cleared (24 bytes plus 4 per split, 1044 at the 255 most) |
 | `0x6A` | Race call | reliable, host to each guest (rerun, lobby) and guest to host (leave) | call at 4 (rerun 1, lobby 2, leave 3), window at 5, two reserved bytes (8 bytes) |
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
@@ -936,6 +936,15 @@ host's phase, which only moves on; its opening and window clock run between read
 time up refuses a rerun there, but it never ends of its own accord and ends on the host's
 ending. A guest records its own pilot's best off the host's line, so a finish the host refused is
 never saved. The final-run cap is the host's alone.
+
+**A course run.** A run over an authored course (`--course=`) is one zone per sequence entry, so
+its line carries one split per entry; a Danger Zone run's carries one per zone. A line whose
+declared length is not its split count's is refused whole. A course reports zones 0 to 254 beside
+the run report's `0xFF`, so a network launch refuses a course of more than 255 entries, with the
+reason, and the lobby leaves one out of its course list. A touch penalty's seconds are inside the
+run's clock, so every run time and split already carries them and no field counts penalties. Each
+machine records its own pilots' bests under the course key, never a Danger Zone key, and takes no
+Danger Zone photograph on a course run.
 
 **The opening.** Every machine holds on the start barrier, and the host's start word reaches a
 guest a link later, so the guest's opening count would start that much behind. The host's reading

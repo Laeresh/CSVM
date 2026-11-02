@@ -205,16 +205,21 @@ public readonly record struct RaceCallMessage(NetRaceCall Call, byte Window) : I
 /// <summary>
 /// One racer's line of the host's leaderboard, sent reliably to every guest whenever the host's
 /// record of that racer changes. It carries the counts the boards show and the best time, or the
-/// furthest run's zones and time. The ranking run's splits follow, a split below zero being a zone
-/// it never cleared. Fixed width, with room for <see cref="MaxZones"/> zones.
+/// furthest run's zones and time. The ranking run's splits follow, exactly as many as its count byte
+/// says, a split below zero being a zone it never cleared. Its width follows the count, up to
+/// <see cref="MaxZones"/> splits.
 /// </summary>
 public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, IEquatable<RaceStandingMessage>
 {
-    /// <summary>The most course zones a line carries. The longest shipped course has 17.</summary>
-    public const int MaxZones = 24;
+    /// <summary>The most zones a line carries, the count byte's range. A run report names zones 0
+    /// to 254 beside <see cref="RaceRunMessage.NoZone"/>, so a network race refuses a longer course.</summary>
+    public const int MaxZones = byte.MaxValue;
 
-    /// <summary>The fixed width of the message, header included.</summary>
-    public const int Size = NetMessage.HeaderBytes + 20 + (4 * MaxZones);
+    /// <summary>The width of a line of no splits, header included.</summary>
+    public const int FixedSize = NetMessage.HeaderBytes + 20;
+
+    /// <summary>The widest line, <see cref="MaxZones"/> splits.</summary>
+    public const int MaxSize = FixedSize + (4 * MaxZones);
 
     /// <summary>The split a line carries for a zone its ranking run never cleared.</summary>
     public const float NoSplit = -1f;
@@ -229,8 +234,15 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     public RaceStandingMessage(byte seat, byte window, bool inRun, bool completed, ushort runsStarted,
         ushort runsFinished, float bestTime, float timeToMostZones, byte mostZones, byte currentZones,
         IReadOnlyList<float> splits, bool left = false)
+        : this(Cut(splits), seat, window, inRun, completed, runsStarted, runsFinished, bestTime, timeToMostZones,
+            mostZones, currentZones, left)
     {
-        ArgumentNullException.ThrowIfNull(splits);
+    }
+
+    // Takes the array it is handed, so a read allocates its splits once.
+    private RaceStandingMessage(float[] splits, byte seat, byte window, bool inRun, bool completed, ushort runsStarted,
+        ushort runsFinished, float bestTime, float timeToMostZones, byte mostZones, byte currentZones, bool left)
+    {
         Seat = seat;
         Left = left;
         Window = window;
@@ -242,9 +254,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
         TimeToMostZones = timeToMostZones;
         MostZones = mostZones;
         CurrentZones = currentZones;
-        _splits = new float[Math.Min(splits.Count, MaxZones)];
-        for (int i = 0; i < _splits.Length; i++)
-            _splits[i] = splits[i];
+        _splits = splits;
     }
 
     /// <inheritdoc/>
@@ -284,24 +294,37 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     /// <summary>The ranking run's split per course zone, <see cref="NoSplit"/> where it cleared none.</summary>
     public IReadOnlyList<float> Splits => _splits ?? Array.Empty<float>();
 
+    /// <summary>The bytes this line takes on the wire, header included.</summary>
+    public int Size => SizeFor(Splits.Count);
+
     /// <summary>Whether two lines carry the same values.</summary>
     public static bool operator ==(RaceStandingMessage left, RaceStandingMessage right) => left.Equals(right);
 
     /// <summary>Whether two lines differ.</summary>
     public static bool operator !=(RaceStandingMessage left, RaceStandingMessage right) => !left.Equals(right);
 
+    /// <summary>The width of a line of <paramref name="splits"/> splits, header included.</summary>
+    public static int SizeFor(int splits) => FixedSize + (4 * splits);
+
+    /// <summary>Whether a line carries a run of <paramref name="zones"/> zones whole, the one test a
+    /// network race puts a course's sequence to.</summary>
+    public static bool Carries(int zones) => zones <= MaxZones;
+
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out RaceStandingMessage message)
     {
         message = default;
         var reader = new NetMessageReader(from);
-        if (!reader.Is(Size) || reader.Type != Type)
+        if (!reader.Valid || reader.Type != Type || reader.Length < FixedSize)
             return false;
 
         byte seat = reader.ReadByte();
         byte flags = reader.ReadByte();
         byte window = reader.ReadByte();
-        int count = Math.Min((int)reader.ReadByte(), MaxZones);
+        int count = reader.ReadByte();
+        if (reader.Length != SizeFor(count))
+            return false;
+
         ushort started = reader.ReadUInt16();
         ushort finished = reader.ReadUInt16();
         float best = reader.ReadSingle();
@@ -313,8 +336,8 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
         for (int i = 0; i < count; i++)
             splits[i] = reader.ReadSingle();
 
-        message = new RaceStandingMessage(seat, window, (flags & InRunFlag) != 0, (flags & CompletedFlag) != 0,
-            started, finished, best, toMost, most, current, splits, (flags & LeftFlag) != 0);
+        message = new RaceStandingMessage(splits, seat, window, (flags & InRunFlag) != 0, (flags & CompletedFlag) != 0,
+            started, finished, best, toMost, most, current, (flags & LeftFlag) != 0);
         return reader.Valid;
     }
 
@@ -334,8 +357,8 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
         writer.WriteByte(MostZones);
         writer.WriteByte(CurrentZones);
         writer.WriteUInt16(0);
-        for (int i = 0; i < MaxZones; i++)
-            writer.WriteSingle(i < splits.Count ? splits[i] : 0f);
+        for (int i = 0; i < splits.Count; i++)
+            writer.WriteSingle(splits[i]);
 
         return writer.Close();
     }
@@ -366,4 +389,14 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Seat, Window, RunsStarted, RunsFinished, Splits.Count);
+
+    private static float[] Cut(IReadOnlyList<float> splits)
+    {
+        ArgumentNullException.ThrowIfNull(splits);
+        var cut = new float[Math.Min(splits.Count, MaxZones)];
+        for (int i = 0; i < cut.Length; i++)
+            cut[i] = splits[i];
+
+        return cut;
+    }
 }
