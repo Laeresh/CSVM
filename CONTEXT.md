@@ -246,6 +246,13 @@ _Avoid_: loading screen, splash, please-wait
 
 ## HUD markers
 
+**HUD mode**:
+How much flight HUD an outside view draws: **Full** (the original's HUD), **Minimal** (the dial
+cluster, compass tape and throttle plate replaced by the flight text block) or **None** (only the
+pipper, the lead marker, messages, prompts and scores). A remake-only rule; the cockpit view
+ignores it.
+_Avoid_: minimal HUD option, HUD toggle, HUD level, clean HUD
+
 **Edge marker**:
 The off-screen presentation of a marked world target: the marker clamped into the inset screen
 edge, with an arrow pointing outward to the pane's own edge and a clock-hour bearing.
