@@ -45,6 +45,7 @@ internal static class DisplaySettingsSuites
         ("LeadingAimAssist", true, false),
         ("LeadMarker", true, false),
         ("ThrottlePlate", true, false),
+        ("SpyglassScale", "200", true),
         ("RocketCraters", true, false),
         ("CockpitEnginePitch", false, false),
         ("FlightTextBlock", true, false),

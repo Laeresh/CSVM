@@ -209,6 +209,7 @@ public static class SuiteCatalog
         "spawn-props-by-def",
         "spawn-props-silent",
         "splitscreen-listeners",
+        "spyglass-scale-hud",
         "start-state-swap-pool",
         "stick-discrete-buttons",
         "stunt-return-nitro",

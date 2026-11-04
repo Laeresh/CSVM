@@ -505,6 +505,7 @@
     "splitscreen-cockpit-body": 0.264,
     "splitscreen-listeners": 0.011,
     "spyglass-marker-hud": 0.364,
+    "spyglass-scale-hud": 0.05,
     "spyglass-sun": 7.431,
     "start-state-swap-pool": 0.007,
     "stick-discrete-buttons": 0.009,

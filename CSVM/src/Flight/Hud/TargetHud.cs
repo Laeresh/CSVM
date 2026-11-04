@@ -477,13 +477,14 @@ public sealed partial class TargetHud : Control
         return (tip, back + perp, back - perp);
     }
 
-    /// <summary>The off-screen label block's anchor: the marker anchor's x untouched, and its y 3
+    /// <summary>The off-screen label block's anchor. Its x is the marker anchor's, and its y is 3
     /// pixels down in the pane's upper half or 45 up in the lower one. With <paramref name="disc"/>
-    /// the same block is measured against the picture instead, 3 below its bottom unless the whole
-    /// block would fall off the pane, then 45 above its top. There is no back-off along the arrow's
-    /// direction (docs/org/spyglass.md "The label anchor").</summary>
+    /// the block measures against the picture: 3 below its bottom, or 45 above its top where the
+    /// block would fall off the pane. The picture's radius takes the player's
+    /// <paramref name="discScale"/>, the gaps do not. There is no back-off along the arrow's direction
+    /// (docs/org/spyglass.md "The label anchor").</summary>
     public static Vector2 EdgeLabelAnchor(Vector2 anchor, float paneHeight, float s,
-        bool disc = false)
+        bool disc = false, float discScale = 1f)
     {
         if (!disc)
         {
@@ -491,18 +492,34 @@ public sealed partial class TargetHud : Control
                 anchor.Y + ((anchor.Y <= paneHeight * 0.5f ? RefLabelGap : -RefEdgeLabelUp) * s));
         }
 
-        float bottom = anchor.Y + (Spyglass.RefRadius * s);
-        return new Vector2(anchor.X,
-            bottom + (RefDiscLabelBlock * s) <= paneHeight
-                ? bottom + (RefLabelGap * s)
-                : anchor.Y - ((Spyglass.RefRadius + RefEdgeLabelUp) * s));
+        float bottom = anchor.Y + DiscRadius(s, discScale);
+        if (bottom + (RefDiscLabelBlock * s) <= paneHeight)
+        {
+            return new Vector2(anchor.X, bottom + (RefLabelGap * s));
+        }
+
+        // ⚠ Do not fold the growth into one sum. At some scales the two orders differ by an ulp.
+        // The growth term is exactly 0 at 100%, which keeps the decoded placement.
+        float growth = DiscRadius(s, discScale) - DiscRadius(s);
+        return new Vector2(anchor.X, anchor.Y - ((Spyglass.RefRadius + RefEdgeLabelUp) * s) - growth);
     }
 
     /// <summary>Where the arrow's shaft starts: the marker anchor, or the disc's rim along the
-    /// bearing once the picture is up, so the shaft leaves the picture rather than crossing it
-    /// (<c>0x0049e2ae</c>).</summary>
-    public static Vector2 ShaftTail(Vector2 anchor, Vector2 dir, float s, bool disc) =>
-        disc ? anchor + (dir * (Spyglass.RefRadius * s)) : anchor;
+    /// bearing once the picture is up (<c>0x0049e2ae</c>). With the picture up, the shaft starts at
+    /// its edge and does not cross it.</summary>
+    public static Vector2 ShaftTail(Vector2 anchor, Vector2 dir, float s, bool disc, float discScale = 1f) =>
+        disc ? anchor + (dir * DiscRadius(s, discScale)) : anchor;
+
+    /// <summary>The disc's radius in pane pixels at HUD scale <paramref name="s"/> and the player's
+    /// <paramref name="discScale"/> (<see cref="HudMetrics.SpyglassScale"/>). ⚠ Keep the factor
+    /// multiplied last: at 1 every placement is then bit for bit the unscaled one.</summary>
+    public static float DiscRadius(float s, float discScale = 1f) => Spyglass.RefRadius * s * discScale;
+
+    /// <summary>The side, in pixels, the picture renders at for a disc at HUD scale
+    /// <paramref name="s"/> and the player's <paramref name="discScale"/>. It is 0 on a pane with no
+    /// scale yet. The factor is multiplied last, as in <see cref="DiscRadius"/>.</summary>
+    public static int DiscSide(float s, float discScale = 1f) =>
+        s > 0f ? Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s * discScale)) : 0;
 
     public override void _Process(double delta)
     {
@@ -635,8 +652,7 @@ public sealed partial class TargetHud : Control
         DiscShown = true;
         if (side <= 0)
         {
-            float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
-            side = s > 0f ? Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)) : 0;
+            side = DiscSide(Size.Y <= 0f ? 0f : HudMetrics.Scale(this), HudMetrics.SpyglassScale);
         }
 
         if (_spyglass != null && side > 0)
@@ -976,17 +992,18 @@ public sealed partial class TargetHud : Control
         // below it, the tag broken onto its own lines the way HUD.png shows. With the picture up
         // all three measure against the disc instead, which is half a window further in.
         bool disc = DiscShown;
-        float radius = Spyglass.RefRadius * s;
+        float discScale = HudMetrics.SpyglassScale;
+        float radius = DiscRadius(s, discScale);
         if (disc)
         {
             placed = EdgeMarker.Resolve(sp, behind, Size, radius);
             DrawDisc(placed.Anchor, radius, color, s);
         }
 
-        DrawArrow(this, placed.Tip, ShaftTail(placed.Anchor, placed.Dir, s, disc), placed.Dir, s, color);
+        DrawArrow(this, placed.Tip, ShaftTail(placed.Anchor, placed.Dir, s, disc, discScale), placed.Dir, s, color);
         _labelLines.Clear();
         EdgeLines(mark, EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos), _labelLines);
-        DrawLabelBlock(this, font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc), _labelLines, color, s, fontSize);
+        DrawLabelBlock(this, font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc, discScale), _labelLines, color, s, fontSize);
     }
 
     // The lead marker: a circle with a faint fill on the intercept, and a dotted line from its rim to

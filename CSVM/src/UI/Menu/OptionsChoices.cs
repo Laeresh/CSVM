@@ -66,6 +66,10 @@ public sealed class OptionsChoices
     /// <summary>The throttle plate, null while never set, which reads as off.</summary>
     public bool? ThrottlePlate { get; set; }
 
+    /// <summary>The <see cref="SpyglassScaleSetting.Words"/> word, null while never set, which reads
+    /// as 100.</summary>
+    public string? SpyglassScale { get; set; }
+
     /// <summary>The <see cref="GraphicsMode"/> word.</summary>
     public string Graphics { get; set; } = GraphicsMode.Default;
 
@@ -191,6 +195,7 @@ public sealed class OptionsChoices
         LeadingAimAssist = saved?.LeadingAimAssist;
         LeadMarker = saved?.LeadMarker;
         ThrottlePlate = saved?.ThrottlePlate;
+        SpyglassScale = saved?.SpyglassScale;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
         Words = saved?.Words.Copy() ?? new WordValues();
         MonitorIndex = saved?.MonitorIndex;
@@ -225,7 +230,7 @@ public sealed class OptionsChoices
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
             NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
-            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate);
+            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, SpyglassScale);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

@@ -490,6 +490,12 @@ The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `Vr
 `SavedWord` holds the `--det` guard. The composition sets `Current` at boot and on every options
 apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
 
+## src/Utils/SpyglassScaleSetting.cs
+The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the factor it spells.
+`Resolve` takes the saved `spyglassScale` over 100, the decoded size, and `SavedWord` holds the
+`--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
+reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
+
 ## src/Utils/VrQuality.cs
 The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launch/LiveSettings.cs`
 before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no
@@ -506,7 +512,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
-display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the spyglass size, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
