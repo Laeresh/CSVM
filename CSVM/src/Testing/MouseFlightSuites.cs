@@ -22,6 +22,9 @@ internal static class MouseFlightSuites
     // High over an empty world, so nothing the rig spawns into resolves a ground contact.
     private const float SpawnAltitudeM = 800f;
 
+    // The cutscene host takes any definition with this name as a mission intro.
+    private const string CutsceneIntro = "mission_intro_animation";
+
     // Past the last control a row can hold, so a staged offer adds a control rather than replacing one.
     private const int RowSlots = 16;
 
@@ -146,6 +149,109 @@ internal static class MouseFlightSuites
         ctx.Note($"the capture is guarded off on this harness and the mouse mode is left at {before}");
     }
 
+    [Suite("flight-mouse-cutscene",
+        "the pointer under an in-mission cutscene, followed through the seat's own mode writes on a "
+        + "stand-in desktop: a flying keyboard seat holds the mouse, the intro's hold, presentation "
+        + "and out-of-flight codes take the hold away and leave the pointer hidden for every frame "
+        + "of the film without banking its motion, a halt over the film shows the pointer and the "
+        + "resume hides it again, the hand-back takes the capture afresh as flight had it, and a "
+        + "second pane's seat that reads no keyboard writes no mode at any point")]
+    internal static void FlightMouseCutscene(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequirePlane("player_bhawk");
+        var stats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
+        var seat = Rig(ctx, stats, "CutsceneMouseSeat", human: true);
+        var pad = Rig(ctx, stats, "CutscenePadSeat", human: true);
+        pad.PlayerIndex = 1;
+        pad.UseKeyboard = false;
+        var host = new Session.World.CutsceneController();
+        var world = new Node3D { Name = "CutsceneMouseWorld" };
+        var runtime = new Mech3.AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+        ctx.Host.AddChild(host);
+        ctx.Host.AddChild(world);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            // An empty program answers "ended" on the next tick, which is the definition's own exit.
+            runtime.Bind(world, new Mech3.AnimProgram());
+            host.BindWorld(runtime);
+            host.BindRigs(
+                new[]
+                {
+                    new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = ctx.Host, Controller = seat },
+                    new PlayerRig { Index = 1, Camera = ctx.Camera, HudParent = ctx.Host, Controller = pad },
+                },
+                () => Array.Empty<FlightController>());
+            foreach (var each in new[] { seat, pad })
+            {
+                each.Mouse.Allowed = true;
+                each.Mouse.ModeForTest = Godot.Input.MouseModeEnum.Visible;
+            }
+
+            Frames(seat, pad, 10, halted: false);
+            var flying = seat.Mouse.ModeForTest;
+            ctx.Check(flying == Godot.Input.MouseModeEnum.Captured && seat.Mouse.Holding,
+                $"ABLE-TO-FAIL CONTROL: the keyboard seat flying holds the mouse captured (mode {flying}, holding {seat.Mouse.Holding})");
+
+            host.Host(Session.World.CutsceneController.CodeHoldsWorld, CutsceneIntro);
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(seat.Mouse.ModeForTest == Godot.Input.MouseModeEnum.Captured,
+                $"the hold code leaves the pointer hidden, the seat still flying under it (mode {seat.Mouse.ModeForTest}, holding {seat.Mouse.Holding})");
+            host.Host(Session.World.CutsceneController.CodePresentation, CutsceneIntro);
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(seat.Mouse.ModeForTest == Godot.Input.MouseModeEnum.Captured,
+                $"and so does the presentation code, before the seat leaves flight (mode {seat.Mouse.ModeForTest}, holding {seat.Mouse.Holding}, hiding {seat.Mouse.Hiding})");
+            host.Host(Session.World.CutsceneController.CodeOutOfFlight, CutsceneIntro);
+            ctx.Check(host.Presenting && seat.InCutscene && seat.Inert && pad.InCutscene,
+                $"the intro's codes give both panes to the film and take the seat out of flight (presenting {host.Presenting}, in cutscene {seat.InCutscene}, inert {seat.Inert})");
+            ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
+                $"ABLE-TO-FAIL CONTROL: out of flight the seat no longer wants the capture, which alone would show the pointer");
+            bool hiddenThroughout = true;
+            for (int frame = 0; frame < 30; frame++)
+            {
+                Frames(seat, pad, 1, halted: false);
+                seat.Mouse.Moved(new InputEventMouseMotion { Relative = new Vector2(40f, 0f) });
+                hiddenThroughout &= seat.Mouse.ModeForTest == Godot.Input.MouseModeEnum.Captured
+                    && seat.Mouse.Hiding && !seat.Mouse.Holding;
+            }
+
+            ctx.Check(hiddenThroughout,
+                $"every frame of the film leaves the pointer hidden without the seat holding it (mode {seat.Mouse.ModeForTest}, hiding {seat.Mouse.Hiding}, holding {seat.Mouse.Holding})");
+
+            Frames(seat, pad, 1, halted: true);
+            ctx.Check(seat.Mouse.ModeForTest == Godot.Input.MouseModeEnum.Visible && !seat.Mouse.Hiding,
+                $"a halt over the film shows the pointer for the board (mode {seat.Mouse.ModeForTest})");
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(seat.Mouse.ModeForTest == Godot.Input.MouseModeEnum.Captured && seat.Mouse.Hiding,
+                $"and the resume hides it again while the film still runs (mode {seat.Mouse.ModeForTest})");
+
+            host.Tick();
+            ctx.Check(!host.Playing && !seat.InCutscene && !seat.Inert,
+                $"the definition ending hands both panes back to flight (playing {host.Playing}, in cutscene {seat.InCutscene}, inert {seat.Inert})");
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(seat.Mouse.ModeForTest == flying && seat.Mouse.Holding && !seat.Mouse.Hiding,
+                $"and the next frame takes the capture afresh, the mode flight had before the film (mode {seat.Mouse.ModeForTest}, was {flying})");
+            ctx.Check(pad.Mouse.ModeForTest == Godot.Input.MouseModeEnum.Visible && !pad.Mouse.Holding && !pad.Mouse.Hiding,
+                $"the pane whose seat reads no keyboard wrote no mode at any point (mode {pad.Mouse.ModeForTest})");
+        }
+        finally
+        {
+            foreach (var each in new[] { seat, pad })
+            {
+                each.Mouse.Allowed = false;
+                each.Mouse.ModeForTest = null;
+                each.QueueFree();
+            }
+
+            runtime.Free();
+            world.Free();
+            host.Free();
+        }
+
+        ctx.Note($"the mode is the seat's own decision on a stand-in desktop; no real pointer was captured");
+    }
+
     [Suite("flight-mouse-scheme-live",
         "a Controls page accepted over the pause reaches the seat already flying: the real pause "
         + "Preferences leaf over the install's decoded layout, holding a rebinding feature that "
@@ -258,6 +364,16 @@ internal static class MouseFlightSuites
             $"the capture decision is the same under either scheme, the seat holding the mouse for the stick and for head-look alike (look {wantedOnLook}, fly {wantedOnFly})");
         one.Mouse.StickForTest = null;
         two.Mouse.StickForTest = null;
+    }
+
+    // Frames of both seats' capture decision on the stand-in desktop.
+    private static void Frames(FlightController seat, FlightController pad, int count, bool halted)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            seat.StepMouseCaptureForTest(halted);
+            pad.StepMouseCaptureForTest(halted);
+        }
     }
 
     // The capture decision for an unhalted frame on a seat allowed the mouse, read and put back in

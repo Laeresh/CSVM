@@ -1112,6 +1112,12 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>A cutscene's presentation has this pane, set by the cutscene host beside
+    /// <see cref="CameraOwned"/>. While set, the keyboard seat hides the desktop pointer it does
+    /// not hold, so no cursor stands over the film. A halt still hands the pointer to the board.
+    /// </summary>
+    public bool InCutscene { get; set; }
+
     /// <summary>This pane's pilot HUD, for the one assembler that builds its readouts and the one
     /// debug mode that hides its instruments. Internal, not public: nothing outside this assembly
     /// draws on a live aircraft, and the per-frame feed is this node's alone.</summary>
@@ -3908,14 +3914,24 @@ public partial class FlightController : Node3D
     internal void StepMouseCaptureForTest(bool halted) => StepMouseCapture(halted);
 
     // The seat's hold on the desktop mouse, re-decided every frame. The resume takes it again.
-    private void StepMouseCapture(bool halted) => Mouse.Step(WantsMouseCapture(halted), this, MouseSensitivity);
+    private void StepMouseCapture(bool halted) =>
+        Mouse.Step(WantsMouseCapture(halted), this, MouseSensitivity, WantsPointerHidden(halted));
+
+    // Whether this seat should hide the pointer it is not holding: a cutscene has the pane and no
+    // board stands over it. Inert is not asked, since the film's out-of-flight is what took the
+    // capture away.
+    private bool WantsPointerHidden(bool halted) => OwnsDesktopMouse(halted) && InCutscene;
 
     // Whether this seat should be holding the mouse. One physical mouse, so only the seat the
     // keyboard flies asks for it. A watcher's pane belongs to its SpectatorCamera, which reads the
     // right button itself. A halt belongs to whichever board went up.
-    private bool WantsMouseCapture(bool halted) =>
+    private bool WantsMouseCapture(bool halted) => OwnsDesktopMouse(halted) && !Inert;
+
+    // Whether this seat is the one the desktop mouse answers to on this frame, under either the
+    // capture or the hide. ⚠ Add a guard here, not to one caller, or the two would disagree.
+    private bool OwnsDesktopMouse(bool halted) =>
         Mouse.Allowed && IsHumanPiloted && UseKeyboard && IsInsideTree()
-        && !Inert && !Spectating && !halted && !Pause.Silenced;
+        && !Spectating && !halted && !Pause.Silenced;
 
     // Both levers on one value, for the writers that place an aircraft rather than fly it. The
     // original's spawn and launch writers set +0x124 and +0x128 together. A stale command left

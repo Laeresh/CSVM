@@ -1310,8 +1310,9 @@ display with somebody at the controls, so the test desktop and `--det` keep thei
 
 ## src/Flight/Camera/SeatMouse.cs
 The desktop mouse one flight seat holds while it flies: `MouseCapture`'s arithmetic plus the engine
-half it leaves out. `Step` takes the mouse on a wanted frame and gives it back on any other, writing
-`Input.MouseMode`; `Release` puts back only a capture this seat made. `Stick` is the cursor offset
+half it leaves out. `Step` takes the mouse on a wanted frame, hides the pointer unheld on a frame a
+cutscene has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
+suite's stand-in); `Release` puts back only a capture or hide this seat made. `Stick` is the cursor offset
 the mouse-flying stick reads, off the virtual cursor while held and the pane's own pointer
 otherwise, and `LookTravel` is head-look's pan. `Allowed` is the session's once-resolved guard and
 `StickForTest` a suite's pinned offset. The host decides which frames want the mouse and hands its

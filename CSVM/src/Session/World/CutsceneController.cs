@@ -105,11 +105,13 @@ public sealed partial class CutsceneController : Node
     /// host's decision reaches <see cref="TakeSkip"/>.</summary>
     public Action<int, int, int>? SkipAsked;
 
+    // The presentation code: the chrome goes down and the view leaves the aircraft.
+    internal const int CodePresentation = 2;
+
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
     // (docs/formats/anim-definitions/cutscenes.md).
     private const int CodeHandoff = 1;
-    private const int CodePresentation = 2;
     private const int CodeRestoreSystems = 10;
     private const int CodeMissionComplete = 13;
     private const int CodeClearOrdnance = 86;
@@ -1214,6 +1216,7 @@ public sealed partial class CutsceneController : Node
         foreach (var pilot in Pilots())
         {
             pilot.CameraOwned = on;
+            pilot.InCutscene = on;
             pilot.SetPilotHudVisible(!on);
             // ⚠ Beside CameraOwned, never instead of it: that flag is what stops the arm
             // re-asserting the pilot's own view rules, so a cockpit seat would otherwise be framed

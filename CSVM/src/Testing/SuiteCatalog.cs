@@ -99,6 +99,7 @@ public static class SuiteCatalog
         "flight-input-handback",
         "flight-live-respawn-gate",
         "flight-mouse-capture",
+        "flight-mouse-cutscene",
         "flight-mouse-scheme",
         "flight-mouse-scheme-live",
         "flight-roster-transaction",

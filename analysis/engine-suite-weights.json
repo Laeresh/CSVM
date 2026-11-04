@@ -226,6 +226,7 @@
     "flight-input-handback": 0.031,
     "flight-live-respawn-gate": 0.371,
     "flight-mouse-capture": 0.013,
+    "flight-mouse-cutscene": 0.08,
     "flight-mouse-scheme": 0.011,
     "flight-mouse-scheme-live": 0.076,
     "flight-roster-transaction": 0.8,
