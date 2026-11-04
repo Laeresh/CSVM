@@ -211,6 +211,7 @@ public static class SuiteCatalog
         "splitscreen-listeners",
         "start-state-swap-pool",
         "stick-discrete-buttons",
+        "stunt-return-nitro",
         "sun-orientation",
         "target-flag",
         "target-input",

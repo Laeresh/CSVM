@@ -30,7 +30,12 @@ public sealed class StuntRunControl
 
     // A tap's pose, armed by ArmReturn and spent by the one respawn that takes it. ⚠ Never written
     // into the seat's spawn pose: the held rerun must still find the start line there.
-    private (Vector3 Pos, Basis Attitude)? _zoneReturn;
+    private (Vector3 Pos, Basis Attitude, float? NitroCharge)? _zoneReturn;
+
+    // The nitro tank as the zone cleared last left it, which a tap's return restores. Null before
+    // any clear and after a reset, where the return is the start and its tank is full.
+    private float? _chargeAtClear;
+    private int _clearsSeen;
 
     /// <summary>The seat's start count, for its readers (the HUD, the suites). Begun, cancelled
     /// and stepped only through this control.</summary>
@@ -108,20 +113,34 @@ public sealed class StuntRunControl
         return null;
     }
 
+    /// <summary>Notes the run's cleared count after its gate test, with the nitro tank of that
+    /// step. A count that rose snapshots the tank for the tap's return: its charge, or an empty tank
+    /// if the boost was burning. A count that fell is a reset, and drops the snapshot.</summary>
+    public void NoteClears(int cleared, float nitroCharge, bool boosting)
+    {
+        if (cleared > _clearsSeen)
+            _chargeAtClear = boosting ? 0f : nitroCharge;
+        else if (cleared < _clearsSeen)
+            _chargeAtClear = null;
+        _clearsSeen = cleared;
+    }
+
     /// <summary>Arms a tap's return: on the route abeam the exit of the zone cleared last, heading
-    /// the way it was flown. With no zone cleared nothing is armed, and the respawn is the start.</summary>
+    /// the way it was flown. It carries the nitro charge that clear left. With no zone cleared
+    /// nothing is armed, and the respawn is the start.</summary>
     public void ArmReturn(StuntMission? run)
     {
         if (run?.ReturnPose() is { } exit)
         {
             // A heading straight up or down has no wings-level roll off world up.
             var up = Mathf.Abs(exit.Heading.Y) > 0.999f ? Vector3.Back : Vector3.Up;
-            _zoneReturn = (exit.Position, Basis.LookingAt(exit.Heading, up));
+            _zoneReturn = (exit.Position, Basis.LookingAt(exit.Heading, up), _chargeAtClear);
         }
     }
 
-    /// <summary>The armed return, or null; taking it disarms it.</summary>
-    public (Vector3 Pos, Basis Attitude)? TakeReturn()
+    /// <summary>The armed return, or null; taking it disarms it. A null charge leaves the
+    /// respawn's full tank.</summary>
+    public (Vector3 Pos, Basis Attitude, float? NitroCharge)? TakeReturn()
     {
         var taken = _zoneReturn;
         _zoneReturn = null;

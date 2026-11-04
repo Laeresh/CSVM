@@ -599,6 +599,7 @@
     "stunt-capture": 0.759,
     "stunt-respawn-tap-hold": 0.632,
     "stunt-start-count": 0.599,
+    "stunt-return-nitro": 0.38,
     "stunt-race-time-attack": 0.908,
     "stunt-race-spectate": 0.8,
     "stunt-race-no-lives": 0.911,

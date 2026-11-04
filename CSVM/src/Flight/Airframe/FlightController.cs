@@ -1372,8 +1372,8 @@ public partial class FlightController : Node3D
     /// <summary>A stunt run's tap of respawn: back on the route through the zone cleared last,
     /// heading on the way the pilot left it. It flies at the spawn speed, and the zones and the
     /// clock are kept. With no zone cleared it is the plain respawn at the start. It repairs,
-    /// restocks and refuels exactly as <see cref="Respawn"/> does, so it is offered only where that
-    /// is.</summary>
+    /// restocks and refuels as <see cref="Respawn"/> does, but keeps the nitro charge of the clear,
+    /// so it is offered only where that respawn is.</summary>
     public void ReturnToLastZone()
     {
         _run.ArmReturn(Stunt);
@@ -1396,7 +1396,8 @@ public partial class FlightController : Node3D
             _spawnPos = placement.Pos;
             _spawnAttitude = AimAttitude(placement.Pos, placement.LookAt, _spawnAttitude);
         }
-        var (placePos, placeAttitude) = _run.TakeReturn() ?? (_spawnPos, _spawnAttitude);
+        var zoneReturn = _run.TakeReturn();
+        var (placePos, placeAttitude) = zoneReturn is { } back ? (back.Pos, back.Attitude) : (_spawnPos, _spawnAttitude);
         Stunt?.Relocated();  // the jump to the new pose is no flight through any gate
         _run.CancelCount(); // a count's walk would drag the aircraft off the pose placed here
         _lifecycle.Respawn();
@@ -1456,6 +1457,9 @@ public partial class FlightController : Node3D
         // A fresh engine has no in-flight plume, and no charge left over from the last airframe.
         ExhaustSmoke?.Reset();
         Nitro.Reset();
+        // A tap's return keeps the tank the zone's clear left, so a return is no nitro refill.
+        if (zoneReturn?.NitroCharge is { } charge)
+            Nitro.RestoreCharge(charge);
         _aiNitroArmed = false;
         SpeedCue?.Reset();
         WindStreaks?.Reset();
@@ -2389,6 +2393,7 @@ public partial class FlightController : Node3D
 
         // Stunt run: the gate tests, and a course's touch volumes, against this frame's committed position.
         Stunt?.Update(_model.Position, Body?.BoundRadius ?? 0f);
+        _run.NoteClears(Stunt?.CompletedCount ?? 0, Nitro.Charge, Nitro.Boosting);
 
         // The camera latch reads the same committed position, after the run's own test, so a
         // photograph and the zone it completes land on one frame.

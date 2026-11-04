@@ -829,8 +829,9 @@ A stunt seat's run control, engine-free and one per seat. The respawn button spl
 (where the crash cam's timer also returns) and `StepLive`. It owns the seat's `StartCount`, begun,
 cancelled and caught up through it: `StepClock` sets `Counting` and ticks the run clock unless the
 count holds it, and `StepCount` answers the cue of a step that is the count's. `ArmReturn` and
-`TakeReturn` hold a tap's pose. `FlightController` performs the answers (the respawn, the walk, the
-cue). Coverage: `CSVM.Tests/StuntRunControlTests.cs`, suite `stunt-start-count`.
+`TakeReturn` hold a tap's pose, with the nitro charge `NoteClears` snapshotted at the zone's clear.
+`FlightController` performs the answers (the respawn, the walk, the cue). Coverage:
+`CSVM.Tests/StuntRunControlTests.cs`, suites `stunt-start-count` and `stunt-return-nitro`.
 
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
@@ -1322,9 +1323,9 @@ refilled at 1/s always, so a burn nets 3/s and runs 9.5 s from full to the 5 % c
 `HumanCommand` engages on a held command only from a 99 % tank and re-asserts the flag until the
 cutoff; `AiSet` has no engage line and fires once per nitro-flagged maneuver. Both refuse an
 engine-out aircraft and a re-engage while the boost or decay animation is alive. `Installed` is the
-injector, and `EngagedThisTick`/`ReleasedThisTick`/`LoopRefreshedThisTick` are the edges
-`FlightController.AdvanceNitro` turns into the shake kick (a person's camera block, an AI's own
-`medium_aishake`), the two defs and the keyed `snd_nitro` loop. Decode: [../org/flightModel.md](../org/flightModel.md).
+injector, and the `...ThisTick` edges are what `FlightController.AdvanceNitro` turns into the shake
+kick, the two defs and the keyed `snd_nitro` loop. `RestoreCharge` puts back a stunt tap return's
+snapshot after `Reset`. Decode: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Ai/PathFollower.cs
 The engine's SECOND movement law and the exclusive alternative to `FlightModel`: the dispatcher

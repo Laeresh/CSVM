@@ -343,6 +343,29 @@ public class NitroSystemTests
         Assert.Equal(a.Position, b.Position);
     }
 
+    [Fact]
+    public void ARestoredChargeKeepsTheResetFlagsAndBelowTheEngageLineCannotBoost()
+    {
+        var n = Installed();
+        Tick(n, held: true);
+        n.Reset();
+        n.RestoreCharge(12f);
+        Assert.Equal(12f, n.Charge);
+        Assert.False(n.Boosting);
+        Assert.False(n.BoostAnimAlive);
+        Assert.False(n.DecayAnimPlaying);
+
+        // An empty tank refills at the recharge rate, and a held command cannot engage it.
+        n.Reset();
+        n.RestoreCharge(0f);
+        Tick(n, held: true);
+        Assert.False(n.Boosting);
+        Assert.Equal(Dt * NitroSystem.RechargeRate, n.Charge, 5);
+
+        n.RestoreCharge(NitroSystem.Capacity * 2f);
+        Assert.Equal(NitroSystem.Capacity, n.Charge);
+    }
+
     private static NitroSystem Installed() => new() { Installed = true };
 
     // One human tick as FlightController.AdvanceNitro runs it: the step opens, then the command

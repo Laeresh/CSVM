@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
@@ -293,6 +294,98 @@ internal static class FlightInputHandoffSuites
         ctx.Note($"the stunt respawn taps back to the last cleared zone and holds into a restart");
     }
 
+    [Suite("stunt-return-nitro",
+        "a stunt run's tap return keeps the nitro tank its zone was cleared with, over a synthetic "
+        + "three-gate course: a gate cleared while the boost burns returns on an empty tank, not "
+        + "boosting and refilling, a gate cleared on a part-filled tank returns on that charge "
+        + "rather than what was burned or refilled after it, and a held rerun and a crash's tap "
+        + "with no gate cleared both fly again on a full tank")]
+    internal static void StuntReturnNitro(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(ctx.Chapter);
+        ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
+
+        // Pylon gates kilometres apart across the rig's line, so a return's straight flight on
+        // from one never crosses another. The third is never flown, so no finish board holds the rig.
+        var gates = new[]
+        {
+            new CourseGate("a", CourseGateKind.PylonGate, new Vector3(3000f, SpawnAltitudeM, 0f), 0f, 40f, 30f, 0f),
+            new CourseGate("b", CourseGateKind.PylonGate, new Vector3(-3000f, SpawnAltitudeM, 0f), 0f, 40f, 30f, 0f),
+            new CourseGate("c", CourseGateKind.PylonGate, new Vector3(6000f, SpawnAltitudeM, 0f), 0f, 40f, 30f, 0f),
+        };
+        var sequence = gates.Select(g => new SequenceEntry(g.Id, GateDirection.Forward)).ToArray();
+        var run = StuntMission.ForCourse(new Course("c1", "nitro", new SpawnPoint(new Vector3(0f, SpawnAltitudeM, 0f), 0f), gates, sequence))!;
+
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        FlightController? pilot = null;
+        try
+        {
+            pilot = HumanRig(ctx, ctx.Planes, textures, pool, StuntSpawnSpeed);
+            pilot.Nitro.Installed = true;
+            pilot.Stunt = run;
+            Fly(pilot, 5);
+            float full = NitroSystem.Capacity;
+            ctx.Check(Mathf.Abs(pilot.Nitro.Charge - full) < 1e-3f, $"the rig spawns on a full tank, {pilot.Nitro.Charge:0.00} of {full:0}");
+
+            // Burn past the first gate: the tap returns on an empty tank.
+            Boost(pilot);
+            Fly(pilot, 60);
+            PassCourseGate(run, gates[0]);
+            Fly(pilot, 1);
+            bool burningAtClear = pilot.Nitro.Boosting;
+            Fly(pilot, 120);
+            int respawns = pilot.RespawnCount;
+            Press(pilot, TapFrames);
+            var exit = run.ReturnPose()!.Value;
+            float charge = pilot.Nitro.Charge;
+            ctx.Check(burningAtClear && pilot.RespawnCount == respawns + 1 && run.CompletedCount == 1
+                    && pilot.WorldPosition.DistanceTo(exit.Position) < StuntSpawnSpeed * StepDt * 2f,
+                $"a tap after burning past gate a returns there once, boost burning at the clear {burningAtClear}, {pilot.WorldPosition.DistanceTo(exit.Position):0.00} m off its exit");
+            ctx.Check(!pilot.Nitro.Boosting && charge < StepDt * 2f,
+                $"…on an empty tank refilling, {charge:0.000} of {full:0} and boosting {pilot.Nitro.Boosting}, not the full tank a respawn fills");
+
+            // Clear the second gate part-filled, keep refilling, and tap: the clear's charge returns.
+            Fly(pilot, 600);
+            PassCourseGate(run, gates[1]);
+            Fly(pilot, 1);
+            float atClear = pilot.Nitro.Charge;
+            Fly(pilot, 120);
+            float before = pilot.Nitro.Charge;
+            Press(pilot, TapFrames);
+            charge = pilot.Nitro.Charge;
+            ctx.Check(run.CompletedCount == 2 && Mathf.Abs(charge - atClear) < StepDt * 2f && charge < before - 1f,
+                $"a tap after gate b returns on the {atClear:0.00} it was cleared with, {charge:0.00} now, not the {before:0.00} flown on to nor a full {full:0}");
+
+            // A hold reruns on a full tank.
+            respawns = pilot.RespawnCount;
+            Hold(pilot, HoldFrames);
+            Release(pilot);
+            ctx.Check(pilot.RespawnCount == respawns + 1 && run.CompletedCount == 0 && Mathf.Abs(pilot.Nitro.Charge - full) < 1e-3f,
+                $"a hold reruns once with no gate kept on a full tank: zones {run.CompletedCount}, {pilot.Nitro.Charge:0.00} of {full:0}");
+
+            // ABLE-TO-FAIL CONTROL: the plain crash respawn with no gate cleared still fills the tank.
+            Boost(pilot);
+            Fly(pilot, 60);
+            float burned = pilot.Nitro.Charge;
+            pilot.DebugForceCrash();
+            Press(pilot, TapFrames);
+            ctx.Check(!pilot.Crashed && burned < full - 1f && Mathf.Abs(pilot.Nitro.Charge - full) < 1e-3f,
+                $"ABLE-TO-FAIL CONTROL: a crash's tap with no gate cleared refills the {burned:0.00} burned to a full {pilot.Nitro.Charge:0.00}");
+        }
+        finally
+        {
+            pilot?.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+
+        ctx.Note($"a stunt tap return keeps the nitro charge of the cleared zone");
+    }
+
     [Suite("stunt-start-count",
         "a solo stunt run's start count over C1/IA1's real zones on a 71.5 m/s spawn: a tap from a "
         + "crash returns with no count and the clock running on, a hold in flight restarts the run "
@@ -516,6 +609,25 @@ internal static class FlightInputHandoffSuites
     {
         Hold(pilot, frames);
         Release(pilot);
+    }
+
+    // One step engaging the boost, which no input stops before the cutoff.
+    private static void Boost(FlightController pilot)
+    {
+        pilot.AutoNitro = true;
+        Fly(pilot, 1);
+        pilot.AutoNitro = false;
+    }
+
+    // One step forward through a course pylon gate's centre on the run itself. A fresh segment
+    // follows, so the aircraft's next step is not tested from the gate.
+    private static void PassCourseGate(StuntMission run, CourseGate gate)
+    {
+        var centre = gate.Position + new Vector3(0f, gate.Height / 2f, 0f);
+        run.Relocated();
+        run.Update(centre - gate.Forward * 5f);
+        run.Update(centre + gate.Forward * 5f);
+        run.Relocated();
     }
 
     // Both gates of a zone crossed green to red on the run itself, each along its own axis. A fresh
