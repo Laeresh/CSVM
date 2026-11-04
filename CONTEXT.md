@@ -246,6 +246,13 @@ _Avoid_: loading screen, splash, please-wait
 
 ## HUD markers
 
+**HUD mode**:
+How much flight HUD an outside view draws: **Full** (the original's HUD), **Minimal** (the dial
+cluster, compass tape and throttle plate replaced by the flight text block) or **None** (only the
+pipper, the lead marker, messages, prompts and scores). A remake-only rule; the cockpit view
+ignores it.
+_Avoid_: minimal HUD option, HUD toggle, HUD level, clean HUD
+
 **Edge marker**:
 The off-screen presentation of a marked world target: the marker clamped into the inset screen
 edge, with an arrow pointing outward to the pane's own edge and a clock-hour bearing.
@@ -260,6 +267,24 @@ _Avoid_: o'clock value, clock direction, relative bearing in hours
 The round live picture of the selected target drawn at its edge marker while the target is off
 screen and inside the range gate. The picture alone is the **disc**.
 _Avoid_: zoom window, magnifier, picture-in-picture, scope
+
+## Enhanced look and sound
+
+**Moonlit mission**:
+A mission picked by hand to be lit as night under Enhanced graphics, though its authored light is
+day-level. A dome that draws a moon makes a mission a candidate, not a moonlit mission, since
+daylit missions draw a moon too.
+_Avoid_: night mission (for these), moon mission, dark mission
+
+**Enhanced Sound**:
+The sound mode that remixes the original's own sounds for clearer engine and hit feedback, chosen
+apart from the graphics mode. **Original Sound** plays them as authored.
+_Avoid_: sound mod, HD sound, remastered audio
+
+**Hit confirm**:
+A sound played when the player's rounds strike an enemy aircraft, its own option in either sound
+mode. A remake-only rule.
+_Avoid_: hit marker, hit sound (the original's hits on the player's own aircraft)
 
 ## Air race courses
 
