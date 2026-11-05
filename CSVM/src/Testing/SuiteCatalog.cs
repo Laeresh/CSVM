@@ -160,6 +160,7 @@ public static class SuiteCatalog
         "menu-original-version",
         "menu-original-wrapup-core",
         "menu-player-setup-seats",
+        "moonlit-mission",
         "motor-acceleration",
         "music-states",
         "net-aircraft-replication",

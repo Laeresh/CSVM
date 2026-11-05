@@ -1,0 +1,4 @@
+{
+  "_about": "The moonlit missions: worlds picked by hand to be lit as night under Enhanced graphics, though their authored light is day-level (CONTEXT.md, 'Moonlit mission'). Read once per world by src/Session/World/MoonlitMissions.cs. Each entry is one world as '<chapter>/<mission folder>', e.g. 'C1C/M01'. A listed world takes the night path the fog-colour rule gives a night zone: capped energies, the light aimed at the dome's moon card, the authored fog range and no cloud shadows. Original graphics, and every world left out, render as authored. --dump-moonlit prints the candidates from the game files (docs/cli.md).",
+  "missions": []
+}

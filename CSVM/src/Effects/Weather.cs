@@ -230,6 +230,15 @@ public sealed class WeatherState
     }
 
 
+    /// <summary>Marks every zone of this mission <see cref="ZoneWeather.Moonlit"/>, for a world the
+    /// moonlit list names (<c>Session/World/MoonlitMissions</c>). The authored values stay as read;
+    /// only <c>WeatherRig.IsNightZone</c> reads the mark, and only under Enhanced.</summary>
+    public void MarkMoonlit()
+    {
+        foreach (var zone in new List<string>(_zones.Keys))
+            _zones[zone] = _zones[zone] with { Moonlit = true };
+    }
+
     /// <summary>One zone's weather ("zone1"/"zone2"/"zone3"), fog, world light and sun bearing;
     /// <see cref="NoFog"/> if the zone is absent. Callers should pass a <see cref="ResolveZone"/>
     /// result rather than a raw request.</summary>
@@ -456,13 +465,12 @@ public sealed class WeatherState
             AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
     }
 
-    /// <summary>One day/night zone's weather: distance fog, the world-brightness scalar with the
-    /// uncollapsed SUNLIGHT pair and colours beside it, and the sun bearing, written together in
-    /// one call by the original's zone-apply (docs/formats/weather.md). <see cref="SunOrientation"/>
-    /// is Godot euler RADIANS, a <see cref="DirectionalLight3D"/> <c>Rotation</c>. ⚠ It is the
-    /// shading direction, not the <c>sun</c> billboard's position (90 degrees apart in C3).
-    /// <see cref="SunBicolored"/> is <c>SUNLIGHT_BICOLORED</c> (docs/org/vertexLighting.md).</summary>
-    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient, bool SunBicolored = false);
+    /// <summary>One zone's fog, world light, uncollapsed SUNLIGHT pair, colours and sun bearing, which the
+    /// original's zone-apply writes together (docs/formats/weather.md). <see cref="SunOrientation"/> is
+    /// a <see cref="DirectionalLight3D"/> <c>Rotation</c> in radians. ⚠ It is the shading direction,
+    /// not the <c>sun</c> billboard's position. <see cref="SunBicolored"/> is <c>SUNLIGHT_BICOLORED</c>
+    /// (docs/org/vertexLighting.md). <see cref="Moonlit"/> is not authored (<see cref="MarkMoonlit"/>).</summary>
+    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient, bool SunBicolored = false, bool Moonlit = false);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of
     /// weather.json. Only some missions carry one; C1/C5 IA1 have none. Consumed by

@@ -623,6 +623,13 @@ public partial class Launcher : Node3D
             GetTree().Quit(_probeRunner.DumpAi(_spec) ? 0 : 1);
             return;
         }
+        // --dump-moonlit: the moonlit list's candidate table, read off the weather and the domes'
+        // sky cards with no world built. See Probes.Moonlit.
+        if (_spec.DumpMoonlit)
+        {
+            GetTree().Quit(_probeRunner.DumpMoonlit() ? 0 : 1);
+            return;
+        }
         // --dump-sticks: the SDL2 stick roster with each stick's counts and resting reads; fails
         // only when no SDL2 loads, since zero sticks is a valid answer.
         string? sdlRepoRoot = _exported ? null : repoRoot;

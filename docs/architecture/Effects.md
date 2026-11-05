@@ -189,8 +189,8 @@ uncollapsed colours, the cloud-cover whiteout band, wind, and precipitation. `De
 `DefaultAmbient` are the install's modal day pair, public because both lighting mappings anchor a
 zone against them. `ResolveZone` picks the flown zone by name, falling back to the one zone whose
 horizon subtree carries meshes where the requested one is empty and this mission also fogs it;
-`CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes.
-Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
+`CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes;
+`MarkMoonlit` flags every zone of a listed moonlit mission (`Session/World/MoonlitMissions.cs`). Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
 
 ## src/Effects/ViewerSet.cs
 The "what do the cameras see" registry, session-owned and bound once after the rigs are built, so

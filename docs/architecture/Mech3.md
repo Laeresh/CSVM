@@ -285,7 +285,7 @@ taking the zone rule through `Session/WeatherRig.Tick` instead.
 `HideUnplacedEntities`/`RestorePlacedEntities` switch off, then restore, the entities a chapter
 parks at the world origin awaiting mission placement; `NoCollisionNode` exempts sky, cloud and
 billboard geometry and anything authoring `intersect_surface: false` from colliders. The static
-helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
+helpers (`HorizonZonesOf`, `SkyCardsOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
 `FogVolumeZoneIdOf`, `MatchNodes`) are pure and test off engine. `HdChapter` is the model pack's chapter key for this world's scene builder, which the weapon flyouts share; the dome builds without it, and the deck, sky, open sea and terrain (`IsTerrainMesh`, or a CAN_MODIFY node) are never replaced. Deck and dome: [../formats/weather.md](../formats/weather.md), [../org/weather.md](../org/weather.md).
 
 ## src/Mech3/WorldMerge.cs

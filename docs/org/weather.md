@@ -358,6 +358,17 @@ lights a night city at noon level and the data carries no other handle. **The sk
 handle**: a daylit mission draws a moon and a star field too (C1 and C4 both wear `horizon/zone2`),
 which is why the dome's night art cannot separate the two populations.
 
+**Moonlit missions are the hand-picked exception.** Some worlds whose dome draws a moon author
+day-level `SUNLIGHT` and a day fog colour, so the rule lights them as day. A maintainer lists such a
+world in `CSVM/data/moonlit_missions.json` as `<chapter>/<mission folder>`; the list ships empty.
+Under Enhanced, `IsNightZone` counts every zone of a listed world as night, so it takes the night
+path below: the capped energies, the light aimed at the dome's moon (at its sun first, where the
+dome draws both), the authored fog range and no cloud shadows. Original, and every unlisted world,
+light as authored. The clutter darkening's shader twin `csky_night_fog` reads the fog colour alone,
+so a listed world's day-grey fog leaves its clutter undarkened. `--dump-moonlit` prints the
+candidates: every flown world whose dome draws a moon card, with its authored pair, its verdict
+under the fog rule and whether its dome draws a sun card too.
+
 The same key keeps a night zone's authored fog range under Enhanced, where a day zone's is pushed
 out 2x for its shadows. Pushed, C5's black fog let the lit walls of its far city stand out over
 ground already gone dark, and inside a fog volume (`ZONE3`, 50 to 250 m) it showed streets the

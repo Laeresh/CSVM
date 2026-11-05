@@ -379,6 +379,18 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
+    /// <summary><c>--dump-moonlit</c>: print and write the moonlit list's candidate table
+    /// (<see cref="Probes.Moonlit"/>); false when no world was read or one failed to decode.</summary>
+    public bool DumpMoonlit()
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        var r = Probes.Moonlit(_paths.Data, Session.World.MoonlitMissions.Load());
+        Log.Raw(r.Text);
+        WriteScratch("moonlit_dump.txt", r.Text);
+        Log.Info("core", $"{r.Summary} → ./.scratch/moonlit_dump.txt");
+        return r.Ok;
+    }
+
     /// <summary>--effects-test (docs/cli.md): the world-effects headless verify, see
     /// <see cref="Probes.Effects"/>. Plays every effect at the camera point so range-gated ones
     /// (gunhit's PLAYER_RANGE) pass. Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>

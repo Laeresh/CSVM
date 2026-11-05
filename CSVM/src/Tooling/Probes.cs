@@ -593,6 +593,81 @@ public static class Probes
         return r;
     }
 
+    // ---- moonlit candidates --------------------------------------------------------------------
+
+    /// <summary>--dump-moonlit (docs/cli.md): the moonlit list's candidate table. It prints one row per
+    /// weather zone of each flown world whose dome draws a moon card there. A row holds the authored
+    /// <c>SUNLIGHT</c> pair and the fog-colour night verdict. It also says whether the dome draws a sun
+    /// card and whether the list names the world. The cards are read off the gamez (<see cref="WorldBuilder.SkyCardsOf"/>).</summary>
+    public static MoonlitResult Moonlit(Spec.GameData data, Session.World.MoonlitMissions list)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new MoonlitResult();
+        var sb = new StringBuilder();
+        sb.AppendLine("# Moonlit mission candidates: every flown world whose dome draws a moon card.");
+        sb.AppendLine("# One row per weather zone with a moon; 'flown' marks the zone a flight starts in.");
+        sb.AppendLine("# night by fog: WeatherRig.IsNightZone's FOG_COLOR rule, what the world gets today.");
+        sb.AppendLine("# sun card: the dome draws a sun too, and the Enhanced light aims at a sun before a moon.");
+        sb.AppendLine($"# A pick is one '<chapter>/<mission>' entry in {Session.World.MoonlitMissions.DefaultPath}.");
+        sb.AppendLine();
+        sb.AppendLine($"{"world",-10} {"zone",-6} {"flown",-5} {"diffuse",7} {"ambient",7}  {"night by fog",-12} {"sun card",-8} listed");
+
+        foreach (var chapter in AiChapters)
+        {
+            foreach (var mission in DiscoverMissions(chapter))
+            {
+                string world = Session.World.MoonlitMissions.Key(chapter, mission);
+                try
+                {
+                    var part = data.LoadChapter(chapter, mission);
+                    if (CSVM.Effects.WeatherState.Load(part.MissionZrdr) is not { } weather)
+                    {
+                        r.NoWeather.Add(world);
+                        continue;
+                    }
+
+                    if (part.Gamez is not { } gamez)
+                    {
+                        r.Errors.Add($"{world}: no gamez for {chapter}");
+                        continue;
+                    }
+
+                    r.Worlds++;
+
+                    // The flight's own request when no --sky-zone is given, resolved as the weather rig does.
+                    string flown = weather.ResolveZone("zone2", WorldBuilder.HorizonZonesOf(gamez));
+                    foreach (var zone in weather.ZoneNames)
+                    {
+                        var (sun, moon) = WorldBuilder.SkyCardsOf(gamez, zone);
+                        if (moon == null)
+                            continue;
+                        var fog = weather.Zone(zone);
+                        r.Rows++;
+                        r.Candidates.Add(world);
+                        sb.AppendLine($"{world,-10} {zone,-6} {(zone.Equals(flown, StringComparison.OrdinalIgnoreCase) ? "yes" : "no"),-5} "
+                            + $"{fog.SunDiffuse,7:0.###} {fog.SunAmbient,7:0.###}  {(Session.World.WeatherRig.IsNightZone(fog) ? "night" : "day"),-12} "
+                            + $"{(sun != null ? "yes" : "no"),-8} {(list.Lists(chapter, mission) ? "yes" : "no")}");
+                    }
+                }
+                catch (Exception e)
+                {
+                    r.Errors.Add($"{world}: {e.Message}");
+                    sb.AppendLine($"!! {world}: FAILED: {e.Message}");
+                }
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"# {r.Worlds} world(s) read, {r.Candidates.Count} with a moon card, {r.Rows} row(s); "
+            + $"{r.NoWeather.Count} folder(s) carry no weather.json: {string.Join(", ", r.NoWeather)}");
+        sb.AppendLine($"# listed now: {(list.Worlds.Count == 0 ? "none" : string.Join(", ", list.Worlds))}");
+        r.Text = sb.ToString();
+        r.Summary = r.Errors.Count == 0
+            ? $"moonlit dump: {r.Candidates.Count} candidate world(s) of {r.Worlds} read, {r.Rows} zone row(s)"
+            : $"moonlit dump: {r.Errors.Count} ERROR(s), see the !! lines above";
+        return r;
+    }
+
     // ---- destructible damage -----------------------------------------------------------------
 
     /// <summary>Every enabled collision shape under a subtree. <c>SetSubtreeActive</c> toggles each
@@ -2520,6 +2595,20 @@ public static class Probes
         /// <summary>Shipped levels whose installed pixels are the authored ones.</summary>
         public int LevelsMatching;
         public bool Ok => Error == null && Failures.Count == 0 && Textures > 0;
+    }
+
+    /// <summary>What <see cref="Moonlit"/> read: the worlds with weather, the candidates among them,
+    /// the zone rows printed, and the folders with no weather.json.</summary>
+    public sealed class MoonlitResult
+    {
+        public readonly List<string> Errors = new();
+        public readonly List<string> NoWeather = new();
+        public readonly SortedSet<string> Candidates = new(StringComparer.OrdinalIgnoreCase);
+        public string Text = "";
+        public string Summary = "";
+        public int Worlds;
+        public int Rows;
+        public bool Ok => Errors.Count == 0 && Worlds > 0;
     }
 
     /// <summary>The five AI data families' install-wide census: nets, <c>aiv</c> vehicle blocks

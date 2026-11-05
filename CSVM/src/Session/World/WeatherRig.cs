@@ -215,6 +215,8 @@ public sealed class WeatherRig
     private readonly List<FogViewTable.View> _tableViews = new();
 
     private WeatherState? _weather;
+    // The moonlit list, loaded with the first world unless a suite hands one in.
+    private MoonlitMissions? _moonlit;
     private string _activeZone;
     private Precipitation? _precip;
     private Vector3 _deckCenter;
@@ -271,9 +273,11 @@ public sealed class WeatherRig
     private Func<IReadOnlyList<Node3D>>? _gatedObjects;
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
-        EffectAmbience? ambience = null, ViewerSet? viewers = null, Godot.Environment? env = null)
+        EffectAmbience? ambience = null, ViewerSet? viewers = null, Godot.Environment? env = null,
+        MoonlitMissions? moonlit = null)
     {
         _spec = spec;
+        _moonlit = moonlit;
         _worldRoot = worldRoot;
         _sun = sun;
         _env = env;
@@ -410,12 +414,14 @@ public sealed class WeatherRig
     public static Vector3 PhotographFill(WeatherState.ZoneWeather fog)
         => Scaled(PhotographFillAmbient(fog.SunAmbient), fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse);
 
-    /// <summary>Whether a zone's authored <c>FOG_COLOR</c> puts it under a night sky, which is
-    /// what caps its enhanced energies. Pure and public so the rule can be pinned and so a log
-    /// line can say which side of it a zone fell on.</summary>
+    /// <summary>Whether a zone is under a night sky: its authored <c>FOG_COLOR</c> is dark, or under
+    /// Enhanced its world is a listed moonlit mission (<see cref="MoonlitMissions"/>). It is what caps
+    /// the enhanced energies and aims the light at the moon. Public so the rule can be pinned and a
+    /// log line can say which side of it a zone fell on.</summary>
     public static bool IsNightZone(WeatherState.ZoneWeather fog)
-        => (0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
-           < NightFogLuminance;
+        => (fog.Moonlit && GraphicsMode.Enhanced)
+           || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
+               < NightFogLuminance);
 
     /// <summary>The light's Euler rotation whose +Z is <paramref name="dir"/>, the inverse of the
     /// authored euler-to-direction mapping (docs/org/weather.md).</summary>
@@ -1235,6 +1241,12 @@ public sealed class WeatherRig
     private void LoadWeather(ZrdrSet missionZrdr, IReadOnlyList<HorizonZone> horizonZones)
     {
         _weather = WeatherState.Load(missionZrdr);
+        _moonlit ??= MoonlitMissions.Load();
+        if (_weather != null && _moonlit.Lists(_spec.Chapter, _spec.Mission))
+        {
+            _weather.MarkMoonlit();
+            Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} is a listed moonlit mission, lit as night under Enhanced");
+        }
         // The mission's WIND block, read per mission rather than baked, see docs/org/weather.md
         // for the authored values every weather.zrd shares. A mission with no weather.json gets
         // still air, not someone else's breeze.

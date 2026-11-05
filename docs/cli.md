@@ -54,7 +54,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-ocean` · `--debug-wake` · `--debug-names` · `--debug-fps` · `--hud-text` · `--debug-join` · `--debug-pointer` · `--debug-marquee` · `--debug-graphics-switch` · `--debug-shaders` · `--debug-scoreboard` · `--debug-scores` · `--debug-race-ghost` · `--xr-tune` · `--sound-lab` · `--debug-race-end` · `--debug-wash` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--debug-targets` · `--debug-markers` · `--debug-spectate` · `--debug-pause` · `--debug-load` · `--debug-objective` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--debug-clutterflag` · `--hide-alpha` · `--markers`
 
 **Dumps and the test harness, report text plus a verdict, then quit**
-`--dump` · `--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-sticks` · `--dump-tilegrid` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
+`--dump` · `--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-moonlit` · `--dump-sticks` · `--dump-tilegrid` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
 
 **Logging and profiling**
 `--log` · `--perf` · `--gc-types` · `--debug-finalizers` · `--debug-mem` · `--debug-anim` · `--debug-net` · `--debug-net-trace` · `--anim-lod` · `--hitch-inject`
@@ -100,8 +100,8 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
 section further down; `--perf` carries four further bullets for its other readouts, and
-`--dump-sticks` and `--menu` one more each. The counts reconcile as **212 index entries, 212 parser
-flags and 219 bullet lines**.
+`--dump-sticks` and `--menu` one more each. The counts reconcile as **213 index entries, 213 parser
+flags and 220 bullet lines**.
 
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world for deterministic weather, fog and edge screenshots. It hosts three labs, always built and needing no extra flag: the damage lab on **F19**, the livery lab on **L** and the mesh lab on **M**. All three start hidden, so an unadorned `--viewer` screenshot matches the pre-paint viewer. F19 toggles the damage lab as a whole, slider panel and HUD gauges together; the panel's own checkbox controls the gauges while it is up. **P** halts the simulation and **`.`** advances one frame)
@@ -312,6 +312,7 @@ flags and 219 bullet lines**.
   and generator half, while `ai.zrd`'s turrets are one shared file always reported in full. Writes
   to `./.scratch/ai_dump.txt`, then quits, exiting nonzero on a parse failure or an unknown
   chapter)
+- `--dump-moonlit` (implies `--det`; the **moonlit list's candidate table**: for every flown world (campaign, Instant Action and Dogfight folders), one row per weather zone whose dome draws a moon card, with the authored `SUNLIGHT` diffuse and ambient, the fog-colour night verdict, whether the dome draws a sun card too and whether `CSVM/data/moonlit_missions.json` lists it. No world is built. Writes stdout and `./.scratch/moonlit_dump.txt`, then quits, nonzero when no world was read)
 - `--dump-sticks` (does **not** imply `--det`, whose `--no-pads` would empty the Godot roster the
   gap-filler subtracts; load SDL2 (`SDL2.dll`, or `libSDL2-2.0.so.0` on Linux), log Godot's pad models, the stick roster (name, model,
   GUID, axis/button/hat counts) and each stick's resting axes, held buttons and hats, then quit.

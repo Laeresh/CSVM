@@ -355,7 +355,7 @@ public sealed record SessionSpec
         CopyGameFiles != null ? "extract"
         : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpMoonlit || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -370,7 +370,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || CopyGameFiles != null
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpMoonlit || DumpTileGrid
         || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary>Resolved. The chapter world is built instead of a single parked plane.</summary>
@@ -767,6 +767,7 @@ public sealed record SessionSpec
         : DumpConfig ? "--dump-config"
         : DumpMips ? "--dump-mips"
         : DumpAi ? "--dump-ai"
+        : DumpMoonlit ? "--dump-moonlit"
         : DumpTileGrid ? "--dump-tilegrid"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
@@ -926,6 +927,11 @@ public sealed record SessionSpec
     /// chapter (turrets are one shared file and are always reported in full).</summary>
     public bool DumpAi { get; private set; }
     public string DumpAiChapter { get; private set; } = "";
+
+    /// <summary><c>--dump-moonlit</c>: the moonlit list's candidate table. It lists every flown world
+    /// whose dome draws a moon card, with its authored <c>SUNLIGHT</c> pair and night verdict. Pure
+    /// data, with no world and no scene (<c>Tooling/Probes.Moonlit</c>).</summary>
+    public bool DumpMoonlit { get; private set; }
 
     /// <summary><c>--dump-tilegrid</c>: build the chapter world, write the map-edge tile census
     /// and quit. The written twin of <c>--debug-tilegrid</c>, and strictly more: the
@@ -1801,6 +1807,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
+            else if (arg == "--dump-moonlit") { s.DumpMoonlit = true; }
             else if (arg == "--dump-sticks") { s.DumpSticks = true; }
             else if (arg.StartsWith("--dump-sticks="))
             {
