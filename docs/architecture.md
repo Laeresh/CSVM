@@ -403,8 +403,8 @@ rows).
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.
 - `src/Effects/TerrainShadow.cs`, the Enhanced terrain's baked sun shadow, one texture per zone sun, published to the world-lit arms' `light()`.
-- `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: the `csky_cloud_shadow*` globals every sun term reads, drawn by day in a cloudy mission.
-- `src/Effects/CloudShadowPattern.cs`, the cloud shadows' world-anchored noise pattern and its drift source (ceiling scroll, sideways wind, fixed), engine-free.
+- `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: gathers the mission's clouds and writes the `csky_cloud_shadow*` globals every sun term reads, by day.
+- `src/Effects/CloudShadowRaster.cs`, the map of the shadows the clouds cast along the sun onto the sea-level plane, engine-free.
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.

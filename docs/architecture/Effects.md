@@ -142,20 +142,19 @@ cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `cs
 side by it. `SunAt` reads the texture as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
 
 ## src/Effects/CloudShadow.cs
-The Enhanced cloud shadows' one owner, a node under the world root (`Launch/GameSession.cs`'s `BuildCloudShadow`). It writes
-the `csky_cloud_shadow` and `csky_cloud_shadow_edge` globals `csky_cloud_shadow.gdshaderinc` declares, whose `csky_cloud_sun`
-multiplies into `csky_terrain_sun`, so the ground, water, buildings and vegetation darken and no aircraft arm does. It draws
-under Enhanced with `Utils/CloudShadowSetting.cs` on, in a mission with a cloud field, placed clouds or a deck, outside a
-night zone (`WeatherRig.ApplyZone` calls `FollowZone`); otherwise darkness 0, which reads exactly 1. Read every frame, so no
-shader is rebuilt. `CeilingDriftOf` reads a scrolling dome's arrays. The seam is one include function and this one owner of
-its globals. It reaches only shaders carrying the terrain shadow's `light()`, so `--terrain-shadows=off` drops it too.
-`cloud-shadow-globals` holds the switch. Read `CloudShadowPattern.cs` next.
+The Enhanced cloud shadows' one owner, a node under the world root (`Launch/GameSession.cs`'s `BuildCloudShadow`). `CastersOf`
+gathers the clouds once, before the world merge: every visible placed cloud sprite (`SceneBuilder.PlacedCloudMaterials`) and
+every card of the `FogVolumeClutter` field, each with its authored size, opacity and mask; the deck and the domes cast nothing.
+It writes the `csky_cloud_shadow*` globals, whose `csky_cloud_sun` multiplies into `csky_terrain_sun`, so ground, water,
+buildings and vegetation darken and no aircraft arm does. It draws under Enhanced with `Utils/CloudShadowSetting.cs` on, by
+day (`WeatherRig.ApplyZone` calls `FollowZone` with the zone's sun); otherwise darkness 0 reads exactly 1. `Bake` casts and
+uploads every zone sun's map at load, so a zone change or a live switch only writes globals. It rides the terrain shadow's `light()`. `cloud-shadow-globals`. Read `CloudShadowRaster.cs` next.
 
-## src/Effects/CloudShadowPattern.cs
-The cloud shadows' tunes and drift, with no engine object touched: the pattern's cell, coverage, darkness and edge (the noise
-itself is only in the shader), its `Period`, and the offset that drifts it (`Offset`). `ChooseDrift` takes the
-below-deck ceiling's scroll (`CeilingDrift`, each triangle's UV-to-X/Z map, its top put at the band centre), else the
-authored wind's sideways part, else `FixedDrift`. Size, coverage and darkness are TUNE. `CloudShadowPatternTests`.
+## src/Effects/CloudShadowRaster.cs
+The cloud shadows' map, engine-free: each cloud card faces the sun, so its authored mask is cast along the sun onto the
+sea-level plane, and a point reads the texel its own sun ray crosses there (`Foot`), whatever its height. Overlapping cards
+multiply what they let through. `Darkness` is the one TUNE; counts, sizes and opacities are the clouds' own data. A sun
+below `MinSunHeight` casts nothing. `Through` reads the map as the shader does. `CloudShadowRasterTests`.
 
 ## src/Effects/TerrainShadowRaster.cs
 The bake's compute, with no engine object touched: the ground triangles' plane heights at the texel centres (`Cell`, 4 m

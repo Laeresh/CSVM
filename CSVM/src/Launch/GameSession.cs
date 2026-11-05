@@ -2747,29 +2747,29 @@ public partial class GameSession : Node3D
     }
 
     // The cloud shadows stand over every full weathered world in either mode, since the node itself
-    // reads the mode, the word and the zone. Built once: the clouds and the drift never change.
+    // reads the mode, the word and the zone. The clouds are gathered once, before the world merge, while
+    // each placed sprite is still its own node. The deck and the domes ride the camera, so neither casts.
     private void BuildCloudShadow()
     {
         var weather = _sky?.Weather;
-        if (!_fullWorld || _plane == null || _worldScene == null || weather == null)
+        if (!_fullWorld || _plane == null || _worldScene == null || weather == null || _sessionTextures == null)
             return;
-        var deck = _unplacedWatch?.CloudDeck;
-        bool cloudy = deck != null || _sky!.CloudField is { InstanceCount: > 0 } || _worldScene.PlacesClouds;
-        Vector2? ceiling = null;
-        // The ceiling is the dome a camera below the band sees, zone_id 1, only where a deck stands.
-        if (deck != null && weather.Mission is { HasCloudBand: true } mission && _rigs.Count > 0)
+        var skip = new List<Node>();
+        foreach (var rig in _rigs)
         {
-            foreach (var dome in _rigs[0].HorizonDomes)
-            {
-                if (dome.ZoneId == 1)
-                    ceiling = Effects.CloudShadow.CeilingDriftOf(dome.Node, _worldScene, mission.CloudBandCentre);
-            }
+            if (rig.Horizon != null)
+                skip.Add(rig.Horizon);
         }
-        var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
-        var (drift, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
-        _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
+        if (_unplacedWatch?.CloudDeck is { } deck)
+            skip.Add(deck);
+        var field = _sky!.CloudField;
+        var casters = Effects.CloudShadow.CastersOf(_plane, _worldScene, field, _sessionTextures, skip);
+        int fieldCards = field == null ? 0 : field.InstanceCount;
+        // Every zone sun is cast now, in either mode, so a zone change or a live switch casts nothing.
+        var suns = weather.SunOrientations.Append(weather.SunOrientation);
+        _cloudShadow = Effects.CloudShadow.Bake(casters, suns, weather.SunOrientation, weather.NightApplied);
         _plane.AddChild(_cloudShadow);
-        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()}");
+        Log.Info("world", $"cloud shadows: {casters.Count - fieldCards} placed cloud(s) + {fieldCards} cloud field card(s) cast night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()}{_cloudShadow.Timing}");
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

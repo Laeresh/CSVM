@@ -1,49 +1,40 @@
 #ifndef CSKY_CLOUD_SHADOW_INC
 #define CSKY_CLOUD_SHADOW_INC
 
-// The Enhanced cloud shadows (Effects/CloudShadow.cs owns both globals). The vec4 is the pattern's
-// drift offset in metres (X, Z), one over the lattice cell in metres, and the darkness at a shadow's
-// core; a darkness of 0 draws nothing. The vec2 is the noise band over which a shadow's edge ramps.
-// The tunes behind both live in Effects/CloudShadowPattern.cs.
+// The Enhanced cloud shadows (Effects/CloudShadow.cs owns all three globals). The map holds per texel
+// the share of the sun the mission's clouds let through, cast along the sun onto the sea-level plane
+// (Effects/CloudShadowRaster.cs). The rect is the map's origin X/Z there, then one over its extent. The
+// vec4 is the metres a sun ray runs along X and Z per metre it rises, then the darkness of an opaque
+// cloud; a darkness of 0 draws nothing.
+global uniform sampler2D csky_cloud_shadow_map;
+global uniform vec4 csky_cloud_shadow_rect;
 global uniform vec4 csky_cloud_shadow;
-global uniform vec2 csky_cloud_shadow_edge;
-
-// A lattice corner's value in [0, 1). The cell wraps at `period`, a power of two, so the pattern
-// repeats exactly and the drift offset can wrap with it.
-float csky_cloud_hash(ivec2 cell, int period, uint seed) {
-    uvec2 c = uvec2(cell & ivec2(period - 1));
-    uint h = (c.x * 2376512323u) ^ (c.y * 3625334849u) ^ seed;
-    h ^= h >> 16u;
-    h *= 2146121005u;
-    h ^= h >> 15u;
-    h *= 2221713035u;
-    h ^= h >> 16u;
-    return float(h >> 8u) * (1.0 / 16777216.0);
-}
-
-// Smooth value noise over one lattice, in [0, 1).
-float csky_cloud_octave(vec2 p, int period, uint seed) {
-    vec2 i = floor(p);
-    vec2 f = p - i;
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    ivec2 c = ivec2(i);
-    float a = csky_cloud_hash(c, period, seed);
-    float b = csky_cloud_hash(c + ivec2(1, 0), period, seed);
-    float d = csky_cloud_hash(c + ivec2(0, 1), period, seed);
-    float e = csky_cloud_hash(c + ivec2(1, 1), period, seed);
-    return mix(mix(a, b, u.x), mix(d, e, u.x), u.y);
-}
 
 // The share of the sun the clouds let through at a world position: 1 in the clear, down to one less
-// the darkness under a shadow's core. It is the one function every sun term reads the clouds through
-// (csky_terrain_sun), over the globals one C# owner writes.
+// the darkness under an opaque cloud. It is the one function every sun term reads the clouds through
+// (csky_terrain_sun). The point reads the texel its sun ray crosses at sea level, fetched texel by
+// texel like the terrain shadow so no sampler state a global carries can change it.
+// CloudShadowRaster.Through spells the same read.
 float csky_cloud_sun(vec3 world) {
-    if (csky_cloud_shadow.w <= 0.0) {
+    if (csky_cloud_shadow.z <= 0.0) {
         return 1.0;
     }
-    vec2 p = (world.xz + csky_cloud_shadow.xy) * csky_cloud_shadow.z;
-    float n = (2.0 * csky_cloud_octave(p, 256, 2654435769u) + csky_cloud_octave(p * 2.0, 512, 2246822507u)) / 3.0;
-    return 1.0 - csky_cloud_shadow.w * smoothstep(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, n);
+    vec2 foot = world.xz - world.y * csky_cloud_shadow.xy;
+    vec2 uv = (foot - csky_cloud_shadow_rect.xy) * csky_cloud_shadow_rect.zw;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
+        return 1.0;
+    }
+    ivec2 size = textureSize(csky_cloud_shadow_map, 0);
+    vec2 t = uv * vec2(size) - 0.5;
+    ivec2 i = ivec2(floor(t));
+    vec2 f = t - floor(t);
+    ivec2 hi = size - 1;
+    float a = texelFetch(csky_cloud_shadow_map, clamp(i, ivec2(0), hi), 0).r;
+    float b = texelFetch(csky_cloud_shadow_map, clamp(i + ivec2(1, 0), ivec2(0), hi), 0).r;
+    float c = texelFetch(csky_cloud_shadow_map, clamp(i + ivec2(0, 1), ivec2(0), hi), 0).r;
+    float d = texelFetch(csky_cloud_shadow_map, clamp(i + ivec2(1, 1), ivec2(0), hi), 0).r;
+    float through = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    return 1.0 - csky_cloud_shadow.z * (1.0 - through);
 }
 
 #endif
