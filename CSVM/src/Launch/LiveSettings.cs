@@ -175,6 +175,8 @@ internal sealed class LiveSettings
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
         options.AudioVoice = applied.AudioVoice;
+        options.SoundMode = applied.SoundMode;
+        options.HitConfirm = applied.HitConfirm;
         options.VrMode = applied.VrMode;
         options.VrRenderScale = applied.VrRenderScale;
         options.VrVignette = applied.VrVignette;
@@ -194,6 +196,8 @@ internal sealed class LiveSettings
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
+        // The flight reads both every play, so a pick over the pause sheet is heard on the next frame.
+        SoundModeSetting.ApplySaved(spec.Det, options);
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;

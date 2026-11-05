@@ -10,6 +10,7 @@ volume and pitch curves, the sound archives, and the WAV container. The readers 
 - [Sound groups](#sound-groups)
 - [The music channel](#the-music-channel)
 - [Player curves](#player-curves)
+- [Enhanced Sound](#enhanced-sound)
 - [The sound archives](#the-sound-archives)
 - [WAV format](#wav-format)
 ## Sound sets
@@ -332,6 +333,43 @@ slot's own **manoeuvre and attitude** terms, decoded in
 [vehicle.md](vehicle.md#the-engine-slots-pitch-and-gain-are-not-throttle-alone). ⚠ Not a
 speed-driven term, which this page said before the expression was read: the quantity is angular
 velocity, and airspeed reaches the engine slot nowhere.
+
+## Enhanced Sound
+
+A remake-only remix of the original's own sounds, chosen on the AUDIO page apart from the graphics
+mode (`Utils/SoundModeSetting.cs`). Original Sound plays everything above as decoded. Enhanced
+Sound changes three things, in every view, by the amounts in `CSVM/data/enhanced_sound.json`
+(`Flight/Audio/EnhancedSoundTuning.cs`); every amount is a TUNE, owed a listen at the controls.
+
+| Field | What it moves | Original Sound | Range read |
+|---|---|---|---|
+| `enginePitchIdle`, `enginePitchFull` | the own engine slot's pitch at `engine_sound`'s two throttle points (0.1 and 1.0) | 0.6, 1.0 | 0.181 to 2.503 |
+| `engineGainIdle`, `engineGainFull` | the same slot's curve gain at those points | 1.0, 1.0 | 0 to 4 |
+| `bulletHitGain` | a multiplier on `bullet_hit_sound`'s own `VOLUME`, a round on the player's own aircraft | 1 | 0 to 4 |
+| `canopyHitGain` | the same on `window_hit_sg`, a canopy hole opening | 1 | 0 to 4 |
+| `hitConfirmSound` | the `SOUND_GROUPS` entry the hit confirm draws | `bullet_hit_sg` | any group name |
+| `hitConfirmGain`, `hitConfirmPitch` | the hit confirm's gain over the member's `VOLUME`, and its pitch scale | 1, 1 | 0 to 4, 0.181 to 2.503 |
+| `hitConfirmInterval` | the least sim time between two hit confirms on one pilot's mix | 0.1 s | 0 to 2 s |
+
+The engine fields replace only the curve's two outputs. The turn-rate and climb terms still add to
+the parameter, the clamp still holds it to 1.5, and the boost still pins it, so the decoded
+manoeuvre lift rides the wider span; with a gain span, the turn-rate term into volume that is inert
+on the shipped flat curve takes effect. Under Enhanced Sound the cockpit loop takes the pitch
+whatever `cockpitEnginePitch` says, overriding that saved setting. The remix reaches the healthy
+loop alone: the damaged loop, every AI engine and the voice-line duck's level compare all stay on
+the decoded curve.
+
+The hit confirm is its own option (Hit Confirm) in either mode: never set, it is on under Enhanced
+Sound and off under Original Sound. It sounds on the gunner's own flat mix when a human pilot's
+gun round strikes an aircraft hostile to that pilot (`Flight/Audio/HitConfirmCue.cs`), never on a
+miss, a ground target, a friendly aircraft or a bot seat's round. Only a seat flown on the machine
+that resolves the strike carries a mix to play it on. A network guest's strike on an AI aircraft is
+resolved on the host (`Session/World/NetWorldLink.cs` routes it there), where the guest's seat has
+no mix, so a guest hears no confirm on AI aircraft. The
+guns' own `player` impact rows bind no sound ([../org/weaponImpact.md](../org/weaponImpact.md)), so
+the original is silent there. A field the file leaves out, or carries out of range, reads Original
+Sound's value and is logged; the reader lays a file over any baseline, so an override file can
+carry only the fields it changes.
 
 ## The sound archives
 

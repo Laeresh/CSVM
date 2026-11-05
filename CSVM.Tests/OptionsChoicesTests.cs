@@ -90,6 +90,8 @@ public class OptionsChoicesTests
             HudMode = HudModeSetting.Words[^1],
             SpyglassScale = SpyglassScaleSetting.Words[^1],
             KeepCameraZoom = false,
+            SoundMode = SoundModeSetting.Original,
+            HitConfirm = true,
         };
         foreach (var setting in WordSettings.All)
         {
@@ -104,7 +106,7 @@ public class OptionsChoicesTests
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
                 saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette,
                 saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate, SpyglassScale: saved.SpyglassScale,
-                KeepCameraZoom: saved.KeepCameraZoom, HudMode: saved.HudMode),
+                KeepCameraZoom: saved.KeepCameraZoom, HudMode: saved.HudMode, SoundMode: saved.SoundMode, HitConfirm: saved.HitConfirm),
             choices.ToExit());
 
         choices.Load(null);

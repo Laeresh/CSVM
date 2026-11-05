@@ -1,0 +1,14 @@
+{
+  "_about": "Enhanced Sound's remix of the original's own sounds, read by src/Flight/Audio/EnhancedSoundTuning.cs at launch and played only while the AUDIO page's Sound row says Enhanced (a --det run plays Original Sound). Every value is a TUNE. enginePitchIdle and enginePitchFull are the own engine loop's pitch at the decoded curve's two throttle points (Original Sound: 0.6 and 1.0); engineGainIdle and engineGainFull its curve gain there (Original Sound: flat 1.0). The decoded turn-rate, climb and boost terms still ride both curves. bulletHitGain and canopyHitGain multiply bullet_hit_sound's and window_hit_sg's own VOLUME on hits the player's own aircraft takes. hitConfirmSound names the SOUND_GROUPS entry the hit confirm draws from when the player's gun rounds strike an enemy aircraft, at hitConfirmGain over the member's VOLUME and hitConfirmPitch, at most once per hitConfirmInterval sim seconds. A field left out plays as Original Sound does. Fields and ranges: docs/formats/sounds.md, Enhanced Sound.",
+
+  "enginePitchIdle": 0.5,
+  "enginePitchFull": 1.15,
+  "engineGainIdle": 0.45,
+  "engineGainFull": 1.0,
+  "bulletHitGain": 1.8,
+  "canopyHitGain": 1.6,
+  "hitConfirmSound": "bullet_hit_sg",
+  "hitConfirmGain": 0.8,
+  "hitConfirmPitch": 1.4,
+  "hitConfirmInterval": 0.1
+}

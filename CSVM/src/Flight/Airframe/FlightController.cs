@@ -1928,6 +1928,13 @@ public partial class FlightController : Node3D
         {
             Targeting.RecordAttacker(attacker);
         }
+        // A seat flown elsewhere carries no FlightAudio, so its pilot's confirm sounds on its own
+        // machine or nowhere, and never on this one's speakers.
+        if (Projectiles is { } pool && pool.RigOfShooter(shooter) is { Audio: { } gunnerAudio } gunner
+            && HitConfirmCue.Earns(weapon.IsGun, gunner.IsHumanPiloted, gunner.Team, Team))
+        {
+            gunnerAudio.OnHitConfirm(pool.SimClock);
+        }
         // The incoming-fire cues, gated as the original gates them: a CANNON round (0x004b9e7e) on
         // the pilot's own aeroplane. ⚠ Never dispatch these from the contact path, where a scrape
         // is "I hit something" rather than "I was shot" and would make both readings wrong.

@@ -475,6 +475,10 @@ public partial class Launcher : Node3D
         bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;
         Flight.Audio.FlightAudio.CockpitLoopPitched = savedCockpitPitch ?? Flight.Audio.FlightAudio.CockpitLoopPitchedDefault;
         Log.Info("sound", $"cockpit engine pitch: pitched={Flight.Audio.FlightAudio.CockpitLoopPitched} via={(savedCockpitPitch.HasValue ? "options.json" : "default")}");
+        // The sound mode and Hit Confirm, Original Sound with no confirm under --det, so no golden
+        // hears the remix. The remix's amounts are read whatever the mode, an apply switching live.
+        SoundModeSetting.ApplySaved(_spec.Det);
+        Flight.Audio.EnhancedSoundTuning.Reload();
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.
         if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)

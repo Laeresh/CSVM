@@ -504,6 +504,13 @@ or `none`, saved as `hudMode` (null reads Full). `Resolve` takes the saved word 
 it and saves it through `Cycle`, which writes nothing to a null store.
 Every pilot pane follows `Current` each frame through `Flight/Hud/FlightHud.cs`'s `SetHudMode`.
 
+## src/Utils/SoundModeSetting.cs
+The AUDIO page's two remake-only switches: the sound mode, `soundMode` (`original` or `enhanced`,
+null reads Enhanced), and Hit Confirm, `hitConfirm` (null reads on under Enhanced Sound, off under
+Original). `ApplySaved` sets `EnhancedOn` and `HitConfirmOn` at launch and on every options apply,
+both Original and off under `--det`, so no golden hears the remix. `Flight/Audio/FlightAudio.cs`
+reads both on every play; the amounts are `Flight/Audio/EnhancedSoundTuning.cs`.
+
 ## src/Utils/CameraZoomMemory.cs
 The Keep Camera Zoom option, `keepCameraZoom` (null reads on), and the external-view zoom it
 remembers as `cameraZoom`. On, `Flight/Camera/CameraController.cs` skips the original's three

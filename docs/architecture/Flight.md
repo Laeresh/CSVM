@@ -1163,13 +1163,13 @@ a `PauseFrame` and the host performs its two edges, the audio's hold and the re-
 
 ## src/Flight/Audio/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
-one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
-run's Danger Zone camera and start count fire, most drawing the sound their own definition authors, not a fixed name (the count's two are shipped menu sounds).
-The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
-`OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine slot's pitch, gain,
-definition and damage phase come from `EngineAudioCurves`, the gun loop and dry cue from
-`WeaponAudioCues`; `MixGain` scales for splitscreen and `EngineVoiceDuck` lowers both engine slots.
-`AiEngineAudio` and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
+one-shots a crash, a ground or water explosion, a graze, an engine stop and a stunt run fire, most
+from their own definitions. The incoming-fire cues `OnWarningShot`, `OnBulletHit` and `OnWindowHit`
+are flat group draws, rate-limited by `FlightController`; `OnHitConfirm`, the gunner's hit confirm,
+limits itself (`HitConfirmCue`). The engine slot's pitch, gain, definition and damage phase come from `EngineAudioCurves`,
+under Enhanced Sound (`Utils/SoundModeSetting.cs`) with `EnhancedSoundTuning`'s curves and hit gains;
+`MixGain` scales for splitscreen and `EngineVoiceDuck` lowers both engine slots. `AiEngineAudio`
+and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
 
 ## src/Flight/Audio/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read, because the original runs one per-frame routine
@@ -1180,6 +1180,21 @@ rattle gate, the drive parameter and the cull distance. The drive adds a turn ra
 attitude to each curve's parameter under a clamp with headroom above 1, which is why `SoundCurve`
 exposes its steps separately. A pitch reaches the voice only where the definition accepts a
 frequency write (`SlotIsPitched`), leaving the damaged loop at its own rate, and the cockpit loop unless the remake-only `cockpitEnginePitch` option lets the exterior curve reach it (`HealthySlotIsPitched`, read through `FlightAudio.CockpitLoopPitched`). Decode: [../formats/vehicle.md](../formats/vehicle.md), [../formats/sounds.md](../formats/sounds.md), [../org/shakes.md](../org/shakes.md).
+
+## src/Flight/Audio/EnhancedSoundTuning.cs
+Enhanced Sound's amounts, every one a TUNE in `CSVM/data/enhanced_sound.json`: the own engine
+slot's pitch and gain at the decoded curve's two throttle points (`PitchCurve`, `GainCurve`, which
+`EngineAudioCurves.Engine` takes in place of the decoded pair), the gains on the bullet and canopy
+hits, and the hit confirm's group, gain, pitch and interval. A field left out reads its baseline,
+`Neutral` (Original Sound's values) for the shipped file, so `Parse` and `Load` also lay an
+override file over another tuning. The launch `Reload`s `Current`; `FlightAudio` reads it per play.
+Fields: [../formats/sounds.md](../formats/sounds.md#enhanced-sound).
+
+## src/Flight/Audio/HitConfirmCue.cs
+The hit confirm's rules: `Earns` (a human pilot's gun round striking an aircraft `AimAssist.Hostile`
+to it) and `TryFire`, the per-mix rate limit on the projectile pool's sim clock.
+`FlightController.TakeProjectileHit` asks it for the struck aircraft's gunner and plays the cue on
+that gunner's `FlightAudio`, which only a seat flown on this machine carries.
 
 ## src/Flight/Audio/EngineVoiceDuck.cs
 The engine duck under a radio line: one gain the session builds once and hands to every engine

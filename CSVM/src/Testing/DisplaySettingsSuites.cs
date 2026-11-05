@@ -60,6 +60,8 @@ internal static class DisplaySettingsSuites
         ("AudioMusic", 100, false),
         ("AudioEffects", 50, false),
         ("AudioVoice", 25, false),
+        ("SoundMode", SoundModeSetting.Original, false),
+        ("HitConfirm", true, false),
         ("InstallPath", Path.GetFullPath(Path.GetTempPath()), false),
         ("ExtractedPromptAnswered", true, false),
         ("ModFolder", Path.GetFullPath(Path.GetTempPath()), false),

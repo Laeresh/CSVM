@@ -221,6 +221,7 @@
     "engine-damage-phases": 0.048,
     "engine-note": 0.005,
     "engine-voice-duck": 0.126,
+    "enhanced-sound-cues": 0.2,
     "fade-walk-bound": 0.016,
     "fbfx-flash": 0.03,
     "first-person-condition": 0.008,

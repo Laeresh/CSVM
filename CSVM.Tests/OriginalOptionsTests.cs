@@ -324,6 +324,19 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.Equal(0, host.Module.Audio.VoiceChoice);
 
+        // The two switches under the levels. A press flips the sound mode off its never-set
+        // Enhanced, and an untouched Hit Confirm follows it off. A sideways step turns it back on.
+        Down(host);
+        Assert.Equal(OriginalAudioPage.SoundModeKey, host.FocusedKey);
+        Assert.Null(host.Module.Audio.SoundModeChoice);
+        Accept(host);
+        Assert.Equal(SoundModeSetting.Original, host.Module.Audio.SoundModeChoice);
+        Down(host);
+        Assert.Equal(OriginalAudioPage.HitConfirmKey, host.FocusedKey);
+        Assert.Null(host.Module.Audio.HitConfirmChoice);
+        StepX(host, 1);
+        Assert.True(host.Module.Audio.HitConfirmChoice);
+
         Down(host);
         Assert.Equal(OriginalAudioPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
@@ -331,6 +344,8 @@ public class OriginalOptionsTests
         Assert.Equal(20, exit.AudioMusic);
         Assert.Equal(55, exit.AudioEffects);
         Assert.Equal(0, exit.AudioVoice);
+        Assert.Equal(SoundModeSetting.Original, exit.SoundMode);
+        Assert.True(exit.HitConfirm);
         // The settings this page never showed ride the apply unchanged, read back when it opened.
         Assert.Equal("hard", exit.Difficulty);
         Assert.Equal("120", exit.VSync);
@@ -439,7 +454,10 @@ public class OriginalOptionsTests
         Assert.Equal((130f, 326f, 170f, 23f), Rect(Row(host, OriginalAudioPage.MusicKey)));
         Assert.Equal((130f, 381f, 170f, 23f), Rect(Row(host, OriginalAudioPage.EffectsKey)));
         Assert.Equal((130f, 431f, 170f, 23f), Rect(Row(host, OriginalAudioPage.VoiceKey)));
-        Assert.Equal((200f, 500f, 240f, 50f), Rect(Row(host, OriginalAudioPage.AcceptKey)));
+        // The two switches stand under Voice, and the plaques move down by what they would reach into.
+        Assert.Equal(458f, Row(host, OriginalAudioPage.SoundModeKey).Y);
+        Assert.Equal(OriginalRowKind.Radio, Row(host, OriginalAudioPage.HitConfirmKey).Kind);
+        Assert.Equal((200f, 504f, 240f, 50f), Rect(Row(host, OriginalAudioPage.AcceptKey)));
 
         var board = Compose(host);
         // The logo and the plate are the backdrop, not pictures. A board draws its fills between
@@ -454,7 +472,9 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "Music Volume" && l.X == 130f && l.Y == 310f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Effects Volume" && l.X == 130f && l.Y == 365f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Voice Volume" && l.X == 130f && l.Y == 415f && l.Width == 170f);
-        Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Sound" && l.X == 130f);
+        Assert.Contains(board.Lines, l => l.Text == "Hit Confirm" && l.X == 130f);
+        Assert.Equal(13, board.Lines.Count(l => l.Row < 0));
 
         // The focused row is marked twice and the others not at all. There is an outline around the
         // row the page opens on, and that row's title alone in the focused ink. Both halves are
@@ -1662,10 +1682,11 @@ public class OriginalOptionsTests
             {
                 OriginalAudioPage.MasterKey, OriginalAudioPage.MusicKey,
                 OriginalAudioPage.EffectsKey, OriginalAudioPage.VoiceKey,
+                OriginalAudioPage.SoundModeKey, OriginalAudioPage.HitConfirmKey,
                 OriginalAudioPage.AcceptKey, OriginalAudioPage.CancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "AUDIO", 8);
+        RowsAreClearOfEachOther(host, rows, "AUDIO", 12);
     }
 
     // The VIDEO page's rows, the same rule over its own plate. Each control must stand clear of the

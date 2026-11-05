@@ -386,6 +386,8 @@ rows).
 - `src/Flight/Audio/WeaponAudioCues.cs`, the weapon-sound selection both audio paths share: a definition name to a resolved cue with its `RANGE` pair and the one cull distance past it.
 - `src/Flight/Audio/EngineAudioCurves.cs`, the engine-slot definition choice and curve maths both audio paths share.
 - `src/Flight/Audio/EngineVoiceDuck.cs`, the one session-wide gain that lowers every engine slot while a radio line is on air.
+- `src/Flight/Audio/EnhancedSoundTuning.cs`, Enhanced Sound's amounts, read and re-read from `data/enhanced_sound.json`: the engine curves, the hit gains and the hit confirm.
+- `src/Flight/Audio/HitConfirmCue.cs`, which strike earns the gunner a hit confirm, and its rate limit.
 
 ### `src/Effects/`, particle systems
 
@@ -698,6 +700,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
 - `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat disc is drawn at.
 - `src/Utils/HudModeSetting.cs`, the HUD mode of the outside views (Full, Minimal, None): the saved `WordSetting` lookup, the process-wide mode every pilot pane follows, and the cycle key's step and save.
+- `src/Utils/SoundModeSetting.cs`, the sound mode (Original or Enhanced Sound) and the Hit Confirm switch, resolved from the options file, Original with no confirm under `--det`.
 - `src/Utils/CameraZoomMemory.cs`, the Keep Camera Zoom option and the external-view zoom it remembers in the options file, read by the chase camera.
 - `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.

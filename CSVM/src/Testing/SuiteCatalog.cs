@@ -93,6 +93,7 @@ public static class SuiteCatalog
         "engine-damage-phases",
         "engine-note",
         "engine-voice-duck",
+        "enhanced-sound-cues",
         "exhaust-smoke",
         "exhaust-smoke-ai",
         "fade-walk-bound",

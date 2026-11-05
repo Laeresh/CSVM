@@ -239,6 +239,15 @@ public sealed class OptionsDef
     /// <summary>The Voice level, on the same range as <see cref="AudioMusic"/>.</summary>
     public int? AudioVoice { get; set; }
 
+    /// <summary>The sound mode, one of <see cref="SoundModeSetting.Words"/>. Null is "never set" and
+    /// reads as Enhanced Sound.</summary>
+    public string? SoundMode { get; set; }
+
+    /// <summary>Whether a gun round of the player's striking an enemy aircraft sounds the hit
+    /// confirm. Null is "never set", which reads as on under Enhanced Sound and off under
+    /// Original Sound (<see cref="SoundModeSetting.HitConfirmOf"/>).</summary>
+    public bool? HitConfirm { get; set; }
+
     /// <summary>The game files last picked, a folder, drive or disc image, fully qualified, which
     /// <c>GameFileSource.Locate</c> tries and the next picker pre-fills
     /// (<c>Extraction.RememberedInstall</c>). Not a display setting and never read by a golden shot.</summary>
@@ -415,6 +424,8 @@ public sealed class OptionsStore
             WriteLevel(w, "audioMusic", def.AudioMusic);
             WriteLevel(w, "audioEffects", def.AudioEffects);
             WriteLevel(w, "audioVoice", def.AudioVoice);
+            Write(w, "soundMode", def.SoundMode);
+            WriteFlag(w, "hitConfirm", def.HitConfirm);
             Write(w, "installPath", def.InstallPath);
             WriteFlag(w, "extractedPromptAnswered", def.ExtractedPromptAnswered);
             Write(w, "modFolder", def.ModFolder);
@@ -491,6 +502,8 @@ public sealed class OptionsStore
                 AudioMusic = ReadLevel(root, "audioMusic"),
                 AudioEffects = ReadLevel(root, "audioEffects"),
                 AudioVoice = ReadLevel(root, "audioVoice"),
+                SoundMode = ReadShaped(root, "soundMode", SoundModeSetting.IsWord),
+                HitConfirm = ReadFlag(root, "hitConfirm"),
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
                 ExtractedPromptAnswered = ReadFlag(root, "extractedPromptAnswered"),
                 ModFolder = ReadShaped(root, "modFolder", Path.IsPathFullyQualified),
