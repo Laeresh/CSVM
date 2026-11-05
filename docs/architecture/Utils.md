@@ -393,6 +393,13 @@ included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts 
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
 shows it as the 3D Vegetation dropdown under Vegetation.
 
+## src/Utils/CloudShadowSetting.cs
+Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `on`. It resolves as `GroundCoverSetting` does:
+`--cloud-shadows=`, the saved `cloudShadows` word, the `graphics.cloudShadows` key, then `on`, or `off` under `--det`
+(`default_det`), so a golden draws none unless its command line asks. It has no live-apply hook: the owner reads `Enabled`
+every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
+description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
+
 ## src/Utils/GroundCoverSetting.cs
 How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (`Mech3/GroundCoverShells.cs`) or `cards`
 (`Mech3/GroundCover.cs`), the default. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved

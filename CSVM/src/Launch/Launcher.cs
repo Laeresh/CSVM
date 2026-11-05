@@ -571,6 +571,7 @@ public partial class Launcher : Node3D
         ShaderTime.RegisterGlobal();
         Effects.Ocean.RegisterGlobal();
         Effects.TerrainShadow.RegisterGlobals();
+        Effects.CloudShadow.RegisterGlobals();
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump

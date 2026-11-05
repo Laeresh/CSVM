@@ -58,6 +58,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's ground cover dropdown, under 3D Vegetation in the scrolled window.</summary>
     public const string GroundCoverKey = "GROUNDCOVER";
 
+    /// <summary>The page's cloud shadows dropdown, under Ground Cover in the scrolled window.</summary>
+    public const string CloudShadowsKey = "CLOUDSHADOWS";
+
     /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
     public const string WaterQualityKey = "WATERQUALITY";
 
@@ -151,6 +154,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(VegetationQualityKey, CSVM.Utils.VegetationQualitySetting.Lookup, "Vegetation"),
         Word(VegetationModelsKey, CSVM.Utils.VegetationModelsSetting.Lookup, "3D Vegetation"),
         Word(GroundCoverKey, CSVM.Utils.GroundCoverSetting.Lookup, "Ground Cover"),
+        Word(CloudShadowsKey, CSVM.Utils.CloudShadowSetting.Lookup, "Cloud Shadows"),
         new(VrModeKey, "VR Mode", null,
             _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,
@@ -221,7 +225,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     public bool ResolutionPinned => _choices.ResolutionPinned;
 
     /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line. On the
-    /// bottom line 1 puts View Distance, 2 Vegetation, 3 3D Vegetation, 4 Ground Cover and 5 VR Mode.</summary>
+    /// bottom line 1 puts View Distance, 2 Vegetation, 3 3D Vegetation, 4 Ground Cover, 5 Cloud
+    /// Shadows and 6 VR Mode.</summary>
     public int Top => _top;
 
     /// <summary>The graphics mode word the page would apply.</summary>

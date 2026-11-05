@@ -137,7 +137,7 @@ internal sealed partial class TerrainShadow : Node
     }
 
     /// <summary>The sun's share at a world point under the published orientation, 1 lit, 0 shaded,
-    /// read as <c>csky_terrain_sun</c> reads the texture. Off the rect, or with the defaults
+    /// read as <c>csky_terrain_baked_sun</c> reads the texture. Off the rect, or with the defaults
     /// published for the orientation, 1.</summary>
     public float SunAt(Vector3 world)
     {

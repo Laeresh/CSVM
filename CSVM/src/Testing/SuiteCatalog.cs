@@ -68,6 +68,7 @@ public static class SuiteCatalog
         "carried-turrets",
         "chase-trail",
         "cinema-skip-pad",
+        "cloud-shadow-globals",
         "cockpit-interior",
         "cockpit-overlay-pass",
         "cockpit-panel-staging",

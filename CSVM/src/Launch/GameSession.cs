@@ -308,6 +308,7 @@ public partial class GameSession : Node3D
     // The wave ocean's stage, null where the session cannot stand an ocean (OceanStage.Eligible).
     private OceanStage? _ocean;
     private Effects.TerrainShadow? _terrainShadow;
+    private Effects.CloudShadow? _cloudShadow;
     // A full world stood for a plane, which the terrain shadow bake needs; false on a node subtree.
     private bool _fullWorld;
     private SceneBuilder? _worldScene;
@@ -856,6 +857,7 @@ public partial class GameSession : Node3D
         // Before the ocean stage, whose shore mask is baked from what draws.
         FollowShadowDecals();
         FollowTerrainShadow();
+        BuildCloudShadow();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -2742,6 +2744,32 @@ public partial class GameSession : Node3D
             Log.Info("world", $"terrain shadow: baked {_terrainShadow.Width}x{_terrainShadow.Height} cell={Effects.TerrainShadow.Cell}m origin=({_terrainShadow.Origin.X:0},{_terrainShadow.Origin.Y:0}) ms={System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ({_terrainShadow.Timing})");
         }
         _terrainShadow.Publish(weather!.SunOrientation);
+    }
+
+    // The cloud shadows stand over every full weathered world in either mode, since the node itself
+    // reads the mode, the word and the zone. Built once: the clouds and the drift never change.
+    private void BuildCloudShadow()
+    {
+        var weather = _sky?.Weather;
+        if (!_fullWorld || _plane == null || _worldScene == null || weather == null)
+            return;
+        var deck = _unplacedWatch?.CloudDeck;
+        bool cloudy = deck != null || _sky!.CloudField is { InstanceCount: > 0 } || _worldScene.PlacesClouds;
+        Vector2? ceiling = null;
+        // The ceiling is the dome a camera below the band sees, zone_id 1, only where a deck stands.
+        if (deck != null && weather.Mission is { HasCloudBand: true } mission && _rigs.Count > 0)
+        {
+            foreach (var dome in _rigs[0].HorizonDomes)
+            {
+                if (dome.ZoneId == 1)
+                    ceiling = Effects.CloudShadow.CeilingDriftOf(dome.Node, _worldScene, mission.CloudBandCentre);
+            }
+        }
+        var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
+        var (drift, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
+        _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
+        _plane.AddChild(_cloudShadow);
+        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()}");
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

@@ -138,8 +138,24 @@ runs `TerrainShadowRaster` once per distinct zone sun (`WeatherRig.SunOrientatio
 moon card, else the authored `SUNLIGHT_ORIENTATION`), and uploads each as an RGH texture. `Publish` hands the live zone's texture, rect and penumbra pair to the `csky_terrain_shadow_*` globals; the zone apply
 (`WeatherRig.ApplyZone`) calls it again, a Shadow Quality apply reaches it through `ShadowQualitySetting.Revision`, and leaving
 the tree puts the defaults back. `SceneBuilder.TerrainShadowLight` writes the `light()` the world-lit, water, ocean and ground
-cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `csky_terrain_sun`; the Rich cards scale their sun
+cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `csky_terrain_sun` (the bake times `CloudShadow.cs`'s term); the Rich cards scale their sun
 side by it. `SunAt` reads the texture as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
+
+## src/Effects/CloudShadow.cs
+The Enhanced cloud shadows' one owner, a node under the world root (`Launch/GameSession.cs`'s `BuildCloudShadow`). It writes
+the `csky_cloud_shadow` and `csky_cloud_shadow_edge` globals `csky_cloud_shadow.gdshaderinc` declares, whose `csky_cloud_sun`
+multiplies into `csky_terrain_sun`, so the ground, water, buildings and vegetation darken and no aircraft arm does. It draws
+under Enhanced with `Utils/CloudShadowSetting.cs` on, in a mission with a cloud field, placed clouds or a deck, outside a
+night zone (`WeatherRig.ApplyZone` calls `FollowZone`); otherwise darkness 0, which reads exactly 1. Read every frame, so no
+shader is rebuilt. `CeilingDriftOf` reads a scrolling dome's arrays. The seam is one include function and this one owner of
+its globals. It reaches only shaders carrying the terrain shadow's `light()`, so `--terrain-shadows=off` drops it too.
+`cloud-shadow-globals` holds the switch. Read `CloudShadowPattern.cs` next.
+
+## src/Effects/CloudShadowPattern.cs
+The cloud shadows' tunes and drift, with no engine object touched: the pattern's cell, coverage, darkness and edge (the noise
+itself is only in the shader), its `Period`, and the offset that drifts it (`Offset`). `ChooseDrift` takes the
+below-deck ceiling's scroll (`CeilingDrift`, each triangle's UV-to-X/Z map, its top put at the band centre), else the
+authored wind's sideways part, else `FixedDrift`. Size, coverage and darkness are TUNE. `CloudShadowPatternTests`.
 
 ## src/Effects/TerrainShadowRaster.cs
 The bake's compute, with no engine object touched: the ground triangles' plane heights at the texel centres (`Cell`, 4 m

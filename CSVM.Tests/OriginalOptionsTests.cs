@@ -569,10 +569,10 @@ public class OriginalOptionsTests
         Wheel(host, 200f, 300f, -1);
         Assert.Equal(0, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.MonitorKey).Visible);
-        Wheel(host, 200f, 300f, 6);
-        Assert.Equal(5, host.Module.Video.Top);
+        Wheel(host, 200f, 300f, 7);
+        Assert.Equal(6, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
-        Wheel(host, 200f, 300f, -4);
+        Wheel(host, 200f, 300f, -5);
         Assert.Equal(1, host.Module.Video.Top);
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
 
@@ -595,10 +595,10 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
         Assert.Equal(1, host.Module.Video.Top);
 
-        // Down scrolls both Vegetation rows, Ground Cover and VR Mode in, stopping on VR Mode where it is
-        // live, then crosses both checkboxes. Under the window the column holds only value rows, so Down
-        // from the checkbox leaves for ACCEPT CHANGES, with CANCEL CHANGES under it.
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 6 : 5); i++)
+        // Down scrolls both Vegetation rows, Ground Cover, Cloud Shadows and VR Mode in, stopping on VR
+        // Mode where it is live, then crosses both checkboxes. Under the window the column holds only value
+        // rows, so Down from the checkbox leaves for ACCEPT CHANGES, with CANCEL CHANGES under it.
+        for (int i = 0; i < (OperatingSystem.IsWindows() ? 7 : 6); i++)
         {
             Down(host);
         }
@@ -639,7 +639,7 @@ public class OriginalOptionsTests
 
         host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
         Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
-        Assert.Equal(5, host.Module.Video.Top);
+        Assert.Equal(6, host.Module.Video.Top);
         Assert.Equal("On", Row(host, OriginalVideoPage.VrModeKey).Label);
         StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
@@ -970,8 +970,8 @@ public class OriginalOptionsTests
         Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
         // The shadow row is the window's foot. Down scrolls View Distance onto it, then Vegetation, 3D
-        // Vegetation, Ground Cover and VR Mode, stopping there where it is live. It walks the two checkboxes
-        // under the window and leaves the value column for ACCEPT and CANCEL CHANGES.
+        // Vegetation, Ground Cover, Cloud Shadows and VR Mode, stopping there where it is live. It walks the
+        // two checkboxes under the window and leaves the value column for ACCEPT and CANCEL CHANGES.
         Down(host);
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
         Down(host);
@@ -980,6 +980,8 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalVideoPage.VegetationModelsKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.GroundCoverKey, host.FocusedKey);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.CloudShadowsKey, host.FocusedKey);
         if (OperatingSystem.IsWindows())
         {
             Down(host);
@@ -1260,7 +1262,7 @@ public class OriginalOptionsTests
     /// <summary>The dropdown window's scroll column ends on the widest description's right edge (the
     /// fixture's 350 + 310). The window's descriptions wrap short of it.
     /// The D rows' own arrows stand at its two ends, each live only towards more rows. Their thumb
-    /// spans seven twelfths of the track. A click on the down arrow scrolls one line.</summary>
+    /// spans seven thirteenths of the track. A click on the down arrow scrolls one line.</summary>
     [Fact]
     public void TheVideoDropdownWindowCarriesItsOwnScrollColumn()
     {
@@ -1275,7 +1277,7 @@ public class OriginalOptionsTests
         Assert.True(down.Enabled);
         var window = Assert.Single(Lists(host)).Window;
         Assert.Equal(up.X, window.ThumbX);
-        Assert.Equal(7f / 12f * window.TrackHeight, window.ThumbHeight, 3);
+        Assert.Equal(7f / 13f * window.TrackHeight, window.ThumbHeight, 3);
         var composed = Compose(host);
         Assert.Contains(composed.Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
         var monitorDesc = Assert.Single(composed.Lines, l => l.Y == 245f && l.X == 350f);
@@ -1287,14 +1289,16 @@ public class OriginalOptionsTests
         // Resolution stands on Monitor's line now but keeps its own box, not Monitor's wider one.
         Assert.Equal((260f, 245f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ResolutionKey)));
         Assert.True(Row(host, OriginalVideoPage.WindowKey + ":up").Enabled);
-        // Four more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
+        // Five more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Click(host, OriginalVideoPage.WindowKey + ":down");
-        Assert.Equal(5, host.Module.Video.Top);
+        Click(host, OriginalVideoPage.WindowKey + ":down");
+        Assert.Equal(6, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.WindowKey + ":down").Enabled);
+        Click(host, OriginalVideoPage.WindowKey + ":up");
         Click(host, OriginalVideoPage.WindowKey + ":up");
         Click(host, OriginalVideoPage.WindowKey + ":up");
         Click(host, OriginalVideoPage.WindowKey + ":up");
@@ -1719,18 +1723,19 @@ public class OriginalOptionsTests
                 OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
                 OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey,
                 OriginalVideoPage.VegetationQualityKey, OriginalVideoPage.VegetationModelsKey, OriginalVideoPage.GroundCoverKey,
-                OriginalVideoPage.VrModeKey,
+                OriginalVideoPage.CloudShadowsKey, OriginalVideoPage.VrModeKey,
                 OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey,
                 OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
                 OriginalVideoPage.WindowKey + ":up", OriginalVideoPage.WindowKey + ":down",
             },
             rows.Select(r => r.Key));
-        // View Distance, both Vegetation rows, Ground Cover and VR Mode wait under the window, unseen, so
-        // only the rows on screen must stand clear.
+        // View Distance, both Vegetation rows, Ground Cover, Cloud Shadows and VR Mode wait under the
+        // window unseen. Only the rows on screen must stand clear.
         Assert.False(Row(host, OriginalVideoPage.ViewDistanceKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.VegetationQualityKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.VegetationModelsKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.GroundCoverKey).Visible);
+        Assert.False(Row(host, OriginalVideoPage.CloudShadowsKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.VrModeKey).Visible);
         RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "VIDEO", 18);
 
