@@ -318,7 +318,7 @@ The original's graphics EffectsLevel option as a config key (`graphics.effectsLe
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
-`WeatherRig.EnhancedFogScale()` times `ViewDistance.ClutterReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
+`WeatherRig.EnhancedFogScale()` times `ViewDistance.EnhancedReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
@@ -412,12 +412,12 @@ native writes nothing, so a faithful `--det` run reads back Godot's own defaults
 ## src/Utils/ViewDistance.cs
 Enhanced mode's view distance: four saved words (`normal`, `far`, `veryfar`, `unlimited`), one
 label table beside them, resolving to how much further the clutter draws than the fade enhanced
-mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
+mode already gives it, and every puffer than its authored far fade: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
 haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
 the decoded fade. The VIDEO page offers it as the last row of its dropdown window, dead until
 Enhanced is chosen. `Resolve` runs `WordSetting` over `--view-distance`, the saved word (never under `--det`),
 the `graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
-cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
+cost. `Launcher` folds `EnhancedReach` into the clutter fade global at startup and on every apply.
 
 ## src/Utils/SunShadow.cs
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far

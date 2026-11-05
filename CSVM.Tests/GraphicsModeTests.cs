@@ -163,11 +163,11 @@ public class GraphicsModeTests
         {
             ViewDistance.Set("veryfar");
             GraphicsMode.Set(true);
-            Assert.Equal(4f, ViewDistance.ClutterReach());
+            Assert.Equal(4f, ViewDistance.EnhancedReach());
             GraphicsMode.Set(false);
-            Assert.Equal(1f, ViewDistance.ClutterReach());
+            Assert.Equal(1f, ViewDistance.EnhancedReach());
             GraphicsMode.Set(true);
-            Assert.Equal(4f, ViewDistance.ClutterReach());
+            Assert.Equal(4f, ViewDistance.EnhancedReach());
         }
         finally
         {

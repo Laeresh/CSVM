@@ -718,7 +718,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the flag/saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
 - `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config `WordSetting` lookup over ultra (high on an integrated GPU, off there at three or four panes), and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
-- `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
+- `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter and puffers draw before their fades, the fog untouched, switched live on an apply.
 - `src/Utils/WaterQualitySetting.cs`, the Enhanced sea's water quality (flat, waves): the flag/saved/config `WordSetting` lookup over waves (flat on an integrated GPU), which the session's wave ocean follows live.
 - `src/Utils/VegetationQualitySetting.cs`, the Enhanced vegetation's quality (original, rich): the flag/saved/config `WordSetting` lookup over rich (original on an integrated GPU drawing two or more panes), and `RichOn`, what the clutter reads, recut live.
 - `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
