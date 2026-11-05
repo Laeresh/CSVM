@@ -40,6 +40,12 @@ public static class EnhancedLook
     private const float ShadowSplit2 = 0.17f;
     private const float ShadowSplit3 = 0.42f;
 
+    // TUNE. ⚠ Do not drop this toward Godot's 20 m default. Godot's soft shadow widens the penumbra
+    // by the receiver's depth over the caster's, both from the cascade's near plane. A shallow near
+    // plane blurs the near cascade's masts, aircraft and the Pandora, 880 m up the light, to nothing.
+    // The cost is bias: Godot scales it by each cascade's depth, which this adds to.
+    private const float ShadowPancakeSize = 1500f;
+
     // TUNE. Screen-space reflection on the glossy water arm. The step count buys reflection length
     // along the ray; the fades hide where a ray runs off the screen or past the depth buffer.
     // The fade-out exponent is the lever on the border and aircraft flicker, since it dims a ray
@@ -296,6 +302,7 @@ public static class EnhancedLook
             sun.LightColor = fresh.LightColor;
             sun.LightSpecular = fresh.LightSpecular;
             SunShadow.Copy(fresh, sun, fresh.DirectionalShadowMaxDistance);
+            sun.DirectionalShadowPancakeSize = fresh.DirectionalShadowPancakeSize;
             fresh.Free();
             RenderingServer.DirectionalSoftShadowFilterSetQuality((RenderingServer.ShadowQuality)
                 ProjectSettings.GetSetting(ShadowFilterQualitySetting, (int)RenderingServer.ShadowQuality.SoftLow).AsInt32());
@@ -316,6 +323,7 @@ public static class EnhancedLook
         sun.DirectionalShadowSplit2 = ShadowSplit2;
         sun.DirectionalShadowSplit3 = ShadowSplit3;
         sun.DirectionalShadowBlendSplits = true;
+        sun.DirectionalShadowPancakeSize = ShadowPancakeSize;
         sun.ShadowBias = ShadowBias;
         sun.ShadowNormalBias = ShadowNormalBias;
         ApplyShadowQuality(sun, true);
