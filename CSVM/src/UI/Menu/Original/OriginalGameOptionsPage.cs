@@ -196,7 +196,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             c => DisplaySettingRows.WordIndex(CSVM.Utils.HudModeSetting.Words, c.HudMode, CSVM.Utils.HudModeSetting.Default),
             (c, i) => c.HudMode = CSVM.Utils.HudModeSetting.Words[Math.Clamp(i, 0, CSVM.Utils.HudModeSetting.Words.Count - 1)]),
         new(HudLayoutKey, "HUD Layout",
-            _ => "Sides moves the dials, compass and throttle plate to the screen sides; Custom is placed with Shift+F2 in flight.",
+            _ => "Sides moves the dials and throttle plate out to the screen's edges; Custom is placed with Shift+F2 in flight.",
             OriginalRowKind.Dropdown, _ => CSVM.Utils.HudLayoutSetting.Labels(),
             c => DisplaySettingRows.WordIndex(CSVM.Utils.HudLayoutSetting.Words, c.HudLayout, CSVM.Utils.HudLayoutSetting.Default),
             (c, i) => c.HudLayout = CSVM.Utils.HudLayoutSetting.Words[Math.Clamp(i, 0, CSVM.Utils.HudLayoutSetting.Words.Count - 1)]),
