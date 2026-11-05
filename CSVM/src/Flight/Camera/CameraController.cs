@@ -137,6 +137,10 @@ public sealed class CameraController
     // The view the run opened on, which a headset death returns to (ResetToChase).
     private readonly PilotViewMode _openingView;
 
+    // The Keep Camera Zoom option and its remembered zoom, taken once at construction. It is the
+    // process's one memory, reloaded in place by every apply, so a pick over the pause sheet lands here.
+    private readonly CameraZoomMemory _zoomMemory;
+
     // The dynamic chase radius: `dist` + `dist_factor`·V + the throttle transient. Advanced by
     // UpdateDynamics on the sim clock, and read by both the chase camera and the fixed views:
     // they are one number, so a numpad snap changes the angle and nothing else.
@@ -148,6 +152,9 @@ public sealed class CameraController
     // The numpad +/- zoom axis's own state: target then shown, both [0, 1], 0 = the rest pose.
     // Kept apart from _radius above; EffectiveRadius is where the two combine.
     private float _zoomTarget, _zoomShown;
+
+    // Whether RememberZoom made this the pilot whose settled zoom UpdateZoom writes.
+    private bool _remembersZoom;
 
     // The two eased aircraft frames the external rig is built on: the offset turns by _posFrame,
     // the aim by _lookFrame. ⚠ Do not ease the camera's WORLD position instead. That trails by
@@ -185,9 +192,10 @@ public sealed class CameraController
 
     public CameraController(Camera3D camera, CamParams cam, Func<InputAction, bool> held, int pinnedView,
         PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default,
-        Func<float>? staticDraw = null)
+        Func<float>? staticDraw = null, CameraZoomMemory? zoomMemory = null)
     {
         _camera = camera;
+        _zoomMemory = zoomMemory ?? CameraZoomMemory.Current;
         _held = held;
         _pinnedView = pinnedView;
         ViewMode = viewMode;
@@ -274,6 +282,12 @@ public sealed class CameraController
     /// <summary>The <see cref="Shot"/> the level chase's last hand-over past vertical flight made,
     /// which the comfort fade holds longer (<c>XrRig.HandOverCut</c>).</summary>
     public int HandOverShot { get; private set; } = -1;
+
+    /// <summary>The zoom axis's target, 0 at the near end to 1, for a suite to read the axis by.</summary>
+    public float ZoomAxis => _zoomTarget;
+
+    // Whether the zoom outlives the original's three resets (CameraZoomMemory, the Keep Camera Zoom box).
+    private bool KeepsZoom => _zoomMemory.Keep;
 
     // The radius every forward-facing external pose reads. _radius itself never carries either
     // term; the look-behind takes its own bounds and no zoom at all.
@@ -364,6 +378,12 @@ public sealed class CameraController
         FlybyActive = false;
         ViewMode = _headset != null ? _openingView : PilotViewMode.Chase;
         Head.Reset();
+        // Read as the chase mode entered from the static camera that held the frame; an open
+        // question in docs/org/cameraViews.md.
+        if (ViewMode == PilotViewMode.Chase)
+        {
+            ResetZoomUnlessKept();
+        }
     }
 
     /// <summary>The look-behind view is on: <see cref="InputAction.LookBack"/> held on any control
@@ -393,6 +413,11 @@ public sealed class CameraController
         if (_headset == null)
         {
             Head.Step(dt, input);
+            // The original's centre slot zeroes the zoom with the angles, in free-look alone.
+            if (input.Center && Head.Mode == LookMode.FreeLook)
+            {
+                ResetZoomUnlessKept();
+            }
         }
     }
 
@@ -658,8 +683,25 @@ public sealed class CameraController
     /// its own dolly.</summary>
     public void UpdateZoom(float dt)
     {
+        float before = _zoomTarget;
         _zoomTarget = ZoomTarget(_zoomTarget, _held(InputAction.ZoomIn), _held(InputAction.ZoomOut), dt);
         _zoomShown = HeadLook.Approach(_zoomShown, _zoomTarget, ZoomSmoothRate, dt);
+        // A held key moves the target every frame, so the write waits for the frame it stops moving.
+        // Save compares against the zoom the memory holds, so a settled frame writes once at most.
+        if (_remembersZoom && _zoomTarget == before)
+        {
+            _zoomMemory.Save(_zoomTarget);
+        }
+    }
+
+    /// <summary>Makes this pilot's zoom the one the options file remembers (<see
+    /// cref="CameraZoomMemory"/>). It opens at once on the saved zoom, target and shown alike. <see
+    /// cref="UpdateZoom"/> then writes each zoom it settles on. Off, it opens at the near end and
+    /// nothing is written. The session calls it for this machine's first player alone.</summary>
+    public void RememberZoom()
+    {
+        _zoomTarget = _zoomShown = _zoomMemory.Seed();
+        _remembersZoom = true;
     }
 
     /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
@@ -920,10 +962,24 @@ public sealed class CameraController
         if (mode != ViewMode || FlybyActive)
         {
             Shot++;
+            if (mode == PilotViewMode.Chase)
+            {
+                ResetZoomUnlessKept();
+            }
         }
 
         FlybyActive = false;
         ViewMode = mode;
+    }
+
+    // The original's reset of the zoom axis to its near end, skipped while the option keeps the zoom.
+    // The target alone is written, so the shown trim eases in; unverified (docs/org/cameraViews.md).
+    private void ResetZoomUnlessKept()
+    {
+        if (!KeepsZoom)
+        {
+            _zoomTarget = CameraZoomMemory.NearEnd;
+        }
     }
 
     // One frame of the two eased aircraft frames the external rig turns by, seeding both off the

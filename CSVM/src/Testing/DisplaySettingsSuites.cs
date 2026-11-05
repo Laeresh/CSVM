@@ -46,6 +46,8 @@ internal static class DisplaySettingsSuites
         ("LeadMarker", true, false),
         ("ThrottlePlate", true, false),
         ("SpyglassScale", "200", true),
+        ("KeepCameraZoom", false, false),
+        ("CameraZoom", 0.5f, false),
         ("RocketCraters", true, false),
         ("CockpitEnginePitch", false, false),
         ("FlightTextBlock", true, false),

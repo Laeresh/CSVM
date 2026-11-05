@@ -163,6 +163,7 @@ internal sealed class LiveSettings
         options.LeadMarker = applied.LeadMarker;
         options.ThrottlePlate = applied.ThrottlePlate;
         options.SpyglassScale = applied.SpyglassScale;
+        CameraZoomMemory.Stage(options, applied.KeepCameraZoom);
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
@@ -197,6 +198,8 @@ internal sealed class LiveSettings
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
         // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
         SpyglassScaleSetting.ApplySaved(spec.Det);
+        // Each camera reads the switch live, so a pick over the pause sheet takes the flying panes too.
+        CameraZoomMemory.ApplySaved(spec.Det);
         // Each word setting resolved again with the applied word in the saved slot, so its flag still
         // beats it, and a headset's profile too.
         WordSettings.ResolveAll(Flags(spec), applied.Words, spec.Det);

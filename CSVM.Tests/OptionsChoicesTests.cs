@@ -88,6 +88,7 @@ public class OptionsChoicesTests
             LeadMarker = false,
             ThrottlePlate = true,
             SpyglassScale = SpyglassScaleSetting.Words[^1],
+            KeepCameraZoom = false,
         };
         foreach (var setting in WordSettings.All)
         {
@@ -101,7 +102,8 @@ public class OptionsChoicesTests
                 saved.DisplayMode, saved.VSync, saved.AudioMaster, saved.AudioMusic, saved.AudioEffects,
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
                 saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette,
-                saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate, SpyglassScale: saved.SpyglassScale),
+                saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate, SpyglassScale: saved.SpyglassScale,
+                KeepCameraZoom: saved.KeepCameraZoom),
             choices.ToExit());
 
         choices.Load(null);

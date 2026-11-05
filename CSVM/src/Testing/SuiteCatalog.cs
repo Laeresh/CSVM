@@ -62,6 +62,7 @@ public static class SuiteCatalog
         "blast-neighbor-shape",
         "build-stamp-icons",
         "burst-light-envelope",
+        "camera-zoom-keep",
         "campaign-coop-cutscene-fullscreen",
         "carried-state-silent",
         "carried-turrets",

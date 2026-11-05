@@ -1224,6 +1224,10 @@ public partial class FlightController : Node3D
             _cam.Head.IdleAim = AutoheadTarget;
             _cam.Head.TargetOffset = PadlockOffset;
             _cam.Headset = _headset;
+            // The options file remembers one zoom, this machine's first player's. The other panes
+            // open at the near end, though the option still keeps theirs through the resets.
+            if (IsHumanPiloted && LocalPlayer == 0)
+                _cam.RememberZoom();
         }
         _spawnPos = spawnPos;
         _spawnAttitude = AimAttitude(spawnPos, spawnLookAt, Basis.Identity);

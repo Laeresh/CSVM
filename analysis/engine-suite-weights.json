@@ -63,6 +63,7 @@
     "c3-hit-attribution": 6.2,
     "callback-events": 0.203,
     "called-death-chain": 2.199,
+    "camera-zoom-keep": 0.05,
     "campaign-airframe-swap": 4.437,
     "campaign-balloon-death": 4.785,
     "campaign-balloon-marker": 5.439,

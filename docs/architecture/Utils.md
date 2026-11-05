@@ -496,6 +496,14 @@ The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the fact
 `--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
 reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
 
+## src/Utils/CameraZoomMemory.cs
+The Keep Camera Zoom option, `keepCameraZoom` (null reads on), and the external-view zoom it
+remembers as `cameraZoom`. On, `Flight/Camera/CameraController.cs` skips the original's three
+zoom resets, seeds this machine's first player's zoom from `Seed` at each camera init and writes it
+through `Save` when the target settles. Off, the resets apply and nothing is written, and `Stage`
+clears the saved zoom on the apply. The launch and every options apply reload `Current` in place;
+under `--det` it holds no store, so it reads on, seeds the near end and writes nothing.
+
 ## src/Utils/VrQuality.cs
 The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launch/LiveSettings.cs`
 before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no

@@ -186,6 +186,14 @@ public sealed class OptionsDef
     /// "never set" and reads as 100.</summary>
     public string? SpyglassScale { get; set; }
 
+    /// <summary>Whether the external-view zoom is kept through the original's resets and remembered in
+    /// <see cref="CameraZoom"/> (<see cref="CameraZoomMemory"/>). Null is "never set" and reads as ON.</summary>
+    public bool? KeepCameraZoom { get; set; }
+
+    /// <summary>The external-view zoom the remembering pilot last settled on, 0 (the near end) to 1.
+    /// Written only while <see cref="KeepCameraZoom"/> is on, and never read under <c>--det</c>.</summary>
+    public float? CameraZoom { get; set; }
+
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
     /// screen with that index is plugged in can only be answered by a caller holding an engine,
@@ -387,6 +395,8 @@ public sealed class OptionsStore
             WriteFlag(w, "leadMarker", def.LeadMarker);
             WriteFlag(w, "throttlePlate", def.ThrottlePlate);
             Write(w, "spyglassScale", def.SpyglassScale);
+            WriteFlag(w, "keepCameraZoom", def.KeepCameraZoom);
+            WriteNumber(w, "cameraZoom", def.CameraZoom);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -404,15 +414,7 @@ public sealed class OptionsStore
             WriteFlag(w, "extractedPromptAnswered", def.ExtractedPromptAnswered);
             Write(w, "modFolder", def.ModFolder);
             Write(w, "netCallsign", def.NetCallsign);
-            if (def.NetVoice is { } voice)
-            {
-                w.WriteNumber("netVoice", voice);
-            }
-            else
-            {
-                w.WriteNull("netVoice");
-            }
-
+            WriteNumber(w, "netVoice", def.NetVoice);
             Write(w, "netGameName", def.NetGameName);
             Write(w, "netMasterServer", def.NetMasterServer);
             WriteFlag(w, "vrMode", def.VrMode);
@@ -473,6 +475,8 @@ public sealed class OptionsStore
                 LeadMarker = ReadFlag(root, "leadMarker"),
                 ThrottlePlate = ReadFlag(root, "throttlePlate"),
                 SpyglassScale = ReadShaped(root, "spyglassScale", SpyglassScaleSetting.Lookup.IsWord),
+                KeepCameraZoom = ReadFlag(root, "keepCameraZoom"),
+                CameraZoom = ReadZoom(root, "cameraZoom"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
@@ -604,8 +608,22 @@ public sealed class OptionsStore
         }
     }
 
-    // The boolean sibling of the two writers above, and null for the same reason: a switch the
-    // build knows but the player has never touched is named in the file rather than left out of it.
+    // The fractional sibling of WriteLevel, the zoom's and the voice's writer. A whole number writes
+    // without a fraction, so the voice reads in the file as it did.
+    private static void WriteNumber(Utf8JsonWriter w, string name, float? value)
+    {
+        if (value is { } set)
+        {
+            w.WriteNumber(name, set);
+        }
+        else
+        {
+            w.WriteNull(name);
+        }
+    }
+
+    // The boolean sibling of the writers above, and null for the same reason. A switch the build
+    // knows but the player has never touched is named in the file rather than left out of it.
     private static void WriteFlag(Utf8JsonWriter w, string name, bool? value)
     {
         if (value is { } set)
@@ -651,6 +669,16 @@ public sealed class OptionsStore
         && field.TryGetInt32(out int level)
         && level >= AudioMix.MinLevel && level <= AudioMix.MaxLevel
             ? level
+            : null;
+
+    // The zoom read, the level read's contract over the axis's own 0..1 range. A value outside it, or
+    // of another JSON kind, reads as never set, so a hand-edited zoom cannot leave the axis.
+    private static float? ReadZoom(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var field)
+        && field.ValueKind == JsonValueKind.Number
+        && field.TryGetSingle(out float zoom)
+        && zoom >= 0f && zoom <= 1f
+            ? zoom
             : null;
 
     // The boolean read, the same drop-an-unknown-value contract as the reads either side of it: a

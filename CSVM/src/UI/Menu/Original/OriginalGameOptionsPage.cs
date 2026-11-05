@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It stages its ten settings in
+/// the three it is painted with, its plaques moving down with it. It stages its eleven settings in
 /// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
@@ -51,6 +51,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The page's spyglass size dropdown, a remake-only row.</summary>
     public const string SpyglassScaleKey = "SPYGLASSSCALE";
+
+    /// <summary>The page's Keep Camera Zoom checkbox, a remake-only row.</summary>
+    public const string KeepCameraZoomKey = "KEEPCAMERAZOOM";
 
     /// <summary>The page's Modding Folder dropdown, a remake-only row: Off, or a folder of unzbd
     /// output read from the next start (<c>Spec.ModdingFolder</c>).</summary>
@@ -186,6 +189,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Dropdown, _ => CSVM.Utils.SpyglassScaleSetting.Labels(),
             c => DisplaySettingRows.WordIndex(CSVM.Utils.SpyglassScaleSetting.Words, c.SpyglassScale, CSVM.Utils.SpyglassScaleSetting.Default),
             (c, i) => c.SpyglassScale = CSVM.Utils.SpyglassScaleSetting.Words[Math.Clamp(i, 0, CSVM.Utils.SpyglassScaleSetting.Words.Count - 1)]),
+        new(KeepCameraZoomKey, "Keep Camera Zoom",
+            _ => "Keep the chase view's zoom through view changes, missions and restarts.",
+            OriginalRowKind.Radio, _ => SwitchWords,
+            c => c.KeepCameraZoomOn ? 1 : 0,
+            (c, i) => c.KeepCameraZoom = i == 1),
         new(ModFolderKey, "Modding Folder", ModFolderDescription,
             OriginalRowKind.Dropdown, ModFolderWords,
             c => c.ModFolder is { } folder ? 1 + IndexOfFolder(c.ModFolders, folder) : 0,
@@ -254,6 +262,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The spyglass size the page would apply, null while never set.</summary>
     public string? SpyglassScaleChoice => _choices.SpyglassScale;
+
+    /// <summary>The Keep Camera Zoom switch the page would apply, null while never set.</summary>
+    public bool? KeepCameraZoomChoice => _choices.KeepCameraZoom;
 
     /// <summary>The modding folder the page would apply, null for none.</summary>
     public string? ModFolderChoice => _choices.ModFolder;

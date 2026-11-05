@@ -697,6 +697,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
 - `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat disc is drawn at.
+- `src/Utils/CameraZoomMemory.cs`, the Keep Camera Zoom option and the external-view zoom it remembers in the options file, read by the chase camera.
 - `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/ShaderCensus.cs`, every shader text a suite hands to Godot, as hashes in its report row, so a headless shard's shaders can be shown compiled by a windowed one.

@@ -394,6 +394,23 @@ law) and `DistTransient` (step 1's transient, reading `dist_vary`/`dist_catch_up
 `CamParams`). The direction factor `f` has no port: CSVM's look-behind takes the forward radius
 whole, so the transient is never inverted and the blended bounds are never formed.
 
+**Remake-only: Keep Camera Zoom** (Game Options, on by default, `Utils/CameraZoomMemory.cs`). On,
+none of the three resets above applies, and this machine's first player's zoom is saved in the
+options file when its target settles and restored at camera init. Off, the port's resets return the
+target to `0` and the shown value eases after it at its own rate; nothing is saved. The other
+splitscreen panes keep their zoom through the resets while it is on, but each camera init opens them at
+the near end. `--det` reads neither key, so a golden flies the option on at the near end.
+
+⚠ **Open question, not yet read in the binary: what the resets write, and which entries count.**
+Two parts of the off path are the port's reading, not a decode. (1) Whether `0042b779`,
+`0042c33d` and the centre slot write the target `DAT_0064ef30` alone or also the shown value
+`DAT_0064ef38`; the port writes the target alone, so its shown value eases back at `1.5/s` rather
+than snapping. (2) Which port events are "entering mode `0` from another mode": the port resets on a
+selection into Chase from Cockpit, Nose or the flyby, and on the destroy callback's return to the
+chase view (`ResetToChase`), reading the death camera (mode `8`) or the crash cut (mode `5`) as the
+mode being left. Whether the original's respawn reaches `FUN_0042c280` with mode `0` from `8` or
+`5`, and so reaches `0042c33d`, is unestablished.
+
 ## The chase rig
 
 The forward arm of `FUN_0042c7f0` builds the chase camera's DIRECTION and AIM from the head's shown
