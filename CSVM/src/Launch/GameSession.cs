@@ -1320,6 +1320,28 @@ public partial class GameSession : Node3D
         return _aircraftScan;
     }
 
+#pragma warning disable SA1202, SA1204
+    // One press of any local seat's HUD mode step, taken by every pane together. The mode is the
+    // process's, so the saved word and the next mission follow it; a null store (a --det run) is
+    // written nothing. Each pane takes the new mode now and posts its line. Static for the suite
+    // that drives two bare seats; kept beside its one caller rather than hoisted.
+    internal static HudMode StepHudMode(IEnumerable<FlightHud> panes, OptionsStore? store)
+    {
+        var mode = HudModeSetting.Cycle(store);
+        foreach (var hud in panes)
+        {
+            hud.SetHudMode(mode);
+            hud.PostHudMode(mode);
+        }
+
+        return mode;
+    }
+#pragma warning restore SA1202, SA1204
+
+    private void CycleHudMode() =>
+        StepHudMode(_rigs.Select(r => r.Controller).OfType<FlightController>().Select(c => c.PilotHud),
+            _spec.Det ? null : OptionsStore.UserOptions());
+
     // Every joined player's aircraft and no AI, in the same reused-list shape as AllAircraft.
     // Read fresh because an airframe swap rebuilds a rig's controller; do not hold across a step.
     // Outside splitscreen the sole entry is the scripted player. ⚠ Over the SEATS, not the panes.
@@ -2205,6 +2227,7 @@ public partial class GameSession : Node3D
             StuntBoard = boards.BuildSoloStuntBoard,
             BestSplits = key => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway).GetSplits(key),
             ToggleGraphicsMode = _toggleGraphicsMode,
+            CycleHudMode = CycleHudMode,
             RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,
             SpawnBase = spawnBase,

@@ -149,7 +149,9 @@ public sealed partial class XrMarkers : Node3D
             targets.MarksInWorld = true;
             font = ChromeType.Face(targets);
             (planePos, heading) = (targets.PlanePos, targets.HeadingDeg);
-            bool shows = Shows(targets);
+            // The None HUD mode's lead-only rule (HudModeSetting.LeadOnly), as the flat draw takes it.
+            // No card, ring arrow or spyglass; selection runs on and the spyglass is released.
+            bool shows = Shows(targets) && !targets.LeadOnly;
             if (shows)
             {
                 targets.WorldMarks(_marks);

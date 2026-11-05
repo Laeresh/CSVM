@@ -292,8 +292,9 @@ internal sealed class HumanFlightAdapter
         controller.Headset = xrInterior ? _policy.XrChase : null;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
-        // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
+        // The graphics-mode action and the HUD mode step, for a seat somebody sits at here, like the pause key below.
         controller.ToggleGraphicsMode = paneless ? null : _human.ToggleGraphicsMode;
+        controller.CycleHudMode = paneless ? null : _human.CycleHudMode;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.

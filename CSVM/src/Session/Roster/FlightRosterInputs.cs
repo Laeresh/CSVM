@@ -257,6 +257,10 @@ internal sealed class HumanRosterBindings
     /// leaves it inert.</summary>
     public Action? ToggleGraphicsMode { get; init; }
 
+    /// <summary>The HUD mode step a local seat fires, the session's own across every pane; null
+    /// leaves it inert.</summary>
+    public Action? CycleHudMode { get; init; }
+
     /// <summary>What a local seat's recenter action does: the VR seat's recenter, null in a flat
     /// session, which leaves the action inert.</summary>
     public Action? RecenterHeadset { get; init; }

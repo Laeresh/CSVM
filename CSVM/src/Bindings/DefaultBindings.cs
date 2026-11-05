@@ -207,6 +207,10 @@ public static class DefaultBindings
         // tool, and the pad has no free control to spend on it.
         b.Keys(InputAction.ToggleGraphicsMode, Key.G);
 
+        // The HUD mode step, a remake-only action on F2, which the original's 64 defaults leave free.
+        // Keyboard only: every common pad button is spent on a flight action.
+        b.Keys(InputAction.CycleHudMode, Key.F2);
+
         // The scores table on the original's own Tab. Back is a pad button no other flight action
         // holds, and the conventional place for a held scoreboard.
         b.Keys(InputAction.DisplayScores, Key.Tab).Buttons(InputAction.DisplayScores, JoyButton.Back);

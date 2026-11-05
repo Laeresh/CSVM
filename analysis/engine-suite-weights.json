@@ -279,6 +279,8 @@
     "hud-auto-dock-line": 0.008,
     "hud-crash-prompt": 0.011,
     "hud-kill-line": 0.448,
+    "hud-mode-cycle-splitscreen": 0.05,
+    "hud-mode-parts": 0.05,
     "impact-building-surface": 2.594,
     "impact-orientation": 0.886,
     "inert-aircraft": 0.386,

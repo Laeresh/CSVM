@@ -127,6 +127,14 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.True(host.Module.GameOptions.ThrottlePlateChoice);
 
+        // The remake-only HUD mode beside it, Full while nothing is saved, and a sideways step takes Minimal.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.HudModeKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.HudModeChoice);
+        Assert.Equal("Full", Row(host, OriginalGameOptionsPage.HudModeKey).Label);
+        StepX(host, 1);
+        Assert.Equal("minimal", host.Module.GameOptions.HudModeChoice);
+
         // The remake-only spyglass size, 100% while nothing is saved, and a sideways step takes 125%.
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.SpyglassScaleKey, host.FocusedKey);
@@ -154,6 +162,7 @@ public class OriginalOptionsTests
         Assert.True(exit.LeadingAimAssist);
         Assert.True(exit.LeadMarker);
         Assert.True(exit.ThrottlePlate);
+        Assert.Equal("minimal", exit.HudMode);
         Assert.Equal("125", exit.SpyglassScale);
         Assert.False(exit.KeepCameraZoom);
         Assert.True(exit.NearestAfterKill);
@@ -982,14 +991,15 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // Eleven option rows, none of them a menu presentation: the command line alone picks one.
+        // Twelve option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey, OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
                 OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
-                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.SpyglassScaleKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.HudModeKey,
+                OriginalGameOptionsPage.SpyglassScaleKey,
                 OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
@@ -1604,9 +1614,9 @@ public class OriginalOptionsTests
         ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
     }
 
-    // The Game Options page's eleven rows share one plate, so no two of them may overlap. No control
+    // The Game Options page's twelve rows share one plate, so no two of them may overlap. No control
     // may sit over a title or a description, at either end of the window's scroll. The first three
-    // are the original's own, in its order; the eight under them are this port's.
+    // are the original's own, in its order; the nine under them are this port's.
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1619,14 +1629,15 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
                 OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
-                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.SpyglassScaleKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.HudModeKey,
+                OriginalGameOptionsPage.SpyglassScaleKey,
                 OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
             },
             rows.Select(r => r.Key));
-        // Four rows stand in the window at a time, one to a frame, the seven below it unseen until it scrolls.
+        // Four rows stand in the window at a time, one to a frame, the eight below it unseen until it scrolls.
         RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
         for (int i = 0; i < 4; i++)
         {

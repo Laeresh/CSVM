@@ -287,6 +287,11 @@ public partial class FlightController : Node3D
     /// plane's. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
     public Action? ToggleGraphicsMode;
 
+    /// <summary>What <see cref="InputAction.CycleHudMode"/> does, set by the session for a seat
+    /// somebody sits at: the step of the process-wide <see cref="Utils.HudModeSetting"/> across every
+    /// local pane. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
+    public Action? CycleHudMode;
+
     /// <summary>What <see cref="InputAction.RecenterHeadset"/> does, and under a headset
     /// <see cref="InputAction.LookCenter"/> and <see cref="InputAction.LookBack"/> too: the VR seat's
     /// recenter, set by the session for the seat the headset flies. Null, in every flat session,
@@ -581,6 +586,7 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _suppliedInputSource;
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
     private bool _graphicsTogglePrev;            // previous frame's ToggleGraphicsMode state (edge detection)
+    private bool _hudModePrev;                   // previous frame's CycleHudMode state (edge detection)
     private bool _recenterPrev;                  // previous frame's RecenterHeadset state (edge detection)
     private XrChase? _headset;                   // Headset's backing field, handed to each camera Setup builds
     // The built parent, pose and visibility of every node the death defs play on, captured before
@@ -2484,6 +2490,7 @@ public partial class FlightController : Node3D
         if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
         PollGraphicsModeToggle();
+        PollHudModeCycle();
         PollRecenterHeadset();
         // ⚠ Ahead of the inert return as well. A seat flagged inert mid-session must give the
         // pointer back, and this is the only frame that would notice.
@@ -3769,6 +3776,25 @@ public partial class FlightController : Node3D
             ToggleGraphicsMode!();
         _graphicsTogglePrev = down;
     }
+
+    // The HUD mode step's edge, polled beside the graphics switch so it works over a halted sim too.
+    // Silent where photo mode and the options leaf own the keyboard. Every frame the pane then takes
+    // the process-wide mode, which an options apply or another seat's step may have moved.
+    private void PollHudModeCycle()
+    {
+        bool down = CycleHudMode != null && !Pause.Silenced
+            && _controls.Seat.Held(InputAction.CycleHudMode);
+        if (down && !_hudModePrev)
+            CycleHudMode!();
+        _hudModePrev = down;
+        _pilotHud.SetHudMode(Utils.HudModeSetting.Current);
+    }
+
+#pragma warning disable SA1202
+    // One frame's HUD mode step as a suite drives it, after HoldActionForTest has stored the press.
+    // Kept beside the poll it drives rather than hoisted for SA1202's sake.
+    internal void PollHudModeCycleForTest() => PollHudModeCycle();
+#pragma warning restore SA1202
 
     // The recenter's edge, polled beside the graphics switch so it works over a halted sim too.
     // Silent where the options pages own the keyboard. Under a headset Look Forward and Look Behind

@@ -370,7 +370,7 @@ about 0.045 degrees, under one headset pixel). A marker within `XrMarkerLaw.Ring
 point (clamped to `MaxDistanceM`), facing the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
 arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
 `MarksInWorld` stops their own drawing; `AnswerSpyglass` then answers `TargetHud`'s spyglass gates off the
-head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
+head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). In the None HUD mode outside the cockpit (`TargetHud.LeadOnly`, from `Utils/HudModeSetting.cs`'s `LeadOnly`) it places no `WorldMark` card, ring arrow or picture and releases the spyglass. Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
 
 ## src/Flight/Hud/XrSpyglassDisc.cs
 The spyglass picture in a stereo session: `Camera/SpyglassView.cs`'s texture, rendered once at
@@ -1134,7 +1134,7 @@ bracket box and label block and owns the colour table, the label layout, the sel
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture at `DiscRadius`/`DiscSide`, the decoded window times `HudMetrics.SpyglassScale`: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+read after the flight rigs (`AfterFlightRigs`). `LeadOnly`, the None HUD mode outside the cockpit, draws the lead marker alone and holds no spyglass. In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
@@ -1503,7 +1503,7 @@ it decides per call. `KeyboardInputSource` reads through it. Read `AnalogAxes.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
 dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
 message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block.
-The text block is remake-only telemetry the original has no counterpart for, built only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+The text block is remake-only telemetry the original has no counterpart for, built in Full only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). `SetHudMode` takes `Utils/HudModeSetting.cs`'s mode every frame: outside the cockpit Minimal swaps the dials, tape and plate for the text block, and None leaves the pipper, `TargetHud.LeadOnly`'s lead marker, messages and prompts; `PostHudMode` posts a press's line into the pane's message stack, and `Launch/GameSession.cs`'s `StepHudMode` steps every local pane. With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `SetSpectatorView` leaves the stunt run HUD alone up, the message stack off too, for a spectating pane. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,

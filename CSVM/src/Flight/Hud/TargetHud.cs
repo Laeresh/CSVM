@@ -185,6 +185,11 @@ public sealed partial class TargetHud : Control
     /// of it.</summary>
     public bool SpyglassOn { get; set; } = Spyglass.DefaultOn;
 
+    /// <summary>Whether the flat draw keeps the lead marker alone, the None HUD mode outside the
+    /// cockpit (<c>FlightHud.SetHudMode</c>). Set, no box, label, edge marker or spyglass is drawn,
+    /// while selection, the hostile tracker and the bracket gate still run.</summary>
+    public bool LeadOnly { get; set; }
+
     /// <summary>Whether a stereo session draws this pane's markers in the world
     /// (<see cref="XrMarkers"/>). Set, this control draws none, and the hostile tracker still runs.
     /// The stereo host then answers the spyglass's gates and shows its picture on the head ring.</summary>
@@ -695,7 +700,8 @@ public sealed partial class TargetHud : Control
         var font = ChromeType.Face(this);
         int markerFont = MarkerFontSize(s);
         _drawn.Clear();
-        WorldMarks(_drawn);
+        if (!LeadOnly)
+            WorldMarks(_drawn);
         foreach (var mark in _drawn)
         {
             if (mark.Style == WorldMarkStyle.Selected)
@@ -928,8 +934,9 @@ public sealed partial class TargetHud : Control
     }
 
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
-    // _Draw: both latch, and a latch that advanced per repaint would depend on how often the pane
-    // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing.
+    // _Draw. Both latch, and a latch that advanced per repaint would depend on how often the pane
+    // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing, and
+    // neither does a lead-only one.
     private void StepSpyglass()
     {
         // ⚠ Do not release here under a headset: the stereo host answers the gate later in the
@@ -939,7 +946,7 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        if (!Visible || Selected is not { Source: not null } sel
+        if (!Visible || LeadOnly || Selected is not { Source: not null } sel
             || !GodotObject.IsInstanceValid(_camera))
         {
             ReleaseSpyglass();

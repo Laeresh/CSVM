@@ -39,6 +39,9 @@ public static class BindingLabels
         // This port's held look-behind (numpad 0), which the original's Kp2 "Look Back" row is not.
         if (action == InputAction.LookBack)
             return "Look Behind (hold)";
+        // HUD is an initialism, which the word split below would print as "Hud".
+        if (action == InputAction.CycleHudMode)
+            return "Cycle HUD Mode";
 
         string name = action.ToString();
         var text = new StringBuilder(name.Length + 8);

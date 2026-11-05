@@ -162,6 +162,7 @@ internal sealed class LiveSettings
         options.LeadingAimAssist = applied.LeadingAimAssist;
         options.LeadMarker = applied.LeadMarker;
         options.ThrottlePlate = applied.ThrottlePlate;
+        options.HudMode = applied.HudMode;
         options.SpyglassScale = applied.SpyglassScale;
         CameraZoomMemory.Stage(options, applied.KeepCameraZoom);
         options.MonitorIndex = applied.MonitorIndex;
@@ -198,6 +199,9 @@ internal sealed class LiveSettings
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
         // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
         SpyglassScaleSetting.ApplySaved(spec.Det);
+        // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.
+        // A --det run reads no saved mode, so a pick there never overwrites the panes' F2 steps.
+        HudModeSetting.ApplySaved(spec.Det);
         // Each camera reads the switch live, so a pick over the pause sheet takes the flying panes too.
         CameraZoomMemory.ApplySaved(spec.Det);
         // Each word setting resolved again with the applied word in the saved slot, so its flag still

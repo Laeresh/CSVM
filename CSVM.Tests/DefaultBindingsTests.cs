@@ -406,16 +406,14 @@ public class DefaultBindingsTests
         }
     }
 
-    /// <summary>The VR recenter is appended last and ships as a flight action on Home, which the
-    /// original leaves free. Its pad rows are the touchpad click and first back paddle, which no
-    /// other flight action holds. Its hand controller row is the left stick click. It reaches the
-    /// Original controls page's Other tab after the graphics switch.</summary>
+    /// <summary>The VR recenter is appended after the scores and ships as a flight action on Home,
+    /// which the original leaves free. Its pad rows are the touchpad click and first back paddle,
+    /// which no other flight action holds. Its hand controller row is the left stick click. It
+    /// reaches the Original controls page's Other tab after the graphics switch.</summary>
     [Fact]
     public void TheVrRecenter_IsAppendedAndShipsOnHomeAndTheSparePadButtons()
     {
-        var all = Enum.GetValues<InputAction>();
         Assert.Equal(93, (int)InputAction.RecenterHeadset);
-        Assert.Equal(all.Length - 1, (int)InputAction.RecenterHeadset);
 
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
         var shipped = new[]
@@ -434,6 +432,39 @@ public class DefaultBindingsTests
 
         var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
         Assert.Equal(other.IndexOf(InputAction.ToggleGraphicsMode) + 1, other.IndexOf(InputAction.RecenterHeadset));
+    }
+
+    /// <summary>The HUD mode step is appended last and ships as a flight action on a bare F2, with no
+    /// pad, mouse or hand controller row. The original's 64 defaults leave F2 free
+    /// (docs/org/input.md). No other context holds F2 in any form, so the vegetation lab's Shift+F2 under
+    /// the free camera reaches no action. The Other tab lists it after the VR recenter.</summary>
+    [Fact]
+    public void TheHudModeStep_IsAppendedAndShipsOnABareF2Alone()
+    {
+        var all = Enum.GetValues<InputAction>();
+        Assert.Equal(94, (int)InputAction.CycleHudMode);
+        Assert.Equal(all.Length - 1, (int)InputAction.CycleHudMode);
+
+        var f2 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2));
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.CycleHudMode));
+        Assert.Equal(new[] { f2 }, map.Bindings(InputAction.CycleHudMode));
+        Assert.Equal(new[] { InputAction.CycleHudMode }, map.OwnersOf(f2));
+        foreach (var context in Enum.GetValues<InputContext>())
+        {
+            foreach (var action in DefaultBindings.ActionsIn(context))
+            {
+                if (action == InputAction.CycleHudMode)
+                    continue;
+                Assert.DoesNotContain(
+                    DefaultBindings.MapFor(context, Pad).Bindings(action),
+                    b => b.Device == DeviceId.Keyboard && b.Control.Kind == ControlKind.Key && b.Control.Index == (int)Key.F2);
+            }
+        }
+
+        Assert.Equal("Cycle HUD Mode", BindingLabels.Name(InputAction.CycleHudMode));
+        var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
+        Assert.Equal(other.IndexOf(InputAction.RecenterHeadset) + 1, other.IndexOf(InputAction.CycleHudMode));
     }
 
     /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its

@@ -496,6 +496,14 @@ The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the fact
 `--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
 reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
 
+## src/Utils/HudModeSetting.cs
+The HUD mode of the outside views (`HudMode`: Full, Minimal, None) as a word, `full`, `minimal`
+or `none`, saved as `hudMode` (null reads Full). `Resolve` takes the saved word over Full and
+`SavedWord` holds the `--det` guard on the launch's and every options apply's read (`ApplySaved`).
+`Launch/GameSession.cs`'s Cycle HUD Mode step moves
+it and saves it through `Cycle`, which writes nothing to a null store.
+Every pilot pane follows `Current` each frame through `Flight/Hud/FlightHud.cs`'s `SetHudMode`.
+
 ## src/Utils/CameraZoomMemory.cs
 The Keep Camera Zoom option, `keepCameraZoom` (null reads on), and the external-view zoom it
 remembers as `cameraZoom`. On, `Flight/Camera/CameraController.cs` skips the original's three

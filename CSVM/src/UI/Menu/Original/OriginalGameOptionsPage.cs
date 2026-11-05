@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It stages its eleven settings in
+/// the three it is painted with, its plaques moving down with it. It stages its twelve settings in
 /// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
@@ -48,6 +48,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The page's throttle plate checkbox, a remake-only row.</summary>
     public const string ThrottlePlateKey = "THROTTLEPLATE";
+
+    /// <summary>The page's HUD Mode dropdown, a remake-only row.</summary>
+    public const string HudModeKey = "HUDMODE";
 
     /// <summary>The page's spyglass size dropdown, a remake-only row.</summary>
     public const string SpyglassScaleKey = "SPYGLASSSCALE";
@@ -184,6 +187,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Radio, _ => SwitchWords,
             c => c.ThrottlePlateOn ? 1 : 0,
             (c, i) => c.ThrottlePlate = i == 1),
+        new(HudModeKey, "HUD Mode",
+            _ => "Outside the cockpit, Minimal swaps the dials for text; None keeps the pipper, lead marker, messages and prompts.",
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.HudModeSetting.Labels(),
+            c => DisplaySettingRows.WordIndex(CSVM.Utils.HudModeSetting.Words, c.HudMode, CSVM.Utils.HudModeSetting.Default),
+            (c, i) => c.HudMode = CSVM.Utils.HudModeSetting.Words[Math.Clamp(i, 0, CSVM.Utils.HudModeSetting.Words.Count - 1)]),
         new(SpyglassScaleKey, "Spyglass Size",
             _ => "Draw the round picture of an off-screen target larger.",
             OriginalRowKind.Dropdown, _ => CSVM.Utils.SpyglassScaleSetting.Labels(),
@@ -259,6 +267,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The throttle plate the page would apply, null while never set.</summary>
     public bool? ThrottlePlateChoice => _choices.ThrottlePlate;
+
+    /// <summary>The HUD mode word the page would apply, null while never set.</summary>
+    public string? HudModeChoice => _choices.HudMode;
 
     /// <summary>The spyglass size the page would apply, null while never set.</summary>
     public string? SpyglassScaleChoice => _choices.SpyglassScale;

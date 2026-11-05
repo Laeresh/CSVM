@@ -45,6 +45,7 @@ internal static class DisplaySettingsSuites
         ("LeadingAimAssist", true, false),
         ("LeadMarker", true, false),
         ("ThrottlePlate", true, false),
+        ("HudMode", "none", true),
         ("SpyglassScale", "200", true),
         ("KeepCameraZoom", false, false),
         ("CameraZoom", 0.5f, false),

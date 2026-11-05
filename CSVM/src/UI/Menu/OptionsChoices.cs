@@ -66,6 +66,10 @@ public sealed class OptionsChoices
     /// <summary>The throttle plate, null while never set, which reads as off.</summary>
     public bool? ThrottlePlate { get; set; }
 
+    /// <summary>The <see cref="HudModeSetting.Words"/> word, null while never set, which reads as
+    /// full.</summary>
+    public string? HudMode { get; set; }
+
     /// <summary>The <see cref="SpyglassScaleSetting.Words"/> word, null while never set, which reads
     /// as 100.</summary>
     public string? SpyglassScale { get; set; }
@@ -202,6 +206,7 @@ public sealed class OptionsChoices
         LeadingAimAssist = saved?.LeadingAimAssist;
         LeadMarker = saved?.LeadMarker;
         ThrottlePlate = saved?.ThrottlePlate;
+        HudMode = saved?.HudMode;
         SpyglassScale = saved?.SpyglassScale;
         KeepCameraZoom = saved?.KeepCameraZoom;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
@@ -238,7 +243,7 @@ public sealed class OptionsChoices
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
             NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
-            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, SpyglassScale, KeepCameraZoom);
+            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, SpyglassScale, KeepCameraZoom, HudMode);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

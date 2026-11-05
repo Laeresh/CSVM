@@ -87,6 +87,7 @@ public class OptionsChoicesTests
             LeadingAimAssist = true,
             LeadMarker = false,
             ThrottlePlate = true,
+            HudMode = HudModeSetting.Words[^1],
             SpyglassScale = SpyglassScaleSetting.Words[^1],
             KeepCameraZoom = false,
         };
@@ -103,7 +104,7 @@ public class OptionsChoicesTests
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
                 saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette,
                 saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate, SpyglassScale: saved.SpyglassScale,
-                KeepCameraZoom: saved.KeepCameraZoom),
+                KeepCameraZoom: saved.KeepCameraZoom, HudMode: saved.HudMode),
             choices.ToExit());
 
         choices.Load(null);

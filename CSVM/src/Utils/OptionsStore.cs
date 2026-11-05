@@ -182,6 +182,10 @@ public sealed class OptionsDef
     /// (<c>ThrottlePlate</c>). Null is never set, which reads as off.</summary>
     public bool? ThrottlePlate { get; set; }
 
+    /// <summary>The HUD mode of the outside views, one of <see cref="HudModeSetting.Words"/>. Null is
+    /// "never set" and reads as full.</summary>
+    public string? HudMode { get; set; }
+
     /// <summary>The spyglass disc's size, one of <see cref="SpyglassScaleSetting.Words"/>. Null is
     /// "never set" and reads as 100.</summary>
     public string? SpyglassScale { get; set; }
@@ -394,6 +398,7 @@ public sealed class OptionsStore
             WriteFlag(w, "leadingAimAssist", def.LeadingAimAssist);
             WriteFlag(w, "leadMarker", def.LeadMarker);
             WriteFlag(w, "throttlePlate", def.ThrottlePlate);
+            Write(w, "hudMode", def.HudMode);
             Write(w, "spyglassScale", def.SpyglassScale);
             WriteFlag(w, "keepCameraZoom", def.KeepCameraZoom);
             WriteNumber(w, "cameraZoom", def.CameraZoom);
@@ -474,6 +479,7 @@ public sealed class OptionsStore
                 LeadingAimAssist = ReadFlag(root, "leadingAimAssist"),
                 LeadMarker = ReadFlag(root, "leadMarker"),
                 ThrottlePlate = ReadFlag(root, "throttlePlate"),
+                HudMode = ReadShaped(root, "hudMode", HudModeSetting.Lookup.IsWord),
                 SpyglassScale = ReadShaped(root, "spyglassScale", SpyglassScaleSetting.Lookup.IsWord),
                 KeepCameraZoom = ReadFlag(root, "keepCameraZoom"),
                 CameraZoom = ReadZoom(root, "cameraZoom"),

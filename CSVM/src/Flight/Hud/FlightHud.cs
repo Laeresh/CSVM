@@ -5,6 +5,7 @@ using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -212,7 +213,11 @@ public sealed class FlightHud
     private readonly List<float> _missileGaugeSlots = new();
     private readonly List<string> _textLines = new(); // reused across frames; ComposeTextLines' return
 
-    private Label? _text;                        // the flight text block; never on an AI rig, nor while TextBlockEnabled is off
+    private Label? _text;                        // the flight text block; never on an AI rig, built by Attach or a Minimal step
+    private CanvasLayer? _canvas;                // Attach's HUD layer, where a Minimal step builds the text block late
+    private int _textSlot;                       // the text block's place in that layer's draw order
+    private bool _textBlockOption;               // TextBlockEnabled as Attach read it: the text block in Full
+    private HudMode _hudMode = HudMode.Full;     // SetHudMode: the outside views' HUD mode
     private bool _shown = true;                  // SetVisible: off in a cutscene and in photo mode
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
     private bool _spectatorView;                 // SetSpectatorView: on while a race pane spectates
@@ -231,12 +236,12 @@ public sealed class FlightHud
     private GaugeCluster.WeaponGauge? _gunGauge;
     private GaugeCluster.WeaponGauge? _missileGauge;
 
-    /// <summary>Whether a pilot pane builds the flight text block at all, read by every
+    /// <summary>Whether a pilot pane in the Full HUD mode builds the flight text block, read by every
     /// <see cref="Attach"/>, so it reaches each splitscreen pane alike. Off in a shipped default,
     /// since the original draws no such readout, and off under <c>--det</c>, which reads no saved
     /// option. ⚠ No screen writes this. The options file's <c>flightTextBlock</c> key and
-    /// <c>--hud-text</c> are its two sources, both read once at boot. Off means no label is built,
-    /// so <see cref="DrawsTextBlock"/> also spares the caller the lines it would have gathered.</summary>
+    /// <c>--hud-text</c> are its two sources, both read once at boot. Minimal shows the block
+    /// whatever this says, and None hides it.</summary>
     public static bool TextBlockEnabled { get; set; }
 
     /// <summary>Whether the caller should compute a pipper feed at all. Resolving the selected
@@ -244,15 +249,18 @@ public sealed class FlightHud
     /// reticle must not pay every rendered frame.</summary>
     public bool DrawsReticle => Reticle != null;
 
-    /// <summary>Whether there is a text block to fill at all. The lines it composes cost real work
-    /// to gather (the damage ledger's summary walks and joins every hurt zone), so an aircraft with
-    /// no text block must not be asked for them.</summary>
-    public bool DrawsTextBlock => _text != null;
+    /// <summary>Whether there is a text block on screen to fill: one is built and the visibility pass
+    /// shows it. The lines it composes cost real work to gather: the damage ledger's summary walks
+    /// and joins every hurt zone. A pane with no shown text block must not be asked for them.</summary>
+    public bool DrawsTextBlock => _text is { Visible: true };
 
     /// <summary>Whether the stunt run's status line has to come through
     /// <see cref="FlightHudState.StuntStatusLine"/>: only where there is a text block to hold it
     /// and no run HUD, which normally carries it instead.</summary>
-    public bool NeedsStuntStatusLine => _text != null && StuntRun == null;
+    public bool NeedsStuntStatusLine => DrawsTextBlock && StuntRun == null;
+
+    /// <summary>The outside views' HUD mode, see <see cref="SetHudMode"/>.</summary>
+    public HudMode HudMode => _hudMode;
 
     /// <summary>Whether the pane shows a spectator's view, see <see cref="SetSpectatorView"/>.</summary>
     public bool SpectatorView => _spectatorView;
@@ -264,6 +272,10 @@ public sealed class FlightHud
     /// <see cref="float.MaxValue"/> where the ray reached nothing (or there are no dials to hold
     /// it). The flight telemetry line reads it back out.</summary>
     public float AglMeters => Gauges?.AglMeters ?? float.MaxValue;
+
+    // Whether the HUD mode shows the text block in an outside view: the option's own answer in
+    // Full, always in Minimal, never in None.
+    private bool TextBlockInMode => _hudMode == HudMode.Minimal || (_hudMode == HudMode.Full && _textBlockOption);
 
     /// <summary>The altimeter's LOW ALT ray, decoupled from <see cref="Gauges"/>: height above
     /// whatever it hits, or <see cref="float.MaxValue"/> off a clear ray. Static so CSVM.Tests
@@ -417,15 +429,12 @@ public sealed class FlightHud
     /// The crash camera hides the HUD layer, and the original shows the stack over that cut.</summary>
     public void Attach(CanvasLayer canvas, CanvasLayer messages, Node? versusStatus, Node? scoreboard)
     {
-        if (TextBlockEnabled)
+        _canvas = canvas;
+        _textSlot = canvas.GetChildCount();
+        _textBlockOption = TextBlockEnabled;
+        if (TextBlockInMode)
         {
-            // Sized with its first line of text by UpdateTextBlock, which reads the window it is drawn in.
-            var text = new Label { Position = TextMargin };
-            text.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
-            text.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
-            text.AddThemeConstantOverride("shadow_offset_y", 2);
-            _text = text;
-            canvas.AddChild(text);
+            BuildTextBlock();
         }
         if (Compass != null)
             canvas.AddChild(Compass);
@@ -580,6 +589,29 @@ public sealed class FlightHud
         ApplyVisibility();
     }
 
+    /// <summary>The outside views' HUD mode (<see cref="HudModeSetting"/>), followed every frame.
+    /// Full draws every part. Minimal takes the dials, tape and
+    /// plate off and shows the text block, built here the first time. None leaves the pipper, the
+    /// lead marker, the messages and the prompts. The cockpit view ignores it, as
+    /// <see cref="SetCockpitView"/> rules.</summary>
+    public void SetHudMode(HudMode mode)
+    {
+        if (_hudMode == mode)
+        {
+            return;
+        }
+        _hudMode = mode;
+        if (_text == null && _canvas != null && TextBlockInMode)
+        {
+            BuildTextBlock();
+        }
+        ApplyVisibility();
+    }
+
+    /// <summary>Posts <paramref name="mode"/>'s line (<see cref="HudModeSetting.Line"/>) into this
+    /// pane's message stack, the answer to one press of the HUD mode step.</summary>
+    public void PostHudMode(HudMode mode) => MessageStack?.Post(HudModeSetting.Line(mode), HudMessages.Side.Neutral);
+
     /// <summary>Whether the cockpit interior is on the screen this frame. Its own panel carries
     /// the dials, so the screen-space dials, the compass tape and the text block come off while it
     /// is. The pipper and the marker HUDs stay, since the panel has no counterpart for them. It is keyed
@@ -680,6 +712,8 @@ public sealed class FlightHud
     // hoisted, the same SA1202 trade FlightController.AutoLandPressed makes.
 #pragma warning disable SA1201, SA1202
     internal string? DrawnText => _text?.Text;
+
+    internal Label? TextBlock => _text;
 #pragma warning restore SA1201, SA1202
 
     // Where a round of `weapon` fired from `origin` along `forward` (carrying `inheritVel`, the
@@ -696,27 +730,45 @@ public sealed class FlightHud
         return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
 
-    // The four switches composed onto each node. The cockpit view takes the overlay off and the
-    // spectate switch the instruments. The spectator's view takes all but the run HUD, and the
-    // session-level hide takes everything.
+    // ⚠ Keep the text block at the slot Attach gave it, also when a Minimal step builds it late. It
+    // draws under every readout Attach parented after it.
+    private void BuildTextBlock()
+    {
+        // Sized with its first line of text by UpdateTextBlock, which reads the window it is drawn in.
+        var text = new Label { Position = TextMargin };
+        text.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
+        text.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
+        text.AddThemeConstantOverride("shadow_offset_y", 2);
+        _text = text;
+        _canvas!.AddChild(text);
+        _canvas.MoveChild(text, Mathf.Min(_textSlot, _canvas.GetChildCount() - 1));
+    }
+
+    // The switches composed onto each node. The cockpit view takes the overlay off and the spectate
+    // switch the instruments. The spectator's view takes all but the run HUD, and the session-level
+    // hide takes everything. The HUD mode thins the overlay and the markers outside the cockpit only.
     private void ApplyVisibility()
     {
         bool readouts = _shown && !_spectatorView;
         bool overlay = readouts && !_cockpitView;
+        bool dials = overlay && _hudMode == HudMode.Full;
         if (Gauges != null)
-            Gauges.Visible = overlay && _instrumentsShown;
+            Gauges.Visible = dials && _instrumentsShown;
         if (ThrottlePlate != null)
-            ThrottlePlate.Visible = overlay && _instrumentsShown && _throttlePlateShown;
+            ThrottlePlate.Visible = dials && _instrumentsShown && _throttlePlateShown;
         if (Reticle != null)
             Reticle.Visible = readouts && _instrumentsShown;
         if (Compass != null)
-            Compass.Visible = overlay;
+            Compass.Visible = dials;
         if (_text != null)
-            _text.Visible = overlay;
+            _text.Visible = overlay && TextBlockInMode;
         if (StuntRun != null)
             StuntRun.Visible = _shown;
         if (TargetHud != null)
+        {
             TargetHud.Visible = readouts;
+            TargetHud.LeadOnly = HudModeSetting.LeadOnly(_hudMode, _cockpitView);
+        }
         if (MessageStack != null)
             MessageStack.Visible = readouts; // screen-space, so the cockpit panel does not replace it
         if (AutoDock != null)
@@ -807,7 +859,7 @@ public sealed class FlightHud
 
     private void UpdateTextBlock(in FlightHudState state, float mph, float ft)
     {
-        if (_text == null)
+        if (_text == null || !TextBlockInMode)
         {
             return;
         }
