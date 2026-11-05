@@ -815,6 +815,12 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     public void Tick(float dt)
     {
+        // Held, not set once: a session freed under the menu restores its pause sheet's pointer after Show.
+        if (_shown && Input.MouseMode != Input.MouseModeEnum.Hidden)
+        {
+            Input.MouseMode = Input.MouseModeEnum.Hidden;
+        }
+
         if (!_shown || _shell == null || _host == null || _devices == null || _host.Seats.Count == 0 || _view == null)
         {
             return;

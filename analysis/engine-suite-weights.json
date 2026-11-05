@@ -470,6 +470,7 @@
     "partition-areas": 0.785,
     "passenger-seat": 1.141,
     "pause-board": 0.159,
+    "pause-exit-pointer": 0.22,
     "pause-preferences": 0.118,
     "pause-preferences-live-options": 0.072,
     "pause-sheet": 0.424,
