@@ -499,8 +499,8 @@ reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring 
 ## src/Utils/HudModeSetting.cs
 The HUD mode of the outside views (`HudMode`: Full, Minimal, None) as a word, `full`, `minimal`
 or `none`, saved as `hudMode` (null reads Full). `Resolve` takes the saved word over Full and
-`SavedWord` holds the `--det` guard on the launch's and every options apply's read (`ApplySaved`).
-`Launch/GameSession.cs`'s Cycle HUD Mode step moves
+`SavedWord` holds the `--det` guard on the launch's read (`ApplySaved`); under `--det` an options
+apply leaves the running mode alone. `Launch/GameSession.cs`'s Cycle HUD Mode step moves
 it and saves it through `Cycle`, which writes nothing to a null store.
 Every pilot pane follows `Current` each frame through `Flight/Hud/FlightHud.cs`'s `SetHudMode`.
 

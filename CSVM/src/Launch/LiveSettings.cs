@@ -205,8 +205,11 @@ internal sealed class LiveSettings
         // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
         SpyglassScaleSetting.ApplySaved(spec.Det);
         // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.
-        // A --det run reads no saved mode, so a pick there never overwrites the panes' F2 steps.
-        HudModeSetting.ApplySaved(spec.Det);
+        // Under --det the apply leaves it alone, so a pick there never overwrites the panes' F2 steps.
+        if (!spec.Det)
+        {
+            HudModeSetting.ApplySaved(det: false);
+        }
         // The panes follow the layout each frame. Under --det the apply leaves it alone, keeping the editor's pick.
         HudLayoutSetting.ApplyAfterOptions(spec.Det);
         // Each camera reads the switch live, so a pick over the pause sheet takes the flying panes too.
