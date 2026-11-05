@@ -21,4 +21,8 @@ public enum HaltReason
     /// <summary>A live graphics switch is drawn over (<c>Launch.SwitchCover</c>). Dropped by
     /// the cover once the frames after the switch settle.</summary>
     Switching = 4,
+
+    /// <summary>The HUD layout editor is open over a pane (<c>Flight.Hud.HudLayoutEditor</c>).
+    /// Dropped by the editor's own save or cancel, never by a player's pause key.</summary>
+    Editing = 8,
 }

@@ -22,8 +22,8 @@ public sealed partial class ThrottlePlate : Control
 
     // Placement in the HUD's 1440p reference. The plate is as tall as the speedometer, centred level
     // with it, its right edge 25 px inboard of that dial's bezel.
+    internal const float GapRef = 25f;
     private const float HeightRef = 2f * GaugeCluster.SpdRadius;
-    private const float GapRef = 25f;
 
     private const string PlatePath = "res://data/hud/throttle_plate.svg.bin";
     private const string KnobPath = "res://data/hud/throttle_knob.svg.bin";
@@ -43,6 +43,10 @@ public sealed partial class ThrottlePlate : Control
 
     /// <summary>The commanded lever, 0 idle to 1 full, fed by <see cref="FlightHud.Draw"/>.</summary>
     public float Lever { get; set; }
+
+    /// <summary>The HUD layout the plate stands by (<see cref="HudLayoutPlacement"/>), null for the
+    /// original's place beside the speedometer. Set by <see cref="FlightHud.SetHudLayout"/>.</summary>
+    public HudLayout? Layout { get; set; }
 
     /// <summary>The plate, or null when either SVG is missing from the build.</summary>
     public static ThrottlePlate? Build()
@@ -92,9 +96,13 @@ public sealed partial class ThrottlePlate : Control
 
     public override void _Draw()
     {
-        var (origin, unit) = Placement(HudMetrics.ReadingBox(this), HudMetrics.Scale(this));
+        var box = HudMetrics.ReadingBox(this);
+        float scale = HudMetrics.Scale(this);
+        var (origin, unit) = Placement(box, scale);
         if (unit <= 0f)
             return;
+        // A null layout shifts by exactly zero, which keeps the original's place.
+        origin += HudLayoutPlacement.Shift(HudElement.ThrottlePlate, Layout, box, GetViewportRect().Size, scale);
         Rasterise(unit);
         if (_plate == null || _knob == null)
             return;

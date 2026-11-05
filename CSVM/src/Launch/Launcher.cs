@@ -1338,6 +1338,7 @@ public partial class Launcher : Node3D
             .WithHeadsetView(_xr != null);
         SpyglassScaleSetting.ApplySaved(_spec.Det);
         HudModeSetting.ApplySaved(_spec.Det);
+        HudLayoutSetting.ApplySaved(_spec.Det);
         CameraZoomMemory.ApplySaved(_spec.Det);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original

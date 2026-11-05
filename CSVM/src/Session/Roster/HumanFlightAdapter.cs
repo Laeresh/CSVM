@@ -295,6 +295,7 @@ internal sealed class HumanFlightAdapter
         // The graphics-mode action and the HUD mode step, for a seat somebody sits at here, like the pause key below.
         controller.ToggleGraphicsMode = paneless ? null : _human.ToggleGraphicsMode;
         controller.CycleHudMode = paneless ? null : _human.CycleHudMode;
+        controller.EditHudLayout = paneless ? null : _human.EditHudLayout;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.

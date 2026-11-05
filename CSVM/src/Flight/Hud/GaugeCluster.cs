@@ -70,6 +70,10 @@ public sealed partial class GaugeCluster : Control
     public bool NitroBoosting;
     public float NitroChargeFrac = 1f;
 
+    /// <summary>The HUD layout the two columns stand by (<see cref="HudLayoutPlacement"/>), null for the
+    /// original's placement. Set by <see cref="FlightHud.SetHudLayout"/>.</summary>
+    public HudLayout? Layout;
+
     /// <summary>The artificial horizon's decoded pitch and roll (radians), from
     /// <see cref="HorizonAngles"/> off the aircraft's own attitude, never the camera's. Computed
     /// here so the 3D panel (<see cref="CockpitGauges"/>) and any future flat draw read the same
@@ -109,6 +113,12 @@ public sealed partial class GaugeCluster : Control
     // The speedometer's placement (the screen metrics below say how it was measured). Internal
     // because ThrottlePlate stands beside it.
     internal const float SpdCenterFromRight = 420f, SpdCenterY = 1108.5f, SpdRadius = 85f;
+    // Each column's extent in the reference frame, the rectangle a HUD layout moves it as. Size the
+    // layout's rectangle only; never draw a dial from these. Derivation: docs/formats/hud.md, "Column extents".
+    internal const float ColumnTopY = 833f;
+    internal const float ColumnBottomY = 1384f;
+    internal const float LeftColumnWidth = 171f;
+    internal const float RightColumnWidth = 170f;
     internal const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
@@ -494,9 +504,13 @@ public sealed partial class GaugeCluster : Control
         float s = HudMetrics.Scale(this);
         (float left, float right) = ColumnAnchors(box, s);
         float bottom = box.End.Y;
+        // Each column moves as one piece. A null layout shifts by exactly zero, so the original's pixels stand.
+        var pane = GetViewportRect().Size;
+        var leftShift = HudLayoutPlacement.Shift(HudElement.LeftDials, Layout, box, pane, s);
+        var rightShift = HudLayoutPlacement.Shift(HudElement.RightDials, Layout, box, pane, s);
 
         // altimeter: long needle 360°/1,000 ft, short 360°/10,000 ft, 0 at the top
-        var altC = new Vector2(left + (AltCenter.X * s), FromBottom(AltCenter.Y, s, bottom));
+        var altC = new Vector2(left + (AltCenter.X * s), FromBottom(AltCenter.Y, s, bottom)) + leftShift;
         float altR = AltRadius * s;
         foreach (var p in _altFace)
             DrawGaugePoly(p, altC, altR);
@@ -509,7 +523,7 @@ public sealed partial class GaugeCluster : Control
             DrawGaugePoly(_altHundreds, altC, altR, AltHundredsAngleDeg(AltitudeFt));
 
         // speedometer: 0.7199957°/mph, decoded (500 mph per revolution)
-        var spdC = new Vector2(right - (SpdCenterFromRight * s), FromBottom(SpdCenterY, s, bottom));
+        var spdC = new Vector2(right - (SpdCenterFromRight * s), FromBottom(SpdCenterY, s, bottom)) + rightShift;
         float spdR = SpdRadius * s;
         foreach (var p in _spdFace)
             DrawGaugePoly(p, spdC, spdR);
@@ -521,7 +535,7 @@ public sealed partial class GaugeCluster : Control
 
         // damage display: face silhouette, then each zone's border bar + hatch fill
         // in its color; a freshly hit zone blinks (fill + border) for a few seconds
-        var dmgC = new Vector2(left + (DmgCenter.X * s), FromBottom(DmgCenter.Y, s, bottom));
+        var dmgC = new Vector2(left + (DmgCenter.X * s), FromBottom(DmgCenter.Y, s, bottom)) + leftShift;
         float dmgR = DmgRadius * s;
         foreach (var p in _dmgFace)
             DrawGaugePoly(p, dmgC, dmgR);
@@ -542,19 +556,19 @@ public sealed partial class GaugeCluster : Control
         // feeding it, hidden in the static viewer, which carries no loadout.
         if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
         {
-            var c = new Vector2(left + (MissileCenter.X * s), FromBottom(MissileCenter.Y, s, bottom));
+            var c = new Vector2(left + (MissileCenter.X * s), FromBottom(MissileCenter.Y, s, bottom)) + leftShift;
             DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false, _missileArrow.Angle);
         }
         if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
         {
-            var c = new Vector2(right - (GunCenterFromRight * s), FromBottom(GunCenterY, s, bottom));
+            var c = new Vector2(right - (GunCenterFromRight * s), FromBottom(GunCenterY, s, bottom)) + rightShift;
             DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true, _gunArrow.Angle);
         }
 
         // The nitro dial, only with the injector installed (the original hides the node otherwise).
         if (NitroInstalled && _nitroFace.Count > 0)
         {
-            var c = new Vector2(right - (NitroCenterFromRight * s), FromBottom(NitroCenterY, s, bottom));
+            var c = new Vector2(right - (NitroCenterFromRight * s), FromBottom(NitroCenterY, s, bottom)) + rightShift;
             float r = NitroRadius * s;
             foreach (var p in _nitroFace)
                 DrawGaugePoly(p, c, r);

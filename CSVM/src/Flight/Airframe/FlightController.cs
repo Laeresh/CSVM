@@ -292,6 +292,11 @@ public partial class FlightController : Node3D
     /// local pane. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
     public Action? CycleHudMode;
 
+    /// <summary>What <see cref="InputAction.EditHudLayout"/> does, set by the session for a seat
+    /// somebody sits at: the HUD layout editor opened over this seat's pane. Null leaves the action
+    /// inert, as on an AI or a suite's bare rig.</summary>
+    public Action<FlightController>? EditHudLayout;
+
     /// <summary>What <see cref="InputAction.RecenterHeadset"/> does, and under a headset
     /// <see cref="InputAction.LookCenter"/> and <see cref="InputAction.LookBack"/> too: the VR seat's
     /// recenter, set by the session for the seat the headset flies. Null, in every flat session,
@@ -587,6 +592,7 @@ public partial class FlightController : Node3D
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
     private bool _graphicsTogglePrev;            // previous frame's ToggleGraphicsMode state (edge detection)
     private bool _hudModePrev;                   // previous frame's CycleHudMode state (edge detection)
+    private bool _hudEditPrev;                   // previous frame's EditHudLayout state (edge detection)
     private bool _recenterPrev;                  // previous frame's RecenterHeadset state (edge detection)
     private XrChase? _headset;                   // Headset's backing field, handed to each camera Setup builds
     // The built parent, pose and visibility of every node the death defs play on, captured before
@@ -1859,6 +1865,14 @@ public partial class FlightController : Node3D
     /// <summary>The options leaf is gone, seeding the pause key's edge so the Escape that left it
     /// does not also resume the mission (<see cref="SeatPause.EndPauseLeaf"/>).</summary>
     public void EndPauseLeaf() => Pause.EndPauseLeaf();
+
+    /// <summary>The HUD layout editor stands over this session: the pause key goes silent until
+    /// <see cref="EndHudEditor"/> (<see cref="SeatPause.BeginHudEditor"/>).</summary>
+    public void BeginHudEditor() => Pause.BeginHudEditor();
+
+    /// <summary>The HUD layout editor is gone, seeding the pause key's edge so the Escape that left
+    /// it does not also pause (<see cref="SeatPause.EndHudEditor"/>).</summary>
+    public void EndHudEditor() => Pause.EndHudEditor();
 
     /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>): whether the
     /// SELECTED gun group could reach an intercept inside the weapon's authored <c>RANGE</c>. That,
@@ -3784,9 +3798,9 @@ public partial class FlightController : Node3D
         _graphicsTogglePrev = down;
     }
 
-    // The HUD mode step's edge, polled beside the graphics switch so it works over a halted sim too.
-    // Silent where photo mode and the options leaf own the keyboard. Every frame the pane then takes
-    // the process-wide mode, which an options apply or another seat's step may have moved.
+    // The HUD mode step's and layout editor's edges, polled beside the graphics switch. Silent where
+    // photo mode, the options leaf or the editor own the keyboard. Every frame the pane then takes the
+    // process-wide mode and layout, which an options apply, the editor or another seat may have moved.
     private void PollHudModeCycle()
     {
         bool down = CycleHudMode != null && !Pause.Silenced
@@ -3795,6 +3809,12 @@ public partial class FlightController : Node3D
             CycleHudMode!();
         _hudModePrev = down;
         _pilotHud.SetHudMode(Utils.HudModeSetting.Current);
+        bool edit = EditHudLayout != null && !Pause.Silenced
+            && _controls.Seat.Held(InputAction.EditHudLayout);
+        if (edit && !_hudEditPrev)
+            EditHudLayout!(this);
+        _hudEditPrev = edit;
+        _pilotHud.SetHudLayout(Hud.HudLayoutEditor.Active());
     }
 
 #pragma warning disable SA1202

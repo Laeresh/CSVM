@@ -42,13 +42,18 @@ public sealed class SeatPause
     /// <see cref="BeginPauseLeaf"/> and <see cref="EndPauseLeaf"/>.</summary>
     public bool InPauseLeaf { get; private set; }
 
+    /// <summary>The HUD layout editor stands over this session. The pause key is silent for the
+    /// duration, so Escape means "leave the editor" and nothing else. Driven by the session through
+    /// <see cref="BeginHudEditor"/> and <see cref="EndHudEditor"/>.</summary>
+    public bool InHudEditor { get; private set; }
+
     /// <summary>A network pause's sheet is up over a flight that keeps running. The seat is then
     /// wholly held and the look controls are muted, so the sheet's menu keys fly nothing.</summary>
     public bool SheetOverFlight { get; private set; }
 
     /// <summary>Whether a screen over the flight owns the keyboard, which silences every key read
     /// beside this one.</summary>
-    public bool Silenced => InPhotoMode || InPauseLeaf;
+    public bool Silenced => InPhotoMode || InPauseLeaf || InHudEditor;
 
     /// <summary>Enter photo mode: the pause key goes silent for the duration.</summary>
     public void BeginPhotoMode() => InPhotoMode = true;
@@ -72,6 +77,17 @@ public sealed class SeatPause
     public void EndPauseLeaf()
     {
         InPauseLeaf = false;
+        _pausePrev = _pauseHeldNow();
+    }
+
+    /// <summary>Enter the HUD layout editor: the pause key goes silent for the duration.</summary>
+    public void BeginHudEditor() => InHudEditor = true;
+
+    /// <summary>Leave the HUD layout editor, seeding the key's edge for the reason
+    /// <see cref="EndPhotoMode"/> does: the Escape that cancelled it would otherwise pause.</summary>
+    public void EndHudEditor()
+    {
+        InHudEditor = false;
         _pausePrev = _pauseHeldNow();
     }
 

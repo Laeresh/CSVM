@@ -434,16 +434,14 @@ public class DefaultBindingsTests
         Assert.Equal(other.IndexOf(InputAction.ToggleGraphicsMode) + 1, other.IndexOf(InputAction.RecenterHeadset));
     }
 
-    /// <summary>The HUD mode step is appended last and ships as a flight action on a bare F2, with no
-    /// pad, mouse or hand controller row. The original's 64 defaults leave F2 free
-    /// (docs/org/input.md). No other context holds F2 in any form, so the vegetation lab's Shift+F2 under
-    /// the free camera reaches no action. The Other tab lists it after the VR recenter.</summary>
+    /// <summary>The HUD mode step ships as a flight action on a bare F2, with no pad, mouse or hand
+    /// controller row. The original's 64 defaults leave F2 free (docs/org/input.md). Only the layout
+    /// editor's Shift+F2 shares the key, so the vegetation lab's Shift+F2 under the free camera reaches
+    /// no action. The Other tab lists it after the VR recenter.</summary>
     [Fact]
-    public void TheHudModeStep_IsAppendedAndShipsOnABareF2Alone()
+    public void TheHudModeStep_ShipsOnABareF2Alone()
     {
-        var all = Enum.GetValues<InputAction>();
         Assert.Equal(94, (int)InputAction.CycleHudMode);
-        Assert.Equal(all.Length - 1, (int)InputAction.CycleHudMode);
 
         var f2 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2));
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
@@ -454,7 +452,7 @@ public class DefaultBindingsTests
         {
             foreach (var action in DefaultBindings.ActionsIn(context))
             {
-                if (action == InputAction.CycleHudMode)
+                if (action is InputAction.CycleHudMode or InputAction.EditHudLayout)
                     continue;
                 Assert.DoesNotContain(
                     DefaultBindings.MapFor(context, Pad).Bindings(action),
@@ -465,6 +463,34 @@ public class DefaultBindingsTests
         Assert.Equal("Cycle HUD Mode", BindingLabels.Name(InputAction.CycleHudMode));
         var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
         Assert.Equal(other.IndexOf(InputAction.RecenterHeadset) + 1, other.IndexOf(InputAction.CycleHudMode));
+    }
+
+    /// <summary>The HUD layout editor is appended last and ships on Shift+F2 alone, keyboard only.
+    /// Held Shift stands the bare F2 down, so one press opens the editor and steps no HUD mode. The
+    /// Other tab lists it after the HUD mode step.</summary>
+    [Fact]
+    public void TheHudLayoutEditor_IsAppendedAndShipsOnShiftF2()
+    {
+        var all = Enum.GetValues<InputAction>();
+        Assert.Equal(95, (int)InputAction.EditHudLayout);
+        Assert.Equal(all.Length - 1, (int)InputAction.EditHudLayout);
+
+        var shiftF2 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2, KeyModifiers.Shift));
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.EditHudLayout));
+        Assert.Equal(new[] { shiftF2 }, map.Bindings(InputAction.EditHudLayout));
+        Assert.Equal(new[] { InputAction.EditHudLayout }, map.OwnersOf(shiftF2));
+
+        var state = new ModifierDevices();
+        state.Keys.Add((int)Key.F2);
+        state.Keys.Add((int)Key.Shift);
+        var snapshot = map.Resolve(state);
+        Assert.True(snapshot.Held(InputAction.EditHudLayout));
+        Assert.False(snapshot.Held(InputAction.CycleHudMode));
+
+        Assert.Equal("Edit HUD Layout", BindingLabels.Name(InputAction.EditHudLayout));
+        var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
+        Assert.Equal(other.IndexOf(InputAction.CycleHudMode) + 1, other.IndexOf(InputAction.EditHudLayout));
     }
 
     /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its

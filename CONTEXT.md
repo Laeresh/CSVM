@@ -253,6 +253,14 @@ pipper, the lead marker, messages, prompts and scores). A remake-only rule; the 
 ignores it.
 _Avoid_: minimal HUD option, HUD toggle, HUD level, clean HUD
 
+**HUD layout**:
+Where an outside view places the dial columns, compass tape and throttle plate: **Original** (the
+original's placement), **Sides** (the preset with the instruments toward the screen sides, inside
+the reading box) or **Custom** (placed in the layout editor, measured from the pane's edges). A
+setting apart from the HUD mode, shared by every splitscreen pane. A remake-only rule; the cockpit
+view draws none of the three.
+_Avoid_: HUD position, HUD arrangement, HUD preset (for the setting), side HUD
+
 **Edge marker**:
 The off-screen presentation of a marked world target: the marker clamped into the inset screen
 edge, with an arrow pointing outward to the pane's own edge and a clock-hour bearing.

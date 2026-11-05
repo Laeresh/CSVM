@@ -1342,6 +1342,12 @@ public partial class GameSession : Node3D
         StepHudMode(_rigs.Select(r => r.Controller).OfType<FlightController>().Select(c => c.PilotHud),
             _spec.Det ? null : OptionsStore.UserOptions());
 
+    // The layout editor over the pressing seat's pane. Every local seat is silenced while it stands,
+    // and a --det run saves to no file.
+    private void OpenHudLayoutEditor(FlightController pilot) =>
+        HudLayoutEditor.Open(pilot, _rigs.Select(r => r.Controller).OfType<FlightController>().ToList(),
+            _pauseState, _spec.Det ? null : OptionsStore.UserOptions());
+
     // Every joined player's aircraft and no AI, in the same reused-list shape as AllAircraft.
     // Read fresh because an airframe swap rebuilds a rig's controller; do not hold across a step.
     // Outside splitscreen the sole entry is the scripted player. ⚠ Over the SEATS, not the panes.
@@ -2231,6 +2237,7 @@ public partial class GameSession : Node3D
             BestSplits = key => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway).GetSplits(key),
             ToggleGraphicsMode = _toggleGraphicsMode,
             CycleHudMode = CycleHudMode,
+            EditHudLayout = OpenHudLayoutEditor,
             RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,
             SpawnBase = spawnBase,

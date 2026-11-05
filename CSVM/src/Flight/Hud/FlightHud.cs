@@ -218,6 +218,8 @@ public sealed class FlightHud
     private int _textSlot;                       // the text block's place in that layer's draw order
     private bool _textBlockOption;               // TextBlockEnabled as Attach read it: the text block in Full
     private HudMode _hudMode = HudMode.Full;     // SetHudMode: the outside views' HUD mode
+    private HudLayout? _layout;                  // SetHudLayout: where the dials, tape and plate stand; null is the original's place
+    private bool _layoutEditing;                 // OpenLayoutEditor: the editor stands over this pane
     private bool _shown = true;                  // SetVisible: off in a cutscene and in photo mode
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
     private bool _spectatorView;                 // SetSpectatorView: on while a race pane spectates
@@ -261,6 +263,16 @@ public sealed class FlightHud
 
     /// <summary>The outside views' HUD mode, see <see cref="SetHudMode"/>.</summary>
     public HudMode HudMode => _hudMode;
+
+    /// <summary>The HUD layout the dials, tape and plate stand by, see <see cref="SetHudLayout"/>.</summary>
+    public HudLayout? Layout => _layout;
+
+    /// <summary>Whether the HUD layout editor stands over this pane, see <see cref="OpenLayoutEditor"/>.</summary>
+    public bool LayoutEditing => _layoutEditing;
+
+    /// <summary>Whether the layout editor can open over this pane. Its HUD layer is built and shown, and
+    /// no cutscene, photo mode or spectator's view has taken the HUD off.</summary>
+    public bool CanHostLayoutEditor => _canvas is { Visible: true } && _shown && !_spectatorView;
 
     /// <summary>Whether the pane shows a spectator's view, see <see cref="SetSpectatorView"/>.</summary>
     public bool SpectatorView => _spectatorView;
@@ -608,6 +620,54 @@ public sealed class FlightHud
         ApplyVisibility();
     }
 
+    /// <summary>The HUD layout (<see cref="HudLayoutSetting"/>, placed by <see cref="HudLayoutPlacement"/>),
+    /// followed every frame. Null is the original's placement, which moves no pixel. It applies in the
+    /// outside views; the cockpit view draws none of the three.</summary>
+    public void SetHudLayout(HudLayout? layout)
+    {
+        if (ReferenceEquals(_layout, layout))
+        {
+            return;
+        }
+
+        _layout = layout;
+        if (Gauges != null)
+            Gauges.Layout = layout;
+        if (Compass != null)
+            Compass.Layout = layout;
+        if (ThrottlePlate != null)
+        {
+            ThrottlePlate.Layout = layout;
+            ThrottlePlate.QueueRedraw();   // the plate repaints only on a lever or size change
+        }
+    }
+
+    /// <summary>Parents <paramref name="editor"/> over this pane's HUD. The dials, tape and plate then
+    /// show whatever the mode, the view and the plate's box say, so every element can be placed.</summary>
+    public void OpenLayoutEditor(Control editor)
+    {
+        _layoutEditing = true;
+        _canvas?.AddChild(editor);
+        ApplyVisibility();
+    }
+
+    /// <summary>Takes <paramref name="editor"/> off this pane and gives the parts their own visibility back.</summary>
+    public void CloseLayoutEditor(Control editor)
+    {
+        _layoutEditing = false;
+        if (_canvas != null && editor.GetParent() == _canvas)
+        {
+            _canvas.RemoveChild(editor);
+        }
+
+        ApplyVisibility();
+    }
+
+    /// <summary>Posts <paramref name="kind"/>'s line (<see cref="HudLayoutSetting.Line"/>) into this
+    /// pane's message stack, the answer to a saved layout edit.</summary>
+    public void PostHudLayout(HudLayoutKind kind) =>
+        MessageStack?.Post(HudLayoutSetting.Line(kind), HudMessages.Side.Neutral);
+
     /// <summary>Posts <paramref name="mode"/>'s line (<see cref="HudModeSetting.Line"/>) into this
     /// pane's message stack, the answer to one press of the HUD mode step.</summary>
     public void PostHudMode(HudMode mode) => MessageStack?.Post(HudModeSetting.Line(mode), HudMessages.Side.Neutral);
@@ -751,11 +811,12 @@ public sealed class FlightHud
     {
         bool readouts = _shown && !_spectatorView;
         bool overlay = readouts && !_cockpitView;
-        bool dials = overlay && _hudMode == HudMode.Full;
+        // The layout editor shows the three it places in any mode and view; false, it changes nothing.
+        bool dials = (overlay && _hudMode == HudMode.Full) || (readouts && _layoutEditing);
         if (Gauges != null)
             Gauges.Visible = dials && _instrumentsShown;
         if (ThrottlePlate != null)
-            ThrottlePlate.Visible = dials && _instrumentsShown && _throttlePlateShown;
+            ThrottlePlate.Visible = dials && _instrumentsShown && (_throttlePlateShown || _layoutEditing);
         if (Reticle != null)
             Reticle.Visible = readouts && _instrumentsShown;
         if (Compass != null)

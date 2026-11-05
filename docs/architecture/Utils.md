@@ -504,6 +504,21 @@ or `none`, saved as `hudMode` (null reads Full). `Resolve` takes the saved word 
 it and saves it through `Cycle`, which writes nothing to a null store.
 Every pilot pane follows `Current` each frame through `Flight/Hud/FlightHud.cs`'s `SetHudMode`.
 
+## src/Utils/HudLayoutSetting.cs
+The HUD layout of the outside views (`HudLayoutKind`: Original, Sides, Custom) as a word, `original`,
+`sides` or `custom`, saved as `hudLayout` (null reads Original), apart from the HUD mode. The custom
+placement rides beside it as `hudLayoutCustom` (`HudLayout.cs`'s spelling). `SavedWord` and
+`SavedCustom` hold the `--det` guard: the launch reads through `ApplySaved`, an options apply through
+`ApplyAfterOptions`, which changes nothing under `--det`. `SaveCustom` is
+`Flight/Hud/HudLayoutEditor.cs`'s save; every pilot pane follows the layout through that editor's `Active`.
+
+## src/Utils/HudLayout.cs
+A stored HUD layout, immutable: one `HudPlacement` per `HudElement` (the two dial columns, the
+compass tape, the throttle plate), each an anchor per axis (`HudAnchor`: start, centre, end of the
+reading box, or of the pane for a `PaneRelative` custom layout) and an offset in 1440p reference pixels. `Format` and `TryParse` are the options file's
+spelling; a hand-edited one that does not parse reads as never saved. The pixels are
+`Flight/Hud/HudLayoutPlacement.cs`'s.
+
 ## src/Utils/SoundModeSetting.cs
 The AUDIO page's two remake-only switches: the sound mode, `soundMode` (`original` or `enhanced`,
 null reads Enhanced), and Hit Confirm, `hitConfirm` (null reads on under Enhanced Sound, off under

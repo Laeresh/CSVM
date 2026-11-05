@@ -332,6 +332,8 @@ rows).
 - `src/Flight/Hud/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/Hud/GaugeCluster.cs`, the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/Hud/ThrottlePlate.cs`, the optional throttle plate beside the speedometer, drawn from two SVGs at the pane's own size.
+- `src/Flight/Hud/HudLayoutPlacement.cs`, where a HUD layout puts the dial columns, compass tape and throttle plate on a pane: the original's own rectangles, the Sides preset, and the editor's drop.
+- `src/Flight/Hud/HudLayoutEditor.cs`, the HUD layout editor (Shift+F2): the halted view with the HUD over it, each element dragged or nudged, Enter saving the Custom layout.
 - `src/Flight/Hud/FlightHud.cs`, everything one pane draws for its pilot, fed one per-frame state struct; the controller's seven HUD collaborators live here.
 
 **`Flight.Modes`**, stunt flying, Dogfight and the pause state.
@@ -700,6 +702,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
 - `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat disc is drawn at.
 - `src/Utils/HudModeSetting.cs`, the HUD mode of the outside views (Full, Minimal, None): the saved `WordSetting` lookup, the process-wide mode every pilot pane follows, and the cycle key's step and save.
+- `src/Utils/HudLayoutSetting.cs`, the HUD layout of the outside views (Original, Sides, Custom): the saved word and custom placement, the process-wide layout every pilot pane follows, and the editor's save.
+- `src/Utils/HudLayout.cs`, a stored HUD layout: one edge-anchored placement in reference pixels per element, and its options-file spelling.
 - `src/Utils/SoundModeSetting.cs`, the sound mode (Original or Enhanced Sound) and the Hit Confirm switch, resolved from the options file, Original with no confirm under `--det`.
 - `src/Utils/CameraZoomMemory.cs`, the Keep Camera Zoom option and the external-view zoom it remembers in the options file, read by the chase camera.
 - `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.

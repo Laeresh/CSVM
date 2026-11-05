@@ -123,6 +123,8 @@ public static class SuiteCatalog
         "hud-auto-dock-line",
         "hud-crash-prompt",
         "hud-kill-line",
+        "hud-layout-editor",
+        "hud-layout-placement",
         "hud-mode-cycle-splitscreen",
         "hud-mode-parts",
         "impact-orientation",

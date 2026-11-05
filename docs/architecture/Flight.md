@@ -1518,7 +1518,7 @@ it decides per call. `KeyboardInputSource` reads through it. Read `AnalogAxes.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
 dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
 message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block.
-The text block is remake-only telemetry the original has no counterpart for, built in Full only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). `SetHudMode` takes `Utils/HudModeSetting.cs`'s mode every frame: outside the cockpit Minimal swaps the dials, tape and plate for the text block, and None leaves the pipper, `TargetHud.LeadOnly`'s lead marker, messages and prompts; `PostHudMode` posts a press's line into the pane's message stack, and `Launch/GameSession.cs`'s `StepHudMode` steps every local pane. With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+The text block is remake-only telemetry the original has no counterpart for, built in Full only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). `SetHudMode` takes `Utils/HudModeSetting.cs`'s mode every frame: outside the cockpit Minimal swaps the dials, tape and plate for the text block, and None leaves the pipper, `TargetHud.LeadOnly`'s lead marker, messages and prompts; `PostHudMode` posts a press's line into the pane's message stack, and `Launch/GameSession.cs`'s `StepHudMode` steps every local pane. `SetHudLayout` hands `HudLayoutEditor.cs`'s `Active` layout to the dials, tape and plate every frame, and `OpenLayoutEditor` shows all three under that editor. With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `SetSpectatorView` leaves the stunt run HUD alone up, the message stack off too, for a spectating pane. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
@@ -1592,7 +1592,7 @@ as a cylindrical drum seen edge-on, headings increasing to the left under a clip
 fade holding the bar's inner half flat and its outer quarter near black. Neither end is capped and
 the comb stops a hem short of the bar's bottom edge. Metrics are probe-fitted reference constants
 times `HudMetrics.Scale`, `Build` returns null where a texture is missing, the octant letters
-squeeze with the drum like the ticks, and the control re-anchors on resize. The heading comes from `GaugeCluster`, and `ReadingDeg` is the one nose-vector-to-heading
+squeeze with the drum like the ticks, and the control re-anchors on resize, by a HUD layout's shift where one is set. The heading comes from `GaugeCluster`, and `ReadingDeg` is the one nose-vector-to-heading
 conversion the gauges and pause chart icons share. Model: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/Hud/GaugeCluster.cs
@@ -1600,7 +1600,7 @@ The original's cockpit dials as a screen-space HUD: altimeter, speedometer, dama
 gun and missile weapon gauges and the nitro dial, all geometry extracted from the plane's own
 `gauges` subtree, drawn by data priority and bottom-anchored so splitscreen panes keep them on
 screen. `ColumnAnchors` places the two columns: `HudMetrics.ReadingBox`'s edges, handed back to
-the borders on a pane narrower than the reference frame. `HeadingDeg` carries the nose heading
+the borders on a pane narrower than the reference frame, and a HUD layout moves each column whole (`HudLayoutPlacement.cs`). `HeadingDeg` carries the nose heading
 `CompassTape` and `CockpitGauges` both read; `DamageZoneColor` bands the damage dial off combined
 armour and health against thresholds mined from the data's own `injure_anims`. The sweep and lamp
 structs need no `Control`, so `CSVM.Tests` drives them. [../formats/hud.md](../formats/hud.md).
@@ -1612,8 +1612,22 @@ standing inboard of it. Plate and knob are SVGs in `CSVM/data/hud`, written by
 reads no filters or text. `Image.LoadSvgFromString` re-rasterises both whenever the drawn size
 moves, so the plate stays sharp at any resolution. `KnobY` maps the lever onto the IDLE to MAX
 ticks. Every pilot pane builds one hidden; the Game Options **Throttle Plate** box or
-`--throttle-plate` shows it through `FlightHud.SetThrottlePlateShown`, and `--det` reads no saved
+`--throttle-plate` shows it through `FlightHud.SetThrottlePlateShown` (a HUD layout moves it), and `--det` reads no saved
 box, so no golden draws it.
+
+## src/Flight/Hud/HudLayoutPlacement.cs
+Where a HUD layout (`Utils/HudLayout.cs`) puts each element on a pane, engine-free and stateless:
+`OriginalRect` is the original's own rectangle, `Place` a layout's (from the reading box, or the
+pane's edges for a custom layout), and `Shift` the difference, which `GaugeCluster`, `CompassTape`
+and `ThrottlePlate` add to what they draw. It owns the `Sides` preset and the editor's drop
+(`PlacementFor`, `ToPane`). Read `HudLayoutEditor.cs` next.
+
+## src/Flight/Hud/HudLayoutEditor.cs
+The HUD layout editor over one seat's pane, opened by Edit HUD Layout (Shift+F2) through
+`Launch/GameSession.cs`: the halted view, each element dragged or nudged, Enter saving the Custom
+layout through `Utils/HudLayoutSetting.cs`. It owns the preview every pane draws while it stands
+(`Preview`, `Active`), the `HaltReason.Editing` halt and the seats' silence (`Modes/SeatPause.cs`).
+Read `HudLayoutPlacement.cs` for the pixels.
 
 ## src/Flight/Hangar/CustomPlaneDef.cs
 A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields

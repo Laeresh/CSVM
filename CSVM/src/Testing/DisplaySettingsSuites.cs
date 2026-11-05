@@ -46,6 +46,9 @@ internal static class DisplaySettingsSuites
         ("LeadMarker", true, false),
         ("ThrottlePlate", true, false),
         ("HudMode", "none", true),
+        ("HudLayout", "sides", true),
+        // The custom placement draws only under the custom word, the display field the guard reads.
+        ("HudLayoutCustom", "leftDials:start,centre,24,0;rightDials:end,centre,-24,0;compassTape:end,start,-24,35;throttlePlate:end,centre,-219,0", false),
         ("SpyglassScale", "200", true),
         ("KeepCameraZoom", false, false),
         ("CameraZoom", 0.5f, false),

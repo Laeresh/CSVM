@@ -134,13 +134,14 @@ public sealed class OriginalKeysPage : IOriginalOptionsPage
     };
 
     // The Other tab's own flight rows, in the original's Other page order, then this port's
-    // graphics-mode switch, VR recenter and HUD mode step. The rest of that tab is whatever the
-    // seven groups leave over, which is every menu and free-camera action.
+    // graphics switch, VR recenter, HUD mode and HUD layout editor. The rest of that tab
+    // is whatever the seven groups leave over, which is every menu and free-camera action.
     private static readonly InputAction[] OtherFlightGroup =
     {
         InputAction.AutoLand, InputAction.Nitro, InputAction.Respawn, InputAction.Pause,
         InputAction.DisplayScores, InputAction.ChatEveryone, InputAction.ChatTeam,
         InputAction.ToggleGraphicsMode, InputAction.RecenterHeadset, InputAction.CycleHudMode,
+        InputAction.EditHudLayout,
     };
 
     private static readonly string[] TabNames =

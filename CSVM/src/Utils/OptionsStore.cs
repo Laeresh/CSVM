@@ -186,6 +186,14 @@ public sealed class OptionsDef
     /// "never set" and reads as full.</summary>
     public string? HudMode { get; set; }
 
+    /// <summary>The HUD layout of the outside views, one of <see cref="HudLayoutSetting.Words"/>. Null
+    /// is "never set" and reads as original.</summary>
+    public string? HudLayout { get; set; }
+
+    /// <summary>The custom HUD layout's placement in <see cref="Utils.HudLayout.Format"/>'s spelling.
+    /// Null is "never saved", which places Custom as the original does.</summary>
+    public string? HudLayoutCustom { get; set; }
+
     /// <summary>The spyglass disc's size, one of <see cref="SpyglassScaleSetting.Words"/>. Null is
     /// "never set" and reads as 100.</summary>
     public string? SpyglassScale { get; set; }
@@ -408,6 +416,8 @@ public sealed class OptionsStore
             WriteFlag(w, "leadMarker", def.LeadMarker);
             WriteFlag(w, "throttlePlate", def.ThrottlePlate);
             Write(w, "hudMode", def.HudMode);
+            Write(w, "hudLayout", def.HudLayout);
+            Write(w, "hudLayoutCustom", def.HudLayoutCustom);
             Write(w, "spyglassScale", def.SpyglassScale);
             WriteFlag(w, "keepCameraZoom", def.KeepCameraZoom);
             WriteNumber(w, "cameraZoom", def.CameraZoom);
@@ -491,6 +501,8 @@ public sealed class OptionsStore
                 LeadMarker = ReadFlag(root, "leadMarker"),
                 ThrottlePlate = ReadFlag(root, "throttlePlate"),
                 HudMode = ReadShaped(root, "hudMode", HudModeSetting.Lookup.IsWord),
+                HudLayout = ReadShaped(root, "hudLayout", HudLayoutSetting.Lookup.IsWord),
+                HudLayoutCustom = ReadShaped(root, "hudLayoutCustom", Utils.HudLayout.IsValid),
                 SpyglassScale = ReadShaped(root, "spyglassScale", SpyglassScaleSetting.Lookup.IsWord),
                 KeepCameraZoom = ReadFlag(root, "keepCameraZoom"),
                 CameraZoom = ReadZoom(root, "cameraZoom"),

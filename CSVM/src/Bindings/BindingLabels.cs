@@ -42,6 +42,8 @@ public static class BindingLabels
         // HUD is an initialism, which the word split below would print as "Hud".
         if (action == InputAction.CycleHudMode)
             return "Cycle HUD Mode";
+        if (action == InputAction.EditHudLayout)
+            return "Edit HUD Layout";
 
         string name = action.ToString();
         var text = new StringBuilder(name.Length + 8);

@@ -163,6 +163,7 @@ internal sealed class LiveSettings
         options.LeadMarker = applied.LeadMarker;
         options.ThrottlePlate = applied.ThrottlePlate;
         options.HudMode = applied.HudMode;
+        options.HudLayout = applied.HudLayout;
         options.SpyglassScale = applied.SpyglassScale;
         CameraZoomMemory.Stage(options, applied.KeepCameraZoom);
         options.MonitorIndex = applied.MonitorIndex;
@@ -206,6 +207,8 @@ internal sealed class LiveSettings
         // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.
         // A --det run reads no saved mode, so a pick there never overwrites the panes' F2 steps.
         HudModeSetting.ApplySaved(spec.Det);
+        // The panes follow the layout each frame. Under --det the apply leaves it alone, keeping the editor's pick.
+        HudLayoutSetting.ApplyAfterOptions(spec.Det);
         // Each camera reads the switch live, so a pick over the pause sheet takes the flying panes too.
         CameraZoomMemory.ApplySaved(spec.Det);
         // Each word setting resolved again with the applied word in the saved slot, so its flag still

@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It stages its twelve settings in
+/// the three it is painted with, its plaques moving down with it. It stages its thirteen settings in
 /// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
@@ -51,6 +51,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The page's HUD Mode dropdown, a remake-only row.</summary>
     public const string HudModeKey = "HUDMODE";
+
+    /// <summary>The page's HUD Layout dropdown, a remake-only row.</summary>
+    public const string HudLayoutKey = "HUDLAYOUT";
 
     /// <summary>The page's spyglass size dropdown, a remake-only row.</summary>
     public const string SpyglassScaleKey = "SPYGLASSSCALE";
@@ -192,6 +195,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Dropdown, _ => CSVM.Utils.HudModeSetting.Labels(),
             c => DisplaySettingRows.WordIndex(CSVM.Utils.HudModeSetting.Words, c.HudMode, CSVM.Utils.HudModeSetting.Default),
             (c, i) => c.HudMode = CSVM.Utils.HudModeSetting.Words[Math.Clamp(i, 0, CSVM.Utils.HudModeSetting.Words.Count - 1)]),
+        new(HudLayoutKey, "HUD Layout",
+            _ => "Sides moves the dials, compass and throttle plate to the screen sides; Custom is placed with Shift+F2 in flight.",
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.HudLayoutSetting.Labels(),
+            c => DisplaySettingRows.WordIndex(CSVM.Utils.HudLayoutSetting.Words, c.HudLayout, CSVM.Utils.HudLayoutSetting.Default),
+            (c, i) => c.HudLayout = CSVM.Utils.HudLayoutSetting.Words[Math.Clamp(i, 0, CSVM.Utils.HudLayoutSetting.Words.Count - 1)]),
         new(SpyglassScaleKey, "Spyglass Size",
             _ => "Draw the round picture of an off-screen target larger.",
             OriginalRowKind.Dropdown, _ => CSVM.Utils.SpyglassScaleSetting.Labels(),
@@ -270,6 +278,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The HUD mode word the page would apply, null while never set.</summary>
     public string? HudModeChoice => _choices.HudMode;
+
+    /// <summary>The HUD layout word the page would apply, null while never set.</summary>
+    public string? HudLayoutChoice => _choices.HudLayout;
 
     /// <summary>The spyglass size the page would apply, null while never set.</summary>
     public string? SpyglassScaleChoice => _choices.SpyglassScale;

@@ -1,4 +1,5 @@
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -12,7 +13,7 @@ namespace CSVM.Flight.Hud;
 public sealed partial class CompassTape : Control
 {
     // Screen metrics from the 1440p reference screenshot, scaled by viewport height.
-    private const float RefBarWidth = 263f, RefBarHeight = 40f, RefTopMargin = 35f;
+    internal const float RefBarWidth = 263f, RefBarHeight = 40f, RefTopMargin = 35f;
     private const float RefDrumRadius = 127.6f; // fit of every tall tick: x = c − R·sin(Δ)
     private const float RefLabelTop = 3f;       // label box top below the bar top
     private const float RefLabelHeight = 20f;   // 32 src px drawn at 20 → scale 0.625
@@ -48,6 +49,10 @@ public sealed partial class CompassTape : Control
     /// <summary>Current heading in degrees, 0 = north (−Z), 90 = east (+X); set
     /// each frame by the flight controller.</summary>
     public float HeadingDeg { get; set; }
+
+    /// <summary>The HUD layout the tape stands by (<see cref="HudLayoutPlacement"/>), null for the
+    /// original's top-centre place. Set by <see cref="FlightHud.SetHudLayout"/>.</summary>
+    public HudLayout? Layout { get; set; }
 
     /// <summary>What this tape reads for a nose direction: degrees clockwise from north, which is
     /// world -Z, so +X is 90. Every gauge and the pause chart's icons turn off this one conversion.
@@ -89,10 +94,12 @@ public sealed partial class CompassTape : Control
         // heading; the tape is a dozen quads, so the unconditional redraw is negligible.
         var vp = GetViewportRect().Size;
         float s = HudMetrics.Scale(this);
-        Position = new Vector2((vp.X - RefBarWidth * s) / 2f, RefTopMargin * s);
+        // A null layout shifts by exactly zero, which keeps the original's top-centre place.
+        Position = new Vector2((vp.X - RefBarWidth * s) / 2f, RefTopMargin * s)
+            + HudLayoutPlacement.Shift(HudElement.CompassTape, Layout, HudMetrics.ReadingBox(this), vp, s);
         Size = new Vector2(RefBarWidth * s, RefBarHeight * s);
         QueueRedraw();
-        _labelLayer.QueueRedraw();
+        _labelLayer?.QueueRedraw();   // a bare tape built outside Build has no label layer
     }
 
     public override void _Draw()
