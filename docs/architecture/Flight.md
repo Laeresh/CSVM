@@ -254,7 +254,7 @@ look-behind, the right-stick look-around, the weapon lab's held-airframe orbit, 
 cameras through `Statics`, and the pilot's selected view mode (`PilotViewMode` decides, this class
 holds the state and the camera, `StepViewKeys` takes the selection controls' press edges, and `ResetToChase` is the player's own destroy callback). The chase
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
-throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
+throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound. The zoom's three resets apply only with `Utils/CameraZoomMemory.cs`'s option off, and `RememberZoom` seeds and saves the remembering pilot's zoom.
 The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair, turned by two aircraft frames `EaseFrame` eases at the `*_catch_up` rates times `CatchUpScale`, frames the look-behind shares; `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
 authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts; with the rig's `Fade` the view keys wait for black (`XrFade.Cover`) and land together on it. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
@@ -370,7 +370,7 @@ about 0.045 degrees, under one headset pixel). A marker within `XrMarkerLaw.Ring
 point (clamped to `MaxDistanceM`), facing the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
 arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
 `MarksInWorld` stops their own drawing; `AnswerSpyglass` then answers `TargetHud`'s spyglass gates off the
-head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
+head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). In the None HUD mode outside the cockpit (`TargetHud.LeadOnly`, from `Utils/HudModeSetting.cs`'s `LeadOnly`) it places no `WorldMark` card, ring arrow or picture and releases the spyglass. Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
 
 ## src/Flight/Hud/XrSpyglassDisc.cs
 The spyglass picture in a stereo session: `Camera/SpyglassView.cs`'s texture, rendered once at
@@ -829,8 +829,9 @@ A stunt seat's run control, engine-free and one per seat. The respawn button spl
 (where the crash cam's timer also returns) and `StepLive`. It owns the seat's `StartCount`, begun,
 cancelled and caught up through it: `StepClock` sets `Counting` and ticks the run clock unless the
 count holds it, and `StepCount` answers the cue of a step that is the count's. `ArmReturn` and
-`TakeReturn` hold a tap's pose. `FlightController` performs the answers (the respawn, the walk, the
-cue). Coverage: `CSVM.Tests/StuntRunControlTests.cs`, suite `stunt-start-count`.
+`TakeReturn` hold a tap's pose, with the nitro charge `NoteClears` snapshotted at the zone's clear.
+`FlightController` performs the answers (the respawn, the walk, the cue). Coverage:
+`CSVM.Tests/StuntRunControlTests.cs`, suites `stunt-start-count` and `stunt-return-nitro`.
 
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
@@ -844,7 +845,7 @@ Instant Action wrap-up can carry it past the session. The boards draw the same t
 The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` is
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
-only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
+only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale; `SpyglassScale`, the player's Spyglass Size (`Utils/SpyglassScaleSetting.cs`), clamped to 1..2, multiplies the spyglass disc alone.
 `ReadingBox`: a full-screen view's box is the reference 16:9 at full height, centred; a splitscreen
 pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a minimal border back.
 `WindowSize` is the window these measure against: the stereo HUD panel's surface
@@ -1035,13 +1036,14 @@ course pylons per pylon gate, and per ring a striped torus under three tethered 
 `Build` makes one node per pool gate, in pool order, plus an optional start cone; `Pose(seconds)` stands each at `CourseMotion.Pose`, which `_Process` does on the session clock. One
 shader text, lit and fogged as the faithful aircraft, with the course pylon ripple on `csky_time`. A course
 pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
-`ripple()`, and a hidden child on the same mesh the falling top. `TrackCuts(run)` cuts on the run's `ElementTouched` (course pylons only) and on its `RunReset` restores the course pylons that run cut last; it is called once per run this machine flies (every pane and bot, never a remote seat), and the last run to cut a course pylon owns it, so a rerun leaves another seat's cuts standing. `Follow(run)` is a solo run's `TrackCuts` plus `ShowCues`. Read `CoursePylonCut`.
-`ShowCues(run)` adds the two cues for one named run (the session passes its first pane's), which `Pose` moves on the run's next entry at the gate's motion pose: `Cross`, a red X of two closed bars across the next gate's clear opening, shown only while the aircraft (`StuntMission.PlanePosition`) is on that entry's wrong side (`WrongSide`: more than 2 m past the gate's plane along the flown way and within 800 m, held until 2 m back and out to 1000 m), seen from both sides while shown; and `Highlight`, a dithered yellow fill across the clear opening of the gate after it. Both draw on the course shader, so no shader compiles mid-flight.
+`ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
+`ElementTouched` (course pylons only) and restores on `RunReset`; `FollowSeats` follows every local seat's run once the roster is built and sets `RegrowSeconds` from the racer count, and a remote seat's touch reaches `Cut` through `NetRaceLink`. Read `CoursePylonCut`.
+`ShowCues` adds one pane's run cues (`RunCues`), the wrong-side `Cross` and the next-after `Highlight`, on the course shader; `WrongSide` is the cross's banded test. `ShowPaneCues` adds one set per `PlayerRig` pane, on its `VisualLayer`, following that pane's pilot's run.
 
 ## src/Flight/Modes/CoursePylonCut.cs
 A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and
 the seconds since the cut: the stump's top and sag, the falling top's outward tip and drop, which
-hides it as its foot reaches the ground, whole before the cut and from `RegrowSeconds` (3 s) on. `Recut` keeps a
+hides it as its foot reaches the ground, whole before the cut and from `RegrowSeconds` (3 s) on. With more than one racer the stump alone is whole at `SharedRegrowSeconds` (`RegrowFor`), the top keeping its solo fall. `Recut` keeps a
 second cut within what has regrown, so nothing fallen falls twice. Ages are doubles from the sim
 clock, so `csky_time`'s 3600 s wrap never reaches them. Every time and share is a look tuned at the
 controls. Read `CoursePylonCutTests.cs`.
@@ -1131,8 +1133,8 @@ selection exists (a bot tagged by its callsign, `TrackedTag`), and the F16 / `--
 bracket box and label block and owns the colour table, the label layout, the selected gun's reach
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
-and draws the picture: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+and draws the picture at `DiscRadius`/`DiscSide`, the decoded window times `HudMetrics.SpyglassScale`: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
+read after the flight rigs (`AfterFlightRigs`). `LeadOnly`, the None HUD mode outside the cockpit, draws the lead marker alone and holds no spyglass. In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
@@ -1161,13 +1163,13 @@ a `PauseFrame` and the host performs its two edges, the audio's hold and the re-
 
 ## src/Flight/Audio/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
-one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
-run's Danger Zone camera and start count fire, most drawing the sound their own definition authors, not a fixed name (the count's two are shipped menu sounds).
-The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
-`OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine slot's pitch, gain,
-definition and damage phase come from `EngineAudioCurves`, the gun loop and dry cue from
-`WeaponAudioCues`; `MixGain` scales for splitscreen and `EngineVoiceDuck` lowers both engine slots.
-`AiEngineAudio` and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
+one-shots a crash, a ground or water explosion, a graze, an engine stop and a stunt run fire, most
+from their own definitions. The incoming-fire cues `OnWarningShot`, `OnBulletHit` and `OnWindowHit`
+are flat group draws, rate-limited by `FlightController`; `OnHitConfirm`, the gunner's hit confirm,
+limits itself (`HitConfirmCue`). The engine slot's pitch, gain, definition and damage phase come from `EngineAudioCurves`,
+under Enhanced Sound (`Utils/SoundModeSetting.cs`) with `EnhancedSoundTuning`'s curves and hit gains;
+`MixGain` scales for splitscreen and `EngineVoiceDuck` lowers both engine slots. `AiEngineAudio`
+and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
 
 ## src/Flight/Audio/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read, because the original runs one per-frame routine
@@ -1178,6 +1180,22 @@ rattle gate, the drive parameter and the cull distance. The drive adds a turn ra
 attitude to each curve's parameter under a clamp with headroom above 1, which is why `SoundCurve`
 exposes its steps separately. A pitch reaches the voice only where the definition accepts a
 frequency write (`SlotIsPitched`), leaving the damaged loop at its own rate, and the cockpit loop unless the remake-only `cockpitEnginePitch` option lets the exterior curve reach it (`HealthySlotIsPitched`, read through `FlightAudio.CockpitLoopPitched`). Decode: [../formats/vehicle.md](../formats/vehicle.md), [../formats/sounds.md](../formats/sounds.md), [../org/shakes.md](../org/shakes.md).
+
+## src/Flight/Audio/EnhancedSoundTuning.cs
+Enhanced Sound's amounts, every one a TUNE in `CSVM/data/enhanced_sound.json`: the own engine
+slot's pitch and gain at the decoded curve's two throttle points (`PitchCurve`, `GainCurve`, which
+`EngineAudioCurves.Engine` takes in place of the decoded pair), the gains on the bullet and canopy
+hits, and the hit confirm's group, gain, pitch and interval. A field left out reads its baseline,
+`Neutral` (Original Sound's values) for the shipped file, so `Parse` and `Load` also lay an
+override file over another tuning. The launch `Reload`s `Current` with a sound pack's override over the file (`WithPack`); `WithoutPack` keeps the file's own values for Original Sound's hit confirm, and `SaveTargetFor` names where the lab saves. `FlightAudio` reads them per play.
+`Fields` lists the numeric amounts for the parse and `UI/Labs/SoundLab.cs`, which sets `Current` live and `Save`s.
+Fields: [../formats/sounds.md](../formats/sounds.md#enhanced-sound).
+
+## src/Flight/Audio/HitConfirmCue.cs
+The hit confirm's rules: `Earns` (a human pilot's gun round striking an aircraft `AimAssist.Hostile`
+to it) and `TryFire`, the per-mix rate limit on the projectile pool's sim clock.
+`FlightController.TakeProjectileHit` asks it for the struck aircraft's gunner and plays the cue on
+that gunner's `FlightAudio`, which only a seat flown on this machine carries.
 
 ## src/Flight/Audio/EngineVoiceDuck.cs
 The engine duck under a radio line: one gain the session builds once and hands to every engine
@@ -1308,8 +1326,9 @@ display with somebody at the controls, so the test desktop and `--det` keep thei
 
 ## src/Flight/Camera/SeatMouse.cs
 The desktop mouse one flight seat holds while it flies: `MouseCapture`'s arithmetic plus the engine
-half it leaves out. `Step` takes the mouse on a wanted frame and gives it back on any other, writing
-`Input.MouseMode`; `Release` puts back only a capture this seat made. `Stick` is the cursor offset
+half it leaves out. `Step` takes the mouse on a wanted frame, hides the pointer unheld on a frame a
+cutscene has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
+suite's stand-in); `Release` puts back only a capture or hide this seat made. `Stick` is the cursor offset
 the mouse-flying stick reads, off the virtual cursor while held and the pane's own pointer
 otherwise, and `LookTravel` is head-look's pan. `Allowed` is the session's once-resolved guard and
 `StickForTest` a suite's pinned offset. The host decides which frames want the mouse and hands its
@@ -1321,9 +1340,9 @@ refilled at 1/s always, so a burn nets 3/s and runs 9.5 s from full to the 5 % c
 `HumanCommand` engages on a held command only from a 99 % tank and re-asserts the flag until the
 cutoff; `AiSet` has no engage line and fires once per nitro-flagged maneuver. Both refuse an
 engine-out aircraft and a re-engage while the boost or decay animation is alive. `Installed` is the
-injector, and `EngagedThisTick`/`ReleasedThisTick`/`LoopRefreshedThisTick` are the edges
-`FlightController.AdvanceNitro` turns into the shake kick (a person's camera block, an AI's own
-`medium_aishake`), the two defs and the keyed `snd_nitro` loop. Decode: [../org/flightModel.md](../org/flightModel.md).
+injector, and the `...ThisTick` edges are what `FlightController.AdvanceNitro` turns into the shake
+kick, the two defs and the keyed `snd_nitro` loop. `RestoreCharge` puts back a stunt tap return's
+snapshot after `Reset`. Decode: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Ai/PathFollower.cs
 The engine's SECOND movement law and the exclusive alternative to `FlightModel`: the dispatcher
@@ -1500,7 +1519,7 @@ it decides per call. `KeyboardInputSource` reads through it. Read `AnalogAxes.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
 dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
 message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block.
-The text block is remake-only telemetry the original has no counterpart for, built only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+The text block is remake-only telemetry the original has no counterpart for, built in Full only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). `SetHudMode` takes `Utils/HudModeSetting.cs`'s mode every frame: outside the cockpit Minimal swaps the dials, tape and plate for the text block, and None leaves the pipper, `TargetHud.LeadOnly`'s lead marker, messages and prompts; `PostHudMode` posts a press's line into the pane's message stack, and `Launch/GameSession.cs`'s `StepHudMode` steps every local pane. `SetHudLayout` hands `HudLayoutEditor.cs`'s `Active` layout to the dials, tape and plate every frame, and `OpenLayoutEditor` shows all three under that editor. With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `SetSpectatorView` leaves the stunt run HUD alone up, the message stack off too, for a spectating pane. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
@@ -1574,7 +1593,7 @@ as a cylindrical drum seen edge-on, headings increasing to the left under a clip
 fade holding the bar's inner half flat and its outer quarter near black. Neither end is capped and
 the comb stops a hem short of the bar's bottom edge. Metrics are probe-fitted reference constants
 times `HudMetrics.Scale`, `Build` returns null where a texture is missing, the octant letters
-squeeze with the drum like the ticks, and the control re-anchors on resize. The heading comes from `GaugeCluster`, and `ReadingDeg` is the one nose-vector-to-heading
+squeeze with the drum like the ticks, and the control re-anchors on resize, by a HUD layout's shift where one is set. The heading comes from `GaugeCluster`, and `ReadingDeg` is the one nose-vector-to-heading
 conversion the gauges and pause chart icons share. Model: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/Hud/GaugeCluster.cs
@@ -1582,7 +1601,7 @@ The original's cockpit dials as a screen-space HUD: altimeter, speedometer, dama
 gun and missile weapon gauges and the nitro dial, all geometry extracted from the plane's own
 `gauges` subtree, drawn by data priority and bottom-anchored so splitscreen panes keep them on
 screen. `ColumnAnchors` places the two columns: `HudMetrics.ReadingBox`'s edges, handed back to
-the borders on a pane narrower than the reference frame. `HeadingDeg` carries the nose heading
+the borders on a pane narrower than the reference frame, and a HUD layout moves each column whole (`HudLayoutPlacement.cs`). `HeadingDeg` carries the nose heading
 `CompassTape` and `CockpitGauges` both read; `DamageZoneColor` bands the damage dial off combined
 armour and health against thresholds mined from the data's own `injure_anims`. The sweep and lamp
 structs need no `Control`, so `CSVM.Tests` drives them. [../formats/hud.md](../formats/hud.md).
@@ -1594,8 +1613,22 @@ standing inboard of it. Plate and knob are SVGs in `CSVM/data/hud`, written by
 reads no filters or text. `Image.LoadSvgFromString` re-rasterises both whenever the drawn size
 moves, so the plate stays sharp at any resolution. `KnobY` maps the lever onto the IDLE to MAX
 ticks. Every pilot pane builds one hidden; the Game Options **Throttle Plate** box or
-`--throttle-plate` shows it through `FlightHud.SetThrottlePlateShown`, and `--det` reads no saved
+`--throttle-plate` shows it through `FlightHud.SetThrottlePlateShown` (a HUD layout moves it), and `--det` reads no saved
 box, so no golden draws it.
+
+## src/Flight/Hud/HudLayoutPlacement.cs
+Where a HUD layout (`Utils/HudLayout.cs`) puts each element on a pane, engine-free and stateless:
+`OriginalRect` is the original's own rectangle, `Place` a layout's (from the reading box, or the
+pane's edges for a custom layout), and `Shift` the difference, which `GaugeCluster`, `CompassTape`
+and `ThrottlePlate` add to what they draw. It owns the `Sides` preset and the editor's drop
+(`PlacementFor`, `ToPane`). Read `HudLayoutEditor.cs` next.
+
+## src/Flight/Hud/HudLayoutEditor.cs
+The HUD layout editor over one seat's pane, opened by Edit HUD Layout (Shift+F2) through
+`Launch/GameSession.cs`: the halted view, each element dragged or nudged, Enter saving the Custom
+layout through `Utils/HudLayoutSetting.cs`. It owns the preview every pane draws while it stands
+(`Preview`, `Active`), the `HaltReason.Editing` halt and the seats' silence (`Modes/SeatPause.cs`).
+Read `HudLayoutPlacement.cs` for the pixels.
 
 ## src/Flight/Hangar/CustomPlaneDef.cs
 A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields

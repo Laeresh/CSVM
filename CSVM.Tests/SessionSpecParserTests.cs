@@ -551,4 +551,15 @@ public class SessionSpecParserTests
         Assert.True(SessionSpec.Parse(new[] { "--no-hd-models", "--hd-models=MyModels" }).NoHdModels);
         Assert.Null(SessionSpec.Parse(new[] { "--hd=Packs" }).HdModels);
     }
+
+    /// <summary><c>--hd-sounds=</c> names the sound pack folder, empty naming none, and absent leaves
+    /// config.json's.</summary>
+    [Fact]
+    public void TheSoundPackFlagParses()
+    {
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).HdSounds);
+        Assert.Equal("MySounds", SessionSpec.Parse(new[] { "--hd-sounds=MySounds" }).HdSounds);
+        Assert.Equal("", SessionSpec.Parse(new[] { "--hd-sounds=" }).HdSounds);
+        Assert.Null(SessionSpec.Parse(new[] { "--hd-models=Packs" }).HdSounds);
+    }
 }

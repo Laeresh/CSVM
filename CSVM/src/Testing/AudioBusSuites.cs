@@ -517,7 +517,7 @@ internal static class AudioBusSuites
     private static string PathFrom(Node root, Node node) =>
         ReferenceEquals(root, node) ? node.Name.ToString() : root.GetPathTo(node).ToString();
 
-    private static AudioStreamWav? Stream(SoundArchive archive, IReadOnlyDictionary<string, SoundDef> defs,
+    private static AudioStream? Stream(SoundArchive archive, IReadOnlyDictionary<string, SoundDef> defs,
         string name) =>
         defs.TryGetValue(name, out var def) ? archive.Find(def.WavName, def.Looped, warn: false) : null;
 

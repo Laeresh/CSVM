@@ -356,7 +356,7 @@ public sealed record SessionSpec
         CopyGameFiles != null ? "extract"
         : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpMoonlit || DumpTileGrid || DumpSticks || DumpPath != null ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -371,7 +371,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || CopyGameFiles != null
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpMoonlit || DumpTileGrid
         || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary>Resolved. The chapter world is built instead of a single parked plane.</summary>
@@ -487,6 +487,10 @@ public sealed record SessionSpec
     /// <summary><c>--dump-ocean-mask=&lt;path&gt;</c>: where the wave ocean writes its baked shore
     /// mask as a PNG when it builds; empty for none. See <c>docs/cli.md</c>.</summary>
     public string OceanMaskPath { get; private set; } = "";
+
+    /// <summary><c>--coast-spray=&lt;word&gt;</c>: how the wave ocean's cliff spray draws
+    /// (<see cref="Effects.CoastSpray.Parse"/>); empty for the default. See <c>docs/cli.md</c>.</summary>
+    public string CoastSpray { get; private set; } = "";
 
     /// <summary><c>--terrain-shadows=on|off</c>: whether Enhanced bakes the terrain's sun shadow
     /// (<see cref="Effects.TerrainShadow"/>), the A/B lever; on unless said otherwise. See <c>docs/cli.md</c>.</summary>
@@ -764,6 +768,7 @@ public sealed record SessionSpec
         : DumpConfig ? "--dump-config"
         : DumpMips ? "--dump-mips"
         : DumpAi ? "--dump-ai"
+        : DumpMoonlit ? "--dump-moonlit"
         : DumpTileGrid ? "--dump-tilegrid"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
@@ -867,6 +872,10 @@ public sealed record SessionSpec
     /// scale and eye offset with a save into <c>data/vr_cockpits.json</c>. Read only by a stereo
     /// session; a flat launch ignores it.</summary>
     public bool XrTune { get; private set; }
+    /// <summary><c>--sound-lab</c>: build the sound lab (Shift+F9) over every flight this launch makes,
+    /// the menu's included. It puts Enhanced Sound's amounts on live sliders with a save into
+    /// <c>data/enhanced_sound.json</c>. Without it nothing reads Shift+F9.</summary>
+    public bool SoundLab { get; private set; }
     /// <summary><c>--xr-render-scale=50..125</c>, the headset's eye size as a percentage of the
     /// runtime's recommendation, one of <see cref="VrRenderScaleSetting.Words"/>. Null
     /// when not given, and for an unknown word with a note. Beats the saved option.</summary>
@@ -919,6 +928,11 @@ public sealed record SessionSpec
     /// chapter (turrets are one shared file and are always reported in full).</summary>
     public bool DumpAi { get; private set; }
     public string DumpAiChapter { get; private set; } = "";
+
+    /// <summary><c>--dump-moonlit</c>: the moonlit list's candidate table. It lists every flown world
+    /// whose dome draws a moon card, with its authored <c>SUNLIGHT</c> pair and night verdict. Pure
+    /// data, with no world and no scene (<c>Tooling/Probes.Moonlit</c>).</summary>
+    public bool DumpMoonlit { get; private set; }
 
     /// <summary><c>--dump-tilegrid</c>: build the chapter world, write the map-edge tile census
     /// and quit. The written twin of <c>--debug-tilegrid</c>, and strictly more: the
@@ -1231,6 +1245,10 @@ public sealed record SessionSpec
     /// <summary><c>--no-hd-models</c>: read no model pack, whatever <see cref="HdModels"/> or
     /// config.json names.</summary>
     public bool NoHdModels { get; private set; }
+
+    /// <summary><c>--hd-sounds=</c>: the sound pack folder, under the data root unless rooted. Empty
+    /// reads no pack. Null when absent, which leaves config.json's <c>sounds.hd</c>.</summary>
+    public string? HdSounds { get; private set; }
 
     /// <summary><c>--mod-folder=</c>: the modding folder of unzbd output this launch reads
     /// (<see cref="ModdingFolder"/>), beating the saved one. Empty names none. Null when absent.</summary>
@@ -1763,6 +1781,7 @@ public sealed record SessionSpec
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
             else if (arg == "--no-ocean") { s.SkippedPasses |= EnhancedPasses.Ocean; }
             else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
+            else if (arg.StartsWith("--coast-spray=")) { s.CoastSpray = arg["--coast-spray=".Length..]; }
             else if (arg is "--terrain-shadows=on" or "--terrain-shadows=off") { s.TerrainShadows = arg.EndsWith("on", StringComparison.Ordinal); }
             else if (arg.StartsWith("--dump-terrain-shadow=")) { s.TerrainShadowPath = arg["--dump-terrain-shadow=".Length..]; }
             else if (arg.StartsWith("--terrain-shadow-cell=")) { s.TerrainShadowCell = float.TryParse(arg["--terrain-shadow-cell=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out float cell) ? Math.Clamp(cell, 2f, 64f) : s.TerrainShadowCell; }
@@ -1789,6 +1808,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
+            else if (arg == "--dump-moonlit") { s.DumpMoonlit = true; }
             else if (arg == "--dump-sticks") { s.DumpSticks = true; }
             else if (arg.StartsWith("--dump-sticks="))
             {
@@ -1813,6 +1833,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
+            else if (arg.StartsWith("--hd-sounds=")) { s.HdSounds = arg["--hd-sounds=".Length..]; }
             else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
             else if (arg.StartsWith("--hitch-inject="))
             {
@@ -1915,6 +1936,10 @@ public sealed record SessionSpec
             else if (arg == "--xr-tune")
             {
                 s.XrTune = true;
+            }
+            else if (arg == "--sound-lab")
+            {
+                s.SoundLab = true;
             }
             else if (arg.StartsWith("--xr-chase="))
             {
@@ -2730,6 +2755,12 @@ public sealed record SessionSpec
              || WeaponFreeCamera || WeaponCameraToggle > 0) && !Fly)
         {
             Warn("core", "the --weapon-lab flags need flight; another mode flag won this session, so the lab will not build");
+        }
+        // A menu launch flies later under a spec derived from this one, so only a mode that never
+        // flies is told.
+        if (SoundLab && Mode is not (SessionMode.Fly or SessionMode.Menu))
+        {
+            Warn("ui", "--sound-lab tunes a flight's sound; this session flies nothing, so it builds no sound lab");
         }
         bool observing = Mode == SessionMode.Freecam || Mode == SessionMode.AnimLab;
         if (DebugSelect != null && !observing)

@@ -43,7 +43,7 @@ are remake-only, so no item has an original-game value to decode.
 | 2 | Whether the race board shows a racer's penalty count | **Times only.** Penalty seconds are already inside every reported time; no count goes on the wire or the board. The solo HUD keeps its own penalty line. |
 | 3 | When the host's course reaches a guest | **In the lobby**: a new reliable lobby message (chapter, name, hash, JSON), sent when the host picks a course and to each guest that joins. The launch builds from that copy. It has a size limit, and a course over it cannot be picked for a network race. |
 | 4 | Whether a guest keeps the host's course | **Save if absent**: write it to `<dataRoot>/Courses/<chapter>/<name>.json` only when no file of that name exists there; a same-named file is never overwritten. |
-| 5 | Whose pylon cuts the drawn course shows with several seats | **Local seats, shared**: each machine draws the cuts of the seats it flies (every split-screen pane and its bots, never a remote pilot); a pylon stands whole again when the seat that cut it reruns. |
+| 5 | Whose pylon cuts the drawn course shows with several seats | **Local seats, shared**: each machine draws the cuts of the seats it flies (every split-screen pane and its bots, never a remote pilot); a pylon stands whole again when the seat that cut it reruns. Superseded by #308 on main: one shared restore, a 1.5 s regrow with more than one racer. |
 | 6 | How a race bot flies a course gate | **Synthetic ribbons**: per sequence entry, a short `DangerZoneRibbon.FromPolyline` from before the gate, through its opening along the entry's direction, to past it, ridden by the existing `FlyDangerZone` run. A moving gate's ribbon follows the gate's live pose (`run.GateMotion`) each step. |
 | 7 | Whether a bot's skill tier changes anything more on a course | **Same as the Danger Zones**: the tier's cruise throttle and approach spread carry over; further tuning is a `type:tuning` issue after the bots fly. |
 | 8 | Whether race bots fire on a course | **Shoot blockers**: run the Danger Zone blocking-structure cast along each synthetic ribbon and shoot what it strikes. |
@@ -106,7 +106,7 @@ parallel.
 
 ## A1 ☑ The host's lobby sends its course to every guest, and each machine builds the run from that copy
 
-**Landed.** A Stunt Race host's course travels as `LobbyCourseMessage` (`0x6C`, reliable, host to
+**Landed.** A Stunt Race host's course travels as `LobbyCourseMessage` (`0x6D`, reliable, host to
 each guest: round, chapter, name, `Course.Hash`, the JSON whole; an empty name is the Danger
 Zones), in `CSVM/src/Net/NetDogfightMessages.cs` over a counted UTF-8 field added to
 `NetMessageWriter.cs`. `DogfightLobby.SetCourse` is the host's pick: a new round, the word sent
@@ -305,20 +305,15 @@ bot suites stay green.
 does (`InstantActionCourseTests`): `Course` the pick, `Chapter` the course's, `Mission` IA1, `Stunt`,
 `Players` the seat count, `VsBots` the rows, no refusal, so C23 needs only the menu gate and layout.
 Every pane and every bot flown here races its own `ForAnotherPlayer` run in one `StuntRace`.
-`CourseVisuals.TrackCuts` is called once per run this machine flies, through the new
-`HumanRosterBindings.TrackRun` that `HumanFlightAdapter` invokes for each pane's and each local
-bot's run (never a remote seat's), in place of `GameSession` following `_courseRun` alone. The last
-seat to cut a course pylon owns it, and a run's `RunReset` restores only the course pylons it owns:
-A cuts, B recuts, A reruns and it stays cut; B reruns and it stands. Once the roster is built,
-`GameSession` hands the first pane's run to `CourseVisuals.ShowCues` for the wrong-side cross and
-the highlight, whatever order the seats were built in; `Follow` stays the solo pair of both.
-Files: `Spec/SessionSpec.cs`, `Flight/Modes/CourseVisuals.cs`, `Launch/GameSession.cs`,
-`Session/Roster/FlightRosterInputs.cs`, `Session/Roster/HumanFlightAdapter.cs`; suites
-`course-race-local` (new, `CourseLaunchSuites`, with a bot's rerun restoring its own cut),
-`course-visuals` (two seats' cuts), `stunt-race-bot-course`/`-blocker` (plain `bots:` spec, the
+C21's per-seat cut ownership and its `TrackCuts`/`ShowCues` binding are superseded by #308's shared
+restore and 1.5 s regrow (`CourseVisuals.FollowSeats`) and #284's per-pane cues (`ShowPaneCues`),
+both on main.
+Files: `Spec/SessionSpec.cs`, `Launch/GameSession.cs`; suites `course-race-local` (new,
+`CourseLaunchSuites`, with a bot's cut and a rerun standing every course pylon whole),
+`stunt-race-bot-course`/`-blocker` (plain `bots:` spec, the
 reflection gone), and `Testing/CourseFlight.cs` (placement flying shared with `net-course-from-host`);
 unit tests in `SessionSpecTests` and `InstantActionCourseTests`; docs `cli.md`, architecture Spec,
-Launch, Flight, Session. In split screen the cues follow the first pane only (follow-up issue).
+Launch.
 
 **Verified.** <pending orchestrator run>
 

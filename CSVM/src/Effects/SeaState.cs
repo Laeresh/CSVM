@@ -47,7 +47,7 @@ public sealed record SeaState
         new("swell_full", "Swell ramp full (m)", Coast, 16f, OceanMaskRaster.ShoreReach, 1f, s => s.SwellFull, (s, v) => s with { SwellFull = v },
             "the mask stops at 160 m; farther needs a rebake"),
         new("look_from", "Look ramp from (m)", Coast, 0f, OceanMaskRaster.ShoreReach - RampGap, 1f, s => s.LookFrom, (s, v) => s with { LookFrom = v },
-            "0 runs the look to a solid shore; keep a texel where an opaque coast tile meets the sea"),
+            "0 runs the look to the land"),
         new("look_full", "Look ramp full (m)", Coast, RampGap, OceanMaskRaster.ShoreReach, 1f, s => s.LookFull, (s, v) => s with { LookFull = v }),
         new("tint_r", "Tint red", Coast, 0.5f, 1.5f, 0.01f, s => s.TintR, (s, v) => s with { TintR = v }),
         new("tint_g", "Tint green", Coast, 0.5f, 1.5f, 0.01f, s => s.TintG, (s, v) => s with { TintG = v }),
@@ -60,6 +60,8 @@ public sealed record SeaState
         new("surf_spacing_m", "Line spacing (m)", Surf, 4f, 40f, 1f, s => s.SurfSpacing, (s, v) => s with { SurfSpacing = v }),
         new("surf_speed_mps", "Line speed (m/s)", Surf, 0f, 5f, 0.1f, s => s.SurfSpeed, (s, v) => s with { SurfSpeed = v },
             "steps by whole lines per csky_time wrap"),
+        new("spray", "Cliff spray", Surf, 0f, 1f, 1f, s => s.Spray, (s, v) => s with { Spray = v },
+            "1 throws spray up the cliffs behind the painted coasts as each line arrives, 0 none"),
     };
 
     // The lab's groups, in the order its panel shows them.
@@ -115,16 +117,14 @@ public sealed record SeaState
     /// <summary>TUNE. Where the swell reaches full height, at most the mask's reach.</summary>
     public float SwellFull { get; init; } = OceanMaskRaster.ShoreReach;
 
-    /// <summary>TUNE. Metres from the shore over which the look (slope, chop, foam, texture) fades in. Where
-    /// an opaque coast tile meets the sea it wants at least one mask texel. The ocean then matches the
-    /// flat sheet over the texel the linear filter blends into the tile. A solid shore has no such
-    /// seam, since the sheet is hidden there, so 0 runs the look to the land.</summary>
+    /// <summary>TUNE. Metres from the shore over which the look (slope, chop, foam) fades in. 0 runs it
+    /// to the land.</summary>
     public float LookFrom { get; init; } = 12f;
 
     /// <summary>TUNE. Where the look is full.</summary>
     public float LookFull { get; init; } = 64f;
 
-    /// <summary>A multiplier on the open sea's colour, red channel. The shore keeps the sheet's own.</summary>
+    /// <summary>A multiplier on the sea's colour, red channel.</summary>
     public float TintR { get; init; } = 1f;
 
     /// <summary>The open sea's colour multiplier, green channel.</summary>
@@ -151,6 +151,13 @@ public sealed record SeaState
 
     /// <summary>TUNE. The lines' speed toward the land in m/s, rounded to whole lines per <c>csky_time</c> wrap.</summary>
     public float SurfSpeed { get; init; } = 1.5f;
+
+    /// <summary>Whether the surf throws spray up the cliffs (<see cref="CoastSpray"/>), 1 or 0. C3 sets 0:
+    /// its cliffs stand 50 to 130 m behind the painted waterline, and its spray landed in the forest.</summary>
+    public float Spray { get; init; } = 1f;
+
+    /// <summary>Whether <see cref="Spray"/> is on.</summary>
+    public bool Sprays => Spray >= 0.5f;
 
     /// <summary>Whether the open sea's colour is tinted at all. An untinted sea writes no tint term.</summary>
     public bool Tinted => TintR != 1f || TintG != 1f || TintB != 1f;

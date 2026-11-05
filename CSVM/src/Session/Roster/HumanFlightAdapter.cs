@@ -292,8 +292,10 @@ internal sealed class HumanFlightAdapter
         controller.Headset = xrInterior ? _policy.XrChase : null;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
-        // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
+        // The graphics-mode action and the HUD mode step, for a seat somebody sits at here, like the pause key below.
         controller.ToggleGraphicsMode = paneless ? null : _human.ToggleGraphicsMode;
+        controller.CycleHudMode = paneless ? null : _human.CycleHudMode;
+        controller.EditHudLayout = paneless ? null : _human.EditHudLayout;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -570,7 +572,6 @@ internal sealed class HumanFlightAdapter
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt = run;
-            _human.TrackRun?.Invoke(run);
             run.LogTag = tag; // "P2 " in a race, one shared world, four runs
             controller.DebugCompleteStunt = _policy.DebugScoreboard;
             // This pilot's own unflown zones, on their own target cycle. Bound per controller
@@ -643,7 +644,6 @@ internal sealed class HumanFlightAdapter
             var run = _human.StuntZones.ForAnotherPlayer();
             run.LogTag = tag;
             controller.Stunt = run;
-            _human.TrackRun?.Invoke(run);
             controller.Race = botRace;
             controller.RerunCount = _human.RerunCount;
             // Nobody presses R for it, so a crash returns it to its last zone unattended.

@@ -100,7 +100,8 @@ function Invoke-FormatAndBuild {
     param([string]$Root, [string[]]$BuildArgs = @())
     $proj = Join-Path $Root 'CSVM/CSVM.csproj'
     if (-not (Test-Path -LiteralPath $proj)) { return @() }
-    dotnet format $proj --verbosity quiet
+    # Its stdout would join the return value, and any line there (the SDK's first-run banner) blocks.
+    $null = dotnet format $proj --verbosity quiet
     $buildOutput = dotnet build $proj --verbosity quiet --nologo -t:Rebuild @BuildArgs 2>&1
     return @($buildOutput | Select-String -Pattern 'SA\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' } | ForEach-Object { $_.Line })
 }

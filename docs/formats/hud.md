@@ -226,6 +226,12 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `HudMetrics.MinimumColumnMargin` there (`GaugeCluster.ColumnAnchors`). That
   minimum is a placement choice, not a measurement: the reference captures run
   through dgVoodoo at 16:9, so there is no 4:3 still to measure.
+- **Column extents** (derived from the dial placements above, for the remake-only HUD layout,
+  which moves each column whole): a column's top is its weapon dial's centre less the radius,
+  918 - 85 = **833**; its bottom the lowest dial's centre plus the radius, 1299 + 85 = **1384**.
+  The left column spans 340.5 (the altimeter's 425.5 less 85) to the damage dial's 426.5 + 85 =
+  511.5, **171** wide; the right column is one dial wide, 2 x 85 = **170**. The original has no
+  layout choice; these numbers draw no dial and only size the rectangle a layout places.
 - **The artificial horizon is decoded and driven as a node rotation, on the ball mesh named
   `pfhorizon`, never `horizn`.** Neither `horizn`, the plain `horiz` some airframes use instead,
   nor `comp` ever appears in `crimson.exe`; the binary's own names are `pfhorizon` (the ball) and

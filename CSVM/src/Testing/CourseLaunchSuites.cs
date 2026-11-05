@@ -39,9 +39,9 @@ internal static class CourseLaunchSuites
 
     [Suite("course-race-local",
         "a --stunt --course=C1/sample_out_and_back race of two split screen panes, and a menu-built one of a "
-        + "pane and an ace race bot: every seat flies its own run of the course, the drawn course carries the first "
-        + "pane's cues, and each pane flown through every entry records its best under the course key in the launch's "
-        + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands it whole")]
+        + "pane and an ace race bot: every seat flies its own run of the course, the drawn course carries one cue set "
+        + "per pane, and each pane flown through every entry records its best under the course key in the launch's "
+        + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands every course pylon whole")]
     internal static void CourseRaceLocal(TestContext ctx)
     {
         ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
@@ -325,9 +325,9 @@ internal static class CourseLaunchSuites
                 return;
             }
 
-            if (session.FindChild("course_visuals", true, false) is not CourseVisuals { Cross: not null } visuals)
+            if (session.FindChild("course_visuals", true, false) is not CourseVisuals visuals || visuals.Cues.Count != spec.Players)
             {
-                ctx.Check(false, $"[{cell}] the course is drawn, with the first pane's cues");
+                ctx.Check(false, $"[{cell}] the course is drawn, with one cue set per pane");
                 return;
             }
 
@@ -350,7 +350,7 @@ internal static class CourseLaunchSuites
 
             if (seats[1] is { IsBotSeat: true })
             {
-                BotCutsItsOwn(ctx, cell, visuals, runs[1]!, course);
+                BotCuts(ctx, cell, visuals, runs[1]!, course);
             }
         }
         finally
@@ -359,9 +359,10 @@ internal static class CourseLaunchSuites
         }
     }
 
-    // The bot's run brushes a pylon gate's left course pylon. The drawing tracks the bot's run, so
-    // the course pylon is cut, and the run's reset, the path every rerun takes, stands it whole.
-    private static void BotCutsItsOwn(TestContext ctx, string cell, CourseVisuals visuals, StuntMission run, Course course)
+    // The bot's run brushes a pylon gate's left course pylon and another racer's cut takes the right.
+    // The drawing follows the bot's run, so the left is cut. The run's reset, the path every rerun
+    // takes, stands both whole: one shared restore.
+    private static void BotCuts(TestContext ctx, string cell, CourseVisuals visuals, StuntMission run, Course course)
     {
         int g = course.Gates.ToList().FindIndex(x => x.Kind == CourseGateKind.PylonGate);
         if (g < 0)
@@ -372,7 +373,9 @@ internal static class CourseLaunchSuites
 
         var gate = course.Gates[g];
         var stump = (ShaderMaterial)visuals.GateNodes[g].GetNode<MeshInstance3D>("pylon_left").MaterialOverride;
+        var right = (ShaderMaterial)visuals.GateNodes[g].GetNode<MeshInstance3D>("pylon_right").MaterialOverride;
         float Top() => stump.GetShaderParameter("clip_hi_m").AsSingle();
+        float RightTop() => right.GetShaderParameter("clip_hi_m").AsSingle();
         float height = 0.4f * gate.Height;
         float radius = Mathf.Lerp(CourseGateShape.PylonBaseRadius(gate), CourseGateShape.PylonTopRadius(gate), height / gate.Height);
         var pose = CourseMotion.Pose(gate, run.SimSeconds());
@@ -380,11 +383,14 @@ internal static class CourseLaunchSuites
         run.Update(pose * new Vector3((-0.5f * gate.Width) - radius - 10f, height, 0.3f), 1f);
         run.Update(pose * new Vector3((-0.5f * gate.Width) - radius - 0.5f, height, 0.3f), 1f);
         double now = run.SimSeconds();
+        visuals.Cut(g, CourseElement.RightCoursePylon, height, now);
         visuals.Pose(now + 0.1);
-        ctx.Check(Top() < gate.Height, $"[{cell}] the bot's touch cuts {gate.Id}'s left course pylon at {Top().ToString("0.00", CultureInfo.InvariantCulture)} m");
+        ctx.Check(Top() < gate.Height && RightTop() < gate.Height,
+            $"[{cell}] the bot's touch cuts {gate.Id}'s left course pylon at {Top().ToString("0.00", CultureInfo.InvariantCulture)} m, beside another racer's cut");
         run.Reset();
         visuals.Pose(now + 0.2);
-        ctx.Check(Top() == CoursePylonCut.NoClipM, $"[{cell}] the bot's rerun stands the course pylon it cut whole");
+        ctx.Check(Top() == CoursePylonCut.NoClipM && RightTop() == CoursePylonCut.NoClipM,
+            $"[{cell}] the bot's rerun stands every course pylon whole, the other racer's cut included");
     }
 
     private static string Seconds(float? time) => time?.ToString("0.000", CultureInfo.InvariantCulture) ?? "none";

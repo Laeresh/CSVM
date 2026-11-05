@@ -162,6 +162,10 @@ internal sealed class LiveSettings
         options.LeadingAimAssist = applied.LeadingAimAssist;
         options.LeadMarker = applied.LeadMarker;
         options.ThrottlePlate = applied.ThrottlePlate;
+        options.HudMode = applied.HudMode;
+        options.HudLayout = applied.HudLayout;
+        options.SpyglassScale = applied.SpyglassScale;
+        CameraZoomMemory.Stage(options, applied.KeepCameraZoom);
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
@@ -172,6 +176,8 @@ internal sealed class LiveSettings
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
         options.AudioVoice = applied.AudioVoice;
+        options.SoundMode = applied.SoundMode;
+        options.HitConfirm = applied.HitConfirm;
         options.VrMode = applied.VrMode;
         options.VrRenderScale = applied.VrRenderScale;
         options.VrVignette = applied.VrVignette;
@@ -191,9 +197,23 @@ internal sealed class LiveSettings
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
+        // The flight reads both every play, so a pick over the pause sheet is heard on the next frame.
+        SoundModeSetting.ApplySaved(spec.Det, options);
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
+        // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
+        SpyglassScaleSetting.ApplySaved(spec.Det);
+        // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.
+        // Under --det the apply leaves it alone, so a pick there never overwrites the panes' F2 steps.
+        if (!spec.Det)
+        {
+            HudModeSetting.ApplySaved(det: false);
+        }
+        // The panes follow the layout each frame. Under --det the apply leaves it alone, keeping the editor's pick.
+        HudLayoutSetting.ApplyAfterOptions(spec.Det);
+        // Each camera reads the switch live, so a pick over the pause sheet takes the flying panes too.
+        CameraZoomMemory.ApplySaved(spec.Det);
         // Each word setting resolved again with the applied word in the saved slot, so its flag still
         // beats it, and a headset's profile too.
         WordSettings.ResolveAll(Flags(spec), applied.Words, spec.Det);

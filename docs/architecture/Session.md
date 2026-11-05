@@ -315,7 +315,7 @@ takes each local seat's run. The host's race follows its own seats and takes eac
 `Step` sends every changed racer's line, then the clock once a second and on each change of phase.
 A guest's race is a `StuntRace.Replicate` copy fed by those lines and that clock. Its opening
 catches up to the host's by the reading's lateness, and `CatchUp` skips each local seat's count
-alike. The host's `CallRerun` opens a guest's next window through `Rerun` ahead of its lines, `Leave` sends a guest's leaving (`GuestLeft` on the host) or an ended race's return to the lobby (`LobbyCalled` on a guest), and `SeatLeft` marks a departed seat's racer on every machine. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
+alike. The host's `CallRerun` opens a guest's next window through `Rerun` ahead of its lines, `Leave` sends a guest's leaving (`GuestLeft` on the host) or an ended race's return to the lobby (`LobbyCalled` on a guest), and `SeatLeft` marks a departed seat's racer on every machine. `Feed` also sends each local course pylon touch, which the host relays; a remote touch reaches only `TouchShown`, the course visuals' cut. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
 `Flight/Modes/StuntRace.cs` next.
 
 ## src/Session/Campaign/NetPositionalStartLink.cs
@@ -564,7 +564,7 @@ contracts keep the roster from taking all of `SessionSpec` or exposing either as
 leaving its required dependencies explicit at the production seam. `HumanRosterBindings.RigCount`
 counts SEATS, guests on other machines included, and `NetSeats` is that roster indexed by seat,
 empty outside a network match, `SeatLeft` says which guest's seat has left it, and `SeatFit` is a co-op seat's loadout. `SoloStuntBoard` is how a
-solo stunt run gets its results board without the roster naming a screen, and `BestSplits` how a course run's HUD reads the stored best's splits without the roster holding the score store. `TrackRun` hands the drawn course each run flown here, a pane's or a bot's, never a remote seat's. `FlightWorldBindings.Racing` is the session's race flag, which both assemblers read. Read `FlightRoster.cs` next.
+solo stunt run gets its results board without the roster naming a screen, and `BestSplits` how a course run's HUD reads the stored best's splits without the roster holding the score store. `FlightWorldBindings.Racing` is the session's race flag, which both assemblers read. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/CrashRigQueue.cs
 The session's queue of crash rigs whose aeroplane is already flying. A mid-flight AI introduction is
@@ -632,8 +632,16 @@ graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit
 zones too; both arms put the ambient half through `WriteColorAmbient`, colour-sourced and never a sky
 contribution, so a night zone's scene fill is darker than a day zone's. `ApplyFogState` is the
 animation runtime's `FOG_STATE` sink, writing only the fields the event carries under the same
-last-writer order. Enhanced mode also caps a night zone, paints the sky the zone's own fog colour and
+last-writer order. Enhanced mode also caps a night zone (`IsNightZone`: a dark fog colour, or a world `MoonlitMissions.cs` lists), paints the sky the zone's own fog colour and
 pushes a day zone's fog range out, which the sun's shadow distance follows; a night zone keeps its authored range, so a lit city fades into its near-black fog with the ground. Outside an armed fog volume an Enhanced view's fog also blends toward the volume zone's (`BlendFog`, range in reciprocal metres) over its camera's last 100 m to the nearest volume (`VolumeApproachMetres`), and its rig shows the volume zone's dome veiled in the outside fog colour, so the scene greys as a whole instead of jumping at the camera-state edge. `PublishVolumeFog` hands the shaders that zone's fog and every armed volume's face planes (`VolumeFogData`, globals registered by `RegisterGlobals`) and, under Enhanced, draws the volumes' body on the outside state's zone layer: each pixel seen through a volume from outside greys over the stretch of its view ray inside the volume, up to the scene depth. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Under Enhanced `ApplyZone` aims the sun at the zone's dome's `sun` billboard, or its `moon` for a night zone, where the chapter draws one (`LightOrientation`, `SkyAnchorOrientation`), so its shadow maps and the terrain bake agree with the sky; Original wears the authored bearing. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+
+## src/Session/World/MoonlitMissions.cs
+The shipped list of moonlit missions, `CSVM/data/moonlit_missions.json`: worlds lit as night under
+Enhanced though their authored light is day-level, each spelled `<chapter>/<mission folder>`. It
+ships empty; a pick is one entry. `WeatherRig` reads it once per world and marks a listed world's
+zones (`WeatherState.MarkMoonlit`), which `WeatherRig.IsNightZone` counts as night under Enhanced
+alone, so the cloud shadows and every other night reader follow. A malformed entry is a warning.
+`--dump-moonlit` prints the candidates (`Tooling/Probes.Moonlit`). Rule: [../org/weather.md](../org/weather.md).
 
 ## src/Session/World/FogViewTable.cs
 The per-view atmosphere table: every camera drawing the shared world (each splitscreen pane and each

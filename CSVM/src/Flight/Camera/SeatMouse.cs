@@ -28,6 +28,27 @@ public sealed class SeatMouse
     /// <summary>Whether this seat holds the mouse right now.</summary>
     public bool Holding => _capture.Holding;
 
+    /// <summary>Whether this seat hides the pointer without holding it. The mode is the capture's,
+    /// but no motion is banked, so a mouse moved under a cutscene flies nothing.</summary>
+    public bool Hiding { get; private set; }
+
+    /// <summary>The desktop mouse mode this seat reads and writes while set, standing in for
+    /// <c>Input.MouseMode</c>. A suite can then follow the mode a seat leaves behind on a display
+    /// that must not be captured, or cannot be. Null, the default, is the real desktop.</summary>
+    internal Input.MouseModeEnum? ModeForTest { get; set; }
+
+    private Input.MouseModeEnum Mode
+    {
+        get => ModeForTest ?? Input.MouseMode;
+        set
+        {
+            if (ModeForTest.HasValue)
+                ModeForTest = value;
+            else
+                Input.MouseMode = value;
+        }
+    }
+
     /// <summary>Banks one input event's relative travel. A captured pointer reports nothing else,
     /// and a seat that holds nothing banks nothing.</summary>
     public void Moved(InputEvent @event)
@@ -36,15 +57,22 @@ public sealed class SeatMouse
             _capture.Moved(motion.Relative);
     }
 
-    /// <summary>One frame of the hold: taken on a <paramref name="wanted"/> frame, given back on any
-    /// other, and the virtual cursor stepped through the pane while held. A board that draws its own
-    /// pointer halts the session, and the halt is what hands the pointer back to it.</summary>
-    public void Step(bool wanted, Node seat, float sensitivity)
+    /// <summary>One frame of the hold: taken on a <paramref name="wanted"/> frame, hidden on a
+    /// <paramref name="hidden"/> one and given back on any other. The virtual cursor steps through
+    /// the pane while held. A board that draws its own pointer halts the session, and the halt is
+    /// what hands the pointer back to it.</summary>
+    public void Step(bool wanted, Node seat, float sensitivity, bool hidden)
     {
         if (wanted && !_capture.Holding)
         {
+            // Taken afresh even out of a hide, so the stick comes back centred after a cutscene.
+            Hiding = false;
             _capture.Take(PaneOf(seat)?.GetVisibleRect().Size ?? Vector2.Zero);
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+            Mode = Input.MouseModeEnum.Captured;
+        }
+        else if (!wanted && hidden)
+        {
+            Hide();
         }
         else if (!wanted)
         {
@@ -60,11 +88,12 @@ public sealed class SeatMouse
     /// pause sheet.</summary>
     public void Release()
     {
-        if (!_capture.Holding)
+        if (!_capture.Holding && !Hiding)
             return;
         _capture.Release();
-        if (Input.MouseMode == Input.MouseModeEnum.Captured)
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+        Hiding = false;
+        if (Mode == Input.MouseModeEnum.Captured)
+            Mode = Input.MouseModeEnum.Visible;
     }
 
     /// <summary>Where the cursor stands in <paramref name="seat"/>'s pane as a stick offset, or the
@@ -100,4 +129,15 @@ public sealed class SeatMouse
     }
 
     private static Viewport? PaneOf(Node seat) => seat.IsInsideTree() ? seat.GetViewport() : null;
+
+    // The capture's mode without its hold. A held mouse is let go with the mode left as it is.
+    // The mode is written once on the edge, like the take, so a board's own write is never fought.
+    private void Hide()
+    {
+        if (_capture.Holding)
+            _capture.Release();
+        else if (!Hiding)
+            Mode = Input.MouseModeEnum.Captured;
+        Hiding = true;
+    }
 }

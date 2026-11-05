@@ -313,6 +313,15 @@ public sealed class WorldBuilder
         return zones;
     }
 
+    /// <summary>Where the dome built for <paramref name="zone"/> draws its <c>sun</c> and <c>moon</c>
+    /// cards, from the <c>horizon</c> node's origin. A card the dome does not draw is null. The zone
+    /// falls back as the horizon build's does. Static over a <see cref="GameZ"/>, so a report needs no built scene.</summary>
+    public static (Vector3? Sun, Vector3? Moon) SkyCardsOf(GameZ gamez, string zone)
+    {
+        var horizon = gamez.FindByName("horizon");
+        return horizon == null ? (null, null) : SkyCards(gamez, horizon, HorizonZoneFor(HorizonZonesOf(gamez), zone));
+    }
+
     /// <summary>Which horizon zones this world builds a DOME for, in build order:
     /// <paramref name="activeZone"/> first, then every other zone <see cref="ZoneGate"/> can tell
     /// apart from it. A deck chapter needs both, because the original draws the dome of the zone
@@ -935,6 +944,70 @@ public sealed class WorldBuilder
             ? ((world.AreaRight - world.AreaLeft) / world.PartitionCols, (world.AreaBottom - world.AreaTop) / world.PartitionRows)
             : null;
 
+    // The zone the horizon build takes for a request: the request where the horizon has it, else its first zone.
+    private static string HorizonZoneFor(IReadOnlyList<HorizonZone> zones, string zone)
+    {
+        foreach (var z in zones)
+            if (z.Name.Equals(zone, StringComparison.OrdinalIgnoreCase))
+                return zone;
+        return zones.Count == 0 ? zone : zones[0].Name;
+    }
+
+    // The cards MarkSkyCards puts on the dome, where a later card of one kind wins over an earlier one.
+    private static (Vector3? Sun, Vector3? Moon) SkyCards(GameZ gamez, GameZNode horizon, string zone)
+    {
+        Vector3? sun = null;
+        Vector3? moon = null;
+        var root = gamez.WorldTransformOf(horizon).AffineInverse();
+        foreach (var n in gamez.Nodes)
+        {
+            if (n.MeshIndex < 0 || n.MeshIndex >= gamez.Meshes.Count || !InZone(n))
+                continue;
+            var mesh = gamez.Meshes[n.MeshIndex];
+            if (mesh.Vertices.Count != 4)
+                continue;
+            bool isSun = Named(n, "sun") || Skinned(mesh, "sun");
+            if (!isSun && !Named(n, "moon") && !Skinned(mesh, "moon"))
+                continue;
+            var centre = Vector3.Zero;
+            foreach (var v in mesh.Vertices)
+                centre += v;
+            var at = root * gamez.WorldTransformOf(n) * (centre / 4f);
+            if (isSun)
+                sun = at;
+            else
+                moon = at;
+        }
+
+        return (sun, moon);
+
+        bool InZone(GameZNode n)
+        {
+            var child = n;
+            for (var p = gamez.ParentOf(n); p != null; child = p, p = gamez.ParentOf(p))
+            {
+                if (p == horizon)
+                    return !child.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
+                        || child.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+
+        static bool Named(GameZNode n, string card) => n.Name.Equals(card, StringComparison.OrdinalIgnoreCase);
+
+        bool Skinned(GameZMesh mesh, string card)
+        {
+            foreach (var polygon in mesh.Polygons)
+            {
+                if (polygon.MaterialIndex >= 0 && polygon.MaterialIndex < gamez.Materials.Count
+                    && gamez.Materials[polygon.MaterialIndex].TextureName is { } tex
+                    && tex.StartsWith(card, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+    }
+
     // IsShadowlessGround per mesh index, for this world's cell size, decided once per mesh.
     private Func<int, bool> GroundSheetTest(GameZNode world)
     {
@@ -1292,20 +1365,18 @@ public sealed class WorldBuilder
     private string ResolveHorizonZone(GameZNode horizon, string zone)
     {
         var zones = HorizonZones();
-        if (zones.Count == 0)
-            return zone;
-        foreach (var z in zones)
-            if (z.Name.Equals(zone, StringComparison.OrdinalIgnoreCase))
-                return zone;
+        string resolved = HorizonZoneFor(zones, zone);
+        if (zones.Count == 0 || resolved == zone)
+            return resolved;
         if (!_loggedHorizonZoneFallback)
         {
             _loggedHorizonZoneFallback = true;
             var names = new List<string>();
             foreach (var z in zones)
                 names.Add(z.Name);
-            Log.Info("world", $"horizon: no '{zone}' subtree (has {string.Join("/", names)}), building '{zones[0].Name}'");
+            Log.Info("world", $"horizon: no '{zone}' subtree (has {string.Join("/", names)}), building '{resolved}'");
         }
-        return zones[0].Name;
+        return resolved;
     }
 
     // The sun billboard and the moon are four-corner cards named sun or moon, or skinned sun* or
@@ -1313,49 +1384,11 @@ public sealed class WorldBuilder
     // the dome as metadata.
     private void MarkSkyCards(Node3D built, GameZNode horizon, string zone)
     {
-        var root = _gamez.WorldTransformOf(horizon).AffineInverse();
-        foreach (var n in _gamez.Nodes)
-        {
-            if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count || !InZone(n))
-                continue;
-            var mesh = _gamez.Meshes[n.MeshIndex];
-            if (mesh.Vertices.Count != 4)
-                continue;
-            StringName? meta = Named(n, "sun") || Skinned(mesh, "sun") ? SunCardMeta
-                : Named(n, "moon") || Skinned(mesh, "moon") ? MoonCardMeta : null;
-            if (meta == null)
-                continue;
-            var centre = Vector3.Zero;
-            foreach (var v in mesh.Vertices)
-                centre += v;
-            built.SetMeta(meta, root * _gamez.WorldTransformOf(n) * (centre / 4f));
-        }
-
-        bool InZone(GameZNode n)
-        {
-            var child = n;
-            for (var p = _gamez.ParentOf(n); p != null; child = p, p = _gamez.ParentOf(p))
-            {
-                if (p == horizon)
-                    return !child.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
-                        || child.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
-            }
-            return false;
-        }
-
-        static bool Named(GameZNode n, string card) => n.Name.Equals(card, StringComparison.OrdinalIgnoreCase);
-
-        bool Skinned(GameZMesh mesh, string card)
-        {
-            foreach (var polygon in mesh.Polygons)
-            {
-                if (polygon.MaterialIndex >= 0 && polygon.MaterialIndex < _gamez.Materials.Count
-                    && _gamez.Materials[polygon.MaterialIndex].TextureName is { } tex
-                    && tex.StartsWith(card, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
+        var (sun, moon) = SkyCards(_gamez, horizon, zone);
+        if (sun is { } s)
+            built.SetMeta(SunCardMeta, s);
+        if (moon is { } m)
+            built.SetMeta(MoonCardMeta, m);
     }
 
     // The source moon is an axis-aligned quad, which looks tilted from most headings. Replaced

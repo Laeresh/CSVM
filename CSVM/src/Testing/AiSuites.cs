@@ -2675,7 +2675,7 @@ internal static class AiSuites
                 if (fresh.Find(def.WavName, def.Looped, warn: false) is { } stream)
                 {
                     ok++;
-                    bytes += stream.Data.Length;
+                    bytes += (stream as AudioStreamWav)?.Data.Length ?? 0;
                 }
                 else
                 {

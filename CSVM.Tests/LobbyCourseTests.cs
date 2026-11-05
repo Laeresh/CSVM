@@ -51,7 +51,7 @@ public sealed class LobbyCourseTests
         Assert.Equal(LobbyCourseMessage.MaxSize, atLimit.Write(buffer));
         Assert.True(LobbyCourseMessage.TryRead(buffer, out var got));
         Assert.Equal(atLimit, got);
-        Assert.Equal(0x6C, (int)NetMessageType.LobbyCourse);
+        Assert.Equal(0x6D, (int)NetMessageType.LobbyCourse);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.LobbyCourse));
 
         var past = atLimit with { Json = atLimit.Json + "x" };

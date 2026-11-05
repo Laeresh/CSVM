@@ -687,6 +687,21 @@ public sealed class TextureArchive : IDisposable
         "shore_trans", // C3
     };
 
+    // The textures whose waterline is painted into their pixels on flat polygons at sea level, each
+    // read for its crossing (CoastProfileOf). Not listed: cliff1_watertrans3, whose water is a wedge
+    // no one-axis crossing places, and shore1_end, which lies only on C4's raised lake.
+    private static readonly string[] PaintedCoastline =
+    {
+        "beach1", "cliff01_trans2", "cliff1_watertrans", "cliff1_watertrans2", "shore1", "shore_trans",
+    };
+
+    // C1's coast tiles. Their colour fades with no step, so they are sea up to the rock overlay over
+    // their landward strip, with no crossing of their own.
+    private static readonly HashSet<string> PaintedSeaTiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "water1_trans1", "water1_trans2",
+    };
+
     // Tree, bush and brush cards. Blended rather than cut because the original alpha-tests nothing,
     // so a 1-bit edge here is ours and not a reproduction (docs/org/textures.md). Every name is a
     // currently-scissored member of the family from the install-wide census in
@@ -725,6 +740,8 @@ public sealed class TextureArchive : IDisposable
     private readonly Dictionary<string, TextureImage> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasAlpha, bool Soft, AlphaClass Class)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
+    // "texture|base sheet" -> its coast profile, null where the pixels give no crossing.
+    private readonly Dictionary<string, CoastProfile?> _coastProfiles = new(StringComparer.OrdinalIgnoreCase);
 
     // Every cached texture whose alpha depth depends on the graphics mode, by base name. A live
     // switch uploads each one again at the other depth (FollowAlphaDepth).
@@ -808,6 +825,10 @@ public sealed class TextureArchive : IDisposable
     /// during a build, not a per-archive property anyone chooses.</summary>
     public static MipSource Mips { get; set; } = MipSource.Authored;
 
+    /// <summary>The textures whose waterline is painted into their pixels, by archive name: the
+    /// names <see cref="CoastProfileOf"/> reads a profile for.</summary>
+    public static IReadOnlyList<string> PaintedCoasts => PaintedCoastline;
+
     /// <summary>Distinct texture names this archive could not resolve, for an end-of-build
     /// summary line. Each was already reported once (one line, no stack trace) by Find.</summary>
     public IReadOnlyCollection<string> MissingTextures => _reportedMissing;
@@ -878,6 +899,21 @@ public sealed class TextureArchive : IDisposable
     /// half of the classification only; the pixel rule decides every other texture.</summary>
     public static bool IsNamedSoftAlpha(string materialTextureName) =>
         SoftAlphaNamed.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>True for a painted coast tile that is sea throughout, with no crossing of its own:
+    /// C1's <c>water1_trans1</c> and <c>water1_trans2</c>.</summary>
+    public static bool IsPaintedSeaTile(string materialTextureName) =>
+        PaintedSeaTiles.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>True for a blended decal of painted shallows and foam laid flat on the sea: C3's
+    /// <c>shore2</c>. It paints water, though <c>ClassifySurface</c> calls it land.</summary>
+    public static bool IsPaintedShallows(string materialTextureName) =>
+        Path.GetFileNameWithoutExtension(materialTextureName).Equals("shore2", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True for natural cliff rock: C1's and C2's <c>cliff01</c>, C3's <c>cliff1</c>. C2's
+    /// breakwaters are <c>stacktop</c>, so they throw no cliff spray where they cross the beach.</summary>
+    public static bool IsCliffRock(string materialTextureName) =>
+        Path.GetFileNameWithoutExtension(materialTextureName).StartsWith("cliff", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The chapter's authored mip LOD bias, read from the boot scripts'
     /// <c>MipBias</c> lines and clamped like the original's own command. It is 0 without scripts or
@@ -1107,6 +1143,26 @@ public sealed class TextureArchive : IDisposable
     /// a unit test cannot construct; the after-<see cref="Dispose"/> contract is asserted here.</summary>
     public TextureImage? Lookup(string materialTextureName) =>
         Read(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>The coast profile of a <see cref="PaintedCoasts"/> texture, read off its authored
+    /// pixels against the mean colour of the base sheet <paramref name="baseTexture"/>, and cached.
+    /// Null for any other texture, one this archive lacks, or pixels with no crossing. An HD
+    /// replacement never moves it.</summary>
+    public CoastProfile? CoastProfileOf(string materialTextureName, string baseTexture)
+    {
+        string name = Path.GetFileNameWithoutExtension(materialTextureName);
+        if (Array.FindIndex(PaintedCoastline, n => n.Equals(name, StringComparison.OrdinalIgnoreCase)) < 0)
+            return null;
+        string key = name + "|" + baseTexture;
+        if (_coastProfiles.TryGetValue(key, out var kept))
+            return kept;
+        // The archive's own record holds the pixels FindImage(authored: true) would wrap.
+        var profile = Lookup(name) is { } texture && Lookup(baseTexture) is { } sheet
+            ? CoastProfile.Of(texture, CoastProfile.MeanColour(sheet))
+            : null;
+        _coastProfiles[key] = profile;
+        return profile;
+    }
 
     /// <summary>Ends the archive's usable life: a later uncached read throws
     /// <see cref="ObjectDisposedException"/>. ⚠ Keep it strict. A session that reads its archive

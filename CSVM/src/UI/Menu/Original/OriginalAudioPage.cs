@@ -10,7 +10,9 @@ namespace CSVM.UI.Menu.Original;
 /// section's own lines. Master takes the In-Game Music row, since a slider reaching zero is that checkbox in one
 /// fewer widget. A slider answers no Accept. <see cref="PreviewMix"/> is the mix the open page
 /// stands at and <see cref="TakeMoved"/> the level a frame moved, the host applying and sounding
-/// both. It leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
+/// both. Two remake-only checkboxes stand under the levels: the sound mode and Hit Confirm
+/// (<see cref="CSVM.Utils.SoundModeSetting"/>). It leaves through the form's apply exit
+/// (<see cref="IOriginalOptionsForm"/>).
 /// </summary>
 public sealed class OriginalAudioPage : IOriginalOptionsPage
 {
@@ -35,6 +37,16 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
     /// <summary>The page's Voice Volume slider.</summary>
     public const string VoiceKey = "AUDIOVOICE";
 
+    /// <summary>The page's Enhanced Sound checkbox, a remake-only row: ticked is Enhanced Sound.</summary>
+    public const string SoundModeKey = "SOUNDMODE";
+
+    /// <summary>The page's Hit Confirm checkbox, a remake-only row.</summary>
+    public const string HitConfirmKey = "HITCONFIRM";
+
+    // The section's own checkbox, the In-Game Music box the Master row does not draw. The two switch
+    // rows take its strip and its offset from its title.
+    private const string CheckKey = "AP_B_MUSIC";
+
     // The page's authored row shape, used where a layout does not carry the section or one of its
     // rows. It is the title column and its box, the slider column, and the distance from a title's
     // line down to its own slider's. The description column and its width follow. Each row's own
@@ -46,6 +58,12 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
     private const float SliderOffsetFallback = 26f;
     private const float DescX = 348f;
     private const float DescWidth = 310f;
+
+    // The switch rows' shape where the section does not state it. They are the checkbox's offset from
+    // its title, the gap above and between switches, and the gap kept above a plaque.
+    private const float CheckDxFallback = 122f;
+    private const float SwitchGap = 4f;
+    private const float PlaqueGap = 6f;
 
     // The aid's four levels, one per row and all distinct. A single shot then shows the thumb at
     // four places on the track rather than at the shipped default three times over.
@@ -77,6 +95,21 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
             "Set the volume of the voices.", 434f, 442f,
             c => c.AudioVoice ?? CSVM.Utils.AudioMix.DefaultVoice,
             (c, v) => c.AudioVoice = v),
+    };
+
+    // The two switches under the levels, in the order the cursor walks them. Each is a key, a title, a description, and
+    // how the staged switch is read and flipped. Hit Confirm reads the staged sound mode while
+    // never set, so flipping the mode flips an untouched Hit Confirm with it.
+    private static readonly AudioSwitch[] Switches =
+    {
+        new(SoundModeKey, "Enhanced Sound",
+            "Remix the engine and hit sounds so the throttle and every hit read clearly.",
+            c => c.SoundEnhancedOn,
+            (c, on) => c.SoundMode = on ? CSVM.Utils.SoundModeSetting.Enhanced : CSVM.Utils.SoundModeSetting.Original),
+        new(HitConfirmKey, "Hit Confirm",
+            "Sound a hit when your guns strike an enemy aircraft.",
+            c => c.HitConfirmOn,
+            (c, on) => c.HitConfirm = on),
     };
 
     // The first authored slider row, which is where the page's slider geometry is read from. The
@@ -127,6 +160,12 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
 
     /// <summary>The Voice level the page would apply, or null while never set.</summary>
     public int? VoiceChoice => _choices.AudioVoice;
+
+    /// <summary>The sound mode word the page would apply, or null while never set.</summary>
+    public string? SoundModeChoice => _choices.SoundMode;
+
+    /// <summary>The Hit Confirm switch the page would apply, or null while never set.</summary>
+    public bool? HitConfirmChoice => _choices.HitConfirm;
 
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.Audio;
 
@@ -182,7 +221,13 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
                 rows.Add(_host.PlaqueRow(fallback.Key, $"{fallback.Title} {fallback.Read(_choices)}", i, true, 0));
             }
 
-            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
+            for (int i = 0; i < Switches.Length; i++)
+            {
+                var toggle = Switches[i];
+                rows.Add(_host.PlaqueRow(toggle.Key, $"{toggle.Title} {(toggle.Read(_choices) ? "ON" : "OFF")}", Options.Length + i, true, 0));
+            }
+
+            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length + Switches.Length);
             return;
         }
 
@@ -205,7 +250,14 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
                 }, artFrom: artFrom));
         }
 
-        _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey);
+        var shape = SwitchShape(screen, rows);
+        for (int i = 0; i < Switches.Length; i++)
+        {
+            rows.Add(new OriginalRow(Switches[i].Key, string.Empty, OriginalRowKind.Radio, shape.CheckX, shape.LineY(i),
+                shape.CheckWidth, shape.CheckHeight, true, 0, shape.Check));
+        }
+
+        _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey, shape.PlaqueDy);
     }
 
     // The page has no list, its rows all in view.
@@ -213,14 +265,32 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
     {
     }
 
-    // The sliders are the shell's own step, which runs ahead of the page's.
-    bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) => false;
+    // The sliders are the shell's own step, which runs ahead of the page's. A sideways step on a
+    // switch flips it, as a press does.
+    bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
+    {
+        if (focus < 0 || focus >= rows.Count || SwitchFor(rows[focus].Key) is not { } toggle)
+        {
+            return false;
+        }
+
+        toggle.Flip(_choices);
+        return true;
+    }
 
     bool IOriginalOptionsPage.CloseDropdown() => false;
 
     // A slider row answers nothing. Its value moves under the pointer or by a sideways step, and an
-    // Accept that also moved it would have no opposite.
-    MenuExit? IOriginalOptionsPage.Activate(OriginalRow row) => null;
+    // Accept that also moved it would have no opposite. A switch flips.
+    MenuExit? IOriginalOptionsPage.Activate(OriginalRow row)
+    {
+        if (SwitchFor(row.Key) is { } toggle)
+        {
+            toggle.Flip(_choices);
+        }
+
+        return null;
+    }
 
     // The settings this page does not show ride the apply unchanged, read back when it opened.
     MenuExit? IOriginalOptionsPage.Accept() => _form.Apply();
@@ -257,10 +327,32 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
                 OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
-        for (int i = 0; i < rows.Count; i++)
+        var shape = SwitchShape(screen, rows);
+        for (int i = 0; i < Switches.Length; i++)
         {
-            _host.ComposeGenericRow(rows[i], i == focus, i == _host.PressedRow, i, layers);
+            int at = Options.Length + i;
+            // Centred on the box, which stands taller than a title line.
+            float line = shape.LineY(i) + shape.TextDy;
+            layers.Lines.Add(new BoardLine(Switches[i].Title, shape.TitleX, line, shape.TitleWidth,
+                OriginalOptionsChrome.TitleFont, at == focus ? BoardInk.RowFocused : BoardInk.Row));
+            layers.Lines.Add(new BoardLine(Switches[i].Description, shape.DescX, line, shape.DescWidth,
+                OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
+
+        _chrome.ComposeControls(rows, focus, _host.PressedRow, key => SwitchFor(key)?.Read(_choices) == true, layers);
+    }
+
+    private static AudioSwitch? SwitchFor(string key)
+    {
+        foreach (var toggle in Switches)
+        {
+            if (toggle.Key == key)
+            {
+                return toggle;
+            }
+        }
+
+        return null;
     }
 
     // The column every slider stands in, read off the first authored slider row. It places the
@@ -297,6 +389,36 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
             description?.Int("Width", (int)DescWidth) ?? DescWidth);
     }
 
+    // Where the switches stand: one under another below the last level's slider. The box stands at
+    // the section's checkbox column, its title left of it and its description in the column. The
+    // plaques move down by whatever the switches would otherwise reach into, never up.
+    private AudioSwitchShape SwitchShape(MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows)
+    {
+        var last = Place(screen, Options[^1]);
+        float top = last.SliderY;
+        foreach (var row in rows)
+        {
+            if (row.Key == Options[^1].Key)
+            {
+                top = row.Y + row.Height;
+            }
+        }
+
+        var check = screen.Widget(CheckKey);
+        var art = OriginalOptionsChrome.StripArt(check?.Art ?? Array.Empty<string>(), 0, check?.Frames ?? 8);
+        var size = _chrome.StripSize(art, OriginalOptionsChrome.FallbackCheckSize, OriginalOptionsChrome.FallbackCheckSize);
+        var checkTitle = screen.Widget(Options[0].TitleKey);
+        float checkDx = check != null && checkTitle != null ? check.Int("X") - checkTitle.Int("X") : CheckDxFallback;
+        float checkX = last.TitleX + checkDx;
+        float firstLine = top + SwitchGap;
+        float pitch = size.Height + SwitchGap;
+        float bottom = firstLine + (Switches.Length * pitch);
+        float plaqueDy = screen.Widget(AcceptKey) is { } accept ? Math.Max(0f, bottom + PlaqueGap - accept.Int("Y")) : 0f;
+        return new AudioSwitchShape(art, checkX, size.Width, size.Height, firstLine, pitch,
+            (float)Math.Floor((size.Height - OriginalOptionsChrome.TitleFont) / 2f),
+            last.TitleX, Math.Max(1f, checkX - last.TitleX - SwitchGap), last.DescX, last.DescWidth, plaqueDy);
+    }
+
     // The level a row stands at, found through its own table entry so a level and its shipped
     // fallback keep one definition. Every member but None is in the table, so the last answer is
     // unreachable. It is the resting level rather than silence, a preview being no place to invent
@@ -323,6 +445,23 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
         string Key, MenuMixLevel Level, string Title, string TitleKey, string? ControlKey,
         string DescriptionKey, string Description, float TitleY, float DescY,
         Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write);
+
+    // One switch: its key, title and description, and how the staged switch is read and written.
+    private sealed record AudioSwitch(
+        string Key, string Title, string Description,
+        Func<OptionsChoices, bool> Read, Action<OptionsChoices, bool> Write)
+    {
+        public void Flip(OptionsChoices choices) => Write(choices, !Read(choices));
+    }
+
+    // The switches' shape in authored pixels: the box strip, its column and size, the first line and
+    // the pitch. Then the text's drop from a box's top, the two text boxes and the plaques' move.
+    private sealed record AudioSwitchShape(
+        BoardArt? Check, float CheckX, float CheckWidth, float CheckHeight, float FirstLine, float Pitch,
+        float TextDy, float TitleX, float TitleWidth, float DescX, float DescWidth, float PlaqueDy)
+    {
+        public float LineY(int index) => FirstLine + (index * Pitch);
+    }
 
     // One row's place in authored pixels. It is the title box, the corner its slider stands at
     // where the row authors no slider of its own, and the description box.

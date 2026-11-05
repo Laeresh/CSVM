@@ -6,6 +6,8 @@
 /HD/
 # HD model packs dropped in for HdModels (models.hd's default folder): third-party or game-derived meshes.
 /HDModels/
+# Sound packs dropped in for HdSounds (sounds.hd's default folder): third-party or game-derived recordings.
+/HDSounds/
 /tools/
 # Archives: every zip in this tree so far has been game data or an extraction of it
 # (CSVM-Complete.zip, the unzbd outputs). Ignored as a class rather than by name, so the

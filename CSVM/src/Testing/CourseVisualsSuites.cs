@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
+using CSVM.Net;
 using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.Tooling;
+using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 
@@ -34,52 +37,101 @@ internal static class CourseVisualsSuites
         + "three tethers per balloon ring, every gate node standing at CourseMotion's pose for the sim time "
         + "it is posed at, on a shader reading csky_time and never TIME; a run's touch of a course pylon "
         + "cuts that course pylon alone at the touch's height, its top vanishing as it lands, whole again at the regrow time or on the run's reset; "
-        + "with two seats' runs followed, seat 1's cut stands through seat 0's rerun and is whole on seat 1's own; "
         + "in a C1 flight they are photographed close, wide, a second apart and through a cut into montages")]
     internal static void CourseVisualsDraw(TestContext ctx)
     {
         CheckBuild(ctx);
         CheckCut(ctx);
-        CheckSeats(ctx);
         Montage(ctx);
     }
 
-    // Two seats' runs tracked by one drawing, the cues on seat 0's. Seat 1 brushes the left course pylon; seat 0's rerun
-    // leaves that cut standing, and seat 1's own rerun stands it whole.
-    private static void CheckSeats(TestContext ctx)
+    [Suite("course-shared-cuts",
+        "a course pylon's cut is shared world state: with P1 and P2 in two panes, a local bot between them and a remote seat, "
+        + "P2's touch and the bot's each cut their course pylon on the default layer every pane draws, a remote seat's touch "
+        + "crosses a loopback host and guest as a visual-only race touch and cuts it on the guest, scoring no run; with more "
+        + "than one racer the stump is whole at 1.5 s while a solo field keeps 3 s, and any one run's rerun stands every course pylon whole")]
+    internal static void CourseSharedCuts(TestContext ctx)
     {
         var gate = new CourseGate("p", CourseGateKind.PylonGate, new Vector3(10f, 5f, -20f), 30f, PylonWidthM, PylonHeightM, 0f);
-        var course = new Course(Chapter, "seats", new SpawnPoint(new Vector3(0f, 100f, 0f), 0f), new[] { gate },
+        var course = new Course(Chapter, "shared", new SpawnPoint(new Vector3(0f, 100f, 0f), 0f), new[] { gate },
             new[] { new SequenceEntry("p", GateDirection.Forward) });
         double now = 0.0;
-        var seat0 = StuntMission.ForCourse(course)!;
-        seat0.SimSeconds = () => now;
-        var seat1 = seat0.ForAnotherPlayer();
-        var visuals = CourseVisuals.Build(course).Follow(seat0).TrackCuts(seat1);
+        StuntMission Run()
+        {
+            var run = StuntMission.ForCourse(course)!;
+            run.SimSeconds = () => now;
+            return run;
+        }
+
+        var bot = new FlightController { Stunt = Run(), PlayerIndex = 1 };
+        var pilots = new[] { new FlightController { Stunt = Run(), PlayerIndex = 0 }, new FlightController { Stunt = Run(), PlayerIndex = 2 } };
+        var seats = new[]
+        {
+            new PlayerRig { Index = 0, VisualLayer = SplitScreen.PlayerVisualLayer(0), Controller = pilots[0] },
+            new PlayerRig { Index = 1, Controller = bot },
+            new PlayerRig { Index = 2, VisualLayer = SplitScreen.PlayerVisualLayer(1), Controller = pilots[1] },
+            new PlayerRig { Index = 3 },
+        };
+        var visuals = CourseVisuals.Build(course).FollowSeats(seats, racers: 4);
+        var solo = CourseVisuals.Build(course).FollowSeats(new[] { seats[0] }, racers: 1);
         ctx.Host.AddChild(visuals);
+        ctx.Host.AddChild(solo);
         try
         {
-            var stump = (ShaderMaterial)visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_left").MaterialOverride;
-            float Top() => stump.GetShaderParameter("clip_hi_m").AsSingle();
+            ctx.Check(visuals.RegrowSeconds == CoursePylonCut.SharedRegrowSeconds && solo.RegrowSeconds == CoursePylonCut.RegrowSeconds,
+                $"the stump regrows in {visuals.RegrowSeconds} s for four racers and {solo.RegrowSeconds} s solo");
+            var left = visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_left");
+            var right = visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_right");
+            float Clip(MeshInstance3D pylon) => ((ShaderMaterial)pylon.MaterialOverride).GetShaderParameter("clip_hi_m").AsSingle();
+            ctx.Check(left.Layers == SplitScreen.EveryCameraLayer && right.Layers == SplitScreen.EveryCameraLayer,
+                $"both course pylons stand on the default layer, which every pane draws: {left.Layers}, {right.Layers}");
+
             var rest = CourseMotion.Rest(gate);
             float radius = Mathf.Lerp(CourseGateShape.PylonBaseRadius(gate), CourseGateShape.PylonTopRadius(gate), TouchHeightM / PylonHeightM);
-            seat1.Update(rest * new Vector3((-0.5f * PylonWidthM) - radius - 10f, TouchHeightM, 0.3f), 1f);
-            now = TouchAt;
-            seat1.Update(rest * new Vector3((-0.5f * PylonWidthM) - radius - 0.5f, TouchHeightM, 0.3f), 1f);
+            void Brush(StuntMission run, float side, double at)
+            {
+                float x = side * ((0.5f * PylonWidthM) + radius);
+                run.Update(rest * new Vector3(x + (side * 10f), TouchHeightM, 0.3f), 1f);
+                now = at;
+                run.Update(rest * new Vector3(x + (side * 0.5f), TouchHeightM, 0.3f), 1f);
+            }
+
+            Brush(pilots[1].Stunt!, -1f, TouchAt);
+            visuals.Pose(TouchAt + 0.1);
+            ctx.Check(Clip(left) < PylonHeightM && Clip(right) == CoursePylonCut.NoClipM, $"P2's touch cuts the left course pylon for every pane: {Clip(left):0.00} m");
+            visuals.Pose(TouchAt + CoursePylonCut.SharedRegrowSeconds - 0.02);
+            ctx.Check(Clip(left) < PylonHeightM, $"still regrowing just short of {CoursePylonCut.SharedRegrowSeconds} s");
+            visuals.Pose(TouchAt + CoursePylonCut.SharedRegrowSeconds);
+            ctx.Check(Clip(left) == CoursePylonCut.NoClipM, $"the stump is whole at {CoursePylonCut.SharedRegrowSeconds} s with more than one racer");
+
+            Brush(bot.Stunt!, 1f, TouchAt + 5.0);
             visuals.Pose(now + 0.1);
-            ctx.Check(Top() < PylonHeightM, $"seat 1's touch cuts the course pylon at {Top():0.00} m");
-            seat0.Reset();
+            ctx.Check(Clip(right) < PylonHeightM, $"the local bot's touch cuts the right course pylon: {Clip(right):0.00} m");
+            ctx.Check(Clip(solo.GateNodes[0].GetNode<MeshInstance3D>("pylon_right")) == CoursePylonCut.NoClipM,
+                $"ABLE-TO-FAIL CONTROL: a visuals node following only P1 does not cut on the bot's touch");
+
+            CheckRemoteTouch(ctx, visuals, left, Clip, () => now, pilots.Select(p => p.Stunt!).Append(bot.Stunt!).ToArray());
+
+            pilots[0].Stunt!.Reset();
             visuals.Pose(now + 0.2);
-            ctx.Check(Top() < PylonHeightM, $"seat 0's rerun leaves seat 1's cut standing at {Top():0.00} m");
-            seat1.Reset();
-            visuals.Pose(now + 0.3);
-            ctx.Check(Top() == CoursePylonCut.NoClipM, $"seat 1's rerun stands its cut whole ({Top():0.00} m)");
-            ctx.Check(visuals.Cross != null && visuals.FindChildren("wrong_side_cross", "", false, false).Count == 1,
-                $"tracking a second run adds no second cross");
+            ctx.Check(Clip(left) == CoursePylonCut.NoClipM && Clip(right) == CoursePylonCut.NoClipM,
+                $"P1's rerun stands every course pylon whole, the bot's and the remote seat's cuts included");
+
+            now = TouchAt + 20.0;
+            Brush(pilots[0].Stunt!, -1f, now);
+            solo.Pose(now + CoursePylonCut.SharedRegrowSeconds);
+            ctx.Check(Clip(solo.GateNodes[0].GetNode<MeshInstance3D>("pylon_left")) < PylonHeightM,
+                $"solo, the stump still regrows at {CoursePylonCut.SharedRegrowSeconds} s, whole only at {CoursePylonCut.RegrowSeconds} s");
         }
         finally
         {
             visuals.Free();
+            solo.Free();
+            bot.Free();
+            foreach (var pilot in pilots)
+            {
+                pilot.Free();
+            }
         }
     }
 
@@ -144,8 +196,8 @@ internal static class CourseVisualsSuites
             ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(stump, "sag_m") == 0f && !top.Visible,
                 $"whole at {CoursePylonCut.RegrowSeconds} s");
 
-            visuals.Cut(0, CourseElement.RingRim, TouchHeightM, TouchAt + 4.0, run);
-            visuals.Cut(0, CourseElement.Balloon, TouchHeightM, TouchAt + 4.0, run);
+            visuals.Cut(0, CourseElement.RingRim, TouchHeightM, TouchAt + 4.0);
+            visuals.Cut(0, CourseElement.Balloon, TouchHeightM, TouchAt + 4.0);
             visuals.Pose(TouchAt + 4.0);
             ctx.Check(Uniform(stump, "clip_hi_m") == CoursePylonCut.NoClipM && Uniform(right, "clip_hi_m") == CoursePylonCut.NoClipM,
                 $"a rim or balloon touch cuts nothing");
@@ -164,6 +216,43 @@ internal static class CourseVisualsSuites
         {
             visuals.Free();
         }
+    }
+
+    // A host and a guest over a perfect loopback, the guest's link drawing into the visuals. The
+    // host's seat 0 touches; the guest, flying seat 1, sees the cut and no run here is scored.
+    private static void CheckRemoteTouch(TestContext ctx, CourseVisuals visuals, MeshInstance3D left,
+        Func<MeshInstance3D, float> clip, Func<double> now, StuntMission[] runs)
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(308));
+        var roster = new[]
+        {
+            new NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "Red" },
+            new NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "Blue" },
+        };
+        var sessions = new[] { NetSession.Host(mesh[0], roster, 0x5EEDUL), NetSession.Guest(mesh[1]) };
+        void Pump()
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                foreach (var session in sessions)
+                {
+                    session.Step(0.016);
+                }
+            }
+        }
+
+        Pump();
+        var host = NetRaceLink.Open(sessions[0], new StuntRace(600f, 1), now, null, null, GameClock.FixedDt);
+        var guest = NetRaceLink.Open(sessions[1], new StuntRace(600f, 1), now, null, null, GameClock.FixedDt);
+        guest.TouchShown = visuals.Cut;
+        int penalties = runs.Sum(r => r.PenaltyCount);
+        host.Touched(0, new CourseTouch(0, CourseElement.LeftCoursePylon, 0, Vector3.Zero, TouchHeightM, TimeAdded: true), now());
+        Pump();
+        visuals.Pose(now() + 0.1);
+        ctx.Check(sessions[1].Joined && guest.TouchesShown == 1 && clip(left) < PylonHeightM,
+            $"the remote seat's touch crosses to the guest and cuts the left course pylon: joined {sessions[1].Joined}, shown {guest.TouchesShown}, {clip(left):0.00} m");
+        ctx.Check(runs.Sum(r => r.PenaltyCount) == penalties && host.ReportsTaken == 0,
+            $"the remote touch scores nothing here: {runs.Sum(r => r.PenaltyCount) - penalties} penalties added, {host.ReportsTaken} reports taken");
     }
 
     private static void CheckBuild(TestContext ctx)
@@ -330,7 +419,7 @@ internal static class CourseVisualsSuites
             // and the stump regrows and stands whole.
             double cutAt = t0 + 5.0;
             double lands = Math.Sqrt(2.0 * CutHeightM / CoursePylonCut.FallAccel);
-            visuals.Cut(0, CourseElement.LeftCoursePylon, CutHeightM, cutAt, StuntMission.ForCourse(course)!);
+            visuals.Cut(0, CourseElement.LeftCoursePylon, CutHeightM, cutAt);
             var leftBase = CourseMotion.Rest(pylons) * CourseGateShape.PylonBase(pylons, 0);
             var cutEye = leftBase - (f * 45f) - (r * 30f) + (Vector3.Up * 10f);
             var cutLook = leftBase + (Vector3.Up * 12f);

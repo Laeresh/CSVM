@@ -43,6 +43,48 @@ public class WavFileTests
     }
 
     [Fact]
+    public void Pcm24KeepsItsTopSixteenBits()
+    {
+        // Little-endian 24-bit: 0x123456 keeps 0x1234, 0xFEDCBA keeps 0xFEDC, the low byte dropped.
+        var wav = WavFile.Parse(Riff(
+            ("fmt ", Fmt(tag: 1, bits: 24, channels: 1)),
+            ("data", new byte[] { 0x56, 0x34, 0x12, 0xBA, 0xDC, 0xFE })));
+
+        Assert.Equal(new short[] { 0x1234, unchecked((short)0xFEDC) }, wav.Samples);
+    }
+
+    [Fact]
+    public void Float32IsScaledAndClampedToPcm16()
+    {
+        // 1.0 and beyond reach short.MaxValue, -0.5 rounds to -16384, and a NaN plays as silence.
+        var data = new List<byte>();
+        foreach (float f in new[] { 1f, 2f, -0.5f, float.NaN })
+            data.AddRange(BitConverter.GetBytes(f));
+        var wav = WavFile.Parse(Riff(("fmt ", Fmt(tag: 3, bits: 32, channels: 1)), ("data", data.ToArray())));
+
+        Assert.Equal(new short[] { short.MaxValue, short.MaxValue, -16384, 0 }, wav.Samples);
+    }
+
+    [Fact]
+    public void AnExtensibleHeaderReadsItsSubformatsTag()
+    {
+        // WAVE_FORMAT_EXTENSIBLE: cbSize 22, valid bits, channel mask, then the subformat GUID,
+        // whose first two bytes are the real tag (1, PCM).
+        var extension = new List<byte>();
+        extension.AddRange(BitConverter.GetBytes((ushort)22));
+        extension.AddRange(BitConverter.GetBytes((ushort)16));
+        extension.AddRange(BitConverter.GetBytes(4u));
+        extension.AddRange(BitConverter.GetBytes((ushort)1));
+        extension.AddRange(new byte[14]);
+        short[] samples = { 7, -7 };
+        var wav = WavFile.Parse(Riff(
+            ("fmt ", Fmt(tag: 0xFFFE, bits: 16, channels: 1, extension.ToArray())),
+            ("data", Shorts(samples))));
+
+        Assert.Equal(samples, wav.Samples);
+    }
+
+    [Fact]
     public void MsAdpcmDecodesTheBlockHeaderAndItsNibbles()
     {
         // Coefficient set {256, 0} collapses the predictor to s1 + nibble*delta, so every step
@@ -104,8 +146,8 @@ public class WavFileTests
     [Fact]
     public void AnUnsupportedCodecThrowsRatherThanReturningSilence()
     {
-        var fmt = PcmFmt(bits: 32, channels: 1);
-        fmt[0] = 3; // IEEE float
+        var fmt = PcmFmt(bits: 8, channels: 1);
+        fmt[0] = 6; // A-law
         Assert.Throws<NotSupportedException>(() =>
             WavFile.Parse(Riff(("fmt ", fmt), ("data", new byte[8]))));
     }
@@ -134,6 +176,15 @@ public class WavFileTests
     }
 
     // The 16-byte canonical fmt chunk: tag, channels, rate, byte rate, block align, bits.
+    private static byte[] Fmt(ushort tag, int bits, int channels, byte[]? extension = null)
+    {
+        var f = new List<byte>(PcmFmt(bits, channels));
+        f[0] = (byte)tag;
+        f[1] = (byte)(tag >> 8);
+        f.AddRange(extension ?? Array.Empty<byte>());
+        return f.ToArray();
+    }
+
     private static byte[] PcmFmt(int bits, int channels)
     {
         int blockAlign = channels * bits / 8;

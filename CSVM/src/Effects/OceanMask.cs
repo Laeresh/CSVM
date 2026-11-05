@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -43,6 +44,7 @@ internal sealed class OceanMask
     private static readonly StringName MaskParam = "csky_ocean_mask";
     private static readonly StringName ZoneParam = "csky_ocean_zone";
     private static readonly StringName RectParam = "csky_ocean_rect";
+    private static readonly StringName InlandParam = "csky_ocean_inland";
 
     // One bake per built world, held only as long as its builder lives.
     private static readonly ConditionalWeakTable<SceneBuilder, Memo> Baked = new();
@@ -51,6 +53,7 @@ internal sealed class OceanMask
     // steps aside nowhere, whatever csky_ocean_on reads.
     private static ImageTexture? _noSea;
     private static ImageTexture? _anyZone;
+    private static ImageTexture? _allSea;
 
     private OceanMask()
     {
@@ -76,12 +79,22 @@ internal sealed class OceanMask
     /// <summary>The lift texture's pixels, kept for <see cref="LiftAt"/>.</summary>
     public Image LiftImage { get; private set; } = null!;
 
-    /// <summary>The surf ring's authored coverage (R8, 255 at the land edge, 0 off the ring), one
-    /// zero texel when the world has no surf triangle.</summary>
+    /// <summary>The surf coverage of the surf ring and the painted coasts' water sides (R8, 255 at
+    /// the land edge, 0 off them). It is one zero texel when the world has neither.</summary>
     public ImageTexture SurfTexture { get; private set; } = null!;
 
     /// <summary>The surf texture's pixels, kept for <see cref="SurfAt"/> and <c>--dump-ocean-mask</c>.</summary>
     public Image SurfImage { get; private set; } = null!;
+
+    /// <summary>The signed distance from the coastline within <see cref="OceanMaskRaster.InlandReach"/>
+    /// (R8, <see cref="OceanMaskRaster.InlandByte"/>), over the mask's rect. The coast shaders' swash reads it.</summary>
+    public ImageTexture InlandTexture { get; private set; } = null!;
+
+    /// <summary>The inland texture's pixels, kept for <c>--dump-ocean-mask</c>.</summary>
+    public Image InlandImage { get; private set; } = null!;
+
+    /// <summary>Where the breakers throw spray at the cliffs and bare solids (<see cref="CoastSpray"/>).</summary>
+    public OceanMaskRaster.SpraySite[] Spray { get; private set; } = Array.Empty<OceanMaskRaster.SpraySite>();
 
     /// <summary>The world X/Z of the mask's first texel corner.</summary>
     public Vector2 Origin { get; private set; }
@@ -111,11 +124,20 @@ internal sealed class OceanMask
     /// open sea in the mask, not counted in <see cref="EdgeTriangles"/>.</summary>
     public int SurfTriangles { get; private set; }
 
+    /// <summary>The painted coasts' triangles at sea level (<see cref="TextureArchive.PaintedCoasts"/>
+    /// with a profile, and <see cref="TextureArchive.IsPaintedSeaTile"/>), counted in no other kind.</summary>
+    public int CoastTriangles { get; private set; }
+
     /// <summary>The base-sheet triangles rising off sea level below <see cref="RampTop"/>, counted
     /// in <see cref="BaseTriangles"/> too.</summary>
     public int RampTriangles { get; private set; }
 
     public int SolidTriangles { get; private set; }
+
+    /// <summary>Each painted coast's profile (<see cref="TextureArchive.CoastProfileOf"/>) by archive
+    /// name, read against <see cref="BaseTexture"/>. A texture this chapter's archive lacks, or whose
+    /// pixels give no crossing, is absent.</summary>
+    public Dictionary<string, CoastProfile> CoastProfiles { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The visual layer sets the base sheets are drawn on, one per zone group. The zone
     /// gate culls a whole group per camera, so the ocean over it draws on the same layers.</summary>
@@ -147,28 +169,32 @@ internal sealed class OceanMask
     {
         _noSea ??= TextureUpload.Create(1, 1, Image.Format.Rg8, new byte[] { 0, 0 });
         _anyZone ??= TextureUpload.Create(1, 1, Image.Format.R8, new[] { OceanMaskRaster.AnyZone });
+        _allSea ??= TextureUpload.Create(1, 1, Image.Format.R8, new byte[] { 0 });
         RenderingServer.GlobalShaderParameterAdd(MaskParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _noSea);
         RenderingServer.GlobalShaderParameterAdd(ZoneParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _anyZone);
         RenderingServer.GlobalShaderParameterAdd(RectParam, RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 0f, 1f, 1f));
+        RenderingServer.GlobalShaderParameterAdd(InlandParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _allSea);
     }
 
     /// <summary>Puts the defaults back, so the base sheet's hide steps aside nowhere.</summary>
     public static void Withdraw()
     {
         Live = null;
-        if (_noSea == null || _anyZone == null)
+        if (_noSea == null || _anyZone == null || _allSea == null)
             return;
         RenderingServer.GlobalShaderParameterSet(MaskParam, _noSea);
         RenderingServer.GlobalShaderParameterSet(ZoneParam, _anyZone);
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(0f, 0f, 1f, 1f));
+        RenderingServer.GlobalShaderParameterSet(InlandParam, _allSea);
     }
 
 
     /// <summary>Bakes the mask over the world under <paramref name="root"/>, or null when that world
     /// has no sea-level base sheet. It skips the subtrees in <paramref name="skip"/> and the
     /// <paramref name="movers"/> found to be hulls on the sea. The surfaces are read through
-    /// <paramref name="scene"/>, which holds the arrays it committed.</summary>
-    public static OceanMask? Bake(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
+    /// <paramref name="scene"/>, which holds the arrays it committed, and the painted coasts'
+    /// profiles through <paramref name="textures"/>.</summary>
+    public static OceanMask? Bake(Node3D root, SceneBuilder scene, TextureArchive textures, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         // The world is static. An ocean rebuilt over it, after a live switch or a Water Quality
         // change, reuses the first bake. The frame path never pays it twice. A shadow decal on the
@@ -184,7 +210,7 @@ internal sealed class OceanMask
                 kept.Timing = "reused";
             return kept;
         }
-        var mask = BakeNew(root, scene, skip, movers);
+        var mask = BakeNew(root, scene, textures, skip, movers);
         // ⚠ Do not drop this collection. Reading MeshInstance3D.Mesh mints a managed wrapper for
         // every mesh whose wrapper was already collected, and each holds its mesh until collected.
         // A short run that quits first leaves hundreds alive, and Godot's exit check aborts.
@@ -209,7 +235,13 @@ internal sealed class OceanMask
         RenderingServer.GlobalShaderParameterSet(MaskParam, Texture);
         RenderingServer.GlobalShaderParameterSet(ZoneParam, ZoneTexture ?? _anyZone);
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
+        RenderingServer.GlobalShaderParameterSet(InlandParam, InlandTexture);
     }
+
+    /// <summary>The signed metres from the coastline at a world X/Z, landward positive, filtered as
+    /// <c>csky_ocean_inland_at</c> reads the inland texture.</summary>
+    public float InlandAt(Vector3 world) =>
+        ((Filtered(InlandImage, world) * 2f) - 1f) * OceanMaskRaster.InlandReach;
 
     /// <summary>Whether the texel under a world point counts as sea, at the coverage the ocean draws
     /// from (<see cref="SeaThreshold"/>). A point off the mask is not sea.</summary>
@@ -241,8 +273,8 @@ internal sealed class OceanMask
     /// filtered as the grid's vertex stage reads the lift.</summary>
     public float LiftAt(Vector3 world) => Filtered(LiftImage, world) * RampTop;
 
-    /// <summary>The surf ring's authored coverage over a world X/Z, 1 at the land edge and 0 off the
-    /// ring. It is filtered as the ocean shader samples <c>surf_tex</c>.</summary>
+    /// <summary>The surf coverage over a world X/Z, 1 at the land edge and 0 off the ring or a
+    /// painted coast's fade. It is filtered as the ocean shader samples <c>surf_tex</c>.</summary>
     public float SurfAt(Vector3 world) => Filtered(SurfImage, world);
 
     /// <summary>Milliseconds since <paramref name="t0"/>, which moves to now. The terrain shadow
@@ -255,11 +287,19 @@ internal sealed class OceanMask
         return ms;
     }
 
+    /// <summary>Whether a triangle of no other kind is solid: anything not water reaching under
+    /// <see cref="OceanMaskRaster.SolidTop"/>, under 400 m tall. Painted
+    /// shallows lying flat on the sea mark nothing, so the sheet beneath stays open sea. They paint water,
+    /// and as a solid they calmed a band off every coast they edge.</summary>
+    internal static bool MarksSolid(string texture, bool water, float minY, float maxY) =>
+        !water && minY < OceanMaskRaster.SolidTop && maxY - minY < 400f
+        && !(TextureArchive.IsPaintedShallows(texture) && minY > -OceanMaskRaster.SeaLevelBand && maxY < OceanMaskRaster.SeaLevelBand);
+
     // The red byte of a texel, clamped to the edge as the include's fetch is.
     private static float Red(Image image, int x, int y) =>
         Mathf.Round(image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1)).R * 255f);
 
-    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
+    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, TextureArchive textures, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         long t0 = Stopwatch.GetTimestamp();
         var names = new Dictionary<Material, string>();
@@ -268,7 +308,6 @@ internal sealed class OceanMask
         var result = new OceanMask();
         var walker = new Walker(root, scene, names, skip, movers, result);
         walker.Walk();
-        double walkMs = Lap(ref t0);
         if (result.BaseTriangles == 0)
             return null;
         int best = 0;
@@ -280,6 +319,15 @@ internal sealed class OceanMask
                 result.BaseTexture = name;
             }
         }
+        foreach (var name in TextureArchive.PaintedCoasts)
+        {
+            if (textures.CoastProfileOf(name, result.BaseTexture) is not { } coast)
+                continue;
+            result.CoastProfiles[name] = coast;
+            Log.Info("world", $"ocean: coast profile {name} axis={(coast.AlongV ? "V" : "U")} water={(coast.WaterAtOne ? 1 : 0)} crossing={coast.Crossing:0.000} fade={coast.Fade:0.000} opaque={coast.Opaque:0.000}");
+        }
+        walker.Finish(result.CoastProfiles);
+        double walkMs = Lap(ref t0);
         var uvSamples = walker.UvSamples;
         if (uvSamples.Count > 0)
         {
@@ -292,7 +340,9 @@ internal sealed class OceanMask
             int cn = walker.ColorCount;
             vertexColor = new Color((float)(walker.R / cn), (float)(walker.G / cn), (float)(walker.B / cn)).SrgbToLinear();
         }
-        var raster = OceanMaskRaster.Run(walker.Tris.ToArray(), vertexColor.LinearToSrgb(), OceanMaskRaster.DefaultBands);
+        var tris = walker.Tris.ToArray();
+        OceanMaskRaster.TintUnder(tris, walker.SeaTiles, vertexColor.LinearToSrgb());
+        var raster = OceanMaskRaster.Run(tris, vertexColor.LinearToSrgb(), OceanMaskRaster.DefaultBands);
         Lap(ref t0);
         result.Width = raster.Width;
         result.Height = raster.Height;
@@ -309,14 +359,18 @@ internal sealed class OceanMask
             ? Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Lift)
             : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
         result.LiftTexture = TextureUpload.Create(result.LiftImage, callerKeeps: true);
-        result.SurfImage = result.SurfTriangles > 0
+        result.SurfImage = result.SurfTriangles + result.CoastTriangles > 0
             ? Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Surf)
             : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
         // Kept: SurfAt and --dump-ocean-mask read it after the upload.
         result.SurfTexture = TextureUpload.Create(result.SurfImage, callerKeeps: true);
+        // Kept: InlandAt and --dump-ocean-mask read it after the upload.
+        result.InlandImage = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Inland);
+        result.InlandTexture = TextureUpload.Create(result.InlandImage, callerKeeps: true);
+        result.Spray = raster.Spray;
         double uploadMs = Lap(ref t0);
         result.Timing = string.Create(CultureInfo.InvariantCulture,
-            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
+            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} inland={raster.InlandMs:0.0} spray={raster.SprayMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
         return result;
     }
 
@@ -359,6 +413,12 @@ internal sealed class OceanMask
         // A wake sheet lies on the water; the freighter's bow wave climbs its hull about 10 m.
         private const float WakeMaxHeight = 20f;
 
+        // Fade widths seaward a sea tile's corners stand: sea throughout with no coverage of its own.
+        private const float SeaTileReach = 2f;
+
+        // A fade narrower than this reads as a step rather than dividing by zero.
+        private const float MinFade = 1f / 256f;
+
         private readonly Node3D _root;
         private readonly SceneBuilder _scene;
         private readonly Dictionary<Material, string> _names;
@@ -370,6 +430,7 @@ internal sealed class OceanMask
         private readonly Mover[] _movers;
         private readonly List<int> _moverPath = new();
         private readonly List<int[]> _triMovers = new();
+        private readonly List<PendingCoast> _coasts = new();
         private int[] _pathArray = Array.Empty<int>();
 
         public Walker(Node3D root, SceneBuilder scene, Dictionary<Material, string> names, ISet<Node> skip,
@@ -393,6 +454,9 @@ internal sealed class OceanMask
 
         public List<Tri> Tris { get; } = new();
 
+        // The painted sea tiles' triangles, indices into Tris.
+        public List<int> SeaTiles { get; } = new();
+
         public List<float> UvSamples { get; } = new();
 
         public Dictionary<string, int> BaseCounts { get; } = new();
@@ -411,8 +475,43 @@ internal sealed class OceanMask
             AddTurbulence();
             foreach (var s in _surfaces)
                 Read(s);
+        }
+
+        // Places each painted coast's waterline from its texture's profile, then drops the moving
+        // hulls. A coast whose texture has no profile marks what ClassifySurface calls it.
+        public void Finish(IReadOnlyDictionary<string, CoastProfile> profiles)
+        {
+            foreach (var c in _coasts)
+            {
+                var t = Tris[c.At];
+                if (TextureArchive.IsPaintedSeaTile(c.Name))
+                {
+                    Tris[c.At] = t with { Surf = new Vector3(SeaTileReach, SeaTileReach, SeaTileReach) };
+                }
+                else if (profiles.TryGetValue(c.Name, out var p))
+                {
+                    Tris[c.At] = t with { Surf = new Vector3(Seaward(p, c.A), Seaward(p, c.B), Seaward(p, c.C)), Opaque = p.Opaque / Math.Max(p.Fade, MinFade) };
+                }
+                else
+                {
+                    Tris[c.At] = t with { Kind = c.Water ? Kind.Edge : Kind.Solid };
+                    if (c.Water)
+                        _result.EdgeTriangles++;
+                    else
+                        _result.SolidTriangles++;
+                    continue;
+                }
+                _result.CoastTriangles++;
+            }
             if (_moverIndex.Count > 0)
                 DropMovingHulls();
+        }
+
+        // How far seaward of the profile's crossing a corner lies, in widths of its fade.
+        private static float Seaward(CoastProfile p, Vector2 uv)
+        {
+            float c = p.AlongV ? uv.Y : uv.X;
+            return (p.WaterAtOne ? c - p.Crossing : p.Crossing - c) / Math.Max(p.Fade, MinFade);
         }
 
         private static bool IsTurbulenceTexture(string tex) =>
@@ -501,13 +600,19 @@ internal sealed class OceanMask
             bool water = SceneBuilder.ClassifySurface(tex) == "water";
             bool isBase = water && SceneBuilder.IsOceanBaseTexture(tex);
             bool isSurf = water && SceneBuilder.IsSurfTexture(tex);
+            // The mask's own predicate: ClassifySurface keeps calling these land or edge water,
+            // since the colliders and the tile census read it.
+            string stem = System.IO.Path.GetFileNameWithoutExtension(tex);
+            bool seaTile = TextureArchive.IsPaintedSeaTile(stem);
+            bool painted = seaTile || TextureArchive.PaintedCoasts.Contains(stem, StringComparer.OrdinalIgnoreCase);
             // The builder's own copy: Godot's read-back copies the surface off the GPU and waits
-            // for the render thread, about a millisecond a surface. UVs serve the base and the surf.
+            // for the render thread, about a millisecond a surface. UVs serve the base, the surf
+            // and the painted coasts.
             var arrays = _scene.SurfaceArrays(mesh, s);
             var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
             var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil
                 ? Array.Empty<int>() : arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-            var uv = !(isBase || isSurf) || arrays[(int)Mesh.ArrayType.TexUV].VariantType == Variant.Type.Nil
+            var uv = !(isBase || isSurf || painted) || arrays[(int)Mesh.ArrayType.TexUV].VariantType == Variant.Type.Nil
                 ? Array.Empty<Vector2>() : arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
             var col = !isBase || arrays[(int)Mesh.ArrayType.Color].VariantType == Variant.Type.Nil
                 ? Array.Empty<Color>() : arrays[(int)Mesh.ArrayType.Color].AsColorArray();
@@ -522,7 +627,7 @@ internal sealed class OceanMask
                 var c = xf * v[i2];
                 float minY = Math.Min(a.Y, Math.Min(b.Y, c.Y));
                 float maxY = Math.Max(a.Y, Math.Max(b.Y, c.Y));
-                bool seaLevel = minY > -0.5f && maxY < 0.5f;
+                bool seaLevel = minY > -OceanMaskRaster.SeaLevelBand && maxY < OceanMaskRaster.SeaLevelBand;
                 bool foot = minY > -0.5f && minY < 0.5f;
                 // A base triangle rising off the sea to a quay is sea the hide clears whole. As edge
                 // water its footprint drew calm and in the mean tint, a dark patch in the waves.
@@ -568,6 +673,14 @@ internal sealed class OceanMask
                     kind = Kind.Surf;
                     _result.SurfTriangles++;
                 }
+                else if (painted && seaLevel && (seaTile || uv.Length > 0))
+                {
+                    // Its waterline waits for the profiles, read once the base sheet is known.
+                    kind = Kind.Coast;
+                    if (seaTile)
+                        SeaTiles.Add(Tris.Count);
+                    _coasts.Add(new PendingCoast(Tris.Count, stem, water, uv.Length > 0 ? uv[i0] : default, uv.Length > 0 ? uv[i1] : default, uv.Length > 0 ? uv[i2] : default));
+                }
                 else if (water && (seaLevel || (isBase && foot)))
                 {
                     // A base-sheet slope too tall for a ramp hides only below HideHeight, so the
@@ -575,7 +688,7 @@ internal sealed class OceanMask
                     kind = Kind.Edge;
                     _result.EdgeTriangles++;
                 }
-                else if (!water && minY < OceanMaskRaster.SolidTop && maxY - minY < 400f)
+                else if (MarksSolid(stem, water, minY, maxY))
                 {
                     kind = Kind.Solid;
                     _result.SolidTriangles++;
@@ -589,7 +702,8 @@ internal sealed class OceanMask
                 // U runs 0 at the land edge to 1 at the ring's seaward edge, the texture's alpha gradient.
                 var surf = kind == Kind.Surf && uv.Length > 0
                     ? new Vector3(1f - uv[i0].X, 1f - uv[i1].X, 1f - uv[i2].X) : default;
-                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp, surf));
+                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp, surf,
+                    Cliff: kind == Kind.Solid && TextureArchive.IsCliffRock(stem)));
                 _triMovers.Add(movers);
             }
         }
@@ -659,11 +773,16 @@ internal sealed class OceanMask
                     _result.EdgeTriangles--;
                 else if (Tris[i].Kind == Kind.Surf)
                     _result.SurfTriangles--;
+                else if (Tris[i].Kind == Kind.Coast)
+                    _result.CoastTriangles--;
             }
             Tris.RemoveRange(kept, Tris.Count - kept);
         }
 
         private readonly record struct Surface(ArrayMesh Mesh, int Index, string Texture, Transform3D Xf, Material Material, uint Layers, int[] Movers);
+
+        // A painted-coast triangle at Tris[At], its texture's archive name and its corners' UVs.
+        private readonly record struct PendingCoast(int At, string Name, bool Water, Vector2 A, Vector2 B, Vector2 C);
 
         // One mover as the walk found it: where it stood, and what its visible meshes reach.
         private struct Mover

@@ -127,6 +127,37 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.True(host.Module.GameOptions.ThrottlePlateChoice);
 
+        // The remake-only HUD mode beside it, Full while nothing is saved, and a sideways step takes Minimal.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.HudModeKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.HudModeChoice);
+        Assert.Equal("Full", Row(host, OriginalGameOptionsPage.HudModeKey).Label);
+        StepX(host, 1);
+        Assert.Equal("minimal", host.Module.GameOptions.HudModeChoice);
+
+        // The remake-only HUD layout under it, Original while nothing is saved, and a sideways step takes Sides.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.HudLayoutKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.HudLayoutChoice);
+        Assert.Equal("Original", Row(host, OriginalGameOptionsPage.HudLayoutKey).Label);
+        StepX(host, 1);
+        Assert.Equal("sides", host.Module.GameOptions.HudLayoutChoice);
+
+        // The remake-only spyglass size, 100% while nothing is saved, and a sideways step takes 125%.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.SpyglassScaleKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.SpyglassScaleChoice);
+        Assert.Equal("100%", Row(host, OriginalGameOptionsPage.SpyglassScaleKey).Label);
+        StepX(host, 1);
+        Assert.Equal("125", host.Module.GameOptions.SpyglassScaleChoice);
+
+        // The remake-only zoom keeper, ON while nothing is saved, so its first press turns it off.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.KeepCameraZoomKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.KeepCameraZoomChoice);
+        Accept(host);
+        Assert.False(host.Module.GameOptions.KeepCameraZoomChoice);
+
         // The remake-only Modding Folder row, Off while nothing is saved and nothing is offered.
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.ModFolderKey, host.FocusedKey);
@@ -139,6 +170,10 @@ public class OriginalOptionsTests
         Assert.True(exit.LeadingAimAssist);
         Assert.True(exit.LeadMarker);
         Assert.True(exit.ThrottlePlate);
+        Assert.Equal("minimal", exit.HudMode);
+        Assert.Equal("sides", exit.HudLayout);
+        Assert.Equal("125", exit.SpyglassScale);
+        Assert.False(exit.KeepCameraZoom);
         Assert.True(exit.NearestAfterKill);
         Assert.True(exit.Rumble);
         Assert.Equal("cockpit", exit.DefaultView);
@@ -298,6 +333,19 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.Equal(0, host.Module.Audio.VoiceChoice);
 
+        // The two switches under the levels. A press flips the sound mode off its never-set
+        // Enhanced, and an untouched Hit Confirm follows it off. A sideways step turns it back on.
+        Down(host);
+        Assert.Equal(OriginalAudioPage.SoundModeKey, host.FocusedKey);
+        Assert.Null(host.Module.Audio.SoundModeChoice);
+        Accept(host);
+        Assert.Equal(SoundModeSetting.Original, host.Module.Audio.SoundModeChoice);
+        Down(host);
+        Assert.Equal(OriginalAudioPage.HitConfirmKey, host.FocusedKey);
+        Assert.Null(host.Module.Audio.HitConfirmChoice);
+        StepX(host, 1);
+        Assert.True(host.Module.Audio.HitConfirmChoice);
+
         Down(host);
         Assert.Equal(OriginalAudioPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
@@ -305,6 +353,8 @@ public class OriginalOptionsTests
         Assert.Equal(20, exit.AudioMusic);
         Assert.Equal(55, exit.AudioEffects);
         Assert.Equal(0, exit.AudioVoice);
+        Assert.Equal(SoundModeSetting.Original, exit.SoundMode);
+        Assert.True(exit.HitConfirm);
         // The settings this page never showed ride the apply unchanged, read back when it opened.
         Assert.Equal("hard", exit.Difficulty);
         Assert.Equal("120", exit.VSync);
@@ -413,7 +463,10 @@ public class OriginalOptionsTests
         Assert.Equal((130f, 326f, 170f, 23f), Rect(Row(host, OriginalAudioPage.MusicKey)));
         Assert.Equal((130f, 381f, 170f, 23f), Rect(Row(host, OriginalAudioPage.EffectsKey)));
         Assert.Equal((130f, 431f, 170f, 23f), Rect(Row(host, OriginalAudioPage.VoiceKey)));
-        Assert.Equal((200f, 500f, 240f, 50f), Rect(Row(host, OriginalAudioPage.AcceptKey)));
+        // The two switches stand under Voice, and the plaques move down by what they would reach into.
+        Assert.Equal(458f, Row(host, OriginalAudioPage.SoundModeKey).Y);
+        Assert.Equal(OriginalRowKind.Radio, Row(host, OriginalAudioPage.HitConfirmKey).Kind);
+        Assert.Equal((200f, 504f, 240f, 50f), Rect(Row(host, OriginalAudioPage.AcceptKey)));
 
         var board = Compose(host);
         // The logo and the plate are the backdrop, not pictures. A board draws its fills between
@@ -428,7 +481,9 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "Music Volume" && l.X == 130f && l.Y == 310f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Effects Volume" && l.X == 130f && l.Y == 365f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Voice Volume" && l.X == 130f && l.Y == 415f && l.Width == 170f);
-        Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Sound" && l.X == 130f);
+        Assert.Contains(board.Lines, l => l.Text == "Hit Confirm" && l.X == 130f);
+        Assert.Equal(13, board.Lines.Count(l => l.Row < 0));
 
         // The focused row is marked twice and the others not at all. There is an outline around the
         // row the page opens on, and that row's title alone in the focused ink. Both halves are
@@ -514,10 +569,10 @@ public class OriginalOptionsTests
         Wheel(host, 200f, 300f, -1);
         Assert.Equal(0, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.MonitorKey).Visible);
-        Wheel(host, 200f, 300f, 6);
-        Assert.Equal(5, host.Module.Video.Top);
+        Wheel(host, 200f, 300f, 7);
+        Assert.Equal(6, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
-        Wheel(host, 200f, 300f, -4);
+        Wheel(host, 200f, 300f, -5);
         Assert.Equal(1, host.Module.Video.Top);
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
 
@@ -540,10 +595,10 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
         Assert.Equal(1, host.Module.Video.Top);
 
-        // Down scrolls both Vegetation rows, Ground Cover and VR Mode in, stopping on VR Mode where it is
-        // live, then crosses both checkboxes. Under the window the column holds only value rows, so Down
-        // from the checkbox leaves for ACCEPT CHANGES, with CANCEL CHANGES under it.
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 6 : 5); i++)
+        // Down scrolls both Vegetation rows, Ground Cover, Cloud Shadows and VR Mode in, stopping on VR
+        // Mode where it is live, then crosses both checkboxes. Under the window the column holds only value
+        // rows, so Down from the checkbox leaves for ACCEPT CHANGES, with CANCEL CHANGES under it.
+        for (int i = 0; i < (OperatingSystem.IsWindows() ? 7 : 6); i++)
         {
             Down(host);
         }
@@ -584,7 +639,7 @@ public class OriginalOptionsTests
 
         host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
         Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
-        Assert.Equal(5, host.Module.Video.Top);
+        Assert.Equal(6, host.Module.Video.Top);
         Assert.Equal("On", Row(host, OriginalVideoPage.VrModeKey).Label);
         StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
@@ -915,8 +970,8 @@ public class OriginalOptionsTests
         Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
         // The shadow row is the window's foot. Down scrolls View Distance onto it, then Vegetation, 3D
-        // Vegetation, Ground Cover and VR Mode, stopping there where it is live. It walks the two checkboxes
-        // under the window and leaves the value column for ACCEPT and CANCEL CHANGES.
+        // Vegetation, Ground Cover, Cloud Shadows and VR Mode, stopping there where it is live. It walks the
+        // two checkboxes under the window and leaves the value column for ACCEPT and CANCEL CHANGES.
         Down(host);
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
         Down(host);
@@ -925,6 +980,8 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalVideoPage.VegetationModelsKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.GroundCoverKey, host.FocusedKey);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.CloudShadowsKey, host.FocusedKey);
         if (OperatingSystem.IsWindows())
         {
             Down(host);
@@ -965,14 +1022,16 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // Nine option rows, none of them a menu presentation: the command line alone picks one.
+        // Thirteen option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {
                 OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey, OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
                 OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
-                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.ModFolderKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.HudModeKey,
+                OriginalGameOptionsPage.HudLayoutKey, OriginalGameOptionsPage.SpyglassScaleKey,
+                OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
@@ -1203,7 +1262,7 @@ public class OriginalOptionsTests
     /// <summary>The dropdown window's scroll column ends on the widest description's right edge (the
     /// fixture's 350 + 310). The window's descriptions wrap short of it.
     /// The D rows' own arrows stand at its two ends, each live only towards more rows. Their thumb
-    /// spans seven twelfths of the track. A click on the down arrow scrolls one line.</summary>
+    /// spans seven thirteenths of the track. A click on the down arrow scrolls one line.</summary>
     [Fact]
     public void TheVideoDropdownWindowCarriesItsOwnScrollColumn()
     {
@@ -1218,7 +1277,7 @@ public class OriginalOptionsTests
         Assert.True(down.Enabled);
         var window = Assert.Single(Lists(host)).Window;
         Assert.Equal(up.X, window.ThumbX);
-        Assert.Equal(7f / 12f * window.TrackHeight, window.ThumbHeight, 3);
+        Assert.Equal(7f / 13f * window.TrackHeight, window.ThumbHeight, 3);
         var composed = Compose(host);
         Assert.Contains(composed.Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
         var monitorDesc = Assert.Single(composed.Lines, l => l.Y == 245f && l.X == 350f);
@@ -1230,14 +1289,16 @@ public class OriginalOptionsTests
         // Resolution stands on Monitor's line now but keeps its own box, not Monitor's wider one.
         Assert.Equal((260f, 245f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ResolutionKey)));
         Assert.True(Row(host, OriginalVideoPage.WindowKey + ":up").Enabled);
-        // Four more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
+        // Five more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Click(host, OriginalVideoPage.WindowKey + ":down");
-        Assert.Equal(5, host.Module.Video.Top);
+        Click(host, OriginalVideoPage.WindowKey + ":down");
+        Assert.Equal(6, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.WindowKey + ":down").Enabled);
+        Click(host, OriginalVideoPage.WindowKey + ":up");
         Click(host, OriginalVideoPage.WindowKey + ":up");
         Click(host, OriginalVideoPage.WindowKey + ":up");
         Click(host, OriginalVideoPage.WindowKey + ":up");
@@ -1586,9 +1647,9 @@ public class OriginalOptionsTests
         ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
     }
 
-    // The Game Options page's seven rows share one plate, so no two of them may overlap. No control
+    // The Game Options page's thirteen rows share one plate, so no two of them may overlap. No control
     // may sit over a title or a description, at either end of the window's scroll. The first three
-    // are the original's own, in its order; the four under them are this port's.
+    // are the original's own, in its order; the ten under them are this port's.
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1601,13 +1662,15 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.AutoHeadTurnKey,
                 OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
                 OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
-                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.ModFolderKey,
+                OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.HudModeKey,
+                OriginalGameOptionsPage.HudLayoutKey, OriginalGameOptionsPage.SpyglassScaleKey,
+                OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
             },
             rows.Select(r => r.Key));
-        // Four rows stand in the window at a time, one to a frame, the five below it unseen until it scrolls.
+        // Four rows stand in the window at a time, one to a frame, the nine below it unseen until it scrolls.
         RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "GAME OPTIONS", 8);
         for (int i = 0; i < 4; i++)
         {
@@ -1632,10 +1695,11 @@ public class OriginalOptionsTests
             {
                 OriginalAudioPage.MasterKey, OriginalAudioPage.MusicKey,
                 OriginalAudioPage.EffectsKey, OriginalAudioPage.VoiceKey,
+                OriginalAudioPage.SoundModeKey, OriginalAudioPage.HitConfirmKey,
                 OriginalAudioPage.AcceptKey, OriginalAudioPage.CancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "AUDIO", 8);
+        RowsAreClearOfEachOther(host, rows, "AUDIO", 12);
     }
 
     // The VIDEO page's rows, the same rule over its own plate. Each control must stand clear of the
@@ -1659,18 +1723,19 @@ public class OriginalOptionsTests
                 OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
                 OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey,
                 OriginalVideoPage.VegetationQualityKey, OriginalVideoPage.VegetationModelsKey, OriginalVideoPage.GroundCoverKey,
-                OriginalVideoPage.VrModeKey,
+                OriginalVideoPage.CloudShadowsKey, OriginalVideoPage.VrModeKey,
                 OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey,
                 OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
                 OriginalVideoPage.WindowKey + ":up", OriginalVideoPage.WindowKey + ":down",
             },
             rows.Select(r => r.Key));
-        // View Distance, both Vegetation rows, Ground Cover and VR Mode wait under the window, unseen, so
-        // only the rows on screen must stand clear.
+        // View Distance, both Vegetation rows, Ground Cover, Cloud Shadows and VR Mode wait under the
+        // window unseen. Only the rows on screen must stand clear.
         Assert.False(Row(host, OriginalVideoPage.ViewDistanceKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.VegetationQualityKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.VegetationModelsKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.GroundCoverKey).Visible);
+        Assert.False(Row(host, OriginalVideoPage.CloudShadowsKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.VrModeKey).Visible);
         RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "VIDEO", 18);
 

@@ -15,14 +15,20 @@ public readonly record struct PylonCutLook(float StumpTopM, float SagM, float Cu
 /// <summary>
 /// A course pylon's cut as a pure function of its height, the cut and the seconds since it. The top
 /// above the cut tips outward and falls, vanishing as it lands. The stump slumps, holds, then regrows to the full
-/// height, whole again at <see cref="RegrowSeconds"/>. Ages come from the sim clock as doubles, so
-/// the shader clock's wrap never reaches them. Engine-free; every time and share is a look, tuned at
-/// the controls.
+/// height, whole again at the regrow time: <see cref="RegrowSeconds"/> solo, <see cref="SharedRegrowSeconds"/>
+/// with more than one racer (<see cref="RegrowFor"/>). The falling top keeps the solo timeline either way.
+/// Ages come from the sim clock as doubles, so the shader clock's wrap never reaches them. Engine-free;
+/// every time and share is a look, tuned at the controls.
 /// </summary>
 public static class CoursePylonCut
 {
-    /// <summary>Seconds from the cut until the course pylon is whole.</summary>
+    /// <summary>Seconds from the cut until the course pylon is whole in a solo run. Nothing of a cut
+    /// draws past it, the falling top included.</summary>
     public const double RegrowSeconds = 3.0;
+
+    /// <summary>Seconds from the cut until the stump is whole with more than one racer, TUNE. Every
+    /// racer's touch cuts the one shared course pylon, so it stands again sooner.</summary>
+    public const double SharedRegrowSeconds = 1.5;
 
     /// <summary>Seconds the stump stands at the cut before it regrows.</summary>
     public const float HoldSeconds = 0.5f;
@@ -47,10 +53,13 @@ public static class CoursePylonCut
     /// <summary>A whole course pylon: nothing clipped, no sag, no falling top.</summary>
     public static readonly PylonCutLook Whole = new(NoClipM, 0f, NoClipM, NoClipM, 0f, 0f);
 
+    /// <summary>The stump's regrow time for a course flown by <paramref name="racers"/> racers.</summary>
+    public static double RegrowFor(int racers) => racers > 1 ? SharedRegrowSeconds : RegrowSeconds;
+
     /// <summary>The look <paramref name="age"/> seconds after a cut at <paramref name="cut"/>, whose
-    /// falling top reaches up to <paramref name="top"/>. Whole before the cut and from
-    /// <see cref="RegrowSeconds"/> on.</summary>
-    public static PylonCutLook At(float height, float cut, float top, double age)
+    /// falling top reaches up to <paramref name="top"/>. The stump is whole from <paramref name="regrow"/>
+    /// on; the top falls as it does solo. Whole before the cut and from <see cref="RegrowSeconds"/> on.</summary>
+    public static PylonCutLook At(float height, float cut, float top, double age, double regrow = RegrowSeconds)
     {
         if (!(age >= 0.0 && age < RegrowSeconds))
         {
@@ -58,11 +67,18 @@ public static class CoursePylonCut
         }
 
         float t = (float)age;
-        float grow = Mathf.SmoothStep(HoldSeconds, (float)RegrowSeconds, t);
-        float sag = SagShare * cut * Mathf.SmoothStep(0f, SagInSeconds, t) * (1f - grow);
         float drop = Math.Min(0.5f * FallAccel * t * t, cut);
         float tip = Math.Min(t / TipSeconds, 1f);
-        return new PylonCutLook(cut + ((height - cut) * grow), sag, cut, top, drop, Mathf.DegToRad(MaxTiltDeg) * tip * tip);
+        float tilt = Mathf.DegToRad(MaxTiltDeg) * tip * tip;
+        if (age >= regrow)
+        {
+            // The stump stands whole while a top still falling finishes its fall.
+            return drop < cut ? new PylonCutLook(NoClipM, 0f, cut, top, drop, tilt) : Whole;
+        }
+
+        float grow = Mathf.SmoothStep(HoldSeconds, (float)regrow, t);
+        float sag = SagShare * cut * Mathf.SmoothStep(0f, SagInSeconds, t) * (1f - grow);
+        return new PylonCutLook(cut + ((height - cut) * grow), sag, cut, top, drop, tilt);
     }
 
     /// <summary>The cut and falling top's reach for a touch at <paramref name="touchM"/>, given the

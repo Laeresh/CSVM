@@ -86,8 +86,9 @@ public sealed partial class Puffer : Node3D
     private static readonly ConditionalWeakTable<TextureArchive, Dictionary<string, (ImageTexture Atlas, bool DiesDark)>> AtlasCache = new();
 
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
-    // puffer stream, so a run repeats and two emitters still scatter independently.
-    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
+    // puffer stream, so a run repeats and two emitters still scatter independently. Drawn in Init, the
+    // step after construction, so an emitter on a stream of its own leaves the puffer stream's series.
+    private System.Random _rng = null!;
 
     // Dev-tunable BaseSize multipliers, one per spawn path (burst = SpawnBatch, trail and sustain
     // = SpawnSustained by way of TrailAdvance / SustainAt). Read once per emitter at Init; --det drops
@@ -210,12 +211,12 @@ public sealed partial class Puffer : Node3D
     internal float FirePhase { get; set; }
 
     /// <summary>Builds an emitter for <paramref name="state"/>, loading its texture frames into an
-    /// atlas; null if a frame is missing. <paramref name="activeDuration"/> is the burst duration
-    /// (ignored by DISTANCE_INTERVAL states). <paramref name="sustained"/> selects continuous
-    /// emission over a burst. <paramref name="softParticles"/> null takes the measured default (see
-    /// <see cref="SmokeLuminance"/>). <paramref name="ambience"/> null is still air.</summary>
+    /// atlas; null if a frame is missing. The burst lasts <paramref name="activeDuration"/> (ignored by
+    /// DISTANCE_INTERVAL states). With <paramref name="sustained"/> it emits continuously instead. A null
+    /// <paramref name="softParticles"/> takes the measured default (see <see cref="SmokeLuminance"/>).
+    /// A null <paramref name="ambience"/> is still air. The scatter draws <paramref name="stream"/>.</summary>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
-        bool sustained = false, bool? softParticles = null, EffectAmbience? ambience = null)
+        bool sustained = false, bool? softParticles = null, EffectAmbience? ambience = null, string stream = Rng.Puffer)
     {
         bool sequenced = state.TextureSequence.Count > 0;
         var frameNames = sequenced
@@ -243,7 +244,7 @@ public sealed partial class Puffer : Node3D
         var puffer = new Puffer();
         puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count, additive,
             softParticles ?? !(state.Colors.Count > 0 || diesDark), fire, smoke),
-            activeDuration, sustained, ambience, fireColumns: fire);
+            activeDuration, sustained, ambience, fireColumns: fire, stream: stream);
         return puffer;
     }
 
@@ -410,6 +411,8 @@ public sealed partial class Puffer : Node3D
         // this frame. Empty until WeatherRig.Tick publishes the pane cameras (EffectAmbience.Viewers).
         var viewers = _ambience.Viewers;
         bool fading = viewers.Count > 0;
+        // Read per frame, so a live mode or View Distance change reaches an emitter already burning.
+        float farFactor = FarBandFactor(_globalFadeFactor, ViewDistance.EnhancedReach());
         // Burst mode keeps particle positions in the node's own frame (the burst point is the
         // node's translation); trail and sustain force the transform to identity and store world
         // positions. Every mode leaves the basis at identity, so one addition covers all three.
@@ -467,7 +470,7 @@ public sealed partial class Puffer : Node3D
                 }
             }
             float distAlpha = 1f;
-            if (fading && !NearestViewerAlpha(world, viewers, out distAlpha))
+            if (fading && !NearestViewerAlpha(world, viewers, farFactor, out distAlpha))
                 continue;
 
             float lifeFrac = p.Age > 0f ? p.Age / p.Life : 0f;
@@ -510,6 +513,14 @@ public sealed partial class Puffer : Node3D
             Visible = false;
         }
     }
+
+    /// <summary>The far band's depth multiplier: the original's global fade factor over the View
+    /// Distance <paramref name="reach"/>, so both band ends move out by it. An infinite
+    /// reach gives 0, which never far-culls. ⚠ Must return <paramref name="globalFadeFactor"/>
+    /// itself at reach 1, so Original stays the decode bit for bit. See
+    /// <c>docs/org/puffer.md</c>.</summary>
+    internal static float FarBandFactor(float globalFadeFactor, float reach) =>
+        reach == 1f ? globalFadeFactor : globalFadeFactor / reach;
 
     // A fade band's `1/width`, with the engine's own degenerate case: both of its
     // setters store the raw difference first and only invert it
@@ -616,14 +627,14 @@ public sealed partial class Puffer : Node3D
     // own forward axis, and a pane facing away can still be the range-nearest one. See
     // `docs/architecture.md`.
     private bool NearestViewerAlpha(Vector3 worldPos,
-        IReadOnlyList<ViewerSet.ViewerPose> viewers, out float alpha)
+        IReadOnlyList<ViewerSet.ViewerPose> viewers, float farFactor, out float alpha)
     {
         alpha = 0f;
         bool drawn = false;
         for (int v = 0; v < viewers.Count; v++)
         {
             var pose = viewers[v];
-            if (!DistanceAlpha(worldPos, pose.Position, pose.Forward, out float paneAlpha))
+            if (!DistanceAlpha(worldPos, pose.Position, pose.Forward, farFactor, out float paneAlpha))
                 continue;
             drawn = true;
             if (paneAlpha > alpha)
@@ -641,11 +652,11 @@ public sealed partial class Puffer : Node3D
     // `_nearCull` are three separate mechanisms, not one switch. See
     // `docs/formats/effects.md` and `docs/org/puffer.md`.
     private bool DistanceAlpha(Vector3 worldPos, in Vector3 camPos, in Vector3 camFwd,
-        out float alpha)
+        float farFactor, out float alpha)
     {
         alpha = 1f;
         float d = camFwd.Dot(worldPos - camPos);
-        float scaled = d * _globalFadeFactor;   // the far band only, see GlobalFadeFactorDefault
+        float scaled = d * farFactor;   // the far band only, see FarBandFactor
         if (_farCull && _state.FarFadeEnd <= scaled)
             return false;
         if (scaled <= _state.FarFadeStart)
@@ -802,8 +813,9 @@ public sealed partial class Puffer : Node3D
 
     private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
         bool sustained, EffectAmbience? ambience = null, PufferFadeSwitches? fade = null,
-        bool[]? fireColumns = null)
+        bool[]? fireColumns = null, string stream = Rng.Puffer)
     {
+        _rng = Rng.NewSystemRandom(stream);
         _state = state;
         _renderer = renderer;
         _ambience = ambience ?? EffectAmbience.Still;

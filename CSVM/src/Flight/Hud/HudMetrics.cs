@@ -32,11 +32,23 @@ public static class HudMetrics
     /// <summary>The highest allowed HUD text multiplier.</summary>
     public const float MaximumTextScale = 2f;
 
+    /// <summary>The lowest allowed spyglass disc multiplier, the disc at its decoded size.</summary>
+    public const float MinimumSpyglassScale = SpyglassScaleSetting.Native;
+
+    /// <summary>The highest allowed spyglass disc multiplier, the largest Game Options step.</summary>
+    public static readonly float MaximumSpyglassScale =
+        SpyglassScaleSetting.FactorOf(SpyglassScaleSetting.Words[^1]);
+
     /// <summary>The user-selected multiplier for flight-status text.</summary>
     public static float StatusTextScale => TextScale("hud.statusTextScale");
 
     /// <summary>The user-selected multiplier for flight marker labels.</summary>
     public static float MarkerTextScale => TextScale("hud.markerTextScale");
+
+    /// <summary>The player's spyglass disc multiplier (<see cref="SpyglassScaleSetting"/>), read every
+    /// frame so an options apply resizes the disc in every flat pane at once. The headset's ring keeps
+    /// its own factor (<see cref="XrMarkerLaw.SpyglassScale"/>).</summary>
+    public static float SpyglassScale => ClampSpyglassScale(SpyglassScaleSetting.Current);
 
     /// <summary>How much this control's viewport is shrunk by splitscreen: 1.0 for a full-screen
     /// single-player view (the pane IS the window), sqrt(½) ≈ 0.71 in a 2P pane, ½ in a 4P pane.
@@ -117,6 +129,10 @@ public static class HudMetrics
 
     /// <summary>Constrain a user-selected HUD text multiplier to its supported range.</summary>
     public static float ClampTextScale(float scale) => Mathf.Clamp(scale, MinimumTextScale, MaximumTextScale);
+
+    /// <summary>Constrain a spyglass disc multiplier to its supported range.</summary>
+    public static float ClampSpyglassScale(float scale) =>
+        Mathf.Clamp(scale, MinimumSpyglassScale, MaximumSpyglassScale);
 
     private static float TextScale(string key) => ClampTextScale(Config.GetFloat(key, 1f));
 }

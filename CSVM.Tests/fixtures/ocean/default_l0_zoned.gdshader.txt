@@ -2,12 +2,11 @@ shader_type spatial;
 render_mode skip_vertex_transform, cull_disabled;
 #include "res://shaders/csky_time.gdshaderinc"
 #include "res://shaders/csky_atmosphere.gdshaderinc"
-#include "res://shaders/csky_mip_bias.gdshaderinc"
+#include "res://shaders/csky_ocean.gdshaderinc"
 #include "res://shaders/csky_terrain_shadow.gdshaderinc"
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
 uniform vec4 mask_rect;
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float tile_m = 32.0;
 uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;
 uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;
 uniform sampler2D surf_tex : hint_default_black, filter_linear, repeat_disable;
@@ -42,20 +41,6 @@ float shore_swell(float g) {
 
 float shore_look(float g) {
     return smoothstep(0.075, 0.4, g);
-}
-
-// Two hashes in [0, 1] per integer cell (a PCG2D mix). It hashes the cell's integer coordinates
-// exactly, so every cell sharing a corner hashes it alike. A float hash of a large coordinate rounds
-// differently per call site and cuts the noise along straight lattice lines.
-vec2 sea_hash(vec2 c) {
-    uvec2 v = uvec2(ivec2(c)) * 1664525u + 1013904223u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    v.x += v.y * 1664525u;
-    v.y += v.x * 1664525u;
-    v ^= v >> 16u;
-    return vec2(v) * (1.0 / 4294967295.0);
 }
 
 // Two smooth value-noise channels in [-1, 1].
@@ -137,21 +122,6 @@ vec3 detail_noise(vec2 q) {
     float k = va - vb - vc + vd;
     return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k,
         ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
-}
-
-// Gradient noise at q, about -0.7 to 0.7, smooth across its cells. The cell's x repeats every
-// period cells. The half cell keeps the modulo exact, so no corner hashes differently in two cells.
-float foam_noise(vec2 q, float period) {
-    vec2 i = floor(q);
-    vec2 f = fract(q);
-    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    vec2 x = vec2(i.x, i.x + 1.0);
-    x -= period * floor((x + 0.5) / period);
-    float a = dot(sea_hash(vec2(x.x, i.y)) * 2.0 - 1.0, f);
-    float b = dot(sea_hash(vec2(x.y, i.y)) * 2.0 - 1.0, f - vec2(1.0, 0.0));
-    float c = dot(sea_hash(vec2(x.x, i.y + 1.0)) * 2.0 - 1.0, f - vec2(0.0, 1.0));
-    float d = dot(sea_hash(vec2(x.y, i.y + 1.0)) * 2.0 - 1.0, f - vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 // The holes in a sheet of foam: one round hole per jittered cell, each its own size. Returns the
@@ -469,19 +439,18 @@ void fragment() {
     vec4 wake = ship_wake(p, vec2(4.0, 9.0) * footprint, footprint);
     n.xz -= wake.yz * 3.0;
     float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
-    // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
-    // against a coplanar coast tile. Rising with the fog, so the far sea fogs as the sheet does
-    // instead of showing darker, wavier water through it.
+    // How calm and smooth this fragment shades: flat normals, no foam, the sheet's roughness. The
+    // sea's look ramp fades the waves' look in from the shore. The fog hands the far sea back to a
+    // calm surface, rather than darker, wavier water showing through it.
     float sheet = max(1.0 - look, smoothstep(0.0, 0.25, fog_amt));
     n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
-    // The open sea takes the texture's mean and the light alone varies it: a tiled texture reads as
-    // a lattice from the air. The last mip is the mean the GPU samples. At sheet = 1 the texture is
-    // the sheet's own mapping, so no seam shows where the ocean meets a coast tile.
+    // The sea takes the texture's mean at every distance and the light alone varies it: the tiled
+    // texture reads as a lattice from the air. The last mip is the mean the GPU samples.
     vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb;
-    vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
+    vec3 col = tex_mean * tint;
     // Foam forms where the swell bunches the surface, its Jacobian below 1, which rides each crest.
     // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
     float bunch = (1.0 - ((1.0 - bx.x) * (1.0 - bz.y) - bz.x * bx.y)) / FOAM_JAC_SIGMA;

@@ -318,7 +318,7 @@ The original's graphics EffectsLevel option as a config key (`graphics.effectsLe
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
-`WeatherRig.EnhancedFogScale()` times `ViewDistance.ClutterReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
+`WeatherRig.EnhancedFogScale()` times `ViewDistance.EnhancedReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
@@ -393,6 +393,13 @@ included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts 
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
 shows it as the 3D Vegetation dropdown under Vegetation.
 
+## src/Utils/CloudShadowSetting.cs
+Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `on`. It resolves as `GroundCoverSetting` does:
+`--cloud-shadows=`, the saved `cloudShadows` word, the `graphics.cloudShadows` key, then `on`, or `off` under `--det`
+(`default_det`), so a golden draws none unless its command line asks. It has no live-apply hook: the owner reads `Enabled`
+every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
+description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
+
 ## src/Utils/GroundCoverSetting.cs
 How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (`Mech3/GroundCoverShells.cs`) or `cards`
 (`Mech3/GroundCover.cs`), the default. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved
@@ -412,12 +419,12 @@ native writes nothing, so a faithful `--det` run reads back Godot's own defaults
 ## src/Utils/ViewDistance.cs
 Enhanced mode's view distance: four saved words (`normal`, `far`, `veryfar`, `unlimited`), one
 label table beside them, resolving to how much further the clutter draws than the fade enhanced
-mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
+mode already gives it, and every puffer than its authored far fade: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
 haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
 the decoded fade. The VIDEO page offers it as the last row of its dropdown window, dead until
 Enhanced is chosen. `Resolve` runs `WordSetting` over `--view-distance`, the saved word (never under `--det`),
 the `graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
-cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
+cost. `Launcher` folds `EnhancedReach` into the clutter fade global at startup and on every apply.
 
 ## src/Utils/SunShadow.cs
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
@@ -490,6 +497,50 @@ The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `Vr
 `SavedWord` holds the `--det` guard. The composition sets `Current` at boot and on every options
 apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
 
+## src/Utils/SpyglassScaleSetting.cs
+The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the factor it spells.
+`Resolve` takes the saved `spyglassScale` over 100, the decoded size, and `SavedWord` holds the
+`--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
+reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
+
+## src/Utils/HudModeSetting.cs
+The HUD mode of the outside views (`HudMode`: Full, Minimal, None) as a word, `full`, `minimal`
+or `none`, saved as `hudMode` (null reads Full). `Resolve` takes the saved word over Full and
+`SavedWord` holds the `--det` guard on the launch's read (`ApplySaved`); under `--det` an options
+apply leaves the running mode alone. `Launch/GameSession.cs`'s Cycle HUD Mode step moves
+it and saves it through `Cycle`, which writes nothing to a null store.
+Every pilot pane follows `Current` each frame through `Flight/Hud/FlightHud.cs`'s `SetHudMode`.
+
+## src/Utils/HudLayoutSetting.cs
+The HUD layout of the outside views (`HudLayoutKind`: Original, Sides, Custom) as a word, `original`,
+`sides` or `custom`, saved as `hudLayout` (null reads Original), apart from the HUD mode. The custom
+placement rides beside it as `hudLayoutCustom` (`HudLayout.cs`'s spelling). `SavedWord` and
+`SavedCustom` hold the `--det` guard: the launch reads through `ApplySaved`, an options apply through
+`ApplyAfterOptions`, which changes nothing under `--det`. `SaveCustom` is
+`Flight/Hud/HudLayoutEditor.cs`'s save; every pilot pane follows the layout through that editor's `Active`.
+
+## src/Utils/HudLayout.cs
+A stored HUD layout, immutable: one `HudPlacement` per `HudElement` (the two dial columns, the
+compass tape, the throttle plate), each an anchor per axis (`HudAnchor`: start, centre, end of the
+reading box, or of the pane for a `PaneRelative` custom layout) and an offset in 1440p reference pixels. `Format` and `TryParse` are the options file's
+spelling; a hand-edited one that does not parse reads as never saved. The pixels are
+`Flight/Hud/HudLayoutPlacement.cs`'s.
+
+## src/Utils/SoundModeSetting.cs
+The AUDIO page's two remake-only switches: the sound mode, `soundMode` (`original` or `enhanced`,
+null reads Enhanced), and Hit Confirm, `hitConfirm` (null reads on under Enhanced Sound, off under
+Original). `ApplySaved` sets `EnhancedOn` and `HitConfirmOn` at launch and on every options apply,
+both Original and off under `--det`, so no golden hears the remix. `Flight/Audio/FlightAudio.cs`
+reads both on every play; the amounts are `Flight/Audio/EnhancedSoundTuning.cs`.
+
+## src/Utils/CameraZoomMemory.cs
+The Keep Camera Zoom option, `keepCameraZoom` (null reads on), and the external-view zoom it
+remembers as `cameraZoom`. On, `Flight/Camera/CameraController.cs` skips the original's three
+zoom resets, seeds this machine's first player's zoom from `Seed` at each camera init and writes it
+through `Save` when the target settles. Off, the resets apply and nothing is written, and `Stage`
+clears the saved zoom on the apply. The launch and every options apply reload `Current` in place;
+under `--det` it holds no store, so it reads on, seeds the near end and writes nothing.
+
 ## src/Utils/VrQuality.cs
 The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launch/LiveSettings.cs`
 before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no
@@ -506,7 +557,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
-display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the spyglass size, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

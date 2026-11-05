@@ -2619,7 +2619,7 @@ internal static class CombatSuites
         }
 
         using var archive = new SoundArchive(ctx.Sounds);
-        AudioStreamWav? Stream(string name) =>
+        AudioStream? Stream(string name) =>
             soundDefs.TryGetValue(name, out var d) ? archive.Find(d.WavName, d.Looped) : null;
         // A mission's own VO waits 45 s for the channel and a combat bark 0.5 s (docs/formats/sounds.md).
         // A combat line is a bark by its QUEUE wait. The install's own are the snd_id lines, taken
@@ -3472,7 +3472,7 @@ internal static class CombatSuites
     // The first radio line in name order whose definition the filter takes and whose clip lasts
     // at least the given length. Name order keeps the pick the same on every run.
     private static string? DuckLine(IReadOnlyDictionary<string, SoundDef> defs,
-        System.Func<string, AudioStreamWav?> stream, System.Func<SoundDef, bool> which, double minSeconds)
+        System.Func<string, AudioStream?> stream, System.Func<SoundDef, bool> which, double minSeconds)
     {
         foreach (var def in defs.Values.Where(d => d.Queued && which(d))
                      .OrderBy(d => d.Name, System.StringComparer.Ordinal))

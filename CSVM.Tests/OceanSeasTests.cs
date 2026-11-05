@@ -37,6 +37,19 @@ public sealed class OceanSeasTests
         Assert.Equal(SeaState.Default, seas.For("C4"));
     }
 
+    /// <summary>The cliff spray is on by default and in every shipped sea but C3's, whose cliffs stand far
+    /// behind the painted waterline. A file's 0 turns it off.</summary>
+    [Fact]
+    public void TheShippedSeasSprayAtTheCliffsButC3()
+    {
+        var seas = OceanSeas.Parse(File.ReadAllText(ShippedPath));
+        Assert.True(SeaState.Default.Sprays);
+        Assert.All(OceanSeas.Chapters, c => Assert.Equal(c != "C3", seas.For(c).Sprays));
+        var off = OceanSeas.Parse("{ \"C1\": { \"spray\": 0 } }");
+        Assert.Empty(off.Warnings);
+        Assert.False(off.For("C1").Sprays);
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{ \"_about\": \"prose\" }")]

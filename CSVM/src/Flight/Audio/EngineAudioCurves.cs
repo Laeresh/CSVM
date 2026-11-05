@@ -73,8 +73,8 @@ public static class EngineAudioCurves
     // The two added terms and the clamp they sit under, all read out of the image rather than tuned
     // (docs/formats/vehicle.md carries each address). Volume and pitch differ only in the turn-rate
     // coefficient; the climb term is the same 0.15 on both.
-    // ⚠ TurnRateIntoVolume is INERT on the shipped data and is not a dead constant to delete: the
-    // engine volume curve is flat 1.0, so the remap multiplies the parameter it moves by a zero span.
+    // ⚠ Do not delete TurnRateIntoVolume as dead. It is inert under Original Sound, whose flat 1.0
+    // volume curve gives it a zero span. Enhanced Sound's gain curve has a span, and there it acts.
     private const float TurnRateIntoVolume = 0.26f;
     private const float TurnRateIntoPitch = 0.25f;
     private const float ClimbAttitudeIntoParam = 0.15f;
@@ -212,21 +212,26 @@ public static class EngineAudioCurves
     /// turn-rate and a climb-attitude term. The sum is clamped to [0, 1.5] BEFORE the curve maps it
     /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone").
     /// The pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
-    /// <paramref name="pitchable"/> (<see cref="SlotIsPitched"/>) is clear. The volume is the curve
-    /// alone: the caller still applies the definition's own VOLUME and any mix gain.</summary>
+    /// <paramref name="pitchable"/> is clear. The volume is the curve alone, before VOLUME and mix
+    /// gain. A non-null <paramref name="enhanced"/> swaps in Enhanced Sound's two curves.</summary>
     internal static (float Pitch, float Volume) Engine(
-        PlaneStats stats, in EngineDrive drive, float pitchMul, bool pitchable)
+        PlaneStats stats, in EngineDrive drive, float pitchMul, bool pitchable,
+        EnhancedSoundTuning? enhanced = null)
     {
+        // Null takes the decoded curves themselves, so Original Sound computes the decoded curve
+        // unchanged.
+        var volumeCurve = enhanced?.GainCurve(stats.EngineVolume) ?? stats.EngineVolume;
+        var pitchCurve = enhanced?.PitchCurve(stats.EnginePitch) ?? stats.EnginePitch;
         float tVol = drive.Boosting ? BoostVolumeParam
-            : Mathf.Clamp(stats.EngineVolume.Frac(drive.Throttle) + (TurnRateIntoVolume * drive.TurnRate)
+            : Mathf.Clamp(volumeCurve.Frac(drive.Throttle) + (TurnRateIntoVolume * drive.TurnRate)
                 - (ClimbAttitudeIntoParam * drive.ClimbAttitude), 0f, ParamMax);
         float tPitch = drive.Boosting ? BoostPitchParam
-            : Mathf.Clamp(stats.EnginePitch.Frac(drive.Throttle) + (TurnRateIntoPitch * drive.TurnRate)
+            : Mathf.Clamp(pitchCurve.Frac(drive.Throttle) + (TurnRateIntoPitch * drive.TurnRate)
                 - (ClimbAttitudeIntoParam * drive.ClimbAttitude), 0f, ParamMax);
         return (pitchable
-                    ? Mathf.Clamp(stats.EnginePitch.Remap(tPitch) * pitchMul, MinPitch, MaxPitch)
+                    ? Mathf.Clamp(pitchCurve.Remap(tPitch) * pitchMul, MinPitch, MaxPitch)
                     : 1f,
-                stats.EngineVolume.Remap(tVol));
+                volumeCurve.Remap(tVol));
     }
 
     /// <summary>Slot 1, the overspeed whine: both curves run on speed / fd_speed, so the loop is

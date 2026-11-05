@@ -34,6 +34,9 @@ public static class ShaderTime
 
     private static double _time;
 
+    /// <summary>The value this frame's shaders read, wrapped as they read it.</summary>
+    public static float Seconds => (float)Wrap(_time);
+
     /// <summary>Declares the uniform. Must run before the first shader that reads it is built,
     /// Godot refuses to compile a shader referencing an unregistered global.</summary>
     public static void RegisterGlobal()

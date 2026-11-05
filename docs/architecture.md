@@ -37,6 +37,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 
 - `src/Mech3/GameZ.cs`, the GameZ model and its reader of unzbd's output (zip or dir, the fork's shape): nodes/models/materials/textures JSON → C# objects.
 - `src/Mech3/TextureArchive.cs`, texture lookup over one decoded archive: resolves the name quirks, classifies each texture's alpha (soft vs hard).
+- `src/Mech3/CoastProfile.cs`, engine-free: where a painted-coast texture crosses from water to land along one UV axis, read off its authored pixels.
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/HdModelMeshes.cs`, a model pack's replacement mesh for a gamez node, imported once per pack key with its winding reversed back.
 - `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
@@ -146,7 +147,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
 - `src/Mech3/SoundZbd.cs`, the engine-free reader for `soundsh`/`soundsl.zbd`: each WAV keyed by today's zip name, read on demand.
-- `src/Mech3/SoundArchive.cs`, WAV lookup over the launch's `SoundZbd` (or a sounds extraction) → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/SoundArchive.cs`, WAV lookup over the launch's `SoundZbd` (or a sounds extraction) → cached stream (forward loop when LOOPED), a sound pack's file standing in under Enhanced Sound.
 - `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
 - `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts, VO dialogue chains and combat voice lines speak on.
@@ -331,6 +332,8 @@ rows).
 - `src/Flight/Hud/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/Hud/GaugeCluster.cs`, the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/Hud/ThrottlePlate.cs`, the optional throttle plate beside the speedometer, drawn from two SVGs at the pane's own size.
+- `src/Flight/Hud/HudLayoutPlacement.cs`, where a HUD layout puts the dial columns, compass tape and throttle plate on a pane: the original's own rectangles, the Sides preset, and the editor's drop.
+- `src/Flight/Hud/HudLayoutEditor.cs`, the HUD layout editor (Shift+F2): the halted view with the HUD over it, each element dragged or nudged, Enter saving the Custom layout.
 - `src/Flight/Hud/FlightHud.cs`, everything one pane draws for its pilot, fed one per-frame state struct; the controller's seven HUD collaborators live here.
 
 **`Flight.Modes`**, stunt flying, Dogfight and the pause state.
@@ -353,7 +356,7 @@ rows).
 - `src/Flight/Modes/CourseLibrary.cs`, the course files of a launch: shipped and game-folder sources, the game folder winning a clash, list, load, save, and a network host's course kept where no file of its name stands.
 - `src/Flight/Modes/CourseMotion.cs`, a course gate's idle motion on sim time: the gate frame, a ring's bob, drift and roll as an offset in it, identity for a pylon gate.
 - `src/Flight/Modes/CourseGateShape.cs`, every dimension a course gate is drawn with, in its own frame: course pylon bases and taper, ring tube, balloons and tethers.
-- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, a red cross on the run's next gate seen from its wrong side and a dim fill on the one after.
+- `src/Flight/Modes/CourseVisuals.cs`, a course's gates from primitives: banded course pylons, a striped ring under tethered balloons, each gate node at its motion pose, a touched course pylon cut and regrowing, a red cross on each pane's run's next gate seen from its wrong side and a dim fill on the one after.
 - `src/Flight/Modes/CoursePylonCut.cs`, a cut course pylon's look on sim time: stump top and sag, the falling top's tip and drop, gone as it lands, whole again after 3 s.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
@@ -385,6 +388,8 @@ rows).
 - `src/Flight/Audio/WeaponAudioCues.cs`, the weapon-sound selection both audio paths share: a definition name to a resolved cue with its `RANGE` pair and the one cull distance past it.
 - `src/Flight/Audio/EngineAudioCurves.cs`, the engine-slot definition choice and curve maths both audio paths share.
 - `src/Flight/Audio/EngineVoiceDuck.cs`, the one session-wide gain that lowers every engine slot while a radio line is on air.
+- `src/Flight/Audio/EnhancedSoundTuning.cs`, Enhanced Sound's amounts, read and re-read from `data/enhanced_sound.json`: the engine curves, the hit gains and the hit confirm.
+- `src/Flight/Audio/HitConfirmCue.cs`, which strike earns the gunner a hit confirm, and its rate limit.
 
 ### `src/Effects/`, particle systems
 
@@ -393,10 +398,13 @@ rows).
 - `src/Effects/EmitterRenderer.cs`, the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/Ocean.cs`, the Enhanced wave ocean on every chapter with a sea at y = 0: a camera-centred Gerstner grid in place of the flat sea-level sheet.
+- `src/Effects/CoastSpray.cs`, the Enhanced spray each breaker throws up the cliffs behind the painted coasts, at the mask's spray sites.
 - `src/Effects/OceanCalmZone.cs`, one ship's calm zone on the wave ocean: a box along the hull's heading over its waterline.
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.
 - `src/Effects/TerrainShadow.cs`, the Enhanced terrain's baked sun shadow, one texture per zone sun, published to the world-lit arms' `light()`.
+- `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: gathers the mission's clouds and writes the `csky_cloud_shadow*` globals every sun term reads, by day.
+- `src/Effects/CloudShadowRaster.cs`, the map of the shadows the clouds cast along the sun onto the sea-level plane, engine-free.
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
@@ -554,6 +562,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
+- `src/UI/Labs/SoundLab.cs`, the sound lab (Shift+F9, a flight under `--sound-lab` only): a slider per Enhanced Sound amount and the hit confirm's group, applied live, a readout of the flown engine slot, with Save into the shipped tuning file, or into a sound pack's override while one plays.
 - `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag, and edits the sequence in a side panel whose row click flies the camera there.
 - `src/UI/Labs/CourseDraft.cs`, the course lab's edited course, selected gate and selected entry: ids, placement facing the camera after the selected entry, a ring's height above ground, reorder, add again with a direction, flip, remove, delete, and the save target.
 - `src/UI/Labs/CourseSequenceOverlay.cs`, the course lab's world drawing of the sequence: entry numbers over each gate and a line through the gates in order, with direction arrows.
@@ -694,6 +703,12 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
+- `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat disc is drawn at.
+- `src/Utils/HudModeSetting.cs`, the HUD mode of the outside views (Full, Minimal, None): the saved `WordSetting` lookup, the process-wide mode every pilot pane follows, and the cycle key's step and save.
+- `src/Utils/HudLayoutSetting.cs`, the HUD layout of the outside views (Original, Sides, Custom): the saved word and custom placement, the process-wide layout every pilot pane follows, and the editor's save.
+- `src/Utils/HudLayout.cs`, a stored HUD layout: one edge-anchored placement in reference pixels per element, and its options-file spelling.
+- `src/Utils/SoundModeSetting.cs`, the sound mode (Original or Enhanced Sound) and the Hit Confirm switch, resolved from the options file, Original with no confirm under `--det`.
+- `src/Utils/CameraZoomMemory.cs`, the Keep Camera Zoom option and the external-view zoom it remembers in the options file, read by the chase camera.
 - `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/ShaderCensus.cs`, every shader text a suite hands to Godot, as hashes in its report row, so a headless shard's shaders can be shown compiled by a windowed one.
@@ -710,10 +725,11 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the flag/saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
 - `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config `WordSetting` lookup over ultra (high on an integrated GPU, off there at three or four panes), and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
-- `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
+- `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter and puffers draw before their fades, the fog untouched, switched live on an apply.
 - `src/Utils/WaterQualitySetting.cs`, the Enhanced sea's water quality (flat, waves): the flag/saved/config `WordSetting` lookup over waves (flat on an integrated GPU), which the session's wave ocean follows live.
 - `src/Utils/VegetationQualitySetting.cs`, the Enhanced vegetation's quality (original, rich): the flag/saved/config `WordSetting` lookup over rich (original on an integrated GPU drawing two or more panes), and `RichOn`, what the clutter reads, recut live.
 - `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
+- `src/Utils/CloudShadowSetting.cs`, whether Enhanced draws the cloud shadows (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, read every frame.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
@@ -872,6 +888,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 
 - `src/Session/World/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
+- `src/Session/World/MoonlitMissions.cs`, the shipped list of moonlit missions in `CSVM/data/moonlit_missions.json`, the worlds Enhanced lights as night.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
 - `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core, Enhanced ring gain; every stereo session and flat Enhanced (`--screen-flare` for the A/B).
@@ -1023,6 +1040,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
 - `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, the UI archive's `rof/` paths, a chapter's own entry beating the bare name.
 - `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
+- `src/Extraction/HdSounds.cs`, the sound packs over `PackIndex`: a `.wav` or `.ogg` per original WAV name, and the pack's Enhanced Sound override.
 
 ### `src/Net/`, the network seam
 

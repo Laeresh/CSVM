@@ -38,6 +38,18 @@ for package in $want; do
     apt_add "$package"
 done
 
+# Matt Pocock's skills, which local machines get from the marketplace. User-level (-g), so they
+# land in ~/.claude/skills and never in the repo's tree.
+if [ ! -d "$HOME/.claude/skills/grilling" ]; then
+    if ! command -v npx >/dev/null 2>&1; then
+        log "no npx, mattpocock/skills not installed"
+    elif (cd "$HOME" && npx -y skills@latest add mattpocock/skills -g --skill '*' --agent claude-code --copy -y >/dev/null 2>&1); then
+        log "installed mattpocock/skills"
+    else
+        log "mattpocock/skills install failed"
+    fi
+fi
+
 # The release and build .github/workflows/checks.yml pins for its engine job, verified the same way.
 release=4.7-stable
 build=Godot_v4.7-stable_mono_linux_x86_64

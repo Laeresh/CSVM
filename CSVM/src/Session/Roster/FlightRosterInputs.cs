@@ -257,16 +257,20 @@ internal sealed class HumanRosterBindings
     /// leaves it inert.</summary>
     public Action? ToggleGraphicsMode { get; init; }
 
+    /// <summary>The HUD mode step a local seat fires, the session's own across every pane; null
+    /// leaves it inert.</summary>
+    public Action? CycleHudMode { get; init; }
+
+    /// <summary>The HUD layout editor a local seat opens over its own pane, the session's own; null
+    /// leaves it inert.</summary>
+    public Action<FlightController>? EditHudLayout { get; init; }
+
     /// <summary>What a local seat's recenter action does: the VR seat's recenter, null in a flat
     /// session, which leaves the action inert.</summary>
     public Action? RecenterHeadset { get; init; }
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }
-
-    /// <summary>Handed every run this machine flies, each pane's and each bot's, never a remote
-    /// seat's: the drawn course tracks their course pylon cuts. Null with no course drawn.</summary>
-    public Action<StuntMission>? TrackRun { get; init; }
 
     /// <summary>The count a stunt run reruns behind, solo or in a race, or null for none.
     /// ⚠ Null under <c>--det</c>, so a scripted run stays byte-identical.</summary>

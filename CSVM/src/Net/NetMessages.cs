@@ -193,9 +193,13 @@ public enum NetMessageType : ushort
     /// world opens on the host's wreckage.</summary>
     CoopPersist = 0x006B,
 
+    /// <summary>A stunt race seat's touch of a course pylon, which every machine draws cut. Visual
+    /// only: nothing timed or scored reads it.</summary>
+    RaceTouch = 0x006C,
+
     /// <summary>A Stunt Race host's course, its JSON whole, sent to every guest when the host picks
     /// it and to each guest that joins.</summary>
-    LobbyCourse = 0x006C,
+    LobbyCourse = 0x006D,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1701,6 +1705,7 @@ public static class NetMessage
         NetMessageType.RaceStanding => RaceStandingMessage.Reliability,
         NetMessageType.RaceCall => RaceCallMessage.Reliability,
         NetMessageType.CoopPersist => CoopPersistMessage.Reliability,
+        NetMessageType.RaceTouch => RaceTouchMessage.Reliability,
         NetMessageType.LobbyCourse => LobbyCourseMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };

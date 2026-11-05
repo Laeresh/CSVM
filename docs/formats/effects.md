@@ -136,6 +136,8 @@ discard), plus `puffer.globalFadeFactor`, the original's own `PufferSetGlobalFad
 (`00637a94`, default 1.0), which scales the FAR band only. ⚠ `puffer.farCull:false` alone changes
 nothing visible: the authored ramp reaches zero at exactly the cutoff distance, so the two are the
 same line. Keeping distant puffers drawn takes `distanceFade:false` and `farCull:false` together.
+Enhanced Graphics alone stretches every puffer's far band by the View Distance reach, with no
+far cull at Unlimited; see [`../org/puffer.md`](../org/puffer.md).
 
 **`TEXTURE_SEQUENCE` times are lifetime fractions, not seconds.** Across all 1,750 flipbook
 `PufferState` events in this install the largest key is **0.8** and none exceeds 1.0, while
