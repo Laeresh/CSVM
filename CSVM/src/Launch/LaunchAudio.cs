@@ -45,7 +45,7 @@ internal sealed class LaunchAudio(Node host)
     public MusicPlayer? Music => _music;
 
     /// <summary>A sound off the score's archive by its WAV name, or null where none opened.</summary>
-    public AudioStreamWav? FindSound(string wav) => _archive?.Find(wav, false, warn: false);
+    public AudioStream? FindSound(string wav) => _archive?.Find(wav, false, warn: false);
 
     /// <summary>Writes the master output gain <see cref="MasterVolume"/> resolves, its only caller.
     /// Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so

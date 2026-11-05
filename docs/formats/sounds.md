@@ -11,6 +11,7 @@ volume and pitch curves, the sound archives, and the WAV container. The readers 
 - [The music channel](#the-music-channel)
 - [Player curves](#player-curves)
 - [Enhanced Sound](#enhanced-sound)
+- [Sound packs](#sound-packs)
 - [The sound archives](#the-sound-archives)
 - [WAV format](#wav-format)
 ## Sound sets
@@ -341,7 +342,7 @@ mode (`Utils/SoundModeSetting.cs`). Original Sound plays everything above as dec
 Sound changes three things, in every view, by the amounts in `CSVM/data/enhanced_sound.json`
 (`Flight/Audio/EnhancedSoundTuning.cs`); every amount is a TUNE, owed a listen at the controls.
 The sound lab (`--sound-lab`, Shift+F9 in flight, `docs/controls.md`) moves each one live and
-saves the file.
+saves the file. A [sound pack](#sound-packs) may override them.
 
 | Field | What it moves | Original Sound | Range read |
 |---|---|---|---|
@@ -372,6 +373,34 @@ guns' own `player` impact rows bind no sound ([../org/weaponImpact.md](../org/we
 the original is silent there. A field the file leaves out, or carries out of range, reads Original
 Sound's value and is logged; the reader lays a file over any baseline, so an override file can
 carry only the fields it changes.
+
+## Sound packs
+
+A remake-only folder of replacement recordings, heard under Enhanced Sound alone
+(`Extraction/HdSounds.cs`, over the same pack enumeration as the HD texture and model packs).
+
+| Rule | Value |
+|---|---|
+| Folder | `HDSounds` under the data root by default; `sounds.hd` in `config.json` or `--hd-sounds=<folder>` names another, and an empty name reads none. A `--det` run reads none unless the flag names one. |
+| Packs | Each zip or subfolder in the folder is one pack, read in name order with its own top folder dropped; a later pack wins a name. A loose file at the folder's root is no pack. |
+| Name | A file replaces the original WAV of its file name, as `SETS` names it (`snd_exp_hit1` plays `explosion_1.wav`, so `explosion_1.ogg` or `Explosion_1.WAV` replaces it). Case, extension and the folders inside a pack are ignored. ⚠ The menu screens' cues are not replaceable: `Launch/MenuAudioService.cs` reads them straight from the UI archive, past the pack. |
+| Formats | WAV, mono or stereo (PCM 8, 16 or 24-bit, 32-bit float, MS ADPCM, plain or extensible, though an extensible file holding 24-bit samples in 32-bit words is refused), and Ogg Vorbis, told apart by the file's first bytes. A file that is neither, has more than two channels, or fails to decode, is skipped with a warning and the original plays. |
+| Override | A pack's top-level `enhanced_sound.json`, in the shipped file's form, lies over the shipped [Enhanced Sound](#enhanced-sound) values field by field, so it carries only what it changes. The last pack's override wins whole; two are not layered. |
+
+Only the stream is replaced. The definition that plays it keeps its `VOLUME`, `RANGE`, channel and
+`FREQUENCY` capability, and a group keeps its members and weights, so a replaced group member
+plays at its slot's authored gain. A pitch is a multiplier on the file's own sample rate, inside
+the same 0.181 to 2.503 bounds, so the engine's throttle curve moves a 44.1 kHz recording exactly
+as it moves a 22050 Hz original. ⚠ A replacement for a definition without `FREQUENCY` still plays
+unpitched, as the original does. The cockpit loop's throttle pitch, a remake rule (see
+[Enhanced Sound](#enhanced-sound)), reaches a replaced cockpit loop the same way.
+
+Original Sound reads nothing from a pack: every stream is the archive's, and its hit confirm uses
+the shipped file's values without the override. A flight reads its streams when it is built, so
+switching the sound mode reaches a pack's sounds from the next flight. The sound lab over a pack
+with an override starts from the shipped values with the override over them, and Save writes the
+override file alone: the fields it already held, and any field moved off the shipped value. An
+override inside a zip is read, and the lab's Save is off for it.
 
 ## The sound archives
 

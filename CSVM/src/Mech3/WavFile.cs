@@ -5,8 +5,9 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Minimal WAV reader for the game's sound extractions (soundsh/soundsl.zbd → WAVs).
-/// The game ships MS ADPCM (format 2, 4-bit, 22050 Hz) which Godot's AudioStreamWav
-/// cannot load, so we decode to 16-bit PCM here; plain PCM 8/16-bit passes through.
+/// The game ships MS ADPCM (format 2, 4-bit, 22050 Hz), which Godot's AudioStreamWav cannot
+/// load, so it is decoded to 16-bit PCM here. Plain PCM 8/16-bit passes through. A sound pack's
+/// 24-bit PCM and 32-bit float files, plain or extensible, are narrowed to 16-bit too.
 /// Pure C# (no Godot types) so the decoder can be exercised standalone.
 /// </summary>
 public sealed class WavFile
@@ -22,6 +23,17 @@ public sealed class WavFile
     };
 
     public int Frames => Channels == 0 ? 0 : Samples.Length / Channels;
+
+    /// <summary><see cref="Parse"/>, refusing more than two channels with an
+    /// <see cref="InvalidDataException"/>: the mixer plays only mono or stereo. A sound pack's file
+    /// goes through here, so a surround export plays the original instead.</summary>
+    public static WavFile ParseMonoOrStereo(byte[] bytes)
+    {
+        var wav = Parse(bytes);
+        if (wav.Channels > 2)
+            throw new InvalidDataException($"{wav.Channels} channels, where the mixer plays mono or stereo");
+        return wav;
+    }
 
     public static WavFile Parse(byte[] bytes)
     {
@@ -47,6 +59,9 @@ public sealed class WavFile
                     rate = BitConverter.ToInt32(bytes, body + 4);
                     blockAlign = BitConverter.ToUInt16(bytes, body + 12);
                     bits = BitConverter.ToUInt16(bytes, body + 14);
+                    // WAVE_FORMAT_EXTENSIBLE names its real tag in the subformat GUID's first two bytes.
+                    if (fmtTag == 0xFFFE && size >= 26)
+                        fmtTag = BitConverter.ToUInt16(bytes, body + 24);
                     if (fmtTag == 2 && size >= 22)
                     {
                         samplesPerBlock = BitConverter.ToUInt16(bytes, body + 18);
@@ -84,6 +99,19 @@ public sealed class WavFile
                 wav.Samples = new short[dataLength];
                 for (int i = 0; i < dataLength; i++)
                     wav.Samples[i] = (short)((bytes[dataOffset + i] - 128) << 8);
+                break;
+            case 1 when bits == 24: // a sound pack's studio export; the top 16 bits are kept
+                wav.Samples = new short[dataLength / 3];
+                for (int i = 0; i < wav.Samples.Length; i++)
+                    wav.Samples[i] = BitConverter.ToInt16(bytes, dataOffset + i * 3 + 1);
+                break;
+            case 3 when bits == 32: // IEEE float
+                wav.Samples = new short[dataLength / 4];
+                for (int i = 0; i < wav.Samples.Length; i++)
+                {
+                    float f = BitConverter.ToSingle(bytes, dataOffset + i * 4);
+                    wav.Samples[i] = (short)Math.Round(Math.Clamp(float.IsFinite(f) ? f : 0f, -1f, 1f) * short.MaxValue);
+                }
                 break;
             case 2:
                 wav.Samples = DecodeMsAdpcm(bytes, dataOffset, dataLength,

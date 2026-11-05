@@ -190,7 +190,9 @@ confirm's sound group. A move plays at once on the flown aircraft, and is heard 
 while the AUDIO page says Enhanced. The readout gives player 1's throttle and the
 engine slot's pitch and gain. **Original values** and **Revert to saved** reset the
 sliders; **Save** writes `CSVM/data/enhanced_sound.json` from the source tree and is
-off in an exported build. The panel takes the mouse's left button and no key, so the
+off in an exported build. While a sound pack carries an override file, the panel
+starts from the shipped values with the override over them, and **Save** writes the
+override file alone; an override inside a zip turns **Save** off. The panel takes the mouse's left button and no key, so the
 flight keeps its controls; a seat flying by mouse holds the pointer, so turn mouse
 flying off to drag.
 

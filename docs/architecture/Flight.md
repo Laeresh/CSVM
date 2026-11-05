@@ -1187,7 +1187,7 @@ slot's pitch and gain at the decoded curve's two throttle points (`PitchCurve`, 
 `EngineAudioCurves.Engine` takes in place of the decoded pair), the gains on the bullet and canopy
 hits, and the hit confirm's group, gain, pitch and interval. A field left out reads its baseline,
 `Neutral` (Original Sound's values) for the shipped file, so `Parse` and `Load` also lay an
-override file over another tuning. The launch `Reload`s `Current`; `FlightAudio` reads it per play.
+override file over another tuning. The launch `Reload`s `Current` with a sound pack's override over the file (`WithPack`); `WithoutPack` keeps the file's own values for Original Sound's hit confirm, and `SaveTargetFor` names where the lab saves. `FlightAudio` reads them per play.
 `Fields` lists the numeric amounts for the parse and `UI/Labs/SoundLab.cs`, which sets `Current` live and `Save`s.
 Fields: [../formats/sounds.md](../formats/sounds.md#enhanced-sound).
 

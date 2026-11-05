@@ -147,7 +147,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
 - `src/Mech3/SoundZbd.cs`, the engine-free reader for `soundsh`/`soundsl.zbd`: each WAV keyed by today's zip name, read on demand.
-- `src/Mech3/SoundArchive.cs`, WAV lookup over the launch's `SoundZbd` (or a sounds extraction) → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/SoundArchive.cs`, WAV lookup over the launch's `SoundZbd` (or a sounds extraction) → cached stream (forward loop when LOOPED), a sound pack's file standing in under Enhanced Sound.
 - `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
 - `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts, VO dialogue chains and combat voice lines speak on.
@@ -562,7 +562,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
-- `src/UI/Labs/SoundLab.cs`, the sound lab (Shift+F9, a flight under `--sound-lab` only): a slider per Enhanced Sound amount and the hit confirm's group, applied live, a readout of the flown engine slot, with Save into the shipped tuning file.
+- `src/UI/Labs/SoundLab.cs`, the sound lab (Shift+F9, a flight under `--sound-lab` only): a slider per Enhanced Sound amount and the hit confirm's group, applied live, a readout of the flown engine slot, with Save into the shipped tuning file, or into a sound pack's override while one plays.
 - `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag, and edits the sequence in a side panel whose row click flies the camera there.
 - `src/UI/Labs/CourseDraft.cs`, the course lab's edited course, selected gate and selected entry: ids, placement facing the camera after the selected entry, a ring's height above ground, reorder, add again with a direction, flip, remove, delete, and the save target.
 - `src/UI/Labs/CourseSequenceOverlay.cs`, the course lab's world drawing of the sequence: entry numbers over each gate and a line through the gates in order, with direction arrows.
@@ -1039,6 +1039,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/PackIndex.cs`, the HD pack folder enumeration both lookups share: zips and subfolders in name order, top folder dropped, an extension filter, a later file winning its key.
 - `src/Extraction/HdTextures.cs`, the HD texture packs over `PackIndex`: archive textures by archive and name, `rimage` art, the UI archive's `rof/` paths, a chapter's own entry beating the bare name.
 - `src/Extraction/HdModels.cs`, the HD model packs over `PackIndex`: a `.glb` or loose `.gltf` per gamez node name, by airframe, chapter or bare name.
+- `src/Extraction/HdSounds.cs`, the sound packs over `PackIndex`: a `.wav` or `.ogg` per original WAV name, and the pack's Enhanced Sound override.
 
 ### `src/Net/`, the network seam
 

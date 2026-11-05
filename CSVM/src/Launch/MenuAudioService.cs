@@ -28,13 +28,13 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     private const string VoicePreviewFile = "VOICE_LOOP.WAV";
 
     private readonly MusicPlayer? _music;
-    private readonly Func<string, AudioStreamWav?> _sounds;
+    private readonly Func<string, AudioStream?> _sounds;
     private readonly Extraction.RofFiles? _cueFiles;
     private readonly bool _previews;
-    private readonly Dictionary<string, AudioStreamWav?> _cues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AudioStream?> _cues = new(StringComparer.Ordinal);
     // Decoded preview clips by file name, cached like a cue: a null is cached like a hit, so a
     // level dragged across its range cannot log once per change about a clip the install lacks.
-    private readonly Dictionary<string, AudioStreamWav?> _clips = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AudioStream?> _clips = new(StringComparer.Ordinal);
     private AudioStreamPlayer _narration = null!;
     private AudioStreamPlayer _cuePlayer = null!;
     private AudioStreamPlayer _effectsPreview = null!;
@@ -53,7 +53,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     /// ⚠ <paramref name="previews"/> is whether a mix page's live preview may apply and sound, and
     /// defaults to off. A run that drives itself must not have its mix depend on which menu page a
     /// walk opened (<c>docs/menu-presentations.md</c>).</summary>
-    public MenuAudioService(MusicPlayer? music, Func<string, AudioStreamWav?> sounds, Extraction.RofFiles? cues = null, bool previews = false)
+    public MenuAudioService(MusicPlayer? music, Func<string, AudioStream?> sounds, Extraction.RofFiles? cues = null, bool previews = false)
     {
         _music = music;
         _sounds = sounds ?? throw new ArgumentNullException(nameof(sounds));
@@ -206,7 +206,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     // The clip a moved level is judged by, decoded once and cached like a cue. The two files are
     // the service's own, not cue-table names: no presentation asks for them, and the page that
     // moves a level names a level rather than a sound.
-    private AudioStreamWav? PreviewClip(MenuMixLevel moved)
+    private AudioStream? PreviewClip(MenuMixLevel moved)
     {
         string file = moved == MenuMixLevel.Voice ? VoicePreviewFile : EffectsPreviewFile;
         if (!_clips.TryGetValue(file, out var stream))
@@ -220,7 +220,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
 
     // The one decode per cue name. Every failure is a debug line and a null, cached like a hit,
     // so a menu cannot log once per frame about a sound it does not have.
-    private AudioStreamWav? LoadCue(string name)
+    private AudioStream? LoadCue(string name)
     {
         string? file = MenuCueTable.FileFor(name);
         if (file == null)
@@ -234,7 +234,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
 
     // One wav under the cue directory, with <paramref name="what"/> naming the asker so a missing
     // file reads the same whether a cue or a preview wanted it.
-    private AudioStreamWav? LoadWav(string file, string what)
+    private AudioStream? LoadWav(string file, string what)
     {
         if (_cueFiles == null)
         {

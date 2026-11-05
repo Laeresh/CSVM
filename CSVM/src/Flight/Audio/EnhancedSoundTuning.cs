@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Utils;
 
@@ -16,8 +17,8 @@ namespace CSVM.Flight.Audio;
 /// <c>CSVM/data/enhanced_sound.json</c>. They are the engine loop's pitch and gain at idle and at
 /// full throttle, and the gain on the hits the player's own aircraft takes. The hit confirm's sound,
 /// gain, pitch and rate limit follow. A field the file leaves out plays as Original Sound does. The
-/// parse reads over a baseline, the way an override file lays its values over these, and a reload
-/// replaces <see cref="Current"/> (fields: docs/formats/sounds.md, "Enhanced Sound"). The sound lab
+/// parse reads over a baseline, as a sound pack's override (<see cref="HdSounds"/>) lies over
+/// these, and a reload replaces <see cref="Current"/> (fields: docs/formats/sounds.md, "Enhanced Sound"). The sound lab
 /// sets <see cref="Current"/> live and writes the file through <see cref="Save"/>.
 /// </summary>
 public sealed record EnhancedSoundTuning
@@ -38,6 +39,9 @@ public sealed record EnhancedSoundTuning
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
+
+    // The shipped file's tuning while a pack's override is laid over Current, else null.
+    private static EnhancedSoundTuning? _withoutPack;
 
     /// <summary>Every numeric amount in the file's order, with its key, its read range and its
     /// accessors. The parse, the save and the sound lab's sliders all walk this one list.</summary>
@@ -62,6 +66,10 @@ public sealed record EnhancedSoundTuning
     /// <see cref="Reload"/> reads the file. A live tuner may set it directly; the flight reads it on
     /// every play.</summary>
     public static EnhancedSoundTuning Current { get; internal set; } = Neutral;
+
+    /// <summary>The tuning Original Sound's hit confirm reads: <see cref="Current"/>, less a sound
+    /// pack's override, which Original Sound never plays.</summary>
+    public static EnhancedSoundTuning WithoutPack => _withoutPack ?? Current;
 
     /// <summary>The engine loop's pitch at idle throttle, the decoded curve's first point.</summary>
     public float EnginePitchIdle { get; init; } = 0.6f;
@@ -106,13 +114,28 @@ public sealed record EnhancedSoundTuning
     public SoundCurve GainCurve(SoundCurve decoded) =>
         new(decoded.MinX, EngineGainIdle, decoded.MaxX, EngineGainFull);
 
-    /// <summary>Reads <paramref name="path"/> (defaults to <see cref="DefaultPath"/>) into
-    /// <see cref="Current"/> and returns it. Never throws: a missing or unreadable file warns and
-    /// leaves <see cref="Neutral"/>.</summary>
+    /// <summary>Reads <paramref name="path"/> (defaults to <see cref="DefaultPath"/>) and the
+    /// running sound pack's override over it into <see cref="Current"/>, and returns it. Never
+    /// throws: a missing or unreadable file warns and leaves its baseline.</summary>
     public static EnhancedSoundTuning Reload(string? path = null)
     {
-        Current = Load(path);
+        var file = Load(path);
+        Current = WithPack(file, HdSounds.Current);
+        _withoutPack = HdSounds.Current.HasOverride ? file : null;
         return Current;
+    }
+
+    /// <summary><paramref name="file"/> with <paramref name="pack"/>'s override laid over it, or
+    /// <paramref name="file"/> itself when the pack carries none.</summary>
+    public static EnhancedSoundTuning WithPack(EnhancedSoundTuning file, HdSounds pack)
+    {
+        if (!pack.HasOverride)
+        {
+            return file;
+        }
+
+        string source = pack.OverrideSource!;
+        return Read(source, () => pack.OverrideBytes() ?? throw new IOException("the override file could not be read"), file);
     }
 
     /// <summary>The tuning <paramref name="path"/> holds over <paramref name="baseline"/>
@@ -129,23 +152,7 @@ public sealed record EnhancedSoundTuning
             return baseline;
         }
 
-        try
-        {
-            var problems = new List<string>();
-            var tuning = Parse(viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path), problems, baseline);
-            foreach (var problem in problems)
-            {
-                Log.Warn("sound", $"enhanced sound: {path}: {problem}");
-            }
-
-            Log.Info("sound", $"enhanced sound: read {path}: {tuning.Describe()}");
-            return tuning;
-        }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-        {
-            Log.Warn("sound", $"enhanced sound: {path} could not be read ({ex.Message}), the remix plays at its baseline");
-            return baseline;
-        }
+        return Read(path, () => viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path), baseline);
     }
 
     /// <summary>Parses the file's bytes over <paramref name="baseline"/>, with no file access and
@@ -179,6 +186,25 @@ public sealed record EnhancedSoundTuning
     public static string? SourceTreePath() =>
         Godot.OS.HasFeature("editor") ? Godot.ProjectSettings.GlobalizePath(DefaultPath) : null;
 
+    /// <summary>Where a tuner saves and the values it starts from. Under <paramref name="pack"/>'s
+    /// override it starts from <paramref name="file"/> with the override over it and writes the
+    /// override alone, or nothing when it sits in a zip. Otherwise it starts from
+    /// <paramref name="file"/> and writes <paramref name="sourceTreePath"/>.</summary>
+    public static SaveTarget SaveTargetFor(HdSounds pack, EnhancedSoundTuning file, string? sourceTreePath)
+    {
+        if (!pack.HasOverride)
+        {
+            return sourceTreePath != null
+                ? SaveTarget.To(sourceTreePath, file, null)
+                : SaveTarget.Off("an exported build carries the tuning inside the pck", file, null);
+        }
+
+        var packed = WithPack(file, pack);
+        return pack.OverridePath is { } overridePath
+            ? SaveTarget.To(overridePath, packed, file)
+            : SaveTarget.Off($"the sound pack's override {pack.OverrideSource} sits inside a zip, which Save never writes; unzip that pack into a folder to tune it", packed, file);
+    }
+
     /// <summary>This tuning as the file holds it: every number at <see cref="Field.Rounded"/>
     /// precision, so a saved file reads back to exactly this value.</summary>
     public EnhancedSoundTuning Written()
@@ -196,8 +222,9 @@ public sealed record EnhancedSoundTuning
     /// <see cref="Written"/> value in place. Every other key, the <c>_about</c> note included, keeps
     /// its place, and a field the file lacks is appended. Throws <see cref="InvalidDataException"/>
     /// when <paramref name="existing"/> is not a JSON object, so a Save never replaces a file it
-    /// cannot read.</summary>
-    public static string WithValues(string? existing, EnhancedSoundTuning tuning)
+    /// cannot read. With <paramref name="under"/>, the file an override lies over, a field the file
+    /// lacks and <paramref name="tuning"/> leaves at <paramref name="under"/>'s value stays out.</summary>
+    public static string WithValues(string? existing, EnhancedSoundTuning tuning, EnhancedSoundTuning? under = null)
     {
         JsonObject root;
         if (string.IsNullOrWhiteSpace(existing))
@@ -233,9 +260,13 @@ public sealed record EnhancedSoundTuning
             rebuilt[key] = values.Remove(key, out var value) ? value : node?.DeepClone();
         }
 
+        var unchanged = under?.Written();
         foreach (var (key, value) in values)
         {
-            rebuilt[key] = value;
+            if (unchanged == null || !SameAs(key, written, unchanged))
+            {
+                rebuilt[key] = value;
+            }
         }
 
         return rebuilt.ToJsonString(WrittenJson) + System.Environment.NewLine;
@@ -243,10 +274,10 @@ public sealed record EnhancedSoundTuning
 
     /// <summary>Writes <paramref name="tuning"/> into the file at <paramref name="diskPath"/> through
     /// <see cref="WithValues"/>, creating it when absent, and returns the values written.</summary>
-    public static EnhancedSoundTuning Save(string diskPath, EnhancedSoundTuning tuning)
+    public static EnhancedSoundTuning Save(string diskPath, EnhancedSoundTuning tuning, EnhancedSoundTuning? under = null)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
-        File.WriteAllText(diskPath, WithValues(existing, tuning), new UTF8Encoding(false));
+        File.WriteAllText(diskPath, WithValues(existing, tuning, under), new UTF8Encoding(false));
         return tuning.Written();
     }
 
@@ -257,6 +288,40 @@ public sealed record EnhancedSoundTuning
         + "hit confirm {6} x{7:0.###} pitch {8:0.###} every {9:0.###} s",
         EnginePitchIdle, EnginePitchFull, EngineGainIdle, EngineGainFull, BulletHitGain, CanopyHitGain,
         HitConfirmSound, HitConfirmGain, HitConfirmPitch, HitConfirmInterval);
+
+    private static EnhancedSoundTuning Read(string origin, Func<byte[]> bytes, EnhancedSoundTuning baseline)
+    {
+        try
+        {
+            var problems = new List<string>();
+            var tuning = Parse(bytes(), problems, baseline);
+            foreach (var problem in problems)
+            {
+                Log.Warn("sound", $"enhanced sound: {origin}: {problem}");
+            }
+
+            Log.Info("sound", $"enhanced sound: read {origin}: {tuning.Describe()}");
+            return tuning;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("sound", $"enhanced sound: {origin} could not be read ({ex.Message}), the remix plays at its baseline");
+            return baseline;
+        }
+    }
+
+    private static bool SameAs(string key, EnhancedSoundTuning a, EnhancedSoundTuning b)
+    {
+        foreach (var field in Fields)
+        {
+            if (field.Key == key)
+            {
+                return field.Get(a) == field.Get(b);
+            }
+        }
+
+        return a.HitConfirmSound == b.HitConfirmSound;
+    }
 
     private static float Number(JsonElement root, string field, float fallback, float min, float max, List<string> problems)
     {
@@ -323,5 +388,36 @@ public sealed record EnhancedSoundTuning
 
         /// <summary><paramref name="value"/> as the decimal the file writes.</summary>
         internal static decimal Decimal(float value) => Math.Round((decimal)value, Places, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>Where a tuner's Save writes and the tuning it starts from (<see cref="SaveTargetFor"/>).
+    /// <see cref="OffReason"/> is set exactly when <see cref="Path"/> is null.</summary>
+    public sealed record SaveTarget
+    {
+        private SaveTarget(string? path, string? offReason, EnhancedSoundTuning saved, EnhancedSoundTuning? under)
+        {
+            Path = path;
+            OffReason = offReason;
+            Saved = saved;
+            Under = under;
+        }
+
+        /// <summary>The file Save writes, or null when Save is off.</summary>
+        public string? Path { get; }
+
+        /// <summary>Why Save is off, null when it writes <see cref="Path"/>.</summary>
+        public string? OffReason { get; }
+
+        /// <summary>The tuning the target holds, which a tuner starts from.</summary>
+        public EnhancedSoundTuning Saved { get; }
+
+        /// <summary>The shipped file's tuning when the target is an override that lies over it, else null.</summary>
+        public EnhancedSoundTuning? Under { get; }
+
+        /// <summary>A target Save writes at <paramref name="path"/>.</summary>
+        public static SaveTarget To(string path, EnhancedSoundTuning saved, EnhancedSoundTuning? under) => new(path, null, saved, under);
+
+        /// <summary>A target Save refuses, for <paramref name="reason"/>.</summary>
+        public static SaveTarget Off(string reason, EnhancedSoundTuning saved, EnhancedSoundTuning? under) => new(null, reason, saved, under);
     }
 }

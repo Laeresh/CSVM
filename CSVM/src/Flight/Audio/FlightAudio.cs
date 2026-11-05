@@ -46,7 +46,7 @@ public partial class FlightAudio : Node
 
     private const float SilenceThreshold = 0.002f;
 
-    private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
+    private readonly List<(string name, AudioStream stream, float volume)> _crashSounds = new();
     private readonly HitConfirmCue _hitConfirmCue = new();
 
     private PlaneStats _stats = null!;
@@ -56,7 +56,7 @@ public partial class FlightAudio : Node
     // The engine slot's three candidate streams, all resolved at Setup so a mid-flight swap is an
     // assignment rather than an archive read: the session's SoundArchive outlives the build, but a
     // decode at the moment the airframe is hit or the view changes is a hitch nobody needs.
-    private AudioStreamWav? _engineStream, _damagedStream, _cockpitStream;
+    private AudioStream? _engineStream, _damagedStream, _cockpitStream;
     private float _damagedVol = 1f, _cockpitVol = 1f;
     private EngineSlotPhase _enginePhase;     // Healthy holds the plain or cockpit stream
     private bool _engineCockpitView;
@@ -119,6 +119,9 @@ public partial class FlightAudio : Node
     /// <summary>The pitch scale the last <see cref="Update"/> wrote to the engine slot.</summary>
     internal float EnginePitch => _engine?.PitchScale ?? 1f;
 
+    /// <summary>The stream the engine slot plays, for the suite that swaps in a sound pack's file.</summary>
+    internal AudioStream? EngineStream => _engine?.Stream;
+
     /// <summary>Whether the slot currently holds the <c>cockpit_engine_sound</c> stream.</summary>
     internal bool EngineHoldsCockpitStream => _engine != null && _cockpitStream != null
         && ReferenceEquals(_engine.Stream, _cockpitStream);
@@ -161,7 +164,7 @@ public partial class FlightAudio : Node
             Log.Warn("sound", $"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
         }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
-        _engineStream = _engine?.Stream as AudioStreamWav;
+        _engineStream = _engine?.Stream;
         // The slot starts on the plain definition, and only a swap goes through the two paths that
         // re-read this, so the opening state has to be set here rather than left at its default.
         _enginePitchable = EngineAudioCurves.SlotIsPitched(defs, stats.EngineSound);
@@ -421,7 +424,8 @@ public partial class FlightAudio : Node
     /// variant that played, or null.</summary>
     public string? OnHitConfirm(double now)
     {
-        var tuning = EnhancedSoundTuning.Current;
+        // Original Sound plays no part of a sound pack, its override included.
+        var tuning = SoundModeSetting.EnhancedOn ? EnhancedSoundTuning.Current : EnhancedSoundTuning.WithoutPack;
         if (!SoundModeSetting.HitConfirmOn || !_hitConfirmCue.TryFire(now, tuning.HitConfirmInterval))
             return null;
         if (_hitConfirm == null)
@@ -512,7 +516,7 @@ public partial class FlightAudio : Node
     // A looped definition's stream and its unscaled VOLUME, same convention as WorldSounds' 3D
     // emitters. Split out from MakeLoop so the engine slot's swap candidate can be resolved without
     // building a player nothing would ever start.
-    private static AudioStreamWav? LoadStream(SoundArchive archive,
+    private static AudioStream? LoadStream(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
     {
         baseVolume = 1f;

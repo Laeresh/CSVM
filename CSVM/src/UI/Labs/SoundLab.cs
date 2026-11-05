@@ -15,8 +15,9 @@ namespace CSVM.UI.Labs;
 /// right edge holds a slider per <see cref="EnhancedSoundTuning.Fields"/> amount and a pick of the
 /// hit confirm's group. Every edit lands in <see cref="EnhancedSoundTuning.Current"/> at once, which
 /// the flown aircraft's mix reads on its next frame. A readout shows the flown aircraft's throttle
-/// and the engine slot's pitch and gain. Save writes <c>enhanced_sound.json</c> from the source tree
-/// and is off in an exported build. Sliders and buttons take no keyboard focus, so flying goes on.
+/// and the engine slot's pitch and gain. Save writes <c>enhanced_sound.json</c> from the source tree,
+/// or a sound pack's override while one plays (<see cref="EnhancedSoundTuning.SaveTargetFor"/>), and is off in an exported
+/// build. Sliders and buttons take no keyboard focus, so flying goes on.
 /// </summary>
 public sealed partial class SoundLab : Node
 {
@@ -43,23 +44,30 @@ public sealed partial class SoundLab : Node
     private float _readoutTimer;
     private string _note = "";
 
-    /// <summary>A lab over the running flight, starting from <paramref name="saved"/>, the file's
-    /// tuning, and <paramref name="start"/>, what plays now. The readout comes from
-    /// <paramref name="reading"/>, and the group pick lists <paramref name="groups"/>. A null
-    /// <paramref name="savePath"/> turns Save off.</summary>
-    public SoundLab(EnhancedSoundTuning saved, EnhancedSoundTuning start, Func<Reading?> reading,
-        IReadOnlyList<string> groups, string? savePath)
+    /// <summary>A lab over the running flight, starting from <paramref name="target"/>'s saved
+    /// tuning and <paramref name="start"/>, what plays now. The readout comes from
+    /// <paramref name="reading"/>, and the group pick lists <paramref name="groups"/>.</summary>
+    public SoundLab(EnhancedSoundTuning.SaveTarget target, EnhancedSoundTuning start, Func<Reading?> reading, IReadOnlyList<string> groups)
     {
-        _saved = saved;
+        _saved = target.Saved;
         _edit = start;
         _reading = reading;
         _groups = groups;
-        SavePath = savePath;
+        SavePath = target.Path;
+        Under = target.Under;
+        SaveOffReason = target.OffReason ?? "it has no file to write";
         Name = "sound_lab";
     }
 
     /// <summary>The file Save writes, null where Save is off. A suite points it at a copy.</summary>
     public string? SavePath { get; internal set; }
+
+    /// <summary>The tuning the saved file lies over: the shipped file's, when Save writes a sound
+    /// pack's override. Null when Save writes the shipped file.</summary>
+    public EnhancedSoundTuning? Under { get; }
+
+    /// <summary>Why Save is off, shown when Save is pressed.</summary>
+    public string SaveOffReason { get; }
 
     /// <summary>Whether the panel is showing. Nothing is built until it first opens.</summary>
     public bool IsOpen => _open;
@@ -153,13 +161,13 @@ public sealed partial class SoundLab : Node
     {
         if (SavePath == null)
         {
-            _note = "Save is off: an exported build carries the tuning inside the pck";
+            _note = $"Save is off: {SaveOffReason}";
             UpdateStatus();
             return null;
         }
         try
         {
-            var written = EnhancedSoundTuning.Save(SavePath, _edit);
+            var written = EnhancedSoundTuning.Save(SavePath, _edit, Under);
             _saved = written;
             Apply(written);
             SyncRows();

@@ -16,7 +16,7 @@ namespace CSVM.Flight.Audio;
 /// <param name="RangeMax"><c>RANGE</c>'s audible distance, m.</param>
 /// <param name="Is3D">The positional opt-in; a definition without it has no distance model at all.</param>
 public readonly record struct WeaponSoundCue(
-    string Name, AudioStreamWav Stream, float Volume, float RangeMin, float RangeMax, bool Is3D)
+    string Name, AudioStream Stream, float Volume, float RangeMin, float RangeMax, bool Is3D)
 {
     /// <summary>The margin the sound manager leaves over <c>RANGE</c>'s audible distance before it
     /// silences a positional voice. The decoded law's own factor, not a second copy of it: the

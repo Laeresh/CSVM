@@ -183,7 +183,7 @@ within one pack also load in name order, and a later file wins its key. The call
 names or refuses each file, and the index owns the open zips and the locked read. A zip entry named
 with backslashes reads as one named with slashes, and a damaged entry or locked file reads as null
 with a warning, never an exception. Engine-free; read
-`HdTextures.cs` and `HdModels.cs` next. Coverage: `CSVM.Tests/PackIndexTests.cs`.
+`HdTextures.cs`, `HdModels.cs` and `HdSounds.cs` next. Coverage: `CSVM.Tests/PackIndexTests.cs`.
 
 ## src/Extraction/HdTextures.cs
 The HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a `--det` run reads none unless `--hd=` names one), over `PackIndex.cs`. A path left with a folder replaces
@@ -202,4 +202,13 @@ match without case or a trailing `.flt`. `KeyFor` names the pack key a node reso
 reading it, which `Mech3/HdModelMeshes.cs` caches on. An airframe is its model node
 (`player_bhawk`), and `RigFor` returns `planes/<airframe>/rig.json` for `Mech3/PlaneRigPatch.cs`. `Clump` returns a clump tile's
 files (`<chapter>/<card>.clump.png`, `.clump.json`, `.clump.side.png`) for `Mech3/ClumpTile.cs`, keyed with their extension, so `KeyFor` never reaches one. Engine-free, apart from the texture folder. Coverage: `CSVM.Tests/HdModelsTests.cs`.
+
+## src/Extraction/HdSounds.cs
+The sound packs in `<dataRoot>/HDSounds` (`sounds.hd`, `--hd-sounds=`; `FolderFor` holds the rule
+that a `--det` run reads none unless the flag names one), over `PackIndex.cs`. A `.wav` or `.ogg`
+keys by its file name's stem alone, so it replaces the original WAV of that name from any folder,
+and `Sniff` reads the container from the bytes. A pack's top-level `enhanced_sound.json` is the
+override, the last pack's winning, and `OverridePath` is null when it sits in a zip. Only
+`Mech3/SoundArchive.cs` (`Find`, under Enhanced Sound) and `Flight/Audio/EnhancedSoundTuning.cs`
+(`Reload`, `WithPack`) read it. Engine-free. Coverage: `CSVM.Tests/HdSoundsTests.cs`.
 

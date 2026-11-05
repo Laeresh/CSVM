@@ -478,6 +478,12 @@ public partial class Launcher : Node3D
         // The sound mode and Hit Confirm, Original Sound with no confirm under --det, so no golden
         // hears the remix. The remix's amounts are read whatever the mode, an apply switching live.
         SoundModeSetting.ApplySaved(_spec.Det);
+        // The sound pack follows the texture packs' rule below, and opens first: the reload lays its
+        // override over the shipped file.
+        if (HdSounds.FolderFor(_spec.HdSounds, _spec.Det, Config.GetString(HdSounds.ConfigKey, HdSounds.DefaultFolder)) is { } soundFolder)
+        {
+            HdSounds.Current = HdSounds.Open(dataRoot, soundFolder);
+        }
         Flight.Audio.EnhancedSoundTuning.Reload();
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.

@@ -917,7 +917,8 @@ carries its `Centre` (the damage node's gamez box centre, a replacement's ignore
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies:
-Godot cannot load the game's WAV format (see docs/formats/sounds.md).
+Godot cannot load the game's WAV format (see docs/formats/sounds.md). A sound pack's 24-bit PCM and
+32-bit float files, plain or `WAVE_FORMAT_EXTENSIBLE` (not 24-bit samples in 32-bit words), are narrowed to PCM16 as well; `ParseMonoOrStereo` refuses a pack file of more than two channels.
 
 ## src/Mech3/WavCues.cs
 The RIFF `cue ` chunk of a WAV as times in seconds, read from bytes already in hand. The briefing narration is the one consumer, reading its bytes
@@ -941,11 +942,12 @@ the score and the briefing read that one. `FromExtracted` stands unzbd's sound z
 ## src/Mech3/SoundArchive.cs
 WAV lookup over the launch's `SoundZbd`, or over a soundsh/soundsl extraction (zip or directory,
 the modding path, which nothing opens by default), decoded through `WavFile` into cached
-`AudioStreamWav`s; `Find(name, looped)` marks a forward loop when asked and caches per
+streams; `Find(name, looped)` marks a forward loop when asked and caches per
 `(wav, looped)`, the play site's flag winning over the definition's. A failed read returns null,
 since callers run inside the session step. `Dispose` leaves a shared `SoundZbd` open, so each
 session wraps it in its own archive and cache. Over a zip it releases the handle, and a later read
 reopens the zip for its one entry, so zip and directory archives fail differently. Read `WorldSounds.cs` for the prewarm that fills the cache.
+Under Enhanced Sound a sound pack's file (`Extraction/HdSounds.cs`) stands in, cached apart, the original playing when it fails.
 
 ## src/Mech3/MusicPlayer.cs
 The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D

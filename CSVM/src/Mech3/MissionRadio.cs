@@ -34,7 +34,7 @@ public sealed partial class MissionRadio : Node
 
     private readonly IReadOnlyDictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
-    private readonly Func<string, AudioStreamWav?> _stream;
+    private readonly Func<string, AudioStream?> _stream;
     private readonly List<RadioCall> _queue = new();
     private readonly AudioStreamPlayer _player = new() { Bus = AudioBuses.Voice };
 
@@ -43,7 +43,7 @@ public sealed partial class MissionRadio : Node
 
     public MissionRadio(IReadOnlyDictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup> groups,
-        Func<string, AudioStreamWav?> stream)
+        Func<string, AudioStream?> stream)
     {
         _defs = defs;
         _groups = groups;

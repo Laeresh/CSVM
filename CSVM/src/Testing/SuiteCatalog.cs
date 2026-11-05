@@ -214,6 +214,7 @@ public static class SuiteCatalog
         "shootable-flyout",
         "smoke-screen",
         "sound-lab",
+        "sound-pack",
         "source-picker",
         "source-screen",
         "source-upgrade",

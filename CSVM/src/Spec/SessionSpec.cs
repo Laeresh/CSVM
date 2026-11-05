@@ -1239,6 +1239,10 @@ public sealed record SessionSpec
     /// config.json names.</summary>
     public bool NoHdModels { get; private set; }
 
+    /// <summary><c>--hd-sounds=</c>: the sound pack folder, under the data root unless rooted. Empty
+    /// reads no pack. Null when absent, which leaves config.json's <c>sounds.hd</c>.</summary>
+    public string? HdSounds { get; private set; }
+
     /// <summary><c>--mod-folder=</c>: the modding folder of unzbd output this launch reads
     /// (<see cref="ModdingFolder"/>), beating the saved one. Empty names none. Null when absent.</summary>
     public string? ModFolder { get; private set; }
@@ -1821,6 +1825,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
+            else if (arg.StartsWith("--hd-sounds=")) { s.HdSounds = arg["--hd-sounds=".Length..]; }
             else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
             else if (arg.StartsWith("--hitch-inject="))
             {

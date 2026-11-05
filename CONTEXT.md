@@ -294,6 +294,12 @@ A sound played when the player's rounds strike an enemy aircraft, its own option
 mode. A remake-only rule.
 _Avoid_: hit marker, hit sound (the original's hits on the player's own aircraft)
 
+**Sound pack**:
+A zip or folder of replacement recordings in the `HDSounds` folder, each named after the original
+WAV it replaces, with an optional override of the Enhanced Sound values. Heard under Enhanced Sound
+alone.
+_Avoid_: sound mod, HD sound (for the mode)
+
 ## Air race courses
 
 **Course**:

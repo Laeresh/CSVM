@@ -940,6 +940,7 @@ sound group. Every edit sets `EnhancedSoundTuning.Current` at once, which the fl
 it is heard only under Enhanced Sound. A readout shows player 1's throttle and engine slot pitch and gain. Original
 values, Revert to saved, and Save, which writes every amount through `EnhancedSoundTuning.Save` into the source tree's
 file and is off in an exported build. The sliders and buttons take no keyboard focus, so the flight keeps its keys.
+Under a sound pack's override the lab starts and saves as `EnhancedSoundTuning.SaveTargetFor` says: the override alone.
 
 ## src/UI/Labs/CourseLab.cs
 The course editor lab (Shift+F3), built by `InspectionLabs.BuildCourseLab` in `--freecam` over a chapter world, open at launch

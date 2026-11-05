@@ -27,7 +27,7 @@ public sealed partial class WorldSounds : Node3D
     /// the point of use.
     /// ⚠ The stream cache alone is not enough; <see cref="Prewarm"/> is what makes a later decode
     /// safe after this field is nulled.</summary>
-    public Func<SoundDef, bool, AudioStreamWav?>? Loader;
+    public Func<SoundDef, bool, AudioStream?>? Loader;
 
     /// <summary>--debug-anim: log each emitter's host, distance and playing state once a second.
     /// Audio cannot be screenshot-verified, so this is the headless equivalent, and it is what
@@ -46,7 +46,7 @@ public sealed partial class WorldSounds : Node3D
 
     private readonly Dictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
-    private readonly Dictionary<string, AudioStreamWav?> _streams = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AudioStream?> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Emitter> _emitters = new();
 
     // Live one-shot players (PlayOneShot). Fire-and-forget, so nothing holds them but this list,
@@ -149,7 +149,7 @@ public sealed partial class WorldSounds : Node3D
     /// its WAV is missing. The same cache <see cref="Create"/> and <see cref="Spawn"/> read, so a
     /// channel that sits beside this one (<see cref="MissionRadio"/>) plays the prewarmed stream
     /// rather than decoding the archive a second time.</summary>
-    public AudioStreamWav? StreamFor(string name)
+    public AudioStream? StreamFor(string name)
     {
         if (_streams.TryGetValue(name, out var cached))
         {
