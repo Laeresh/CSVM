@@ -826,9 +826,12 @@ internal static class MenuOriginalConnectionSuites
         + "fourth row, and picking it on Above the Clouds moves the Environment off that greyed row onto "
         + "Hawai'ian Islands with the Time box at 5 on both ends. Every chapter without Danger Zones greys in the "
         + "Environment list, every Mission Option but the Time box greys on the host, and both ends describe "
-        + "the race under the Type box. A typed Time reaches the guest, and both LAUNCH! and the "
-        + "guest's launch leave as stunt launches on the chapter with the race type and that window, which "
-        + "the menu's own spec turns into the chapter's IA1. Back on a Deathmatch every option is live again")]
+        + "the race under the Type box. A typed Time reaches the guest. On NW Boeing Field, a chapter with a "
+        + "shipped course, both ends show a Course box in the description's place, the guest's greyed on the "
+        + "Danger Zones; the host's lists the Danger Zones and then the shipped course by title, and its pick "
+        + "reaches the guest's box by title. Both LAUNCH! and the guest's launch leave as "
+        + "stunt launches on the chapter with the race type, that window and the course's file name, which "
+        + "the menu's own spec turns into the course in the chapter's IA1. Back on a Deathmatch every option is live again")]
     internal static void TheLobbyStuntRace(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -864,6 +867,9 @@ internal static class MenuOriginalConnectionSuites
             door.Lan.SearchAddress = Loopback;
         }
 
+        // Both doors list the shipped courses, as a --det launch does.
+        hostDoor.Courses = DogfightLobby.ShippedCourseChoices;
+        guestDoor.Courses = DogfightLobby.ShippedCourseChoices;
         var ends = new List<End>();
         var hostExits = new List<MenuExit>();
         var guestExits = new List<MenuExit>();
@@ -880,7 +886,7 @@ internal static class MenuOriginalConnectionSuites
             if (PickTheStuntRace(ctx, host, guest, ends))
             {
                 GreyedForTheRace(ctx, host, guest, ends);
-                _ = LaunchTheRace(ctx, host, guest, ends, hostExits, guestExits);
+                _ = LaunchTheRace(ctx, host, guest, ends, hostExits, guestExits, PickTheCourse(ctx, host, guest, ends));
             }
         }
         finally
@@ -3627,9 +3633,38 @@ internal static class MenuOriginalConnectionSuites
             $"NW Boeing Field and a typed Time of 7 reach the guest ({heard.Environment}, {heard.TimeMinutes})");
     }
 
+    // The Course box on NW Boeing Field, in the description's place on both ends. The host's lists the
+    // Danger Zones, then the shipped course by title; its pick reaches the guest's, greyed. The course's name, or null.
+    private static string? PickTheCourse(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        const string Sample = "sample_out_and_back";
+        const string Title = "Airfield Out and Back";
+        string key = OriginalLobbyScreen.CourseKey;
+        ctx.Check(Row(guest.Shell, key) is { Enabled: false, Label: InstantActionFeature.DangerZonesLabel } && Row(host.Shell, key) is { Enabled: true }
+                  && !Draws(guest.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
+                  && !Draws(host.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription),
+            $"before a pick both ends show the Course box in the description's place, the guest's greyed on the Danger Zones ('{Row(guest.Shell, key)?.Label}', enabled {Row(guest.Shell, key)?.Enabled})");
+        ClickRow(ctx, host, key);
+        ctx.Check(Row(host.Shell, key + ":0") is { Label: InstantActionFeature.DangerZonesLabel } && Row(host.Shell, key + ":1") is { Enabled: true, Label: Title }
+                  && Row(host.Shell, key + ":2") == null,
+            $"the host's Course list offers the Danger Zones, then the shipped course by title ('{Row(host.Shell, key + ":0")?.Label}', '{Row(host.Shell, key + ":1")?.Label}')");
+        ClickRow(ctx, host, key + ":1");
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        bool heard = guest.Door.Dogfight!.Course?.Name == Sample && host.Door.Dogfight!.Course?.Name == Sample;
+        ctx.Check(heard && Row(host.Shell, key) is { Enabled: true, Label: Title } && Row(guest.Shell, key) is { Enabled: false, Label: Title }
+                  && !Draws(guest.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription),
+            $"the pick reaches the guest's Course box, greyed, by title ('{Row(guest.Shell, key)?.Label}', enabled {Row(guest.Shell, key)?.Enabled})");
+        return heard ? Sample : null;
+    }
+
     // Both ends Ready, LAUNCH! and the host's opener. Each end leaves as a stunt launch on the chapter
-    // with the race and its window. The menu's own spec flies it as the chapter's IA1.
-    private static (MenuNetLaunch Host, MenuNetLaunch? Guest)? LaunchTheRace(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> hostExits, List<MenuExit> guestExits)
+    // with the race, its window and the course picked. The menu's own spec flies it in the chapter's IA1.
+    private static (MenuNetLaunch Host, MenuNetLaunch? Guest)? LaunchTheRace(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> hostExits, List<MenuExit> guestExits,
+        string? course = null)
     {
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
         ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
@@ -3641,8 +3676,9 @@ internal static class MenuOriginalConnectionSuites
         int before = hostExits.Count;
         ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
         var launch = hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
-        ctx.Check(launch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: true, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7, KillTarget: 0, Lives: 0 } },
-            $"LAUNCH! hands out a stunt launch on C1 with the race and its window ({launch?.Mode}, {launch?.Chapter}, {launch?.Match})");
+        ctx.Check(launch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: true, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7, KillTarget: 0, Lives: 0 } }
+                  && launch.Course == course,
+            $"LAUNCH! hands out a stunt launch on C1 with the race, its window and course {course ?? "none"} ({launch?.Mode}, {launch?.Chapter}, {launch?.Match}, {launch?.Course ?? "none"})");
         if (launch?.Net is not { } wire)
         {
             return null;
@@ -3658,14 +3694,16 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var guestLaunch = guestExits.Skip(guestBefore).OfType<LaunchExit>().FirstOrDefault();
-        ctx.Check(guestLaunch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: false, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7 } },
-            $"the guest launches behind the host on the same race ({guestLaunch?.Mode}, {guestLaunch?.Chapter}, {guestLaunch?.Match})");
+        ctx.Check(guestLaunch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: false, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7 } }
+                  && guestLaunch.Course == course,
+            $"the guest launches behind the host on the same race and course ({guestLaunch?.Mode}, {guestLaunch?.Chapter}, {guestLaunch?.Match}, {guestLaunch?.Course ?? "none"})");
 
         var cli = SessionSpec.Parse(new[] { "--mission=MP1" });
         var spec = SessionSpec.FromMenu(cli, launch.Chapter, planes, launch.Mode, vsTimeMinutes: launch.Match!.TimeLimitMinutes,
-            missionType: launch.Match.MissionType);
-        ctx.Check(spec is { Stunt: true, Versus: false, Mission: SessionSpec.StuntRaceMission, MissionType: DogfightMissionType.StuntRace, StuntRaceMinutes: 7 },
-            $"and the menu's own spec flies C1's IA1 as a 7 minute race whatever --mission says ({spec.Mission}, {spec.MissionType}, {spec.StuntRaceMinutes} min)");
+            missionType: launch.Match.MissionType, course: launch.Course, fromLobby: launch.Net != null);
+        ctx.Check(spec is { Stunt: true, Versus: false, Mission: SessionSpec.StuntRaceMission, MissionType: DogfightMissionType.StuntRace, StuntRaceMinutes: 7, CourseRefusal: null }
+                  && spec.Course?.Name == course,
+            $"and the menu's own spec flies C1's IA1 as a 7 minute race on course {course ?? "none"} whatever --mission says ({spec.Mission}, {spec.MissionType}, {spec.StuntRaceMinutes} min, {spec.Course?.Name ?? "none"})");
         return (wire, guestLaunch?.Net);
     }
 

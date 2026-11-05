@@ -118,8 +118,63 @@ internal static class NetCourseSuites
         }
     }
 
-    private static void Race(TestContext ctx, string cell, Course course, LobbyCourseMessage word, string? ownJson, int seed)
+    [Suite("net-course-lobby",
+        "a two-machine Stunt Race from the lobby's own options over a 100 ms loopback: the host picks "
+        + "C1/sample_out_and_back among the chapter's courses, the guest's lobby reads its title and its "
+        + "launch names the host's course, each machine's spec comes from FromMenu as the lobby's launch "
+        + "builds it, and both fly the host's gates, the guest keeping a copy in its scratch game folder")]
+    internal static void ALobbyRaceFliesTheHostsPick(TestContext ctx)
     {
+        var missionZrdr = ctx.MissionZrdr(Chapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{Chapter}/{SessionSpec.StuntRaceMission} zrdr");
+
+        var choices = DogfightLobby.ShippedCourseChoices(Chapter);
+        if (choices.FirstOrDefault(c => c.Name == Sample) is not { } course)
+        {
+            ctx.Check(false, $"the lobby offers the shipped course {Chapter}/{Sample} ({string.Join(", ", choices.Select(c => c.Name))})");
+            return;
+        }
+
+        var wires = LoopbackTransport.Mesh(2, new LoopbackConditions(0.1, 0.0, 0.0), new Random(9607)).Select(end => new NetLobby(end)).ToList();
+        var host = new DogfightLobby(wires[0], () => "Host") { Seated = _ => true };
+        var guest = new DogfightLobby(wires[1], () => "Guest", 0);
+        guest.Show();
+        bool picked = host.SetMissionType(DogfightMissionType.StuntRace) && host.SetEnvironment(DogfightLobby.EnvironmentOf(Chapter))
+            && host.SetCourse(course);
+        for (int step = 0; step < 60 && guest.LaunchCourse == null; step++)
+        {
+            wires[0].Step(0.016);
+            host.Step();
+            wires[1].Step(0.016);
+            guest.Step();
+        }
+
+        ctx.Check(picked && guest.Course?.DisplayName == course.DisplayName && guest.LaunchCourse == Sample && host.LaunchCourse == Sample
+                  && guest.CourseWord == host.CourseWord && DogfightLobby.IsStuntRace(guest.Options),
+            $"the host's pick reaches the guest's lobby by title ('{guest.Course?.DisplayName}', launch {guest.LaunchCourse ?? "none"}, refusal '{guest.CourseRefusal}')");
+        if (guest.CourseWord is not { } word)
+        {
+            return;
+        }
+
+        var lobbies = new[] { host, guest };
+        Race(ctx, "lobby", course, word, ownJson: null, seed: 9608, spec: (root, machine) =>
+        {
+            var options = lobbies[machine].Options;
+            var rules = DogfightLobby.RulesOf(options);
+            return SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--scores={Path.Combine(root, $"scores{machine}.json")}" }),
+                DogfightLobby.ChapterOf(options.Environment), new[] { Plane }, DogfightLobby.LaunchMode(options),
+                vsTimeMinutes: rules.TimeLimitMinutes, missionType: rules.MissionType, course: lobbies[machine].LaunchCourse, fromLobby: true);
+        });
+    }
+
+    private static void Race(TestContext ctx, string cell, Course course, LobbyCourseMessage word, string? ownJson, int seed,
+        Func<string, int, SessionSpec>? spec = null)
+    {
+        spec ??= (root, machine) => Spec(root, machine, course);
         string root = Path.Combine(ctx.ScratchDir, "net-course", cell);
         if (Directory.Exists(root))
         {
@@ -142,7 +197,7 @@ internal static class NetCourseSuites
         ctx.Check(ownJson == null ? local == null : local != null && local.Hash != course.Hash,
             $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's library alone flies something else ({(local == null ? "no course" : $"hash {local.Hash} against the host's {course.Hash}")})");
 
-        var specs = new[] { Spec(root, 0, course), Spec(root, 1, course) };
+        var specs = new[] { spec(root, 0), spec(root, 1) };
         ctx.Check(specs.All(s => s.Course != null && s.CourseRefusal == null && s.Chapter == course.Chapter),
             $"[{cell}] both lobby launches name the course ({specs[0].Course}, {specs[0].CourseRefusal ?? "no refusal"})");
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.1, 0.0, 0.0), new Random(seed));
@@ -330,7 +385,7 @@ internal static class NetCourseSuites
     // A lobby launch's Stunt Race on the course, each machine with its own scores file.
     private static SessionSpec Spec(string root, int machine, Course course) =>
         SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--scores={Path.Combine(root, $"scores{machine}.json")}" }),
-            course.Chapter, new[] { Plane }, MenuMode.Stunt, vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: course.Name);
+            course.Chapter, new[] { Plane }, MenuMode.Stunt, vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: course.Name, fromLobby: true);
 
     // The guest's run, every entry flown through the host's gate once the window opens, until the
     // host's line brings its best back. A touch penalty lands once penaltyAt entries are crossed.

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Net;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -202,6 +203,17 @@ public sealed class LobbyCourseTests
         Assert.NotNull(guests[0].CourseWord);
         Assert.Null(guests[0].Course);
         Assert.Contains("C1/Harbour is refused", guests[0].CourseRefusal, StringComparison.Ordinal);
+
+        // Its launch would be refused, so it may not stand Ready while that course stands.
+        Assert.True(guests[0].RefusesCourse);
+        Assert.False(guests[0].SetReady(true));
+        Assert.False(guests[0].Ready);
+
+        // ABLE-TO-FAIL CONTROL: once the host's Danger Zones word arrives, the same Ready takes.
+        wires[0].Tell(1, LobbyCourseMessage.None(host.Options.Epoch));
+        Settle(host, guests, wires);
+        Assert.False(guests[0].RefusesCourse);
+        Assert.True(guests[0].SetReady(true));
     }
 
     [Fact]
@@ -221,6 +233,77 @@ public sealed class LobbyCourseTests
         // ABLE-TO-FAIL CONTROL: the right word for the launch's course, matched without case, is taken.
         Assert.Equal(course.Hash, DogfightLobby.CourseOf(word, ("c1", "HARBOUR"), out string none)?.Hash);
         Assert.Equal(string.Empty, none);
+    }
+
+    [Fact]
+    public void TheCourseBoxOffersEveryCourseThatFitsByTitle()
+    {
+        Directory.CreateDirectory(Path.Combine(_shipped, "C1"));
+        Directory.CreateDirectory(Path.Combine(_game, "C1"));
+        File.WriteAllText(Path.Combine(_shipped, "C1", "Harbour.json"), Json);
+        File.WriteAllText(Path.Combine(_game, "C1", "Zed.json"), Json.Replace("Harbour Dash", "Airfield Loop", StringComparison.Ordinal));
+        var entry = Harbour().Sequence[0];
+        var tooLong = Harbour() with { Name = "Long", Sequence = Enumerable.Repeat(entry, RaceStandingMessage.MaxZones + 1).ToList() };
+        File.WriteAllText(Path.Combine(_game, "C1", "Long.json"), tooLong.ToJson());
+        File.WriteAllText(Path.Combine(_game, "C1", "Broken.json"), "{ \"start\": 3 }");
+
+        var choices = DogfightLobby.CourseChoices(new CourseLibrary(_shipped, _game), "C1");
+
+        Assert.Equal(new[] { "Zed", "Harbour" }, choices.Select(c => c.Name));
+        Assert.Equal(new[] { "Airfield Loop", "Harbour Dash" }, choices.Select(c => c.DisplayName));
+        Assert.Empty(DogfightLobby.CourseChoices(new CourseLibrary(_shipped, _game), "C2"));
+    }
+
+    [Fact]
+    public void ALaunchFliesTheHostsCourseInItsChaptersStuntRaceAndAMoveOffEitherTakesTheDangerZones()
+    {
+        var (host, guests, wires) = Lobbies(2, _ => true);
+        int c1 = DogfightLobby.EnvironmentOf("C1");
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Assert.True(host.SetEnvironment(c1));
+        Assert.True(host.SetCourse(Harbour()));
+        Settle(host, guests, wires);
+        Assert.Equal("Harbour", host.LaunchCourse);
+        Assert.Equal("Harbour", guests[0].LaunchCourse);
+
+        // Another chapter's race takes the Danger Zones on every machine.
+        Assert.True(host.SetEnvironment(DogfightLobby.EnvironmentOf("C3")));
+        Settle(host, guests, wires);
+        Assert.Null(host.Course);
+        Assert.Null(host.LaunchCourse);
+        Assert.Null(guests[0].CourseWord);
+        Assert.Null(guests[0].LaunchCourse);
+        Assert.False(host.SetCourse(Harbour()));
+
+        // ABLE-TO-FAIL CONTROL: back on the course's chapter it flies again, until a Deathmatch drops it.
+        Assert.True(host.SetEnvironment(c1));
+        Assert.True(host.SetCourse(Harbour()));
+        Settle(host, guests, wires);
+        Assert.Equal("Harbour", guests[0].LaunchCourse);
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Settle(host, guests, wires);
+        Assert.Null(host.Course);
+        Assert.Null(guests[0].LaunchCourse);
+        Assert.False(host.SetCourse(Harbour()));
+
+        // Capture the Flag drops it too, through the same options change.
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Assert.True(host.SetEnvironment(c1));
+        Assert.True(host.SetCourse(Harbour()));
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Assert.Null(host.Course);
+    }
+
+    [Fact]
+    public void ALobbyLaunchOnACourseComesBackToTheTopLevelNotInstantAction()
+    {
+        var mesh = LoopbackTransport.Mesh(2, Clean, new Random(2));
+        var seats = Array.Empty<MenuSeatChoice>();
+        var lobby = new LaunchExit("C1", seats, MenuMode.Stunt, Net: new MenuNetLaunch(mesh[0], true), Course: "Harbour");
+        Assert.Same(MenuReturnDestination.TopLevel, MenuReturnDestination.ForLaunch(lobby));
+
+        // ABLE-TO-FAIL CONTROL: the same course from Instant Action, with no wire, goes back there.
+        Assert.Same(MenuReturnDestination.InstantAction, MenuReturnDestination.ForLaunch(lobby with { Net = null }));
     }
 
     [Fact]
@@ -254,6 +337,9 @@ public sealed class LobbyCourseTests
         }
 
         var host = new DogfightLobby(wires[0], () => "Host") { Seated = seated };
+        // A course stands only in its own chapter's Stunt Race.
+        host.SetMissionType(DogfightMissionType.StuntRace);
+        host.SetEnvironment(DogfightLobby.EnvironmentOf("C1"));
         var guests = new List<DogfightLobby>();
         for (int i = 1; i < players; i++)
         {

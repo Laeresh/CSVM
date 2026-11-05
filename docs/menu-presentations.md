@@ -492,7 +492,12 @@ transport and which end owns the match, built by `NetPlayFeature.BuildLaunch` an
 session, which from then on steps it and closes it; the door keeps only the router's port mapping,
 so it can give that back when the flight ends. The local two-seat minimum does not apply to such a
 launch, since the opponent is at another machine. Original offers it through the Multiplayer
-Connection page and the lobby's LAUNCH (`OriginalConnectionScreen`, `OriginalLobbyScreen`). The
+Connection page and the lobby's LAUNCH (`OriginalConnectionScreen`, `OriginalLobbyScreen`). A lobby
+Stunt Race on its host's authored course leaves with that course's file name in `LaunchExit.Course`
+on every machine, a guest's taken from its host's word (`DogfightLobby.LaunchCourse`), and returns
+where any lobby flight does rather than to Instant Action. The lobby's Course box lists the
+chapter's courses by title, where Instant Action's lists them by file name; a course over the lobby message's size or a racer line's 255 splits stays out of
+the lobby's list. The
 feature is shared, so a further presentation's board is rows and a sink, not a second mechanism.
 
 ## Return

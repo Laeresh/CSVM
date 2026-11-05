@@ -216,8 +216,8 @@ public class SessionSpecTests
         Assert.Equal("stunt_flying", s.Scenario);
     }
 
-    /// <summary>A course is a stunt run on this machine's seats, so a Dogfight, a network session and
-    /// the bare stage refuse the launch. The world is left alone on a refusal.</summary>
+    /// <summary>A Dogfight, the command line's network session and the bare stage refuse a course.
+    /// The world is left alone on a refusal.</summary>
     [Theory]
     [InlineData("--vs")]
     [InlineData("--net-host=127.0.0.1:47600")]
@@ -229,6 +229,31 @@ public class SessionSpecTests
         Assert.NotNull(s.Course);
         Assert.NotNull(s.CourseRefusal);
         Assert.Equal("C1", s.Chapter);
+    }
+
+    /// <summary>`--net-host`/`--net-join` have no lobby to carry the course, and the refusal says
+    /// where to pick one. A lobby's Stunt Race on the host's course flies on every machine.</summary>
+    [Theory]
+    [InlineData("--net-host=127.0.0.1:47600")]
+    [InlineData("--net-join=127.0.0.1:47600")]
+    public void ANetworkCourseFliesFromTheLobbyAloneAndTheCommandLineIsToldSo(string net)
+    {
+        Assert.Contains("lobby's Mission Options", S("--course=C2/loop", net).CourseRefusal);
+
+        // A lobby's launch flies it, even in a process whose command line named the network.
+        var lobby = SessionSpec.FromMenu(S("--mute", net), "C2", new[] { "player_fury" }, MenuMode.Stunt,
+            vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: "loop", fromLobby: true);
+        Assert.Equal(("C2", "loop"), lobby.Course);
+        Assert.Null(lobby.CourseRefusal);
+        Assert.Equal(SessionSpec.StuntRaceMission, lobby.Mission);
+        Assert.Equal(DogfightMissionType.StuntRace, lobby.MissionType);
+
+        // ABLE-TO-FAIL CONTROL: any other menu launch in that process still meets the refusal. A
+        // lobby's launch keeps the refusals that are not about the network.
+        var instantAction = SessionSpec.FromMenu(S("--mute", net), "C2", new[] { "player_fury" }, MenuMode.Stunt, course: "loop");
+        Assert.Contains("lobby's Mission Options", instantAction.CourseRefusal);
+        var dogfight = SessionSpec.FromMenu(S("--mute"), "C2", new[] { "player_fury" }, MenuMode.Versus, course: "loop", fromLobby: true);
+        Assert.NotNull(dogfight.CourseRefusal);
     }
 
     /// <summary>A second local pilot and race bots each fly a run of the course in one race.</summary>

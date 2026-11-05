@@ -1229,6 +1229,25 @@ public sealed class OriginalPresentation : IMenuPresentation
             NetDoorAid.SettleDogfight(host, guests);
         }
 
+        if (tab is "course" or "course-zones" && host.Dogfight is { } race)
+        {
+            // A Stunt Race on NW Boeing Field, every door listing the shipped courses, over the first
+            // of them or the Danger Zones.
+            foreach (var door in guests.Prepend(host))
+            {
+                door.Courses = DogfightLobby.ShippedCourseChoices;
+            }
+
+            race.SetMissionType(Spec.DogfightMissionType.StuntRace);
+            race.SetEnvironment(DogfightLobby.EnvironmentOf("C1"));
+            if (tab == "course")
+            {
+                race.SetCourse(DogfightLobby.ShippedCourseChoices("C1").FirstOrDefault());
+            }
+
+            NetDoorAid.SettleDogfight(host, guests);
+        }
+
         if (outlaw)
         {
             _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);

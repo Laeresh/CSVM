@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, open the gates
 
 21. ☑ `--course=` with a second local pilot and with race bots; pylon cuts per local seat (#277)
-22. ☐ `--course=` in a network session, and the Course dropdown in the lobby's Mission Options (#277)
+22. ☑ `--course=` in a network session, and the Course dropdown in the lobby's Mission Options (#277)
 23. ☐ Instant Action offers the Course box with more seats and bot rows (#277)
 
 ## Dependency and parallelism notes
@@ -341,10 +341,41 @@ cut, then seat 1 reruns and it stands.
 
 **⚠ Traps.** `--vs` stays refused: it is a Dogfight.
 
-## C22 ☐ `--course=` in a network session, and the Course dropdown in the lobby's Mission Options
+## C22 ☑ `--course=` in a network session, and the Course dropdown in the lobby's Mission Options
 
-**Goal.** A host launches a network Stunt Race on a course, from the command line or by picking it
-in the lobby's Mission Options, and its guests see the pick and fly it.
+**Landed.** A lobby network Stunt Race launches on a course: `SessionSpec.FromMenu(..., fromLobby:
+true)`, which the launcher passes only for the lobby's exit (the one exit with a wire), settles the
+course with no network refusal, and the launch exit carries it. Every other menu launch, and the
+command line's `--net-host`/`--net-join` with `--course=`, stays refused, the reason naming the
+lobby's Mission Options: that path has no lobby message to carry the course word to its guests,
+and carrying it there would be a new message on the join path, not a few lines. The user accepted
+this refusal: network course races start from the lobby only. `--vs` and `--stage=empty` stay
+refused. Mission Options shows a Course box on both ends for a Stunt Race in a chapter with
+courses, at the Type box's pitch under it in the race description's place, so that description
+does not show there: the Danger Zones, then `DogfightLobby.CourseChoices` (every course of the
+chapter that loads and `CourseFits`, by title) through `NetPlayFeature.Courses`, which
+`ProcessMenu` sets from the launch's `CourseLibrary.ForLaunch`. A host's pick calls `SetCourse`,
+which refuses a course outside a Stunt Race on its chapter; any options change off either drops
+the pick in the same round (`Change`). A guest's box reads its host's course by title, Danger Zones
+for none, or its `CourseRefusal`, greyed, and a guest that refused its host's course may not stand
+Ready (`RefusesCourse`). Both ends' `LaunchExit.Course` is `DogfightLobby.LaunchCourse`, a guest's
+from its host's word; a lobby course launch returns where any lobby flight does
+(`MenuReturnDestination.ForLaunch`), not to Instant Action. The `--menu=lobby:host:course`,
+`lobby:guest:course` and `lobby:guest:course-zones` aids pose it. Files: `Spec/SessionSpec.cs`,
+`Launch/Launcher.cs`, `Launch/ProcessMenu.cs`, `UI/Menu/DogfightLobby.cs`, `UI/Menu/NetPlayFeature.cs`,
+`UI/Menu/MenuExit.cs`, `UI/Menu/MenuReturnDestination.cs`, `UI/Menu/Original/OriginalLobbyScreen.cs`,
+`UI/Menu/Original/OriginalPresentation.cs`; suites `net-course-lobby` (new, `NetCourseSuites`) and
+`menu-original-lobby-stunt-race` (the Course box on both ends and the course on both exits); unit
+tests in `LobbyCourseTests` and `SessionSpecTests`; docs `cli.md`, `menu-presentations.md`,
+`org/menu-inventory.md`, architecture UI, Spec, Launch. For C23: nothing in the lobby path; the
+Instant Action gate and layout are untouched.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
+**Goal.** A host launches a network Stunt Race on a course by picking it in the lobby's Mission
+Options, and its guests see the pick and fly it.
 
 **Evidence (confidence: traced for the gate, lead-only for the lobby layout).** The network refusal
 is `SessionSpec.cs:2914`. The lobby's Mission Options travel as `DogfightOptionsMessage`
