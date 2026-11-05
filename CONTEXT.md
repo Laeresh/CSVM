@@ -255,8 +255,8 @@ _Avoid_: minimal HUD option, HUD toggle, HUD level, clean HUD
 
 **HUD layout**:
 Where an outside view places the dial columns, compass tape and throttle plate: **Original** (the
-original's placement), **Sides** (the preset with the instruments toward the screen sides, inside
-the reading box) or **Custom** (placed in the layout editor, measured from the pane's edges). A
+original's placement), **Sides** (the preset with the dial columns at the original's height, moved
+out to the pane's edges) or **Custom** (placed in the layout editor, measured from the pane's edges). A
 setting apart from the HUD mode, shared by every splitscreen pane. A remake-only rule; the cockpit
 view draws none of the three.
 _Avoid_: HUD position, HUD arrangement, HUD preset (for the setting), side HUD

@@ -312,7 +312,7 @@ flags and 220 bullet lines**.
   and generator half, while `ai.zrd`'s turrets are one shared file always reported in full. Writes
   to `./.scratch/ai_dump.txt`, then quits, exiting nonzero on a parse failure or an unknown
   chapter)
-- `--dump-moonlit` (implies `--det`; the **moonlit list's candidate table**: for every flown world (campaign, Instant Action and Dogfight folders), one row per weather zone whose dome draws a moon card, with the authored `SUNLIGHT` diffuse and ambient, the fog-colour night verdict, whether the dome draws a sun card too and whether `CSVM/data/moonlit_missions.json` lists it. No world is built. Writes stdout and `./.scratch/moonlit_dump.txt`, then quits, nonzero when no world was read)
+- `--dump-moonlit` (implies `--det`; the **moonlit list's candidate table**: for every flown world (campaign, Instant Action and Dogfight folders), one row per weather zone of a world with a moon card anywhere, for each zone whose dome draws a sun or moon card, with the authored `SUNLIGHT` diffuse and ambient, the fog-colour night verdict, which cards it draws and whether `CSVM/data/moonlit_missions.json` lists it. No world is built. Writes stdout and `./.scratch/moonlit_dump.txt`, then quits, nonzero when no world was read)
 - `--dump-sticks` (does **not** imply `--det`, whose `--no-pads` would empty the Godot roster the
   gap-filler subtracts; load SDL2 (`SDL2.dll`, or `libSDL2-2.0.so.0` on Linux), log Godot's pad models, the stick roster (name, model,
   GUID, axis/button/hat counts) and each stick's resting axes, held buttons and hats, then quit.

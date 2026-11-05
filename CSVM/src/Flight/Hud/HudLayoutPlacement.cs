@@ -7,26 +7,29 @@ namespace CSVM.Flight.Hud;
 /// Where a HUD layout puts each instrument on a pane, engine-free and stateless. Every rectangle is in
 /// pane pixels, from the reading box, the pane size and the HUD scale (<see cref="HudMetrics"/>). A
 /// null layout is the original's own formulas, so <see cref="Shift"/> is exactly zero for it. A layout
-/// measures in reference pixels from the reading box, or the pane's edges for a custom one, and keeps
-/// every element inside the pane. The preset is <see cref="Sides"/>, the editor's first draft
+/// measures in reference pixels from the reading box, or the pane's edges for Sides and a custom one.
+/// It keeps every element inside the pane. The preset is <see cref="Sides"/>, the editor's first draft
 /// <see cref="OriginalLayout"/>; docs/architecture/Flight.md says what to read next.
 /// </summary>
 public static class HudLayoutPlacement
 {
-    /// <summary>The Sides preset's border from the reading box's edge, in reference pixels: the
-    /// columns hug the sides and stand centred on the pane's height.</summary>
+    /// <summary>The Sides preset's border from the pane's edge, in reference pixels.</summary>
     public const float SidesMargin = 24f;
 
-    /// <summary>The ready-made Sides preset. Both dial columns stand against the reading box's sides,
-    /// centred on its height. The plate stands inboard of the right column, level with the speedometer,
-    /// and the tape at the top right. The centre and the bottom of the pane stay clear.</summary>
-    public static readonly HudLayout Sides = new(new[]
-    {
-        new HudPlacement(HudAnchor.Start, HudAnchor.Centre, SidesMargin, 0f),
-        new HudPlacement(HudAnchor.End, HudAnchor.Centre, -SidesMargin, 0f),
-        new HudPlacement(HudAnchor.End, HudAnchor.Start, -SidesMargin, CompassTape.RefTopMargin),
-        new HudPlacement(HudAnchor.End, HudAnchor.Centre, -(SidesMargin + GaugeCluster.RightColumnWidth + ThrottlePlate.GapRef), 0f),
-    });
+    /// <summary>The ready-made Sides preset: the original's heights, with both dial columns moved out
+    /// to the pane's real edges. On a wide screen that is past the reading box. The plate keeps its place
+    /// beside the speedometer and the tape stays centred at the top.</summary>
+    public static readonly HudLayout Sides = new(
+        new[]
+        {
+            new HudPlacement(HudAnchor.Start, HudAnchor.End, SidesMargin, GaugeCluster.ColumnBottomY - HudMetrics.ReferenceHeight),
+            new HudPlacement(HudAnchor.End, HudAnchor.End, -SidesMargin, GaugeCluster.ColumnBottomY - HudMetrics.ReferenceHeight),
+            new HudPlacement(HudAnchor.Centre, HudAnchor.Start, 0f, CompassTape.RefTopMargin),
+            new HudPlacement(HudAnchor.End, HudAnchor.End,
+                -(SidesMargin + GaugeCluster.RightColumnWidth + ThrottlePlate.GapRef),
+                GaugeCluster.SpdCenterY + GaugeCluster.SpdRadius - HudMetrics.ReferenceHeight),
+        },
+        paneRelative: true);
 
     /// <summary>The original's placement spelt as a layout, which the editor starts from while no
     /// custom layout is saved. It matches the original on every pane 16:9 or wider. A narrower pane's
