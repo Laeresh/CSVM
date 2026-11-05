@@ -2066,6 +2066,7 @@ public partial class GameSession : Node3D
         // world's gamez. Parsed once for the session; each player then races an independent copy.
         StuntMission? stuntZones = null;
         StuntRace? race = null;
+        CourseVisuals? courseVisuals = null;
         // An Instant Action stunt_flying mission IS a stunt run: the mission type asks for the
         // zones, so --stunt is not the tester's flag to remember on an --ia= launch.
         bool iaStunt = _iaDirector?.IsStuntRun ?? false;
@@ -2080,8 +2081,10 @@ public partial class GameSession : Node3D
             if (_courseRun?.Course is { } course)
             {
                 // The gates drawn where they are scored: both read CourseMotion on the sim clock. A
-                // touched course pylon is cut, and a rerun stands them whole.
-                _worldRoot!.AddChild(CourseVisuals.Build(course).Follow(_courseRun));
+                // touched course pylon is cut, and a rerun stands them whole. The run cues wait for
+                // the roster, since each pane follows its own pilot's run.
+                courseVisuals = CourseVisuals.Build(course).Follow(_courseRun);
+                _worldRoot!.AddChild(courseVisuals);
             }
 
             if (stuntZones == null)
@@ -2250,6 +2253,7 @@ public partial class GameSession : Node3D
         var rosterBuild = flightRoster.BuildPlayers(_seatRigs);
         state.MeshInstances += rosterBuild.MeshInstances;
         state.What += rosterBuild.SummarySuffix;
+        courseVisuals?.ShowPaneCues(_rigs);
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. The whole-window board covers every pane; single player uses the same path.
         boards.BuildPause(new SessionBoards.PauseSheetInputs

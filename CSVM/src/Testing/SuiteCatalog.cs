@@ -72,6 +72,7 @@ public static class SuiteCatalog
         "cockpit-overlay-pass",
         "cockpit-panel-staging",
         "cockpit-sun-bearing",
+        "course-pane-cues",
         "damage-stage-slots",
         "damage-staging-pool",
         "damage-template-freed-anchor",

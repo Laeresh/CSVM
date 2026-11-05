@@ -2,12 +2,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
 using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.Tooling;
+using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 
@@ -42,6 +44,119 @@ internal static class CourseHudSuites
         Montage(ctx);
     }
 
+    [Suite("course-pane-cues",
+        "split screen course cues are one set per pane, keyed on the pane and never on the seat: with a bot "
+        + "on seat 0, P1 on seat 1, a bot between the panes on seat 2 and P2 on seat 3, each racing "
+        + "their own copy of a three-gate course, each pane's "
+        + "cross and dim fill follow its own pilot's run on that pane's own visual layer, which only its "
+        + "own pane, spyglass disc and photograph draw; each cross holds its own wrong-side band, a "
+        + "spectating pane's cues hide and come back, a rebuilt pilot's new run is picked up, every cue "
+        + "draws on the gates' pooled course shader, and a single pane keeps the one default-layer set")]
+    internal static void CoursePaneCues(TestContext ctx)
+    {
+        var gates = new[]
+        {
+            new CourseGate("a", CourseGateKind.PylonGate, new Vector3(0f, 100f, -500f), 0f, WidthM, HeightM, 0f),
+            new CourseGate("b", CourseGateKind.PylonGate, new Vector3(0f, 100f, -1500f), 0f, WidthM, HeightM, 0f),
+            new CourseGate("c", CourseGateKind.PylonGate, new Vector3(0f, 100f, -2500f), 0f, WidthM, HeightM, 0f),
+        };
+        var course = new Course(Chapter, "panes", new SpawnPoint(new Vector3(0f, 100f, 0f), 0f), gates,
+            gates.Select(g => new SequenceEntry(g.Id, GateDirection.Forward)).ToArray());
+        const double now = 1.0;
+        StuntMission Run()
+        {
+            var run = StuntMission.ForCourse(course)!;
+            run.SimSeconds = () => now;
+            return run;
+        }
+
+        // Seat 0 is a bot flying the loaded run, as GameSession's own copy is seat 0's. Another bot
+        // sits between the panes, so neither pane's seat is its pane index.
+        var bot = Run();
+        var between = new FlightController { Stunt = Run(), PlayerIndex = 2 };
+        var pilots = new[] { new FlightController { Stunt = Run(), PlayerIndex = 1 }, new FlightController { Stunt = Run(), PlayerIndex = 3 } };
+        var panes = new[]
+        {
+            new PlayerRig { Index = 0, VisualLayer = SplitScreen.PlayerVisualLayer(0), Controller = pilots[0] },
+            new PlayerRig { Index = 1, VisualLayer = SplitScreen.PlayerVisualLayer(1), Controller = pilots[1] },
+        };
+        var visuals = CourseVisuals.Build(course).Follow(bot);
+        visuals.ShowPaneCues(panes);
+        var solo = CourseVisuals.Build(course).Follow(bot);
+        solo.ShowPaneCues(new[] { new PlayerRig { Index = 0, VisualLayer = 0, Controller = pilots[0] } });
+        var rebuilt = new FlightController { Stunt = Run() };
+        ctx.Host.AddChild(visuals);
+        ctx.Host.AddChild(solo);
+        try
+        {
+            ctx.Check(visuals.Cues.Count == 2 && solo.Cues.Count == 1, $"one cue set per pane: {visuals.Cues.Count} for two panes, {solo.Cues.Count} for one");
+            if (visuals.Cues.Count != 2 || solo.Cues.Count != 1)
+            {
+                return;
+            }
+
+            PaneLayers(ctx, visuals);
+            var pooled = ((ShaderMaterial)visuals.GateNodes[0].GetNode<MeshInstance3D>("pylon_left").MaterialOverride).Shader;
+            ctx.Check(visuals.Cues.Concat(solo.Cues).All(c => ReferenceEquals(((ShaderMaterial)c.Cross.MaterialOverride).Shader, pooled)
+                    && ReferenceEquals(((ShaderMaterial)c.Highlight.MaterialOverride).Shader, pooled)),
+                $"every cue draws on the gates' own pooled course shader");
+            var single = solo.Cues[0];
+            ctx.Check(single.Cross.Layers == SplitScreen.EveryCameraLayer && single.Highlight.Layers == SplitScreen.EveryCameraLayer
+                    && single.Cross.Name == "wrong_side_cross" && single.Highlight.Name == "after_highlight",
+                $"a single pane's set keeps the default layer and names: {single.Cross.Name} on {single.Cross.Layers}, {single.Highlight.Name} on {single.Highlight.Layers}");
+
+            // Both bots are two entries in, P1 one, P2 none. A set keyed on a seat would show seat
+            // 1's or seat 2's state, never P2's.
+            foreach (var botRun in new[] { bot, between.Stunt! })
+            {
+                Cross(botRun, gates[0], GateDirection.Forward, now);
+                Cross(botRun, gates[1], GateDirection.Forward, now);
+            }
+
+            Cross(pilots[0].Stunt!, gates[0], GateDirection.Forward, now);
+            Place(pilots[1].Stunt!, visuals, gates[0], new Vector3(0f, 0f, -60f), now);
+            Pane(ctx, visuals, 0, gates[2], cross: null, now, "P1 on seat 1, one entry in and short of b");
+            Pane(ctx, visuals, 1, gates[1], cross: gates[0], now, "P2 on seat 3, past the seat-2 bot, none in and 60 m past a");
+
+            // Each cross holds its own band.
+            Place(pilots[0].Stunt!, visuals, gates[1], new Vector3(0f, 0f, -60f), now);
+            Place(pilots[1].Stunt!, visuals, gates[0], new Vector3(0f, 0f, 1f), now);
+            Pane(ctx, visuals, 0, gates[2], cross: gates[1], now, "P1 60 m past b");
+            Pane(ctx, visuals, 1, gates[1], cross: gates[0], now, "P2 1 m back from a, inside its band");
+            Place(pilots[1].Stunt!, visuals, gates[0], new Vector3(0f, 0f, 3f), now);
+            Pane(ctx, visuals, 0, gates[2], cross: gates[1], now, "P1 still past b");
+            Pane(ctx, visuals, 1, gates[1], cross: null, now, "P2 3 m back from a");
+
+            // A spectating pane hides its own set only.
+            pilots[1].Spectating = true;
+            visuals.Pose(now);
+            ctx.Check(!visuals.Cues[1].Cross.Visible && !visuals.Cues[1].Highlight.Visible, $"P2 spectating: no cross, no fill");
+            Pane(ctx, visuals, 0, gates[2], cross: gates[1], now, "P1 while P2 spectates");
+            pilots[1].Spectating = false;
+            visuals.Pose(now);
+            Pane(ctx, visuals, 1, gates[1], cross: null, now, "P2 handed back");
+
+            // A rebuilt pilot flies a new run, which the pane's set picks up with its cross unheld.
+            Place(pilots[1].Stunt!, visuals, gates[0], new Vector3(0f, 0f, -60f), now);
+            Pane(ctx, visuals, 1, gates[1], cross: gates[0], now, "P2 60 m past a again");
+            Place(rebuilt.Stunt!, visuals, gates[0], new Vector3(0f, 0f, -1f), now);
+            panes[1].Controller = rebuilt;
+            visuals.Pose(now);
+            Pane(ctx, visuals, 1, gates[1], cross: null, now, "P2's rebuilt pilot 1 m past a, inside a band a fresh cross does not show in");
+        }
+        finally
+        {
+            visuals.Free();
+            solo.Free();
+            rebuilt.Free();
+            between.Free();
+            foreach (var pilot in pilots)
+            {
+                pilot.Free();
+            }
+        }
+    }
+
     // A pylon gate flown forward, a ring forward, then the pylon gate back the other way.
     private static void CheckRun(TestContext ctx)
     {
@@ -55,6 +170,7 @@ internal static class CourseHudSuites
         run.GateMotion = (g, t) => CourseMotion.Offset(course.Gates[g], t);
         var hud = StuntRunHud.Build(run);
         var visuals = CourseVisuals.Build(course).Follow(run);
+        visuals.ShowCues(() => run);
         ctx.Host.AddChild(hud);
         ctx.Host.AddChild(visuals);
         try
@@ -98,7 +214,7 @@ internal static class CourseHudSuites
             var a = CrossAt(visuals, now);
             var b = CrossAt(visuals, now = 12.0);
             var expected = CourseMotion.Pose(r, 12.0).Origin;
-            ctx.Check(visuals.Cross!.Visible && a.DistanceTo(b) > 0.05f && b.DistanceTo(expected) < 1e-3f,
+            ctx.Check(visuals.Cues[0].Cross.Visible && a.DistanceTo(b) > 0.05f && b.DistanceTo(expected) < 1e-3f,
                 $"the cross rides the bobbing ring: moved {a.DistanceTo(b):0.000} m, {b.DistanceTo(expected):0.0000} m off the ring's pose");
 
             Cross(run, r, GateDirection.Forward, now);
@@ -108,7 +224,7 @@ internal static class CourseHudSuites
             Cues(ctx, visuals, course, 2, now, "behind the pylon gate, the reverse entry's wrong side", shown: true);
             Cross(run, p, GateDirection.Reverse, now);
             visuals.Pose(now);
-            ctx.Check(run.AllComplete && !visuals.Cross!.Visible && !visuals.Highlight!.Visible && StuntRunHud.StatusLine(run).Contains("GATE 3/3"),
+            ctx.Check(run.AllComplete && !visuals.Cues[0].Cross.Visible && !visuals.Cues[0].Highlight.Visible && StuntRunHud.StatusLine(run).Contains("GATE 3/3"),
                 $"the finished run shows no cue and reads '{StuntRunHud.StatusLine(run)}'");
             run.Reset();
             visuals.Pose(now);
@@ -121,11 +237,47 @@ internal static class CourseHudSuites
         }
     }
 
+    // Pane `pane`'s fill on `after` and its cross on `cross`, or no cross.
+    private static void Pane(TestContext ctx, CourseVisuals visuals, int pane, CourseGate after, CourseGate? cross, double now, string when)
+    {
+        var cues = visuals.Cues[pane];
+        var fill = CourseMotion.Pose(after, now) * Centre(after);
+        ctx.Check(cues.Highlight.Visible && cues.Highlight.Transform.Origin.DistanceTo(fill) < 1e-3f,
+            $"{when}: its fill stands on {after.Id}, {cues.Highlight.Transform.Origin.DistanceTo(fill):0.0} m off");
+        if (cross == null)
+        {
+            ctx.Check(!cues.Cross.Visible, $"{when}: no cross");
+            return;
+        }
+
+        var at = CourseMotion.Pose(cross, now) * Centre(cross);
+        ctx.Check(cues.Cross.Visible && cues.Cross.Transform.Origin.DistanceTo(at) < 1e-3f,
+            $"{when}: its cross stands on {cross.Id}, shown {cues.Cross.Visible}");
+    }
+
+    // Each pane's set is drawn by that pane's camera, spyglass disc and photograph, and by no other pane's.
+    private static void PaneLayers(TestContext ctx, CourseVisuals visuals)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            uint own = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(i), i);
+            uint other = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1 - i), 1 - i);
+            uint disc = SpyglassView.DiscMask(own, SplitScreen.OwnAirframeLayer(i), enhanced: true);
+            uint photo = DangerZonePhotograph.PhotoMask(own);
+            foreach (var cue in new[] { visuals.Cues[i].Cross, visuals.Cues[i].Highlight })
+            {
+                ctx.Check(cue.Layers == SplitScreen.PlayerVisualLayer(i) && (cue.Layers & own) != 0
+                        && (cue.Layers & disc) != 0 && (cue.Layers & photo) != 0 && (cue.Layers & other) == 0,
+                    $"P{i + 1}'s {cue.Name} is on its pane's own layer {cue.Layers}, drawn by its pane, disc and photograph and not by P{2 - i}'s pane");
+            }
+        }
+    }
+
     // The red cross across entry `next`'s clear opening when `shown`, and the dim fill on the entry after's.
     private static void Cues(TestContext ctx, CourseVisuals visuals, Course course, int next, double now, string when, bool shown)
     {
-        var cross = visuals.Cross!;
-        var highlight = visuals.Highlight!;
+        var cross = visuals.Cues[0].Cross;
+        var highlight = visuals.Cues[0].Highlight;
         var entry = course.Sequence[next];
         var gate = course.Gates.First(g => g.Id == entry.GateId);
         if (shown)
@@ -167,7 +319,7 @@ internal static class CourseHudSuites
     private static Vector3 CrossAt(CourseVisuals visuals, double now)
     {
         visuals.Pose(now);
-        return visuals.Cross!.Transform.Origin;
+        return visuals.Cues[0].Cross.Transform.Origin;
     }
 
     private static Vector3 Centre(CourseGate gate) => CourseGateShape.OpeningCentre(gate);
@@ -298,7 +450,7 @@ internal static class CourseHudSuites
             var ring = Gate(1);
             Approach(plane, hud, run, ring, GateDirection.Forward, 220f);
             visuals.Pose(run.SimSeconds());
-            ctx.Check(run.CompletedCount == 1 && targets.Selected?.DisplayName == "Gate 2" && !visuals.Cross!.Visible,
+            ctx.Check(run.CompletedCount == 1 && targets.Selected?.DisplayName == "Gate 2" && !visuals.Cues[0].Cross.Visible,
                 $"approaching entry 2 the right way, no cross: selected '{targets.Selected?.DisplayName}', status '{StuntRunHud.StatusLine(run)}'");
             if (!Shoot("hud-next-gate", pane, withHud: true))
             {
@@ -337,13 +489,13 @@ internal static class CourseHudSuites
             ctx.Check(Through(plane, hud, run, course, 2) && Through(plane, hud, run, course, 3), $"the sample's third and fourth entries count");
             Approach(plane, hud, run, ring, GateDirection.Forward, 220f);
             visuals.Pose(run.SimSeconds());
-            ctx.Check(run.CompletedCount == 4 && course.Sequence[4].Direction == GateDirection.Reverse && visuals.Cross!.Visible,
+            ctx.Check(run.CompletedCount == 4 && course.Sequence[4].Direction == GateDirection.Reverse && visuals.Cues[0].Cross.Visible,
                 $"approaching the reverse entry from its wrong side, the cross shows: status '{StuntRunHud.StatusLine(run)}'");
             Shoot("hud-wrong-side", pane, withHud: true);
             Shoot("side-wrong-side", Side(ring), withHud: false);
             Approach(plane, hud, run, ring, GateDirection.Reverse, 220f);
             visuals.Pose(run.SimSeconds());
-            ctx.Check(run.CompletedCount == 4 && !visuals.Cross!.Visible,
+            ctx.Check(run.CompletedCount == 4 && !visuals.Cues[0].Cross.Visible,
                 $"approaching the reverse entry from its right side, no cross");
             Shoot("hud-reverse", pane, withHud: true);
 

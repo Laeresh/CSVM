@@ -1038,7 +1038,7 @@ shader text, lit and fogged as the faithful aircraft, with the course pylon ripp
 pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
 `ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
 `ElementTouched` (course pylons only) and restores on `RunReset`. Read `CoursePylonCut`.
-`Follow` also adds the run's two cues, which `Pose` moves on the run's next entry at the gate's motion pose: `Cross`, a red X of two closed bars across the next gate's clear opening, shown only while the aircraft (`StuntMission.PlanePosition`) is on that entry's wrong side (`WrongSide`: more than 2 m past the gate's plane along the flown way and within 800 m, held until 2 m back and out to 1000 m), seen from both sides while shown; and `Highlight`, a dithered yellow fill across the clear opening of the gate after it. Both draw on the course shader, so no shader compiles mid-flight.
+`ShowCues` adds one pane's run cues (`RunCues`), the wrong-side `Cross` and the next-after `Highlight`, on the course shader; `WrongSide` is the cross's banded test. `ShowPaneCues` adds one set per `PlayerRig` pane, on its `VisualLayer`, following that pane's pilot's run.
 
 ## src/Flight/Modes/CoursePylonCut.cs
 A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and

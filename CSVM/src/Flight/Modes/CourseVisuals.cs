@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -11,8 +13,9 @@ namespace CSVM.Flight.Modes;
 /// striped torus under tethered balloons per ring. One child node
 /// per pool gate, in pool order, stands at <see cref="CourseMotion"/>'s pose each frame. The course pylons'
 /// fabric ripple is drawn only, on <c>csky_time</c>. A touched course pylon is cut and regrows
-/// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. A followed run's next gate
-/// carries a red cross while the aircraft is on its wrong side, the gate after it a dim fill. Everything is lit by the zone's
+/// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. Each pane's cues
+/// (<see cref="ShowCues"/>) cross its run's next gate in red from the wrong side and dimly
+/// fill the gate after it. Everything is lit by the zone's
 /// per-vertex sun and fogged as the faithful aircraft are, casts no shadow, and is sized and coloured to tune.
 /// </summary>
 public sealed partial class CourseVisuals : Node3D
@@ -111,13 +114,11 @@ public sealed partial class CourseVisuals : Node3D
     private static readonly Vector3 CrossRed = new(1f, 0.08f, 0.06f); // the wrong-side cross, TUNE
 
     private readonly List<(CourseGate Gate, Node3D Node, CutPylon[]? Pylons)> _gates = new();
+    private readonly List<RunCues> _cues = new();
     private Course _course = null!;
     private int[] _entryGates = System.Array.Empty<int>();
-    private StuntMission? _run;
     private (Mesh Mesh, Transform3D Local)[] _fills = System.Array.Empty<(Mesh, Transform3D)>();
     private Mesh[] _crosses = System.Array.Empty<Mesh>();
-    private int _crossEntry = -1;
-    private bool _wrongSide;
     private double _unclocked;
 
     private CourseVisuals()
@@ -128,14 +129,8 @@ public sealed partial class CourseVisuals : Node3D
     /// <summary>One node per pool gate, in pool order, each at its gate's current pose.</summary>
     public IReadOnlyList<Node3D> GateNodes => _gates.ConvertAll(g => g.Node);
 
-    /// <summary>The followed run's red cross across its next sequence entry's clear opening, shown only
-    /// while the aircraft is on that entry's wrong side (<see cref="WrongSide"/>). Its node's origin is
-    /// the aperture's middle. Null until <see cref="Follow"/>.</summary>
-    public MeshInstance3D? Cross { get; private set; }
-
-    /// <summary>The dim fill across the aperture of the gate after the next entry's. Hidden with no
-    /// entry after the next; null until <see cref="Follow"/>.</summary>
-    public MeshInstance3D? Highlight { get; private set; }
+    /// <summary>Every cue set <see cref="ShowCues"/> added, in the order added.</summary>
+    public IReadOnlyList<RunCues> Cues => _cues;
 
     /// <summary>Whether the cross shows, given whether it showed. <paramref name="beyond"/> is how far
     /// the aircraft is past the gate's plane along the entry's flown way. It is negative on the side
@@ -201,30 +196,57 @@ public sealed partial class CourseVisuals : Node3D
             }
         }
 
-        if (_run is { } run && Cross is { } cross && Highlight is { } highlight)
+        foreach (var cues in _cues)
         {
-            int next = run.AllComplete ? -1 : run.CompletedCount;
-            PoseCross(cross, next, seconds);
-            PoseHighlight(highlight, next >= 0 && next + 1 < _entryGates.Length ? next + 1 : -1, seconds);
+            var run = cues.Track(cues.Hidden?.Invoke() == true ? null : cues.Run());
+            int next = run is null || run.AllComplete ? -1 : run.CompletedCount;
+            PoseCross(cues, next, seconds);
+            PoseHighlight(cues.Highlight, next >= 0 && next + 1 < _entryGates.Length ? next + 1 : -1, seconds);
         }
     }
 
     /// <summary>Cuts a course pylon on each of <paramref name="run"/>'s touches of one, at the run's sim
     /// time, and stands every course pylon whole on its reset. Both only record, and <see cref="Pose"/> draws,
-    /// so a run outliving this node does no harm. It also adds the run's <see cref="Cross"/> and
-    /// <see cref="Highlight"/>, which <see cref="Pose"/> moves with the run's next entry. Answers this node.</summary>
+    /// so a run outliving this node does no harm. Answers this node.</summary>
     public CourseVisuals Follow(StuntMission run)
     {
         run.ElementTouched += touch => Cut(touch.Gate, touch.Element, touch.PylonHeight, run.SimSeconds());
         run.RunReset += Restore;
-        _run = run;
-        _fills = _course.Gates.Select(Fill).ToArray();
-        _crosses = _course.Gates.Select(CrossMesh).ToArray();
-        Cross = Cue("wrong_side_cross", null, CrossRed, 0f);
-        Highlight = Cue("after_highlight", null, Yellow, HighlightFade);
-        AddChild(Cross);
-        AddChild(Highlight);
         return this;
+    }
+
+    /// <summary>One <see cref="ShowCues"/> set per pane of <paramref name="panes"/>, on that pane's
+    /// own <see cref="PlayerRig.VisualLayer"/>, following the run of the pilot the pane flies. ⚠ Do not
+    /// key a cue set on a seat: a bot or a remote seat can sit before the pane. A spectating pane's cues
+    /// hide, since it flies no run and the racer it watches may be timed on another machine.</summary>
+    public void ShowPaneCues(IReadOnlyList<PlayerRig> panes)
+    {
+        foreach (var pane in panes)
+        {
+            ShowCues(() => pane.Controller?.Stunt, pane.VisualLayer, () => pane.Controller is { Spectating: true });
+        }
+    }
+
+    /// <summary>Adds one pane's cues, which <see cref="Pose"/> moves with the next entry of the run
+    /// <paramref name="run"/> answers. It is read every pose, so a rebuilt pilot's run is picked up. The
+    /// <paramref name="layer"/> parameter is that pane's own visual layer, so no other pane draws them; 0 keeps
+    /// the default layer, as a single pane does. Both hide while <paramref name="hidden"/> holds or
+    /// the run is null or done.</summary>
+    public RunCues ShowCues(Func<StuntMission?> run, uint layer = 0, Func<bool>? hidden = null)
+    {
+        if (_crosses.Length == 0)
+        {
+            _fills = _course.Gates.Select(Fill).ToArray();
+            _crosses = _course.Gates.Select(CrossMesh).ToArray();
+        }
+
+        string suffix = _cues.Count == 0 ? string.Empty : $"_{_cues.Count + 1}";
+        var cues = new RunCues(run, hidden, Cue("wrong_side_cross" + suffix, null, CrossRed, 0f, layer),
+            Cue("after_highlight" + suffix, null, Yellow, HighlightFade, layer));
+        AddChild(cues.Cross);
+        AddChild(cues.Highlight);
+        _cues.Add(cues);
+        return cues;
     }
 
     /// <summary>Cuts pool gate <paramref name="gate"/>'s course pylon <paramref name="element"/> at
@@ -261,11 +283,11 @@ public sealed partial class CourseVisuals : Node3D
                 new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2f), Vector3.Zero));
 
     // A cue on the course shader, so no new shader compiles mid-flight.
-    private static MeshInstance3D Cue(string name, Mesh? mesh, Vector3 srgb, float fade)
+    private static MeshInstance3D Cue(string name, Mesh? mesh, Vector3 srgb, float fade, uint layer)
     {
         var material = Material(srgb, srgb, 0f, byAngle: false, 1f, 0f);
         material.SetShaderParameter("fade", fade);
-        return new MeshInstance3D
+        var cue = new MeshInstance3D
         {
             Name = name,
             Mesh = mesh,
@@ -273,6 +295,12 @@ public sealed partial class CourseVisuals : Node3D
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
         };
+        if (layer != 0)
+        {
+            cue.Layers = layer;
+        }
+
+        return cue;
     }
 
     // Two bars corner to corner across the clear opening, about its middle. A pylon gate's span its
@@ -385,16 +413,13 @@ public sealed partial class CourseVisuals : Node3D
     }
 
     // A new entry starts hidden. Forward entries are flown along the gate's -Z.
-    private void PoseCross(MeshInstance3D cross, int entry, double seconds)
+    private void PoseCross(RunCues cues, int entry, double seconds)
     {
-        if (entry != _crossEntry)
+        var cross = cues.Cross;
+        cues.Aim(entry);
+        if (entry < 0 || cues.Followed?.PlanePosition is not { } plane)
         {
-            (_crossEntry, _wrongSide) = (entry, false);
-        }
-
-        if (entry < 0 || _run?.PlanePosition is not { } plane)
-        {
-            cross.Visible = _wrongSide = false;
+            cross.Visible = cues.CrossShown = false;
             return;
         }
 
@@ -403,8 +428,8 @@ public sealed partial class CourseVisuals : Node3D
         var pose = CourseMotion.Pose(gate, seconds);
         var from = (pose.AffineInverse() * plane) - CourseGateShape.OpeningCentre(gate);
         bool reverse = _course.Sequence[entry].Direction == GateDirection.Reverse;
-        _wrongSide = WrongSide(_wrongSide, reverse ? from.Z : -from.Z, from.Length());
-        cross.Visible = _wrongSide;
+        cues.CrossShown = WrongSide(cues.CrossShown, reverse ? from.Z : -from.Z, from.Length());
+        cross.Visible = cues.CrossShown;
         cross.Mesh = _crosses[g];
         cross.Transform = pose * new Transform3D(Basis.Identity, CourseGateShape.OpeningCentre(gate));
     }
@@ -420,6 +445,58 @@ public sealed partial class CourseVisuals : Node3D
         int g = _entryGates[entry];
         highlight.Mesh = _fills[g].Mesh;
         highlight.Transform = CourseMotion.Pose(_course.Gates[g], seconds) * _fills[g].Local;
+    }
+
+    /// <summary>One pane's two run cues and the cross's held state, its own so one pane's band never
+    /// shows or hides another's cross.</summary>
+    public sealed class RunCues
+    {
+        internal RunCues(Func<StuntMission?> run, Func<bool>? hidden, MeshInstance3D cross, MeshInstance3D highlight)
+        {
+            Run = run;
+            Hidden = hidden;
+            Cross = cross;
+            Highlight = highlight;
+        }
+
+        /// <summary>The red cross across the run's next sequence entry's clear opening, shown only
+        /// while the aircraft is on that entry's wrong side (<see cref="WrongSide"/>). Its node's
+        /// origin is the aperture's middle.</summary>
+        public MeshInstance3D Cross { get; }
+
+        /// <summary>The dim fill across the aperture of the gate after the next entry's. Hidden with
+        /// no entry after the next.</summary>
+        public MeshInstance3D Highlight { get; }
+
+        internal Func<StuntMission?> Run { get; }
+
+        internal Func<bool>? Hidden { get; }
+
+        internal StuntMission? Followed { get; private set; }
+
+        internal int CrossEntry { get; private set; } = -1;
+
+        internal bool CrossShown { get; set; }
+
+        // A run other than the one followed starts the cross unheld, as a rebuilt pilot's does.
+        internal StuntMission? Track(StuntMission? run)
+        {
+            if (!ReferenceEquals(run, Followed))
+            {
+                (Followed, CrossEntry, CrossShown) = (run, -1, false);
+            }
+
+            return run;
+        }
+
+        // A new entry starts the cross unheld.
+        internal void Aim(int entry)
+        {
+            if (entry != CrossEntry)
+            {
+                (CrossEntry, CrossShown) = (entry, false);
+            }
+        }
     }
 
     // One course pylon's cut: what was cut and when, written to its two materials only on a change.
