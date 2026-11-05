@@ -59,7 +59,7 @@ public class HudLayoutTests
         Assert.True(HudLayout.TryParse(reversed, out var shuffled));
         Assert.Equal(Custom(), shuffled);
         Assert.Equal(
-            "leftDials:start,centre,24,0;rightDials:end,centre,-24,0;compassTape:end,start,-24,35;throttlePlate:end,centre,-219,0",
+            "leftDials:start,end,24,-56;rightDials:end,end,-24,-56;compassTape:centre,start,0,35;throttlePlate:end,end,-219,-246.5",
             HudLayoutPlacement.Sides.Format());
     }
 
@@ -131,10 +131,11 @@ public class HudLayoutTests
     }
 
     // Sides on every pane: each element whole inside the pane and apart from the rest. The columns
-    // stand at the reading box's sides, centred on its height, and the bottom centre stays clear.
+    // stand at the pane's edges at the original's height, the tape where the original puts it, and
+    // the bottom centre stays clear.
     [Theory]
     [MemberData(nameof(Shapes))]
-    public void SidesKeepsEveryElementInsideItsPaneApartAndOffTheCentre(string shape, float paneW, float paneH, float windowW, float windowH)
+    public void SidesPutsTheColumnsAtThePanesEdgesAtTheOriginalsHeight(string shape, float paneW, float paneH, float windowW, float windowH)
     {
         var (box, pane, scale) = Frame(paneW, paneH, windowW, windowH);
         var rects = HudLayout.Elements.ToDictionary(e => e, e => HudLayoutPlacement.Place(e, HudLayoutPlacement.Sides, box, pane, scale));
@@ -149,18 +150,21 @@ public class HudLayoutTests
         }
 
         float margin = HudLayoutPlacement.SidesMargin * scale;
-        Assert.Equal(box.Position.X + margin, rects[HudElement.LeftDials].Position.X, 2);
-        Assert.Equal(box.End.X - margin, rects[HudElement.RightDials].End.X, 2);
-        Assert.Equal(box.GetCenter().Y, rects[HudElement.LeftDials].GetCenter().Y, 2);
-        Assert.Equal(box.GetCenter().Y, rects[HudElement.RightDials].GetCenter().Y, 2);
-        Assert.True(rects[HudElement.CompassTape].End.Y <= rects[HudElement.RightDials].Position.Y);
-        var bottomCentre = new Rect2(box.Position.X + (box.Size.X / 3f), box.GetCenter().Y, box.Size.X / 3f, box.Size.Y / 2f);
+        Assert.Equal(margin, rects[HudElement.LeftDials].Position.X, 2);
+        Assert.Equal(pane.X - margin, rects[HudElement.RightDials].End.X, 2);
+        foreach (var element in HudLayout.Elements)
+        {
+            Assert.Equal(HudLayoutPlacement.OriginalRect(element, box, pane, scale).Position.Y, rects[element].Position.Y, 2);
+        }
+
+        Assert.Equal(HudLayoutPlacement.OriginalRect(HudElement.CompassTape, box, pane, scale), rects[HudElement.CompassTape]);
+        var bottomCentre = new Rect2(pane.X / 3f, pane.Y / 2f, pane.X / 3f, pane.Y / 2f);
         Assert.DoesNotContain(rects.Values, r => r.Intersects(bottomCentre));
         Assert.True(HudLayoutPlacement.Shift(HudElement.LeftDials, HudLayoutPlacement.Sides, box, pane, scale) != Vector2.Zero);
     }
 
-    // A custom placement measures from the pane's own edges. One saved against the right edge stands
-    // at a wide pane's real edge, past the reading box Sides keeps to. One saved off a big
+    // A custom placement measures from the pane's own edges, as Sides does. One saved against the
+    // right edge stands at a wide pane's real edge, past the reading box. One saved off a big
     // screen stands whole inside a small split pane.
     [Theory]
     [InlineData(2560f, 1440f, 2560f, 1440f)]
@@ -175,7 +179,7 @@ public class HudLayoutTests
         Assert.Equal(pane.X - (40f * scale), rect.End.X, 2);
         Assert.Equal(200f * scale, rect.Position.Y, 2);
         var sides = HudLayoutPlacement.Place(HudElement.RightDials, HudLayoutPlacement.Sides, box, pane, scale);
-        Assert.Equal(box.End.X - (HudLayoutPlacement.SidesMargin * scale), sides.End.X, 2);
+        Assert.Equal(pane.X - (HudLayoutPlacement.SidesMargin * scale), sides.End.X, 2);
         if (pane.X > box.Size.X + 1f)
         {
             Assert.True(rect.End.X > box.End.X, $"a custom column on {pane} stands past the reading box {box}");

@@ -42,8 +42,8 @@ internal static class HudLayoutSuites
         + "ultrawide 21:9, 2P stacked, 4P grid; single 32:9, 2P side by side and 4P grid on 32:9): a pane given Original hands no layout to "
         + "its dials, tape and plate and the tape stands where a pane never given a layout puts it; "
         + "Sides hands its layout to all three and puts every element whole inside the pane and apart from "
-        + "the rest, the columns at the reading box's sides and centred on its height, nothing over the "
-        + "bottom centre, the tape at the top right; a custom placement anchored to the pane's right "
+        + "the rest, the columns at the pane's edges at the original's height, nothing over the "
+        + "bottom centre, the tape where the original puts it; a custom placement anchored to the pane's right "
         + "edge keeps its margin there on every shape, past the reading box on a wider pane; and the cockpit view and the text block are untouched")]
     internal static void HudLayoutPlacementSuite(TestContext ctx)
     {
@@ -212,14 +212,14 @@ internal static class HudLayoutSuites
         float margin = HudLayoutPlacement.SidesMargin * scale;
         var left = rects[HudElement.LeftDials];
         var right = rects[HudElement.RightDials];
-        ctx.Check(Mathf.IsEqualApprox(left.Position.X, box.Position.X + margin) && Mathf.IsEqualApprox(right.End.X, box.End.X - margin)
-            && Mathf.Abs(left.GetCenter().Y - box.GetCenter().Y) < 0.5f && Mathf.Abs(right.GetCenter().Y - box.GetCenter().Y) < 0.5f,
-            $"…the columns at the reading box's sides ({box}) and centred on its height ({left}, {right})");
-        var bottomCentre = new Rect2(box.Position.X + (box.Size.X / 3f), box.GetCenter().Y, box.Size.X / 3f, box.Size.Y / 2f);
+        float originalY = HudLayoutPlacement.OriginalRect(HudElement.LeftDials, box, pane, scale).Position.Y;
+        ctx.Check(Mathf.IsEqualApprox(left.Position.X, margin) && Mathf.IsEqualApprox(right.End.X, pane.X - margin)
+            && Mathf.Abs(left.Position.Y - originalY) < 0.5f && Mathf.Abs(right.Position.Y - originalY) < 0.5f,
+            $"…the columns at the pane's edges ({pane}) at the original's height {originalY} ({left}, {right})");
+        var bottomCentre = new Rect2(pane.X / 3f, pane.Y / 2f, pane.X / 3f, pane.Y / 2f);
         var compass = rects[HudElement.CompassTape];
-        ctx.Check(!rects.Values.Any(r => r.Intersects(bottomCentre)) && compass.GetCenter().X > box.GetCenter().X
-            && compass.End.Y <= right.Position.Y,
-            $"…nothing over the bottom centre, and the tape at the top right above the right column ({compass})");
+        ctx.Check(!rects.Values.Any(r => r.Intersects(bottomCentre)) && tape.Position.IsEqualApprox(plain),
+            $"…nothing over the bottom centre, and the tape where the original puts it ({compass}, {plain})");
 
         hud.SetHudLayout(custom);
         var placed = HudLayoutPlacement.Place(HudElement.RightDials, custom, box, pane, scale);
@@ -227,7 +227,7 @@ internal static class HudLayoutSuites
             && Mathf.IsEqualApprox(placed.End.X, pane.X - (40f * scale)),
             $"{name}: a custom right column keeps its 40 px margin from the pane's right edge ({placed}, pane {pane})");
         ctx.Check(pane.X <= box.Size.X + 1f || placed.End.X > box.End.X,
-            $"…past the reading box Sides keeps to on a pane wider than it ({placed}, box {box})");
+            $"…past the reading box on a pane wider than it ({placed}, box {box})");
 
         hud.SetCockpitView(true);
         untouched.SetCockpitView(true);

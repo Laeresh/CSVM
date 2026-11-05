@@ -605,12 +605,12 @@ public static class Probes
         var r = new MoonlitResult();
         var sb = new StringBuilder();
         sb.AppendLine("# Moonlit mission candidates: every flown world whose dome draws a moon card.");
-        sb.AppendLine("# One row per weather zone with a moon; 'flown' marks the zone a flight starts in.");
+        sb.AppendLine("# One row per weather zone of such a world with a sun or moon card; 'flown' marks the zone a flight starts in.");
         sb.AppendLine("# night by fog: WeatherRig.IsNightZone's FOG_COLOR rule, what the world gets today.");
-        sb.AppendLine("# sun card: the dome draws a sun too, and the Enhanced light aims at a sun before a moon.");
+        sb.AppendLine("# sun card: the Enhanced light aims at a sun before a moon. A listed world lights every zone as night.");
         sb.AppendLine($"# A pick is one '<chapter>/<mission>' entry in {Session.World.MoonlitMissions.DefaultPath}.");
         sb.AppendLine();
-        sb.AppendLine($"{"world",-10} {"zone",-6} {"flown",-5} {"diffuse",7} {"ambient",7}  {"night by fog",-12} {"sun card",-8} listed");
+        sb.AppendLine($"{"world",-10} {"zone",-6} {"flown",-5} {"diffuse",7} {"ambient",7}  {"night by fog",-12} {"sun card",-8} {"moon card",-9} listed");
 
         foreach (var chapter in AiChapters)
         {
@@ -636,17 +636,19 @@ public static class Probes
 
                     // The flight's own request when no --sky-zone is given, resolved as the weather rig does.
                     string flown = weather.ResolveZone("zone2", WorldBuilder.HorizonZonesOf(gamez));
-                    foreach (var zone in weather.ZoneNames)
+                    var zones = weather.ZoneNames.Select(z => (zone: z, cards: WorldBuilder.SkyCardsOf(gamez, z))).ToList();
+                    if (!zones.Any(z => z.cards.Item2 != null))
+                        continue;
+                    r.Candidates.Add(world);
+                    foreach (var (zone, (sun, moon)) in zones)
                     {
-                        var (sun, moon) = WorldBuilder.SkyCardsOf(gamez, zone);
-                        if (moon == null)
+                        if (sun == null && moon == null)
                             continue;
                         var fog = weather.Zone(zone);
                         r.Rows++;
-                        r.Candidates.Add(world);
                         sb.AppendLine($"{world,-10} {zone,-6} {(zone.Equals(flown, StringComparison.OrdinalIgnoreCase) ? "yes" : "no"),-5} "
                             + $"{fog.SunDiffuse,7:0.###} {fog.SunAmbient,7:0.###}  {(Session.World.WeatherRig.IsNightZone(fog) ? "night" : "day"),-12} "
-                            + $"{(sun != null ? "yes" : "no"),-8} {(list.Lists(chapter, mission) ? "yes" : "no")}");
+                            + $"{(sun != null ? "yes" : "no"),-8} {(moon != null ? "yes" : "no"),-9} {(list.Lists(chapter, mission) ? "yes" : "no")}");
                     }
                 }
                 catch (Exception e)

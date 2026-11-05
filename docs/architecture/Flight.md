@@ -1619,7 +1619,7 @@ box, so no golden draws it.
 ## src/Flight/Hud/HudLayoutPlacement.cs
 Where a HUD layout (`Utils/HudLayout.cs`) puts each element on a pane, engine-free and stateless:
 `OriginalRect` is the original's own rectangle, `Place` a layout's (from the reading box, or the
-pane's edges for a custom layout), and `Shift` the difference, which `GaugeCluster`, `CompassTape`
+pane's edges for Sides and a custom layout), and `Shift` the difference, which `GaugeCluster`, `CompassTape`
 and `ThrottlePlate` add to what they draw. It owns the `Sides` preset and the editor's drop
 (`PlacementFor`, `ToPane`). Read `HudLayoutEditor.cs` next.
 
