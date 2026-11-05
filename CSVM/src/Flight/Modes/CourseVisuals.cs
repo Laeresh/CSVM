@@ -13,7 +13,8 @@ namespace CSVM.Flight.Modes;
 /// striped torus under tethered balloons per ring. One child node
 /// per pool gate, in pool order, stands at <see cref="CourseMotion"/>'s pose each frame. The course pylons'
 /// fabric ripple is drawn only, on <c>csky_time</c>. A touched course pylon is cut and regrows
-/// (<see cref="CoursePylonCut"/>) through its own materials' uniforms. Each pane's cues
+/// (<see cref="CoursePylonCut"/>) through its own materials' uniforms, and any racer's touch cuts
+/// it everywhere (<see cref="FollowSeats"/>). Each pane's cues
 /// (<see cref="ShowCues"/>) cross its run's next gate in red from the wrong side and dimly
 /// fill the gate after it. Everything is lit by the zone's
 /// per-vertex sun and fogged as the faithful aircraft are, casts no shadow, and is sized and coloured to tune.
@@ -132,6 +133,10 @@ public sealed partial class CourseVisuals : Node3D
     /// <summary>Every cue set <see cref="ShowCues"/> added, in the order added.</summary>
     public IReadOnlyList<RunCues> Cues => _cues;
 
+    /// <summary>Seconds from a cut until the stump is whole, <see cref="CoursePylonCut.RegrowFor"/>
+    /// the field's racer count. Visual only: nothing timed or scored reads it.</summary>
+    public double RegrowSeconds { get; private set; } = CoursePylonCut.RegrowSeconds;
+
     /// <summary>Whether the cross shows, given whether it showed. <paramref name="beyond"/> is how far
     /// the aircraft is past the gate's plane along the entry's flown way. It is negative on the side
     /// the entry is flown from. <paramref name="range"/> is the aircraft's distance from the aperture's
@@ -192,7 +197,7 @@ public sealed partial class CourseVisuals : Node3D
             node.Transform = CourseMotion.Pose(gate, seconds);
             foreach (var pylon in pylons ?? System.Array.Empty<CutPylon>())
             {
-                pylon.Show(seconds);
+                pylon.Show(seconds, RegrowSeconds);
             }
         }
 
@@ -212,6 +217,31 @@ public sealed partial class CourseVisuals : Node3D
     {
         run.ElementTouched += touch => Cut(touch.Gate, touch.Element, touch.PylonHeight, run.SimSeconds());
         run.RunReset += Restore;
+        return this;
+    }
+
+    /// <summary>Follows every run flown on this machine among <paramref name="seats"/>, each local
+    /// pane's and each local bot's, once the roster is built. With more than one of
+    /// <paramref name="racers"/> the stump regrows sooner. A remote seat flies no run here; the race
+    /// link hands its touches to <see cref="Cut"/>. ⚠ Do not let any rerun restore only its own cuts:
+    /// one shared restore is the rule.</summary>
+    public CourseVisuals FollowSeats(IReadOnlyList<PlayerRig> seats, int racers)
+    {
+        var runs = new List<StuntMission>();
+        foreach (var seat in seats)
+        {
+            if (seat.Controller?.Stunt is { } run && !runs.Contains(run))
+            {
+                runs.Add(run);
+            }
+        }
+
+        RegrowSeconds = CoursePylonCut.RegrowFor(Math.Max(racers, runs.Count));
+        foreach (var run in runs)
+        {
+            Follow(run);
+        }
+
         return this;
     }
 
@@ -251,12 +281,13 @@ public sealed partial class CourseVisuals : Node3D
 
     /// <summary>Cuts pool gate <paramref name="gate"/>'s course pylon <paramref name="element"/> at
     /// <paramref name="heightM"/> above its base, at <paramref name="seconds"/> of sim time. Any other
-    /// element, a rim or a balloon, cuts nothing.</summary>
+    /// element, a rim or a balloon, and a gate the course does not hold cut nothing. Visual only.</summary>
     public void Cut(int gate, CourseElement element, float heightM, double seconds)
     {
-        if (element is CourseElement.LeftCoursePylon or CourseElement.RightCoursePylon && _gates[gate].Pylons is { } pylons)
+        if (element is CourseElement.LeftCoursePylon or CourseElement.RightCoursePylon
+            && gate >= 0 && gate < _gates.Count && _gates[gate].Pylons is { } pylons)
         {
-            pylons[element == CourseElement.LeftCoursePylon ? 0 : 1].Cut(heightM, seconds);
+            pylons[element == CourseElement.LeftCoursePylon ? 0 : 1].Cut(heightM, seconds, RegrowSeconds);
         }
     }
 
@@ -508,17 +539,17 @@ public sealed partial class CourseVisuals : Node3D
         private float _top;
         private PylonCutLook? _drawn;
 
-        public void Cut(float heightM, double seconds)
+        public void Cut(float heightM, double seconds, double regrow)
         {
-            (_cut, _top) = CoursePylonCut.Recut(gate.Height, heightM, Look(seconds));
+            (_cut, _top) = CoursePylonCut.Recut(gate.Height, heightM, Look(seconds, regrow));
             _at = seconds;
         }
 
         public void Restore() => _at = double.NaN;
 
-        public void Show(double seconds)
+        public void Show(double seconds, double regrow)
         {
-            var look = Look(seconds);
+            var look = Look(seconds, regrow);
             if (look == _drawn)
             {
                 return;
@@ -537,7 +568,7 @@ public sealed partial class CourseVisuals : Node3D
             top.Visible = look.TopShown;
         }
 
-        private PylonCutLook Look(double seconds) =>
-            double.IsNaN(_at) ? CoursePylonCut.Whole : CoursePylonCut.At(gate.Height, _cut, _top, seconds - _at);
+        private PylonCutLook Look(double seconds, double regrow) =>
+            double.IsNaN(_at) ? CoursePylonCut.Whole : CoursePylonCut.At(gate.Height, _cut, _top, seconds - _at, regrow);
     }
 }

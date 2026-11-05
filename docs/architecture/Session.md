@@ -314,7 +314,7 @@ takes each local seat's run. The host's race follows its own seats and takes eac
 `Step` sends every changed racer's line, then the clock once a second and on each change of phase.
 A guest's race is a `StuntRace.Replicate` copy fed by those lines and that clock. Its opening
 catches up to the host's by the reading's lateness, and `CatchUp` skips each local seat's count
-alike. The host's `CallRerun` opens a guest's next window through `Rerun` ahead of its lines, `Leave` sends a guest's leaving (`GuestLeft` on the host) or an ended race's return to the lobby (`LobbyCalled` on a guest), and `SeatLeft` marks a departed seat's racer on every machine. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
+alike. The host's `CallRerun` opens a guest's next window through `Rerun` ahead of its lines, `Leave` sends a guest's leaving (`GuestLeft` on the host) or an ended race's return to the lobby (`LobbyCalled` on a guest), and `SeatLeft` marks a departed seat's racer on every machine. `Feed` also sends each local course pylon touch, which the host relays; a remote touch reaches only `TouchShown`, the course visuals' cut. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
 `Flight/Modes/StuntRace.cs` next.
 
 ## src/Session/Campaign/NetPositionalStartLink.cs

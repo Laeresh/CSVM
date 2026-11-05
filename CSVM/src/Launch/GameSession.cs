@@ -2086,10 +2086,9 @@ public partial class GameSession : Node3D
             stuntZones = _courseRun ?? StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
             if (_courseRun?.Course is { } course)
             {
-                // The gates drawn where they are scored: both read CourseMotion on the sim clock. A
-                // touched course pylon is cut, and a rerun stands them whole. The run cues wait for
-                // the roster, since each pane follows its own pilot's run.
-                courseVisuals = CourseVisuals.Build(course).Follow(_courseRun);
+                // The gates drawn where they are scored: both read CourseMotion on the sim clock. The
+                // cuts and the run cues wait for the roster, which seats every run.
+                courseVisuals = CourseVisuals.Build(course);
                 _worldRoot!.AddChild(courseVisuals);
             }
 
@@ -2260,7 +2259,16 @@ public partial class GameSession : Node3D
         var rosterBuild = flightRoster.BuildPlayers(_seatRigs);
         state.MeshInstances += rosterBuild.MeshInstances;
         state.What += rosterBuild.SummarySuffix;
-        courseVisuals?.ShowPaneCues(_rigs);
+        if (courseVisuals != null)
+        {
+            // Any racer's touch cuts the one shared course pylon in every pane, and any rerun stands
+            // them whole. A remote seat's touch arrives over the race link, drawn and never scored.
+            courseVisuals.FollowSeats(_seatRigs, race?.Racers.Count ?? 1).ShowPaneCues(_rigs);
+            if (raceLink != null)
+            {
+                raceLink.TouchShown = courseVisuals.Cut;
+            }
+        }
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. The whole-window board covers every pane; single player uses the same path.
         boards.BuildPause(new SessionBoards.PauseSheetInputs

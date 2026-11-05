@@ -367,3 +367,63 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Seat, Window, RunsStarted, RunsFinished, Splits.Count);
 }
+
+/// <summary>
+/// One seat's touch of a course pylon, so every machine draws that pylon cut. The machine flying
+/// the seat sends it, a guest's through the host's relay. Visual only: no race, run, penalty or hit
+/// test takes it. <c>Pylon</c> is 0 for a gate's left course pylon and 1 for its right. <c>Time</c>
+/// is the host's session clock at the touch. Reliable (<c>docs/org/multiplayer-messages.md</c>,
+/// "Stunt race").
+/// </summary>
+public readonly record struct RaceTouchMessage(byte Seat, byte Window, ushort Gate, byte Pylon, float Height, float Time)
+    : INetMessage<RaceTouchMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 16;
+
+    /// <summary>The pylon byte of a gate's left course pylon; its right is one more.</summary>
+    public const byte LeftPylon = 0;
+
+    /// <summary>The pylon byte of a gate's right course pylon.</summary>
+    public const byte RightPylon = 1;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.RaceTouch;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out RaceTouchMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte seat = reader.ReadByte();
+        byte window = reader.ReadByte();
+        ushort gate = reader.ReadUInt16();
+        byte pylon = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        float height = reader.ReadSingle();
+        message = new RaceTouchMessage(seat, window, gate, pylon, height, reader.ReadSingle());
+        return reader.Valid;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Seat);
+        writer.WriteByte(Window);
+        writer.WriteUInt16(Gate);
+        writer.WriteByte(Pylon);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        writer.WriteSingle(Height);
+        writer.WriteSingle(Time);
+        return writer.Close();
+    }
+}

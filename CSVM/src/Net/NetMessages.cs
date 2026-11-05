@@ -192,6 +192,10 @@ public enum NetMessageType : ushort
     /// <summary>One object of a co-op host's persist log, sent to every guest at a launch so its
     /// world opens on the host's wreckage.</summary>
     CoopPersist = 0x006B,
+
+    /// <summary>A stunt race seat's touch of a course pylon, which every machine draws cut. Visual
+    /// only: nothing timed or scored reads it.</summary>
+    RaceTouch = 0x006C,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1697,6 +1701,7 @@ public static class NetMessage
         NetMessageType.RaceStanding => RaceStandingMessage.Reliability,
         NetMessageType.RaceCall => RaceCallMessage.Reliability,
         NetMessageType.CoopPersist => CoopPersistMessage.Reliability,
+        NetMessageType.RaceTouch => RaceTouchMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

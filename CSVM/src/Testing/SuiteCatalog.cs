@@ -73,6 +73,7 @@ public static class SuiteCatalog
         "cockpit-panel-staging",
         "cockpit-sun-bearing",
         "course-pane-cues",
+        "course-shared-cuts",
         "damage-stage-slots",
         "damage-staging-pool",
         "damage-template-freed-anchor",

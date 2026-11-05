@@ -1037,13 +1037,13 @@ course pylons per pylon gate, and per ring a striped torus under three tethered 
 shader text, lit and fogged as the faithful aircraft, with the course pylon ripple on `csky_time`. A course
 pylon's own two materials draw its cut: its instance is the stump, clipped on `v_local` and sagged in
 `ripple()`, and a hidden child on the same mesh the falling top. `Follow(run)` cuts on the run's
-`ElementTouched` (course pylons only) and restores on `RunReset`. Read `CoursePylonCut`.
+`ElementTouched` (course pylons only) and restores on `RunReset`; `FollowSeats` follows every local seat's run once the roster is built and sets `RegrowSeconds` from the racer count, and a remote seat's touch reaches `Cut` through `NetRaceLink`. Read `CoursePylonCut`.
 `ShowCues` adds one pane's run cues (`RunCues`), the wrong-side `Cross` and the next-after `Highlight`, on the course shader; `WrongSide` is the cross's banded test. `ShowPaneCues` adds one set per `PlayerRig` pane, on its `VisualLayer`, following that pane's pilot's run.
 
 ## src/Flight/Modes/CoursePylonCut.cs
 A cut course pylon's look as a pure function of its height, the cut, the falling top's reach and
 the seconds since the cut: the stump's top and sag, the falling top's outward tip and drop, which
-hides it as its foot reaches the ground, whole before the cut and from `RegrowSeconds` (3 s) on. `Recut` keeps a
+hides it as its foot reaches the ground, whole before the cut and from `RegrowSeconds` (3 s) on. With more than one racer the stump alone is whole at `SharedRegrowSeconds` (`RegrowFor`), the top keeping its solo fall. `Recut` keeps a
 second cut within what has regrown, so nothing fallen falls twice. Ages are doubles from the sim
 clock, so `csky_time`'s 3600 s wrap never reaches them. Every time and share is a look tuned at the
 controls. Read `CoursePylonCutTests.cs`.
