@@ -211,6 +211,7 @@ public static class SuiteCatalog
         "session-start-cover",
         "shootable-flyout",
         "smoke-screen",
+        "sound-lab",
         "source-picker",
         "source-screen",
         "source-upgrade",

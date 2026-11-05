@@ -340,6 +340,8 @@ A remake-only remix of the original's own sounds, chosen on the AUDIO page apart
 mode (`Utils/SoundModeSetting.cs`). Original Sound plays everything above as decoded. Enhanced
 Sound changes three things, in every view, by the amounts in `CSVM/data/enhanced_sound.json`
 (`Flight/Audio/EnhancedSoundTuning.cs`); every amount is a TUNE, owed a listen at the controls.
+The sound lab (`--sound-lab`, Shift+F9 in flight, `docs/controls.md`) moves each one live and
+saves the file.
 
 | Field | What it moves | Original Sound | Range read |
 |---|---|---|---|

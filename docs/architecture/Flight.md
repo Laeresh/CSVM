@@ -1188,6 +1188,7 @@ slot's pitch and gain at the decoded curve's two throttle points (`PitchCurve`, 
 hits, and the hit confirm's group, gain, pitch and interval. A field left out reads its baseline,
 `Neutral` (Original Sound's values) for the shipped file, so `Parse` and `Load` also lay an
 override file over another tuning. The launch `Reload`s `Current`; `FlightAudio` reads it per play.
+`Fields` lists the numeric amounts for the parse and `UI/Labs/SoundLab.cs`, which sets `Current` live and `Save`s.
 Fields: [../formats/sounds.md](../formats/sounds.md#enhanced-sound).
 
 ## src/Flight/Audio/HitConfirmCue.cs

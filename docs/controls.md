@@ -106,7 +106,7 @@ reset (INSTR-64).
 | `Tab` | Back | hold to show the scores, the original's "Display Scores (Multiplayer Only)", in a split screen or network stunt race (place, pilot, aircraft, best, gap, runs) or Dogfight (place, pilot, score, kills, deaths, a team match's lines first). The scores stand in the holding seat's own pane only while the control is held, and that pane's chat lines step aside for them. They are the original's own HUD text, yellow monospaced lines at the top left (a Dogfight in its name and score columns with this port's kills and deaths after them, a race in the same grid). Nothing shows in a mode that keeps no scores, solo or campaign. The original's press shows the table for four seconds; held is this port's rule. Back is the pad button no other flight action holds. `--debug-scores` holds it on every seat for a screenshot |
 | `Home` | touchpad click · back paddle 1 | VR only: recenter the headset, bringing the seated eye back onto the cockpit eye and the view's heading onto the aircraft's nose, the head's tilt kept. "Recenter Headset", this port's own flight action, inert in flat play. `Home` is a key the original leaves free; every common pad button is spent above, so the pad rows are the touchpad click (PlayStation pads) and the first back paddle (Elite-style pads). The runtime's own recenter (holding the headset's system button) does the same on any pad, and the game also recenters once when the headset session gains focus. The left hand controller's stick click does it as well ([VR hand controllers](#vr-hand-controllers)), and so do Look Forward (`numpad 5`) and Look Behind (`numpad 0`, the right-stick click) in a headset flight, once per press, which gives a standard pad its recenter |
 | - | | VR only: the headset turns the head, so the head-look rows above are inert in a headset flight: the numpad cluster, the MMB pan, `K`, `L` and `J`, the right stick and the chase zoom. `numpad 5`, `numpad 0` and the right-stick click recenter the headset instead (the row above). `F8` walks the same three views, each switch (and `F7`'s) darkening for 0.15 s and landing on a black frame, the chase rides the aircraft rigidly, and a flight opens in Cockpit (`docs/org/cameraViews.md`, "Views under a headset") |
-| - | | the original's commands this port has no action for leave their keys free: Shift+`L` level off, Ctrl+`X` bail out, and `F9`, the first of its four external cameras. The other three external-camera keys, `F10` through `F12`, are the one place this port sits on an original command's key: they carry the gltf export, the placement print and the screenshot, which are instruments rather than flight actions and are not in the shipped table a Controls door can rebind |
+| - | | the original's commands this port has no action for leave their keys free: Shift+`L` level off, Ctrl+`X` bail out, and `F9`, the first of its four external cameras (Shift+`F9` opens the sound lab, under `--sound-lab` alone). The other three external-camera keys, `F10` through `F12`, are the one place this port sits on an original command's key: they carry the gltf export, the placement print and the screenshot, which are instruments rather than flight actions and are not in the shipped table a Controls door can rebind |
 
 ## VR hand controllers
 
@@ -174,6 +174,25 @@ swap work under either grip.
 The keyboard's twin, in the debug block from `F13`: `F24` marks the next row of the
 card (plane, scale, aft, up), `F22` / `F23` step the marked row down / up (repeating
 while held), Shift+`F24` saves and Ctrl+`F24` resets.
+
+### The sound lab (`--sound-lab`)
+
+A development lab, off unless `--sound-lab` is on the command line (`docs/cli.md`).
+Every flight of that launch, a menu flight included, carries it, and Shift+`F9` shows
+or hides its panel down the right edge. Without the flag nothing reads Shift+`F9`.
+`F9` is a key no flight action holds (the original's first external camera, which
+this port does not have), and the panel is outside the `F13` debug block so it works
+without the extended keypad.
+
+The panel holds one slider per Enhanced Sound amount (`docs/formats/sounds.md`,
+"Enhanced Sound") with Original Sound's value beside it, and a pick of the hit
+confirm's sound group. A move plays at once on the flown aircraft, and is heard only
+while the AUDIO page says Enhanced. The readout gives player 1's throttle and the
+engine slot's pitch and gain. **Original values** and **Revert to saved** reset the
+sliders; **Save** writes `CSVM/data/enhanced_sound.json` from the source tree and is
+off in an exported build. The panel takes the mouse's left button and no key, so the
+flight keeps its controls; a seat flying by mouse holds the pointer, so turn mouse
+flying off to drag.
 
 ## Flying with the mouse
 

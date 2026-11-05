@@ -129,6 +129,68 @@ public class EnhancedSoundTests
     }
 
     [Fact]
+    public void ASavedTuningKeepsTheFilesNoteAndOrderAndReadsBackExactly()
+    {
+        string shippedText = File.ReadAllText(ShippedPath);
+        var edit = Shipped() with { EnginePitchFull = 1.234567f, EngineGainIdle = 0.3333333f, HitConfirmSound = "window_hit_sg" };
+        string saved = EnhancedSoundTuning.WithValues(shippedText, edit);
+
+        var problems = new List<string>();
+        var read = EnhancedSoundTuning.Parse(Encoding.UTF8.GetBytes(saved), problems);
+        Assert.Empty(problems);
+        Assert.Equal(edit.Written(), read);
+        Assert.Equal(1.235f, read.EnginePitchFull);
+        Assert.Equal("window_hit_sg", read.HitConfirmSound);
+        Assert.Equal(Keys(shippedText), Keys(saved));
+        Assert.Contains("\"_about\": \"Enhanced Sound's remix", saved);
+
+        // A file with no fields gains every one, and reads back to the same values.
+        var fromEmpty = EnhancedSoundTuning.Parse(Encoding.UTF8.GetBytes(EnhancedSoundTuning.WithValues(null, edit)), problems);
+        Assert.Equal(edit.Written(), fromEmpty);
+        Assert.Throws<InvalidDataException>(() => EnhancedSoundTuning.WithValues("[1, 2]", edit));
+        Assert.Throws<InvalidDataException>(() => EnhancedSoundTuning.WithValues("{ not json", edit));
+
+        static List<string> Keys(string json)
+        {
+            var keys = new List<string>();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                keys.Add(property.Name);
+            }
+
+            return keys;
+        }
+    }
+
+    [Fact]
+    public void TheSoundLabIsAskedForByItsFlagAlone()
+    {
+        Assert.True(CSVM.Spec.SessionSpec.Parse(new[] { "--fly", "--sound-lab" }).SoundLab);
+        Assert.True(CSVM.Spec.SessionSpec.Parse(new[] { "--sound-lab" }).SoundLab);
+        Assert.False(CSVM.Spec.SessionSpec.Parse(new[] { "--fly" }).SoundLab);
+    }
+
+    [Fact]
+    public void EveryFieldRoundsItsBoundsBackInsideTheRangeTheParseReads()
+    {
+        Assert.Equal(9, EnhancedSoundTuning.Fields.Count);
+        foreach (var field in EnhancedSoundTuning.Fields)
+        {
+            foreach (float bound in new[] { field.Min, field.Max })
+            {
+                var problems = new List<string>();
+                var tuning = field.With(EnhancedSoundTuning.Neutral, bound);
+                var read = EnhancedSoundTuning.Parse(Encoding.UTF8.GetBytes(EnhancedSoundTuning.WithValues(null, tuning)), problems);
+                Assert.Empty(problems);
+                Assert.Equal(field.Rounded(bound), field.Get(read));
+            }
+
+            Assert.Equal(field.Default, field.Get(EnhancedSoundTuning.Neutral));
+        }
+    }
+
+    [Fact]
     public void LoadReadsAFileOverItsBaselineAndAMissingFileIsTheBaseline()
     {
         string dir = Path.Combine(Path.GetTempPath(), "csvm-enhanced-sound-" + System.Guid.NewGuid().ToString("N"));

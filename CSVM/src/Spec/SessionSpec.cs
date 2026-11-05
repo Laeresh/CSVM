@@ -870,6 +870,10 @@ public sealed record SessionSpec
     /// scale and eye offset with a save into <c>data/vr_cockpits.json</c>. Read only by a stereo
     /// session; a flat launch ignores it.</summary>
     public bool XrTune { get; private set; }
+    /// <summary><c>--sound-lab</c>: build the sound lab (Shift+F9) over every flight this launch makes,
+    /// the menu's included. It puts Enhanced Sound's amounts on live sliders with a save into
+    /// <c>data/enhanced_sound.json</c>. Without it nothing reads Shift+F9.</summary>
+    public bool SoundLab { get; private set; }
     /// <summary><c>--xr-render-scale=50..125</c>, the headset's eye size as a percentage of the
     /// runtime's recommendation, one of <see cref="VrRenderScaleSetting.Words"/>. Null
     /// when not given, and for an unknown word with a note. Beats the saved option.</summary>
@@ -1920,6 +1924,10 @@ public sealed record SessionSpec
             {
                 s.XrTune = true;
             }
+            else if (arg == "--sound-lab")
+            {
+                s.SoundLab = true;
+            }
             else if (arg.StartsWith("--xr-chase="))
             {
                 string want = arg["--xr-chase=".Length..];
@@ -2734,6 +2742,12 @@ public sealed record SessionSpec
              || WeaponFreeCamera || WeaponCameraToggle > 0) && !Fly)
         {
             Warn("core", "the --weapon-lab flags need flight; another mode flag won this session, so the lab will not build");
+        }
+        // A menu launch flies later under a spec derived from this one, so only a mode that never
+        // flies is told.
+        if (SoundLab && Mode is not (SessionMode.Fly or SessionMode.Menu))
+        {
+            Warn("ui", "--sound-lab tunes a flight's sound; this session flies nothing, so it builds no sound lab");
         }
         bool observing = Mode == SessionMode.Freecam || Mode == SessionMode.AnimLab;
         if (DebugSelect != null && !observing)

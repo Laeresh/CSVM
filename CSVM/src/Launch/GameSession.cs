@@ -2290,6 +2290,9 @@ public partial class GameSession : Node3D
         // The weapon lab in flight, bound to player 1's held aircraft.
         _labs!.BuildWeaponLab(state, _rigs, weaponDefs);
 
+        // The sound lab over the flight, under --sound-lab alone.
+        _labs!.BuildSoundLab(state, _rigs);
+
         // The board's Restart is Rerun's: a new window in place, or a rebuilt Instant Action
         // mission.
         if (_raceDirector is { } raceDirector)
