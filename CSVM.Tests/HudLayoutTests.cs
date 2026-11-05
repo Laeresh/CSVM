@@ -27,6 +27,16 @@ public class HudLayoutTests
         { "4P grid on 32:9", 2559f, 719f, 5120f, 1440f },
     };
 
+    // Panes 16:9 and narrower: a 1280x800 Deck, a 4:3 screen, a 2P side-by-side pane and 1080p. The
+    // first three outdent the original's columns toward the border.
+    public static readonly TheoryData<string, float, float, float, float> NarrowShapes = new()
+    {
+        { "Deck 16:10", 1280f, 800f, 1280f, 800f },
+        { "4:3", 1024f, 768f, 1024f, 768f },
+        { "2P side by side on 1080p", 959f, 1080f, 1920f, 1080f },
+        { "single 1080p", 1920f, 1080f, 1920f, 1080f },
+    };
+
     [Fact]
     public void TheWordsSpellTheThreeLayoutsWithOriginalTheDefault()
     {
@@ -48,7 +58,7 @@ public class HudLayoutTests
     [Fact]
     public void ALayoutRoundTripsThroughItsSpellingInAnyClauseOrder()
     {
-        foreach (var layout in new[] { HudLayoutPlacement.Sides, HudLayoutPlacement.OriginalLayout, Custom() })
+        foreach (var layout in new[] { HudLayoutPlacement.Sides, Custom() })
         {
             Assert.True(HudLayout.TryParse(layout.Format(), out var back));
             Assert.True(back.PaneRelative);
@@ -84,7 +94,7 @@ public class HudLayoutTests
     {
         Assert.Null(HudLayoutPlacement.Resolve(HudLayoutKind.Original, Custom()));
         Assert.Same(HudLayoutPlacement.Sides, HudLayoutPlacement.Resolve(HudLayoutKind.Sides, Custom()));
-        Assert.Same(HudLayoutPlacement.OriginalLayout, HudLayoutPlacement.Resolve(HudLayoutKind.Custom, null));
+        Assert.Null(HudLayoutPlacement.Resolve(HudLayoutKind.Custom, null));
         Assert.Equal(Custom(), HudLayoutPlacement.Resolve(HudLayoutKind.Custom, Custom()));
     }
 
@@ -111,22 +121,40 @@ public class HudLayoutTests
         _ = shape;
     }
 
-    // The editor's first draft matches the original wherever the original keeps its 16:9 margins.
     [Theory]
-    [InlineData(2560f, 1440f, 2560f, 1440f)]
-    [InlineData(3440f, 1440f, 3440f, 1440f)]
-    [InlineData(2560f, 719f, 2560f, 1440f)]
-    [InlineData(1279f, 719f, 2560f, 1440f)]
-    public void TheOriginalSpeltAsALayoutPlacesAsTheOriginalDoes(float paneW, float paneH, float windowW, float windowH)
+    [MemberData(nameof(NarrowShapes))]
+    public void CustomWithNothingSavedPlacesAsTheOriginalDoes(string shape, float paneW, float paneH, float windowW, float windowH)
     {
         var (box, pane, scale) = Frame(paneW, paneH, windowW, windowH);
+        var unsaved = HudLayoutPlacement.Resolve(HudLayoutKind.Custom, null);
         foreach (var element in HudLayout.Elements)
         {
-            var original = HudLayoutPlacement.OriginalRect(element, box, pane, scale);
-            var spelt = HudLayoutPlacement.Place(element, HudLayoutPlacement.OriginalLayout, box, pane, scale);
-            Assert.Equal(original.Position.X, spelt.Position.X, 2);
-            Assert.Equal(original.Position.Y, spelt.Position.Y, 2);
-            Assert.Equal(original.Size, spelt.Size);
+            Assert.True(HudLayoutPlacement.Shift(element, unsaved, box, pane, scale) == Vector2.Zero, $"{shape}: {element} moves");
+            Assert.Equal(HudLayoutPlacement.OriginalRect(element, box, pane, scale),
+                HudLayoutPlacement.Place(element, unsaved, box, pane, scale));
+        }
+    }
+
+    // The editor's draft of the original is its first with nothing saved and the O key's. It and the
+    // layout Enter saves from it unmoved put every element where the original draws it.
+    [Theory]
+    [MemberData(nameof(NarrowShapes))]
+    public void TheEditorsOriginalDraftStandsWhereTheOriginalDraws(string shape, float paneW, float paneH, float windowW, float windowH)
+    {
+        var (box, pane, scale) = Frame(paneW, paneH, windowW, windowH);
+        var draft = HudLayoutPlacement.ToPane(null, box, pane, scale);
+        Assert.True(draft.PaneRelative);
+        Assert.True(HudLayout.TryParse(draft.Format(), out var saved));
+        foreach (var layout in new[] { draft, saved })
+        {
+            foreach (var element in HudLayout.Elements)
+            {
+                var original = HudLayoutPlacement.OriginalRect(element, box, pane, scale);
+                var placed = HudLayoutPlacement.Place(element, layout, box, pane, scale);
+                Assert.True((placed.Position - original.Position).Length() <= 0.5f,
+                    $"{shape}: {element} stands at {placed.Position}, the original at {original.Position}");
+                Assert.Equal(original.Size, placed.Size);
+            }
         }
     }
 
@@ -192,14 +220,14 @@ public class HudLayoutTests
         Assert.Equal(sp.Y, kept.End.Y, 2);
     }
 
-    // The editor's first draft out of Sides or the original, re-measured from the pane's edges,
-    // leaves every element where it stood on that pane.
+    // The editor's first draft out of Sides or the original (null), re-measured from the pane's
+    // edges, leaves every element where it stood on that pane.
     [Theory]
     [MemberData(nameof(Shapes))]
     public void ReMeasuringFromThePaneMovesNothingOnThatPane(string shape, float paneW, float paneH, float windowW, float windowH)
     {
         var (box, pane, scale) = Frame(paneW, paneH, windowW, windowH);
-        foreach (var layout in new[] { HudLayoutPlacement.Sides, HudLayoutPlacement.OriginalLayout })
+        foreach (var layout in new HudLayout?[] { HudLayoutPlacement.Sides, null })
         {
             var moved = HudLayoutPlacement.ToPane(layout, box, pane, scale);
             Assert.True(moved.PaneRelative);
@@ -225,8 +253,8 @@ public class HudLayoutTests
             var at = corner.X < 1f ? (pane - size) * corner : corner * scale;
             var rect = HudLayoutPlacement.Inside(new Rect2(at, size), pane);
             var placement = HudLayoutPlacement.PlacementFor(rect, box, scale);
-            var back = HudLayoutPlacement.Place(HudElement.ThrottlePlate,
-                HudLayoutPlacement.OriginalLayout.With(HudElement.ThrottlePlate, placement), box, pane, scale);
+            var fromBox = new HudLayout(HudLayout.Elements.Select(_ => placement).ToArray());
+            var back = HudLayoutPlacement.Place(HudElement.ThrottlePlate, fromBox, box, pane, scale);
             Assert.True((back.Position - rect.Position).Length() <= scale, $"{shape}: {rect.Position} came back at {back.Position}");
         }
 
