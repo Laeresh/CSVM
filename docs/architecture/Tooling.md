@@ -8,7 +8,7 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Tooling/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--dump-flight` / `--dump-mips` / `--damage-test` / `--effects-test` reports. Each
+`--dump-flight` / `--dump-mips` / `--dump-ai` / `--dump-moonlit` / `--damage-test` / `--effects-test` reports. Each
 probe does the work once and returns both halves: the report text a flag prints and writes, and the
 structured verdict a `--run-tests` suite asserts on, so a dump and the suite reading it cannot
 disagree. The envelope, effects, damage and debris-shading sweeps each carry their thresholds, row

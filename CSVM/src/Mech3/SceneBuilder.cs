@@ -665,6 +665,19 @@ void fragment() {
     /// <summary>Gets whether <see cref="ShadowDecals"/> are hidden; a decal built later takes it.</summary>
     public bool ShadowDecalsHidden { get; private set; }
 
+    /// <summary>Every placed cloud sprite's material with its authored texture's name, in either mode. A
+    /// pooled swap is made only for a texture the builder's billboard predicate passes, which the world's
+    /// builder sets to <c>WorldBuilder.IsCloudSpriteTexture</c>. ⚠ Read it on the world's builder only;
+    /// another builder's predicate may pass other sprites.</summary>
+    public IEnumerable<(ShaderMaterial Material, string TextureName)> PlacedCloudMaterials
+    {
+        get
+        {
+            foreach (var swap in _pooledSwaps)
+                yield return (swap.Material, swap.TexName);
+        }
+    }
+
     public int ColliderCount { get; private set; }
 
     /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by

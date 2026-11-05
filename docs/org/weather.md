@@ -358,6 +358,17 @@ lights a night city at noon level and the data carries no other handle. **The sk
 handle**: a daylit mission draws a moon and a star field too (C1 and C4 both wear `horizon/zone2`),
 which is why the dome's night art cannot separate the two populations.
 
+**Moonlit missions are the hand-picked exception.** Some worlds whose dome draws a moon author
+day-level `SUNLIGHT` and a day fog colour, so the rule lights them as day. A maintainer lists such a
+world in `CSVM/data/moonlit_missions.json` as `<chapter>/<mission folder>`; the list ships empty.
+Under Enhanced, `IsNightZone` counts every zone of a listed world as night, so it takes the night
+path below: the capped energies, the light aimed at the dome's moon (at its sun first, where the
+dome draws both), the authored fog range and no cloud shadows. Original, and every unlisted world,
+light as authored. The clutter darkening's shader twin `csky_night_fog` reads the fog colour alone,
+so a listed world's day-grey fog leaves its clutter undarkened. `--dump-moonlit` prints the
+candidates: every flown world whose dome draws a moon card, with its authored pair, its verdict
+under the fog rule and whether its dome draws a sun card too.
+
 The same key keeps a night zone's authored fog range under Enhanced, where a day zone's is pushed
 out 2x for its shadows. Pushed, C5's black fog let the lit walls of its far city stand out over
 ground already gone dark, and inside a fog volume (`ZONE3`, 50 to 250 m) it showed streets the
@@ -609,6 +620,7 @@ Everything here is a known, deliberate divergence, not a gap waiting to be close
 | **The whiteout is one screen-space overlay carrying BOTH the band and the volume curtain**, unioned `a + b − a·b` | The binary computes one camera-space density and blends the frame with it; the union is its own combiner between volumes. The two never coexist in shipped data, so this is unmeasurable today, it is a union rather than a pick so that a future chapter authoring both would not silently lose one |
 | **That overlay draws UNDER the cockpit interior's own pass**, per pane | The original applies the density to the world draw, which the interior does not take, so the window whites out and the canopy, panel and gauges stay clear. An overlay above the pass whitens the panel too, which is not what the original does at the controls |
 | **The world is rendered fullbright and dimmed by a scalar** | We do not reproduce the per-vertex `N·L` bake; the scalar is the data-driven collapse of it (see above) |
+| **Under Enhanced the clouds shade the ground, the water, buildings and vegetation by day** (`Effects/CloudShadow.cs`) | A remake-only rule: the original casts no cloud shadow. The clouds stand still as authored, so the shadows match the visible sky and stand still too. The casters are the placed cloud sprites and every card of the `fvol` cloud field, each with its authored size, vertex or `OBJECT_OPACITY_STATE` opacity and mask, so a clear sky casts nothing and an overcast field shades most of the ground. A cloud card turns to face its viewer, so the sun sees its mask face on, and the mask is cast along the zone's sun onto the sea-level plane. A point reads where its own sun ray crosses that plane, which assumes the ground lies below the cloud: a hilltop or a roof standing above a card still reads that card's shadow. The cloud deck casts nothing: it is one opaque sheet over the whole map, so its shadow would only dim the zone sun the mission authors for flight beneath it. Aircraft never receive the term |
 | **The band whiteout's fallback colour (0.95, 0.95, 0.96)** | A TUNE, and only where a mission authors no `CLOUD_COVER` colours. ⚠ Do not "unify" it with the zone `FOG_COLOR`: C1's fog is 0.69 = 176, which would darken a passing A/B by 70 units. CAP-12 puts C1's in-cloud interior at 248 in the original against our 243 |
 
 ## Retired and superseded findings

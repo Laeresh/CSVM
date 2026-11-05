@@ -69,7 +69,7 @@ public sealed partial class MusicPlayer : Node
 
     /// <summary>Resolves a definition's WAV into a stream, the same seam
     /// <see cref="WorldSounds.Loader"/> uses. The bool is the stream's own forward-loop flag.</summary>
-    public Func<SoundDef, bool, AudioStreamWav?>? Loader;
+    public Func<SoundDef, bool, AudioStream?>? Loader;
 
     private readonly IReadOnlyDictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;

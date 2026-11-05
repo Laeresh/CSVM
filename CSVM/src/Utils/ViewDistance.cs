@@ -1,10 +1,10 @@
 namespace CSVM.Utils;
 
 /// <summary>
-/// The enhanced mode's view distance, one of four words. It sets how far the clutter draws before
-/// its authored far fade: the buildings, poles, trees and signs a chapter scatters. The fog never
+/// The enhanced mode's view distance, one of four words. It sets how far the clutter (buildings,
+/// poles, trees, signs) and the puffers' smoke and fire draw before their far fades. The fog never
 /// moves with it, since the early chapters' haze is part of their scenery. The faithful path
-/// ignores it and keeps the decoded fade. In <see cref="Lookup"/>, <c>--view-distance=</c> beats
+/// ignores it and keeps the decoded fades. In <see cref="Lookup"/>, <c>--view-distance=</c> beats
 /// the saved <c>viewDistance</c> option, then the <see cref="Key"/> config key, then
 /// <see cref="Default"/>. The VIDEO page writes the option, applied live.
 /// </summary>
@@ -32,8 +32,8 @@ public static class ViewDistance
         Labels = ViewDistance.Labels,
         EnhancedOnly = true,
         Detail = static enhanced => enhanced
-            ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
-            : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.",
+            ? "How far scenery, smoke and fire draw before they fade; the haze stays. Applies at once."
+            : "Enhanced Graphics only: choose Enhanced above to set how far scenery, smoke and fire draw.",
         Shown = static _ => Default,
         Fallback = static _ => new ResolvedWord(Default, SettingSource.Default),
         Take = static resolved =>
@@ -44,11 +44,14 @@ public static class ViewDistance
         Apply = static world => world.FollowSession(),
     };
 
-    // TUNE. Multiples of the fade distance enhanced mode already draws clutter to. The last is no
-    // fade at all, so every piece of clutter draws out to the fog, which still hides it past there.
+    // TUNE. Multiples of the fade distance enhanced mode already draws clutter to, and of every
+    // puffer's authored far fade. The last is no fade at all, so both draw out to the fog.
     private static readonly float[] Reaches = { 1f, 2f, 4f, float.PositiveInfinity };
 
     private static float _reach = Reaches[Lookup.IndexOf(Default)];
+
+    /// <summary>The word whose reach is set, so a caller that changes it can put it back.</summary>
+    public static string Word { get; private set; } = Default;
 
     /// <summary>The position of <paramref name="word"/> in <see cref="Words"/>, or the default's
     /// for a null or unknown word.</summary>
@@ -61,8 +64,8 @@ public static class ViewDistance
     /// <summary>The label a screen shows for <paramref name="word"/>.</summary>
     public static string Label(string? word) => Labels[Index(word)];
 
-    /// <summary>How much further clutter draws under <paramref name="word"/> than its enhanced
-    /// fade, infinite for no fade at all.</summary>
+    /// <summary>How much further clutter and puffers draw under <paramref name="word"/> than their
+    /// fades, infinite for no fade at all.</summary>
     public static float Reach(string? word) => Reaches[Index(word)];
 
     /// <summary>The word <see cref="Lookup"/> resolves the sources to over <see cref="Default"/>,
@@ -77,9 +80,13 @@ public static class ViewDistance
 
     /// <summary>Sets the reach from one word. The caller writes the clutter fade global again after
     /// a change.</summary>
-    public static void Set(string? word) => _reach = Reach(word);
+    public static void Set(string? word)
+    {
+        Word = Words[Index(word)];
+        _reach = Reach(word);
+    }
 
-    /// <summary>How much further clutter draws than its authored fade. Enhanced mode takes the
-    /// resolved reach; original mode takes 1, keeping the decoded fade.</summary>
-    public static float ClutterReach() => GraphicsMode.Enhanced ? _reach : 1f;
+    /// <summary>How much further clutter, and every puffer's far band, draws than its fade. Enhanced
+    /// mode takes the resolved reach; original mode takes 1, keeping the decoded fades.</summary>
+    public static float EnhancedReach() => GraphicsMode.Enhanced ? _reach : 1f;
 }

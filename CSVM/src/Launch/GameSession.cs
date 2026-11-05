@@ -308,6 +308,7 @@ public partial class GameSession : Node3D
     // The wave ocean's stage, null where the session cannot stand an ocean (OceanStage.Eligible).
     private OceanStage? _ocean;
     private Effects.TerrainShadow? _terrainShadow;
+    private Effects.CloudShadow? _cloudShadow;
     // A full world stood for a plane, which the terrain shadow bake needs; false on a node subtree.
     private bool _fullWorld;
     private SceneBuilder? _worldScene;
@@ -856,6 +857,7 @@ public partial class GameSession : Node3D
         // Before the ocean stage, whose shore mask is baked from what draws.
         FollowShadowDecals();
         FollowTerrainShadow();
+        BuildCloudShadow();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -1319,6 +1321,34 @@ public partial class GameSession : Node3D
         _aircraftScan.AddRange(AiPlanes);
         return _aircraftScan;
     }
+
+#pragma warning disable SA1202, SA1204
+    // One press of any local seat's HUD mode step, taken by every pane together. The mode is the
+    // process's, so the saved word and the next mission follow it; a null store (a --det run) is
+    // written nothing. Each pane takes the new mode now and posts its line. Static for the suite
+    // that drives two bare seats; kept beside its one caller rather than hoisted.
+    internal static HudMode StepHudMode(IEnumerable<FlightHud> panes, OptionsStore? store)
+    {
+        var mode = HudModeSetting.Cycle(store);
+        foreach (var hud in panes)
+        {
+            hud.SetHudMode(mode);
+            hud.PostHudMode(mode);
+        }
+
+        return mode;
+    }
+#pragma warning restore SA1202, SA1204
+
+    private void CycleHudMode() =>
+        StepHudMode(_rigs.Select(r => r.Controller).OfType<FlightController>().Select(c => c.PilotHud),
+            _spec.Det ? null : OptionsStore.UserOptions());
+
+    // The layout editor over the pressing seat's pane. Every local seat is silenced while it stands,
+    // and a --det run saves to no file.
+    private void OpenHudLayoutEditor(FlightController pilot) =>
+        HudLayoutEditor.Open(pilot, _rigs.Select(r => r.Controller).OfType<FlightController>().ToList(),
+            _pauseState, _spec.Det ? null : OptionsStore.UserOptions());
 
     // Every joined player's aircraft and no AI, in the same reused-list shape as AllAircraft.
     // Read fresh because an airframe swap rebuilds a rig's controller; do not hold across a step.
@@ -2044,6 +2074,7 @@ public partial class GameSession : Node3D
         // world's gamez. Parsed once for the session; each player then races an independent copy.
         StuntMission? stuntZones = null;
         StuntRace? race = null;
+        CourseVisuals? courseVisuals = null;
         // An Instant Action stunt_flying mission IS a stunt run: the mission type asks for the
         // zones, so --stunt is not the tester's flag to remember on an --ia= launch.
         bool iaStunt = _iaDirector?.IsStuntRun ?? false;
@@ -2057,9 +2088,10 @@ public partial class GameSession : Node3D
             stuntZones = _courseRun ?? StuntMission.Load(state.Gamez, state.MissionZrdr, state.Data.Messages);
             if (_courseRun?.Course is { } course)
             {
-                // The gates drawn where they are scored: both read CourseMotion on the sim clock. A
-                // touched course pylon is cut, and a rerun stands them whole.
-                _worldRoot!.AddChild(CourseVisuals.Build(course).Follow(_courseRun));
+                // The gates drawn where they are scored: both read CourseMotion on the sim clock. The
+                // cuts and the run cues wait for the roster, which seats every run.
+                courseVisuals = CourseVisuals.Build(course);
+                _worldRoot!.AddChild(courseVisuals);
             }
 
             if (stuntZones == null)
@@ -2205,6 +2237,8 @@ public partial class GameSession : Node3D
             StuntBoard = boards.BuildSoloStuntBoard,
             BestSplits = key => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway).GetSplits(key),
             ToggleGraphicsMode = _toggleGraphicsMode,
+            CycleHudMode = CycleHudMode,
+            EditHudLayout = OpenHudLayoutEditor,
             RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
@@ -2227,6 +2261,16 @@ public partial class GameSession : Node3D
         var rosterBuild = flightRoster.BuildPlayers(_seatRigs);
         state.MeshInstances += rosterBuild.MeshInstances;
         state.What += rosterBuild.SummarySuffix;
+        if (courseVisuals != null)
+        {
+            // Any racer's touch cuts the one shared course pylon in every pane, and any rerun stands
+            // them whole. A remote seat's touch arrives over the race link, drawn and never scored.
+            courseVisuals.FollowSeats(_seatRigs, race?.Racers.Count ?? 1).ShowPaneCues(_rigs);
+            if (raceLink != null)
+            {
+                raceLink.TouchShown = courseVisuals.Cut;
+            }
+        }
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. The whole-window board covers every pane; single player uses the same path.
         boards.BuildPause(new SessionBoards.PauseSheetInputs
@@ -2255,6 +2299,9 @@ public partial class GameSession : Node3D
 
         // The weapon lab in flight, bound to player 1's held aircraft.
         _labs!.BuildWeaponLab(state, _rigs, weaponDefs);
+
+        // The sound lab over the flight, under --sound-lab alone.
+        _labs!.BuildSoundLab(state, _rigs);
 
         // The board's Restart is Rerun's: a new window in place, or a rebuilt Instant Action
         // mission.
@@ -2697,6 +2744,32 @@ public partial class GameSession : Node3D
             Log.Info("world", $"terrain shadow: baked {_terrainShadow.Width}x{_terrainShadow.Height} cell={Effects.TerrainShadow.Cell}m origin=({_terrainShadow.Origin.X:0},{_terrainShadow.Origin.Y:0}) ms={System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ({_terrainShadow.Timing})");
         }
         _terrainShadow.Publish(weather!.SunOrientation);
+    }
+
+    // The cloud shadows stand over every full weathered world in either mode, since the node itself
+    // reads the mode, the word and the zone. The clouds are gathered once, before the world merge, while
+    // each placed sprite is still its own node. The deck and the domes ride the camera, so neither casts.
+    private void BuildCloudShadow()
+    {
+        var weather = _sky?.Weather;
+        if (!_fullWorld || _plane == null || _worldScene == null || weather == null || _sessionTextures == null)
+            return;
+        var skip = new List<Node>();
+        foreach (var rig in _rigs)
+        {
+            if (rig.Horizon != null)
+                skip.Add(rig.Horizon);
+        }
+        if (_unplacedWatch?.CloudDeck is { } deck)
+            skip.Add(deck);
+        var field = _sky!.CloudField;
+        var casters = Effects.CloudShadow.CastersOf(_plane, _worldScene, field, _sessionTextures, skip);
+        int fieldCards = field == null ? 0 : field.InstanceCount;
+        // Every zone sun is cast now, in either mode, so a zone change or a live switch casts nothing.
+        var suns = weather.SunOrientations.Append(weather.SunOrientation);
+        _cloudShadow = Effects.CloudShadow.Bake(casters, suns, weather.SunOrientation, weather.NightApplied);
+        _plane.AddChild(_cloudShadow);
+        Log.Info("world", $"cloud shadows: {casters.Count - fieldCards} placed cloud(s) + {fieldCards} cloud field card(s) cast night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()}{_cloudShadow.Timing}");
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

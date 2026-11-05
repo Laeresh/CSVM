@@ -46,7 +46,8 @@ public partial class FlightAudio : Node
 
     private const float SilenceThreshold = 0.002f;
 
-    private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
+    private readonly List<(string name, AudioStream stream, float volume)> _crashSounds = new();
+    private readonly HitConfirmCue _hitConfirmCue = new();
 
     private PlaneStats _stats = null!;
     private AudioStreamPlayer? _engine, _whine, _rattle;
@@ -55,7 +56,7 @@ public partial class FlightAudio : Node
     // The engine slot's three candidate streams, all resolved at Setup so a mid-flight swap is an
     // assignment rather than an archive read: the session's SoundArchive outlives the build, but a
     // decode at the moment the airframe is hit or the view changes is a hitch nobody needs.
-    private AudioStreamWav? _engineStream, _damagedStream, _cockpitStream;
+    private AudioStream? _engineStream, _damagedStream, _cockpitStream;
     private float _damagedVol = 1f, _cockpitVol = 1f;
     private EngineSlotPhase _enginePhase;     // Healthy holds the plain or cockpit stream
     private bool _engineCockpitView;
@@ -93,6 +94,10 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _warningShot, _bulletHit, _windowHit;
     private System.Random? _cueRng;
 
+    // The hit confirm's player, built on its first play, and the groups it draws from, by name.
+    private AudioStreamPlayer? _hitConfirm;
+    private IReadOnlyDictionary<string, SoundGroup>? _groups;
+
     /// <summary>Whether the cockpit loop takes the exterior views' throttle pitch
     /// (<see cref="EngineAudioCurves.HealthySlotIsPitched"/>). Armed at boot from the saved
     /// <c>cockpitEnginePitch</c> option, and <see cref="CockpitLoopPitchedDefault"/> where none is
@@ -114,13 +119,30 @@ public partial class FlightAudio : Node
     /// <summary>The pitch scale the last <see cref="Update"/> wrote to the engine slot.</summary>
     internal float EnginePitch => _engine?.PitchScale ?? 1f;
 
+    /// <summary>The stream the engine slot plays, for the suite that swaps in a sound pack's file.</summary>
+    internal AudioStream? EngineStream => _engine?.Stream;
+
     /// <summary>Whether the slot currently holds the <c>cockpit_engine_sound</c> stream.</summary>
     internal bool EngineHoldsCockpitStream => _engine != null && _cockpitStream != null
         && ReferenceEquals(_engine.Stream, _cockpitStream);
 
+    /// <summary>The linear gain the last group cue (incoming fire or hit confirm) played at.</summary>
+    internal float LastCueGain { get; private set; }
+
+    /// <summary>How many hit confirms have sounded on this mix.</summary>
+    internal int HitConfirms { get; private set; }
+
+    /// <summary>The pitch scale the hit confirm's player stands at, 1 before its first play.</summary>
+    internal float HitConfirmPitchScale => _hitConfirm?.PitchScale ?? 1f;
+
     /// <summary>Whether the slot currently holds the <c>damaged_engine_sound</c> stream.</summary>
     internal bool EngineHoldsDamagedStream => _engine != null && _damagedStream != null
         && ReferenceEquals(_engine.Stream, _damagedStream);
+
+    // The amounts the hits play at: Enhanced Sound's tuning, or Neutral's unity gains under Original
+    // Sound.
+    private static EnhancedSoundTuning ActiveTuning =>
+        SoundModeSetting.EnhancedOn ? EnhancedSoundTuning.Current : EnhancedSoundTuning.Neutral;
 
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats,
         WeaponDefs? weapons, IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -142,7 +164,7 @@ public partial class FlightAudio : Node
             Log.Warn("sound", $"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
         }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
-        _engineStream = _engine?.Stream as AudioStreamWav;
+        _engineStream = _engine?.Stream;
         // The slot starts on the plain definition, and only a swap goes through the two paths that
         // re-read this, so the opening state has to be set here rather than left at its default.
         _enginePitchable = EngineAudioCurves.SlotIsPitched(defs, stats.EngineSound);
@@ -194,6 +216,7 @@ public partial class FlightAudio : Node
         // shot at hears it: the absorbed round (player.json warning_shot_sound), the airframe
         // ricochet (player.json bullet_hit_sound) and the canopy glass (named by the hole defs).
         _cueRng = Rng.NewSystemRandom(Rng.Weapons);
+        _groups = groups;
         _warningShot = MakeGroupCue(groups, stats.WarningShotSound, out _warningShotGroup);
         _bulletHit = MakeGroupCue(groups, stats.BulletHitSound, out _bulletHitGroup);
         _windowHit = MakeGroupCue(groups, CanopyHoleCue.WindowHitSound, out _windowHitGroup);
@@ -273,12 +296,20 @@ public partial class FlightAudio : Node
         {
             if (_enginePhase == EngineSlotPhase.Healthy && !_engine!.Playing)
                 StartEngine(); // the respawn after a crash
+            // The remix is the healthy loop's alone; the damaged loop keeps the decoded curve. The
+            // cockpit loop takes the remix's pitch over cockpitEnginePitch, its span being the point.
+            var enhanced = SoundModeSetting.EnhancedOn && _enginePhase == EngineSlotPhase.Healthy
+                ? EnhancedSoundTuning.Current : null;
+            bool pitchable = _enginePitchable || (enhanced != null && _engineCockpitView);
             var (pitch, volume) = EngineAudioCurves.Engine(
-                _stats, drive, _enginePitchMul, _enginePitchable);
+                _stats, drive, _enginePitchMul, pitchable, enhanced);
             _engine!.PitchScale = pitch;
             float baseVol = _enginePhase == EngineSlotPhase.Damaged ? _damagedVol
                 : _engineCockpitView ? _cockpitVol : _engineVol;
-            engineCurve = volume;
+            // The duck compares the decoded curve's level in either mode, so a voice line pulls the
+            // engines down exactly as the original does.
+            engineCurve = enhanced == null ? volume
+                : EngineAudioCurves.Engine(_stats, drive, _enginePitchMul, pitchable).Volume;
             _engineGain = volume * baseVol * MixGain * duck;
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, _engineGain));
         }
@@ -373,17 +404,44 @@ public partial class FlightAudio : Node
     /// original plays INSTEAD of the ricochet on a round whose damage it discards
     /// (<see cref="WarningShotCue"/> holds the rule). Returns the variant that played, or null when
     /// the cue is unbuilt.</summary>
-    public string? OnWarningShot() => PlayGroupCue(_warningShot, _warningShotGroup);
+    public string? OnWarningShot() => PlayGroupCue(_warningShot, _warningShotGroup, 1f);
 
     /// <summary>A gun round struck this airframe and the shield did not take it: one draw from
     /// <c>bullet_hit_sound</c>. Every such round rings it, as the original's does, the rate limit
     /// belongs to the canopy cue. Dispatched from the projectile-hit path, never from a
     /// contact.</summary>
-    public string? OnBulletHit() => PlayGroupCue(_bulletHit, _bulletHitGroup);
+    public string? OnBulletHit() => PlayGroupCue(_bulletHit, _bulletHitGroup,
+        ActiveTuning.BulletHitGain);
 
     /// <summary>A canopy hole opened: one draw from <c>window_hit_sg</c>. The cadence is
     /// <see cref="CanopyHoleCue"/>'s, and the caller has already decided.</summary>
-    public string? OnWindowHit() => PlayGroupCue(_windowHit, _windowHitGroup);
+    public string? OnWindowHit() => PlayGroupCue(_windowHit, _windowHitGroup,
+        ActiveTuning.CanopyHitGain);
+
+    /// <summary>One of this pilot's gun rounds struck an enemy aircraft (<see cref="HitConfirmCue.Earns"/>).
+    /// It plays one draw from the tuning's hit confirm group, at its gain and pitch. That needs the
+    /// Hit Confirm switch on and the rate limit open at sim time <paramref name="now"/>. Returns the
+    /// variant that played, or null.</summary>
+    public string? OnHitConfirm(double now)
+    {
+        // Original Sound plays no part of a sound pack, its override included.
+        var tuning = SoundModeSetting.EnhancedOn ? EnhancedSoundTuning.Current : EnhancedSoundTuning.WithoutPack;
+        if (!SoundModeSetting.HitConfirmOn || !_hitConfirmCue.TryFire(now, tuning.HitConfirmInterval))
+            return null;
+        if (_hitConfirm == null)
+        {
+            _hitConfirm = new AudioStreamPlayer { Bus = AudioBuses.Effects };
+            AddChild(_hitConfirm);
+        }
+        // Looked up per play rather than at Setup, so a reloaded tuning naming another group takes.
+        SoundGroup? group = null;
+        _groups?.TryGetValue(tuning.HitConfirmSound, out group);
+        _hitConfirm.PitchScale = tuning.HitConfirmPitch;
+        string? variant = PlayGroupCue(_hitConfirm, group, tuning.HitConfirmGain);
+        if (variant != null)
+            HitConfirms++;
+        return variant;
+    }
 
     /// <summary>The Danger Zone camera sting, one shot as the run latches that marker's
     /// photograph (<see cref="Modes.StuntCapture"/>). Takes MixGain like the other own-ship cues, so four
@@ -458,7 +516,7 @@ public partial class FlightAudio : Node
     // A looped definition's stream and its unscaled VOLUME, same convention as WorldSounds' 3D
     // emitters. Split out from MakeLoop so the engine slot's swap candidate can be resolved without
     // building a player nothing would ever start.
-    private static AudioStreamWav? LoadStream(SoundArchive archive,
+    private static AudioStream? LoadStream(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
     {
         baseVolume = 1f;
@@ -488,9 +546,9 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    // One draw from a group cue, restreamed onto that cue's own player. Null when the cue is
-    // unbuilt or the draw names a definition the archive has no WAV for.
-    private string? PlayGroupCue(AudioStreamPlayer? player, SoundGroup? group)
+    // One draw from a group cue, restreamed onto that cue's own player at Enhanced Sound's
+    // `gain` over its own level. Null when the cue is unbuilt or the draw has no WAV.
+    private string? PlayGroupCue(AudioStreamPlayer? player, SoundGroup? group, float gain)
     {
         if (player == null || group == null || _archive == null || _defs == null)
             return null;
@@ -501,7 +559,9 @@ public partial class FlightAudio : Node
         if (stream == null)
             return null;
         player.Stream = stream;
-        PlayOneShot(player, def.Volume * MixGain);
+        // Original Sound's gain is exactly 1, so its level is the authored product unchanged.
+        LastCueGain = def.Volume * MixGain * gain;
+        PlayOneShot(player, LastCueGain);
         return name;
     }
 

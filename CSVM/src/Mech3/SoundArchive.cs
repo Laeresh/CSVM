@@ -10,7 +10,8 @@ namespace CSVM.Mech3;
 /// <summary>
 /// Sound lookup over the launch's <see cref="SoundZbd"/> (<c>soundsh.zbd</c>), or over a sound
 /// extraction from a ZIP or a directory (the modding path). Decodes via <see cref="WavFile"/> (the
-/// game's WAVs are MS ADPCM, which Godot can't load) into cached <see cref="AudioStreamWav"/>s.
+/// game's WAVs are MS ADPCM, which Godot can't load) into cached streams. Under Enhanced Sound a
+/// sound pack's file (<see cref="Extraction.HdSounds"/>) stands in for the WAV of its name.
 /// ⚠ <see cref="Dispose"/> releases the OS handle but does NOT end the archive's usable life:
 /// a later <see cref="Find"/> reopens the zip for that one read. See <see cref="Dispose"/>.
 /// </summary>
@@ -24,7 +25,7 @@ public sealed class SoundArchive : IDisposable
     // Name -> in-zip path, built once and kept across Dispose: it is what lets a post-Dispose read
     // find its entry in a transient archive without reopening to rebuild the map first.
     private readonly Dictionary<string, string> _entryPaths = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, AudioStreamWav?> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AudioStream?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     private ZipArchive? _zip;
     private int _reopensLogged;
@@ -58,8 +59,14 @@ public sealed class SoundArchive : IDisposable
     /// is false for speculative bulk decodes (the sound prewarm): a per-chapter archive legitimately
     /// lacks WAVs the program can reference, and the authoritative "silent for the session" report
     /// happens at the point of use, not here.</summary>
-    public AudioStreamWav? Find(string wavName, bool looped, bool warn = true)
+    public AudioStream? Find(string wavName, bool looped, bool warn = true)
     {
+        // A pack is read under Enhanced Sound alone, and only Find consults it, so ReadWavBytes and
+        // every Original Sound read stay the archive's own bytes.
+        if (SoundModeSetting.EnhancedOn && Extraction.HdSounds.Current.Replaces(wavName)
+            && FindReplacement(wavName, looped) is { } replaced)
+            return replaced;
+
         // The cache key carries the PLAY SITE's looped flag, not the one sounds.json holds:
         // FlightAudio forces it true on a firing loop and ProjectilePool false on everything else,
         // so WorldSounds' prewarm (which reads the definition's flag) cannot cover those reads.
@@ -67,7 +74,7 @@ public sealed class SoundArchive : IDisposable
         if (_cache.TryGetValue(key, out var cached))
             return cached;
 
-        AudioStreamWav? stream = null;
+        AudioStream? stream = null;
         var bytes = ReadBytes(wavName);
         if (bytes == null)
         {
@@ -80,18 +87,7 @@ public sealed class SoundArchive : IDisposable
         {
             try
             {
-                var wav = WavFile.Parse(bytes);
-                var data = new byte[wav.Samples.Length * 2];
-                Buffer.BlockCopy(wav.Samples, 0, data, 0, data.Length);
-                stream = new AudioStreamWav
-                {
-                    Data = data,
-                    Format = AudioStreamWav.FormatEnum.Format16Bits,
-                    MixRate = wav.SampleRate,
-                    Stereo = wav.Channels == 2,
-                    LoopMode = looped ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled,
-                    LoopEnd = wav.Frames,
-                };
+                stream = WavStream(WavFile.Parse(bytes), looped);
             }
             catch (Exception e)
             {
@@ -127,6 +123,58 @@ public sealed class SoundArchive : IDisposable
         using var ms = new MemoryStream();
         s.CopyTo(ms);
         return ms.ToArray();
+    }
+
+    private static AudioStreamWav WavStream(WavFile wav, bool looped)
+    {
+        var data = new byte[wav.Samples.Length * 2];
+        Buffer.BlockCopy(wav.Samples, 0, data, 0, data.Length);
+        return new AudioStreamWav
+        {
+            Data = data,
+            Format = AudioStreamWav.FormatEnum.Format16Bits,
+            MixRate = wav.SampleRate,
+            Stereo = wav.Channels == 2,
+            LoopMode = looped ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled,
+            LoopEnd = wav.Frames,
+        };
+    }
+
+    private static AudioStreamOggVorbis OggStream(byte[] bytes, bool looped)
+    {
+        var ogg = AudioStreamOggVorbis.LoadFromBuffer(bytes)
+            ?? throw new InvalidDataException("not a readable Ogg Vorbis stream");
+        ogg.Loop = looped;
+        return ogg;
+    }
+
+    // The stream is all a pack replaces. The definition's VOLUME, RANGE and FREQUENCY and a group's
+    // weights still apply, and a pitch scales the file's own rate. Null plays the original.
+    private AudioStream? FindReplacement(string wavName, bool looped)
+    {
+        // Keyed apart from the original, so either mode finds its own; a failure caches null and warns once.
+        var key = $"hd|{wavName}|{looped}";
+        if (_cache.TryGetValue(key, out var cached))
+            return cached;
+
+        AudioStream? stream = null;
+        if (Extraction.HdSounds.Current.For(wavName) is { } replacement)
+        {
+            try
+            {
+                stream = replacement.Format == Extraction.HdSoundFormat.Ogg
+                    ? OggStream(replacement.Bytes, looped)
+                    : WavStream(WavFile.ParseMonoOrStereo(replacement.Bytes), looped);
+                Log.Info("sound", $"HD sound: {wavName} plays {replacement.Source}");
+            }
+            catch (Exception e) when (e is InvalidDataException or NotSupportedException or ArgumentException or IndexOutOfRangeException)
+            {
+                Log.Warn("sound", $"HD sound {replacement.Source} was refused ({e.Message}), {wavName} plays the original");
+            }
+        }
+
+        _cache[key] = stream;
+        return stream;
     }
 
     private byte[]? ReadBytes(string wavName)

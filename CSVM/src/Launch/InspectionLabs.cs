@@ -4,6 +4,7 @@ using System.Linq;
 using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
@@ -448,6 +449,32 @@ internal sealed class InspectionLabs
         {
             Log.Info("flight", $"damage lab: '{spec.PlaneName}' has no destroyable_parts");
         }
+    }
+
+    /// <summary>The sound lab (Shift+F9) over a flight launched with <c>--sound-lab</c>, and over no
+    /// other session. Its edits play on every seat's mix, and its readout follows player 1's
+    /// aircraft. Save writes the shipped tuning file, or a sound pack's override while one plays.</summary>
+    public void BuildSoundLab(BuildState state, IReadOnlyList<PlayerRig> rigs)
+    {
+        if (!_in.Spec.SoundLab)
+            return;
+        if (rigs.Count == 0)
+        {
+            Log.Info("ui", $"sound lab: no flight rig to read, so none is built");
+            return;
+        }
+        // ⚠ Do not start from the shipped file alone under a pack's override. The lab would open on
+        // unsaved changes, and Save would bake the pack's values into the shipped file.
+        var target = EnhancedSoundTuning.SaveTargetFor(Extraction.HdSounds.Current, EnhancedSoundTuning.Load(), EnhancedSoundTuning.SourceTreePath());
+        var groups = state.SoundGroups?.Keys.Order(StringComparer.Ordinal).ToList() ?? new List<string>();
+        var p1 = rigs[0];
+        _in.WorldRoot.AddChild(new SoundLab(target, EnhancedSoundTuning.Current,
+            () => p1.Controller is { Audio: { } audio } c
+                ? new SoundLab.Reading(c.Throttle, audio.EnginePitch, audio.EngineGain, audio.EngineSounding)
+                : null,
+            groups));
+        state.What += " + sound lab (Shift+F9)";
+        Log.Info("ui", $"sound lab ready (Shift+F9), save {target.Path ?? $"off, {target.OffReason}"}");
     }
 
     /// <summary>The weapon lab in flight, bound to player 1's held aircraft inside a real chapter

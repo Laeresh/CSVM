@@ -314,7 +314,8 @@ internal static class PufferSuites
     [Suite("puffer-distance-fade",
         "the NEAR_FADE/FAR_FADE camera-distance alpha and its two culls, against the shipped "
         + "bands of C3's spew_puffer and volcanosmoke, the cross-wire included (C7), and the "
-        + "most-favourable-pane rule every viewer gets an answer from (B11)")]
+        + "most-favourable-pane rule every viewer gets an answer from (B11), and Enhanced's far "
+        + "band following the View Distance reach, Original unchanged")]
     internal static void PufferDistanceFade(TestContext ctx)
     {
         var clock = GameClock.Current;
@@ -326,6 +327,7 @@ internal static class PufferSuites
             PufferFadeSwitchesOff(ctx);
             PufferFadeNoCameraNoFade(ctx);
             PufferFadeEveryPane(ctx);
+            PufferFadeViewDistance(ctx);
         }
         finally
         {
@@ -355,20 +357,23 @@ internal static class PufferSuites
             Colors = new[] { (0f, Colors.White), (1f, Colors.White) },
         };
 
-    // Bursts one particle at `at` and returns the alpha it was drawn
-    // with, or null when it was discarded. The burst is fired AT the point (burst mode stores
-    // positions in the node's own frame, whose origin is the burst point), and a single
-    // `_Process` at a dt small enough to leave the particle where it was born runs the draw.
+    // Bursts one particle at `at`, or with `sustained` emits it from a sustained emitter there.
+    // Returns the alpha it was drawn with, or null when it was discarded. Burst mode stores
+    // positions in the node's own frame, whose origin is the burst point. A single `_Process` at a
+    // small dt leaves the particle where it was born and runs the draw.
     internal static float? FadeAlphaAt(TestContext ctx, PufferState state, Vector3 at,
-        EffectAmbience ambience, PufferFadeSwitches? switches = null)
+        EffectAmbience ambience, PufferFadeSwitches? switches = null, bool sustained = false)
     {
         var gpu = new RecordingEmitterRenderer();
-        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f, ambience: ambience,
-            fade: switches);
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f, sustained: sustained,
+            ambience: ambience, fade: switches);
         ctx.Host.AddChild(puffer);
         try
         {
-            puffer.Burst(at);
+            if (sustained)
+                puffer.Emit(at, Basis.Identity, 1f / 60f);
+            else
+                puffer.Burst(at);
             puffer._Process(1f / 60f);
             ctx.Same(1, puffer.LiveCount,
                 $"{state.Name}: the particle stays ALIVE whatever the fade decides, it is a draw rule, not a reaper");
@@ -565,6 +570,70 @@ internal static class PufferSuites
         {
             p1.Free();
             p2.Free();
+        }
+    }
+
+    // Under Enhanced the far band follows the View Distance reach; Original keeps the decode. The
+    // bands are large_30sec_fire's fire_n_smoke as authored, FADE_RANGE [1500, 1700] and
+    // NEAR_FADE [70, 20] (docs/formats/effects.md). Both emission modes take the reach.
+    internal static void PufferFadeViewDistance(TestContext ctx)
+    {
+        var state = FadeTestState("fire_n_smoke", 70f, 20f, 1500f, 1700f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);
+        var pastAuthored = new Vector3(0f, 0f, -2000f);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string wasWord = ViewDistance.Word;
+        try
+        {
+            GraphicsMode.Set(false);
+            foreach (string word in ViewDistance.Words)
+            {
+                ViewDistance.Set(word);
+                ctx.Check(FadeAlphaAt(ctx, state, pastAuthored, amb, sustained: true) == null,
+                    $"Original at {word}: 2000 m, past the authored 1700 m cutoff, is culled");
+                float? mid = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -1600f), amb);
+                ctx.Check(mid is { } m && Mathf.IsEqualApprox(m, 0.5f, 1e-4f),
+                    $"Original at {word}: the authored band halves the alpha at 1600 m alpha={mid}");
+            }
+
+            GraphicsMode.Set(true);
+            foreach (string word in ViewDistance.Words)
+            {
+                ViewDistance.Set(word);
+                float reach = ViewDistance.Reach(word);
+                if (float.IsPositiveInfinity(reach))
+                {
+                    var veryFar = new Vector3(0f, 0f, -1e6f);
+                    ctx.Check(FadeAlphaAt(ctx, state, veryFar, amb, sustained: true) is { } u
+                              && Mathf.IsEqualApprox(u, 1f),
+                        $"Enhanced at {word}: a puff 1000 km out still draws at full alpha, no far cull");
+                    ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -50f), amb, sustained: true) == null,
+                        $"Enhanced at {word}: the near cull still culls at 50 m");
+                    ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, 100f), amb) == null,
+                        $"Enhanced at {word}: a puff behind the camera is still culled");
+                    continue;
+                }
+                float? midSustained = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -1600f * reach), amb, sustained: true);
+                ctx.Check(midSustained is { } ms && Mathf.IsEqualApprox(ms, 0.5f, 1e-3f),
+                    $"Enhanced at {word}: a sustained puff is half faded at {1600f * reach:0} m alpha={midSustained}");
+                float? midBurst = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -1600f * reach), amb);
+                ctx.Check(midBurst is { } mb && Mathf.IsEqualApprox(mb, 0.5f, 1e-3f),
+                    $"Enhanced at {word}: so is a burst at the same depth alpha={midBurst}");
+                ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -1800f * reach), amb, sustained: true) == null,
+                    $"Enhanced at {word}: past {1700f * reach:0} m the puff is culled");
+                ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -50f), amb, sustained: true) == null,
+                    $"Enhanced at {word}: the near band is untouched, 50 m still culls");
+            }
+            ViewDistance.Set("far");
+            ctx.Check(FadeAlphaAt(ctx, state, pastAuthored, amb, sustained: true) is { } far
+                      && Mathf.IsEqualApprox(far, 1f),
+                $"ABLE-TO-FAIL CONTROL: at the default Far the 2000 m puff Original culls draws at full alpha");
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+            ViewDistance.Set(wasWord);
         }
     }
 

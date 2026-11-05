@@ -1,6 +1,8 @@
 #ifndef CSKY_TERRAIN_SHADOW_INC
 #define CSKY_TERRAIN_SHADOW_INC
 
+#include "res://shaders/csky_cloud_shadow.gdshaderinc"
+
 // The Enhanced terrain's baked sun shadow (Effects/TerrainShadow.cs): per texel the height of the
 // sun ray grazing the ground upstream along the sun's azimuth (R) and the horizontal distance to that
 // ground (G), over the rect (origin X/Z, then 1 / extent). The soft pair is the penumbra's growth in
@@ -10,10 +12,10 @@ global uniform sampler2D csky_terrain_shadow;
 global uniform vec4 csky_terrain_shadow_rect;
 global uniform vec2 csky_terrain_shadow_soft;
 
-// The sun's share reaching a world position: 1 lit, 0 in terrain shadow, a ramp over the softness
-// between. Off the rect everything is lit. Fetched texel by texel like the ocean mask, so no sampler
-// state a global carries can change it. TerrainShadowRaster.Lit spells the same ramp.
-float csky_terrain_sun(vec3 world) {
+// The bake's share of the sun at a world position: 1 lit, 0 in terrain shadow, a ramp over the
+// softness between. Off the rect everything is lit. Fetched texel by texel like the ocean mask, so no
+// sampler state a global carries can change it. TerrainShadowRaster.Lit spells the same ramp.
+float csky_terrain_baked_sun(vec3 world) {
     vec2 uv = (world.xz - csky_terrain_shadow_rect.xy) * csky_terrain_shadow_rect.zw;
     if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
         return 1.0;
@@ -30,6 +32,13 @@ float csky_terrain_sun(vec3 world) {
     vec2 texel = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
     float soft = max(texel.y * csky_terrain_shadow_soft.x, csky_terrain_shadow_soft.y);
     return 1.0 - clamp((texel.x - world.y) / soft + 0.5, 0.0, 1.0);
+}
+
+// The sun's share reaching a world position, which every Enhanced ground, water, building and
+// vegetation arm scales its sun by: the terrain's baked shadow under the clouds' shadow. Aircraft
+// never read it.
+float csky_terrain_sun(vec3 world) {
+    return csky_terrain_baked_sun(world) * csky_cloud_sun(world);
 }
 
 // Godot's own Lambert diffuse and Schlick-GGX specular (scene_forward_lights_inc.glsl), which a

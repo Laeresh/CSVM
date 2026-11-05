@@ -405,7 +405,7 @@ above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
 the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
-line and race call at `0x67` to `0x6A` ("Stunt race" below), and the lobby's co-op persisted object at `0x6B`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+line and race call at `0x67` to `0x6A` and its course pylon touch at `0x6C` ("Stunt race" below), and the lobby's co-op persisted object at `0x6B`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -913,6 +913,7 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 | `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), window at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
 | `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), window at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
 | `0x6A` | Race call | reliable, host to each guest (rerun, lobby) and guest to host (leave) | call at 4 (rerun 1, lobby 2, leave 3), window at 5, two reserved bytes (8 bytes) |
+| `0x6C` | Race touch | reliable, the seat's machine to every other, a guest's relayed by the host | seat at 4, window at 5, pool gate at 6 (16 bits), course pylon at 8 (left 0, right 1), three reserved bytes, the touch's height above the pylon's base at 12, the host's session clock at the touch at 16 (20 bytes) |
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
 the step after its count's GO, each zone's first clearing with its run time, the finish, and a
@@ -958,6 +959,15 @@ A return in flight sends nothing, since the poses carry it. The same holds in ev
 session without a match where a pilot returns from a crash: a networked free flight, and a co-op
 campaign mission under `--no-crash-loss`. Under the campaign's own rule a co-op human's crash is
 final (`CrashIsFinal`), so no return follows it and nothing is sent.
+
+**A course pylon touch.** A cut course pylon is shared world state, so every racer's touch cuts it on
+every machine. The machine flying the seat stamps the touch on the host's clock (a guest adds its
+clock offset) and sends it; the host checks that the sender flies the seat and relays it to the other
+guests. A receiver drops another window's touch, an unknown pylon and a non-finite height or time,
+and draws the rest at the stamp read back onto its own clock, never later than its now. The touch is
+visual only: no race, run, penalty or hit test takes it, and the touching machine alone times its own
+penalty. Nothing restores over the wire: a window's rerun resets every local run on every machine,
+and any local run's reset stands every course pylon whole.
 
 **Wire compatibility.** A build without these ids drops them as unknown. Builds share a lobby only
 on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.

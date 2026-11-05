@@ -66,6 +66,22 @@ public sealed class OptionsChoices
     /// <summary>The throttle plate, null while never set, which reads as off.</summary>
     public bool? ThrottlePlate { get; set; }
 
+    /// <summary>The <see cref="HudModeSetting.Words"/> word, null while never set, which reads as
+    /// full.</summary>
+    public string? HudMode { get; set; }
+
+    /// <summary>The <see cref="HudLayoutSetting.Words"/> word, null while never set, which reads as
+    /// original.</summary>
+    public string? HudLayout { get; set; }
+
+    /// <summary>The <see cref="SpyglassScaleSetting.Words"/> word, null while never set, which reads
+    /// as 100.</summary>
+    public string? SpyglassScale { get; set; }
+
+    /// <summary>The Keep Camera Zoom switch (<see cref="CameraZoomMemory"/>), null while never set,
+    /// which reads as on.</summary>
+    public bool? KeepCameraZoom { get; set; }
+
     /// <summary>The <see cref="GraphicsMode"/> word.</summary>
     public string Graphics { get; set; } = GraphicsMode.Default;
 
@@ -106,6 +122,13 @@ public sealed class OptionsChoices
 
     /// <summary>The Voice level, null while never set.</summary>
     public int? AudioVoice { get; set; }
+
+    /// <summary>The <see cref="SoundModeSetting.Words"/> word, null while never set, which reads as
+    /// Enhanced Sound.</summary>
+    public string? SoundMode { get; set; }
+
+    /// <summary>The Hit Confirm switch, null while never set, which reads as the sound mode reads.</summary>
+    public bool? HitConfirm { get; set; }
 
     /// <summary>The modding folder a launch reads (<c>Spec.ModdingFolder</c>), null for none.</summary>
     public string? ModFolder { get; set; }
@@ -158,6 +181,16 @@ public sealed class OptionsChoices
     /// <summary>The throttle plate as a switch reads it: on only once set on.</summary>
     public bool ThrottlePlateOn => ThrottlePlate == true;
 
+    /// <summary>The zoom switch as a switch reads it: on until set off.</summary>
+    public bool KeepCameraZoomOn => KeepCameraZoom != false;
+
+    /// <summary>The sound mode as the row reads it: Enhanced Sound until set to Original.</summary>
+    public bool SoundEnhancedOn => SoundModeSetting.IsEnhanced(SoundMode);
+
+    /// <summary>The Hit Confirm switch as the row reads it: the staged switch, else on exactly under
+    /// Enhanced Sound (<see cref="SoundModeSetting.HitConfirmOf"/>).</summary>
+    public bool HitConfirmOn => SoundModeSetting.HitConfirmOf(HitConfirm, SoundEnhancedOn);
+
     /// <summary>The machine's screens, read through the reader on every access.</summary>
     public ScreenList Screens => _screens();
 
@@ -191,6 +224,10 @@ public sealed class OptionsChoices
         LeadingAimAssist = saved?.LeadingAimAssist;
         LeadMarker = saved?.LeadMarker;
         ThrottlePlate = saved?.ThrottlePlate;
+        HudMode = saved?.HudMode;
+        HudLayout = saved?.HudLayout;
+        SpyglassScale = saved?.SpyglassScale;
+        KeepCameraZoom = saved?.KeepCameraZoom;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
         Words = saved?.Words.Copy() ?? new WordValues();
         MonitorIndex = saved?.MonitorIndex;
@@ -205,6 +242,8 @@ public sealed class OptionsChoices
         AudioMusic = saved?.AudioMusic;
         AudioEffects = saved?.AudioEffects;
         AudioVoice = saved?.AudioVoice;
+        SoundMode = saved?.SoundMode;
+        HitConfirm = saved?.HitConfirm;
         ModFolder = _savedModFolder = saved?.ModFolder;
     }
 
@@ -225,7 +264,8 @@ public sealed class OptionsChoices
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
             NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
-            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate);
+            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, SpyglassScale, KeepCameraZoom, HudMode,
+            SoundMode, HitConfirm, HudLayout);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

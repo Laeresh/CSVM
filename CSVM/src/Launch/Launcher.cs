@@ -475,6 +475,16 @@ public partial class Launcher : Node3D
         bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;
         Flight.Audio.FlightAudio.CockpitLoopPitched = savedCockpitPitch ?? Flight.Audio.FlightAudio.CockpitLoopPitchedDefault;
         Log.Info("sound", $"cockpit engine pitch: pitched={Flight.Audio.FlightAudio.CockpitLoopPitched} via={(savedCockpitPitch.HasValue ? "options.json" : "default")}");
+        // The sound mode and Hit Confirm, Original Sound with no confirm under --det, so no golden
+        // hears the remix. The remix's amounts are read whatever the mode, an apply switching live.
+        SoundModeSetting.ApplySaved(_spec.Det);
+        // The sound pack follows the texture packs' rule below, and opens first: the reload lays its
+        // override over the shipped file.
+        if (HdSounds.FolderFor(_spec.HdSounds, _spec.Det, Config.GetString(HdSounds.ConfigKey, HdSounds.DefaultFolder)) is { } soundFolder)
+        {
+            HdSounds.Current = HdSounds.Open(dataRoot, soundFolder);
+        }
+        Flight.Audio.EnhancedSoundTuning.Reload();
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.
         if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)
@@ -567,6 +577,7 @@ public partial class Launcher : Node3D
         ShaderTime.RegisterGlobal();
         Effects.Ocean.RegisterGlobal();
         Effects.TerrainShadow.RegisterGlobals();
+        Effects.CloudShadow.RegisterGlobals();
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
@@ -610,6 +621,13 @@ public partial class Launcher : Node3D
         if (_spec.DumpAi)
         {
             GetTree().Quit(_probeRunner.DumpAi(_spec) ? 0 : 1);
+            return;
+        }
+        // --dump-moonlit: the moonlit list's candidate table, read off the weather and the domes'
+        // sky cards with no world built. See Probes.Moonlit.
+        if (_spec.DumpMoonlit)
+        {
+            GetTree().Quit(_probeRunner.DumpMoonlit() ? 0 : 1);
             return;
         }
         // --dump-sticks: the SDL2 stick roster with each stick's counts and resting reads; fails
@@ -1332,6 +1350,10 @@ public partial class Launcher : Node3D
             .WithSavedLeadingAimAssist(saved.LeadingAimAssist).WithSavedLeadMarker(saved.LeadMarker)
             .WithSavedThrottlePlate(saved.ThrottlePlate)
             .WithHeadsetView(_xr != null);
+        SpyglassScaleSetting.ApplySaved(_spec.Det);
+        HudModeSetting.ApplySaved(_spec.Det);
+        HudLayoutSetting.ApplySaved(_spec.Det);
+        CameraZoomMemory.ApplySaved(_spec.Det);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.

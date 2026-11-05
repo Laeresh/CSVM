@@ -411,6 +411,8 @@ public sealed partial class Puffer : Node3D
         // this frame. Empty until WeatherRig.Tick publishes the pane cameras (EffectAmbience.Viewers).
         var viewers = _ambience.Viewers;
         bool fading = viewers.Count > 0;
+        // Read per frame, so a live mode or View Distance change reaches an emitter already burning.
+        float farFactor = FarBandFactor(_globalFadeFactor, ViewDistance.EnhancedReach());
         // Burst mode keeps particle positions in the node's own frame (the burst point is the
         // node's translation); trail and sustain force the transform to identity and store world
         // positions. Every mode leaves the basis at identity, so one addition covers all three.
@@ -468,7 +470,7 @@ public sealed partial class Puffer : Node3D
                 }
             }
             float distAlpha = 1f;
-            if (fading && !NearestViewerAlpha(world, viewers, out distAlpha))
+            if (fading && !NearestViewerAlpha(world, viewers, farFactor, out distAlpha))
                 continue;
 
             float lifeFrac = p.Age > 0f ? p.Age / p.Life : 0f;
@@ -511,6 +513,14 @@ public sealed partial class Puffer : Node3D
             Visible = false;
         }
     }
+
+    /// <summary>The far band's depth multiplier: the original's global fade factor over the View
+    /// Distance <paramref name="reach"/>, so both band ends move out by it. An infinite
+    /// reach gives 0, which never far-culls. ⚠ Must return <paramref name="globalFadeFactor"/>
+    /// itself at reach 1, so Original stays the decode bit for bit. See
+    /// <c>docs/org/puffer.md</c>.</summary>
+    internal static float FarBandFactor(float globalFadeFactor, float reach) =>
+        reach == 1f ? globalFadeFactor : globalFadeFactor / reach;
 
     // A fade band's `1/width`, with the engine's own degenerate case: both of its
     // setters store the raw difference first and only invert it
@@ -617,14 +627,14 @@ public sealed partial class Puffer : Node3D
     // own forward axis, and a pane facing away can still be the range-nearest one. See
     // `docs/architecture.md`.
     private bool NearestViewerAlpha(Vector3 worldPos,
-        IReadOnlyList<ViewerSet.ViewerPose> viewers, out float alpha)
+        IReadOnlyList<ViewerSet.ViewerPose> viewers, float farFactor, out float alpha)
     {
         alpha = 0f;
         bool drawn = false;
         for (int v = 0; v < viewers.Count; v++)
         {
             var pose = viewers[v];
-            if (!DistanceAlpha(worldPos, pose.Position, pose.Forward, out float paneAlpha))
+            if (!DistanceAlpha(worldPos, pose.Position, pose.Forward, farFactor, out float paneAlpha))
                 continue;
             drawn = true;
             if (paneAlpha > alpha)
@@ -642,11 +652,11 @@ public sealed partial class Puffer : Node3D
     // `_nearCull` are three separate mechanisms, not one switch. See
     // `docs/formats/effects.md` and `docs/org/puffer.md`.
     private bool DistanceAlpha(Vector3 worldPos, in Vector3 camPos, in Vector3 camFwd,
-        out float alpha)
+        float farFactor, out float alpha)
     {
         alpha = 1f;
         float d = camFwd.Dot(worldPos - camPos);
-        float scaled = d * _globalFadeFactor;   // the far band only, see GlobalFadeFactorDefault
+        float scaled = d * farFactor;   // the far band only, see FarBandFactor
         if (_farCull && _state.FarFadeEnd <= scaled)
             return false;
         if (scaled <= _state.FarFadeStart)

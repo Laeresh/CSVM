@@ -142,6 +142,11 @@ public sealed class NitroSystem
         LoopRefreshedThisTick = false;
     }
 
+    /// <summary>A tap's return to a cleared zone, after <see cref="Reset"/>: the tank holds
+    /// <paramref name="charge"/> and refills from there. The flags and the animation stay cleared,
+    /// so a charge under the engage line cannot boost until it refills.</summary>
+    public void RestoreCharge(float charge) => Charge = Mathf.Clamp(charge, 0f, Capacity);
+
     // The original's SetNitro, in its order: refuse on engine out, refuse while the decay plays,
     // then the flag, the engage arm, the release arm.
     private void Set(bool want, bool engineOut, float dt)

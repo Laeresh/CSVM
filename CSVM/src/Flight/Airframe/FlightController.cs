@@ -287,6 +287,16 @@ public partial class FlightController : Node3D
     /// plane's. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
     public Action? ToggleGraphicsMode;
 
+    /// <summary>What <see cref="InputAction.CycleHudMode"/> does, set by the session for a seat
+    /// somebody sits at: the step of the process-wide <see cref="Utils.HudModeSetting"/> across every
+    /// local pane. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
+    public Action? CycleHudMode;
+
+    /// <summary>What <see cref="InputAction.EditHudLayout"/> does, set by the session for a seat
+    /// somebody sits at: the HUD layout editor opened over this seat's pane. Null leaves the action
+    /// inert, as on an AI or a suite's bare rig.</summary>
+    public Action<FlightController>? EditHudLayout;
+
     /// <summary>What <see cref="InputAction.RecenterHeadset"/> does, and under a headset
     /// <see cref="InputAction.LookCenter"/> and <see cref="InputAction.LookBack"/> too: the VR seat's
     /// recenter, set by the session for the seat the headset flies. Null, in every flat session,
@@ -581,6 +591,8 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _suppliedInputSource;
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
     private bool _graphicsTogglePrev;            // previous frame's ToggleGraphicsMode state (edge detection)
+    private bool _hudModePrev;                   // previous frame's CycleHudMode state (edge detection)
+    private bool _hudEditPrev;                   // previous frame's EditHudLayout state (edge detection)
     private bool _recenterPrev;                  // previous frame's RecenterHeadset state (edge detection)
     private XrChase? _headset;                   // Headset's backing field, handed to each camera Setup builds
     // The built parent, pose and visibility of every node the death defs play on, captured before
@@ -1112,6 +1124,12 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>A cutscene's presentation has this pane, set by the cutscene host beside
+    /// <see cref="CameraOwned"/>. While set, the keyboard seat hides the desktop pointer it does
+    /// not hold, so no cursor stands over the film. A halt still hands the pointer to the board.
+    /// </summary>
+    public bool InCutscene { get; set; }
+
     /// <summary>This pane's pilot HUD, for the one assembler that builds its readouts and the one
     /// debug mode that hides its instruments. Internal, not public: nothing outside this assembly
     /// draws on a live aircraft, and the per-frame feed is this node's alone.</summary>
@@ -1218,6 +1236,10 @@ public partial class FlightController : Node3D
             _cam.Head.IdleAim = AutoheadTarget;
             _cam.Head.TargetOffset = PadlockOffset;
             _cam.Headset = _headset;
+            // The options file remembers one zoom, this machine's first player's. The other panes
+            // open at the near end, though the option still keeps theirs through the resets.
+            if (IsHumanPiloted && LocalPlayer == 0)
+                _cam.RememberZoom();
         }
         _spawnPos = spawnPos;
         _spawnAttitude = AimAttitude(spawnPos, spawnLookAt, Basis.Identity);
@@ -1372,8 +1394,8 @@ public partial class FlightController : Node3D
     /// <summary>A stunt run's tap of respawn: back on the route through the zone cleared last,
     /// heading on the way the pilot left it. It flies at the spawn speed, and the zones and the
     /// clock are kept. With no zone cleared it is the plain respawn at the start. It repairs,
-    /// restocks and refuels exactly as <see cref="Respawn"/> does, so it is offered only where that
-    /// is.</summary>
+    /// restocks and refuels as <see cref="Respawn"/> does, but keeps the nitro charge of the clear,
+    /// so it is offered only where that respawn is.</summary>
     public void ReturnToLastZone()
     {
         _run.ArmReturn(Stunt);
@@ -1396,7 +1418,8 @@ public partial class FlightController : Node3D
             _spawnPos = placement.Pos;
             _spawnAttitude = AimAttitude(placement.Pos, placement.LookAt, _spawnAttitude);
         }
-        var (placePos, placeAttitude) = _run.TakeReturn() ?? (_spawnPos, _spawnAttitude);
+        var zoneReturn = _run.TakeReturn();
+        var (placePos, placeAttitude) = zoneReturn is { } back ? (back.Pos, back.Attitude) : (_spawnPos, _spawnAttitude);
         Stunt?.Relocated();  // the jump to the new pose is no flight through any gate
         _run.CancelCount(); // a count's walk would drag the aircraft off the pose placed here
         _lifecycle.Respawn();
@@ -1456,6 +1479,9 @@ public partial class FlightController : Node3D
         // A fresh engine has no in-flight plume, and no charge left over from the last airframe.
         ExhaustSmoke?.Reset();
         Nitro.Reset();
+        // A tap's return keeps the tank the zone's clear left, so a return is no nitro refill.
+        if (zoneReturn?.NitroCharge is { } charge)
+            Nitro.RestoreCharge(charge);
         _aiNitroArmed = false;
         SpeedCue?.Reset();
         WindStreaks?.Reset();
@@ -1840,6 +1866,14 @@ public partial class FlightController : Node3D
     /// does not also resume the mission (<see cref="SeatPause.EndPauseLeaf"/>).</summary>
     public void EndPauseLeaf() => Pause.EndPauseLeaf();
 
+    /// <summary>The HUD layout editor stands over this session: the pause key goes silent until
+    /// <see cref="EndHudEditor"/> (<see cref="SeatPause.BeginHudEditor"/>).</summary>
+    public void BeginHudEditor() => Pause.BeginHudEditor();
+
+    /// <summary>The HUD layout editor is gone, seeding the pause key's edge so the Escape that left
+    /// it does not also pause (<see cref="SeatPause.EndHudEditor"/>).</summary>
+    public void EndHudEditor() => Pause.EndHudEditor();
+
     /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>): whether the
     /// SELECTED gun group could reach an intercept inside the weapon's authored <c>RANGE</c>. That,
     /// not a HUD distance constant, is the original's threshold, so the marker is weapon-dependent.
@@ -1907,6 +1941,13 @@ public partial class FlightController : Node3D
             && Team != AimAssist.NeutralTeam)
         {
             Targeting.RecordAttacker(attacker);
+        }
+        // A seat flown elsewhere carries no FlightAudio, so its pilot's confirm sounds on its own
+        // machine or nowhere, and never on this one's speakers.
+        if (Projectiles is { } pool && pool.RigOfShooter(shooter) is { Audio: { } gunnerAudio } gunner
+            && HitConfirmCue.Earns(weapon.IsGun, gunner.IsHumanPiloted, gunner.Team, Team))
+        {
+            gunnerAudio.OnHitConfirm(pool.SimClock);
         }
         // The incoming-fire cues, gated as the original gates them: a CANNON round (0x004b9e7e) on
         // the pilot's own aeroplane. ⚠ Never dispatch these from the contact path, where a scrape
@@ -2389,6 +2430,7 @@ public partial class FlightController : Node3D
 
         // Stunt run: the gate tests, and a course's touch volumes, against this frame's committed position.
         Stunt?.Update(_model.Position, Body?.BoundRadius ?? 0f);
+        _run.NoteClears(Stunt?.CompletedCount ?? 0, Nitro.Charge, Nitro.Boosting);
 
         // The camera latch reads the same committed position, after the run's own test, so a
         // photograph and the zone it completes land on one frame.
@@ -2469,6 +2511,7 @@ public partial class FlightController : Node3D
         if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
         PollGraphicsModeToggle();
+        PollHudModeCycle();
         PollRecenterHeadset();
         // ⚠ Ahead of the inert return as well. A seat flagged inert mid-session must give the
         // pointer back, and this is the only frame that would notice.
@@ -3755,6 +3798,31 @@ public partial class FlightController : Node3D
         _graphicsTogglePrev = down;
     }
 
+    // The HUD mode step's and layout editor's edges, polled beside the graphics switch. Silent where
+    // photo mode, the options leaf or the editor own the keyboard. Every frame the pane then takes the
+    // process-wide mode and layout, which an options apply, the editor or another seat may have moved.
+    private void PollHudModeCycle()
+    {
+        bool down = CycleHudMode != null && !Pause.Silenced
+            && _controls.Seat.Held(InputAction.CycleHudMode);
+        if (down && !_hudModePrev)
+            CycleHudMode!();
+        _hudModePrev = down;
+        _pilotHud.SetHudMode(Utils.HudModeSetting.Current);
+        bool edit = EditHudLayout != null && !Pause.Silenced
+            && _controls.Seat.Held(InputAction.EditHudLayout);
+        if (edit && !_hudEditPrev)
+            EditHudLayout!(this);
+        _hudEditPrev = edit;
+        _pilotHud.SetHudLayout(Hud.HudLayoutEditor.Active());
+    }
+
+#pragma warning disable SA1202
+    // One frame's HUD mode step as a suite drives it, after HoldActionForTest has stored the press.
+    // Kept beside the poll it drives rather than hoisted for SA1202's sake.
+    internal void PollHudModeCycleForTest() => PollHudModeCycle();
+#pragma warning restore SA1202
+
     // The recenter's edge, polled beside the graphics switch so it works over a halted sim too.
     // Silent where the options pages own the keyboard. Under a headset Look Forward and Look Behind
     // recenter as well, since the head turns by itself there. The right-stick click is the one
@@ -3903,14 +3971,24 @@ public partial class FlightController : Node3D
     internal void StepMouseCaptureForTest(bool halted) => StepMouseCapture(halted);
 
     // The seat's hold on the desktop mouse, re-decided every frame. The resume takes it again.
-    private void StepMouseCapture(bool halted) => Mouse.Step(WantsMouseCapture(halted), this, MouseSensitivity);
+    private void StepMouseCapture(bool halted) =>
+        Mouse.Step(WantsMouseCapture(halted), this, MouseSensitivity, WantsPointerHidden(halted));
+
+    // Whether this seat should hide the pointer it is not holding: a cutscene has the pane and no
+    // board stands over it. Inert is not asked, since the film's out-of-flight is what took the
+    // capture away.
+    private bool WantsPointerHidden(bool halted) => OwnsDesktopMouse(halted) && InCutscene;
 
     // Whether this seat should be holding the mouse. One physical mouse, so only the seat the
     // keyboard flies asks for it. A watcher's pane belongs to its SpectatorCamera, which reads the
     // right button itself. A halt belongs to whichever board went up.
-    private bool WantsMouseCapture(bool halted) =>
+    private bool WantsMouseCapture(bool halted) => OwnsDesktopMouse(halted) && !Inert;
+
+    // Whether this seat is the one the desktop mouse answers to on this frame, under either the
+    // capture or the hide. ⚠ Add a guard here, not to one caller, or the two would disagree.
+    private bool OwnsDesktopMouse(bool halted) =>
         Mouse.Allowed && IsHumanPiloted && UseKeyboard && IsInsideTree()
-        && !Inert && !Spectating && !halted && !Pause.Silenced;
+        && !Spectating && !halted && !Pause.Silenced;
 
     // Both levers on one value, for the writers that place an aircraft rather than fly it. The
     // original's spawn and launch writers set +0x124 and +0x128 together. A stale command left

@@ -11,10 +11,10 @@ namespace CSVM.Session.World;
 /// runs and the host keeps the window, the leaderboard and the ending. A guest reports its seats'
 /// run starts, splits, finishes and reruns to the host as <see cref="RaceRunMessage"/>s. The host
 /// feeds them to its race beside its own seats' runs, and sends every changed racer's line and its
-/// clock to every guest. A guest's race is a replica that takes both, and its opening count
-/// catches up to the host's. The window's end crosses as <see cref="RaceCallMessage"/>s: the host's
-/// rerun and return to the lobby, a guest's leaving (<c>docs/org/multiplayer-messages.md</c>,
-/// "Stunt race").
+/// clock to each guest's replica. The window's end crosses as
+/// <see cref="RaceCallMessage"/>s: the host's rerun and return to the lobby, a guest's leaving. Each
+/// local seat's course pylon touch crosses as a visual-only <see cref="RaceTouchMessage"/>, which only
+/// <see cref="TouchShown"/> takes (<c>docs/org/multiplayer-messages.md</c>, "Stunt race").
 /// </summary>
 internal sealed class NetRaceLink
 {
@@ -85,6 +85,21 @@ internal sealed class NetRaceLink
     /// <summary>On a guest, the seconds its opening caught up to the host's in all.</summary>
     internal float CaughtUp { get; private set; }
 
+    /// <summary>Where a remote seat's course pylon touch is drawn: the pool gate, the course pylon,
+    /// its height and the sim time on this machine's clock. ⚠ Do not hand it to a run, the race or a
+    /// hit test; a touch shown is never scored here.</summary>
+    internal Action<int, CourseElement, float, double>? TouchShown { get; set; }
+
+    /// <summary>Remote touches handed to <see cref="TouchShown"/>.</summary>
+    internal int TouchesShown { get; private set; }
+
+    /// <summary>Remote touches dropped for another window or an unknown course pylon. The reader
+    /// already refuses a non-finite height or time.</summary>
+    internal int TouchesDropped { get; private set; }
+
+    // The host's clock less this machine's: zero on the host, a guest's slew offset otherwise.
+    private double ClockOffset => _slew?.Offset ?? 0.0;
+
     /// <summary>Wires <paramref name="race"/> to <paramref name="net"/>. A guest's race becomes a
     /// replica. <paramref name="slew"/> and <paramref name="ping"/> are a guest's shared clock and
     /// its round trip; <paramref name="stepSeconds"/> is the fixed sim step a catch-up moves in.</summary>
@@ -98,6 +113,9 @@ internal sealed class NetRaceLink
         if (net.IsHost)
         {
             net.On<RaceRunMessage>(link.TakeReport);
+            // A guest's touch reaches the other guests as sent, its seat checked first.
+            net.RequireSeatOwner<RaceTouchMessage>(touch => touch.Seat);
+            net.RelayToOthers<RaceTouchMessage>();
         }
         else
         {
@@ -107,6 +125,7 @@ internal sealed class NetRaceLink
         }
 
         net.On<RaceCallMessage>(link.TakeCall);
+        net.On<RaceTouchMessage>(link.TakeTouch);
         return link;
     }
 
@@ -150,6 +169,7 @@ internal sealed class NetRaceLink
     internal void Feed(int seat, StuntMission run)
     {
         ArgumentNullException.ThrowIfNull(run);
+        run.ElementTouched += touch => Touched(seat, touch, run.SimSeconds());
         if (_net.IsHost)
         {
             _race.Follow(seat, run);
@@ -202,6 +222,29 @@ internal sealed class NetRaceLink
         _net.Send(_net.HostPeer,
             new RaceRunMessage((byte)seat, kind, (byte)Math.Clamp(zone, 0, RaceRunMessage.NoZone), (byte)_race.Window, run, runTime),
             NetChannels.Events);
+    }
+
+    /// <summary>Tells every other machine that local seat <paramref name="seat"/> touched a course
+    /// pylon at <paramref name="seconds"/> of this machine's sim time. Any other element sends nothing.</summary>
+    internal void Touched(int seat, CourseTouch touch, double seconds)
+    {
+        if (touch.Element is not (CourseElement.LeftCoursePylon or CourseElement.RightCoursePylon)
+            || touch.Gate < 0 || touch.Gate > ushort.MaxValue)
+        {
+            return;
+        }
+
+        byte pylon = touch.Element == CourseElement.LeftCoursePylon ? RaceTouchMessage.LeftPylon : RaceTouchMessage.RightPylon;
+        var message = new RaceTouchMessage((byte)seat, (byte)_race.Window, (ushort)touch.Gate, pylon, touch.PylonHeight,
+            (float)(seconds + ClockOffset));
+        if (_net.IsHost)
+        {
+            _net.Broadcast(message, NetChannels.Events);
+        }
+        else
+        {
+            _net.Send(_net.HostPeer, message, NetChannels.Events);
+        }
     }
 
     /// <summary>Once per sim step, after the race has advanced. The host sends each changed racer's
@@ -364,6 +407,27 @@ internal sealed class NetRaceLink
 
         // At once, not on the next step: a finish that ends the race halts the host's simulation.
         Flush(false);
+    }
+
+    // A remote seat's touch, drawn and nothing more. A guest hears only its host, and the host's
+    // seat-owner check has already dropped a touch for a seat its sender does not fly. A touch
+    // stamped ahead of this clock is drawn now, so a skewed clock never hides a standing cut.
+    private void TakeTouch(int peer, RaceTouchMessage touch)
+    {
+        if (peer == _net.LocalPeer || (!_net.IsHost && peer != _net.HostPeer))
+        {
+            return;
+        }
+
+        if (touch.Window != (byte)_race.Window || touch.Pylon > RaceTouchMessage.RightPylon)
+        {
+            TouchesDropped++;
+            return;
+        }
+
+        TouchesShown++;
+        var element = touch.Pylon == RaceTouchMessage.LeftPylon ? CourseElement.LeftCoursePylon : CourseElement.RightCoursePylon;
+        TouchShown?.Invoke(touch.Gate, element, touch.Height, Math.Min(touch.Time - ClockOffset, _clock()));
     }
 
     private void Refuse(in RaceRunMessage report, string why)

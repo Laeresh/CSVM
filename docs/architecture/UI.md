@@ -932,6 +932,16 @@ into the source tree's file, refuses a file it cannot parse and is off in an exp
 Save would write, so a slider dragged back reads as saved. No flag twins it; a suite drives `Set`, `SetSeed`, `RevertToSaved`.
 The paint tool takes a left click off the panel (`PaintTool`) and finds the ground under the cursor through the session's ground ray (`VegetationGround.RayHit` over the world's own triangles). ⚠ Never the physics ray: a `--freecam` world builds no colliders, so a collider ray hits nothing there. `Pick` gives the texture `Mech3/VegetationGround.cs` names under the hit (the coplanar layer that takes stamps, never a `no_clutter` overlay) the checked kinds through `VegetationEntry.WithPick`, applied at once; `Brush` dabs the session's `VegetationMask` while held (`Paint`, a radius and strength slider, `Thicken`, `Thin`, `Clear`, `Neutral`), names `vegetation/<chapter>.bin` in the entry, and hands the mask to its own callback on release (`ApplyMask`). While the brush is chosen, every mouse motion (`_Input`, before the panel takes it) stands a ring of the brush radius on the ground under the cursor (`Ring`): a 64-segment line strip at the hit's height, unshaded and drawn through the ground (`SelectionService.NewBoxInstance`), coloured by mode (Clear red, Thin amber, Thicken green, Neutral white) and tagged `SelectionService.OverlayMeta`. It hides off the brush, over the panel, over the sky and with the lab closed. Under Thicken a dim note says the stroke adds no original stamp, since the density rule only thins those. Save writes the mask before the entry; Revert restores both. Each tool is off when the session hands no mask, no texture lookup or no ground ray.
 
+## src/UI/Labs/SoundLab.cs
+The sound lab (Shift+F9), built by `InspectionLabs.BuildSoundLab` over a flight launched with `--sound-lab` and nowhere
+else, a menu flight of that launch included. A panel down the right edge holds one slider per
+`Flight/Audio/EnhancedSoundTuning.cs` `Fields` amount, beside Original Sound's value, and a pick of the hit confirm's
+sound group. Every edit sets `EnhancedSoundTuning.Current` at once, which the flown mixes read on their next frame, so
+it is heard only under Enhanced Sound. A readout shows player 1's throttle and engine slot pitch and gain. Original
+values, Revert to saved, and Save, which writes every amount through `EnhancedSoundTuning.Save` into the source tree's
+file and is off in an exported build. The sliders and buttons take no keyboard focus, so the flight keeps its keys.
+Under a sound pack's override the lab starts and saves as `EnhancedSoundTuning.SaveTargetFor` says: the override alone.
+
 ## src/UI/Labs/CourseLab.cs
 The course editor lab (Shift+F3), built by `InspectionLabs.BuildCourseLab` in `--freecam` over a chapter world, open at launch
 under `--course-edit`. A right-edge panel lists (a titled course as "title [name]"), opens, starts (its start at the camera) and saves courses to `CourseLab.Target`, a course opened from the game folder back there and any other to the build's `CourseDraft.SaveTarget`, the name field giving the file name and the title field (`course_title`) the title.

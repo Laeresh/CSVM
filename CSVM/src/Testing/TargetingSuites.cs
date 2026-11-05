@@ -1436,6 +1436,88 @@ internal static class TargetingSuites
         }
     }
 
+    // The player's spyglass size against a real TargetHud and its real SubViewport, with no game data.
+    // The picture's side is read back from the viewport the hud aims. The factor changes between two
+    // frames of one hud, which is the live apply the pause sheet makes.
+    [Suite("spyglass-scale-hud",
+        "the spyglass size (Game Options Spyglass Size, SpyglassScaleSetting): at 100% the picture "
+        + "renders the disc's decoded side at the pane's HUD scale, and at 125, 150 and 200% the SAME "
+        + "hud, unrebuilt, renders it that much larger on its next aim, so an apply over the pause "
+        + "sheet resizes every pane at once; the radius every placement measures from grows by the "
+        + "same factor, the anchor's inset, the shaft's start on the rim and the label under the "
+        + "disc with it, while the 3-pixel label gap does not; the factor is clamped to 1..2 and a "
+        + "word outside the four reads as 100; and a --det launch reads no saved size")]
+    internal static void SpyglassScaleHud(TestContext ctx)
+    {
+        float before = SpyglassScaleSetting.Current;
+        TargetHud? hud = null;
+        try
+        {
+            SpyglassScaleSetting.Current = SpyglassScaleSetting.Native;
+            hud = TargetHud.Build(0, ctx.Camera, null!);
+            ctx.Host.AddChild(hud);
+            var pane = new Vector2(2560f, 1440f);
+            hud.Size = pane;
+            hud.PlanePos = Vector3.Zero;
+            var target = TargetRef.ForAircraft(
+                new AimCandidate { Team = AimAssist.TeamOfPilot(100), Live = true },
+                TargetClass.Enemy, "scale_bogey", "Bogey");
+            float s = HudMetrics.Scale(hud);
+            ctx.Check(s > 0f, $"the hud measures a HUD scale on this window ({s})");
+
+            int Side()
+            {
+                hud.UpdateSpyglass(target, new Vector3(0f, 0f, -100f), offScreen: true);
+                return hud.Picture?.Size.X ?? -1;
+            }
+
+            int native = Side();
+            ctx.Check(hud.PictureLive && native == SpyglassView.RenderSide(TargetHud.DiscSide(s, 1f))
+                      && TargetHud.DiscSide(s, 1f) == Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)),
+                $"at 100% the picture renders the decoded {Spyglass.RefWindow}-pixel window at the pane's scale, {native} texels square");
+
+            foreach (string word in new[] { "125", "150", "200" })
+            {
+                float factor = SpyglassScaleSetting.FactorOf(word);
+                SpyglassScaleSetting.Apply(word);
+                int side = Side();
+                int expected = SpyglassView.RenderSide(Mathf.RoundToInt(Spyglass.RefWindow * s * factor));
+                ctx.Check(HudMetrics.SpyglassScale == factor && side == expected,
+                    $"at {word}% the same hud's next aim renders {side} texels square (expected {expected}, {native} at 100%), with no rebuild");
+                // The placements at the 1440p reference's scale, where a pixel is a pixel to read.
+                float radius = TargetHud.DiscRadius(1f, factor);
+                ctx.Check(Mathf.IsEqualApprox(radius, Spyglass.RefRadius * factor),
+                    $"and the radius every placement measures from is {factor} times the decoded one ({radius})");
+                var far = new Vector2(9000f, 720f);
+                var bare = EdgeMarker.Resolve(far, behind: false, pane);
+                var inset = EdgeMarker.Resolve(far, behind: false, pane, radius);
+                var tail = TargetHud.ShaftTail(inset.Anchor, inset.Dir, 1f, disc: true, factor);
+                var label = TargetHud.EdgeLabelAnchor(new Vector2(400f, 300f), pane.Y, 1f, disc: true, factor);
+                ctx.Check(Mathf.Abs(bare.Anchor.X - inset.Anchor.X - radius) < 1e-3f
+                          && Mathf.Abs(tail.DistanceTo(inset.Anchor) - radius) < 1e-3f
+                          && Mathf.Abs(label.Y - (300f + radius + 3f)) < 1e-3f,
+                    $"so the anchor stands {bare.Anchor.X - inset.Anchor.X} further in, the shaft starts {tail.DistanceTo(inset.Anchor)} out on the rim and the label sits 3 under the bigger disc ({label.Y})");
+            }
+
+            SpyglassScaleSetting.Apply(null);
+            ctx.Check(Side() == native,
+                $"CONTROL: back at a never-set size the same hud renders its 100% side again ({native}), so the factor and not a drift moved it");
+            SpyglassScaleSetting.Current = 3f;
+            ctx.Check(HudMetrics.SpyglassScale == HudMetrics.MaximumSpyglassScale,
+                $"a factor past the largest step is held at {HudMetrics.MaximumSpyglassScale}");
+            ctx.Check(SpyglassScaleSetting.Apply("175").Word == SpyglassScaleSetting.Default
+                      && SpyglassScaleSetting.Current == SpyglassScaleSetting.Native,
+                $"and a word outside the four reads as 100");
+            ctx.Check(SpyglassScaleSetting.SavedWord(det: true) == null,
+                $"a --det launch reads no saved size, so no golden depends on it");
+        }
+        finally
+        {
+            SpyglassScaleSetting.Current = before;
+            hud?.Free();
+        }
+    }
+
     // The target-routing switch, driven directly against hand-built sources, no live
     // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
     // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW

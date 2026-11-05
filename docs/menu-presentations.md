@@ -395,6 +395,13 @@ opens on 100, 50, 50 and 50, the authored `CurrentValue` of the three category r
 added one. `Utils/AudioMix.cs` turns them into one gain per category bus, `category/100 x
 master/100`, so Master is a multiplier over the other three rather than a level of its own.
 
+**The two switches under the levels.** Enhanced Sound (ticked by default) remixes the original's
+own engine and hit sounds, and Hit Confirm sounds a hit when the player's guns strike an enemy
+aircraft; never set, Hit Confirm follows the sound mode. Both are remake-only, saved as
+`soundMode` and `hitConfirm`, apply live from either apply, and a `--det` run plays Original Sound
+with no hit confirm (`Utils/SoundModeSetting.cs`). What the remix changes:
+[formats/sounds.md](formats/sounds.md#enhanced-sound).
+
 **Bus 0 is not part of that mix.** It carries the developer gain alone, `--volume=` over the
 `audio.volume` key over silence in a repo run (`Utils/MasterVolume.cs`), and `AudioMix` refuses to
 write index 0 by construction. The two gains therefore reach the output as a product: `--volume=0`

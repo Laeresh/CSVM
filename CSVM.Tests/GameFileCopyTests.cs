@@ -125,24 +125,39 @@ public class GameFileCopyTests
     }
 
     // A virus scanner briefly holds a fresh file without FileShare.Delete. Windows refuses the
-    // folder's rename until it lets go.
+    // folder's rename until it lets go. ⚠ Do not release from a pool timer: a starved pool runs
+    // its callback after the copy's retries end.
     [Fact]
     public void ACopySucceedsOnceAScannerBrieflyHoldingAFreshFileLetsGo()
     {
         string dataRoot = TestData.TempDir();
         string held = Path.Combine(GameFileCopy.Target(dataRoot) + GameFileCopy.PartialSuffix, Messages.GameFile);
         FileStream? scanner = null;
-        using var release = new Timer(_ => scanner?.Dispose());
+        Thread? release = null;
         var source = MemorySource.Complete();
 
-        GameFileCopy.Run(source, dataRoot, progress: step =>
+        try
         {
-            if (step.Done == GameFileCopy.Files.Count && scanner == null)
+            GameFileCopy.Run(source, dataRoot, progress: step =>
             {
-                scanner = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read);
-                release.Change(200, Timeout.Infinite);
-            }
-        });
+                if (step.Done == GameFileCopy.Files.Count && scanner == null)
+                {
+                    var hold = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    scanner = hold;
+                    release = new Thread(() =>
+                    {
+                        Thread.Sleep(200);
+                        hold.Dispose();
+                    });
+                    release.IsBackground = true;
+                    release.Start();
+                }
+            });
+        }
+        finally
+        {
+            release?.Join();
+        }
 
         Assert.NotNull(scanner);
         Assert.Equal(source.Content(Messages.GameFile), File.ReadAllBytes(Path.Combine(GameFileCopy.Target(dataRoot), Messages.GameFile)));

@@ -270,7 +270,7 @@ public static class EnhancedLook
     /// <summary>The clutter fade's squared scale under the fog push and the View Distance reach, both
     /// identity in original mode. An infinite reach makes it 0, the never-fades scale.</summary>
     public static float ClutterFadeScaleSq() =>
-        EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale() * ViewDistance.ClutterReach());
+        EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale() * ViewDistance.EnhancedReach());
 
     /// <summary>The word settings whose fallback the standing mode moves resolved again from the
     /// sources they last read, as the anti-aliasing default follows the mode. Then every live 3D
@@ -388,7 +388,7 @@ public static class EnhancedLook
     }
 
     private static void LogViewDistance() =>
-        Log.Info("world", $"view distance: clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+        Log.Info("world", $"view distance: clutter reach x{ViewDistance.EnhancedReach():0.#} (applied live)");
 
     private static void LogVegetationQuality() =>
         Log.Info("world", $"vegetation quality: {VegetationQualitySetting.Word} (applied live, rich {(VegetationQualitySetting.RichOn ? "on" : "off")})");

@@ -548,6 +548,10 @@ public sealed partial class ProjectilePool : Node3D
     /// cannon round never reaches the rocket-only fuse/range-expiry arms below).</summary>
     public int CannonHits { get; private set; }
 
+    /// <summary>Sim seconds since the pool started, the clock the gun-effect throttle reads and the
+    /// hit confirm's rate limit reads too.</summary>
+    public double SimClock => _simClock;
+
     /// <summary>Whether an authored effect radius is also a positive-health damage blast, the
     /// weapon-level spelling of <see cref="ImpactOutcome.HasBlastDamage"/>, where the rule lives.
     /// The surface never changes the answer, so any resolves it.</summary>

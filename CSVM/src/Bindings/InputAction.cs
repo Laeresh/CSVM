@@ -174,4 +174,12 @@ public enum InputAction
     // Bringing a VR headset's seated eye back onto the cockpit eye, Home by default. This port's own
     // flight action, inert without a headset. Appended because the enum is positional.
     RecenterHeadset,
+
+    // Stepping the outside views' HUD mode, Full, Minimal, None, F2 by default. A remake-only flight
+    // action on a key the original binds nothing to. Appended because the enum is positional.
+    CycleHudMode,
+
+    // Opening the HUD layout editor over the seat's pane, Shift+F2 by default. A remake-only flight
+    // action beside the HUD mode step. Appended because the enum is positional.
+    EditHudLayout,
 }

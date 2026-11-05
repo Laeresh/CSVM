@@ -326,6 +326,98 @@ public sealed class NetStuntRaceTests
     }
 
     [Fact]
+    public void TheRaceTouchRoundTripsAtItsDocumentedOffsets()
+    {
+        Assert.Equal(0x6C, (int)NetMessageType.RaceTouch);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.RaceTouch));
+        var bytes = new byte[RaceStandingMessage.Size];
+        var touch = new RaceTouchMessage(2, 3, 0x0105, RaceTouchMessage.RightPylon, 12.5f, 77.25f);
+        Assert.Equal(20, touch.Write(bytes));
+        Assert.Equal(new byte[] { 2, 3, 0x05, 0x01, 1, 0, 0, 0 }, bytes[4..12]);
+        Assert.Equal(12.5f, BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(12)));
+        Assert.Equal(77.25f, BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(16)));
+        Assert.True(RaceTouchMessage.TryRead(bytes.AsSpan(0, 20), out var back));
+        Assert.Equal(touch, back);
+
+        // ABLE-TO-FAIL CONTROL: a short buffer reads nothing.
+        Assert.False(RaceTouchMessage.TryRead(bytes.AsSpan(0, 19), out _));
+    }
+
+    [Fact]
+    public void EverySeatsCoursePylonTouchIsShownOnEveryOtherMachineAndScoredNowhere()
+    {
+        var f = TouchField();
+        var shown = new List<(int Machine, int Gate, CourseElement Element, float Height, double At)>[3];
+        for (int m = 0; m < 3; m++)
+        {
+            int machine = m;
+            shown[m] = new();
+            f.Links[m].TouchShown = (gate, element, height, at) => shown[machine].Add((machine, gate, element, height, at));
+        }
+
+        // Guest A's seat 1 touches: the host and guest B draw it, A itself gets nothing back.
+        f.Links[1].Touched(1, Touch(2, CourseElement.RightCoursePylon, 9f), 10.0);
+        f.Pump();
+        Assert.Equal(new[] { (0, 2, CourseElement.RightCoursePylon, 9f, 10.0) }, shown[0]);
+        Assert.Equal(new[] { (2, 2, CourseElement.RightCoursePylon, 9f, 10.0) }, shown[2]);
+        Assert.Empty(shown[1]);
+
+        // The host's own seat 0 touches: both guests draw it.
+        f.Links[0].Touched(0, Touch(0, CourseElement.LeftCoursePylon, 4f), 11.0);
+        f.Pump();
+        Assert.Equal((0, CourseElement.LeftCoursePylon), (shown[1].Single().Gate, shown[1].Single().Element));
+        Assert.Equal(2, shown[2].Count);
+
+        // A rim or balloon touch sends nothing.
+        int sent = f.Sessions.Sum(s => s.Sent);
+        f.Links[2].Touched(2, Touch(1, CourseElement.RingRim, 0f), 12.0);
+        f.Links[2].Touched(2, Touch(1, CourseElement.Balloon, 0f), 12.0);
+        Assert.Equal(sent, f.Sessions.Sum(s => s.Sent));
+
+        // Nothing it carries reaches any race: no racer moved.
+        Assert.All(f.Races, race => Assert.All(race.Racers, r => Assert.Equal((0, 0, false), (r.RunsStarted, r.MostZones, r.InRun))));
+        Assert.Equal((0, 0), (f.Links[0].ReportsTaken, f.Links[0].ReportsRefused));
+
+        // ABLE-TO-FAIL CONTROLS: a forged seat, another window, a bad pylon and a NaN height are drawn
+        // nowhere. The reader refuses the NaN, so the link counts only two drops.
+        int before = shown.Sum(s => s.Count);
+        f.Sessions[2].Send(f.Sessions[2].HostPeer, new RaceTouchMessage(1, 0, 0, RaceTouchMessage.LeftPylon, 3f, 1f), NetChannels.Events);
+        f.Sessions[2].Send(f.Sessions[2].HostPeer, new RaceTouchMessage(2, 1, 0, RaceTouchMessage.LeftPylon, 3f, 1f), NetChannels.Events);
+        f.Sessions[2].Send(f.Sessions[2].HostPeer, new RaceTouchMessage(2, 0, 0, 7, 3f, 1f), NetChannels.Events);
+        f.Sessions[2].Send(f.Sessions[2].HostPeer, new RaceTouchMessage(2, 0, 0, RaceTouchMessage.LeftPylon, float.NaN, 1f), NetChannels.Events);
+        f.Pump();
+        Assert.Equal(before, shown.Sum(s => s.Count));
+        Assert.Equal(1, f.Sessions[0].Forged);
+        Assert.Equal(2, f.Links[0].TouchesDropped);
+        Assert.Equal(2, f.Links[1].TouchesDropped);
+    }
+
+    [Fact]
+    public void ATouchCrossesOnTheHostsClockAndIsNeverDrawnAheadOfTheReceiversOwn()
+    {
+        double hostNow = 100.0;
+        double guestNow = 100.0;
+        var f = TouchField(() => hostNow, () => guestNow, new NetClockSlew(5.0));
+        var host = new List<double>();
+        var guest = new List<double>();
+        f.Links[0].TouchShown = (_, _, _, at) => host.Add(at);
+        f.Links[1].TouchShown = (_, _, _, at) => guest.Add(at);
+
+        // The guest's 10 s is the host's 15 s; the host's 20 s is the guest's 15 s.
+        f.Links[1].Touched(1, Touch(0, CourseElement.LeftCoursePylon, 5f), 10.0);
+        f.Links[0].Touched(0, Touch(0, CourseElement.LeftCoursePylon, 5f), 20.0);
+        f.Pump();
+        Assert.Equal(new[] { 15.0 }, host);
+        Assert.Equal(new[] { 15.0 }, guest);
+
+        // ABLE-TO-FAIL CONTROL: a touch stamped past the receiver's clock is drawn at its now.
+        hostNow = 12.0;
+        f.Links[1].Touched(1, Touch(0, CourseElement.LeftCoursePylon, 5f), 50.0);
+        f.Pump();
+        Assert.Equal(12.0, host[^1]);
+    }
+
+    [Fact]
     public void TheHostsRerunOpensTheGuestsNextWindowAheadOfItsLinesAndAnOldLineOrCallOpensNothing()
     {
         var f = Field();
@@ -499,6 +591,40 @@ public sealed class NetStuntRaceTests
         return new RaceField(sessions, hostLink, guestLink, races[0], races[1]);
     }
 
+    private static CourseTouch Touch(int gate, CourseElement element, float height) =>
+        new(gate, element, 0, Godot.Vector3.Zero, height, TimeAdded: true);
+
+    // The host on seat 0 and two guests on seats 1 and 2, each machine's race holding all three.
+    private static TouchRace TouchField(Func<double>? hostClock = null, Func<double>? guestClock = null, NetClockSlew? slew = null)
+    {
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(308));
+        var roster = new[]
+        {
+            new NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "Red" },
+            new NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "Blue" },
+            new NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "Green" },
+        };
+        var sessions = new[] { NetSession.Host(mesh[0], roster, 0x5EEDUL), NetSession.Guest(mesh[1]), NetSession.Guest(mesh[2]) };
+        Pump(sessions);
+        Assert.True(sessions[1].Joined && sessions[2].Joined);
+        var races = new[] { new StuntRace(Window, Zones), new StuntRace(Window, Zones), new StuntRace(Window, Zones) };
+        foreach (var race in races)
+        {
+            for (int seat = 0; seat < 3; seat++)
+            {
+                race.Add(seat, "Bloodhawk");
+            }
+        }
+
+        var links = new[]
+        {
+            NetRaceLink.Open(sessions[0], races[0], hostClock ?? (() => 100.0), null, null, Dt),
+            NetRaceLink.Open(sessions[1], races[1], guestClock ?? (() => 100.0), slew, null, Dt),
+            NetRaceLink.Open(sessions[2], races[2], guestClock ?? (() => 100.0), slew, null, Dt),
+        };
+        return new TouchRace(sessions, links, races);
+    }
+
     private static void Pump(NetSession[] sessions)
     {
         for (int i = 0; i < 4; i++)
@@ -542,6 +668,11 @@ public sealed class NetStuntRaceTests
         public void Step(double dt)
         {
         }
+    }
+
+    private sealed record TouchRace(NetSession[] Sessions, NetRaceLink[] Links, StuntRace[] Races)
+    {
+        public void Pump() => NetStuntRaceTests.Pump(Sessions);
     }
 
     private sealed record RaceField(NetSession[] Sessions, NetRaceLink Host, NetRaceLink Guest, StuntRace HostRace, StuntRace GuestRace)

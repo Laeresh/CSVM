@@ -37,7 +37,7 @@ public sealed partial class AiEngineAudio : Node3D
     private PlaneStats _stats = null!;
     private float _engineGain;     // the linear gain Update last wrote to the engine slot
     private AudioStreamPlayer3D? _engine, _whine, _nitro;
-    private AudioStreamWav? _engineStream, _damagedStream;
+    private AudioStream? _engineStream, _damagedStream;
     private float _engineVol = 1f, _damagedVol = 1f, _whineVol = 1f, _nitroVol = 1f;
     private float _nitroKeyedS;    // s the keyed nitro loop has left before it expires
     private EngineSlotPhase _phase;
@@ -89,7 +89,7 @@ public sealed partial class AiEngineAudio : Node3D
         _stats = stats;
         _defs = defs;
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
-        _engineStream = _engine?.Stream as AudioStreamWav;
+        _engineStream = _engine?.Stream;
         // The slot opens on the plain definition, and only a swap re-reads this below.
         _enginePitchable = EngineAudioCurves.SlotIsPitched(defs, stats.EngineSound);
         // No player of its own: this stream replaces the engine's on the one slot.
@@ -207,7 +207,7 @@ public sealed partial class AiEngineAudio : Node3D
         player.VolumeDb = Mathf.LinearToDb(volume);
     }
 
-    private static AudioStreamWav? LoadStream(SoundArchive archive,
+    private static AudioStream? LoadStream(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
     {
         baseVolume = 1f;
