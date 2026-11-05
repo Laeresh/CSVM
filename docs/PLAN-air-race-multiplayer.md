@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `--course=` with a second local pilot and with race bots; pylon cuts per local seat (#277)
 22. ☑ `--course=` in a network session, and the Course dropdown in the lobby's Mission Options (#277)
-23. ☐ Instant Action offers the Course box with more seats and bot rows (#277)
+23. ☑ Instant Action offers the Course box with more seats and bot rows (#277)
 
 ## Dependency and parallelism notes
 
@@ -395,7 +395,33 @@ lobby showing the title. A screenshot of host and guest Mission Options for the 
 
 **⚠ Traps.** The lobby shows the course title, but the id it sends is the file name.
 
-## C23 ☐ Instant Action offers the Course box with more seats and bot rows
+## C23 ☑ Instant Action offers the Course box with more seats and bot rows
+
+**Landed.** `InstantActionFeature.OffersCourse` (now a property, with `LaunchCourse`) holds for
+Stunt Flying in a chapter with courses whatever the join board holds, and `StuntOffered` lists
+Stunt Flying for a chapter with courses and no Danger Zones on any board, so `SetBoard` is gone. A
+course exit carries the racing bot rows in `Bots` and, for a race, the Race Time box's window as a
+Stunt Race `VersusRules`, which `SessionSpec.FromMenu` reads into `StuntRaceMinutes` (the command
+line keeps the default window); the rest is the spec `--stunt --course= --players=2 --vs-bot`
+builds. Original's screen stands the Race Bots toggle on the first clear line beside the Race Time
+(or Lives) box, its right edge on the mission dropdown's and titled "Bots:" one wingman-row gap past
+the Race Time box, and the Course box alone on the second. "Race Bots:" and a 60 px box do not fit:
+635 + 15 + 73 + 60 runs past the column's 735 px edge, so the title is shortened and the box is
+45 px; the user accepted the 45 px "Bots:" toggle beside Race Time. A wide box above or below the
+line would send its vertical press to the Race Time box, whose middle is nearer its own, so the
+line walks in reading order through the new `OriginalRow.UpTo`/`DownTo` named neighbours, which
+`OriginalFocus.Step` takes ahead of the spatial walk: Down from the Race Time (or Lives) box and Up
+from the mission type land on the toggle, and Up from it returns to the left box. Files:
+`UI/Menu/InstantActionFeature.cs`, `UI/Menu/Original/OriginalInstantActionScreen.cs`,
+`UI/Menu/Original/OriginalShell.cs` (`OriginalRow`), `UI/Menu/Original/OriginalFocus.cs`; suites
+`menu-instant-action-course` (`CourseRaced` replaces `CourseWithdrawn`) and
+`menu-original-instant-action` (the toggle's place and walk); unit tests in
+`InstantActionCourseTests` and `OriginalInstantActionTests`; docs `menu-presentations.md`,
+`org/menu-inventory.md`, architecture UI and its index line.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Instant Action's Stunt Flying shows the Course box with more than one seat or with bot
 rows, and the launch flies the picked course with all of them.

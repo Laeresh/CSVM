@@ -91,7 +91,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     public const string RaceBotsKey = "IA_D_RACEBOTS";
 
     /// <summary>The remake-only Course dropdown, the Danger Zones or an authored course. It shows for
-    /// a solo stunt run in a chapter with courses.</summary>
+    /// a stunt run in a chapter with courses, whatever the join board holds.</summary>
     public const string CourseKey = "IA_D_COURSE";
 
     /// <summary>The layout section the loadout screen is composed from.</summary>
@@ -156,13 +156,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const float RaceTimeWidth = 110f;
     private const string RaceTimeLabelText = "Race Time:";
 
-    // The race toggle's width, title and two values, authored by no row. Its line is the setup
-    // stack's next clear one after the lives box's, read the same way.
-    private const float RaceBotsWidth = 60f;
-    private const string RaceBotsLabelText = "Race Bots:";
+    // The race toggle's width, title and two values, authored by no row. It shares the race time
+    // box's line, ending where the mission dropdown ends. Its title is short so both fit in the
+    // column; "Race Bots:" and a 60 px box would run past the column's frame.
+    private const float RaceBotsWidth = 45f;
+    private const string RaceBotsLabelText = "Bots:";
 
-    // The Course box, on the race toggle's line, the two never showing together: a bot row on the
-    // join board withdraws the courses. As wide as the mission dropdown, a course name being free text.
+    // The gap between two boxes on one line where the wingman row cannot be read.
+    private const float FallbackBoxGap = 15f;
+
+    // The Course box, alone on the setup stack's next clear line after the race time box's. As
+    // wide as the mission dropdown, a course name being free text.
     private const float CourseWidth = 210f;
     private const string CourseLabelText = "Course:";
 
@@ -592,11 +596,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // Whether the race toggle shows: stunt flying with bot rows the toggle could seat.
     private bool RaceBotsShown => _instantAction.MissionType.Key == InstantActionFeature.StuntKey && _setup.Bots.Count > 0;
 
-    // Whether the Course box shows: the feature's solo rule over the seats and the board's bot rows.
-    private bool CourseShown => _instantAction.OffersCourse(_setup.Seats.Count, _setup.Bots.Count);
+    // Whether the Course box shows: stunt flying in a chapter with courses, whoever is on the board.
+    private bool CourseShown => _instantAction.OffersCourse;
 
     // Whether a launch now flies an authored course, which takes no waves, wingmen or lives.
-    private bool CourseFlown => _instantAction.LaunchCourse(_setup.Seats.Count, _setup.Bots.Count) != null;
+    private bool CourseFlown => _instantAction.LaunchCourse != null;
 
     // The remake-only box the page hides right now, exactly one of the two. A race spends no
     // lives, so the lives box gives way while the race time box shows.
@@ -731,8 +735,6 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return;
         }
 
-        // A seat or bot row joining or leaving takes stunt flying off a chapter with courses alone.
-        _instantAction.SetBoard(_setup.Seats.Count, _setup.Bots.Count);
         string hidden = HiddenRemakeKey;
         bool orphaned = _iaOpen == hidden;
         if (orphaned)
@@ -869,7 +871,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             int setup = rows.Count;
             AddDropdown(screen, rows, PlayerPlaneKey);
             // The race blanks the wingman boxes too: its AI would not keep weapons off. A course
-            // flies alone, as --course does.
+            // takes no wingmen, as --course does.
             bool wingmen = !RaceTimeShown && !CourseFlown;
             AddDropdown(screen, rows, WingmenKey, live: wingmen);
             AddDropdown(screen, rows, WingmanPlaneKey, live: wingmen && _instantAction.NumWingmen > 0);
@@ -880,6 +882,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddRemakeRow(screen, rows, setup, RaceTimeKey, RaceTimeDropdown(), RaceTimeBox(screen), RaceTimeShown);
             AddRemakeRow(screen, rows, setup, RaceBotsKey, RaceBotsDropdown(), RaceBotsBox(screen), RaceBotsShown);
             AddRemakeRow(screen, rows, setup, CourseKey, CourseDropdown(), CourseBox(screen), CourseShown);
+            if (RaceBotsShown)
+            {
+                ReadAcross(rows, HiddenRemakeKey == LivesKey ? RaceTimeKey : LivesKey);
+            }
         }
         else
         {
@@ -939,6 +945,23 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             shown, shown ? 1 : -1, LivesArrow(screen), shown));
     }
 
+    // The race toggle's line walked in reading order. A wide box's vertical press would land on the
+    // left box, whose middle is nearer, so the toggle is named instead. Down from the left box and Up
+    // from the mission type reach it, and Up from it reaches the left box.
+    private static void ReadAcross(List<OriginalRow> rows, string left)
+    {
+        for (int i = 0; i < rows.Count; i++)
+        {
+            rows[i] = rows[i].Key switch
+            {
+                RaceBotsKey => rows[i] with { UpTo = left },
+                MissionKey => rows[i] with { UpTo = RaceBotsKey },
+                _ when rows[i].Key == left => rows[i] with { DownTo = RaceBotsKey },
+                _ => rows[i],
+            };
+        }
+    }
+
     // The race toggle's list: Off, the solo run the board's bots stay out of, then On.
     private DropdownList RaceBotsDropdown()
     {
@@ -965,14 +988,39 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     private (float X, float Y, float Width, float Height) RaceTimeBox(MenuLayoutScreen screen) => RemakeBox(screen, 0, RaceTimeWidth);
 
-    private (float X, float Y, float Width, float Height) RaceBotsBox(MenuLayoutScreen screen) => RemakeBox(screen, 1, RaceBotsWidth);
+    // The race toggle on the race time box's line, its right edge on the mission dropdown's. It
+    // stays put when the lives box holds the line instead, so flipping it moves nothing.
+    private (float X, float Y, float Width, float Height) RaceBotsBox(MenuLayoutScreen screen)
+    {
+        var line = RemakeBox(screen, 0, RaceBotsWidth);
+        var mission = screen.Widget(MissionKey) is { } widget ? DropBox(widget) : default;
+        // CourseWidth is the mission dropdown's authored width, so it stands in for a missing one.
+        float right = mission.Width > 0f ? mission.X + mission.Width : line.X + CourseWidth;
+        return (right - RaceBotsWidth, line.Y, RaceBotsWidth, line.Height);
+    }
+
+    // The race toggle's title, one box gap past the race time box.
+    private float RaceBotsTitleX(MenuLayoutScreen screen) => RaceTimeBox(screen).X + RaceTimeWidth + BoxGap(screen);
+
+    // The gap the layout leaves between the wingman count and the wingman plane, two boxes on one line.
+    private static float BoxGap(MenuLayoutScreen screen)
+    {
+        if (screen.Widget(WingmenKey) is not { } count || screen.Widget(WingmanPlaneKey) is not { } plane)
+        {
+            return FallbackBoxGap;
+        }
+
+        var left = DropBox(count);
+        float gap = DropBox(plane).X - (left.X + left.Width);
+        return gap > 0f ? gap : FallbackBoxGap;
+    }
 
     private (float X, float Y, float Width, float Height) CourseBox(MenuLayoutScreen screen) => RemakeBox(screen, 1, CourseWidth);
 
     // A remake-only box's rectangle takes the mission dropdown's left edge and item height. The
     // row therefore stands in the setup column at the height every other box there draws. Its line
     // is the nth clear one that column leaves. The first holds whichever of the lives and race time
-    // boxes shows, and the second the race toggle.
+    // boxes shows with the race toggle beside it, and the second the Course box.
     private (float X, float Y, float Width, float Height) RemakeBox(MenuLayoutScreen screen, int nth, float width)
     {
         var mission = screen.Widget(MissionKey) is { } widget ? DropBox(widget) : default;
@@ -982,8 +1030,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     // The nth gap in the setup stack tall enough to hold a box, centred in that gap. The shipped
     // layout skips a line between the wingman and mission rows and another above the enemy block.
-    // The lives or race time box takes the first, beside the mission type dropdown, and the race
-    // toggle the second. A layout with too few gaps stacks the boxes still owed under the column instead. That
+    // The lives or race time box takes the first, beside the mission type dropdown, and the Course
+    // box the second. A layout with too few gaps stacks the boxes still owed under the column instead. That
     // is honest about the crowding rather than drawing a box over an authored one.
     private float ClearLine(MenuLayoutScreen screen, float height, int nth)
     {
@@ -1427,7 +1475,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
             if (RaceBotsShown)
             {
-                lines.Add(new BoardLine(RaceBotsLabelText, LivesTitleX(screen), RaceBotsBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+                lines.Add(new BoardLine(RaceBotsLabelText, RaceBotsTitleX(screen), RaceBotsBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
             }
 
             if (CourseShown)

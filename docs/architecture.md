@@ -601,7 +601,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/CampaignAidProfiles.cs`, the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
 - `src/UI/Menu/MenuIdleSource.cs`, a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
-- `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def, and Stunt Flying's solo Course option.
+- `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def, and Stunt Flying's Course option.
 - `src/UI/Menu/NetPlayFeature.cs`, the multiplayer door as a shared feature: the port and address, the socket, the link readouts, the session advert, the wire a launch takes.
 - `src/UI/Menu/NetIdentity.cs`, the door's answers from the Game and Player Information boxes: callsign, voice, game name, cap, password and listing, the last two for one session.
 - `src/UI/Menu/InternetDoor.cs`, the door's master server link: the internet games list, the join by code, a host's listing with its code and why there is none.

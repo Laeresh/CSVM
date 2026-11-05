@@ -206,6 +206,10 @@ Instant Action's lower contents rows drops onto Change Weapons 90 px below rathe
 level with them. A press out of a column of values (`SpatialFocus.Leave`) decides which stops lie
 ahead by centre: by the middle, Down from the Video page's Enhanced Graphics checkbox passes over
 ACCEPT CHANGES, whose top stands level with the box and whose centre lies below it.
+A row may name the stop a vertical press lands on (`OriginalRow.UpTo`/`DownTo`), taken ahead of the
+spatial rule while that stop is live. Instant Action's Race Bots toggle needs it: on the Race Time
+box's line, every wide box above or below would send its press to the nearer Race Time box, so the
+line walks in reading order instead.
 
 The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
 drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and
@@ -449,7 +453,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 
 | Exit | Carries | The consumer's action |
 |---|---|---|
-| `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, or an authored `Course` name for a solo Stunt Flying course, a `VersusRules` for Dogfight, a `MenuNetLaunch` for a networked one | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
+| `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, or an authored `Course` name for a Stunt Flying course, a `VersusRules` for Dogfight, a lobby Stunt Race or an Instant Action course race, a `MenuNetLaunch` for a networked one | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
 | `OptionsApplyExit` | the graphics-mode and difficulty words, the six display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
@@ -467,15 +471,17 @@ file name order from both course sources (`Flight/Modes/CourseLibrary.cs`, the g
 a name; a `--det` run lists the shipped ones alone). A row shows the course file's `title`, or its
 file name where it has none; the pick and the launch carry the file name. A chapter with an authored course offers Stunt Flying
 even without Danger Zones, and takes its first course; the local lobby's Stunt Race keeps to the
-Danger Zones. Authored courses are solo, so the option is offered only to one seat with no bot row
-on the join board (`InstantActionFeature.OffersCourse`); a second seat or a bot row withdraws it and
-the run flies the Danger Zones, the Race Time box and the Race Bots toggle staying Danger-Zone-only. A chapter with courses and no Danger Zones offers Stunt Flying itself only to that solo board (`InstantActionFeature.SetBoard`).
+Danger Zones. The option is offered whatever seats and bot rows the join board holds
+(`InstantActionFeature.OffersCourse`): every seat, and every bot row the Race Bots toggle has
+racing, flies the picked course in one race.
 A picked course leaves as `LaunchExit.Course` with no def, and `SessionSpec.FromMenu` settles it as
 `--stunt --course=<chapter>/<name>` is settled, so the menu and the command line fly the same
-course. A course the build cannot fly does not quit the process as the command line does: the
+course; a race also carries the racing bot rows in `Bots` and the Race Time box's window as a
+Stunt Race `VersusRules`, the command line's `--players=`/`--vs-bot=` race keeping the default window. A course the build cannot fly does not quit the process as the command line does: the
 launcher returns to the screen the launch came from with the reason in Original's warning box.
-Original draws the option as a dropdown on the Race Bots line, the two never showing together, and
-a picked course blanks the wingman, enemy and Lives boxes, since a course run takes none of them.
+Original draws the option as a dropdown alone on the second clear line, the Race Bots toggle (titled
+"Bots:") standing beside the Race Time or Lives box on the first, and a picked course blanks the
+wingman, enemy and Lives boxes, since a course run takes none of them.
 Its load screen is the blackboard headed by the course's title with "Fly through every gate in
 order." in the blurb's place, never the Instant Action stunt dialog's Danger Zone text.
 
@@ -578,7 +584,7 @@ count and at that count with one (the screen opens on one life, so neither readi
 plain shot of it can show), `instant-action:race-time` on stunt flying with the remake-only Race
 Time box focused (shown only beside `--debug-join=1` or more, since a solo run has no race),
 `instant-action:race-bots` on stunt flying with a bot row put on the join board and the
-remake-only Race Bots toggle standing on and focused, the Race Time box on the lives box's line,
+remake-only Race Bots toggle standing on and focused beside the Race Time box on the lives box's line,
 `instant-action:course` on stunt flying on the airfield with the remake-only Course list standing
 open over the shipped sample course,
 `instant-action-wrapup` and `instant-action-wrapup:failed` on the
