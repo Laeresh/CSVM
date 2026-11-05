@@ -2101,7 +2101,7 @@ public sealed record LauncherContext
 
     /// <summary>The course word a lobby's host picked, on every machine of a lobby flight, null for
     /// the Danger Zones. A <c>--course=</c> launch builds its run from it in place of the library.</summary>
-    public System.Func<Net.LobbyCourseMessage?>? NetCourse { get; init; }
+    public System.Func<Net.LobbyCourseMessage?>? NetLobbyCourse { get; init; }
 
     /// <summary>The course library a <c>--course=</c> launch reads and a guest keeps its host's course
     /// in. Null reads the data root's (<see cref="Flight.Modes.CourseLibrary.ForLaunch"/>); a suite

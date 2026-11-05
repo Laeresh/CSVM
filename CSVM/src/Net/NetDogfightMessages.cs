@@ -153,7 +153,7 @@ public readonly record struct LobbyCourseMessage(byte Epoch, string Chapter, str
     }
 
     /// <inheritdoc/>
-    /// <remarks>⚠ Throws on a message past <see cref="MaxSize"/>: its counts would wrap.</remarks>
+    /// <remarks>⚠ Do not write a message that fails <see cref="Fits"/>; its counts would wrap, so this throws.</remarks>
     public int Write(Span<byte> into)
     {
         if (!Fits)

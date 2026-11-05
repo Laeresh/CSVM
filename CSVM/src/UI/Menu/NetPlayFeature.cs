@@ -144,7 +144,7 @@ public sealed class NetPlayFeature : IMenuFeature
     public string BindAddress { get; set; } = "*";
 
     /// <summary>The courses a Stunt Race host's Course box offers in a chapter
-    /// (<see cref="DogfightLobby.CourseChoices"/>). Null unless the launcher, an aid or a suite sets
+    /// (<see cref="Flight.Modes.CourseLibrary.Choices"/>). Null unless the launcher, an aid or a suite sets
     /// it. Null offers no course, so the host shows no Course box.</summary>
     public Func<string, IReadOnlyList<Flight.Modes.Course>>? Courses { get; set; }
 
@@ -787,6 +787,7 @@ public sealed class NetPlayFeature : IMenuFeature
                 Seated = peer => !_admission.Refused(peer),
                 LocalSeats = () => HostSeats,
                 SeatsOf = _admission.GrantedTo,
+                Courses = chapter => this.Courses?.Invoke(chapter) ?? Array.Empty<Flight.Modes.Course>(),
             };
         }
     }

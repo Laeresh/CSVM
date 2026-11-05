@@ -1448,8 +1448,8 @@ public partial class GameSession : Node3D
         if (refusal == null)
         {
             var library = Courses();
-            var course = _wire.HostCourse is { } held
-                ? UI.Menu.DogfightLobby.CourseOf(held(), wanted, out string error)
+            var course = _wire.LobbyCourse is { } held
+                ? Course.FromWord(held(), wanted, out string error)
                 : library.Load(wanted.Chapter, wanted.Name, out error);
             if (course == null)
             {
@@ -1467,7 +1467,7 @@ public partial class GameSession : Node3D
             else
             {
                 // A lobby guest keeps the host's course in its game folder, never over a same-named file.
-                if (_wire.HostCourse != null && _wire.Link is { IsHost: false })
+                if (_wire.LobbyCourse != null && _wire.Link is { IsHost: false })
                 {
                     library.SaveIfAbsent(course);
                 }

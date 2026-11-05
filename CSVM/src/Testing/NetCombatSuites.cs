@@ -1653,7 +1653,7 @@ internal static class NetCombatSuites
             IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null,
             Action? lobbyLanding = null,
             Func<IReadOnlyCollection<CoopPersistMessage>?>? coopPersisted = null,
-            Func<LobbyCourseMessage?>? course = null, Flight.Modes.CourseLibrary? courses = null)
+            Func<LobbyCourseMessage?>? lobbyCourse = null, Flight.Modes.CourseLibrary? courses = null)
         {
             var pane = new SubViewport
             {
@@ -1696,7 +1696,7 @@ internal static class NetCombatSuites
                 NetSeatFit = seatFit,
                 NetCoopWingman = coopWingman,
                 NetCoopPersisted = coopPersisted,
-                NetCourse = course,
+                NetLobbyCourse = lobbyCourse,
                 Courses = courses,
                 NetSeatBuild = seatBuild,
                 NetTeamNames = teamNames,

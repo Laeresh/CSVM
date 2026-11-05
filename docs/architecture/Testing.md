@@ -139,7 +139,7 @@ placed aeroplane stands on, the Dogfight's ranked board as one line, and a pane'
 ## src/Testing/CourseFlight.cs
 A course flown by placement in built sessions, which the local and network course race suites
 share: `Through` sets an aircraft 8 m short of an entry's gate at its pose now and steps every
-session until the run counts the entry, and `Until` steps them until a condition holds.
+session (or one caller's own step) until the run counts the entry, `Until` steps them until a condition holds, and `Seconds` formats a time.
 
 ## src/Testing/MenuSuiteHost.cs
 What a menu suite's host is built from. `AddFeatures` registers the same Free Flight, Instant

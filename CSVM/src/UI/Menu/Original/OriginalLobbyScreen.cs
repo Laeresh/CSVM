@@ -1634,7 +1634,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         hash.Add(lobby.Chat.Count);
         hash.Add(lobby.Scores.Count);
         hash.Add(lobby.RaceScores.Count);
-        hash.Add(lobby.CourseWord?.Hash);
+        hash.Add(lobby.LobbyCourse?.Hash);
         foreach (var player in lobby.Players)
         {
             hash.Add(player);
@@ -2039,7 +2039,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     // Either end shows the box for a Stunt Race in a chapter with courses, or on a host's course word.
     private bool CourseShown(DogfightLobby lobby) =>
-        DogfightLobby.IsStuntRace(lobby.Options) && (CourseChoices(lobby).Count > 0 || lobby.CourseWord != null);
+        DogfightLobby.IsStuntRace(lobby.Options) && (CourseChoices(lobby).Count > 0 || lobby.LobbyCourse != null);
 
     private IReadOnlyList<CSVM.Flight.Modes.Course> CourseChoices(DogfightLobby lobby)
     {
@@ -2160,7 +2160,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     return new DropdownList(items, lobby.Options.Environment,
-                        i => DogfightLobby.Offers(DogfightLobby.TypeOf(lobby.Options), i), i => lobby.SetEnvironment(i));
+                        i => DogfightLobby.Offers(DogfightLobby.TypeOf(lobby.Options), i, lobby.Courses), i => lobby.SetEnvironment(i));
                 }
 
             case TypeKey:
@@ -2187,7 +2187,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                         current = string.Equals(lobby.Course?.Name, choices[i].Name, StringComparison.OrdinalIgnoreCase) ? i + 1 : current;
                     }
 
-                    return new DropdownList(items, current, _ => true, i => lobby.SetCourse(i == 0 ? null : choices[i - 1]));
+                    return new DropdownList(items, current, i => i > 0 || MenuChapters.DangerZonesFor(DogfightLobby.ChapterOf(lobby.Options.Environment)),
+                        i => lobby.SetCourse(i == 0 ? null : choices[i - 1]));
                 }
 
             case PlaneKey when CustomPlanes:

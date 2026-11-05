@@ -172,6 +172,8 @@ public class InstantActionCourseTests
         Assert.Equal(cli.PlaneName, menu.PlaneName);
         Assert.Equal(cli.IaDef, menu.IaDef);
         Assert.Equal(cli.VsBots.Count, menu.VsBots.Count);
+        Assert.Equal(DogfightMissionType.Deathmatch, menu.MissionType);
+        Assert.Equal(cli.MissionType, menu.MissionType);
     }
 
     [Fact]
@@ -191,6 +193,10 @@ public class InstantActionCourseTests
         Assert.Equal(cli.Players, menu.Players);
         Assert.Equal(2, menu.Players);
         Assert.Equal(cli.VsBots.Select(b => (b.Plane, b.Skill)), menu.VsBots.Select(b => (b.Plane, b.Skill)));
+        Assert.Equal(DogfightMissionType.StuntRace, menu.MissionType);
+        Assert.Equal(cli.MissionType, menu.MissionType);
+        Assert.Equal(cli.VsKills, menu.VsKills);
+        Assert.Equal(cli.VsTimeMinutes, menu.VsTimeMinutes);
     }
 
     [Fact]
@@ -219,8 +225,16 @@ public class InstantActionCourseTests
         Assert.Equal(cli.Players, menu.Players);
         Assert.Equal(cli.IaDef, menu.IaDef);
         Assert.Equal(cli.VsBots.Select(b => (b.Plane, b.Skill)), menu.VsBots.Select(b => (b.Plane, b.Skill)));
-        // The one field the command line cannot set: the race window the Race Time box picked.
+        Assert.Equal(DogfightMissionType.StuntRace, menu.MissionType);
+        Assert.Equal(cli.MissionType, menu.MissionType);
+        Assert.Equal(0, menu.VsKills);
+        Assert.Equal(cli.VsKills, menu.VsKills);
+
+        // The one field the command line cannot set: the race window the Race Time box picked. Each
+        // match clock is its own window.
         Assert.Equal(10, menu.StuntRaceMinutes);
+        Assert.Equal(menu.StuntRaceMinutes, menu.VsTimeMinutes);
+        Assert.Equal(cli.StuntRaceMinutes, cli.VsTimeMinutes);
     }
 
     [Fact]

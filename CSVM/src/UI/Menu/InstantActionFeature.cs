@@ -335,7 +335,7 @@ public sealed class InstantActionFeature : IMenuFeature
     }
 
     /// <summary>Whether a chapter offers stunt flying: it ships Danger Zones, or it has an authored course.
-    /// The local lobby's Stunt Race reads <see cref="MenuChapters.DangerZonesFor"/> alone.</summary>
+    /// The network lobby's Stunt Race counts courses the same way (<see cref="DogfightLobby.Offers"/>).</summary>
     public bool StuntOffered(string chapterCode) =>
         MenuChapters.DangerZonesFor(chapterCode) || CoursesFor(chapterCode).Count > 0;
 

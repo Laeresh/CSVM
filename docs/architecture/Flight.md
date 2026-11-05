@@ -982,7 +982,7 @@ heading and sizes, with `FlownWay` the way an entry crosses it), the `SequenceEn
 `GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come from the file's path;
 the name is the id everywhere (`--course=`, `--course-edit=`, the library, the score key), and the optional `title`, a
 string, is what a player sees (`DisplayName`, the name where it is blank). `Parse` reads a file or rejects it whole,
-`ToJson` writes the same shape, `FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, and `Hash`
+`ToJson` writes the same shape, `FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, `FromWord` its check of a lobby word (`WordFor` builds one, `FitsWire` says whether it can be sent), and `Hash`
 digests pool, sequence and start but not the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course
 bests, so a retitle keeps them. Read `CourseLibrary` for where the files live.
 
@@ -1008,10 +1008,10 @@ not game data. Coverage: `CSVM.Tests/CourseTouchTests.cs`.
 
 ## src/Flight/Modes/CourseLibrary.cs
 The course files of a launch: `res://data/courses/<chapter>/<name>.json` shipped and `<dataRoot>/Courses/<chapter>/<name>.json`
-in the game folder, which wins a name clash. `List` names a chapter's courses, `Load` parses the winning file, and `Save`
+in the game folder, which wins a name clash. `List` names a chapter's courses, `Load` parses the winning file, `Choices` lists what a lobby's Course box offers (`ShippedChoices` the shipped alone), and `Save`
 writes one atomically into either root, refusing a chapter or name no file can carry (`.` and `..` among them).
-`SaveIfAbsent` keeps a network host's course in the game folder only where neither root has a file of its name; ⚠ a
-same-named file is never overwritten. `DisplayName(chapter, name)` is the winning file's title for the menu, the boards
+`SaveIfAbsent` keeps a network host's course in the game folder only where neither root has a file of its name.
+`DisplayName(chapter, name)` is the winning file's title for the menu, the boards
 and the lab, the name where the file is missing, broken or untitled. `ForLaunch` reads no game folder under `--det`, as
 no HD pack is read; a test or suite hands in OS paths (the launch context's `Courses`). `Launch/GameSession.cs` is its
 engine reader, and the `course-launch` suite reads the shipped `C1/sample_out_and_back` and a game-folder file over it.

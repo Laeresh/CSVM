@@ -178,6 +178,38 @@ public sealed record Course(
         return course;
     }
 
+    /// <summary>The course a host's lobby <paramref name="word"/> carries, or null with the one refusal a
+    /// lobby and a launch both show. Refused: no word, a word naming a course other than
+    /// <paramref name="wanted"/> (a lobby passes none), and JSON that does not parse or hash as sent.</summary>
+    public static Course? FromWord(Net.LobbyCourseMessage? word, (string Chapter, string Name)? wanted, out string refusal)
+    {
+        if (word is not { } sent)
+        {
+            refusal = "the host's course has not arrived";
+            return null;
+        }
+
+        if (wanted is { } launch && (!string.Equals(sent.Chapter, launch.Chapter, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(sent.Name, launch.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            refusal = $"the host's course is {sent.Chapter}/{sent.Name}";
+            return null;
+        }
+
+        var course = FromWire(sent.Chapter, sent.Name, sent.Hash, sent.Json, out string error);
+        refusal = course == null ? $"the host's course {sent.Chapter}/{sent.Name} is refused: {error}" : "";
+        return course;
+    }
+
+    /// <summary>The lobby word that carries <paramref name="course"/> under round <paramref name="epoch"/>.</summary>
+    public static Net.LobbyCourseMessage WordFor(byte epoch, Course course) =>
+        new(epoch, course.Chapter, course.Name, course.Hash, course.ToJson());
+
+    /// <summary>Whether <paramref name="course"/> goes on the wire in one lobby message and its run in
+    /// one racer line. An oversize course is left out of the lobby's course list.</summary>
+    public static bool FitsWire(Course course) =>
+        Net.RaceStandingMessage.Carries(course.Sequence.Count) && WordFor(0, course).Fits;
+
     /// <summary>The course as indented JSON, the shape <see cref="Parse"/> reads. The top level holds
     /// <c>version</c>, <c>title</c> where one is set, <c>start</c> {<c>pos</c>, <c>heading</c>},
     /// <c>gates</c> and <c>sequence</c>.

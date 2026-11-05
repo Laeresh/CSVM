@@ -71,11 +71,11 @@ public class StuntBotObjectiveTests
 
         // ABLE-TO-FAIL CONTROL: in the cone, tracking toward the entry, it starts the run there.
         var run = bot.Decide(zones, FirstNear + new Vector3(10, 0, 500), North, zoneRun: false);
-        Assert.True(run is { Leg: StuntBotLeg.Run, StartsRun: true, Zone: 0, FarEnd: false });
+        Assert.True(run is { Leg: StuntBotLeg.Run, Start: not StuntBotStart.None, Zone: 0, FarEnd: false });
         Assert.Equal(FirstNear, run.Point);
 
         // While the pilot flies it the order holds without starting another.
-        Assert.True(bot.Decide(zones, FirstFar, North, zoneRun: true) is { Leg: StuntBotLeg.Run, StartsRun: false });
+        Assert.True(bot.Decide(zones, FirstFar, North, zoneRun: true) is { Leg: StuntBotLeg.Run, Start: StuntBotStart.None });
     }
 
     [Fact]
@@ -341,7 +341,7 @@ public class StuntBotObjectiveTests
         bot.Returned();
         var start = new Vector3(0, 15, -StuntMission.EntryLeadInM - 400);
         var flies = bot.Decide(zones, start, -North, zoneRun: false);
-        Assert.True(flies is { Leg: StuntBotLeg.Run, StartsRun: true, Zone: 0, FarEnd: false });
+        Assert.True(flies is { Leg: StuntBotLeg.Run, Start: not StuntBotStart.None, Zone: 0, FarEnd: false });
         Assert.Same(zones[0].Route, flies.Ribbon);
         Assert.True(flies.Ribbon!.EndTangentInto(false).Normalized().IsEqualApprox(Vector3.Back));
 
@@ -352,7 +352,7 @@ public class StuntBotObjectiveTests
 
         // ABLE-TO-FAIL CONTROL: closer to the gate than the rail needs, it does not.
         bot.Returned();
-        Assert.True(bot.Decide(zones, beside + new Vector3(0, 0, 100), -North, zoneRun: false) is { StartsRun: false });
+        Assert.True(bot.Decide(zones, beside + new Vector3(0, 0, 100), -North, zoneRun: false) is { Start: StuntBotStart.None });
 
         // ABLE-TO-FAIL CONTROL: once the first entry is flown the next is the pick.
         zones[0].Completed = true;

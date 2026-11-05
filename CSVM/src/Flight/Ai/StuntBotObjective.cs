@@ -44,9 +44,6 @@ public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 P
     /// <summary>How this step starts a run, which the pilot takes as its danger-zone run.</summary>
     public StuntBotStart Start { get; init; }
 
-    /// <summary>Whether this step starts a run, either way.</summary>
-    public bool StartsRun => Start != StuntBotStart.None;
-
     /// <summary>The ribbon a started run flies: the zone's route, with a lead-in before its entry where
     /// the zone needs one (<see cref="StuntBotObjective.LeadInFor"/>).</summary>
     public DangerZoneRibbon? Ribbon { get; init; }

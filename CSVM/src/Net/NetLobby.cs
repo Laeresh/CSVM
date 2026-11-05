@@ -176,7 +176,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 
     /// <summary>The Stunt Race host's latest course, or null while none has arrived and once the
     /// host's word is that it flies the Danger Zones.</summary>
-    public LobbyCourseMessage? Course { get; private set; }
+    public LobbyCourseMessage? LobbyCourse { get; private set; }
 
     /// <summary>The advert this end hands out, or null while it hands out none.</summary>
     public SessionAdvertMessage? Advertising => _advertising;
@@ -690,13 +690,13 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             return true;
         }
 
-        // ⚠ Only a guest takes a course, and a guest is linked to its host alone. A host that
-        // advertises drops one, so no guest can push a course through it.
+        // ⚠ Do not take a course on a host that advertises, or a guest could push one through it.
+        // A guest takes its course from its host alone, the one end it is linked to.
         if (LobbyCourseMessage.TryRead(payload, out var course))
         {
             if (_advertising == null)
             {
-                Course = course.IsNone ? null : course;
+                LobbyCourse = course.IsNone ? null : course;
             }
 
             return true;

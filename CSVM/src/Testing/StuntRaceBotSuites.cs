@@ -406,7 +406,7 @@ internal static class StuntRaceBotSuites
             }
 
             double clock = (GameClock.Current?.Time ?? 0.0) - start;
-            ctx.Check(clock > 60.0, $"ABLE-TO-FAIL CONTROL: [{cell}] the sim clock the rings move on advanced {clock:0.0} s over {steps} steps");
+            ctx.Check(clock > 60.0, $"ABLE-TO-FAIL CONTROL: [{cell}] the sim clock the rings move on advanced {CourseFlight.Seconds((float)clock)} s over {steps} steps");
             for (int b = 0; b < racers.Length; b++)
             {
                 var w = watched[b];
@@ -512,7 +512,7 @@ internal static class StuntRaceBotSuites
             bool shot = target.Status == DestructibleRegistry.State.Destroyed && target.LastShooter == bot.PlayerIndex;
             ctx.Check(shot, $"[{cell}] the bot's own rounds destroy '{target.Def.Name}' ({target.Status} by {target.LastShooter}, {flown} steps, {crashes} crash(es))");
             ctx.Check(travel is { } t && t.Dot(way) > 0f,
-                $"[{cell}] the bot crosses the gate against its heading, the way the reverse entry names ({(travel == null ? "not crossed" : $"travel along the line {travel.Value.Dot(way):0.00}")}, {flown} steps)");
+                $"[{cell}] the bot crosses the gate against its heading, the way the reverse entry names ({(travel == null ? "not crossed" : $"travel along the line {travel.Value.Dot(way).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}")}, {flown} steps)");
         }
         finally
         {
@@ -566,7 +566,7 @@ internal static class StuntRaceBotSuites
             var entry = course.Sequence[i];
             int g = course.Gates.ToList().FindIndex(x => x.Id == entry.GateId);
             var gate = course.Gates[g];
-            seen.Order.Add($"{zone.DzName}:{gate.Id}@{zone.CompletedAt:0.0}");
+            seen.Order.Add($"{zone.DzName}:{gate.Id}@{CourseFlight.Seconds(zone.CompletedAt)}");
             seen.OutOfOrder += i == zone.CompletionOrder ? 0 : 1;
             var way = gate.FlownWay(entry.Direction);
             seen.WrongWay += zone.ExitTravel.Dot(way) > 0f ? 0 : 1;

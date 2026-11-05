@@ -19,10 +19,6 @@ internal static class CourseLaunchSuites
     private const string Chapter = "C1";
     private const string Sample = "sample_out_and_back";
 
-    // How far short of a gate the aircraft is placed, and how many steps it may take to cross.
-    private const float LeadM = 8f;
-    private const int CrossSteps = 20;
-
     [Suite("course-launch",
         "the shipped sample course lists and loads from res:// and a game-folder file of its name wins "
         + "it; a --det --stunt --course= C1 session spawns on the start point, draws the gates and flies "
@@ -160,7 +156,7 @@ internal static class CourseLaunchSuites
             // Each pass below starts inside a Danger Zone marker's radius of the gate centre.
             int photographs = 0;
             plane.StuntShots = new StuntCapture(run, Chapter, _ => ++photographs > 0);
-            ctx.Check(LeadM < StuntMission.DzRadius, $"each pass starts {LeadM} m from the gate centre, inside the {StuntMission.DzRadius} m camera radius");
+            ctx.Check(CourseFlight.LeadM < StuntMission.DzRadius, $"each pass starts {CourseFlight.LeadM} m from the gate centre, inside the {StuntMission.DzRadius} m camera radius");
 
             Step(plane, 5);
             Ground(ctx, pane, course);
@@ -170,8 +166,8 @@ internal static class CourseLaunchSuites
 
             // Out of order and the wrong way: the second entry's gate, then the first gate backwards.
             var first = course.Sequence[0];
-            Through(plane, run, course, course.Sequence[1]);
-            Through(plane, run, course, first with { Direction = Flip(first.Direction) });
+            CourseFlight.Through(() => Step(plane, 1), plane, run, course, course.Sequence[1]);
+            CourseFlight.Through(() => Step(plane, 1), plane, run, course, first with { Direction = Flip(first.Direction) });
             ctx.Check(run.CompletedCount == 0 && run.Elapsed == 0f,
                 $"ABLE-TO-FAIL CONTROL: the second entry's gate and the first gate flown backwards count nothing, and the clock stands at {run.Elapsed}");
 
@@ -180,7 +176,7 @@ internal static class CourseLaunchSuites
             for (int i = 0; i < course.Sequence.Count; i++)
             {
                 var entry = course.Sequence[i];
-                bool crossed = Through(plane, run, course, entry);
+                bool crossed = CourseFlight.Through(() => Step(plane, 1), plane, run, course, entry);
                 ctx.Check(crossed && run.CompletedCount == i + 1,
                     $"entry {i + 1}, {entry.GateId} {entry.Direction}, counts in order: {run.CompletedCount}/{run.TotalCount}, crashed={plane.Crashed}");
                 if (i == 0)
@@ -222,24 +218,6 @@ internal static class CourseLaunchSuites
         }
     }
 
-    // The aircraft placed short of the entry's gate centre and flown through it the entry's way, at
-    // the gate's pose now. True once the run counts a further entry.
-    private static bool Through(FlightController plane, StuntMission run, Course course, SequenceEntry entry)
-    {
-        var gate = course.Gates.First(x => x.Id == entry.GateId);
-        var centre = CourseGateShape.OpeningCentre(gate);
-        float lead = entry.Direction == GateDirection.Forward ? LeadM : -LeadM;
-        var pose = CourseMotion.Pose(gate, run.SimSeconds());
-        plane.RespawnAt(pose * (centre + (Vector3.Back * lead)), pose * (centre + (Vector3.Forward * lead)));
-        int before = run.CompletedCount;
-        for (int i = 0; i < CrossSteps && run.CompletedCount == before; i++)
-        {
-            Step(plane, 1);
-        }
-
-        return run.CompletedCount > before;
-    }
-
     // The solo board's record, read back from the file. The course key holds the run's total and
     // penalty count; the seeded Danger Zone entry is the only other key.
     private static void Recorded(TestContext ctx, string scores, string dzKey, string courseKey, StuntMission run)
@@ -275,7 +253,7 @@ internal static class CourseLaunchSuites
         var flashes = new string?[run.TotalCount];
         for (int i = 0; i < run.TotalCount; i++)
         {
-            Through(plane, run, course, course.Sequence[i]);
+            CourseFlight.Through(() => Step(plane, 1), plane, run, course, course.Sequence[i]);
             flashes[i] = hud.FlashLine;
             if (i == 1)
             {
@@ -345,7 +323,7 @@ internal static class CourseLaunchSuites
                 float? best = ScoreStore.Load(scores).GetBest(key);
                 ctx.Check(opened && crossed == course.Sequence.Count && key.StartsWith($"course/{Chapter}/{Sample}/{course.Hash}/", StringComparison.Ordinal)
                         && best is > 0f && best == board,
-                    $"[{cell}] seat {i} crosses {crossed} of {course.Sequence.Count} entries and records its best under '{key}' ({Seconds(best)}, board {Seconds(board)})");
+                    $"[{cell}] seat {i} crosses {crossed} of {course.Sequence.Count} entries and records its best under '{key}' ({CourseFlight.Seconds(best)}, board {CourseFlight.Seconds(board)})");
             }
 
             if (seats[1] is { IsBotSeat: true })
@@ -392,8 +370,6 @@ internal static class CourseLaunchSuites
         ctx.Check(Top() == CoursePylonCut.NoClipM && RightTop() == CoursePylonCut.NoClipM,
             $"[{cell}] the bot's rerun stands every course pylon whole, the other racer's cut included");
     }
-
-    private static string Seconds(float? time) => time?.ToString("0.000", CultureInfo.InvariantCulture) ?? "none";
 
     private static GateDirection Flip(GateDirection d) => d == GateDirection.Forward ? GateDirection.Reverse : GateDirection.Forward;
 

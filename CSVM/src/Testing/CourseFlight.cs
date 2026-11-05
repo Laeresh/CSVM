@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
@@ -12,16 +13,24 @@ namespace CSVM.Testing;
 /// entry's gate and stepped through it, every session stepping together.</summary>
 internal static class CourseFlight
 {
-    // How far short of a gate the aircraft is placed, and how many steps it may take to cross.
-    private const float LeadM = 8f;
+    /// <summary>How far short of a gate the aircraft is placed.</summary>
+    internal const float LeadM = 8f;
+
+    // How many steps the aircraft may take to cross.
     private const int CrossSteps = 20;
 
     // Generous against the start gate, the opening's five seconds and any retransmission.
     private const int StepLimit = 1200;
 
+    /// <summary><see cref="Through(Action, FlightController, StuntMission, Course, SequenceEntry)"/>
+    /// with every session in <paramref name="peers"/> stepping together.</summary>
+    internal static bool Through(GameSession[] peers, FlightController plane, StuntMission run, Course course, SequenceEntry entry) =>
+        Through(() => Step(peers), plane, run, course, entry);
+
     /// <summary>The aircraft placed short of the entry's gate centre and flown through it the
-    /// entry's way, at the gate's pose now. True once the run counts a further entry.</summary>
-    internal static bool Through(GameSession[] peers, FlightController plane, StuntMission run, Course course, SequenceEntry entry)
+    /// entry's way, at the gate's pose now, one <paramref name="step"/> at a time. True once the run
+    /// counts a further entry.</summary>
+    internal static bool Through(Action step, FlightController plane, StuntMission run, Course course, SequenceEntry entry)
     {
         var gate = course.Gates.First(x => x.Id == entry.GateId);
         var centre = CourseGateShape.OpeningCentre(gate);
@@ -31,7 +40,7 @@ internal static class CourseFlight
         int before = run.CompletedCount;
         for (int i = 0; i < CrossSteps && run.CompletedCount == before; i++)
         {
-            Step(peers);
+            step();
         }
 
         return run.CompletedCount > before;
@@ -48,6 +57,9 @@ internal static class CourseFlight
 
         return condition();
     }
+
+    /// <summary>A time in seconds to three places, "none" for no time.</summary>
+    internal static string Seconds(float? time) => time?.ToString("0.000", CultureInfo.InvariantCulture) ?? "none";
 
     // Each session's own clock is framed first, as its rendered frame does.
     private static void Step(GameSession[] peers)

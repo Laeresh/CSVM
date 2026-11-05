@@ -868,8 +868,8 @@ internal static class MenuOriginalConnectionSuites
         }
 
         // Both doors list the shipped courses, as a --det launch does.
-        hostDoor.Courses = DogfightLobby.ShippedCourseChoices;
-        guestDoor.Courses = DogfightLobby.ShippedCourseChoices;
+        hostDoor.Courses = CourseLibrary.ShippedChoices;
+        guestDoor.Courses = CourseLibrary.ShippedChoices;
         var ends = new List<End>();
         var hostExits = new List<MenuExit>();
         var guestExits = new List<MenuExit>();
@@ -3582,8 +3582,8 @@ internal static class MenuOriginalConnectionSuites
         return picked;
     }
 
-    // The Environment list greys the chapters with no Danger Zones, and every Mission Option but the
-    // Time box greys on the host. A typed Time reaches the guest.
+    // The Environment list greys a chapter with neither Danger Zones nor a course, and every Mission
+    // Option but the Time box greys on the host. A typed Time reaches the guest.
     private static void GreyedForTheRace(TestContext ctx, End host, End guest, List<End> ends)
     {
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
@@ -3597,7 +3597,16 @@ internal static class MenuOriginalConnectionSuites
         }
 
         ctx.Check(matches && Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0") is { Enabled: false },
-            $"the Environment list greys Above the Clouds and offers every chapter with a course ({string.Join(", ", offered)})");
+            $"ABLE-TO-FAIL CONTROL: the Environment list greys Above the Clouds, with neither Danger Zones nor a course, and offers every chapter with Danger Zones ({string.Join(", ", offered)})");
+
+        // A game-folder course on Above the Clouds offers it the race too.
+        var aloft = CourseLibrary.ShippedChoices("C1")[0] with { Chapter = "C1C" };
+        host.Door.Courses = chapter => chapter == "C1C" ? new[] { aloft } : CourseLibrary.ShippedChoices(chapter);
+        Pump(host);
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0") is { Enabled: true },
+            $"the Environment list offers Above the Clouds once it has a course ({Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0")?.Enabled})");
+        host.Door.Courses = CourseLibrary.ShippedChoices;
+        Pump(host);
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey + ":4");
 
         string[] greyed =

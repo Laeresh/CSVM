@@ -154,7 +154,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // The multiplayer door, built over the carrier and the master server the spec settles. Its
         // lobby offers the courses a launch would read, as Instant Action does.
         var door = net.OpenDoor(spec);
-        door.Courses = chapter => DogfightLobby.CourseChoices(Flight.Modes.CourseLibrary.ForLaunch(paths().DataRoot, spec.Det), chapter);
+        door.Courses = chapter => Flight.Modes.CourseLibrary.ForLaunch(paths().DataRoot, spec.Det).Choices(chapter);
         host.Features.Add(door);
         host.AddSeat(seat);
         string? reason = host.Select(spec.PresentationOverride);

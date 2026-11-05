@@ -1235,14 +1235,14 @@ public sealed class OriginalPresentation : IMenuPresentation
             // of them or the Danger Zones.
             foreach (var door in guests.Prepend(host))
             {
-                door.Courses = DogfightLobby.ShippedCourseChoices;
+                door.Courses = CSVM.Flight.Modes.CourseLibrary.ShippedChoices;
             }
 
             race.SetMissionType(Spec.DogfightMissionType.StuntRace);
             race.SetEnvironment(DogfightLobby.EnvironmentOf("C1"));
             if (tab == "course")
             {
-                race.SetCourse(DogfightLobby.ShippedCourseChoices("C1").FirstOrDefault());
+                race.SetCourse(CSVM.Flight.Modes.CourseLibrary.ShippedChoices("C1").FirstOrDefault());
             }
 
             NetDoorAid.SettleDogfight(host, guests);

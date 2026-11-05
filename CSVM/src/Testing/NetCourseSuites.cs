@@ -49,7 +49,7 @@ internal static class NetCourseSuites
             return;
         }
 
-        var word = DogfightLobby.WordFor(1, course);
+        var word = Course.WordFor(1, course);
         var moved = course with { Gates = course.Gates.Select((g, i) => i == 0 ? g with { Position = g.Position + (Vector3.Right * MovedM) } : g).ToList() };
         var ambient = NetCombatSuites.Ambient.Save();
         try
@@ -131,7 +131,7 @@ internal static class NetCourseSuites
         ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
         ctx.RequireData(missionZrdr, $"{Chapter}/{SessionSpec.StuntRaceMission} zrdr");
 
-        var choices = DogfightLobby.ShippedCourseChoices(Chapter);
+        var choices = CourseLibrary.ShippedChoices(Chapter);
         if (choices.FirstOrDefault(c => c.Name == Sample) is not { } course)
         {
             ctx.Check(false, $"the lobby offers the shipped course {Chapter}/{Sample} ({string.Join(", ", choices.Select(c => c.Name))})");
@@ -153,9 +153,9 @@ internal static class NetCourseSuites
         }
 
         ctx.Check(picked && guest.Course?.DisplayName == course.DisplayName && guest.LaunchCourse == Sample && host.LaunchCourse == Sample
-                  && guest.CourseWord == host.CourseWord && DogfightLobby.IsStuntRace(guest.Options),
+                  && guest.LobbyCourse == host.LobbyCourse && DogfightLobby.IsStuntRace(guest.Options),
             $"the host's pick reaches the guest's lobby by title ('{guest.Course?.DisplayName}', launch {guest.LaunchCourse ?? "none"}, refusal '{guest.CourseRefusal}')");
-        if (guest.CourseWord is not { } word)
+        if (guest.LobbyCourse is not { } word)
         {
             return;
         }
@@ -206,9 +206,9 @@ internal static class NetCourseSuites
         try
         {
             ends.Add(NetCombatSuites.Ends.Open(ctx, specs[0], mesh[0], isHost: true, HostSeed, roster,
-                course: () => word, courses: new CourseLibrary(CourseLibrary.ShippedRoot, null)));
+                lobbyCourse: () => word, courses: new CourseLibrary(CourseLibrary.ShippedRoot, null)));
             ends.Add(NetCombatSuites.Ends.Open(ctx, specs[1], mesh[1], isHost: false, HostSeed + 1, null,
-                course: () => word, courses: guestLibrary));
+                lobbyCourse: () => word, courses: guestLibrary));
             ctx.Check(ends.All(e => e.Built), $"[{cell}] two sessions build the course race ({string.Join(", ", ends.Select(e => e.Built))})");
             if (!ends.All(e => e.Built))
             {
@@ -244,7 +244,7 @@ internal static class NetCourseSuites
             string key = guestRace.Of(1)?.ScoreKey ?? "";
             float? best = ScoreStore.Load(Path.Combine(root, "scores1.json")).GetBest(key);
             ctx.Check(key.StartsWith($"course/{course.Chapter}/{course.Name}/{course.Hash}/", StringComparison.Ordinal) && best is > 0f,
-                $"[{cell}] the guest's best lands under the host course's hash ('{key}', best {Seconds(best)})");
+                $"[{cell}] the guest's best lands under the host course's hash ('{key}', best {CourseFlight.Seconds(best)})");
         }
         finally
         {
@@ -274,9 +274,9 @@ internal static class NetCourseSuites
         try
         {
             ends.Add(NetCombatSuites.Ends.Open(ctx, hostSpec, mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(2, hostSpec),
-                course: () => DogfightLobby.WordFor(1, course), courses: new CourseLibrary(CourseLibrary.ShippedRoot, null)));
+                lobbyCourse: () => Course.WordFor(1, course), courses: new CourseLibrary(CourseLibrary.ShippedRoot, null)));
             ends.Add(NetCombatSuites.Ends.Open(ctx, Spec(root, 1, course), mesh[1], isHost: false, HostSeed + 1, null,
-                exitSession: () => { }, course: () => bad, courses: new CourseLibrary(shipped, game)));
+                exitSession: () => { }, lobbyCourse: () => bad, courses: new CourseLibrary(shipped, game)));
             string? refusal = ends[1].Session.MenuRefusal;
             ctx.Check(ends[0].Built && !ends[1].Built && refusal?.Contains(reason, StringComparison.Ordinal) == true,
                 $"[{cell}] the host builds and the guest's launch is refused ({ends[0].Built}/{ends[1].Built}: '{refusal}')");
@@ -293,16 +293,16 @@ internal static class NetCourseSuites
 
     private static void LongRace(TestContext ctx, string root, Course course, CourseLibrary hostLibrary)
     {
-        var word = DogfightLobby.WordFor(1, course);
+        var word = Course.WordFor(1, course);
         var specs = new[] { Spec(root, 0, course), Spec(root, 1, course) };
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.1, 0.0, 0.0), new Random(9605));
         var ends = new List<NetCombatSuites.Ends>();
         try
         {
             ends.Add(NetCombatSuites.Ends.Open(ctx, specs[0], mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(2, specs[0]),
-                course: () => word, courses: hostLibrary));
+                lobbyCourse: () => word, courses: hostLibrary));
             ends.Add(NetCombatSuites.Ends.Open(ctx, specs[1], mesh[1], isHost: false, HostSeed + 1, null,
-                course: () => word, courses: new CourseLibrary(Path.Combine(root, "shipped"), Path.Combine(root, "guest"))));
+                lobbyCourse: () => word, courses: new CourseLibrary(Path.Combine(root, "shipped"), Path.Combine(root, "guest"))));
             var peers = ends.Select(e => e.Session).ToArray();
             if (!ends.All(e => e.Built)
                 || peers[0].SeatRigs[0].Controller is not { Stunt: { } hostRun, Race: { } hostRace } host
@@ -326,13 +326,13 @@ internal static class NetCourseSuites
                 var hostSplits = hostRace.Of(seat)?.Line().Splits ?? Array.Empty<float?>();
                 var guestSplits = guestRace.Of(seat)?.Line().Splits ?? Array.Empty<float?>();
                 ctx.Check(guestSplits.Count == course.Sequence.Count && guestSplits.All(s => s != null) && guestSplits.SequenceEqual(hostSplits),
-                    $"seat {seat}'s every split stands on the guest's board as the host holds it ({guestSplits.Count(s => s != null)} of {course.Sequence.Count}, last {Seconds(guestSplits.LastOrDefault())} against {Seconds(hostSplits.LastOrDefault())})");
+                    $"seat {seat}'s every split stands on the guest's board as the host holds it ({guestSplits.Count(s => s != null)} of {course.Sequence.Count}, last {CourseFlight.Seconds(guestSplits.LastOrDefault())} against {CourseFlight.Seconds(hostSplits.LastOrDefault())})");
             }
 
             float? onHost = hostRace.Of(1)?.BestTime;
             float? onGuest = guestRace.Of(1)?.BestTime;
             ctx.Check(guestRun.PenaltyCount == 1 && onHost == guestRun.Elapsed && onGuest == guestRun.Elapsed,
-                $"the guest's time with its touch penalty reads the same on both machines ({guestRun.PenaltyCount} penalty, run {Seconds(guestRun.Elapsed)}, host board {Seconds(onHost)}, guest board {Seconds(onGuest)})");
+                $"the guest's time with its touch penalty reads the same on both machines ({guestRun.PenaltyCount} penalty, run {CourseFlight.Seconds(guestRun.Elapsed)}, host board {CourseFlight.Seconds(onHost)}, guest board {CourseFlight.Seconds(onGuest)})");
 
             string prefix = $"course/{course.Chapter}/{course.Name}/{course.Hash}/";
             var keyed = new[] { (Race: hostRace, Seat: 0, Run: hostRun), (Race: guestRace, Seat: 1, Run: guestRun) };
@@ -342,7 +342,7 @@ internal static class NetCourseSuites
                 string key = race.Of(seat)?.ScoreKey ?? "";
                 float? best = ScoreStore.Load(Path.Combine(root, $"scores{machine}.json")).GetBest(key);
                 ctx.Check(key.StartsWith(prefix, StringComparison.Ordinal) && best == run.Elapsed,
-                    $"machine {machine} records its seat's best under the course key ('{key}', best {Seconds(best)} for a {Seconds(run.Elapsed)} run)");
+                    $"machine {machine} records its seat's best under the course key ('{key}', best {CourseFlight.Seconds(best)} for a {CourseFlight.Seconds(run.Elapsed)} run)");
             }
 
             int shots = (host.StuntShots?.Count ?? 0) + (guest.StuntShots?.Count ?? 0);
@@ -369,7 +369,7 @@ internal static class NetCourseSuites
         var spec = Spec(root, 0, course);
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.1, 0.0, 0.0), new Random(9606));
         var end = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(2, spec),
-            exitSession: () => { }, course: () => DogfightLobby.WordFor(1, course), courses: new CourseLibrary(CourseLibrary.ShippedRoot, null));
+            exitSession: () => { }, lobbyCourse: () => Course.WordFor(1, course), courses: new CourseLibrary(CourseLibrary.ShippedRoot, null));
         try
         {
             string? refusal = end.Session.MenuRefusal;
@@ -407,8 +407,6 @@ internal static class NetCourseSuites
 
         bool back = CourseFlight.Until(peers, () => race.Of(1)?.BestTime != null);
         ctx.Check(opened && crossed == course.Sequence.Count && run.AllComplete && back,
-            $"[{cell}] the guest crosses every entry at the host's gate and its run reaches the board (window open {opened}, {crossed} of {course.Sequence.Count} crossed, best {Seconds(race.Of(1)?.BestTime)})");
+            $"[{cell}] the guest crosses every entry at the host's gate and its run reaches the board (window open {opened}, {crossed} of {course.Sequence.Count} crossed, best {CourseFlight.Seconds(race.Of(1)?.BestTime)})");
     }
-
-    private static string Seconds(float? time) => time?.ToString("0.000", CultureInfo.InvariantCulture) ?? "none";
 }

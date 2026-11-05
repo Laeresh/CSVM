@@ -61,7 +61,7 @@ public sealed class LobbyCourseTests
         Assert.Throws<InvalidOperationException>(() => past.Write(new byte[LobbyCourseMessage.MaxSize + 16]));
 
         // A whole course and the Danger Zones word round trip too.
-        foreach (var sent in new[] { DogfightLobby.WordFor(3, course), LobbyCourseMessage.None(4) })
+        foreach (var sent in new[] { Course.WordFor(3, course), LobbyCourseMessage.None(4) })
         {
             int length = sent.Write(buffer);
             Assert.Equal(sent.Size, length);
@@ -149,7 +149,7 @@ public sealed class LobbyCourseTests
         guests[0].SetReady(true);
         Settle(host, guests, wires);
         Assert.Null(guests[0].Course);
-        Assert.Null(guests[0].CourseWord);
+        Assert.Null(guests[0].LobbyCourse);
         byte before = host.Options.Epoch;
 
         Assert.True(host.SetCourse(course));
@@ -157,7 +157,7 @@ public sealed class LobbyCourseTests
         Assert.Equal(course.Hash, guests[0].Course?.Hash);
         Assert.Equal("Harbour Dash", guests[0].Course?.DisplayName);
         Assert.Equal(string.Empty, guests[0].CourseRefusal);
-        Assert.Equal(host.CourseWord, guests[0].CourseWord);
+        Assert.Equal(host.LobbyCourse, guests[0].LobbyCourse);
         Assert.NotEqual(before, host.Options.Epoch);
         Assert.False(host.Ready);
         Assert.False(guests[0].Ready);
@@ -174,9 +174,9 @@ public sealed class LobbyCourseTests
         Assert.Equal(picked, host.Options.Epoch);
         Assert.True(host.SetCourse(null));
         Settle(host, guests, wires);
-        Assert.Null(host.CourseWord);
+        Assert.Null(host.LobbyCourse);
         Assert.Null(guests[0].Course);
-        Assert.Null(guests[1].CourseWord);
+        Assert.Null(guests[1].LobbyCourse);
     }
 
     [Fact]
@@ -186,21 +186,21 @@ public sealed class LobbyCourseTests
         var course = Harbour();
         var oversize = course with { Title = new string('t', LobbyCourseMessage.MaxSize) };
 
-        Assert.False(DogfightLobby.CourseFits(oversize));
+        Assert.False(Course.FitsWire(oversize));
         Assert.False(host.SetCourse(oversize));
         Assert.False(guests[0].SetCourse(course));
-        Assert.True(DogfightLobby.CourseFits(course));
-        Assert.Null(host.CourseWord);
+        Assert.True(Course.FitsWire(course));
+        Assert.Null(host.LobbyCourse);
 
         // A run longer than a racer line's splits is refused; the longest one fits.
         var entry = course.Sequence[0];
         Assert.False(host.SetCourse(course with { Sequence = Enumerable.Repeat(entry, RaceStandingMessage.MaxZones + 1).ToList() }));
-        Assert.True(DogfightLobby.CourseFits(course with { Sequence = Enumerable.Repeat(entry, RaceStandingMessage.MaxZones).ToList() }));
+        Assert.True(Course.FitsWire(course with { Sequence = Enumerable.Repeat(entry, RaceStandingMessage.MaxZones).ToList() }));
 
         // A word whose JSON does not hash as sent reaches the guest's lobby but flies nothing.
-        wires[0].Tell(1, DogfightLobby.WordFor(1, course) with { Hash = "0000000000000000" });
+        wires[0].Tell(1, Course.WordFor(1, course) with { Hash = "0000000000000000" });
         Settle(host, guests, wires);
-        Assert.NotNull(guests[0].CourseWord);
+        Assert.NotNull(guests[0].LobbyCourse);
         Assert.Null(guests[0].Course);
         Assert.Contains("C1/Harbour is refused", guests[0].CourseRefusal, StringComparison.Ordinal);
 
@@ -220,18 +220,18 @@ public sealed class LobbyCourseTests
     public void ALaunchRefusesAMissingWordAnotherCourseAndAForgedHash()
     {
         var course = Harbour();
-        var word = DogfightLobby.WordFor(1, course);
+        var word = Course.WordFor(1, course);
         var wanted = (course.Chapter, course.Name);
 
-        Assert.Null(DogfightLobby.CourseOf(null, wanted, out string missing));
+        Assert.Null(Course.FromWord(null, wanted, out string missing));
         Assert.Equal("the host's course has not arrived", missing);
-        Assert.Null(DogfightLobby.CourseOf(word, ("C1", "Docks"), out string other));
+        Assert.Null(Course.FromWord(word, ("C1", "Docks"), out string other));
         Assert.Equal("the host's course is C1/Harbour", other);
-        Assert.Null(DogfightLobby.CourseOf(word with { Hash = "0000000000000000" }, wanted, out string forged));
+        Assert.Null(Course.FromWord(word with { Hash = "0000000000000000" }, wanted, out string forged));
         Assert.StartsWith("the host's course C1/Harbour is refused: its gates hash to", forged, StringComparison.Ordinal);
 
         // ABLE-TO-FAIL CONTROL: the right word for the launch's course, matched without case, is taken.
-        Assert.Equal(course.Hash, DogfightLobby.CourseOf(word, ("c1", "HARBOUR"), out string none)?.Hash);
+        Assert.Equal(course.Hash, Course.FromWord(word, ("c1", "HARBOUR"), out string none)?.Hash);
         Assert.Equal(string.Empty, none);
     }
 
@@ -247,11 +247,11 @@ public sealed class LobbyCourseTests
         File.WriteAllText(Path.Combine(_game, "C1", "Long.json"), tooLong.ToJson());
         File.WriteAllText(Path.Combine(_game, "C1", "Broken.json"), "{ \"start\": 3 }");
 
-        var choices = DogfightLobby.CourseChoices(new CourseLibrary(_shipped, _game), "C1");
+        var choices = new CourseLibrary(_shipped, _game).Choices("C1");
 
         Assert.Equal(new[] { "Zed", "Harbour" }, choices.Select(c => c.Name));
         Assert.Equal(new[] { "Airfield Loop", "Harbour Dash" }, choices.Select(c => c.DisplayName));
-        Assert.Empty(DogfightLobby.CourseChoices(new CourseLibrary(_shipped, _game), "C2"));
+        Assert.Empty(new CourseLibrary(_shipped, _game).Choices("C2"));
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public sealed class LobbyCourseTests
         Settle(host, guests, wires);
         Assert.Null(host.Course);
         Assert.Null(host.LaunchCourse);
-        Assert.Null(guests[0].CourseWord);
+        Assert.Null(guests[0].LobbyCourse);
         Assert.Null(guests[0].LaunchCourse);
         Assert.False(host.SetCourse(Harbour()));
 
@@ -310,16 +310,40 @@ public sealed class LobbyCourseTests
     public void AHostThatAdvertisesTakesNoCourseFromAGuest()
     {
         var (_, _, wires) = Lobbies(2, _ => true);
-        var word = DogfightLobby.WordFor(1, Harbour());
+        var word = Course.WordFor(1, Harbour());
         wires[0].Advertise(new SessionAdvertMessage(NetSessionKind.Dogfight, SessionAdvertMessage.NoMission, 1, ""));
         wires[1].Tell(0, word);
         wires[0].Step(0.016);
-        Assert.Null(wires[0].Course);
+        Assert.Null(wires[0].LobbyCourse);
 
         // ABLE-TO-FAIL CONTROL: the same word from the host reaches the guest's lobby.
         wires[0].Tell(1, word);
         wires[1].Step(0.016);
-        Assert.Equal(word, wires[1].Course);
+        Assert.Equal(word, wires[1].LobbyCourse);
+    }
+
+    [Fact]
+    public void AStuntRaceIsOfferedInAChapterWithCoursesAndNoDangerZonesAndFliesItsFirstCourse()
+    {
+        var aloft = Harbour() with { Chapter = "C1C" };
+        int clouds = DogfightLobby.EnvironmentOf("C1C");
+        IReadOnlyList<Course> Listed(string chapter) => chapter == "C1C" ? new[] { aloft } : Array.Empty<Course>();
+        Assert.True(DogfightLobby.Offers(DogfightMissionType.StuntRace, clouds, Listed));
+
+        // ABLE-TO-FAIL CONTROL: a chapter with neither Danger Zones nor a course stays greyed.
+        Assert.False(MenuChapters.DangerZonesFor("C1C"));
+        Assert.False(DogfightLobby.Offers(DogfightMissionType.StuntRace, clouds));
+
+        var (host, guests, wires) = Lobbies(2, _ => true, Listed);
+        Assert.True(host.SetEnvironment(clouds));
+        Settle(host, guests, wires);
+        Assert.Equal(aloft.Hash, host.Course?.Hash);
+        Assert.Equal("Harbour", guests[0].LaunchCourse);
+
+        // No Danger Zones to fly there, so the host may not pick them; another chapter takes them back.
+        Assert.False(host.SetCourse(null));
+        Assert.True(host.SetEnvironment(DogfightLobby.EnvironmentOf("C1")));
+        Assert.Null(host.Course);
     }
 
     private static Course Harbour() => Parse(Json);
@@ -327,7 +351,8 @@ public sealed class LobbyCourseTests
     private static Course Parse(string json) =>
         Course.Parse("C1", "Harbour", json, out string error) ?? throw new InvalidOperationException(error);
 
-    private static (DogfightLobby Host, List<DogfightLobby> Guests, List<NetLobby> Wires) Lobbies(int players, Func<int, bool> seated)
+    private static (DogfightLobby Host, List<DogfightLobby> Guests, List<NetLobby> Wires) Lobbies(int players, Func<int, bool> seated,
+        Func<string, IReadOnlyList<Course>>? courses = null)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
         var wires = new List<NetLobby>();
@@ -336,7 +361,7 @@ public sealed class LobbyCourseTests
             wires.Add(new NetLobby(end));
         }
 
-        var host = new DogfightLobby(wires[0], () => "Host") { Seated = seated };
+        var host = new DogfightLobby(wires[0], () => "Host") { Seated = seated, Courses = courses };
         // A course stands only in its own chapter's Stunt Race.
         host.SetMissionType(DogfightMissionType.StuntRace);
         host.SetEnvironment(DogfightLobby.EnvironmentOf("C1"));

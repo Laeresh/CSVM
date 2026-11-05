@@ -2950,6 +2950,14 @@ public sealed record SessionSpec
             Chapter = Course.Value.Chapter;
             ChapterGiven = true;
             Mission = "IA1";
+
+            // More than one pilot races the course, a Stunt Race on its window as Instant Action's exit names it.
+            if (Players + VsBots.Count > 1)
+            {
+                MissionType = DogfightMissionType.StuntRace;
+                VsKills = VsKillsExplicit ? VsKills : 0;
+                VsTimeMinutes = VsTimeExplicit ? VsTimeMinutes : StuntRaceMinutes;
+            }
         }
     }
 
