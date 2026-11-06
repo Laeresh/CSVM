@@ -217,6 +217,13 @@ public sealed class ControlChannel
             viewport.AddChild(_camera);
         }
 
+        // The default mask takes the spyglass sun's layer, whose shadowless light fills in every
+        // shadow. Draw what the game's camera draws now.
+        if (_stoodDown != null && GodotObject.IsInstanceValid(_stoodDown))
+        {
+            _camera.CullMask = _stoodDown.CullMask;
+        }
+
         if (words.Length > 3)
         {
             _camera.Fov = float.Parse(words[3], CultureInfo.InvariantCulture);
