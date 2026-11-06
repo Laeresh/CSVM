@@ -21,9 +21,9 @@ internal static class ShadowQualitySuites
     {
         (ShadowQualitySetting.Off, false, 0f, 0f, RenderingServer.ShadowQuality.Hard, 4096),
         (ShadowQualitySetting.Low, true, 0f, 1f, RenderingServer.ShadowQuality.SoftLow, 4096),
-        (ShadowQualitySetting.Medium, true, 0.25f, 1f, RenderingServer.ShadowQuality.SoftMedium, 4096),
-        (ShadowQualitySetting.High, true, 0.5f, 1f, RenderingServer.ShadowQuality.SoftHigh, 4096),
-        (ShadowQualitySetting.Ultra, true, 1f, 1f, RenderingServer.ShadowQuality.SoftUltra, 8192),
+        (ShadowQualitySetting.Medium, true, 0.15f, 1f, RenderingServer.ShadowQuality.SoftMedium, 4096),
+        (ShadowQualitySetting.High, true, 0.15f, 1f, RenderingServer.ShadowQuality.SoftHigh, 4096),
+        (ShadowQualitySetting.Ultra, true, 0.15f, 1f, RenderingServer.ShadowQuality.SoftUltra, 8192),
     };
 
     [Suite("display-shadow-quality",
@@ -32,6 +32,7 @@ internal static class ShadowQualitySuites
         + "GPU, Off there at three or four panes under its own source, Ultra under --det everywhere), a key spelling the fallback reads as the default "
         + "and an unknown word at any layer falls through; each of Off, Low, "
         + "Medium, High and Ultra writes its pinned cast switch, angular distance and blur on the sun "
+        + "(0.15 degrees at Medium, High and Ultra, none at Low and Off) "
         + "and hands the renderer its pinned soft filter and atlas (4096 below Ultra, 8192 at Ultra), "
         + "Off handing the renderer nothing; no level's sun is wider than its filter rung holds "
         + "(Ultra 1.0, High 0.5, Medium 0.25 degrees, below that none); the --no-soft-shadows door "
@@ -191,7 +192,7 @@ internal static class ShadowQualitySuites
                 return;
             }
 
-            ctx.Check(light.ShadowEnabled && light.LightAngularDistance == 1f,
+            ctx.Check(light.ShadowEnabled && light.LightAngularDistance == 0.15f,
                 $"the pass's light is built on the sun's Ultra shadow ({light.ShadowEnabled}, {light.LightAngularDistance})");
             int before = ShadowQualitySetting.Revision;
             ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.PlanFor(ShadowQualitySetting.Low), true, false, ignore);
@@ -204,8 +205,8 @@ internal static class ShadowQualitySuites
             ctx.Check(!light.ShadowEnabled, $"Off turns the pass's shadow off with the sun's ({light.ShadowEnabled})");
             ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.PlanFor(ShadowQualitySetting.High), true, false, ignore);
             pass.FollowSunShadow();
-            ctx.Check(light.ShadowEnabled && light.LightAngularDistance == 0.5f,
-                $"and High turns it back on at half a degree ({light.ShadowEnabled}, {light.LightAngularDistance})");
+            ctx.Check(light.ShadowEnabled && light.LightAngularDistance == 0.15f,
+                $"and High turns it back on at 0.15 degrees ({light.ShadowEnabled}, {light.LightAngularDistance})");
         }
         finally
         {
