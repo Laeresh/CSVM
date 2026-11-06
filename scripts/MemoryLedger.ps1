@@ -74,15 +74,16 @@ if ($SelfTest) {
         }
         Assert-Mem $freed "killing the holder frees its reservation"
 
-        # Estimates: the seed with no history, then the highest of the last 20 plus 25 percent.
+        # Estimates: the seed with no history, then the highest of the last 20 plus the margin.
         Assert-Mem ((Get-MemEstimateGB -Kind "capture-xr") -eq $MemSeedGB["capture-xr"]) "a kind with no history is estimated at its seed"
         Add-MemHistory -Kind "perf" -PeakGB 10 -Worktree "selftest"
         for ($i = 1; $i -le 20; $i++) { Add-MemHistory -Kind "perf" -PeakGB 2 -Worktree "selftest" }
         Assert-Mem ((Get-MemEstimateGB -Kind "perf") -eq $MemSeedGB["perf"]) "the older 10 GB peak dropped out, and 20 small peaks never take the estimate below the seed"
         Add-MemHistory -Kind "perf" -PeakGB 6 -Worktree "selftest"
-        Assert-Mem ((Get-MemEstimateGB -Kind "perf") -eq 7.5) "a higher peak raises the estimate"
+        $raised = [math]::Round(6 * $MemEstimateMargin, 2)
+        Assert-Mem ((Get-MemEstimateGB -Kind "perf") -eq $raised) "a higher peak raises the estimate"
         $written = [System.IO.File]::ReadAllText($MemEstimatesFile) | ConvertFrom-Json
-        Assert-Mem ([double]$written.perf -eq 7.5 -and [double]$written."engine-shard" -eq $MemSeedGB["engine-shard"]) "estimates.json carries every kind for the engine"
+        Assert-Mem ([double]$written.perf -eq $raised -and [double]$written."engine-shard" -eq $MemSeedGB["engine-shard"]) "estimates.json carries every kind for the engine"
 
         # An engine-shard peak is learned only from a launch marked a full shard (RunTests.ps1's
         # Get-EngineShardPlan decides which, and its -SelfTest checks that).
