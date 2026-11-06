@@ -36,13 +36,14 @@ public static class ShadowQualitySetting
     /// <summary>A hard-edged sun shadow on a four-tap filter.</summary>
     public const string Low = "low";
 
-    /// <summary>A quarter-degree penumbra on the middle filter rung.</summary>
+    /// <summary>The 0.15-degree penumbra on the middle filter rung.</summary>
     public const string Medium = "medium";
 
-    /// <summary>The real sun's half-degree penumbra on the second filter rung.</summary>
+    /// <summary>The 0.15-degree penumbra on the second filter rung.</summary>
     public const string High = "high";
 
-    /// <summary>The one-degree penumbra on the top filter rung, the enhanced mode's own look.</summary>
+    /// <summary>The 0.15-degree penumbra on the top filter rung and the 8192 atlas, the enhanced
+    /// mode's own look.</summary>
     public const string Ultra = "ultra";
 
     /// <summary>The word a launch with nothing saved runs on a discrete GPU, and under
@@ -74,18 +75,18 @@ public static class ShadowQualitySetting
     /// the GPU and the pane count, never the graphics mode.</summary>
     public static readonly WordSetting Lookup = Register();
 
-    // ⚠ Do not lower a filter rung without narrowing the sun with it. The penumbra is sampled
-    // through a disc rotated per screen pixel, and too few samples weave that rotation over every
-    // lit surface. SoftUltra holds 1.0 degree, SoftHigh 0.5 and SoftMedium 0.25.
-    // ⚠ Keep Ultra's atlas at 8192. It is the map the aircraft's own shadow was judged on under the
-    // one-degree sun; the narrower levels hold that shadow on 4096.
+    // ⚠ Do not widen a sun past 0.2 degrees. Wider, an aircraft's shadow on its own wings breaks
+    // into dots and holes, then vanishes. Each filter rung caps its sun too, past
+    // which its per-pixel sample disc weaves over lit surfaces: SoftUltra 1.0, SoftHigh 0.5, SoftMedium 0.25.
+    // ⚠ Keep Ultra's atlas at 8192, the map the aircraft's own shadow was judged on. The lower
+    // levels hold that shadow on 4096.
     private static readonly SunShadowPlan[] Plans =
     {
         new(false, 0f, 0f, RenderingServer.ShadowQuality.Hard, 4096),
         new(true, 0f, 1f, RenderingServer.ShadowQuality.SoftLow, 4096),
-        new(true, 0.25f, 1f, RenderingServer.ShadowQuality.SoftMedium, 4096),
-        new(true, 0.5f, 1f, RenderingServer.ShadowQuality.SoftHigh, 4096),
-        new(true, 1f, 1f, RenderingServer.ShadowQuality.SoftUltra, 8192),
+        new(true, 0.15f, 1f, RenderingServer.ShadowQuality.SoftMedium, 4096),
+        new(true, 0.15f, 1f, RenderingServer.ShadowQuality.SoftHigh, 4096),
+        new(true, 0.15f, 1f, RenderingServer.ShadowQuality.SoftUltra, 8192),
     };
 
     private static bool? _integrated;
