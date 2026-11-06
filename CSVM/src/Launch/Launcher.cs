@@ -372,7 +372,10 @@ public partial class Launcher : Node3D
         Log.Info("core", $"user={UserData.Root}{(UserData.Portable ? " (portable)" : "")}");
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
-        Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
+        if (EngineLogFileArg() is { } own)
+            Log.Info("core", $"engine log={own} (--log-file)");
+        else
+            Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
         foreach (var (old, replacement) in _spec.Deprecated)
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
@@ -1059,6 +1062,22 @@ public partial class Launcher : Node3D
         _menu.Host?.Tick(MenuStep(delta));
     }
 
+    /// <summary>The path Godot's own <c>--log-file</c> names, or null. ⚠ Read off the process
+    /// command line: Godot consumes that flag, so <c>OS.GetCmdlineArgs()</c> never returns it.</summary>
+    internal static string? EngineLogFileArg()
+    {
+        var args = System.Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--log-file")
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
+    }
+
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
     // writes it here, ExitSession reads it back, and the rule stands in one place.
     // ⚠ Keep it internal rather than private. Nothing instantiates a Launcher headlessly, so the
@@ -1157,7 +1176,9 @@ public partial class Launcher : Node3D
     /// here may take the quit with it.</summary>
     private void MirrorEngineLog()
     {
-        if (Log.SinkPath is not { } sinkPath)
+        // #312: Godot keys the default log on the project name, so every worktree shares it. A run
+        // given its own --log-file has nothing here to copy.
+        if (Log.SinkPath is not { } sinkPath || EngineLogFileArg() != null)
         {
             return;
         }

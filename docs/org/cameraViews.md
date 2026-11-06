@@ -376,9 +376,35 @@ The axis itself is the tail of `FUN_0042d010`. Key `0x43` (**External Camera Zoo
 `+` in the shipped table, [input.md](input.md)) drives the target `DAT_0064ef30` toward `0` at
 `2·dt`, key `0x44` (**Zoom Out**, numpad `−`) toward `1` at the same rate, clamped `[0, 1]`; the
 shown value `DAT_0064ef38` then eases toward it at `1.5/s`. Zoom In is the dead direction at rest.
-Three sites put the axis back to `0`: camera init (`FUN_0042b730` at `0042b779`), entering chase
-mode `0` from any other mode (`FUN_0042c280` at `0042c33d`), and the head-look centre key `0x3e`
-in free-look. Nothing else writes it, so a mode change always returns the pilot to the near end.
+Three sites put the axis back to `0`, and they differ in what they write:
+
+- **Camera init** (`FUN_0042b730`) writes the shown value `DAT_0064ef38` at `0042b779` and the
+  target `DAT_0064ef30` at `0042b783`, so the view opens at the near end with nothing to ease.
+- **Entering chase mode `0` from any other mode** (`FUN_0042c280`) writes both as well, `0042c33d`
+  and `0042c347`, so the view **snaps** to the near end. The test is the new mode alone
+  (`TEST EAX,EAX` / `JZ 0042c33d` at `0042c31f`); the `00621380` from/to table only raises the
+  placement flag `DAT_0064ef2c` and gates nothing here. A call naming the mode the camera already
+  holds returns at `0042c28f` before any of it, so it resets nothing.
+- **The head-look centre key `0x3e`** writes the target alone at `0042d566`, beside the two
+  angles, so the shown value eases back at `1.5/s`. Its flag `[EBP-1]` (set at `0042d3b3`) is read
+  only at `0042d547`, inside the free-look arm (`DAT_0064ef68 == 1`, `0042d4c6`), and only on a
+  frame with no direction held. In snap (state `0`) the centre key leaves the zoom alone, and
+  padlock discards the slot outright (below).
+
+Nothing else writes the axis, so every mode change into the chase view returns the pilot to the
+near end.
+
+**Which flows reach the mode-`0` entry.** The player's own destroy definition raises code `3` at
+its head (`0047e0ec`): `FUN_0042c280(0)` at `0047e0fe`, called only while the selection is not
+already `0`, so a pilot shot down in the chase view keeps the zoom and one shot down in the cockpit
+or the nose has it snap to the near end. The respawn does not go through mode `0` from the death
+camera. The multiplayer return step `FUN_00470a10` first runs the restore `FUN_00480480`, which
+moves a camera left in the crash (`5`) or death (`8`) mode to the cockpit (`FUN_0042c280(6)` at
+`00480508`, and the same test at `00480620`). Entering `6` takes the head-only tail at `0042c351`.
+The step then places the aircraft (`FUN_004969b0`) and re-selects `DAT_0071c300` at `00470ad0`.
+That global has one writer, the death report `FUN_00498a90`, which saves the selection at
+`00498ae8` when the death is reported. A saved `0` therefore enters chase from the cockpit and
+snaps the zoom again. Single player has no respawn at all: code `12` ends the mission.
 
 ⚠ **The easing dt is WALL time, not a fixed step.** `FUN_00460490` multiplies its rate by
 `DAT_009ad744`, and `FUN_0059c0c0` (`0059c0c0`-`0059c141`) builds that global once per rendered
@@ -396,20 +422,17 @@ whole, so the transient is never inverted and the blended bounds are never forme
 
 **Remake-only: Keep Camera Zoom** (Game Options, on by default, `Utils/CameraZoomMemory.cs`). On,
 none of the three resets above applies, and this machine's first player's zoom is saved in the
-options file when its target settles and restored at camera init. Off, the port's resets return the
-target to `0` and the shown value eases after it at its own rate; nothing is saved. The other
+options file when its target settles and restored at camera init. Off, the port resets as the
+original does: a selection into Chase from Cockpit, Nose or the flyby snaps both values to `0`, the
+destroy callback's return (`CameraController.ResetToChase`) snaps them only when it changes the
+selection, and the free-look centre key resets the target alone; nothing is saved. The other
 splitscreen panes keep their zoom through the resets while it is on, but each camera init opens them at
 the near end. `--det` reads neither key, so a golden flies the option on at the near end.
 
-⚠ **Open question, not yet read in the binary: what the resets write, and which entries count.**
-Two parts of the off path are the port's reading, not a decode. (1) Whether `0042b779`,
-`0042c33d` and the centre slot write the target `DAT_0064ef30` alone or also the shown value
-`DAT_0064ef38`; the port writes the target alone, so its shown value eases back at `1.5/s` rather
-than snapping. (2) Which port events are "entering mode `0` from another mode": the port resets on a
-selection into Chase from Cockpit, Nose or the flyby, and on the destroy callback's return to the
-chase view (`ResetToChase`), reading the death camera (mode `8`) or the crash cut (mode `5`) as the
-mode being left. Whether the original's respawn reaches `FUN_0042c280` with mode `0` from `8` or
-`5`, and so reaches `0042c33d`, is unestablished.
+⚠ **Undecoded: the order of code `3` and the death report.** Whether `FUN_00498a90` saves the
+selection before or after code `3` moves it to `0` decides whether a multiplayer pilot shot down in
+the cockpit respawns in the cockpit or behind the aeroplane. The port respawns every pilot in the
+selection `ResetToChase` left, the chase view.
 
 ## The chase rig
 
