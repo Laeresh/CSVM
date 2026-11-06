@@ -251,17 +251,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
 
         try
         {
-            var wav = WavFile.Parse(_cueFiles.Read(path) ?? throw new FileNotFoundException(path));
-            var data = new byte[wav.Samples.Length * 2];
-            Buffer.BlockCopy(wav.Samples, 0, data, 0, data.Length);
-            return new AudioStreamWav
-            {
-                Data = data,
-                Format = AudioStreamWav.FormatEnum.Format16Bits,
-                MixRate = wav.SampleRate,
-                Stereo = wav.Channels == 2,
-                LoopMode = AudioStreamWav.LoopModeEnum.Disabled,
-            };
+            return SoundArchive.WavStream(WavFile.Parse(_cueFiles.Read(path) ?? throw new FileNotFoundException(path)), looped: false);
         }
         catch (Exception e) when (e is IOException or InvalidDataException or FormatException or ArgumentException)
         {
