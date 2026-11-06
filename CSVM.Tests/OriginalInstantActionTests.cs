@@ -46,8 +46,9 @@ public class OriginalInstantActionTests
                 OriginalInstantActionScreen.WingmanPlaneKey,
                 OriginalInstantActionScreen.LivesKey, OriginalInstantActionScreen.MissionKey,
                 OriginalInstantActionScreen.EnvironmentKey, OriginalInstantActionScreen.RaceTimeKey,
+                OriginalInstantActionScreen.RaceBotsKey,
                 "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
-                OriginalInstantActionScreen.RaceBotsKey, OriginalInstantActionScreen.CourseKey,
+                OriginalInstantActionScreen.CourseKey,
                 OriginalInstantActionScreen.PageUpKey, OriginalInstantActionScreen.PageDownKey,
                 OriginalInstantActionScreen.PlayerRadioKey, OriginalInstantActionScreen.WingmanRadioKey,
                 OriginalInstantActionScreen.WeaponLoadoutKey,
@@ -494,7 +495,8 @@ public class OriginalInstantActionTests
         Assert.Equal((520f, 310f, 110f, 20f), Rect(shown));
         Assert.Equal("5 minutes", shown.Label);
         Assert.Equal(OriginalInstantActionScreen.EnvironmentKey, host.Rows[index - 1].Key);
-        Assert.Equal("IA_D_NENEMY0", host.Rows[index + 1].Key);
+        Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.Rows[index + 1].Key);
+        Assert.Equal("IA_D_NENEMY0", host.Rows[index + 2].Key);
         Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.RaceTimeKey && r.Visible && Overlaps(r, shown));
         var board = Compose(host);
         Assert.Contains(board.Lines, l => l.Text == "Race Time:" && l.X == 420f && l.Y == 310f);
@@ -546,7 +548,7 @@ public class OriginalInstantActionTests
         int index = host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.RaceBotsKey);
         Assert.False(host.Rows[index].Visible);
         Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.RaceBotsKey));
-        Assert.DoesNotContain(Compose(host).Lines, l => l.Text == "Race Bots:");
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text == "Bots:");
 
         // A row left on the join board shows it at the same index, off. The run stays solo, with its
         // lives box and no race time box, and its exit leaves the row on the board.
@@ -556,9 +558,11 @@ public class OriginalInstantActionTests
         Assert.True(toggle.Visible);
         Assert.Equal(1, toggle.Column);
         Assert.Equal("Off", toggle.Label);
-        Assert.Equal((520f, 380f, 60f, 20f), Rect(toggle));
+        // On the lives box's line, ending where the mission dropdown ends (520 + 210). Its title
+        // stands one wingman-row gap (10) past the race time box.
+        Assert.Equal((685f, 310f, 45f, 20f), Rect(toggle));
         Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.RaceBotsKey && r.Visible && Overlaps(r, toggle));
-        Assert.Contains(Compose(host).Lines, l => l.Text == "Race Bots:" && l.X == 420f && l.Y == 380f);
+        Assert.Contains(Compose(host).Lines, l => l.Text == "Bots:" && l.X == 640f && l.Y == 310f);
         Assert.True(Row(host, OriginalInstantActionScreen.LivesKey).Visible);
         Assert.False(Row(host, OriginalInstantActionScreen.RaceTimeKey).Visible);
         Assert.Null(Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey)).Bots);
@@ -574,14 +578,15 @@ public class OriginalInstantActionTests
         var race = Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey));
         Assert.Equal(1, race.Bots?.Count);
 
-        // The cursor walks onto it and off it as drawn. This layout stacks it under the enemy
-        // block, which the race blanks, so Down from the environment meets the race time box first.
+        // The line walks in reading order. Down from the race time box and Up from the mission type
+        // reach the toggle. Up from it returns to the race time box.
         host.FocusKey(OriginalInstantActionScreen.EnvironmentKey);
         Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Press(0, 1));
         Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.Press(0, 1));
         Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Press(0, -1));
         Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.Press(0, 1));
-        Assert.Equal(OriginalInstantActionScreen.WeaponLoadoutKey, host.Press(0, 1));
+        host.FocusKey(OriginalInstantActionScreen.MissionKey);
+        Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.Press(0, -1));
 
         // Another mission type hides it with the pick kept, and its exit carries no row.
         Hover(host, OriginalInstantActionScreen.MissionKey);
@@ -596,14 +601,14 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
-    public void TheCourseBoxShowsForASoloStuntRunAndAPickedCourseFliesAloneOrHidesForABotRow()
+    public void TheCourseBoxShowsForAStuntRunAndAPickedCourseFliesWithTheBoardsRacingBots()
     {
         var host = OpenSeated(out var ia, out var setup, code => code == "C5" ? new[] { ("harbour_dash", "harbour_dash") } : Array.Empty<(string, string)>());
         Assert.False(Row(host, OriginalInstantActionScreen.CourseKey).Visible);
         Click(host, 1);
         Assert.Equal(("stunt_flying", "C5"), (ia.MissionType.Key, ia.Environment.Code));
 
-        // Solo stunt flying in a chapter with a course: the box stands on the race toggle's line on Danger Zones.
+        // Solo stunt flying in a chapter with a course: the box stands alone on the second line on Danger Zones.
         var box = Row(host, OriginalInstantActionScreen.CourseKey);
         Assert.True(box.Visible && box.Enabled);
         Assert.Equal(InstantActionFeature.DangerZonesLabel, box.Label);
@@ -625,13 +630,20 @@ public class OriginalInstantActionTests
         Assert.Equal(("C5", "harbour_dash"), (exit.Chapter, exit.Course));
         Assert.Null(exit.InstantAction);
 
-        // A bot row on the board withdraws the box for the race toggle, and the launch flies the zones.
+        // A bot row keeps the box, the race toggle standing on the line above it. Racing the bot
+        // flies the course with it, the waves still blank.
         Assert.True(setup.AddBot());
-        Assert.False(Row(host, OriginalInstantActionScreen.CourseKey).Visible);
-        Assert.True(Row(host, OriginalInstantActionScreen.RaceBotsKey).Visible);
-        Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.CourseKey));
-        Assert.True(Row(host, "IA_D_NENEMY0").Enabled);
-        Assert.Null(Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey)).Course);
+        var kept = Row(host, OriginalInstantActionScreen.CourseKey);
+        var toggle = Row(host, OriginalInstantActionScreen.RaceBotsKey);
+        Assert.True(kept.Visible && toggle.Visible);
+        Assert.Equal((520f, 380f, 210f, 20f), Rect(kept));
+        Assert.True(toggle.Y < kept.Y);
+        Assert.DoesNotContain(host.Rows, r => r.Visible && r.Key != toggle.Key && Overlaps(r, toggle));
+        ia.RaceBots = true;
+        Assert.True(Row(host, OriginalInstantActionScreen.RaceTimeKey).Visible);
+        Assert.False(Row(host, "IA_D_NENEMY0").Enabled);
+        var race = Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey));
+        Assert.Equal(("harbour_dash", 1), (race.Course, race.Bots?.Count));
     }
 
     [Fact]

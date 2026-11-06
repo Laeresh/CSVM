@@ -56,9 +56,10 @@ internal static class MenuInstantActionSuites
         + "and its pick riding the def into the session spec. The lives box, which a race does not spend, "
         + "hides with its title as the pilot joins and returns with its count under another type, and a "
         + "cursor left on the lives box lifts to the live box above it. The race also blanks the wingman "
-        + "and enemy boxes. A bot row on the join board shows the remake-only race toggle, off, on the clear line "
-        + "over the enemy block, reached by Down from the environment, flipped in place by a sideways press and left "
-        + "by Down for Weapon Loadout, and its removal hides it.")]
+        + "and enemy boxes. A bot row on the join board shows the remake-only race toggle, off, titled Bots: beside "
+        + "the race time box on its line and ending where the mission dropdown ends, reached by Up from the mission "
+        + "type and by Down from the race time box, "
+        + "flipped in place by a sideways press and left by Down for the mission type, and its removal hides it.")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -125,8 +126,9 @@ internal static class MenuInstantActionSuites
         + "sample_out_and_back by its title, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
         + "Mission leaves as a LaunchExit naming the course by file name with no def whose session spec matches "
         + "--stunt --course=C1/sample_out_and_back on the course, chapter, mission, mode, pilots, plane, def and "
-        + "bots, the load and pause boards' heading is the title, a bot row on the join board withdraws the box and "
-        + "flies the Danger Zones, and a menu-driven "
+        + "bots, the load and pause boards' heading is the title, a second pilot and a racing bot row keep the box on a "
+        + "line of its own with the race toggle beside the race time box, and leave as that course raced by both seats and "
+        + "the bot whose spec matches --stunt --course= --players=2 --vs-bot in the picked window, and a menu-driven "
         + "session over a course no library holds fails its build with the reason for the menu rather than "
         + "quitting, the return landing back on the Instant Action screen with that reason in its warning box")]
     internal static void MenuInstantActionCourse(TestContext ctx)
@@ -174,7 +176,7 @@ internal static class MenuInstantActionSuites
                 return;
             }
 
-            CourseWithdrawn(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), exits);
+            CourseRaced(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), ia, exits);
             CourseRefused(ctx, host, shell, original!, exit);
         }
         finally
@@ -309,19 +311,74 @@ internal static class MenuInstantActionSuites
         return exit;
     }
 
-    // A bot row on the join board takes the line from the Course box, and the launch flies the zones.
-    private static void CourseWithdrawn(
-        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, PlayerSetupFeature setup, List<MenuExit> exits)
+    // A second pilot and a racing bot row keep the Course box. The race time box and the race toggle
+    // share the first clear line, and the Course box has the second alone. The launch races the
+    // picked course with both seats and the bot in the picked window.
+    private static void CourseRaced(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, PlayerSetupFeature setup,
+        InstantActionFeature ia, List<MenuExit> exits)
     {
+        const string sample = "sample_out_and_back";
         host.Show(MenuReturnDestination.InstantAction);
-        ctx.Check(setup.AddBot(), $"a bot row joins the board");
-        ctx.Check(Row(shell, OriginalInstantActionScreen.CourseKey) is { Visible: false } && Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: true },
-            $"and the race toggle takes the Course box's line");
+        var guest = new ScriptedSeat();
+        var joined = setup.Join(guest);
+        ctx.Check(joined != null && setup.AddBot(), $"a second pilot joins and a bot row joins the board ({host.Seats.Count}, {setup.Bots.Count})");
+        ia.RaceBots = true;
+        var time = Row(shell, OriginalInstantActionScreen.RaceTimeKey);
+        var toggle = Row(shell, OriginalInstantActionScreen.RaceBotsKey);
+        var course = Row(shell, OriginalInstantActionScreen.CourseKey);
+        ctx.Check(ia.Course == sample && time is { Visible: true } && toggle is { Visible: true, Label: "On" } && course is { Visible: true, Enabled: true },
+            $"the Course box stays with the race time box and the race toggle ({ia.Course}, {time?.Visible}, {toggle?.Visible}, {course?.Visible})");
+        ctx.CheckShipped(time is { X: 525f, Y: 257.5f, Width: 110f } && toggle is { X: 690f, Y: 257.5f, Width: 45f } && course is { X: 525f, Y: 327.5f, Width: 210f },
+            $"on the install the race toggle stands beside the race time box at 690, 257.5 and the Course box alone at 525, 327.5 ({toggle?.X}, {toggle?.Y}; {course?.X}, {course?.Y})");
+        ctx.Check(time != null && toggle != null && course != null && toggle.Y == time.Y && toggle.X >= time.X + time.Width && course.Y > time.Y
+                && HasLine(shell, "Bots:", null, toggle.Y) && HasLine(shell, "Course:", null, course.Y)
+                && !new[] { time, toggle, course }.Any(b => shell.Rows.Any(r => r.Key != b.Key && r.Visible && r.Width > 0f && r.Height > 0f
+                    && r.X < b.X + b.Width && b.X < r.X + r.Width && r.Y < b.Y + b.Height && b.Y < r.Y + r.Height)),
+            $"the race toggle shares the race time box's line to its right, the Course box stands on a line of its own below, each titled and sharing no space");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.WingmenKey) is { Enabled: false } && Row(shell, "IA_D_NENEMY0") is { Enabled: false }
+                && Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false },
+            $"the course race still takes no wingmen, waves or lives");
+
         var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        int before = exits.Count;
         Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(exits[^1] is LaunchExit { Course: null, InstantAction.MissionType: InstantActionFeature.StuntKey },
-            $"so Fly Mission flies the Danger Zones ({(exits[^1] as LaunchExit)?.Course ?? "no course"})");
+        Press(host, guest, Down);
+        Press(host, guest, Accept);
+        Press(host, guest, Accept);
+        if (exits.Count != before + 1 || exits[^1] is not LaunchExit exit)
+        {
+            ctx.Check(false, $"the guest's walk ends as one LaunchExit ({exits.Count - before})");
+            return;
+        }
+
+        ctx.Check(exit is { Chapter: "C1", Mode: MenuMode.Stunt, Course: sample, InstantAction: null, Seats.Count: 2, Bots.Count: 1 }
+                && MenuReturnDestination.ForLaunch(exit) == MenuReturnDestination.InstantAction,
+            $"the exit races the course with both seats and the bot, no def, back to Instant Action ({exit.Course}, {exit.Seats.Count} seats, {exit.Bots?.Count} bots)");
+        // The launcher's own call over the exit, against the command line's course race.
+        var planes = exit.Seats.Select(s => s.PlaneNode).ToList();
+        var menu = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), exit.Chapter, planes, exit.Mode, exit.InstantAction,
+            vsKills: exit.Match?.KillTarget, vsTimeMinutes: exit.Match?.TimeLimitMinutes, vsLives: exit.Match?.Lives,
+            missionType: exit.Match?.MissionType ?? DogfightMissionType.Deathmatch, bots: exit.Bots, course: exit.Course);
+        var bot = exit.Bots![0];
+        var cli = SessionSpec.Parse(new[] { "--stunt", $"--course=C1/{sample}", "--players=2", $"--plane={planes[0]},{planes[1]}",
+            $"--vs-bot={bot.Plane}:skill={bot.Skill.ToString().ToLowerInvariant()}" });
+        ctx.Check(menu.Course == cli.Course && menu.CourseRefusal == null && cli.CourseRefusal == null && menu.Chapter == cli.Chapter
+                && menu.Mission == cli.Mission && menu.Stunt && cli.Stunt && !menu.Versus && menu.Players == 2 && cli.Players == 2
+                && menu.PlaneNames.SequenceEqual(cli.PlaneNames) && menu.IaDef == null
+                && menu.VsBots.Select(b => (b.Plane, b.Skill)).SequenceEqual(cli.VsBots.Select(b => (b.Plane, b.Skill))),
+            $"its session spec is the one --stunt --course= --players=2 --vs-bot builds ({menu.Course}/{cli.Course}, players {menu.Players}/{cli.Players}, bots {menu.VsBots.Count}/{cli.VsBots.Count}, refusal {menu.CourseRefusal ?? "none"}/{cli.CourseRefusal ?? "none"})");
+        ctx.Check(menu.StuntRaceMinutes == ia.RaceWindowMinutes,
+            $"and races in the race time box's window ({menu.StuntRaceMinutes} against {ia.RaceWindowMinutes})");
+
+        host.Show(MenuReturnDestination.InstantAction);
+        ia.RaceBots = false;
         setup.Bots.Remove(setup.Bots.Rows[0].Id);
+        if (joined != null)
+        {
+            setup.Unjoin(joined);
+        }
+
         host.Show(MenuReturnDestination.InstantAction);
     }
 
@@ -1026,11 +1083,18 @@ internal static class MenuInstantActionSuites
         ctx.Check(!rows.Any(r => r.Key != box.Key && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < box.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
             $"no other row shares its space ({box.Y})");
+        // The race toggle's row shares the line, so the first box below is the first row off it.
+        int below = at + 1;
+        while (below < rows.Count && rows[below].Y == box.Y)
+        {
+            below++;
+        }
+
         string before = at > 0 ? rows[at - 1].Key : "?";
-        string after = at + 1 < rows.Count ? rows[at + 1].Key : "?";
+        string after = below < rows.Count ? rows[below].Key : "?";
         ctx.CheckShipped(before == OriginalInstantActionScreen.LivesKey && after == OriginalInstantActionScreen.MissionKey,
             $"on the install its row stands with the hidden lives box's, before the mission type ({before}, {after})");
-        ctx.Check(at > 0 && at + 1 < rows.Count && rows[at - 1].Y <= box.Y && rows[at + 1].Y > box.Y,
+        ctx.Check(at > 0 && below < rows.Count && rows[at - 1].Y <= box.Y && rows[below].Y > box.Y,
             $"its row stands where its line falls, before the first box below it ({before}, {after})");
         ctx.Check(HasLine(shell, "Race Time:", titleX, box.Y), $"titled in the column's title ink and place");
 
@@ -1067,36 +1131,38 @@ internal static class MenuInstantActionSuites
     }
 
     // The race toggle over the layout. A bot row left on a stunt run's join board shows it off on
-    // the setup column's second clear line. On the install that line is over the enemy block. The
-    // row's removal hides it again.
+    // the race time box's line, to its right. The row's removal hides it again.
     private static void OriginalRaceBots(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, PlayerSetupFeature setup, InstantActionFeature ia,
         MenuLayoutScreen? section)
     {
-        ctx.Check(Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: false } && !HasLine(shell, "Race Bots:"),
+        ctx.Check(Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: false } && !HasLine(shell, "Bots:"),
             $"with no bot row on the join board the race toggle is hidden ({ia.MissionType.Key})");
         ctx.Check(setup.AddBot(), $"a bot row joins the board");
         var toggle = Row(shell, OriginalInstantActionScreen.RaceBotsKey);
+        var time = Row(shell, OriginalInstantActionScreen.RaceTimeKey);
         var mission = Box(section, OriginalInstantActionScreen.MissionKey);
-        float titleX = section?.Widget("IA_T_MISSIONTITLE")?.Int("X") ?? -1;
-        ctx.CheckShipped(toggle is { X: 525f, Y: 327.5f, Height: 18f },
-            $"on the install the race toggle is at 525, 327.5 ({toggle?.X}, {toggle?.Y})");
-        ctx.Check(!ia.RaceBots && toggle is { Visible: true, Enabled: true, Column: 1, Label: "Off", Width: 60f }
-            && toggle.X == mission.X && toggle.Height == mission.ItemHeight && HasLine(shell, "Race Bots:", titleX, toggle.Y),
-            $"the race toggle shows off on the setup column's next clear line ({toggle?.Label}, {toggle?.X}, {toggle?.Y})");
+        ctx.CheckShipped(toggle is { X: 690f, Y: 257.5f, Height: 18f },
+            $"on the install the race toggle is at 690, 257.5 ({toggle?.X}, {toggle?.Y})");
+        ctx.Check(!ia.RaceBots && toggle is { Visible: true, Enabled: true, Column: 1, Label: "Off", Width: 45f } && time != null
+            && toggle.Y == time.Y && toggle.X + toggle.Width == mission.X + mission.Width && toggle.Height == mission.ItemHeight
+            && shell.Compose().Lines.Any(l => l.Text == "Bots:" && l.Y == toggle.Y && l.X > time.X + time.Width && l.X < toggle.X),
+            $"the race toggle shows off beside the race time box, ending where the mission dropdown ends, titled between them ({toggle?.Label}, {toggle?.X}, {toggle?.Y})");
         ctx.Check(toggle != null && !shell.Rows.Any(r => r.Key != toggle.Key && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < toggle.X + toggle.Width && toggle.X < r.X + r.Width && r.Y < toggle.Y + toggle.Height && toggle.Y < r.Y + r.Height),
             $"no other row shares its space");
 
-        // On the install the walk reaches it under the environment. A sideways press flips it in
-        // place, and Down leaves it past the blank enemy block.
+        // The line walks in reading order. Up from the mission type reaches the toggle, Up again the
+        // race time box, and Down from it the toggle.
+        OriginalWalk.WalkTo(shell, OriginalInstantActionScreen.MissionKey, frame => Press(host, seat, frame));
+        Press(host, seat, Up);
+        string fromMission = shell.FocusedKey;
+        Press(host, seat, Up);
+        string fromToggle = shell.FocusedKey;
         Press(host, seat, Down);
-        bool fromMission = shell.FocusedKey == OriginalInstantActionScreen.EnvironmentKey;
-        Press(host, seat, Down);
-        ctx.CheckShipped(fromMission && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey,
-            $"on the install Down walks from the mission type over the environment onto the toggle ({fromMission}, {shell.FocusedKey})");
-        OriginalWalk.WalkTo(shell, OriginalInstantActionScreen.RaceBotsKey, frame => Press(host, seat, frame));
-        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey, $"the walk reaches the toggle ({shell.FocusedKey})");
+        ctx.Check(fromMission == OriginalInstantActionScreen.RaceBotsKey && fromToggle == OriginalInstantActionScreen.RaceTimeKey
+                && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey,
+            $"Up from the mission type lands on the toggle, Up from it on the race time box, and Down from that back on the toggle ({fromMission}, {fromToggle}, {shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.RaceBots && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey && Row(shell, OriginalInstantActionScreen.RaceBotsKey)?.Label == "On",
             $"Right turns it on and keeps the cursor on it ({ia.RaceBots}, {shell.FocusedKey})");
@@ -1104,8 +1170,9 @@ internal static class MenuInstantActionSuites
         ctx.Check(!ia.RaceBots && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey && Row(shell, OriginalInstantActionScreen.RaceBotsKey)?.Label == "Off",
             $"Left turns it off and keeps the cursor on it ({ia.RaceBots}, {shell.FocusedKey})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.WeaponLoadoutKey,
-            $"Down leaves it past the blank enemy boxes for Weapon Loadout ({shell.FocusedKey})");
+        ctx.CheckShipped(shell.FocusedKey == OriginalInstantActionScreen.MissionKey,
+            $"on the install Down leaves it for the mission type under its line ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey != OriginalInstantActionScreen.RaceBotsKey, $"and Down leaves it ({shell.FocusedKey})");
 
         setup.Bots.Remove(setup.Bots.Rows[0].Id);
         ctx.Check(Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: false }, $"and the row's removal hides it");

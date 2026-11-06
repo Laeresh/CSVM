@@ -84,6 +84,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public const string StuntRaceDescription =
         "Race the chapter's Danger Zone course against the clock. Fly as many runs as the time allows. The fastest complete run wins.";
 
+    /// <summary>The remake-only Course box under the Type box: the Danger Zones or an authored
+    /// course. Both ends see it for a Stunt Race in a chapter with courses, live on the host.</summary>
+    public const string CourseKey = "MPL_D_COURSE";
+
     /// <summary>LAUNCH!, live on the host once every pilot is Ready.</summary>
     public const string LaunchKey = "MPL_B_LAUNCH";
 
@@ -353,6 +357,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private readonly Func<IReadOnlyList<CustomPlaneDef>> _customs;
     private readonly OriginalOutlawList _outlaw;
     private readonly OriginalTeamBox _teamBox;
+
+    // The Course box's courses by chapter, read once per visit to the lobby.
+    private readonly Dictionary<string, IReadOnlyList<CSVM.Flight.Modes.Course>> _courses = new(StringComparer.Ordinal);
     private string? _open;
 
     // The team row picked for Join Team, 0 for none. A pick is a team or a player, never both.
@@ -920,7 +927,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
                 if (lobby != null && !lobby.SetReady(!lobby.Ready))
                 {
-                    Refused(lobby.ReadyRefusals);
+                    Refused(lobby);
                 }
 
                 return null;
@@ -1102,7 +1109,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         if (!lobby.SetReady(true))
         {
-            Refused(lobby.ReadyRefusals);
+            Refused(lobby);
         }
     }
 
@@ -1387,7 +1394,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <paramref name="picked"/> marked.</summary>
     internal void ComposeOpenList(IReadOnlyList<OriginalRow> rows, int focus, int picked, string key, BoardLayers layers)
     {
-        var face = _text.Regular(key is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144);
+        var face = _text.Regular(DropFace(key));
         layers.Overlays.Add(OriginalDropLists.ComposeOpen(rows, focus, picked, face, MultiplayerBoardText.TextFallback,
             item => item.Enabled ? Black : TabDisabled));
     }
@@ -1536,8 +1543,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static OriginalRow Arrow(string key, string art, float x, float y, bool enabled) =>
         new(key, string.Empty, OriginalRowKind.Button, x, y, 16f, 11f, enabled, 1, new BoardArt(BoardArtLibrary.Ui, art, 4));
 
+    // A dropdown's face: the Mission Options boxes' and the bot editor's, else the pickers'.
+    private static int DropFace(string key) =>
+        key is EnvironmentKey or TypeKey or CourseKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144;
+
     // The lines Game Scores lists: a landed race's standings, else the match's.
     private static int ScoreCount(DogfightLobby lobby) => lobby.RaceScores.Count > 0 ? lobby.RaceScores.Count : lobby.Scores.Count;
+
+    // The pick by title, the Danger Zones for none; a guest that refused its host's course says why.
+    private static string CourseText(DogfightLobby lobby) =>
+        lobby.Course?.DisplayName ?? (lobby.CourseRefusal is { Length: > 0 } why ? why : InstantActionFeature.DangerZonesLabel);
 
     // The player list as drawn: each team's row followed by its members, then every player on no
     // team. The ready script's rows of kind 1 and kind 0 stand so. Player is the index into Players,
@@ -1619,6 +1634,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         hash.Add(lobby.Chat.Count);
         hash.Add(lobby.Scores.Count);
         hash.Add(lobby.RaceScores.Count);
+        hash.Add(lobby.LobbyCourse?.Hash);
         foreach (var player in lobby.Players)
         {
             hash.Add(player);
@@ -1741,6 +1757,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _typing = null;
         _chat = string.Empty;
         _chatHeld = false;
+        _courses.Clear();
         Tab = LobbyTab.Mission;
         Rockets = false;
         CustomPlanes = false;
@@ -1749,11 +1766,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     // The original's own refusal at Ready: langui 10517, then 10514, 10515 and 10516 for each
-    // reason, on its OK dialog.
-    private void Refused(IReadOnlyList<PlaneRefusal> why)
+    // reason, on its OK dialog. A refused host's course adds the remake's own line, its reason.
+    private void Refused(DogfightLobby lobby)
     {
         string text = _text.Word(10517, "You cannot select Ready yet.");
-        foreach (var refusal in why)
+        if (lobby.RefusesCourse)
+        {
+            text += $" The host's course cannot be flown here: {lobby.CourseRefusal}.";
+        }
+
+        foreach (var refusal in lobby.ReadyRefusals)
         {
             text += " " + refusal switch
             {
@@ -1782,9 +1804,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.Connection);
     }
 
-    // Every seat this machine flies on the plane and fit it picked, on the chapter and the rules the
-    // host's options name. The wire rides out with it. ⚠ A custom plane flies as its wire build
-    // reads back, the copy every other machine builds, never the stored def.
+    // Every seat this machine flies on the plane and fit it picked, on the chapter, rules and course
+    // the host names. The wire rides out with it. ⚠ A custom plane flies as its wire build reads
+    // back, the copy every other machine builds, never the stored def.
     private LaunchExit Exit(NetPlayFeature net, DogfightLobby lobby)
     {
         var options = lobby.Options;
@@ -1802,7 +1824,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         return new LaunchExit(
             DogfightLobby.ChapterOf(options.Environment), seats, DogfightLobby.LaunchMode(options),
-            Match: DogfightLobby.RulesOf(options), Net: net.BuildLaunch());
+            Match: DogfightLobby.RulesOf(options), Net: net.BuildLaunch(), Course: lobby.LaunchCourse);
     }
 
 
@@ -1905,6 +1927,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var options = lobby.Options;
         bool live = lobby.IsHost && !lobby.Ready;
         MapRows(rows, EnvironmentWord(options.Environment), TypeWord(options.MissionType), live, live);
+        // Remake-only, at the Type box's pitch under it, in the race description's place; a guest's reads its host's pick.
+        if (CourseShown(lobby))
+        {
+            rows.Add(Drop(CourseKey, CourseText(lobby), PageX + 25f, PageY + 153f, 175f, 22f, live));
+        }
+
         rows.Add(LaunchRow(LaunchKey, lobby.CanLaunch));
         // A Stunt Race keeps the Time box alone, the race window; every other option greys.
         bool race = DogfightLobby.IsStuntRace(options);
@@ -2007,6 +2035,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             string label = hung && DropdownFor(CellKey(cell)) is { } list ? Item(list) : _text.Word(10144, "<none>");
             rows.Add(Drop(CellKey(cell), label, PageX + 25f, PageY + 80f + (30f * cell), 195f, 22f, hung));
         }
+    }
+
+    // Either end shows the box for a Stunt Race in a chapter with courses, or on a host's course word.
+    private bool CourseShown(DogfightLobby lobby) =>
+        DogfightLobby.IsStuntRace(lobby.Options) && (CourseChoices(lobby).Count > 0 || lobby.LobbyCourse != null);
+
+    private IReadOnlyList<CSVM.Flight.Modes.Course> CourseChoices(DogfightLobby lobby)
+    {
+        string chapter = DogfightLobby.ChapterOf(lobby.Options.Environment);
+        if (!_courses.TryGetValue(chapter, out var choices))
+        {
+            choices = _net()?.Courses?.Invoke(chapter) ?? Array.Empty<CSVM.Flight.Modes.Course>();
+            _courses[chapter] = choices;
+        }
+
+        return choices;
     }
 
     private string BoxText(string key, DogfightLobby lobby) => _typing == key ? _draft : BoxValue(key, lobby);
@@ -2116,7 +2160,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     return new DropdownList(items, lobby.Options.Environment,
-                        i => DogfightLobby.Offers(DogfightLobby.TypeOf(lobby.Options), i), i => lobby.SetEnvironment(i));
+                        i => DogfightLobby.Offers(DogfightLobby.TypeOf(lobby.Options), i, lobby.Courses), i => lobby.SetEnvironment(i));
                 }
 
             case TypeKey:
@@ -2129,6 +2173,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
                     return new DropdownList(types, lobby.Options.MissionType,
                         i => DogfightLobby.Flies((DogfightMissionType)i), i => lobby.SetMissionType((DogfightMissionType)i));
+                }
+
+            case CourseKey when lobby.IsHost:
+                {
+                    var choices = CourseChoices(lobby);
+                    var items = new string[choices.Count + 1];
+                    items[0] = InstantActionFeature.DangerZonesLabel;
+                    int current = 0;
+                    for (int i = 0; i < choices.Count; i++)
+                    {
+                        items[i + 1] = choices[i].DisplayName;
+                        current = string.Equals(lobby.Course?.Name, choices[i].Name, StringComparison.OrdinalIgnoreCase) ? i + 1 : current;
+                    }
+
+                    return new DropdownList(items, current, i => i > 0 || MenuChapters.DangerZonesFor(DogfightLobby.ChapterOf(lobby.Options.Environment)),
+                        i => lobby.SetCourse(i == 0 ? null : choices[i - 1]));
                 }
 
             case PlaneKey when CustomPlanes:
@@ -2356,7 +2416,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             layers.Fills.Add(_host.FocusMark(row));
         }
 
-        int faceId = row.Key is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144;
+        int faceId = DropFace(row.Key);
         var face = _text.Regular(faceId);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         float textY = row.Key == PlaneKey ? row.Y + 5f : row.Y + ((row.Height - size) / 2f) - 1f;
@@ -2372,6 +2432,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 break;
             case TypeKey:
                 layers.Lines.Add(_text.Line(10097, "Mission Type", row.X, row.Y - 20f, 0f, Black));
+                break;
+            case CourseKey:
+                // No langui row names a course, so the word is the remake's, in Mission Type's face.
+                layers.Lines.Add(_text.Line(-1, "Course", row.X, row.Y - 20f, 0f, Black, faceId: 10097));
                 break;
             case var gun when gun.StartsWith(GunKeyPrefix, StringComparison.Ordinal):
                 layers.Lines.Add(_text.Line(1008, string.Empty, row.X, row.Y - 23f, 0f, Black, text: GunTitle((OriginalWidgets.Indexed(gun, GunKeyPrefix) ?? -1))));
@@ -2569,7 +2633,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private void ComposeMission(DogfightLobby lobby, BoardLayers layers)
     {
-        ComposeMissionHead(layers, lobby.Options.MissionType);
+        // The Course box takes the race description's place, whose Danger Zone words a course would belie.
+        ComposeMissionHead(layers, CourseShown(lobby) ? null : lobby.Options.MissionType);
         layers.Lines.Add(_text.Line(10099, "Teams", PageX + 241f, TeamsY, 0f, Black));
         layers.Lines.Add(_text.Line(10101, "Planes", PageX + 241f, PageY + 227f, 0f, Black));
 

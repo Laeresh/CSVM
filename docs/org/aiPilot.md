@@ -1749,6 +1749,21 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    never its person's hull or its person def's wing probes. C2's `dzpath2` arch, the 9.7 m slot in
    the warning above, is narrower than a wingspan at the rail's roll, so a hull or wing probe meets
    its front face at `(-6038, 23, -3848)` on every pass; an origin point clears it.
+7. On an authored course each sequence entry is one zone, and its route is a straight line through
+   its gate's opening the way the entry is flown: from 250 m short of the opening's centre
+   (`StuntMission.EntryLeadInM`) to 60 m past it (`EntryRunOutM`), both the remake's own lengths.
+   The lead-in is long enough for the rail to close a lock-range offset before the opening; the
+   run-out carries the rail's trailing pose through it. The bot takes the next entry alone, in
+   sequence order, and runs its line one way only, so a reverse entry is crossed from its named
+   side; the line takes no row of the run table and no lead-in check, since the course's scoring is
+   its apertures', not the line's gates. Gates stand closer than a zone's cone reach, so a bot past
+   the line's start also takes the run when it is within the 105 m lock range of the line, at least
+   150 m short of the opening (`StuntBotObjective.JoinRailM`) and tracking within 30 degrees of the
+   line: it locks on at once where the line passes nearest (`AiPilot.RejoinDangerZone`). A fluff on a
+   course passes over the gate rather than the line's start. A balloon ring's line moves with the
+   ring, read at the run's sim time as the aperture is. The cone, steering, tiers, return ride and
+   shooting along the line are those above.
+   Regressions: the `stunt-race-bot-course` and `stunt-race-bot-course-blocker` suites.
 
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
 join board's bot rows on a menu Stunt Flying run with its race toggle on, which they make a race.

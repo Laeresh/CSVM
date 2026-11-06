@@ -106,10 +106,6 @@ public sealed class InstantActionFeature : IMenuFeature
     private readonly Dictionary<string, IReadOnlyList<(string Name, string Title)>> _courses = new(StringComparer.Ordinal);
     private readonly InstantActionWaveSetup[] _waves = new InstantActionWaveSetup[WaveSlots];
 
-    // The join board as SetBoard last had it; solo until a presentation says otherwise.
-    private int _boardSeats = 1;
-    private int _boardBots;
-
     /// <summary>A feature whose environment defs come from <paramref name="loadBase"/>, called with
     /// a chapter code when an environment is confirmed. The loader's failure policy is its own;
     /// see <see cref="ForGameData"/> for the one the game uses. A chapter's authored courses, each a
@@ -171,6 +167,13 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>The picked mission type.</summary>
     public InstantActionMissionType MissionType => MissionTypes[MissionTypeIndex];
+
+    /// <summary>Whether the setup offers the Course option: stunt flying in a chapter with courses,
+    /// whatever seats and bot rows the join board holds. Every seat and racing bot flies the course.</summary>
+    public bool OffersCourse => MissionType.Key == StuntKey && CoursesFor(Environment.Code).Count > 0;
+
+    /// <summary>The course a launch flies, or null for the Danger Zones.</summary>
+    public string? LaunchCourse => OffersCourse ? Course : null;
 
     /// <summary>Whether the picked mission is the ace duel, which takes no waves and no wingmen.</summary>
     public bool IsAceDuel => MissionType.Key == AceKey;
@@ -331,23 +334,10 @@ public sealed class InstantActionFeature : IMenuFeature
         return names;
     }
 
-    /// <summary>Whether a chapter offers stunt flying: it ships Danger Zones, or it has an authored course
-    /// and the board is solo. Solo is at most one seat and no bot row, as <see cref="SetBoard"/> last had them.
-    /// The local lobby's Stunt Race reads <see cref="MenuChapters.DangerZonesFor"/> alone.</summary>
+    /// <summary>Whether a chapter offers stunt flying: it ships Danger Zones, or it has an authored course.
+    /// The network lobby's Stunt Race counts courses the same way (<see cref="DogfightLobby.Offers"/>).</summary>
     public bool StuntOffered(string chapterCode) =>
-        MenuChapters.DangerZonesFor(chapterCode) || (_boardSeats <= 1 && _boardBots == 0 && CoursesFor(chapterCode).Count > 0);
-
-    /// <summary>Takes the join board's seats and bot rows, which decide whether a chapter with courses and
-    /// no Danger Zones offers stunt flying. A presentation calls it on every build. The picked mission
-    /// type keeps its row where the list still has it, else wraps as <see cref="ConfirmEnvironment"/> does.</summary>
-    public void SetBoard(int seats, int bots)
-    {
-        string key = MissionType.Key;
-        (_boardSeats, _boardBots) = (seats, bots);
-        var types = MissionTypes;
-        int at = types.ToList().FindIndex(m => m.Key == key);
-        MissionTypeIndex = at >= 0 ? at : Wrap(MissionTypeIndex, types.Count);
-    }
+        MenuChapters.DangerZonesFor(chapterCode) || CoursesFor(chapterCode).Count > 0;
 
     /// <summary><see cref="EnvironmentAllowed"/> with the authored courses counted.</summary>
     public bool AllowsEnvironment(int environmentIndex, string missionTypeKey) =>
@@ -359,14 +349,6 @@ public sealed class InstantActionFeature : IMenuFeature
         var rows = CourseRows;
         Course = rows[Index(index, rows.Count, nameof(index))].Name;
     }
-
-    /// <summary>Whether the setup offers the Course option: stunt flying in a chapter with
-    /// courses, one seat and no bot row on the join board. Authored courses are solo.</summary>
-    public bool OffersCourse(int seats, int bots) =>
-        MissionType.Key == StuntKey && seats == 1 && bots == 0 && CoursesFor(Environment.Code).Count > 0;
-
-    /// <summary>The course a launch with these seats and bot rows flies, or null for the Danger Zones.</summary>
-    public string? LaunchCourse(int seats, int bots) => OffersCourse(seats, bots) ? Course : null;
 
     /// <summary>Picks an environment row. The mission type is not re-fitted until
     /// <see cref="ConfirmEnvironment"/>, so a cursor passing over the clouds changes nothing.</summary>
@@ -603,9 +585,9 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>The typed exit for the confirmed seats, in seat order. It carries the environment's
     /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. A Stunt Flying
     /// run with <see cref="RaceBots"/> on carries the join board's <paramref name="bots"/>, which race
-    /// it; with it off they stay on the board. A <see cref="LaunchCourse"/> exit carries the course
-    /// and no def, the launch <c>--stunt --course=</c> makes. Throws when the gate is
-    /// closed or a seat names no plane, so a half-built launch cannot leave the menu.</summary>
+    /// it; with it off they stay on the board. A <see cref="LaunchCourse"/> exit carries the course and no
+    /// def, as <c>--stunt --course=</c> does, and a race's window as a Stunt Race <see cref="VersusRules"/>.
+    /// Throws when the gate is closed or a seat names no plane, so a half-built launch cannot leave the menu.</summary>
     public LaunchExit BuildExit(IReadOnlyList<MenuSeatChoice> seats, string? playerPlane = null,
         IReadOnlyList<VsBotEntry>? bots = null)
     {
@@ -623,13 +605,15 @@ public sealed class InstantActionFeature : IMenuFeature
             }
         }
 
-        if (LaunchCourse(seats.Count, bots?.Count ?? 0) is { } course)
-        {
-            return new LaunchExit(Environment.Code, seats, Mode, Course: course);
-        }
-
         int pilots = Pilots(seats.Count, bots?.Count ?? 0);
         var racers = pilots > seats.Count ? bots : null;
+        if (LaunchCourse is { } course)
+        {
+            // No def to carry the race window, so it rides the match clock a lobby Stunt Race's does.
+            var race = OffersRaceWindow(pilots) ? new VersusRules(0, RaceWindowMinutes, MissionType: DogfightMissionType.StuntRace) : null;
+            return new LaunchExit(Environment.Code, seats, Mode, Match: race, Bots: racers, Course: course);
+        }
+
         return new LaunchExit(Environment.Code, seats, Mode, BuildDef(pilots, playerPlane),
             WingmanLoadout: LaunchWingmanFit(pilots), Bots: racers);
     }

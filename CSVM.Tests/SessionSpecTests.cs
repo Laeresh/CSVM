@@ -216,22 +216,60 @@ public class SessionSpecTests
         Assert.Equal("stunt_flying", s.Scenario);
     }
 
-    /// <summary>Authored courses are solo only, so every way of adding a pilot refuses the launch.
+    /// <summary>A Dogfight, the command line's network session and the bare stage refuse a course.
     /// The world is left alone on a refusal.</summary>
     [Theory]
     [InlineData("--vs")]
-    [InlineData("--players=2")]
-    [InlineData("--plane=player_fury,player_bhawk")]
-    [InlineData("--vs-bots=1")]
     [InlineData("--net-host=127.0.0.1:47600")]
     [InlineData("--net-join=127.0.0.1:47600")]
     [InlineData("--stage=empty")]
-    public void CourseRefusesAnyLaunchThatIsNotSolo(string other)
+    public void CourseRefusesADogfightANetworkSessionAndTheBareStage(string other)
     {
         var s = S("--course=C2/loop", other);
         Assert.NotNull(s.Course);
         Assert.NotNull(s.CourseRefusal);
         Assert.Equal("C1", s.Chapter);
+    }
+
+    /// <summary>`--net-host`/`--net-join` have no lobby to carry the course, and the refusal says
+    /// where to pick one. A lobby's Stunt Race on the host's course flies on every machine.</summary>
+    [Theory]
+    [InlineData("--net-host=127.0.0.1:47600")]
+    [InlineData("--net-join=127.0.0.1:47600")]
+    public void ANetworkCourseFliesFromTheLobbyAloneAndTheCommandLineIsToldSo(string net)
+    {
+        Assert.Contains("lobby's Mission Options", S("--course=C2/loop", net).CourseRefusal);
+
+        // A lobby's launch flies it, even in a process whose command line named the network.
+        var lobby = SessionSpec.FromMenu(S("--mute", net), "C2", new[] { "player_fury" }, MenuMode.Stunt,
+            vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: "loop", fromLobby: true);
+        Assert.Equal(("C2", "loop"), lobby.Course);
+        Assert.Null(lobby.CourseRefusal);
+        Assert.Equal(SessionSpec.StuntRaceMission, lobby.Mission);
+        Assert.Equal(DogfightMissionType.StuntRace, lobby.MissionType);
+
+        // ABLE-TO-FAIL CONTROL: any other menu launch in that process still meets the refusal. A
+        // lobby's launch keeps the refusals that are not about the network.
+        var instantAction = SessionSpec.FromMenu(S("--mute", net), "C2", new[] { "player_fury" }, MenuMode.Stunt, course: "loop");
+        Assert.Contains("lobby's Mission Options", instantAction.CourseRefusal);
+        var dogfight = SessionSpec.FromMenu(S("--mute"), "C2", new[] { "player_fury" }, MenuMode.Versus, course: "loop", fromLobby: true);
+        Assert.NotNull(dogfight.CourseRefusal);
+    }
+
+    /// <summary>A second local pilot and race bots each fly a run of the course in one race.</summary>
+    [Theory]
+    [InlineData("--players=2")]
+    [InlineData("--plane=player_fury,player_bhawk")]
+    [InlineData("--vs-bots=1")]
+    [InlineData("--vs-bot=player_fury:skill=ace")]
+    public void CourseFliesWithLocalPilotsAndRaceBots(string other)
+    {
+        var s = S("--course=C2/loop", other);
+        Assert.Equal(("C2", "loop"), s.Course);
+        Assert.Null(s.CourseRefusal);
+        Assert.Equal("C2", s.Chapter);
+        Assert.Equal("IA1", s.Mission);
+        Assert.Equal(2, s.Players + s.VsBots.Count);
     }
 
     [Theory]

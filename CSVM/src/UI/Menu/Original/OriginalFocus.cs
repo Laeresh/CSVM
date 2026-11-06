@@ -6,11 +6,11 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// Where a pad or arrow press moves the focus on an Original screen, the shell's one stepper. The
-/// live rows drawn on screen are the stops, read through <see cref="SpatialFocus.Step"/>, so
-/// neither row order nor a row's column decides a walk. A list with rows to walk takes no stop on
-/// its scroll arrows. A press leaving a list with more rows that way scrolls it instead. A band of
-/// value rows alone lets a wrapping press out. A sideways step that changes a value is the shell's
-/// business and never reaches this engine-free stepper.
+/// live rows drawn on screen are the stops, read through <see cref="SpatialFocus.Step"/>; neither
+/// row order nor column decides a walk. A named neighbour (<see cref="OriginalRow.UpTo"/>,
+/// <see cref="OriginalRow.DownTo"/>) comes first. A list's scroll arrows take no stop while it has
+/// rows to walk, a press off its end scrolling it. A band of value rows alone lets a wrapping press
+/// out. A sideways step that changes a value is the shell's business and never reaches this stepper.
 /// </summary>
 internal static class OriginalFocus
 {
@@ -70,9 +70,14 @@ internal static class OriginalFocus
         }
 
         var stops = new (float X, float Y, float Width, float Height)?[rows.Count];
+        string? named = moveX != 0 ? null : moveY < 0 ? rows[focus].UpTo : rows[focus].DownTo;
         for (int i = 0; i < rows.Count; i++)
         {
             stops[i] = IsStop(rows[i], rows, lists) ? Box(rows[i]) : null;
+            if (named != null && stops[i] != null && rows[i].Key == named)
+            {
+                return i;
+            }
         }
 
         var at = Box(rows[focus]);

@@ -32,7 +32,8 @@ public sealed class StuntZone
     public int CompletionOrder = -1;
 
     /// <summary>The <c>dzpathN</c> route ribbon, the original's own line through the zone, which a
-    /// return to this zone heads the pilot along. Null when the route polygon builds no ribbon.</summary>
+    /// return to this zone heads the pilot along. Null when the route polygon builds no ribbon. A course
+    /// entry's is a remake-only line through its gate (<see cref="DangerZoneRibbon.ForEntry"/>).</summary>
     public DangerZoneRibbon? Route;
 
     /// <summary>The gate whose crossing completed this zone, the one the pilot left it through.
@@ -117,6 +118,15 @@ public sealed class StuntMission
     /// consumers.</summary>
     public const float DzRadius = 15f;
 
+    /// <summary>Remake-only rule, not a game value: how far short of a course gate's opening its
+    /// entry's line starts, metres (<see cref="StuntZone.Route"/>). A race bot locks on near that
+    /// start, and the rail closes its offset before the opening.</summary>
+    public const float EntryLeadInM = 250f;
+
+    /// <summary>Remake-only rule, not a game value: how far past the opening an entry's line runs on,
+    /// metres. The rail's pose trails its cursor, so this carries the pose through the opening.</summary>
+    public const float EntryRunOutM = 60f;
+
     /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race). Empty in a
     /// solo run, so single-player logs read exactly as before, but with four pilots clearing zones
     /// in one shared world the completion lines are otherwise indistinguishable.</summary>
@@ -161,6 +171,10 @@ public sealed class StuntMission
             elements += CourseElements.Count(course.Gates[g]);
         }
         _touching = new bool[elements];
+
+        // Each run lays its own lines, so each reads its own GateMotion and SimSeconds.
+        for (int i = 0; i < zones.Count; i++)
+            zones[i].Route = EntryLine(i);
     }
 
     /// <summary>Fired once per zone the moment it is flown through (scoring records a split).</summary>
@@ -322,7 +336,7 @@ public sealed class StuntMission
             var gate = course.Gates[g];
             var centre = apertures[g].Rest * CourseGateShape.OpeningCentre(gate);
             // A one-point polygon nothing can cross: scoring is the aperture's, and this only gives
-            // ReturnPose the gate's centre and axis.
+            // ReturnPose the gate's centre to find on the entry's line.
             var marker = new StuntGate { Vertices = new[] { centre }, Center = centre, Normal = gate.Forward };
             zones.Add(new StuntZone
             {
@@ -349,10 +363,10 @@ public sealed class StuntMission
             "{0}:{1:00.0}", min, seconds - min * 60f);
     }
 
-    /// <summary>A second, independent run over the same Danger Zones (splitscreen
-    /// racing): same zone list, positions and display strings, but its own completion flags, clock,
-    /// active target and events. Copying beats calling <see cref="Load"/> once per player, the
-    /// ia.json/targets.json/messages parse and the gamez lookups happen once for the session.</summary>
+    /// <summary>A second, independent run over the same zones (splitscreen racing). It keeps the zone
+    /// list, positions and strings, with its own completion flags, clock, target and events. Copying beats calling <see cref="Load"/> once per player, the
+    /// ia.json/targets.json/messages parse and the gamez lookups happen once for the session. A course
+    /// copy lays its own entry lines, read at its own <see cref="GateMotion"/>.</summary>
     public StuntMission ForAnotherPlayer()
     {
         var zones = new List<StuntZone>(_zones.Count);
@@ -760,6 +774,21 @@ public sealed class StuntMission
             return false;
         gate = new StuntGate { Vertices = vertices, Center = center, Normal = normal.Normalized() };
         return true;
+    }
+
+    // Entry i's line, through its gate's opening the way the entry is flown. It follows the gate's
+    // motion at the sim time, as the aperture does. That motion never tilts the gate's axis, so the
+    // opening centre's travel moves the whole line.
+    private DangerZoneRibbon EntryLine(int i)
+    {
+        int g = _entryGates[i];
+        var gate = Course!.Gates[g];
+        var local = CourseGateShape.OpeningCentre(gate);
+        var rest = _apertures[g].Rest;
+        var centre = rest * local;
+        var way = gate.FlownWay(Course.Sequence[i].Direction);
+        return DangerZoneRibbon.ForEntry(gate.Id, i + 1, centre, way, EntryLeadInM, EntryRunOutM,
+            () => (rest * GateMotion(g, SimSeconds()) * local) - centre);
     }
 
     // A course step tests the next entry alone. One segment thus advances at most one entry, and a

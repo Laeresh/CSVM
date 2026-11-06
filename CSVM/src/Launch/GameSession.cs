@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Bindings;
@@ -143,6 +144,8 @@ public partial class GameSession : Node3D
     // Base (chapter-independent) paths, settled by the Launcher and handed in via the context.
     // StartSession reads them each build and recomputes the chapter-dependent paths from the spec.
     private readonly BasePaths _paths;
+    // The launch context's course library, null for the data root's.
+    private readonly CourseLibrary? _courses;
     private readonly DecodeCache? _decode;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
     // --destroy= probe wrappers below delegate to it (see src/Tooling/ProbeRunner.cs).
@@ -346,6 +349,7 @@ public partial class GameSession : Node3D
         _spec = CampaignDirector.ResolveSeatedPlane(
             ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.Paths.Data.Zrdr), ctx.Paths.Data));
         _paths = ctx.Paths;
+        _courses = ctx.Courses;
         _decode = ctx.Decode;
         _probeRunner = ctx.ProbeRunner;
         _captureDirector = ctx.CaptureDirector;
@@ -881,7 +885,7 @@ public partial class GameSession : Node3D
         }
         if (gamez != null)
         {
-            _labs!.BuildCourseLab(CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
+            _labs!.BuildCourseLab(Courses(), (from, dir) => VegetationGround.RayHit(ground.Value, from, dir));
         }
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
@@ -1221,6 +1225,18 @@ public partial class GameSession : Node3D
         _exitSession();
     }
 
+    /// <summary>The Post-processing word on the world's Environment and each cockpit pass's copy.</summary>
+    internal void FollowGrade()
+    {
+        if (_env != null)
+            EnhancedLook.ApplyGrade(_env, GraphicsMode.Enhanced);
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.Dressing.Pass?.Env is { } env)
+                EnhancedLook.ApplyGrade(env, GraphicsMode.Enhanced);
+        }
+    }
+
     /// <summary>Hides the original's painted shadow decals while our shadow maps draw: Enhanced, with a
     /// Shadow Quality that casts. A standing ocean is rebuilt over the world as it now draws, since a
     /// decal on the water reads as land in its shore mask.</summary>
@@ -1429,9 +1445,10 @@ public partial class GameSession : Node3D
         }
     }
 
-    // --course=: the course from whichever source wins it, its run and its gate motion. A course
-    // this launch cannot fly fails the build, since the Danger Zones in its place would pass for
-    // it. A command line quits with exit 1; a menu launch leaves MenuRefusal for the menu to show.
+    // --course=: the course (a lobby host's word, else the library's winning file), its run and its
+    // gate motion. A course this launch cannot fly fails the build, since the Danger Zones in its
+    // place would pass for it. A command line quits with exit 1; a menu launch leaves MenuRefusal
+    // for the menu to show.
     private bool ResolveCourse()
     {
         _courseRun = null;
@@ -1443,9 +1460,18 @@ public partial class GameSession : Node3D
         string? refusal = _spec.CourseRefusal;
         if (refusal == null)
         {
-            if (CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det).Load(wanted.Chapter, wanted.Name, out string error) is not { } course)
+            var library = Courses();
+            var course = _wire.LobbyCourse is { } held
+                ? Course.FromWord(held(), wanted, out string error)
+                : library.Load(wanted.Chapter, wanted.Name, out error);
+            if (course == null)
             {
                 refusal = error;
+            }
+            else if (_wire.Link != null && !Net.RaceStandingMessage.Carries(course.Sequence.Count))
+            {
+                refusal = string.Create(CultureInfo.InvariantCulture,
+                    $"its {course.Sequence.Count} sequence entries pass the {Net.RaceStandingMessage.MaxZones} a network race carries");
             }
             else if (StuntMission.ForCourse(course) is not { } run)
             {
@@ -1453,6 +1479,12 @@ public partial class GameSession : Node3D
             }
             else
             {
+                // A lobby guest keeps the host's course in its game folder, never over a same-named file.
+                if (_wire.LobbyCourse != null && _wire.Link is { IsHost: false })
+                {
+                    library.SaveIfAbsent(course);
+                }
+
                 run.GateMotion = (g, t) => CourseMotion.Offset(course.Gates[g], t);
                 _courseRun = run;
                 return true;
@@ -1470,6 +1502,8 @@ public partial class GameSession : Node3D
         GetTree().Quit(1);
         return false;
     }
+
+    private CourseLibrary Courses() => _courses ?? CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det);
 
     // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is built, so
     // a miss reports its candidates and quits instead of half-building a world. Returns false if
