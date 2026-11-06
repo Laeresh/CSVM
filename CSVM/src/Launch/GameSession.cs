@@ -858,6 +858,7 @@ public partial class GameSession : Node3D
         FollowShadowDecals();
         FollowTerrainShadow();
         BuildCloudShadow();
+        _labs!.BuildCloudLab(() => _cloudShadow);
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -2747,29 +2748,32 @@ public partial class GameSession : Node3D
     }
 
     // The cloud shadows stand over every full weathered world in either mode, since the node itself
-    // reads the mode, the word and the zone. The clouds are gathered once, before the world merge, while
-    // each placed sprite is still its own node. The deck and the domes ride the camera, so neither casts.
+    // reads the mode, the word and the zone. Built once: the clouds and the drift never change.
     private void BuildCloudShadow()
     {
         var weather = _sky?.Weather;
-        if (!_fullWorld || _plane == null || _worldScene == null || weather == null || _sessionTextures == null)
+        if (!_fullWorld || _plane == null || _worldScene == null || weather == null)
             return;
-        var skip = new List<Node>();
-        foreach (var rig in _rigs)
+        var deck = _unplacedWatch?.CloudDeck;
+        bool cloudy = deck != null || _sky!.CloudField is { InstanceCount: > 0 } || _worldScene.PlacesClouds;
+        Vector2? ceiling = null;
+        // The ceiling is the dome a camera below the band sees, zone_id 1, only where a deck stands.
+        if (deck != null && weather.Mission is { HasCloudBand: true } mission && _rigs.Count > 0)
         {
-            if (rig.Horizon != null)
-                skip.Add(rig.Horizon);
+            foreach (var dome in _rigs[0].HorizonDomes)
+            {
+                if (dome.ZoneId == 1)
+                    ceiling = Effects.CloudShadow.CeilingDriftOf(dome.Node, _worldScene, mission.CloudBandCentre);
+            }
         }
-        if (_unplacedWatch?.CloudDeck is { } deck)
-            skip.Add(deck);
-        var field = _sky!.CloudField;
-        var casters = Effects.CloudShadow.CastersOf(_plane, _worldScene, field, _sessionTextures, skip);
-        int fieldCards = field == null ? 0 : field.InstanceCount;
-        // Every zone sun is cast now, in either mode, so a zone change or a live switch casts nothing.
-        var suns = weather.SunOrientations.Append(weather.SunOrientation);
-        _cloudShadow = Effects.CloudShadow.Bake(casters, suns, weather.SunOrientation, weather.NightApplied);
+        var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
+        var (authored, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
+        var tunes = Effects.CloudShadowChapters.Load().For(_spec.Chapter);
+        var drift = tunes.Drift(authored);
+        _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
+        _cloudShadow.Tunes = tunes;
         _plane.AddChild(_cloudShadow);
-        Log.Info("world", $"cloud shadows: {casters.Count - fieldCards} placed cloud(s) + {fieldCards} cloud field card(s) cast night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()}{_cloudShadow.Timing}");
+        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} darkness={_cloudShadow.Tunes.Darkness:0.##} ambient={_cloudShadow.Tunes.Ambient:0.##} size={_cloudShadow.Tunes.PatternSize:0}m coverage={_cloudShadow.Tunes.Coverage:0.##} softness={_cloudShadow.Tunes.Softness:0.###} speed={(tunes.DriftSpeed > 0f ? tunes.DriftSpeed.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "mission")} heading={(tunes.Heading is { } h ? h.ToString("0", System.Globalization.CultureInfo.InvariantCulture) : "mission")}");
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

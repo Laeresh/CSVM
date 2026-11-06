@@ -391,6 +391,18 @@ internal sealed class InspectionLabs
         Log.Info("ui", $"ocean lab ready (Shift+F1), save {savePath ?? "off in an exported build"}");
     }
 
+    /// <summary>The cloud lab (Shift+F4), in <c>--freecam</c> alone: the cloud shadows' tunes, drift and
+    /// tint on sliders, applied live to <paramref name="clouds"/>. Save writes the shipped file.
+    /// Every other mode builds none.</summary>
+    public void BuildCloudLab(Func<CloudShadow?> clouds)
+    {
+        if (!_in.Spec.Freecam)
+            return;
+        string? savePath = CloudShadowChapters.SourceTreePath();
+        _in.WorldRoot.AddChild(new CloudLab(clouds, _in.Spec.Chapter.ToUpperInvariant(), savePath));
+        Log.Info("ui", $"cloud lab ready (Shift+F4), save {savePath ?? "off in an exported build"}");
+    }
+
     /// <summary>The vegetation lab (Shift+F2), in <c>--freecam</c> on a vegetation chapter alone. It puts
     /// the chapter's sidecar entry on sliders, hands each edit to <paramref name="apply"/>, and saves
     /// into the shipped file. The paint tool finds the ground through <paramref name="groundHit"/>, brushes
