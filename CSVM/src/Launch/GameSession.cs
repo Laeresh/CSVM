@@ -1224,6 +1224,18 @@ public partial class GameSession : Node3D
         _exitSession();
     }
 
+    /// <summary>The Post-processing word on the world's Environment and each cockpit pass's copy.</summary>
+    internal void FollowGrade()
+    {
+        if (_env != null)
+            EnhancedLook.ApplyGrade(_env, GraphicsMode.Enhanced);
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.Dressing.Pass?.Env is { } env)
+                EnhancedLook.ApplyGrade(env, GraphicsMode.Enhanced);
+        }
+    }
+
     /// <summary>Hides the original's painted shadow decals while our shadow maps draw: Enhanced, with a
     /// Shadow Quality that casts. A standing ocean is rebuilt over the world as it now draws, since a
     /// decal on the water reads as land in its shore mask.</summary>

@@ -400,6 +400,13 @@ Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `o
 every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
 description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
 
+## src/Utils/PostProcessingSetting.cs
+Whether Enhanced grades the lit world (`Launch/EnhancedLook.cs`'s `ApplyGrade`): `off` or `on`. It resolves as
+`CloudShadowSetting` does: `--post-processing=`, the saved `postProcessing` word, the `graphics.postProcessing` key, then
+`on`, or `off` under `--det` (`default_det`), so a golden stays ungraded unless its command line asks. Its live-apply hook
+follows the session, which writes the grade on the world's Environment and each cockpit pass's copy. The VIDEO page
+shows it as the Post-processing dropdown under Cloud Shadows.
+
 ## src/Utils/GroundCoverSetting.cs
 How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (`Mech3/GroundCoverShells.cs`) or `cards`
 (`Mech3/GroundCover.cs`), the default. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved

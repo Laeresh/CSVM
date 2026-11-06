@@ -61,6 +61,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's cloud shadows dropdown, under Ground Cover in the scrolled window.</summary>
     public const string CloudShadowsKey = "CLOUDSHADOWS";
 
+    /// <summary>The page's post-processing dropdown, under Cloud Shadows in the scrolled window.</summary>
+    public const string PostProcessingKey = "POSTPROCESSING";
+
     /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
     public const string WaterQualityKey = "WATERQUALITY";
 
@@ -155,6 +158,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(VegetationModelsKey, CSVM.Utils.VegetationModelsSetting.Lookup, "3D Vegetation"),
         Word(GroundCoverKey, CSVM.Utils.GroundCoverSetting.Lookup, "Ground Cover"),
         Word(CloudShadowsKey, CSVM.Utils.CloudShadowSetting.Lookup, "Cloud Shadows"),
+        Word(PostProcessingKey, CSVM.Utils.PostProcessingSetting.Lookup, "Post-processing"),
         new(VrModeKey, "VR Mode", null,
             _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,
