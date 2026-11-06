@@ -45,8 +45,10 @@ internal sealed class StuntRaceBots
     private readonly BotOrderLog _log = new();
     private readonly Dictionary<int, int> _respawns = new();
 
-    // Each bot's entries cleared at its last crash return (Rejoin).
-    private readonly Dictionary<int, int> _returnedAt = new();
+    // Each bot's runs started and entries cleared at its last crash return (Rejoin), and the bots down
+    // since their last return.
+    private readonly Dictionary<int, (int Runs, int Cleared)> _returnedAt = new();
+    private readonly HashSet<int> _crashed = new();
 
     // Each zone's targets, found when a bot first takes it. The blocking structure each route end
     // cannot see, found when a pick first reads that end.
@@ -136,6 +138,11 @@ internal sealed class StuntRaceBots
 
         foreach (var (seat, objective) in _bots)
         {
+            if (_seats[seat].Controller is { Crashed: true })
+            {
+                _crashed.Add(seat);
+            }
+
             if (_seats[seat].Controller is not { Pilot: { } pilot, Stunt: { } run } bot
                 || !GodotObject.IsInstanceValid(bot) || bot.Crashed || bot.StartCount.Running)
             {
@@ -148,7 +155,8 @@ internal sealed class StuntRaceBots
             {
                 _respawns[seat] = bot.RespawnCount;
                 objective.Returned();
-                Rejoin(seat, bot, run, at);
+                Rejoin(seat, bot, run, at, _crashed.Remove(seat));
+                at = bot.WorldPosition;
             }
 
             if (run.AllComplete && _race.MayStartRun && BotObjective)
@@ -409,23 +417,32 @@ internal sealed class StuntRaceBots
 
     // A crash's return puts the bot on the route of the zone it cleared last, often low between
     // walls. It rides that ribbon on out as the route goes, rather than flying free from there.
-    private void Rejoin(int seat, FlightController bot, StuntMission run, Vector3 at)
+    private void Rejoin(int seat, FlightController bot, StuntMission run, Vector3 at, bool crashed)
     {
-        if (!BotObjective || run.AllComplete || run.ReturnPose() is not { } pose || at.DistanceTo(pose.Position) > 1f)
+        if (!BotObjective || run.AllComplete)
         {
             return;
         }
 
-        // ⚠ A second crash with no entry cleared since must not replay the first. The return and its
-        // ride are the same each time, so the bot would strike one spot until the window shut. It goes
-        // on to the start of the next entry's line, which FitLines cleared, and joins there.
-        bool again = _returnedAt.TryGetValue(seat, out int was) && was == run.CompletedCount;
-        _returnedAt[seat] = run.CompletedCount;
-        if (again && run.Course != null && run.Zones[run.CompletedCount].Route is { Opening: { } opening } next)
+        // ⚠ A second crash in a run with no entry cleared since must not replay the first. The return
+        // repeats exactly, so the bot strikes one spot until the window shuts. It goes to the next
+        // entry's line start, which FitLines cleared, and joins there.
+        if (crashed && run.Course != null)
         {
-            bot.RespawnAt(next.End(false), opening);
-            _respawns[seat] = bot.RespawnCount;
-            Log.Info("flight", $"stunt race: bot seat {seat} crashed again before {next.Name}, so it returns to that entry's line");
+            var progress = (_race.Of(seat)?.RunsStarted ?? 0, run.CompletedCount);
+            bool again = _returnedAt.TryGetValue(seat, out var was) && was == progress;
+            _returnedAt[seat] = progress;
+            if (again && run.Zones[run.CompletedCount].Route is { Opening: { } opening } next)
+            {
+                bot.RespawnAt(next.End(false), opening);
+                _respawns[seat] = bot.RespawnCount;
+                Log.Info("flight", $"stunt race: bot seat {seat} crashed again before {next.Name}, so it returns to that entry's line");
+                return;
+            }
+        }
+
+        if (run.ReturnPose() is not { } pose || at.DistanceTo(pose.Position) > 1f)
+        {
             return;
         }
 

@@ -526,11 +526,17 @@ internal static class StuntRaceBotSuites
         + "each shipped course for 240 s: each entry's line is fitted clear of the built world, so C1's p2 lead-in, "
         + "buried in the plateau's edge, starts higher and C1's p1 exit, toward the face past it, climbs; no bot "
         + "strikes the world more than twice, where each bot but the Peacemaker struck the face past C1's p1 about "
-        + "fifty times, its crash return riding it back into the face; every bot completes a C1 run. Each bot's "
-        + "seconds per entry are noted, the go-rounds #281 owns")]
+        + "fifty times, its crash return riding it back into the face; bridging between entries (#281), every bot "
+        + "completes a C1 run in under 50 s and clears at least 12 C2 entries, where going round the best C1 runs "
+        + "took 51 s and more and no bot cleared 9 C2 entries. Each bot's seconds per entry are noted")]
     internal static void CourseBotsClearTheWorld(TestContext ctx)
     {
         const int MostCrashes = 2;
+
+        // Bridged (#281), every bot's best C1 run is under this, s, and each clears this many C2 entries.
+        // Going round instead, the best C1 runs took 51 s and more, and no bot cleared 9 C2 entries.
+        const float BridgedC1BestS = 50f;
+        const int BridgedC2Entries = 12;
         string[] planes = { "player_fury", "player_warhawk", "player_peacemaker", "player_brigand" };
         foreach (var (chapter, name) in new[] { ("C1", "sample_out_and_back"), ("C2", CourseName) })
         {
@@ -603,7 +609,13 @@ internal static class StuntRaceBotSuites
                         $"[{cell}] {planes[b]} strikes the world at most {MostCrashes} times in 240 s ({crashes[b].Count}: {string.Join("; ", crashes[b].Take(4))})");
                     if (chapter == "C1")
                     {
-                        ctx.Check(racer.RunsFinished >= 1, $"[{cell}] {planes[b]} completes a run ({racer.RunsFinished}, best {Time(racer)})");
+                        ctx.Check(racer.RunsFinished >= 1 && racer.BestTime < BridgedC1BestS,
+                            $"[{cell}] {planes[b]} completes a run in under {BridgedC1BestS:0} s ({racer.RunsFinished}, best {Time(racer)})");
+                    }
+                    else
+                    {
+                        ctx.Check(entries[b].Count >= BridgedC2Entries,
+                            $"[{cell}] {planes[b]} clears at least {BridgedC2Entries} entries in 240 s ({entries[b].Count})");
                     }
                 }
             }
