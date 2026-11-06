@@ -347,33 +347,29 @@ public sealed partial class HudLayoutEditor : Control
     {
         bool shift = Input.IsKeyPressed(Key.Shift);
         float step = shift ? FineNudgeStep : NudgeStep;
-        var presses = new Dictionary<Key, bool>();
-        foreach (var key in PolledKeys)
-        {
-            presses[key] = Pressed(key);
-        }
-
-        if (presses[Key.Escape])
+        // ⚠ Read every key of PolledKeys before any return, so each key's edge state moves every frame.
+        bool escape = Pressed(Key.Escape), enter = Pressed(Key.Enter), kpEnter = Pressed(Key.KpEnter), tab = Pressed(Key.Tab);
+        bool left = Pressed(Key.Left), right = Pressed(Key.Right), up = Pressed(Key.Up), down = Pressed(Key.Down);
+        bool sides = Pressed(Key.S), original = Pressed(Key.O);
+        if (escape)
         {
             Close(save: false);
             return;
         }
 
-        if (presses[Key.Enter] || presses[Key.KpEnter])
+        if (enter || kpEnter)
         {
             Close(save: true);
             return;
         }
 
-        if (presses[Key.Tab])
+        if (tab)
             SelectNext(backward: shift);
-        if (presses[Key.S])
+        if (sides)
             Load(HudLayoutPlacement.Sides);
-        if (presses[Key.O])
+        if (original)
             Load(null);
-        var move = new Vector2(
-            (presses[Key.Right] ? step : 0f) - (presses[Key.Left] ? step : 0f),
-            (presses[Key.Down] ? step : 0f) - (presses[Key.Up] ? step : 0f));
+        var move = new Vector2((right ? step : 0f) - (left ? step : 0f), (down ? step : 0f) - (up ? step : 0f));
         if (move != Vector2.Zero)
             Nudge(move);
     }

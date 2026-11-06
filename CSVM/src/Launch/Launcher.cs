@@ -1362,10 +1362,10 @@ public partial class Launcher : Node3D
             .WithSavedLeadingAimAssist(saved.LeadingAimAssist).WithSavedLeadMarker(saved.LeadMarker)
             .WithSavedThrottlePlate(saved.ThrottlePlate)
             .WithHeadsetView(_xr != null);
-        SpyglassScaleSetting.ApplySaved(_spec.Det);
-        HudModeSetting.ApplySaved(_spec.Det);
-        HudLayoutSetting.ApplySaved(_spec.Det);
-        CameraZoomMemory.ApplySaved(_spec.Det);
+        SpyglassScaleSetting.ApplySaved(_spec.Det, saved);
+        HudModeSetting.ApplySaved(_spec.Det, saved);
+        HudLayoutSetting.ApplySaved(_spec.Det, saved);
+        CameraZoomMemory.ApplySaved(_spec.Det, saved);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.

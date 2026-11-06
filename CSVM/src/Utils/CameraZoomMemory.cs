@@ -30,10 +30,11 @@ public sealed class CameraZoomMemory
     public bool Keep { get; private set; }
 
     /// <summary>Reloads <see cref="Current"/> over the user options file, or over none under
-    /// <paramref name="det"/>, and logs the option. The launch and every options apply call it.</summary>
-    public static void ApplySaved(bool det)
+    /// <paramref name="det"/>, and logs the option. The launch and every options apply call it, with
+    /// the file's options in <paramref name="saved"/> where already read.</summary>
+    public static void ApplySaved(bool det, OptionsDef? saved = null)
     {
-        Current.Reload(det ? null : OptionsStore.UserOptions());
+        Current.Reload(det ? null : OptionsStore.UserOptions(), saved);
         Log.Info("flight", $"keep camera zoom={Current.Keep} source={(det ? "--det" : OptionsStore.FileName)}");
     }
 
@@ -49,11 +50,11 @@ public sealed class CameraZoomMemory
     }
 
     /// <summary>Takes the option and the zoom from <paramref name="store"/> in one read, or the no-file
-    /// reading where it is null.</summary>
-    public void Reload(OptionsStore? store)
+    /// reading where it is null. A caller that has read it passes <paramref name="loaded"/>.</summary>
+    public void Reload(OptionsStore? store, OptionsDef? loaded = null)
     {
         _store = store;
-        var options = store?.Load();
+        var options = store == null ? null : loaded ?? store.Load();
         Keep = options?.KeepCameraZoom != false;
         _saved = options?.CameraZoom;
     }

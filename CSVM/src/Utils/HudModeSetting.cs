@@ -66,24 +66,26 @@ public static class HudModeSetting
     public static ResolvedWord Resolve(string? savedWord) => Lookup.Resolve(null, savedWord, null, Default);
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps).</summary>
-    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().HudMode;
+    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps). It reads
+    /// <paramref name="saved"/>, the options file read here when null.</summary>
+    public static string? SavedWord(bool det, OptionsDef? saved = null) =>
+        det ? null : (saved ?? OptionsStore.UserOptions().Load()).HudMode;
 
     /// <summary>The launch's read: stores the saved word's mode as <see cref="Current"/> through
     /// <see cref="SavedWord"/>, so <paramref name="det"/> reads none, and logs it.</summary>
-    public static void ApplySaved(bool det) => Apply(SavedWord(det));
+    public static void ApplySaved(bool det, OptionsDef? saved = null) => Apply(SavedWord(det, saved));
 
     /// <summary>An options apply's read: the saved word, as <see cref="ApplySaved"/>, after the file is
     /// written. Under <paramref name="det"/> it changes nothing, so an unrelated accept never
     /// overwrites the cycle key's steps. Returns whether it applied.</summary>
-    public static bool ApplyAfterOptions(bool det)
+    public static bool ApplyAfterOptions(bool det, OptionsDef? saved = null)
     {
         if (det)
         {
             return false;
         }
 
-        ApplySaved(det: false);
+        ApplySaved(det: false, saved);
         return true;
     }
 
