@@ -17,8 +17,8 @@
     Does NOT build -- run `dotnet build CSVM/CSVM.sln` first if the code changed. Every
     argument is forwarded to CSVM verbatim (the part after `--` on a manual launch).
     Streams land beside the run's --log-file when one is passed, else under
-    .scratch/logs/probe-<stamp>.out/.err; the script prints both paths and exits with
-    Godot's exit code.
+    .scratch/logs/probe-<stamp>.out/.err with the engine log beside them as
+    probe-<stamp>.godot.log; the script prints both paths and exits with Godot's exit code.
 
     The launch is first admitted against the machine-wide memory ledger (MemoryLedgerCore.ps1)
     and waits while it does not fit; -TimeoutSec starts at admission. Past the ledger's
@@ -97,10 +97,20 @@ $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
 $null = Open-RunJob
 . (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
 
+# Streams park beside the run's own --log-file when one was passed, so its evidence stays
+# together; otherwise a timestamped probe-* base keeps concurrent runs from clobbering.
+$streamBase = Join-Path $LogDir ("probe-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), $PID)
+$logFileGiven = $false
+for ($i = 0; $i -lt $EngineArgs.Count - 1; $i++) {
+    if ($EngineArgs[$i] -eq "--log-file") { $streamBase = $EngineArgs[$i + 1]; $logFileGiven = $true }
+}
+
 # Engine options belong before the `--`; everything after it is the CSVM argument list.
 $Engine = @("--path", $ProjectDir, "res://scenes/Main.tscn")
 if ($Resolution) { $Engine += @("--resolution", $Resolution) }
 $Engine += @($EngineArgs)
+# #312: without one, Godot writes its log under the user data dir that every worktree shares.
+if (-not $logFileGiven) { $Engine += @("--log-file", "$streamBase.godot.log") }
 $Launch = $Engine + @("--") + @($GodotArgs)
 
 # SHELL-19: the argument string is re-split by the callee, and a path may carry a space, so
@@ -114,13 +124,6 @@ foreach ($a in $Launch) {
     } else {
         $quoted += $a
     }
-}
-
-# Streams park beside the run's own --log-file when one was passed, so its evidence stays
-# together; otherwise a timestamped probe-* base keeps concurrent runs from clobbering.
-$streamBase = Join-Path $LogDir ("probe-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), $PID)
-for ($i = 0; $i -lt $Launch.Count - 1; $i++) {
-    if ($Launch[$i] -eq "--log-file") { $streamBase = $Launch[$i + 1] }
 }
 
 Write-Host ("probe: {0}" -f ($GodotArgs -join " ")) -ForegroundColor Cyan
