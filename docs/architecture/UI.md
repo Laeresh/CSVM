@@ -922,6 +922,19 @@ this chapter's differing fields through `Effects/OceanSeas.cs` into the source t
 exported build. The sliders take no keyboard focus and the freecam looks on the right button. `--debug-ocean` is
 the scripted twin, checked at launch by `SessionSpec`.
 
+## src/UI/Labs/LightingLab.cs
+The lighting lab (Shift+F4), built by `InspectionLabs.BuildLightingLab` in `--freecam` over a world with weather alone:
+a panel down the right edge with one slider per `Effects/ZoneLighting.cs` field for the zone shown. A dropdown
+follows the camera's zone or holds the world in one (`WeatherRig.ForceZone`). An edit goes to `WeatherRig.SetLighting`,
+which lights the session sun, the Environment and every registered clone with it. A field the mission overrides is
+marked with a reset to the chapter's value. Save to chapter and Save to this mission write through `LightingTable.WithZone`
+and are off in an exported build. Entry off shows the untuned look. A parked plane, the anim lab's stage prop placed by
+`LabParking.cs`, turns on heading, pitch and bank sliders. `--debug-lighting` is the scripted twin.
+
+## src/UI/Labs/LabParking.cs
+The ray the weapon lab's stand-off and the lighting lab's parked plane share: how far along a line from a point is
+clear of world colliders, shortened a margin short of the first hit and never under a floor.
+
 ## src/UI/Labs/VegetationLab.cs
 The vegetation lab (Shift+F2), the ocean lab's twin for `Mech3/VegetationSidecar.cs`, built by `InspectionLabs.BuildVegetationLab`
 in `--freecam` on a vegetation chapter alone; no session calls it until one can rebuild the clutter from an entry. A panel down

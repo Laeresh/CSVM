@@ -408,6 +408,7 @@ rows).
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
+- `src/Effects/ZoneLighting.cs`, one weather zone's Enhanced lighting tune: the field table with its defaults, and the `--debug-lighting` grammar.
 - `src/Effects/OceanShader.cs`, the wave ocean's shader text generated from one sea state, byte-identical to the tune at the defaults.
 - `src/Effects/OceanWakeTrack.cs`, one hull's sim-clock track, which the wave ocean draws its procedural Kelvin wake and foam trail from.
 - `src/Effects/SeaState.cs`, one chapter's sea: every tunable of the wave ocean with its default, range and lab group, clamped to the fold limit.
@@ -561,6 +562,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
+- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F4, `--freecam` only): a slider per zone lighting field over a held or followed zone, a parked plane to turn through the sun, with Save into the shipped lighting file.
+- `src/UI/Labs/LabParking.cs`, the clear-reach ray the weapon and lighting labs park an aircraft along.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
 - `src/UI/Labs/SoundLab.cs`, the sound lab (Shift+F9, a flight under `--sound-lab` only): a slider per Enhanced Sound amount and the hit confirm's group, applied live, a readout of the flown engine slot, with Save into the shipped tuning file, or into a sound pack's override while one plays.
 - `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag, and edits the sequence in a side panel whose row click flies the camera there.
@@ -888,8 +891,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 
 - `src/Session/World/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
-- `src/Session/World/MoonlitMissions.cs`, the shipped list of moonlit missions in `CSVM/data/moonlit_missions.json`, the worlds Enhanced lights as night.
-- `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
+- `src/Session/World/LightingTable.cs`, the shipped Enhanced lighting tune in `CSVM/data/lighting.json`: per chapter, mission and zone sparse blocks and the mission `night` flag, read with warnings and written by the lighting lab.- `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
 - `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core, Enhanced ring gain; every stereo session and flat Enhanced (`--screen-flare` for the A/B).
 - `src/Session/World/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.

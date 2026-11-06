@@ -231,7 +231,7 @@ public sealed class WeatherState
 
 
     /// <summary>Marks every zone of this mission <see cref="ZoneWeather.Moonlit"/>, for a world the
-    /// moonlit list names (<c>Session/World/MoonlitMissions</c>). The authored values stay as read;
+    /// lighting table flags as night (<c>Session/World/LightingTable</c>). The authored values stay as read;
     /// only <c>WeatherRig.IsNightZone</c> reads the mark, and only under Enhanced.</summary>
     public void MarkMoonlit()
     {

@@ -359,15 +359,21 @@ handle**: a daylit mission draws a moon and a star field too (C1 and C4 both wea
 which is why the dome's night art cannot separate the two populations.
 
 **Moonlit missions are the hand-picked exception.** Some worlds whose dome draws a moon author
-day-level `SUNLIGHT` and a day fog colour, so the rule lights them as day. A maintainer lists such a
-world in `CSVM/data/moonlit_missions.json` as `<chapter>/<mission folder>`; the list ships empty.
-Under Enhanced, `IsNightZone` counts every zone of a listed world as night, so it takes the night
+day-level `SUNLIGHT` and a day fog colour, so the rule lights them as day. A maintainer flags such a
+world `"night": true` under its chapter and mission folder in `CSVM/data/lighting.json`, which ships
+with no entry. Under Enhanced, `IsNightZone` counts every zone of a flagged world as night, so it takes the night
 path below: the capped energies, the light aimed at the dome's moon (at its sun first, where the
-dome draws both), the authored fog range and no cloud shadows. Original, and every unlisted world,
+dome draws both), the authored fog range and no cloud shadows. Original, and every unflagged world,
 light as authored. The clutter darkening's shader twin `csky_night_fog` reads the fog colour alone,
-so a listed world's day-grey fog leaves its clutter undarkened. `--dump-moonlit` prints the
+so a flagged world's day-grey fog leaves its clutter undarkened. `--dump-moonlit` prints the
 candidates: every flown world whose dome draws a moon card, with its authored pair, its verdict
 under the fog rule and whether its dome draws a sun card too.
+
+**The lighting tune adjusts the night path; it does not replace it.** A zone block's energy
+multipliers in `lighting.json` scale the capped pair, so a multiplier of 1.0 is the night look above,
+and its bearing offset turns the dome-aimed light. The night rule reads the authored `FOG_COLOR`, never
+the block's sky tint. The lighting lab (Shift+F4) edits the blocks; the file and its fields are
+`Session/World/LightingTable.cs` and `Effects/ZoneLighting.cs`.
 
 The same key keeps a night zone's authored fog range under Enhanced, where a day zone's is pushed
 out 2x for its shadows. Pushed, C5's black fog let the lit walls of its far city stand out over

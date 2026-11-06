@@ -37,14 +37,6 @@ public sealed class WeatherRig
     /// point lies this deep inside it. So it neither cuts the ray nor thins the fog.</summary>
     public const float VolumeUnboundD = 1e9f;
 
-    // ⚠ TUNE, judged at the controls: the authored SUNLIGHT numbers are the original's own
-    // lighting units, not Godot energies. Both factors are anchored on the install's modal day
-    // zone (diffuse 1.5, ambient 0.5) landing on the 1.6 and 0.9 the faithful path hardcodes, so
-    // a day mission keeps today's level while the data alone carries C1B's night zone
-    // (0.6 / 0.15) down to 0.64 and 0.27.
-    private const float SunEnergyPerDiffuse = 1.07f;
-    private const float AmbientEnergyPerAuthored = 1.8f;
-
     // ⚠ TUNE, judged at the controls, and NOT enhanced mode's pair. There a real sun lights the
     // whole world through a tonemap; here it lights only the Godot-shaded surfaces of a faithful
     // flight over a fullbright world. The in-flight aircraft is not one of them: it draws the
@@ -86,11 +78,6 @@ public sealed class WeatherRig
     // to live in. The faithful path keeps the authored ranges exactly, per the prohibition in
     // ZoneFog.
     private const float EnhancedFogRangeScale = 2f;
-
-    // TUNE, judged at the controls. The last shadow cascade fades out over this fraction of the
-    // sun's DirectionalShadowMaxDistance rather than cutting at a hard edge, so a shadow reads as
-    // dissolving into the coming haze instead of vanishing the frame before it starts.
-    private const float EnhancedShadowFadeStart = 0.8f;
 
     // The original's camera state inside an armed fog volume, which wears ZONE3. Rule: docs/org/weather.md,
     // "Precedence: 3 beats 2".
@@ -158,6 +145,11 @@ public sealed class WeatherRig
     // zone FOG_COLOR: C1's fog is 0.69 = 176, which would darken a passing A/B by 70 units.
     private static readonly Color WhiteoutFallbackColor = new(0.95f, 0.95f, 0.96f);
 
+    // Whether a zone tune's shadow or tonemap values sit on the session sun and Environment. Static,
+    // since the launcher keeps both across sessions, so the next rig knows to put the defaults back.
+    private static bool _sunTuned;
+    private static bool _tonemapTuned;
+
     // One flicker per rig, keyed like `_lastLoggedVolumeWhiteout`, the original keeps its drift
     // state in a single global, but that assumes one camera, and splitscreen panes on opposite
     // sides of the band must not share a drift phase.
@@ -214,9 +206,17 @@ public sealed class WeatherRig
     // This frame's eyes for the fog table, refilled per Tick so the frame allocates nothing.
     private readonly List<FogViewTable.View> _tableViews = new();
 
+    // The lighting lab's live tunes by zone, which win over the file's.
+    private readonly Dictionary<string, ZoneLighting> _labLighting = new(StringComparer.OrdinalIgnoreCase);
+    // Each zone's resolved tune, cleared whenever the file, a lab edit or the off switch moves one.
+    private readonly Dictionary<string, ZoneLighting> _tuned = new(StringComparer.OrdinalIgnoreCase);
+
     private WeatherState? _weather;
-    // The moonlit list, loaded with the first world unless a suite hands one in.
-    private MoonlitMissions? _moonlit;
+    // The lighting tune, loaded with the first world unless a suite hands one in.
+    private LightingTable? _lighting;
+    private bool _lightingOff;
+    // The zone the lighting lab holds the world in, null while the camera states drive it.
+    private string? _forcedZone;
     private string _activeZone;
     private Precipitation? _precip;
     private Vector3 _deckCenter;
@@ -274,10 +274,10 @@ public sealed class WeatherRig
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
         EffectAmbience? ambience = null, ViewerSet? viewers = null, Godot.Environment? env = null,
-        MoonlitMissions? moonlit = null)
+        LightingTable? lighting = null)
     {
         _spec = spec;
-        _moonlit = moonlit;
+        _lighting = lighting;
         _worldRoot = worldRoot;
         _sun = sun;
         _env = env;
@@ -337,6 +337,31 @@ public sealed class WeatherRig
     /// aircraft blocks (<c>Flight/Airframe/GroundShadowLaw</c>).</summary>
     public (Vector3 Diffuse, Vector3 Ambient) SunlightRgb { get; private set; } = DefaultSunlightRgb;
 
+    /// <summary>The mission's weather zones, the lighting lab's choices; empty with no weather.json.</summary>
+    public IReadOnlyList<string> ZoneNames => _weather?.ZoneNames ?? (IReadOnlyList<string>)Array.Empty<string>();
+
+    /// <summary>The zone the session's light wears now, null before the first zone apply.</summary>
+    public string? LiveZone => _appliedZone is { } fog ? ZoneNameOf(fog) : null;
+
+    /// <summary>The zone <see cref="ForceZone"/> holds the world in, null while the cameras drive it.</summary>
+    public string? ForcedZone => _forcedZone;
+
+    /// <summary>The lighting tune as the file holds it, loaded with the world.</summary>
+    public LightingTable Lighting => _lighting ?? LightingTable.None;
+
+    /// <summary>Gets or sets whether every zone lights untuned, the lab's before/after switch. Setting it
+    /// lights the zone again.</summary>
+    public bool LightingOff
+    {
+        get => _lightingOff;
+        set
+        {
+            _lightingOff = value;
+            _tuned.Clear();
+            ReapplyZone();
+        }
+    }
+
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
     /// top at or above it. Pure, so two cameras either side get independently correct answers.
@@ -364,11 +389,16 @@ public sealed class WeatherRig
     /// pinnable without a live scene, and so a viewport holding its own copy of the sun can
     /// resolve the same numbers.</summary>
     public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog)
+        => EnhancedEnergies(fog, ZoneLighting.Default);
+
+    /// <summary>The enhanced energies under a zone tune: its multipliers in place of the default
+    /// conversion factors, over the night-capped authored pair. Pure.</summary>
+    public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog, ZoneLighting tune)
     {
         bool night = IsNightZone(fog);
         float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
         float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
-        return (diffuse * SunEnergyPerDiffuse, ambient * AmbientEnergyPerAuthored);
+        return (diffuse * tune.SunEnergy, ambient * tune.AmbientEnergy);
     }
 
     /// <summary>The enhanced sun's <c>LightSpecular</c> for one zone: the strength of its direct
@@ -415,7 +445,7 @@ public sealed class WeatherRig
         => Scaled(PhotographFillAmbient(fog.SunAmbient), fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse);
 
     /// <summary>Whether a zone is under a night sky: its authored <c>FOG_COLOR</c> is dark, or under
-    /// Enhanced its world is a listed moonlit mission (<see cref="MoonlitMissions"/>). It is what caps
+    /// Enhanced its world is a moonlit mission (<see cref="LightingTable.Night"/>). It is what caps
     /// the enhanced energies and aims the light at the moon. Public so the rule can be pinned and a
     /// log line can say which side of it a zone fell on.</summary>
     public static bool IsNightZone(WeatherState.ZoneWeather fog)
@@ -554,6 +584,69 @@ public sealed class WeatherRig
     /// frame in the pass's own basis.</summary>
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
+
+    /// <summary>The tune <paramref name="zone"/> lights with under Enhanced, the lab's edit before the file's.</summary>
+    public ZoneLighting LightingFor(string zone)
+    {
+        if (_labLighting.TryGetValue(zone, out var edit))
+            return edit;
+        if (!_tuned.TryGetValue(zone, out var tune))
+            _tuned[zone] = tune = Lighting.For(_spec.Chapter, _spec.Mission, zone);
+        return tune;
+    }
+
+    /// <summary>The file read again after a lab Save. The lab's live tunes still win over it.</summary>
+    public void ReloadLighting(LightingTable table)
+    {
+        _lighting = table;
+        _tuned.Clear();
+    }
+
+    /// <summary>The lighting lab's live tune for one zone, or null to fall back to the file's. The zone
+    /// is lit again at once, the cockpit and spyglass suns with it.</summary>
+    public void SetLighting(string zone, ZoneLighting? tune)
+    {
+        if (tune == null)
+            _labLighting.Remove(zone);
+        else
+            _labLighting[zone] = tune.Clamped();
+        _tuned.Clear();
+        ReapplyZone();
+    }
+
+    /// <summary>Holds every view in <paramref name="zone"/>'s weather and light whatever its camera
+    /// state, or with null hands the views back to their camera-state edges. The lighting lab's zone
+    /// pick; ⚠ Tick skips the edges while a zone is held, so no camera edge writes over it.</summary>
+    public void ForceZone(string? zone)
+    {
+        if (_weather == null)
+            return;
+        _forcedZone = zone == null ? null : _weather.ResolveZone(zone);
+        WeatherState.ZoneWeather? lit;
+        if (_forcedZone != null)
+        {
+            var fog = _weather.Zone(_forcedZone);
+            ViewOf(_primary);
+            foreach (var view in _views.Values)
+            {
+                view.Zone = fog;
+                view.Over = null;
+                view.Fog = ZoneFog(fog);
+                view.Sun = ZoneSun(fog);
+            }
+            lit = fog;
+        }
+        else
+        {
+            // Fresh views start on the build's zone with untriggered edges, so each view's next Tick takes its camera's.
+            _views.Clear();
+            lit = _baseFog.Zone;
+        }
+        if (lit is { } applied)
+            ApplyZone(applied);
+        WriteGlobals(FogOf(_primary), FogField.All);
+        Log.Info("world", $"weather: zone {(_forcedZone != null ? $"held at '{_forcedZone}' by the lighting lab" : "handed back to the camera states")}");
+    }
 
     /// <summary>A live graphics-mode switch: write the current zone again, since both the fog range
     /// and which lighting arm drives the sun and ambient depend on the mode. A rig with no zone
@@ -810,8 +903,8 @@ public sealed class WeatherRig
             // The original's zone_id visibility gate, applied per camera because splitscreen
             // panes can sit in different states at once. Cull mask for shared world content,
             // Visible for the deck/dome's own per-rig copies (docs/org/weather.md).
-            int gate = _spec.SkyZoneExplicit
-                ? ZoneNumberOf(_spec.SkyZone) ?? rig.CameraWeatherState
+            int gate = _forcedZone != null ? ZoneNumberOf(_forcedZone) ?? rig.CameraWeatherState
+                : _spec.SkyZoneExplicit ? ZoneNumberOf(_spec.SkyZone) ?? rig.CameraWeatherState
                 : rig.CameraWeatherState;
             rig.Camera.CullMask = _spec.NoZoneCull
                 ? ZoneGate.OpenCullMask(rig.Camera.CullMask)
@@ -830,7 +923,7 @@ public sealed class WeatherRig
         {
             bool primaryMoved = rigs[0].Index != _primary;
             _primary = rigs[0].Index;
-            if (_weather != null)
+            if (_weather != null && _forcedZone == null)
             {
                 foreach (var rig in rigs)
                 {
@@ -852,7 +945,7 @@ public sealed class WeatherRig
     // The resolved energies said out loud beside the world light, so a zone log says which
     // lighting the flight got and which authored pair produced it. Both modes print, since the
     // faithful arm moves per zone too.
-    private static string LightSuffix(WeatherState.ZoneWeather fog)
+    private static string LightSuffix(WeatherState.ZoneWeather fog, ZoneLighting tune)
     {
         if (!GraphicsMode.Enhanced)
         {
@@ -861,11 +954,12 @@ public sealed class WeatherRig
                    + Log.Format($"ambient energy {ambient:0.00} (ambient {fog.SunAmbient:0.##})");
         }
 
-        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
         return Log.Format($"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
                + Log.Format($"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), ")
-               + Log.Format($"shadows to {FogRangeFor(fog).X:0} m")
-               + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
+               + Log.Format($"shadows to {FogRangeFor(fog).X * tune.ShadowDistance:0} m")
+               + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty)
+               + (tune != ZoneLighting.Default ? $"; lighting tune {tune.Describe()}" : string.Empty);
     }
 
     // Where the dome draws a sky card, from its own origin (WorldBuilder.MarkSkyCards); null for none,
@@ -923,6 +1017,10 @@ public sealed class WeatherRig
     private static Vector3 Scaled(float intensity, Color colour) =>
         new(colour.R * intensity, colour.G * intensity, colour.B * intensity);
 
+    // A tune's sky tint over a FOG_COLOR, alpha kept.
+    private static Color SkyTinted(Color fogColor, ZoneLighting tune) =>
+        fogColor * new Color(tune.SkyR, tune.SkyG, tune.SkyB);
+
     // The primary view's fog into the plain globals, the fields named. Every view's fog also
     // reaches the shaders through FogViewTable whenever the views disagree.
     // ⚠ GlobalShaderParameterSet, never Add: Add runs once per process in Launcher._Ready, so a
@@ -967,7 +1065,7 @@ public sealed class WeatherRig
         }
         ApplyZone(fog);
         WriteGlobals(FogOf(rig.Index), FogField.All);
-        Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(_sun.Rotation.X):0.#}°/{Mathf.RadToDeg(_sun.Rotation.Y):0.#}°{AimedSuffix(fog)} (dome built for '{_activeZone}'){LightSuffix(fog)}");
+        Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(_sun.Rotation.X):0.#}°/{Mathf.RadToDeg(_sun.Rotation.Y):0.#}°{AimedSuffix(fog)} (dome built for '{_activeZone}'){LightSuffix(fog, Tuning(fog))}");
     }
 
     // Enhanced only: outside an armed fog volume a view's fog runs toward the volume zone's own. The
@@ -1241,12 +1339,16 @@ public sealed class WeatherRig
     private void LoadWeather(ZrdrSet missionZrdr, IReadOnlyList<HorizonZone> horizonZones)
     {
         _weather = WeatherState.Load(missionZrdr);
-        _moonlit ??= MoonlitMissions.Load();
-        if (_weather != null && _moonlit.Lists(_spec.Chapter, _spec.Mission))
+        _lighting ??= LightingTable.Load();
+        _tuned.Clear();
+        if (_weather != null && _lighting.Night(_spec.Chapter, _spec.Mission))
         {
             _weather.MarkMoonlit();
-            Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} is a listed moonlit mission, lit as night under Enhanced");
+            Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} is a moonlit mission (night in lighting.json), lit as night under Enhanced");
         }
+        // No zone apply follows a world with no weather, so a previous session's tune is put back here.
+        if (_weather == null && GraphicsMode.Enhanced)
+            ApplySunTune(ZoneLighting.Default);
         // The mission's WIND block, read per mission rather than baked, see docs/org/weather.md
         // for the authored values every weather.zrd shares. A mission with no weather.json gets
         // still air, not someone else's breeze.
@@ -1303,7 +1405,7 @@ public sealed class WeatherRig
         _baseFog.Sun = ZoneSun(fog);
         WriteGlobals(FogOf(_primary), FogField.All);
         var fogRange = _baseFog.Fog.Range;
-        Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(_sun.Rotation.X):0.#}° pitch / {Mathf.RadToDeg(_sun.Rotation.Y):0.#}° yaw{AimedSuffix(fog)}; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog)}");
+        Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(_sun.Rotation.X):0.#}° pitch / {Mathf.RadToDeg(_sun.Rotation.Y):0.#}° yaw{AimedSuffix(fog)}; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog, Tuning(fog))}");
         Log.Info("world", $"sky cards: {SkyCardNote(fog)}");
         if (_fogWhiteout.Armed)
         {
@@ -1322,7 +1424,7 @@ public sealed class WeatherRig
     {
         // FOG_COLOR is a DX7-era sRGB framebuffer value; the shader mixes ALBEDO in linear
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
-        var fogLinear = fog.FogColor.SrgbToLinear();
+        var fogLinear = SkyTinted(fog.FogColor, Tuning(fog)).SrgbToLinear();
         // ⚠ Do not scale the authored fog ranges in the FAITHFUL path: VIEWING_RANGE ships
         // FOG_SCALE 1.0 at HIGH in every chapter and no screenshot residual licenses re-opening it
         // (docs/org/weather.md). FogRangeFor is identity there; only enhanced mode pushes them out.
@@ -1422,11 +1524,18 @@ public sealed class WeatherRig
     // shadow pointing away from the sky's sun or moon reads wrong, so Enhanced aims at the zone's dome.
     private Vector3 LightOrientation(WeatherState.ZoneWeather fog)
     {
+        var aimed = AimedOrientation(fog);
+        if (!GraphicsMode.Enhanced || Tuning(fog) is not { TurnsSun: true } tune)
+            return aimed;
+        return aimed + new Vector3(-Mathf.DegToRad(tune.SunPitch), Mathf.DegToRad(tune.SunYaw), 0f);
+    }
+
+    // The bearing before a tune's offset: Original's authored one, or Enhanced's dome-aimed one.
+    private Vector3 AimedOrientation(WeatherState.ZoneWeather fog)
+    {
         if (!GraphicsMode.Enhanced || _weather == null || _domes.Count == 0)
             return fog.SunOrientation;
-        // ponytail: a zone authored like an earlier one reads that one's dome.
-        string name = _weather.ZoneNames.FirstOrDefault(z => _weather.Zone(z).Equals(fog)) ?? _activeZone;
-        int state = ZoneNumberOf(name) ?? 0;
+        int state = ZoneNumberOf(ZoneNameOf(fog)) ?? 0;
         Node3D? dome = _domes.Count == 1 ? _domes[0].Node : null;
         foreach (var d in _domes)
         {
@@ -1498,19 +1607,71 @@ public sealed class WeatherRig
         // Shadows end where this zone's haze BEGINS, off the AUTHORED near, so a shadow fades out
         // before the ramp rather than mixing with it (docs/architecture.md). The session sun only:
         // a registered clone owns its own camera-relative distance (RegisterExtraLighting).
+        var tune = Tuning(fog);
         if (fog.FogFar > 0f)
         {
-            _sun.DirectionalShadowMaxDistance = FogRangeFor(fog).X;
-            _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
+            _sun.DirectionalShadowMaxDistance = FogRangeFor(fog).X * tune.ShadowDistance;
+            _sun.DirectionalShadowFadeStart = tune.FadeStart;
         }
-        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
         float sunSpecular = EnhancedSunSpecular(fog);
-        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, fog.SunColorDiffuse, ambientEnergy,
-            fog.SunColorAmbient, fog.FogColor);
+        var sunColor = fog.SunColorDiffuse * new Color(tune.SunR, tune.SunG, tune.SunB);
+        var ambientColor = fog.SunColorAmbient * new Color(tune.AmbientR, tune.AmbientG, tune.AmbientB);
+        var skyColor = SkyTinted(fog.FogColor, tune);
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
         foreach (var (sun, env) in _extraLighting)
-            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, fog.SunColorDiffuse, ambientEnergy,
-                fog.SunColorAmbient, fog.FogColor);
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
+        ApplySunTune(tune);
     }
+
+    // The tune's shadow and tonemap values, which an untuned zone leaves to EnhancedLook. Written while
+    // a tune holds them and once more to put the defaults back. A shadow write re-runs the Shadow
+    // Quality apply, whose revision makes the cockpit pass copy the sun again (SunShadow).
+    private void ApplySunTune(ZoneLighting tune)
+    {
+        var d = ZoneLighting.Default;
+        bool shadow = tune.ShadowSoftness != d.ShadowSoftness || tune.ShadowBias != d.ShadowBias
+            || tune.NormalBias != d.NormalBias || tune.Split1 != d.Split1 || tune.Split2 != d.Split2
+            || tune.Split3 != d.Split3 || tune.FadeStart != d.FadeStart;
+        if (shadow || _sunTuned)
+        {
+            _sun.ShadowBias = tune.ShadowBias;
+            _sun.ShadowNormalBias = tune.NormalBias;
+            _sun.DirectionalShadowSplit1 = tune.Split1;
+            _sun.DirectionalShadowSplit2 = tune.Split2;
+            _sun.DirectionalShadowSplit3 = tune.Split3;
+            _sun.DirectionalShadowFadeStart = tune.FadeStart;
+            ShadowQualitySetting.Softness = tune.ShadowSoftness;
+            ShadowQualitySetting.ApplyTo(_sun, ShadowQualitySetting.Sun, true, ShadowQualitySetting.HardShadows);
+        }
+        _sunTuned = shadow;
+
+        bool tonemap = tune.Exposure != d.Exposure || tune.White != d.White;
+        if (tonemap || _tonemapTuned)
+        {
+            WriteTonemap(_env, tune);
+            foreach (var (_, env) in _extraLighting)
+                WriteTonemap(env, tune);
+        }
+        _tonemapTuned = tonemap;
+
+        static void WriteTonemap(Godot.Environment? env, ZoneLighting tune)
+        {
+            if (env == null)
+                return;
+            env.TonemapExposure = tune.Exposure;
+            env.TonemapAgxWhite = tune.White;
+        }
+    }
+
+    // The tune one zone lights with: none under Original, which never reads the file, or with the
+    // lab's off switch on.
+    private ZoneLighting Tuning(WeatherState.ZoneWeather fog) =>
+        !GraphicsMode.Enhanced || _lightingOff || _weather == null ? ZoneLighting.Default : LightingFor(ZoneNameOf(fog));
+
+    // The name of the zone a record is; ponytail: a zone authored like an earlier one reads as that one.
+    private string ZoneNameOf(WeatherState.ZoneWeather fog) =>
+        _weather?.ZoneNames.FirstOrDefault(z => _weather.Zone(z).Equals(fog)) ?? _activeZone;
 
     // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the scene sun
     // and ambient, which reach only the Godot-shaded surfaces. The in-flight aircraft takes the

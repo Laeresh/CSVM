@@ -868,6 +868,8 @@ public partial class GameSession : Node3D
                 state.Zrdr, _ambience);
             _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
         }
+        if (state.NodeSubtree == null)
+            _labs!.BuildLightingLab(state, _sky?.Weather, _liveryResolver);
         var gamez = state.Gamez;
         // The labs' ground under the cursor, built on the first ray, so a session that never asks never pays for it.
         var ground = new Lazy<Vector3[]>(() =>

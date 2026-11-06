@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
@@ -1666,6 +1667,147 @@ internal static class GraphicsSwitchSuites
             WaterQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
+    }
+
+    [Suite("lighting-lab",
+        "the lighting lab stands in an Enhanced --freecam C2 session and nowhere in a --fly one: a held zone "
+        + "stays held through the camera's steps, an edit reaches the live sun, ambient, tonemap and shadow fields "
+        + "and a registered clone's, off restores the untuned values and on brings the edit back, a mission override "
+        + "reads through its chapter entry, Save to chapter and Save to this mission write the sparse blocks, and a "
+        + "reset drops an override")]
+    internal static void LightingLabEdits(TestContext ctx)
+    {
+        const string Chapter = "C2";
+        const string Mission = "IA1";
+        RequireData(ctx, Chapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            var freecam = Open(ctx, enhanced: true, chapter: Chapter, extra: new[] { "--freecam", $"--mission={Mission}" });
+            UI.Labs.LightingLab? lab = null;
+            try
+            {
+                var labs = NodesOf<UI.Labs.LightingLab>(freecam.Session);
+                if (!freecam.Built || labs.Count != 1 || labs[0].Weather.ZoneNames.Count < 2)
+                {
+                    ctx.Check(false, $"the Enhanced --freecam {Chapter} session builds one lighting lab over two zones or more (built={freecam.Built}, {labs.Count} lab(s))");
+                    return;
+                }
+                lab = labs[0];
+                var weather = lab.Weather;
+                var (sun, env) = (freecam.Sun, freecam.Env);
+                // A clone as a cockpit pass registers its own sun and Environment.
+                var cloneSun = new DirectionalLight3D { Name = "lighting-lab-clone" };
+                var cloneEnv = new Godot.Environment();
+                freecam.Pane.AddChild(cloneSun);
+                weather.RegisterExtraLighting(cloneSun, cloneEnv);
+                weather.ReloadLighting(LightingTable.None);
+
+                string held = weather.ZoneNames[^1];
+                lab.Toggle();
+                lab.PickZone(held);
+                lab.RevertToSaved();
+                Step(freecam);
+                ctx.Check(lab.IsOpen && Same(weather.ForcedZone, held) && Same(weather.LiveZone, held) && Same(lab.ShownZone, held)
+                        && lab.Edited == ZoneLighting.Default,
+                    $"the lab opens, and the world stays in the held zone {held} through the camera's steps (live {weather.LiveZone}, forced {weather.ForcedZone})");
+
+                float sun0 = sun.LightEnergy, ambient0 = env.AmbientLightEnergy, blur0 = sun.ShadowBlur;
+                var colour0 = sun.LightColor;
+                int revision0 = ShadowQualitySetting.Revision;
+                lab.Set("sun_energy", ZoneLighting.Default.SunEnergy * 2f);
+                lab.Set("ambient_energy", ZoneLighting.Default.AmbientEnergy * 0.5f);
+                lab.Set("sun_r", 0.5f);
+                lab.Set("exposure", 1.5f);
+                lab.Set("white", 8f);
+                lab.Set("shadow_bias", 0.2f);
+                lab.Set("shadow_softness", 2f);
+                Step(freecam);
+                ctx.Check(Mathf.IsEqualApprox(sun.LightEnergy, sun0 * 2f) && Mathf.IsEqualApprox(env.AmbientLightEnergy, ambient0 * 0.5f)
+                        && Mathf.IsEqualApprox(sun.LightColor.R, colour0.R * 0.5f),
+                    $"the energy and tint edits reach the sun and ambient (sun {sun0:0.###} -> {sun.LightEnergy:0.###}, ambient {ambient0:0.###} -> {env.AmbientLightEnergy:0.###})");
+                ctx.Check(env.TonemapExposure == 1.5f && env.TonemapAgxWhite == 8f && sun.ShadowBias == 0.2f
+                        && Mathf.IsEqualApprox(sun.ShadowBlur, blur0 * 2f) && ShadowQualitySetting.Revision > revision0,
+                    $"the tonemap and shadow edits reach the Environment and the sun, and move the shadow revision the cockpit pass copies on (blur {blur0:0.##} -> {sun.ShadowBlur:0.##})");
+                ctx.Check(Mathf.IsEqualApprox(cloneSun.LightEnergy, sun.LightEnergy) && cloneSun.LightColor.IsEqualApprox(sun.LightColor)
+                        && cloneEnv.TonemapExposure == 1.5f,
+                    $"a registered clone takes the same values (energy {cloneSun.LightEnergy:0.###}, exposure {cloneEnv.TonemapExposure:0.##})");
+
+                lab.SetOff(true);
+                Step(freecam);
+                ctx.Check(Mathf.IsEqualApprox(sun.LightEnergy, sun0) && Mathf.IsEqualApprox(env.AmbientLightEnergy, ambient0)
+                        && env.TonemapExposure == ZoneLighting.Default.Exposure && env.TonemapAgxWhite == ZoneLighting.Default.White
+                        && sun.ShadowBias == ZoneLighting.Default.ShadowBias && Mathf.IsEqualApprox(sun.ShadowBlur, blur0)
+                        && cloneEnv.TonemapExposure == ZoneLighting.Default.Exposure,
+                    $"off restores the untuned values (sun {sun.LightEnergy:0.###}, exposure {env.TonemapExposure:0.##}, bias {sun.ShadowBias:0.###})");
+                lab.SetOff(false);
+                ctx.Check(Mathf.IsEqualApprox(sun.LightEnergy, sun0 * 2f) && env.TonemapExposure == 1.5f,
+                    $"on brings the edit back (sun {sun.LightEnergy:0.###})");
+
+                string json = $"{{ \"{Chapter}\": {{ \"{held}\": {{ \"exposure\": 1.2 }}, \"{Mission}\": {{ \"{held}\": {{ \"sun_r\": 0.9 }} }} }} }}";
+                weather.ReloadLighting(LightingTable.Parse(json));
+                lab.RevertToSaved();
+                ctx.Check(lab.Edited.Exposure == 1.2f && lab.Edited.SunR == 0.9f && lab.Overrides.SequenceEqual(new[] { "sun_r" })
+                        && env.TonemapExposure == 1.2f,
+                    $"a mission override reads through its chapter entry: {lab.Edited.Describe()}, overrides [{string.Join(",", lab.Overrides)}]");
+
+                string scratch = System.IO.Path.Combine(ctx.ScratchDir, "test-lighting-lab.json");
+                System.IO.Directory.CreateDirectory(ctx.ScratchDir);
+                System.IO.File.WriteAllText(scratch, json);
+                lab.SavePath = scratch;
+                lab.Set("exposure", 1.4f);
+                bool chapterSaved = lab.SaveToChapter() == scratch;
+                var saved = LightingTable.Parse(System.IO.File.ReadAllText(scratch));
+                ctx.Check(chapterSaved && Fields(saved.ChapterFields(Chapter, held)) == "exposure:1.4"
+                        && Fields(saved.MissionFields(Chapter, Mission, held)) == "sun_r:0.9" && saved.For(Chapter, Mission, held).Exposure == 1.4f,
+                    $"Save to chapter writes the chapter block and keeps the override the mission's (chapter {Fields(saved.ChapterFields(Chapter, held))}, mission {Fields(saved.MissionFields(Chapter, Mission, held))})");
+                lab.Set("white", 7f);
+                bool missionSaved = lab.SaveToMission() == scratch;
+                saved = LightingTable.Parse(System.IO.File.ReadAllText(scratch));
+                ctx.Check(missionSaved && Fields(saved.ChapterFields(Chapter, held)) == "exposure:1.4"
+                        && Fields(saved.MissionFields(Chapter, Mission, held)) == "sun_r:0.9,white:7",
+                    $"Save to this mission writes only what differs from the chapter ({Fields(saved.MissionFields(Chapter, Mission, held))})");
+
+                lab.ResetToChapter("sun_r");
+                ctx.Check(lab.Edited.SunR == 1f && !lab.Overrides.Contains("sun_r"),
+                    $"a reset takes the chapter's value and drops the mark (sun_r {lab.Edited.SunR:0.##})");
+                lab.PickZone(null);
+                Step(freecam);
+                ctx.Check(weather.ForcedZone == null, $"Follow camera hands the zone back to the camera states");
+            }
+            finally
+            {
+                if (lab != null)
+                {
+                    lab.Weather.ReloadLighting(LightingTable.None);
+                    foreach (var zone in lab.Weather.ZoneNames)
+                        lab.Weather.SetLighting(zone, null);
+                }
+                freecam.Close();
+            }
+
+            var fly = Open(ctx, enhanced: true, chapter: Chapter, extra: "--fly");
+            try
+            {
+                int built = NodesOf<UI.Labs.LightingLab>(fly.Session).Count;
+                ctx.Check(fly.Built && built == 0, $"a --fly {Chapter} session builds no lighting lab (built={fly.Built}, {built} lab(s))");
+            }
+            finally
+            {
+                fly.Close();
+            }
+        }
+        finally
+        {
+            ShadowQualitySetting.Softness = 1f;
+            Restore(wasEnhanced);
+        }
+
+        static bool Same(string? a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+        static string Fields(IReadOnlyDictionary<string, float> fields) =>
+            string.Join(",", ZoneLighting.Fields.Where(f => fields.ContainsKey(f.Key))
+                .Select(f => $"{f.Key}:{fields[f.Key].ToString("0.###", CultureInfo.InvariantCulture)}"));
     }
 
     [Suite("vegetation-added-stamps",

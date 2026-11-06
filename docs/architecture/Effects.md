@@ -78,6 +78,15 @@ a `world` warning. `WithEntry` rewrites one chapter's entry in place for the oce
 key and its order, skipping comments as the read does, and refusing a file it cannot parse rather than replacing it;
 `SourceTreePath` is null in an exported build. `OceanSeasTests`. Read `SeaState.cs` next.
 
+## src/Effects/ZoneLighting.cs
+One weather zone's Enhanced lighting tune: sun and ambient energy multipliers in place of the
+conversion factors, sun, ambient and sky tints over the decoded colours, a bearing offset, the AgX
+exposure and white, and the shadow softness, distance, biases, splits and fade start. The defaults
+are the untuned Enhanced look, which `Launch/EnhancedLook.cs` and `Session/World/WeatherRig.cs` read.
+Its field table drives the lighting lab's sliders and the file's keys. `LightingDebug` beside it is
+the `--debug-lighting` grammar, below `Spec` so `SessionSpec` can filter it. `LightingTableTests`.
+Read `Session/World/LightingTable.cs` next.
+
 ## src/Effects/OceanShader.cs
 The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
 tables, the bending field, the coast ramps and the open sea's tint, written as literals; at the defaults it is the
@@ -190,7 +199,7 @@ uncollapsed colours, the cloud-cover whiteout band, wind, and precipitation. `De
 zone against them. `ResolveZone` picks the flown zone by name, falling back to the one zone whose
 horizon subtree carries meshes where the requested one is empty and this mission also fogs it;
 `CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes;
-`MarkMoonlit` flags every zone of a listed moonlit mission (`Session/World/MoonlitMissions.cs`). Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
+`MarkMoonlit` flags every zone of a moonlit mission (`Session/World/LightingTable.cs`). Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
 
 ## src/Effects/ViewerSet.cs
 The "what do the cameras see" registry, session-owned and bound once after the rigs are built, so

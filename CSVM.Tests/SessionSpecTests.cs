@@ -968,6 +968,18 @@ public class SessionSpecTests
         Assert.Null(S("--viewer", "--debug-ocean=height:1.4").DebugOcean);
     }
 
+    /// <summary>The lighting lab's twin is a <c>--freecam</c> flag too, keeping only the tokens the lab reads.</summary>
+    [Fact]
+    public void TheLightingLabTwinIsAFreecamFlag()
+    {
+        var s = S("--freecam", "--debug-lighting=zone:zone2,exposure:1.3,bogus,off,open");
+        Assert.Equal("zone:zone2,exposure:1.3,off,open", s.DebugLighting);
+        Assert.Contains(s.Warnings, w => w.Category == "ui" && w.Message.Contains("'bogus'"));
+        Assert.Equal("", S("--freecam", "--debug-lighting").DebugLighting);
+        Assert.Null(S("--fly", "--debug-lighting=exposure:1.3").DebugLighting);
+        Assert.Null(S("--viewer", "--debug-lighting=exposure:1.3").DebugLighting);
+    }
+
     // ---- Placement -----------------------------------------------------------------------------
 
     [Fact]

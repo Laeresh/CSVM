@@ -105,6 +105,10 @@ public static class ShadowQualitySetting
     /// The launcher sets it once from the spec, before the sun is dressed.</summary>
     public static bool HardShadows { get; set; }
 
+    /// <summary>Gets or sets the zone tune's multiplier on the level's blur and angular distance, 1 untuned.
+    /// The zone apply sets it (<c>Effects.ZoneLighting.ShadowSoftness</c>), so an Options apply keeps it.</summary>
+    public static float Softness { get; set; } = 1f;
+
     /// <summary>Gets or sets whether the Enhanced terrain casts its baked sun shadow
     /// (<c>Effects.TerrainShadow</c>); <c>--terrain-shadows=off</c> clears it. The launcher sets it
     /// once from the spec, before the first world shader is written. The lit arms carry a
@@ -172,8 +176,8 @@ public static class ShadowQualitySetting
             return;
         }
 
-        sun.LightAngularDistance = hard ? 0f : plan.AngularDistance;
-        sun.ShadowBlur = hard ? 0f : plan.Blur;
+        sun.LightAngularDistance = hard ? 0f : plan.AngularDistance * Softness;
+        sun.ShadowBlur = hard ? 0f : plan.Blur * Softness;
         (renderer ?? WriteRenderer)(hard ? RenderingServer.ShadowQuality.Hard : plan.Filter, plan.AtlasSize);
     }
 
