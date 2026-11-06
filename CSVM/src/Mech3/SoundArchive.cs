@@ -167,7 +167,7 @@ public sealed class SoundArchive : IDisposable
                     : WavStream(WavFile.ParseMonoOrStereo(replacement.Bytes), looped);
                 Log.Info("sound", $"HD sound: {wavName} plays {replacement.Source}");
             }
-            catch (Exception e) when (e is InvalidDataException or NotSupportedException or ArgumentException or IndexOutOfRangeException)
+            catch (Exception e)
             {
                 Log.Warn("sound", $"HD sound {replacement.Source} was refused ({e.Message}), {wavName} plays the original");
             }

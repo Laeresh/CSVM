@@ -83,6 +83,23 @@ public class HudModeSettingTests
     }
 
     [Fact]
+    public void AnOptionsAcceptUnderDetKeepsTheSteppedMode()
+    {
+        var before = HudModeSetting.Current;
+        try
+        {
+            // The mode an F2 step left, which a --det accept must not reset to Full.
+            HudModeSetting.Current = HudMode.None;
+            Assert.False(HudModeSetting.ApplyAfterOptions(det: true));
+            Assert.Equal(HudMode.None, HudModeSetting.Current);
+        }
+        finally
+        {
+            HudModeSetting.Current = before;
+        }
+    }
+
+    [Fact]
     public void TheSavedWordBeatsFullAndNothingSavedReadsFull()
     {
         Assert.Equal("full", HudModeSetting.Resolve(null).Word);

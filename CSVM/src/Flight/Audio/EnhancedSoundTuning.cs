@@ -164,7 +164,8 @@ public sealed record EnhancedSoundTuning
         baseline ??= Neutral;
         // An editor may save the file with a byte order mark, which the JSON reader refuses.
         int bom = json.Length >= 3 && json[0] == 0xEF && json[1] == 0xBB && json[2] == 0xBF ? 3 : 0;
-        using var doc = JsonDocument.Parse(json.AsMemory(bom));
+        // Comments are skipped as Save's read (VegetationSidecar.ParseWhole) skips them.
+        using var doc = JsonDocument.Parse(json.AsMemory(bom), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
         {
@@ -273,11 +274,12 @@ public sealed record EnhancedSoundTuning
     }
 
     /// <summary>Writes <paramref name="tuning"/> into the file at <paramref name="diskPath"/> through
-    /// <see cref="WithValues"/>, creating it when absent, and returns the values written.</summary>
+    /// <see cref="WithValues"/> and <see cref="AtomicFile"/>, creating it when absent, and returns the
+    /// values written.</summary>
     public static EnhancedSoundTuning Save(string diskPath, EnhancedSoundTuning tuning, EnhancedSoundTuning? under = null)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
-        File.WriteAllText(diskPath, WithValues(existing, tuning, under), new UTF8Encoding(false));
+        AtomicFile.WriteAllText(diskPath, WithValues(existing, tuning, under));
         return tuning.Written();
     }
 

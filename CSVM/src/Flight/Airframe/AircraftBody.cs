@@ -1,3 +1,4 @@
+using CSVM.Flight.Audio;
 using CSVM.Flight.Weapons;
 using Godot;
 
@@ -90,6 +91,16 @@ public sealed partial class AircraftBody : AnimatableBody3D
     public void TakeProjectileHit(WeaponDef weapon, Vector3 point, int shapeIdx, int shooter,
         float damageScale = 1f)
     {
+        // Ahead of the router, which claims a networked hit before the controller sees it. Every
+        // round simulated here is judged once, and a claim off the wire never comes through here.
+        // A seat flown elsewhere carries no FlightAudio, so its replayed round sounds on no mix.
+        if (Rig.InPlay && Rig.Projectiles is { } pool
+            && pool.RigOfShooter(shooter) is { Audio: { } gunnerAudio } gunner
+            && HitConfirmCue.Earns(weapon.IsGun, gunner.IsHumanPiloted, gunner.Team, Rig.Team))
+        {
+            gunnerAudio.OnHitConfirm(pool.SimClock);
+        }
+
         // Both projectile paths, the ray and the blast, come through here, which is why the
         // router is asked here and nowhere else.
         if (Rig.HitRouter is { } router

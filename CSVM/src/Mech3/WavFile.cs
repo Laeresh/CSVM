@@ -24,14 +24,16 @@ public sealed class WavFile
 
     public int Frames => Channels == 0 ? 0 : Samples.Length / Channels;
 
-    /// <summary><see cref="Parse"/>, refusing more than two channels with an
+    /// <summary><see cref="Parse"/>, refusing more than two channels or no frames with an
     /// <see cref="InvalidDataException"/>: the mixer plays only mono or stereo. A sound pack's file
-    /// goes through here, so a surround export plays the original instead.</summary>
+    /// goes through here, so a surround or empty export plays the original instead.</summary>
     public static WavFile ParseMonoOrStereo(byte[] bytes)
     {
         var wav = Parse(bytes);
         if (wav.Channels > 2)
             throw new InvalidDataException($"{wav.Channels} channels, where the mixer plays mono or stereo");
+        if (wav.Frames == 0)
+            throw new InvalidDataException("no sample frames");
         return wav;
     }
 
@@ -51,6 +53,10 @@ public sealed class WavFile
             uint id = BitConverter.ToUInt32(bytes, pos);
             int size = BitConverter.ToInt32(bytes, pos + 4);
             int body = pos + 8;
+            // A piped ffmpeg export's 'data' says 0xFFFFFFFF, so such a chunk reads to the file's end.
+            // A negative size would otherwise step the walk back or hold it in place.
+            if (size < 0 || size > bytes.Length - body)
+                size = bytes.Length - body;
             switch (id)
             {
                 case 0x20746d66: // 'fmt '
@@ -80,7 +86,7 @@ public sealed class WavFile
                     break;
                 case 0x61746164: // 'data'
                     dataOffset = body;
-                    dataLength = Math.Min(size, bytes.Length - body);
+                    dataLength = size;
                     break;
             }
             pos = body + size + (size & 1);
@@ -126,6 +132,8 @@ public sealed class WavFile
     private static short[] DecodeMsAdpcm(byte[] d, int offset, int length, int channels,
         int blockAlign, int samplesPerBlock, short[] coef1, short[] coef2, int factSamples)
     {
+        if (blockAlign == 0)
+            throw new InvalidDataException("MS ADPCM block align 0");
         int blocks = length / blockAlign;
         int totalFrames = blocks * samplesPerBlock;
         if (factSamples > 0)

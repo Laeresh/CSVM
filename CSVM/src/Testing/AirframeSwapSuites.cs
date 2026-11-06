@@ -219,6 +219,69 @@ internal static class AirframeSwapSuites
         ctx.Note($"captured the {chapter}/{folder} Balmoral mid-burst and read its loops after the swap");
     }
 
+    /// <summary>Runs CM02's capture swap through a flown session's own swap seam. The pilot's pane
+    /// then holds one interior pass, the new airframe's.</summary>
+    // #293: the pass was built once per rig. After a swap it kept drawing the outgoing interior,
+    // and the new one rendered in the main world.
+    [Suite("campaign-swap-cockpit-pass",
+        "CM02's capture swap (callback 967) driven through a flown session's own swap seam leaves "
+        + "the pilot's pane exactly one live interior pass, the rebuilt aircraft's own, holding the "
+        + "new airframe's interior and not the outgoing one, and that pass draws in Cockpit view")]
+    internal static void SwapCockpitPass(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.Zrdr, CampaignSequence.FileName);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.Zrdr), Cm02Seq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        ctx.RequireData(ctx.MissionZrdr(chapter, folder), $"{chapter}/{folder} zrdr");
+        var spec = SessionSpec.Parse(new[] { "--fly", $"--chapter={chapter}", $"--mission={folder}", "--mute", "--no-pads" });
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, seed: 293, roster: null);
+        try
+        {
+            ctx.Check(end.Built, $"the {chapter}/{folder} flight session builds");
+            if (!end.Built || end.Session.Cutscene?.SwapAirframe is not { } swap)
+            {
+                ctx.Check(false, $"and binds the cutscene's airframe swap");
+                return;
+            }
+
+            var rig = end.Session.Rigs[0];
+            var before = rig.Controller!;
+            var oldInterior = before.Dressing.Interior;
+            // Flown in Cockpit view up to the capture, so the outgoing pass was last left drawing.
+            InCockpit(end.Session, before);
+            ctx.Check(before.Dressing.Pass is { Visible: true }, $"the flown rig draws its interior in a pass before the swap");
+            swap(new AirframeSwapOrder(AirframeSwapCodes.For(967)!.Value, null, rig));
+            var after = rig.Controller;
+            ctx.Check(after != null && !ReferenceEquals(after, before), $"the swap rebuilt the rig");
+            if (after == null)
+            {
+                return;
+            }
+
+            InCockpit(end.Session, after);
+
+            var passes = rig.HudParent.FindChildren("*", string.Empty, recursive: true, owned: false)
+                .OfType<Flight.Hud.CockpitOverlay>().Where(p => GodotObject.IsInstanceValid(p) && !p.IsQueuedForDeletion()).ToList();
+            string drawn = string.Join(", ", passes.Select(p => $"{AnimRuntime.NameOf(p.Interior)} visible={p.Visible} old={ReferenceEquals(p.Interior, oldInterior)}"));
+            ctx.Note($"after the swap: {passes.Count} pass(es) [{drawn}]");
+            ctx.Same(1, passes.Count, $"the pane holds exactly one live interior pass after the swap ([{drawn}])");
+            ctx.Check(after.Dressing.Pass is { } pass && passes.Contains(pass) && ReferenceEquals(pass.Interior, after.Dressing.Interior),
+                $"and it is the rebuilt aircraft's own, holding the new airframe's interior");
+            ctx.Check(after.Dressing.Pass is { Visible: true }, $"which draws in Cockpit view");
+            ctx.Check(oldInterior == null || !GodotObject.IsInstanceValid(oldInterior) || !oldInterior.IsInsideTree(),
+                $"and the outgoing airframe's interior is gone rather than left drawn on the pane");
+            ctx.Check(after.Dressing.Visibility != null, $"the rebuilt aircraft hides its own body in Cockpit view");
+        }
+        finally
+        {
+            end.Close();
+        }
+    }
+
     /// <summary>Plays CM07's hangar drop over that mission's built world on a realtime clock: the
     /// drop's two camera legs fork on <c>hdrop_direction</c>'s state, so exactly one of each pair
     /// starts, and the 965 it raises rebuilds the player on the Blue Streak build in its shipped
@@ -994,6 +1057,19 @@ internal static class AirframeSwapSuites
         }
 
         return true;
+    }
+
+    private static void InCockpit(Launch.GameSession session, FlightController plane)
+    {
+        plane.CameraControl!.ViewMode = PilotViewMode.Cockpit;
+        for (int i = 0; i < 4; i++)
+        {
+            session._PhysicsProcess(GameClock.FixedDt);
+            session._Process(GameClock.FixedDt);
+            // The Cockpit-view frame's own dressing call. The mission-start hold keeps the pilot's
+            // _Process off that arm, and the suite runs in one engine frame besides.
+            plane.Dressing.Show(PilotViewMode.Cockpit, firstPersonPose: true, Basis.Identity, plane.CameraControl, Vector3.Zero, null);
+        }
     }
 
     private static AnimDefinition? First(IReadOnlyList<AnimDefinition> defs) =>

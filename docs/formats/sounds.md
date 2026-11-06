@@ -396,8 +396,11 @@ unpitched, as the original does. The cockpit loop's throttle pitch, a remake rul
 [Enhanced Sound](#enhanced-sound)), reaches a replaced cockpit loop the same way.
 
 Original Sound reads nothing from a pack: every stream is the archive's, and its hit confirm uses
-the shipped file's values without the override. A flight reads its streams when it is built, so
-switching the sound mode reaches a pack's sounds from the next flight. The sound lab over a pack
+the shipped file's values without the override. Switching the sound mode mid-flight reaches the
+sounds a flight looks up at each play at once: a hit's group cue and a round's fire and impact
+sounds (`FlightAudio.PlayGroupCue`, `ProjectilePool.PlaySound`). The first play of a pack file
+after the switch decodes it then. The streams a flight holds from its build, the engine and gun
+loops, the crash and prop-stop one-shots and the world's sounds, change from the next flight. The sound lab over a pack
 with an override starts from the shipped values with the override over them, and Save writes the
 override file alone: the fields it already held, and any field moved off the shipped value. An
 override inside a zip is read, and the lab's Save is off for it.

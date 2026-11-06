@@ -1194,8 +1194,8 @@ Fields: [../formats/sounds.md](../formats/sounds.md#enhanced-sound).
 ## src/Flight/Audio/HitConfirmCue.cs
 The hit confirm's rules: `Earns` (a human pilot's gun round striking an aircraft `AimAssist.Hostile`
 to it) and `TryFire`, the per-mix rate limit on the projectile pool's sim clock.
-`FlightController.TakeProjectileHit` asks it for the struck aircraft's gunner and plays the cue on
-that gunner's `FlightAudio`, which only a seat flown on this machine carries.
+`AircraftBody.TakeProjectileHit` asks it for the struck aircraft's gunner, ahead of the hit router,
+and plays the cue on that gunner's `FlightAudio`, which only a seat flown on this machine carries.
 
 ## src/Flight/Audio/EngineVoiceDuck.cs
 The engine duck under a radio line: one gain the session builds once and hands to every engine

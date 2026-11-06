@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using CSVM.Mech3;
 using Xunit;
 
@@ -128,6 +129,33 @@ public class WavFileTests
             ("data", Shorts(new short[] { 7, -7 }))));
 
         Assert.Equal(new short[] { 7, -7 }, wav.Samples);
+    }
+
+    [Fact]
+    public async Task ANegativeChunkSizeEndsTheWalkInsteadOfLoopingForever()
+    {
+        // The junk chunk's size (bytes 40-43) of -8 once led the walk back to the same chunk.
+        // Read to the file's end, it swallows the data chunk, so the file has none.
+        var bytes = Riff(
+            ("fmt ", PcmFmt(bits: 16, channels: 1)),
+            ("junk", new byte[4]),
+            ("data", Shorts(new short[] { 7 })));
+        BitConverter.GetBytes(-8).CopyTo(bytes, 40);
+
+        var parse = Task.Run(() => Assert.Throws<InvalidDataException>(() => WavFile.Parse(bytes)));
+        Assert.True(await Task.WhenAny(parse, Task.Delay(TimeSpan.FromSeconds(10))) == parse, "the chunk walk did not end");
+        await parse;
+    }
+
+    [Fact]
+    public void AnUnknownDataSizeReadsTheSamplesToTheEndOfTheFile()
+    {
+        // ffmpeg writing to a pipe cannot seek back, so the data chunk's size (bytes 40-43) stays 0xFFFFFFFF.
+        short[] samples = { 1, -2, 3 };
+        var bytes = Riff(("fmt ", PcmFmt(bits: 16, channels: 1)), ("data", Shorts(samples)));
+        BitConverter.GetBytes(uint.MaxValue).CopyTo(bytes, 40);
+
+        Assert.Equal(samples, WavFile.Parse(bytes).Samples);
     }
 
     [Fact]
