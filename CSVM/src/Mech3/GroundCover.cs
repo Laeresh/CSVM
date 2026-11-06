@@ -448,7 +448,7 @@ public static class GroundCover
 
         varying flat float v_alpha;
         varying flat vec3 v_normal;
-        {{(Utils.ShadowQualitySetting.TerrainShadows ? "varying flat float v_terrain_sun;" : "")}}
+        {{(Utils.ShadowQualitySetting.TerrainShadows ? "varying flat float v_terrain_sun;\nvarying flat vec3 v_origin;" : "")}}
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
@@ -456,7 +456,7 @@ public static class GroundCover
         {{ClutterBuilder.LeanLines}}    vec3 world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
             world += vec3(breeze.x, 0.0, breeze.y) * (lean * sway * (world.y - origin.y));
             world = mix(origin, world, step(0.004, v_alpha));
-            {{(Utils.ShadowQualitySetting.TerrainShadows ? "v_terrain_sun = csky_terrain_sun(world);" : "")}}
+            {{(Utils.ShadowQualitySetting.TerrainShadows ? "v_terrain_sun = csky_terrain_sun(world);\n    v_origin = origin;" : "")}}
             VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
             v_normal = normalize((VIEW_MATRIX * vec4(INSTANCE_CUSTOM.xyz, 0.0)).xyz);
             NORMAL = v_normal;
@@ -478,8 +478,9 @@ public static class GroundCover
             ALPHA_SCISSOR_THRESHOLD = 0.5;
             ALPHA_ANTIALIASING_EDGE = 0.0;
             ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(card_tex, 0));
+            {{(Utils.ShadowQualitySetting.TerrainShadows ? "AO = csky_cloud_ao(v_origin);" : "")}}
         }
-        {{(Utils.ShadowQualitySetting.TerrainShadows ? SceneBuilder.TerrainShadowLight("v_terrain_sun", 0f) : "")}}
+        {{(Utils.ShadowQualitySetting.TerrainShadows ? SceneBuilder.TerrainShadowLight("v_terrain_sun", 0f, "v_origin") : "")}}
         """;
 
     /// <summary>One card: its placement (foot on the ground, X along its width or row, Y up by its height). It

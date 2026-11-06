@@ -566,11 +566,11 @@ public static class GroundCoverShells
                 METALLIC = 0.0;
                 SPECULAR = 0.0;
                 FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
-            """ : """
+            """ + (shadow ? "\n    AO = csky_cloud_ao(v_world);" : "") : """
                 ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
             """)}}
             }
-            {{(shadow ? SceneBuilder.TerrainShadowLight("v_terrain_sun", 0f) : "")}}
+            {{(shadow ? SceneBuilder.TerrainShadowLight("v_terrain_sun", 0f, "v_world") : "")}}
             """;
     }
 
