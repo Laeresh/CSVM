@@ -926,7 +926,7 @@ the scripted twin, checked at launch by `SessionSpec`.
 The lighting lab (Shift+F5), built by `InspectionLabs.BuildLightingLab` in `--freecam` over a world with weather alone:
 a panel down the right edge with one slider per `Effects/ZoneLighting.cs` field for the zone shown. A dropdown
 follows the camera's zone or holds the world in one (`WeatherRig.ForceZone`). An edit goes to `WeatherRig.SetLighting`,
-which lights the session sun, the Environment and every registered clone with it. A field the mission overrides is
+which lights the session sun, the Environment and every registered clone with it; the grade fields reach the Environment only while Post-processing is on. A field the mission overrides is
 marked with a reset to the chapter's value. Save to chapter and Save to this mission write through `LightingTable.WithZone`
 and are off in an exported build. Entry off shows the untuned look. A parked plane, the anim lab's stage prop placed by
 `LabParking.cs`, turns on heading, pitch and bank sliders. `--debug-lighting` is the scripted twin.

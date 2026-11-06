@@ -78,24 +78,17 @@ public static class EnhancedLook
 
     // TUNE, judged at the controls against a C4 horizon, a C1 horizon and C5 at night. AgX rolls
     // off the far-ridge washout the authored sun energy produces, and keeps the night city's
-    // contrast where Filmic reads flatter. The exposure and white point are a zone tune's
-    // (ZoneLighting), at their defaults here.
+    // contrast where Filmic reads flatter. The exposure, white point and Post-processing grade are a
+    // zone tune's (ZoneLighting), at their defaults here.
     private const Godot.Environment.ToneMapper TonemapMode = Godot.Environment.ToneMapper.Agx;
-    private const float TonemapAgxContrast = 1.0f;
-
-    // TUNE, the Post-processing grade, picked by eye against the original over every chapter (#299).
-    // A steeper AgX curve, then post-tonemap contrast and saturation.
-    private const float GradeAgxContrast = 1.25f;
-    private const float GradeContrast = 1.1f;
-    private const float GradeSaturation = 1.15f;
 
     // The zone default FOG_COLOR (Effects/Weather.cs's no-weather zone), which is the colour a
     // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);
 
-    // The shadow fade start, biases and splits, and the tonemap's exposure and white, are a zone
-    // tune's plain values. Their defaults hold here, and WeatherRig writes a tune over them.
+    // The shadow fade start, biases and splits, the tonemap's exposure and white, and the grade are a
+    // zone tune's plain values. Their defaults hold here, and WeatherRig writes a tune over them.
     private static readonly ZoneLighting Untuned = ZoneLighting.Default;
 
     /// <summary>Gets a value indicating whether this process has switched the graphics mode live, which
@@ -386,16 +379,11 @@ public static class EnhancedLook
     }
 
     /// <summary>The colour grade on one Environment: on under Enhanced with
-    /// <see cref="PostProcessingSetting.Enabled"/>, a fresh Environment's values otherwise.</summary>
-    public static void ApplyGrade(Godot.Environment env, bool enhanced)
-    {
-        var fresh = new Godot.Environment();
-        bool grade = enhanced && PostProcessingSetting.Enabled;
-        env.TonemapAgxContrast = grade ? GradeAgxContrast : enhanced ? TonemapAgxContrast : fresh.TonemapAgxContrast;
-        env.AdjustmentEnabled = grade;
-        env.AdjustmentContrast = grade ? GradeContrast : fresh.AdjustmentContrast;
-        env.AdjustmentSaturation = grade ? GradeSaturation : fresh.AdjustmentSaturation;
-    }
+    /// <see cref="PostProcessingSetting.Enabled"/>, a fresh Environment's values otherwise. It grades
+    /// with <paramref name="tune"/>, the active zone's for a live toggle, the untuned grade when null.
+    /// <see cref="WeatherRig.WriteGrade"/> owns the write.</summary>
+    public static void ApplyGrade(Godot.Environment env, bool enhanced, ZoneLighting? tune = null) =>
+        WeatherRig.WriteGrade(env, enhanced, tune ?? Untuned);
 
     private static void LogViewDistance() =>
         Log.Info("world", $"view distance: clutter reach x{ViewDistance.EnhancedReach():0.#} (applied live)");

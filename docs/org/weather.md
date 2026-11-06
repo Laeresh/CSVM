@@ -372,7 +372,7 @@ under the fog rule and whether its dome draws a sun card too.
 **The lighting tune adjusts the night path; it does not replace it.** A zone block's energy
 multipliers in `lighting.json` scale the capped pair, so a multiplier of 1.0 is the night look above,
 and its bearing offset turns the dome-aimed light. The night rule reads the authored `FOG_COLOR`, never
-the block's sky tint. The lighting lab (Shift+F5) edits the blocks; the file and its fields are
+the block's sky tint. A block's `grade_*` fields grade the zone only while Post-processing is on. The lighting lab (Shift+F5) edits the blocks; the file and its fields are
 `Session/World/LightingTable.cs` and `Effects/ZoneLighting.cs`.
 
 The same key keeps a night zone's authored fog range under Enhanced, where a day zone's is pushed

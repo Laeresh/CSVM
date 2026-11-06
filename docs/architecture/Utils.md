@@ -401,10 +401,10 @@ every frame. The shadows ride the terrain shadow's `light()`, so under `--terrai
 description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
 
 ## src/Utils/PostProcessingSetting.cs
-Whether Enhanced grades the lit world (`Launch/EnhancedLook.cs`'s `ApplyGrade`): `off` or `on`. It resolves as
+Whether Enhanced grades the lit world (`Session/World/WeatherRig.cs`'s `WriteGrade`, at the zone tune's grade): `off` or `on`. It resolves as
 `CloudShadowSetting` does: `--post-processing=`, the saved `postProcessing` word, the `graphics.postProcessing` key, then
 `on`, or `off` under `--det` (`default_det`), so a golden stays ungraded unless its command line asks. Its live-apply hook
-follows the session, which writes the grade on the world's Environment and each cockpit pass's copy. The VIDEO page
+follows the session, which writes the active zone's tuned grade on the world's Environment and each cockpit pass's copy. The VIDEO page
 shows it as the Post-processing dropdown under Cloud Shadows.
 
 ## src/Utils/GroundCoverSetting.cs

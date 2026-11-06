@@ -51,6 +51,9 @@ public sealed class WeatherRig
     private const float DaySunSpecular = 0.35f;
     private const float NightSunSpecular = 0.1f;
 
+    // The AgX curve's contrast with the Post-processing grade off, Godot's neutral.
+    private const float UngradedAgxContrast = 1.0f;
+
     // ⚠ TUNE, enhanced mode only, and a PROXY the original never uses: it lights from SUNLIGHT and
     // darkens from FOG_COLOR independently, so nothing in the game reads one off the other. What
     // licenses it is that the two populations do not overlap: every zone under a night sky authors
@@ -349,6 +352,10 @@ public sealed class WeatherRig
     /// <summary>The zone <see cref="ForceZone"/> holds the world in, null while the cameras drive it.</summary>
     public string? ForcedZone => _forcedZone;
 
+    /// <summary>The tune of the zone the session's light wears now. It is the defaults before the first
+    /// zone apply, under Original, or with the lab's off switch on.</summary>
+    public ZoneLighting ActiveTune => _appliedZone is { } fog ? Tuning(fog) : ZoneLighting.Default;
+
     /// <summary>The lighting tune as the file holds it, loaded with the world.</summary>
     public LightingTable Lighting => _lighting ?? LightingTable.None;
 
@@ -566,6 +573,20 @@ public sealed class WeatherRig
         var image = Image.CreateEmpty(SkyPanoramaWidth, SkyPanoramaHeight, false, Image.Format.Rgbaf);
         image.Fill(skyColor.SrgbToLinear());
         panorama.Panorama = TextureUpload.Create(image);
+    }
+
+    /// <summary>The Post-processing grade on one Environment, the one writer of it: under Enhanced with
+    /// <see cref="PostProcessingSetting.Enabled"/>, <paramref name="tune"/>'s grade over the AgX tonemap.
+    /// Otherwise the bare AgX contrast under Enhanced, and a fresh Environment's values under Original.
+    /// The zone apply writes the tuned grade; <c>EnhancedLook.ApplyGrade</c> calls it for a live toggle.</summary>
+    public static void WriteGrade(Godot.Environment env, bool enhanced, ZoneLighting tune)
+    {
+        var fresh = new Godot.Environment();
+        bool grade = enhanced && PostProcessingSetting.Enabled;
+        env.TonemapAgxContrast = grade ? tune.GradeAgxContrast : enhanced ? UngradedAgxContrast : fresh.TonemapAgxContrast;
+        env.AdjustmentEnabled = grade;
+        env.AdjustmentContrast = grade ? tune.GradeContrast : fresh.AdjustmentContrast;
+        env.AdjustmentSaturation = grade ? tune.GradeSaturation : fresh.AdjustmentSaturation;
     }
 
     /// <summary>Publishes <paramref name="sun"/>'s bearing as the <c>csky_sun_dir</c> global, the
@@ -1654,7 +1675,7 @@ public sealed class WeatherRig
         }
         _sunTuned = shadow;
 
-        bool tonemap = tune.Exposure != d.Exposure || tune.White != d.White;
+        bool tonemap = tune.TunesEnvironment;
         if (tonemap || _tonemapTuned)
         {
             WriteTonemap(_env, tune);
@@ -1669,6 +1690,7 @@ public sealed class WeatherRig
                 return;
             env.TonemapExposure = tune.Exposure;
             env.TonemapAgxWhite = tune.White;
+            WriteGrade(env, true, tune);
         }
     }
 

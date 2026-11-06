@@ -81,7 +81,7 @@ key and its order, skipping comments as the read does, and refusing a file it ca
 ## src/Effects/ZoneLighting.cs
 One weather zone's Enhanced lighting tune: sun and ambient energy multipliers in place of the
 conversion factors, sun, ambient and sky tints over the decoded colours, a bearing offset, the AgX
-exposure and white, and the shadow softness, distance, biases, splits and fade start. The defaults
+exposure and white, the Post-processing grade, and the shadow softness, distance, biases, splits and fade start. The defaults
 are the untuned Enhanced look, which `Launch/EnhancedLook.cs` and `Session/World/WeatherRig.cs` read.
 Its field table drives the lighting lab's sliders and the file's keys. `LightingDebug` beside it is
 the `--debug-lighting` grammar, below `Spec` so `SessionSpec` can filter it. `LightingTableTests`.

@@ -35,7 +35,10 @@ public sealed class LightingTableTests
         var d = ZoneLighting.Default;
         Assert.Equal((1.07f, 1.8f, 1f, 6f), (d.SunEnergy, d.AmbientEnergy, d.Exposure, d.White));
         Assert.Equal((0.05f, 1.25f, 0.12f, 0.17f, 0.42f, 0.8f), (d.ShadowBias, d.NormalBias, d.Split1, d.Split2, d.Split3, d.FadeStart));
+        Assert.Equal((1.25f, 1.1f, 1.15f), (d.GradeAgxContrast, d.GradeContrast, d.GradeSaturation));
         Assert.False(d.TurnsSun);
+        Assert.False(d.TunesEnvironment);
+        Assert.True((d with { GradeSaturation = 1.3f }).TunesEnvironment);
         Assert.Equal("defaults", d.Describe());
     }
 
@@ -44,10 +47,13 @@ public sealed class LightingTableTests
     {
         var table = LightingTable.Parse("""
             { "_about": "prose",
-              "c5": { "ZONE1": { "exposure": 1.2, "sun_energy": 1.4 },
-                      "m02": { "night": true, "zone1": { "sun_energy": 0.9 } } } }
+              "c5": { "ZONE1": { "exposure": 1.2, "sun_energy": 1.4, "grade_saturation": 1.3 },
+                      "m02": { "night": true, "zone1": { "sun_energy": 0.9, "grade_contrast": 1.2 } } } }
             """);
         Assert.Empty(table.Warnings);
+        Assert.Equal((1.25f, 1.2f, 1.3f), (table.For("C5", "M02", "zone1").GradeAgxContrast,
+            table.For("C5", "M02", "zone1").GradeContrast, table.For("C5", "M02", "zone1").GradeSaturation));
+        Assert.Equal(1.1f, table.For("C5", "IA1", "zone1").GradeContrast);
         Assert.Equal(1.2f, table.For("C5", "M02", "zone1").Exposure);
         Assert.Equal(0.9f, table.For("C5", "M02", "zone1").SunEnergy);
         Assert.Equal(1.4f, table.For("C5", "IA1", "zone1").SunEnergy);
@@ -124,6 +130,8 @@ public sealed class LightingTableTests
         Assert.True(LightingDebug.SetsFields(kept));
         Assert.Equal(1.3f, LightingDebug.WithFields(ZoneLighting.Default, kept).Exposure);
         Assert.Equal(4f, LightingDebug.WithFields(ZoneLighting.Default, "exposure:40").Exposure);
+        Assert.Equal("grade_saturation:0.8", LightingDebug.FilterTokens("grade_saturation:0.8"));
+        Assert.Equal(0.8f, LightingDebug.WithFields(ZoneLighting.Default, "grade_saturation:0.8").GradeSaturation);
     }
 
     private static List<string> Keys(JsonObject o)

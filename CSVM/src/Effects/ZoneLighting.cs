@@ -40,6 +40,10 @@ public sealed record ZoneLighting
         new("sky_b", "Sky + fog tint blue", Sky, 0f, 2f, 0.01f, l => l.SkyB, (l, v) => l with { SkyB = v }),
         new("exposure", "Exposure", Tonemap, 0.25f, 4f, 0.01f, l => l.Exposure, (l, v) => l with { Exposure = v }),
         new("white", "AgX white", Tonemap, 1f, 16f, 0.1f, l => l.White, (l, v) => l with { White = v }),
+        new("grade_agx_contrast", "AgX contrast", Grade, 0.5f, 2f, 0.01f, l => l.GradeAgxContrast, (l, v) => l with { GradeAgxContrast = v },
+            "the grade applies only while Post-processing is on"),
+        new("grade_contrast", "Contrast", Grade, 0.5f, 2f, 0.01f, l => l.GradeContrast, (l, v) => l with { GradeContrast = v }),
+        new("grade_saturation", "Saturation", Grade, 0f, 2f, 0.01f, l => l.GradeSaturation, (l, v) => l with { GradeSaturation = v }),
         new("shadow_softness", "Softness", Shadows, 0f, 4f, 0.05f, l => l.ShadowSoftness, (l, v) => l with { ShadowSoftness = v },
             "scales the Shadow Quality tier's blur and sun size; off and --no-soft-shadows still win"),
         new("shadow_distance", "Max distance scale", Shadows, 0.1f, 4f, 0.05f, l => l.ShadowDistance, (l, v) => l with { ShadowDistance = v },
@@ -56,6 +60,7 @@ public sealed record ZoneLighting
     private const string Ambient = "Ambient";
     private const string Sky = "Sky + fog";
     private const string Tonemap = "Tonemap";
+    private const string Grade = "Post-processing grade";
     private const string Shadows = "Shadows";
 
     /// <summary>⚠ TUNE. The sun's Godot energy per unit of authored <c>SUNLIGHT_DIFFUSE</c>. Anchored on the
@@ -104,6 +109,21 @@ public sealed record ZoneLighting
 
     /// <summary>TUNE. The AgX white point, which recovers the horizon; AgX ignores the general white.</summary>
     public float White { get; init; } = 6f;
+
+    /// <summary>TUNE, the Post-processing grade's AgX contrast, a steeper curve than the ungraded 1.0.
+    /// The grade values were picked by eye against the original over every chapter (#299).</summary>
+    public float GradeAgxContrast { get; init; } = 1.25f;
+
+    /// <summary>TUNE, the grade's post-tonemap contrast.</summary>
+    public float GradeContrast { get; init; } = 1.1f;
+
+    /// <summary>TUNE, the grade's post-tonemap saturation.</summary>
+    public float GradeSaturation { get; init; } = 1.15f;
+
+    /// <summary>Whether the tonemap or the grade differs from the defaults, the Environment half of a tune.</summary>
+    public bool TunesEnvironment =>
+        Exposure != Default.Exposure || White != Default.White || GradeAgxContrast != Default.GradeAgxContrast
+        || GradeContrast != Default.GradeContrast || GradeSaturation != Default.GradeSaturation;
 
     /// <summary>A multiplier on the Shadow Quality tier's blur and angular distance.</summary>
     public float ShadowSoftness { get; init; } = 1f;

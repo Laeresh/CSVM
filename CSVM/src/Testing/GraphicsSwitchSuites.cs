@@ -1720,7 +1720,8 @@ internal static class GraphicsSwitchSuites
     [Suite("lighting-lab",
         "the lighting lab stands in an Enhanced --freecam C2 session and nowhere in a --fly one: a held zone "
         + "stays held through the camera's steps, an edit reaches the live sun, ambient, tonemap and shadow fields "
-        + "and a registered clone's, off restores the untuned values and on brings the edit back, a mission override "
+        + "and a registered clone's, off restores the untuned values and on brings the edit back, a grade edit reaches "
+        + "the Environment while Post-processing is on, is ignored while it is off and comes back on a live toggle, a mission override "
         + "reads through its chapter entry, Save to chapter and Save to this mission write the sparse blocks, and a "
         + "reset drops an override")]
     internal static void LightingLabEdits(TestContext ctx)
@@ -1729,6 +1730,9 @@ internal static class GraphicsSwitchSuites
         const string Mission = "IA1";
         RequireData(ctx, Chapter);
         bool wasEnhanced = GraphicsMode.Enhanced;
+        var launchedGrade = PostProcessingSetting.Lookup.Current;
+        void PostWord(string word) =>
+            PostProcessingSetting.Lookup.ResolveFrom(word, null, new SettingContext(Det: true, Enhanced: true, Panes: 1));
         try
         {
             var freecam = Open(ctx, enhanced: true, chapter: Chapter, extra: new[] { "--freecam", $"--mission={Mission}" });
@@ -1792,6 +1796,22 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(Mathf.IsEqualApprox(sun.LightEnergy, sun0 * 2f) && env.TonemapExposure == 1.5f,
                     $"on brings the edit back (sun {sun.LightEnergy:0.###})");
 
+                PostWord(PostProcessingSetting.On);
+                lab.Set("grade_agx_contrast", 1.4f);
+                lab.Set("grade_saturation", 0.8f);
+                ctx.Check(env.AdjustmentEnabled && env.TonemapAgxContrast == 1.4f && env.AdjustmentSaturation == 0.8f
+                        && cloneEnv.AdjustmentSaturation == 0.8f,
+                    $"with Post-processing on a grade edit reaches the Environment and the clone (AgX contrast {env.TonemapAgxContrast:0.##}, saturation {env.AdjustmentSaturation:0.##})");
+                PostWord(PostProcessingSetting.Off);
+                EnhancedLook.FollowWordSettings(freecam.Session);
+                lab.Set("grade_saturation", 0.9f);
+                ctx.Check(!env.AdjustmentEnabled && env.TonemapAgxContrast == 1f,
+                    $"with Post-processing off the grade stays off whatever the tune says (adjustment {env.AdjustmentEnabled}, AgX contrast {env.TonemapAgxContrast:0.##})");
+                PostWord(PostProcessingSetting.On);
+                EnhancedLook.FollowWordSettings(freecam.Session);
+                ctx.Check(env.AdjustmentEnabled && env.TonemapAgxContrast == 1.4f && env.AdjustmentSaturation == 0.9f,
+                    $"a live toggle back on puts the zone's tuned grade back, not the constants (saturation {env.AdjustmentSaturation:0.##})");
+
                 string json = $"{{ \"{Chapter}\": {{ \"{held}\": {{ \"exposure\": 1.2 }}, \"{Mission}\": {{ \"{held}\": {{ \"sun_r\": 0.9 }} }} }} }}";
                 weather.ReloadLighting(LightingTable.Parse(json));
                 lab.RevertToSaved();
@@ -1848,6 +1868,7 @@ internal static class GraphicsSwitchSuites
         finally
         {
             ShadowQualitySetting.Softness = 1f;
+            PostProcessingSetting.Lookup.Take(launchedGrade.Word == null ? PostProcessingSetting.FallbackFor(det: false) : launchedGrade);
             Restore(wasEnhanced);
         }
 
