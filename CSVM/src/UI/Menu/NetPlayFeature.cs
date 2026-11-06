@@ -143,6 +143,11 @@ public sealed class NetPlayFeature : IMenuFeature
     /// bind is what makes Windows put a firewall dialog on somebody's screen.</summary>
     public string BindAddress { get; set; } = "*";
 
+    /// <summary>The courses a Stunt Race host's Course box offers in a chapter
+    /// (<see cref="Flight.Modes.CourseLibrary.Choices"/>). Null unless the launcher, an aid or a suite sets
+    /// it. Null offers no course, so the host shows no Course box.</summary>
+    public Func<string, IReadOnlyList<Flight.Modes.Course>>? Courses { get; set; }
+
     /// <summary>The port a host opens on, and the port a join is aimed at. It starts on
     /// <see cref="NetPorts.Game"/> as the door is built.</summary>
     public int Port { get; private set; } = NetPorts.Game;
@@ -782,6 +787,7 @@ public sealed class NetPlayFeature : IMenuFeature
                 Seated = peer => !_admission.Refused(peer),
                 LocalSeats = () => HostSeats,
                 SeatsOf = _admission.GrantedTo,
+                Courses = chapter => this.Courses?.Invoke(chapter) ?? Array.Empty<Flight.Modes.Course>(),
             };
         }
     }

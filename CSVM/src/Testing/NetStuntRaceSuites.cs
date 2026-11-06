@@ -263,7 +263,7 @@ internal static class NetStuntRaceSuites
         }
 
         Release(seats);
-        Until(s.Peers, () => seats.All(p => !p.StartCount.Running));
+        CourseFlight.Until(s.Peers, () => seats.All(p => !p.StartCount.Running));
         CopiesFly(ctx, cell, "hold", s, seats, copies, names, downed);
 
         // Past GO's step, so each run's clock has started and the race counts its zone.
@@ -294,7 +294,7 @@ internal static class NetStuntRaceSuites
             race.Advance(race.TimeLeft);
         }
 
-        bool up = Until(s.Peers, () => races.All(r => r.Phase == StuntRacePhase.FinalRun));
+        bool up = CourseFlight.Until(s.Peers, () => races.All(r => r.Phase == StuntRacePhase.FinalRun));
         respawns = seats.Select(p => p.RespawnCount).ToArray();
         Press(s.Peers, seats, TapFrames);
         ctx.Check(up && seats.Select(p => p.RespawnCount).SequenceEqual(respawns) && races.All(r => r.Racers.All(x => x.InRun)),
@@ -303,7 +303,7 @@ internal static class NetStuntRaceSuites
         // The host's seat first: the race waits on the guest's run.
         s.Host.DebugForceCrash();
         Press(s.Peers, new[] { s.Host }, TapFrames);
-        bool hostStopped = Until(s.Peers, () => !s.GuestRace.Of(0)!.InRun);
+        bool hostStopped = CourseFlight.Until(s.Peers, () => !s.GuestRace.Of(0)!.InRun);
         bool onCrashCamera = !s.Host.Spectating;
         ctx.Check(hostStopped && s.Host.Crashed && !s.Host.RespawnOffered && !s.HostRace.Ended && s.HostRace.Of(1)!.InRun,
             $"[{cell}] the host's crash in the final run stays down after a tap and stops its run on both boards while the guest's runs on ({s.Host.RespawnCount - respawns[0]} respawn(s), ended={s.HostRace.Ended})");
@@ -325,7 +325,7 @@ internal static class NetStuntRaceSuites
 
         s.Guest.DebugForceCrash();
         Press(s.Peers, new[] { s.Guest }, TapFrames);
-        bool over = Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
+        bool over = CourseFlight.Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
         ctx.Check(over && seats.All(p => p.Crashed) && seats.Select(p => p.RespawnCount).SequenceEqual(respawns)
                   && races.All(r => r.Racers.All(x => !x.InRun) && r.Racers.All(x => x.CurrentZones == 1)),
             $"[{cell}] the guest's crash stops the last run on the host, and the race ends on both machines with nobody respawned and each run's zone kept (ended {s.HostRace.Ended}/{s.GuestRace.Ended}, crashed {string.Join("/", seats.Select(p => p.Crashed))}, respawns {string.Join("/", seats.Select((p, i) => p.RespawnCount - respawns[i]))}, in a run and zones {string.Join(" ", races.SelectMany(r => r.Racers).Select(x => $"{x.InRun}:{x.CurrentZones}"))})");
@@ -396,7 +396,7 @@ internal static class NetStuntRaceSuites
             float guestFirst = guestRun.Elapsed;
             float hostFirst = hostRun.Elapsed;
             var guestFirstSplits = Splits(guestRun);
-            bool reached = Until(peers, () => hostRace.Of(1)!.RunsFinished == 1 && guestRace.Of(1)!.RunsFinished == 1
+            bool reached = CourseFlight.Until(peers, () => hostRace.Of(1)!.RunsFinished == 1 && guestRace.Of(1)!.RunsFinished == 1
                                               && guestRace.Of(0)!.RunsFinished == 1);
             ctx.Check(reached && hostRace.Of(1)!.BestTime == guestFirst && hostRace.Of(1)!.Splits.SequenceEqual(guestFirstSplits)
                       && guestRace.Of(1)!.BestTime == guestFirst && guestRace.Of(1)!.Splits.SequenceEqual(guestFirstSplits),
@@ -433,9 +433,9 @@ internal static class NetStuntRaceSuites
             var spawn = s.Peers[0].SeatRigs[1].Controller!.WorldPosition;
             Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
             FlyBoth(s, hostGap: HostGap, guestGap: GuestFirstGap);
-            Until(s.Peers, () => s.GuestRace.Of(0)!.RunsFinished == 1 && s.GuestRace.Of(1)!.RunsFinished == 1);
+            CourseFlight.Until(s.Peers, () => s.GuestRace.Of(0)!.RunsFinished == 1 && s.GuestRace.Of(1)!.RunsFinished == 1);
             CloseWindow(s);
-            bool ended = Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
+            bool ended = CourseFlight.Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
             ctx.Check(ended, $"[{cell}] the window's end ends both races ({s.HostRace.Phase}/{s.GuestRace.Phase})");
 
             var hostBoard = s.Peers[0].Boards?.RaceBoard as UI.Menu.Original.OriginalRaceBoard;
@@ -525,10 +525,10 @@ internal static class NetStuntRaceSuites
     {
         FlyBoth(s, hostGap: HostGap, guestGap: FinalGap * 5);
         float guestBest = s.GuestRun.Elapsed;
-        Until(s.Peers, () => s.HostRace.Of(0)!.RunsFinished == 1 && s.HostRace.Of(1)!.RunsFinished == 1);
+        CourseFlight.Until(s.Peers, () => s.HostRace.Of(0)!.RunsFinished == 1 && s.HostRace.Of(1)!.RunsFinished == 1);
 
         s.Peers[1].LeaveFlight();
-        bool marked = Until(s.Peers, () => s.HostRace.Of(1)!.Left);
+        bool marked = CourseFlight.Until(s.Peers, () => s.HostRace.Of(1)!.Left);
         var copy = s.Peers[0].SeatRigs[1].Controller!;
         var left = s.HostRace.Of(1)!;
         ctx.Check(exits[1] == 1 && marked && left.BestTime == guestBest && s.HostRace.Standings()[0] == left,
@@ -541,7 +541,7 @@ internal static class NetStuntRaceSuites
         ctx.Check(s.HostRace.Phase == StuntRacePhase.Open && s.HostRace.TimeLeft > 1f,
             $"[{cell}] the host's race runs on with one pilot left ({s.HostRace.Phase}, {s.HostRace.TimeLeft:0} s left)");
         s.HostRace.Advance(s.HostRace.TimeLeft - (3f * GameClock.FixedDt));
-        bool over = Until(host, () => s.HostRace.Ended);
+        bool over = CourseFlight.Until(host, () => s.HostRace.Ended);
         ctx.Check(over && s.HostRace.WindowElapsed - s.HostRace.WindowSeconds < 2f * GameClock.FixedDt,
             $"[{cell}] and ends at the window's end ({s.HostRace.WindowElapsed:0.000} of {s.HostRace.WindowSeconds:0} s)");
         var first = hostBoard?.Sheet?.Standings.FirstOrDefault();
@@ -565,16 +565,16 @@ internal static class NetStuntRaceSuites
 
             Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
             FlyBoth(s, hostGap: HostGap, guestGap: GuestFirstGap);
-            Until(s.Peers, () => s.GuestRace.Of(0)!.RunsFinished == 1 && s.GuestRace.Of(1)!.RunsFinished == 1);
+            CourseFlight.Until(s.Peers, () => s.GuestRace.Of(0)!.RunsFinished == 1 && s.GuestRace.Of(1)!.RunsFinished == 1);
             ctx.Check(NetFlight.RaceLanding(s.HostRace) == null, $"ABLE-TO-FAIL CONTROL: [{cell}] a race still running lands no table");
             CloseWindow(s);
-            Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
+            CourseFlight.Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
             var guestLink = s.Peers[1].Wire.Race!;
             ctx.Check(!guestLink.LobbyCalled && exits.All(e => e == 0),
                 $"ABLE-TO-FAIL CONTROL: [{cell}] nobody is called to the lobby before the host leaves the board");
 
             s.Peers[0].LeaveFlight();
-            bool called = Until(s.Peers, () => guestLink.LobbyCalled);
+            bool called = CourseFlight.Until(s.Peers, () => guestLink.LobbyCalled);
             var here = NetFlight.RaceLanding(s.HostRace);
             var there = NetFlight.RaceLanding(s.GuestRace);
             ctx.Check(exits[0] == 1 && called && s.Peers[0].Wire.Race!.CallsTaken == 0,
@@ -725,11 +725,11 @@ internal static class NetStuntRaceSuites
             seat.HoldActionForTest(InputAction.Respawn, false);
         }
 
-        bool counted = Until(peers, () => !host.StartCount.Running && !guest.StartCount.Running);
+        bool counted = CourseFlight.Until(peers, () => !host.StartCount.Running && !guest.StartCount.Running);
         Steps(peers, 6);
         StuntRaceSuites.ClearZone(hostRun, hostRun.Zones[0]);
         StuntRaceSuites.ClearZone(guestRun, guestRun.Zones[0]);
-        bool up = Until(peers, () => hostRace.Phase == StuntRacePhase.FinalRun && guestRace.Phase == StuntRacePhase.FinalRun
+        bool up = CourseFlight.Until(peers, () => hostRace.Phase == StuntRacePhase.FinalRun && guestRace.Phase == StuntRacePhase.FinalRun
                                      && guestRace.Of(0)!.CurrentZones == 1 && guestRace.Of(1)!.CurrentZones == 1);
         ctx.Check(counted && up && hostRace.Racers.All(r => r.InRun) && guestRace.Racers.All(r => r.InRun),
             $"[{cell}] both pilots restart late and are in a run at time up, on both boards ({hostRace.Phase}/{guestRace.Phase}, in a run {string.Join("", hostRace.Racers.Select(r => r.InRun ? 1 : 0))}/{string.Join("", guestRace.Racers.Select(r => r.InRun ? 1 : 0))})");
@@ -750,7 +750,7 @@ internal static class NetStuntRaceSuites
 
         float guestFinal = guestRun.Elapsed;
         var finalSplits = Splits(guestRun);
-        bool reached = Until(peers, () => hostRace.Of(1)!.RunsFinished == 2 && guestRace.Of(1)!.RunsFinished == 2);
+        bool reached = CourseFlight.Until(peers, () => hostRace.Of(1)!.RunsFinished == 2 && guestRace.Of(1)!.RunsFinished == 2);
         ctx.Check(reached && hostRace.Phase == StuntRacePhase.FinalRun && hostRace.Of(1)!.BestTime == guestFinal
                   && guestRace.Of(1)!.BestTime == guestFinal && guestRace.Of(1)!.Splits.SequenceEqual(finalSplits),
             $"[{cell}] the guest's run finished after time up, {StuntMission.FormatTime(guestFinal)}, counts as its best on both boards while the host's pilot flies on ({hostRace.Phase})");
@@ -859,17 +859,6 @@ internal static class NetStuntRaceSuites
     }
 
     private static string Names(StuntRace race) => string.Join(" ", race.Racers.Select(r => $"{r.Index}:{r.Callsign}"));
-
-    // Steps until the condition holds, as a lossy link reshuffles which words land together.
-    private static bool Until(GameSession[] peers, Func<bool> condition)
-    {
-        for (int step = 0; step < StepLimit && !condition(); step++)
-        {
-            Step(peers);
-        }
-
-        return condition();
-    }
 
     // The respawn control down on every listed seat for `frames` steps, then up for the one step its
     // release resolves on.

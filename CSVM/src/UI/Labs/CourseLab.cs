@@ -423,7 +423,7 @@ public sealed partial class CourseLab : Node
 
         var centre = CourseDraft.Centre(gate);
         float back = (FlyBackShare * Mathf.Max(gate.Width, Mathf.Max(gate.Height, gate.Diameter))) + FlyBackM;
-        _flyEye = centre - (CourseDraft.FlownWay(gate, Draft.Course.Sequence[index]) * back) + (Vector3.Up * (FlyRise * back));
+        _flyEye = centre - (gate.FlownWay(Draft.Course.Sequence[index].Direction) * back) + (Vector3.Up * (FlyRise * back));
         _flyLook = centre;
         _flyFromEye = camera.GlobalPosition;
         _flyFromLook = camera.GlobalPosition - (camera.GlobalBasis.Z * camera.GlobalPosition.DistanceTo(centre));

@@ -54,6 +54,10 @@ public sealed class CourseLibrary
     public static CourseLibrary ForLaunch(string dataRoot, bool det) =>
         new(ShippedRoot, det ? null : System.IO.Path.Combine(dataRoot, GameFolderName));
 
+    /// <summary><see cref="Choices"/> over the shipped courses alone, as a <c>--det</c> launch lists
+    /// them: what the screenshot aids and the suites offer.</summary>
+    public static IReadOnlyList<Course> ShippedChoices(string chapter) => new CourseLibrary(ShippedRoot, null).Choices(chapter);
+
     /// <summary>Every course of <paramref name="chapter"/> by name, the game folder's file standing in
     /// for a shipped one of the same name. Listing reads no file, so a broken one surfaces on
     /// <see cref="Load"/>.</summary>
@@ -102,6 +106,12 @@ public sealed class CourseLibrary
     /// <see cref="Course.DisplayName"/>, or <paramref name="name"/> where the file is missing or broken.</summary>
     public string DisplayName(string chapter, string name) => Load(chapter, name, out _)?.DisplayName ?? name;
 
+    /// <summary>The courses a Stunt Race host may pick in <paramref name="chapter"/>: every one listed
+    /// that loads and <see cref="Course.FitsWire"/>, by title.</summary>
+    public IReadOnlyList<Course> Choices(string chapter) =>
+        List(chapter).Select(f => Load(chapter, f.Name, out _)).OfType<Course>().Where(Course.FitsWire)
+            .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
     /// <summary>Writes <paramref name="course"/> to <c>&lt;chapter&gt;/&lt;name&gt;.json</c> under the
     /// <paramref name="target"/> root, atomically, and returns the OS path written. A shipped root is
     /// resolved through <see cref="ProjectSettings.GlobalizePath"/>, which is the source tree only in a
@@ -111,20 +121,49 @@ public sealed class CourseLibrary
         ArgumentNullException.ThrowIfNull(course);
         string root = (target == CourseSource.Shipped ? Shipped : GameFolder)
             ?? throw new InvalidOperationException("this library reads no game folder");
-        foreach (string part in new[] { course.Chapter, course.Name })
-        {
-            if (part.Length == 0 || part.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
-            {
-                throw new ArgumentException($"course chapter and name must be file names, got \"{part}\"");
-            }
-        }
-
+        RequireFileNames(course);
         string folder = System.IO.Path.Combine(root.Contains("://") ? Globalize(root) : root, course.Chapter);
         Directory.CreateDirectory(folder);
         string path = System.IO.Path.Combine(folder, course.Name + Extension);
         AtomicFile.WriteAllText(path, course.ToJson());
         Log.Info("flight", $"course saved: {course.Chapter}/{course.Name} -> {path}");
         return path;
+    }
+
+    /// <summary>Keeps a host's <paramref name="course"/> in the game folder when neither root has a
+    /// file of its name in its chapter, and returns the path written. Null when one stands, when
+    /// the library reads no game folder, or when the write failed, which is logged.
+    /// ⚠ Never overwrite a same-named file, whatever it holds.</summary>
+    public string? SaveIfAbsent(Course course)
+    {
+        ArgumentNullException.ThrowIfNull(course);
+        try
+        {
+            // ⚠ Do not move this below the listing, which would read outside the root for a host's "..".
+            RequireFileNames(course);
+            if (GameFolder is null || List(course.Chapter).Any(f => string.Equals(f.Name, course.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return null;
+            }
+
+            return Save(course, CourseSource.GameFolder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Log.Warn("flight", $"course {course.Chapter}/{course.Name}: not kept in the game folder ({e.Message})");
+            return null;
+        }
+    }
+
+    private static void RequireFileNames(Course course)
+    {
+        foreach (string part in new[] { course.Chapter, course.Name })
+        {
+            if (part.Length == 0 || part is "." or ".." || part.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
+            {
+                throw new ArgumentException($"course chapter and name must be file names, got \"{part}\"");
+            }
+        }
     }
 
     private static IEnumerable<string> Names(string folder)

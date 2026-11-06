@@ -299,7 +299,7 @@ a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 A carrier's first listener and itself the `INetTransport` the session later binds. A host's
 `Advertise` reaches every peer on connect and on change; a guest keeps `Advert` and `Closed`. Lobby
 messages stay here (a host's `Picks`, each seat's by `PickAt` with `SeatsWanted`, each seat's build by `BuildAt` and team actions, a guest's flow, fits, builds,
-rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
+rules, teams, wingman, film and Stunt Race `LobbyCourse`); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
 address after `Boot`, a wrong password, a full game) stand off every peer list at once, before the
@@ -383,13 +383,13 @@ and `CoopPersistMessage` one host persist-log object, a launch's first replacing
 set; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
-The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
+The Multiplayer Lobby's six messages, all reliable and kept in `NetLobby` rather than a session.
 `DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3) and a spare flag bit saying whether the host's match lands on Game Scores, `DogfightRosterMessage`
 the whole player list with each row's team and custom plane name, a bot row's tier and Random plane, and the reading
 guest's own rows marked (its first and how many seats it was given), and `LobbyChatMessage` one typed line, which the host relays.
 `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
-team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
-session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.
+team names. `LobbyCourseMessage` is a Stunt Race host's course (chapter, name, hash and the JSON whole), the one lobby message whose width follows its text, up to `MaxSize`.
+A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.
 Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`, which outside a match carries an owner's own return from a death instead. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetRaceMessages.cs
@@ -397,7 +397,8 @@ A network stunt race's five session messages, all reliable. `RaceCallMessage` (`
 seat's own run (`NetRaceRun`: started, a zone split, finished, abandoned) from the machine flying
 it to the host, under the owner's run number and the window's number. Every message names its `Window`. `RaceStateMessage` is the
 host's clock (`NetRacePhase`, how far into it, the window, the host's session clock), and
-`RaceStandingMessage` one racer's line of its leaderboard with the ranking run's splits and whether its pilot left.
+`RaceStandingMessage` one racer's line of its leaderboard with the ranking run's splits and whether its pilot left;
+its width follows its split count, one per zone up to `MaxZones` (255), so a course run of any length a network race takes crosses whole.
 `RaceTouchMessage` is one seat's course pylon touch on the host's clock, which every machine draws and none scores.
 `Session/World/NetRaceLink.cs` sends and takes them. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
@@ -429,7 +430,7 @@ The two cursors every serialiser and deserialiser runs on, `NetMessageWriter` an
 `NetMessageReader`, kept in one file because they are one pair and drift apart if they are not.
 Little-endian primitives over the caller's span, plus the two quantised forms the layouts need: a
 unit-range field as a 16-bit integer, and a fixed-width UTF-8 field that truncates on a whole
-character. The writer opens with the header and patches the total length in on `Close`; the
+character. `WriteString`/`ReadString` are the one variable-width field, UTF-8 behind a 16-bit count, whose reader refuses a count past the length or bytes that are not UTF-8. The writer opens with the header and patches the total length in on `Close`; the
 reader reads the header in its constructor, so `Type`, `Length` and `Valid` answer first, and a
 NaN or infinite float clears `Valid`. A text field decodes on the stack and allocates only its string.
 `NetMessageFuzzTests.cs` feeds every reader random, truncated and mislabelled bytes.

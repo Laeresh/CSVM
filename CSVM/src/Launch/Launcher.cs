@@ -1803,10 +1803,11 @@ public partial class Launcher : Node3D
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
         _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.Data.Messages, _paths.Data.Zrdr);
+        // Only the network lobby's exit carries a wire, and its course is the host's word.
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
-            launch.Match?.FlagHomeToCapture == true, launch.Bots, launch.Course);
+            launch.Match?.FlagHomeToCapture == true, launch.Bots, launch.Course, fromLobby: launch.Net != null);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
@@ -2109,6 +2110,15 @@ public sealed record LauncherContext
     /// <summary>The persist log as a co-op guest's host named it. Set on a co-op guest only, whose
     /// director opens its world on it.</summary>
     public System.Func<IReadOnlyCollection<Net.CoopPersistMessage>?>? NetCoopPersisted { get; init; }
+
+    /// <summary>The course word a lobby's host picked, on every machine of a lobby flight, null for
+    /// the Danger Zones. A <c>--course=</c> launch builds its run from it in place of the library.</summary>
+    public System.Func<Net.LobbyCourseMessage?>? NetLobbyCourse { get; init; }
+
+    /// <summary>The course library a <c>--course=</c> launch reads and a guest keeps its host's course
+    /// in. Null reads the data root's (<see cref="Flight.Modes.CourseLibrary.ForLaunch"/>); a suite
+    /// hands in its scratch folders.</summary>
+    public Flight.Modes.CourseLibrary? Courses { get; init; }
 
     /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
     /// them at the launch. A host reads its own book and a guest the names its host sent. Null

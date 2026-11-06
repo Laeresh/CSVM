@@ -217,7 +217,8 @@ public sealed record SessionSpec
     /// <c>GameSession</c>'s, through <see cref="Flight.Modes.CourseLibrary"/>.</summary>
     public (string Chapter, string Name)? Course { get; private set; }
     /// <summary>Resolved. Why this launch may not fly <see cref="Course"/>, null when it may.
-    /// Authored courses are solo only. <c>GameSession</c> refuses the launch on it.</summary>
+    /// It flies split screen, with race bots and from a network lobby, never as a Dogfight or over
+    /// the command line's <c>--net-host</c>/<c>--net-join</c>. <c>GameSession</c> refuses the launch on it.</summary>
     public string? CourseRefusal { get; private set; }
     /// <summary>Resolved. <c>--course-edit=&lt;chapter&gt;[/&lt;name&gt;]</c>, which implies
     /// <see cref="SessionMode.Freecam"/> over that chapter's IA1 world. The course lab opens on the
@@ -2048,7 +2049,7 @@ public sealed record SessionSpec
 
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line <paramref name="cli"/>,
     /// never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
-    /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead, and a <paramref name="course"/> is settled as <c>--course=</c> is. The vs arguments
+    /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead, and a <paramref name="course"/> is settled as <c>--course=</c> is; <paramref name="fromLobby"/> marks a network lobby's, which no network refusal meets. The vs arguments
     /// are a screen's rules, a Stunt Race's window among them, and <paramref name="bots"/> the
     /// join board's rows a local Dogfight or stunt run seats. ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever <c>--mission</c> says,
     /// the type being all a guest hears.</summary>
@@ -2057,7 +2058,7 @@ public sealed record SessionSpec
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
         int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
         DogfightMissionType missionType = DogfightMissionType.Deathmatch, bool flagHomeToCapture = false,
-        IReadOnlyList<VsBotEntry>? bots = null, string? course = null)
+        IReadOnlyList<VsBotEntry>? bots = null, string? course = null, bool fromLobby = false)
     {
         var names = planeNodes.ToArray();
         var type = MenuType(missionType, mode, iaDef);
@@ -2112,7 +2113,7 @@ public sealed record SessionSpec
             IaWingmanLoadout = iaDef != null ? iaWingmanLoadout : null,
             StuntRaceMinutes = iaDef?.RaceWindowMinutes ?? (race ? vsTimeMinutes : null) ?? cli.StuntRaceMinutes,
         };
-        spec.ResolveCourse();
+        spec.ResolveCourse(fromLobby);
         return spec;
     }
 
@@ -2928,9 +2929,10 @@ public sealed record SessionSpec
         }
     }
 
-    // An authored course is solo only: a guest may not have the host's course file, and bots fly
-    // no sequence. The course names its world, its chapter's IA1, where Stunt Flying flies.
-    private void ResolveCourse()
+    // An authored course flies on every seat, each local pilot and bot on a run of its own. A network
+    // session flies one only from the lobby, whose course word every machine builds from. The command
+    // line's --net-host/--net-join has no lobby to carry it. The course names its world, its chapter's IA1.
+    private void ResolveCourse(bool fromLobby = false)
     {
         if (_courseArg is not { } arg)
         {
@@ -2946,10 +2948,8 @@ public sealed record SessionSpec
         int slash = arg.IndexOf('/');
         Course = (arg[..Math.Max(slash, 0)].ToUpperInvariant(), arg[(slash + 1)..]);
         CourseRefusal = slash <= 0 || slash == arg.Length - 1 ? $"'{arg}' is not <chapter>/<name>"
-            : Versus ? "--vs is a Dogfight, and authored courses are solo only"
-            : Players > 1 ? $"--players={Players}: authored courses are solo only"
-            : VsBots.Count > 0 ? "--vs-bot/--vs-bots race the run, and authored courses are solo only"
-            : NetHostPort != null || NetJoin != null ? "a network session, and authored courses are solo only"
+            : Versus ? "--vs is a Dogfight, and an authored course is a stunt run"
+            : !fromLobby && (NetHostPort != null || NetJoin != null) ? "--net-host/--net-join has no lobby to send the course to every machine; pick it in the lobby's Mission Options"
             : EmptyStage ? "--stage=empty has no chapter world to fly it over"
             : null;
         if (CourseRefusal == null)
@@ -2957,6 +2957,14 @@ public sealed record SessionSpec
             Chapter = Course.Value.Chapter;
             ChapterGiven = true;
             Mission = "IA1";
+
+            // More than one pilot races the course, a Stunt Race on its window as Instant Action's exit names it.
+            if (Players + VsBots.Count > 1)
+            {
+                MissionType = DogfightMissionType.StuntRace;
+                VsKills = VsKillsExplicit ? VsKills : 0;
+                VsTimeMinutes = VsTimeExplicit ? VsTimeMinutes : StuntRaceMinutes;
+            }
         }
     }
 

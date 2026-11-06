@@ -25,6 +25,7 @@ public static class WordSettings
         VegetationModelsSetting.Lookup,
         GroundCoverSetting.Lookup,
         CloudShadowSetting.Lookup,
+        PostProcessingSetting.Lookup,
     };
 
     /// <summary>The panes the running session draws, which a fallback may read. 1 until

@@ -190,6 +190,13 @@ public sealed record OriginalRow(
     string Key, string Label, OriginalRowKind Kind, float X, float Y, float Width, float Height,
     bool Enabled, int Column, BoardArt? Art, bool Visible = true, OriginalSlider? Slider = null)
 {
+    /// <summary>The key an Up press from this row lands on while that row is a stop, ahead of the
+    /// spatial walk. Null leaves the walk alone. It is for a box standing beside a nearer one.</summary>
+    public string? UpTo { get; init; }
+
+    /// <summary>The key a Down press lands on, as <see cref="UpTo"/> is for Up.</summary>
+    public string? DownTo { get; init; }
+
     /// <summary>Whether an authored point lies on the row.</summary>
     public bool Contains(float x, float y) => x >= X && x < X + Width && y >= Y && y < Y + Height;
 }

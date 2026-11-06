@@ -151,8 +151,11 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
                 (who, keymap) => CSVM.Bindings.BindingStore.UserBindings().Save(who, keymap)),
             CSVM.Sticks.StickScreens.OpenUserFolder,
             () => CSVM.Sticks.StickProfiles.Live));
-        // The multiplayer door, built over the carrier and the master server the spec settles.
-        host.Features.Add(net.OpenDoor(spec));
+        // The multiplayer door, built over the carrier and the master server the spec settles. Its
+        // lobby offers the courses a launch would read, as Instant Action does.
+        var door = net.OpenDoor(spec);
+        door.Courses = chapter => Flight.Modes.CourseLibrary.ForLaunch(paths().DataRoot, spec.Det).Choices(chapter);
+        host.Features.Add(door);
         host.AddSeat(seat);
         string? reason = host.Select(spec.PresentationOverride);
         string why = reason == null ? "" : $" reason={reason}";

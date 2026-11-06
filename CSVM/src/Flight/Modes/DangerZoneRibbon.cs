@@ -47,6 +47,17 @@ public sealed class DangerZoneRibbon
 
     public IReadOnlyList<Segment> Segments { get; }
 
+    /// <summary>Whether this is a course sequence entry's line (<see cref="ForEntry"/>). It is flown
+    /// from its first vertex only, and only while its entry is the run's next.</summary>
+    public bool IsCourseEntry { get; private init; }
+
+    /// <summary>A course entry's gate opening centre, where it stands now; null on any other ribbon.</summary>
+    public Vector3? Opening => IsCourseEntry ? PointAt(0, Segments[0].Length) : null;
+
+    /// <summary>A world offset added to every point, read on each call: a moving course gate's travel
+    /// from rest. Null on a still ribbon.</summary>
+    public Func<Vector3>? Drift { get; private init; }
+
     /// <summary>The lateral offsets a run may fly at: the zero lane, then one per child node of
     /// the ribbon (its local translation). A pilot takes the least-occupied lane.</summary>
     public IReadOnlyList<Vector3> Lanes { get; }
@@ -101,12 +112,23 @@ public sealed class DangerZoneRibbon
         return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty };
     }
 
+    /// <summary>A course sequence entry's straight line: from <paramref name="before"/> metres short of
+    /// <paramref name="opening"/> along <paramref name="way"/> to <paramref name="after"/> metres past it,
+    /// <see cref="IsCourseEntry"/> and moved by <paramref name="drift"/>.</summary>
+    public static DangerZoneRibbon ForEntry(string name, int index, Vector3 opening, Vector3 way, float before, float after,
+        Func<Vector3> drift)
+    {
+        var line = FromPolyline(name, index, new[] { opening - (way * before), opening, opening + (way * after) });
+        return new DangerZoneRibbon(name, index, line.Segments, line.Lanes) { IsCourseEntry = true, Drift = drift };
+    }
+
     /// <summary>The point <paramref name="t"/> metres into segment <paramref name="segment"/>,
-    /// displaced by lane <paramref name="lane"/>.</summary>
+    /// displaced by lane <paramref name="lane"/> and by any <see cref="Drift"/>.</summary>
     public Vector3 PointAt(int segment, float t, int lane = 0)
     {
         var s = Segments[segment];
-        return s.A + (s.B * t) + (s.C * (t * t)) + (s.D * (t * t * t)) + Lanes[lane];
+        var point = s.A + (s.B * t) + (s.C * (t * t)) + (s.D * (t * t * t)) + Lanes[lane];
+        return Drift is { } drift ? point + drift() : point;
     }
 
     /// <summary>The first derivative at the parameter, metres per metre of parameter (about unit
