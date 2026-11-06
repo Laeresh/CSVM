@@ -508,6 +508,17 @@ public class SessionSpecTests
         Assert.Equal("", S("--fly").ScriptedBy);
     }
 
+    [Fact]
+    public void ControlPortHidesTheWindowAndPinsTheRun()
+    {
+        var s = S("--control=7777", "--chapter=C1");
+        Assert.Equal(7777, s.ControlPort);
+        Assert.True(s.IsScripted);
+        Assert.True(s.Det);
+        Assert.Equal("--control", s.DetVia);
+        Assert.Null(S("--fly").ControlPort);
+    }
+
     [Theory]
     [InlineData("--no-focus")]
     [InlineData("--screenshot=a.png")]
