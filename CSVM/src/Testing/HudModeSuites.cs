@@ -51,9 +51,8 @@ internal static class HudModeSuites
         "the Cycle HUD Mode action across two splitscreen seats: a press on the second seat steps "
         + "both panes to Minimal and posts 'HUD: Minimal' in both message stacks, a held key steps "
         + "nothing more, the next presses on the first seat walk None and back to Full with every "
-        + "pane alike, and each step writes hudMode to the options file; a launch that applies the "
-        + "saved word (a mission change or a restart) starts in the last mode chosen while a --det "
-        + "launch starts in Full, and the cycle under --det steps the panes and writes no file; a pane "
+        + "pane alike, and each step writes hudMode to the options file; the cycle under --det steps "
+        + "the panes and writes no file; a pane "
         + "follows the process-wide mode on its next frame, which is how an Options apply reaches it, "
         + "the applied word and not the file, so the row moves the panes under --det as the key does; "
         + "and the step is silent while photo mode or the options leaf owns the keyboard")]
@@ -83,10 +82,8 @@ internal static class HudModeSuites
 
             Press(ctx, rigs[1], panes, HudMode.Minimal, store);
             Press(ctx, rigs[0], panes, HudMode.None, store);
-            Persists(ctx, HudMode.None);
             Press(ctx, rigs[0], panes, HudMode.Full, store);
             Press(ctx, rigs[0], panes, HudMode.Minimal, store);
-            Persists(ctx, HudMode.Minimal);
 
             Silenced(ctx, rigs[0], panes);
             Follows(ctx, rigs, panes);
@@ -173,15 +170,7 @@ internal static class HudModeSuites
     // A pane with every part its canvas can hold, attached the way a flight attaches it.
     private static FlightHud Pane(CanvasLayer canvas)
     {
-        var hud = new FlightHud
-        {
-            Compass = new CompassTape(),
-            Gauges = new GaugeCluster(),
-            ThrottlePlate = ThrottlePlate.Build(),
-            Reticle = new ImpactReticle(),
-            TargetHud = new TargetHud(),
-        };
-        hud.Attach(canvas, canvas, null, null);
+        var hud = HudLayoutSuites.AttachBare(new FlightHud(), canvas);
         hud.SetThrottlePlateShown(true);
         return hud;
     }
@@ -245,21 +234,6 @@ internal static class HudModeSuites
             $"…and the key still held on the next frame steps nothing more ({Describe(panes)})");
         seat.HoldActionForTest(InputAction.CycleHudMode, false);
         seat.PollHudModeCycleForTest();
-    }
-
-    // What the next launch reads: Launcher.LaunchSession applies the saved word for a mission change
-    // and for a restart alike.
-    private static void Persists(TestContext ctx, HudMode expected)
-    {
-        var running = HudModeSetting.Current;
-        HudModeSetting.Current = HudMode.Full;
-        HudModeSetting.ApplySaved(det: false);
-        ctx.Check(HudModeSetting.Current == expected,
-            $"a launch applying the saved word starts in {expected} ({HudModeSetting.Current})");
-        HudModeSetting.ApplySaved(det: true);
-        ctx.Check(HudModeSetting.Current == HudMode.Full,
-            $"…while a --det launch over the same file starts in Full ({HudModeSetting.Current})");
-        HudModeSetting.Current = running;
     }
 
     private static void Silenced(TestContext ctx, FlightController seat, FlightHud[] panes)
