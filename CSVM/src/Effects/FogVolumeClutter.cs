@@ -269,17 +269,6 @@ public sealed partial class FogVolumeClutter : Node3D
     internal static string ShaderCodeFor(bool lit, bool fogged, bool enhanced, bool pooled, bool stereo) =>
         CardCode(lit, fogged, enhanced, pooled, stereo);
 
-    /// <summary>Every card the field placed, for the cloud shadows: its centre, its edge in metres, its
-    /// authored vertex opacity and its authored mask's texture name. The cards stand still.</summary>
-    internal IEnumerable<(Vector3 Centre, float Size, float Opacity, string Mask)> Cards()
-    {
-        foreach (var (kind, _, _) in _drawn)
-        {
-            foreach (var placement in kind.Placements)
-                yield return (placement.Origin, kind.Radius * 2f * placement.Basis.Scale.X, kind.Opacity, kind.TextureName);
-        }
-    }
-
     // The gamez side of one clutter alternative: the sprite card its template root carries.
     // Resolved by ClutterBuilder's own template rule, a parentless Object3d of that name whose
     // first meshed descendant is the card (docs/formats/clutter.md).
@@ -311,7 +300,6 @@ public sealed partial class FogVolumeClutter : Node3D
                     Lit = mesh.Lighting,
                     Fogged = mesh.Fog,
                     Radius = CardRadius(mesh),
-                    Opacity = CardOpacity(mesh),
                 };
                 if (GraphicsMode.Enhanced)
                 {
@@ -376,25 +364,6 @@ public sealed partial class FogVolumeClutter : Node3D
             }
         }
         return null;
-    }
-
-    // The card's authored vertex alpha, averaged over its corners. The card shader multiplies the
-    // mask's alpha by it. 1 where it authors no colour.
-    private static float CardOpacity(GameZMesh mesh)
-    {
-        float sum = 0f;
-        int count = 0;
-        foreach (var poly in mesh.Polygons)
-        {
-            if (poly.VertexColors == null)
-                continue;
-            foreach (var c in poly.VertexColors)
-            {
-                sum += c.A;
-                count++;
-            }
-        }
-        return count > 0 ? sum / count : 1f;
     }
 
     // Half the card's largest local extent, what the billboard can swing outside the MultiMesh's
@@ -965,7 +934,6 @@ public sealed partial class FogVolumeClutter : Node3D
         public bool Lit = true;
         public bool Fogged = true;
         public float Radius;
-        public float Opacity = 1f;
 
         // Enhanced only: what SwapInPuff carries over from the authored mask it replaced.
         public Color PuffTint = Colors.White;

@@ -47,13 +47,6 @@ public sealed class ClutterBuilder
         + "    float flutter = sin(csky_time * 2.0943951 + dot(origin.xz, vec2(0.071, 0.113)));\n"
         + "    float lean = 0.012 + gust * (0.024 + 0.020 * flutter);\n";
 
-    // The Rich card's fragment line. The half facing the sun's bearing gains, whatever its height.
-    // Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
-    // so a smaller gain moved only a few sRGB levels. The gain is full a sixth of the card's width off
-    // its axis. No base darkening: the ground already paints a dark blob under each original tree.
-    internal const string RichFragmentLines =
-        "    ALBEDO *= 1.0 + max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0) * vec3(1.6, 1.5, 1.2);\n";
-
     // The sprite shader's distance-fog block, emitted only into the fogged variant.
     internal const string FogLines =
         "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
@@ -208,17 +201,29 @@ public sealed class ClutterBuilder
         + "varying float v_side;\nvarying flat float v_sun;\n"
         + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";";
 
-    /// <summary>The baked terrain shadow's include, for the three Rich vertex stages that scale
-    /// their sun side by it (<see cref="SunLine"/>); empty under <c>--terrain-shadows=off</c>.</summary>
+    /// <summary>The half of a Rich card facing the sun's bearing gains, whatever its height.
+    /// Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
+    /// so a smaller gain moved only a few sRGB levels. The gain is full a sixth of the card's width off
+    /// its axis. No base darkening: the ground already paints a dark blob under each original tree.
+    /// Unshaded, so the cloud shadow reaches it as a gain (v_cloud, from SunLine) and never through AO.</summary>
+    public static string RichFragmentLines =>
+        "    ALBEDO *= 1.0 + max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0) * vec3(1.6, 1.5, 1.2);\n"
+        + (Utils.ShadowQualitySetting.TerrainShadows ? "    ALBEDO *= v_cloud;\n" : "");
+
+    /// <summary>The baked terrain shadow's include and the cloud gain's varying, for the three Rich
+    /// vertex stages that read them (<see cref="SunLine"/>); empty under <c>--terrain-shadows=off</c>.</summary>
     public static string TerrainShadowDecl =>
-        Utils.ShadowQualitySetting.TerrainShadows ? SceneBuilder.TerrainShadowInclude + "\n" : "";
+        Utils.ShadowQualitySetting.TerrainShadows ? SceneBuilder.TerrainShadowInclude + "\nvarying flat vec3 v_cloud;\n" : "";
 
     /// <summary>How much the card's half facing the sun's bearing gains, before its side; the
     /// clumps and the models share it. Under a cliff's baked shadow the stamp's origin reads no
-    /// sun, so no gain.</summary>
+    /// sun, so no gain. The cloud gain is read once per stamp, at its origin.</summary>
     public static string SunLine =>
         "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0)"
-        + (Utils.ShadowQualitySetting.TerrainShadows ? " * csky_terrain_sun(MODEL_MATRIX[3].xyz)" : "") + ";\n";
+        + (Utils.ShadowQualitySetting.TerrainShadows
+            ? " * csky_terrain_sun(MODEL_MATRIX[3].xyz);\n"
+                + "    v_cloud = csky_cloud_unlit(MODEL_MATRIX[3].xyz, csky_sun_light_at(CAMERA_POSITION_WORLD));\n"
+            : ";\n");
 
     /// <summary>The Rich card's vertex lines. The mirror reads a negative X axis off the instance
     /// basis. A card has vertices only at its base and top, so the sway is a lean about the base

@@ -1,0 +1,65 @@
+{
+  "_about": "Per-chapter Enhanced cloud shadow tunes (Effects/CloudShadowChapters.cs). A chapter or field left out takes the constants in Effects/CloudShadowPattern.cs. The cloud lab (Shift+F4 in --freecam) saves the chapter it runs on. Darkness and ambient 0 draw no shadow, for a chapter whose sky is clear. Heading is degrees from +X toward +Z, as ocean_seas.json's wind.",
+  "C2": {
+    "darkness": 0.7,
+    "ambient": 0.87,
+    "size": 330,
+    "coverage": 0.26,
+    "softness": 0.07,
+    "speed": 9.5,
+    "heading": 291
+  },
+  "C1": {
+    "darkness": 0.79,
+    "ambient": 0.7,
+    "size": 590,
+    "coverage": 0.42,
+    "softness": 0.07,
+    "speed": 15,
+    "heading": 295
+  },
+  "C1B": {
+    "darkness": 0.67,
+    "ambient": 1,
+    "size": 300,
+    "coverage": 0.42,
+    "softness": 0.16,
+    "speed": 15,
+    "heading": 20
+  },
+  "C4": {
+    "darkness": 0.72,
+    "ambient": 0.7,
+    "size": 740,
+    "coverage": 0.54,
+    "softness": 0.12,
+    "speed": 10,
+    "heading": 36.87
+  },
+  "C2B": {
+    "darkness": 0.73,
+    "ambient": 0.57,
+    "size": 900,
+    "coverage": 0.42,
+    "softness": 0.12,
+    "speed": 10,
+    "heading": 20
+  },
+  "C3": {
+    "darkness": 0,
+    "ambient": 0
+  },
+  "C5": {
+    "darkness": 0,
+    "ambient": 0
+  },
+  "C1C": {
+    "darkness": 0.77,
+    "ambient": 0.84,
+    "size": 880,
+    "coverage": 0.74,
+    "softness": 0.12,
+    "speed": 10,
+    "heading": 20
+  }
+}

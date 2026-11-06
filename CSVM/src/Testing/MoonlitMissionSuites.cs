@@ -50,8 +50,8 @@ internal static class MoonlitMissionSuites
             var moonward = WeatherRig.OrientationToward(MoonAt.Normalized());
 
             GraphicsMode.Set(true);
-            var day = Lit(ctx, chapter, mission, zrdr, MoonlitMissions.None, moonward);
-            var night = Lit(ctx, chapter, mission, zrdr, listed, moonward);
+            var day = Lit(ctx, chapter, mission, zrdr, MoonlitMissions.None);
+            var night = Lit(ctx, chapter, mission, zrdr, listed);
             var caps = WeatherRig.EnhancedEnergies(zone with { FogColor = Colors.Black });
             ctx.Check(!day.Night && night.Night, $"Enhanced: unlisted lights as day, listed as night (day {day.Night}, listed {night.Night})");
             ctx.Check(Mathf.IsEqualApprox(night.Sun, caps.Sun) && Mathf.IsEqualApprox(night.Ambient, caps.Ambient),
@@ -69,8 +69,8 @@ internal static class MoonlitMissionSuites
                 $"the listed world's sun still casts the aircraft's shadow maps, out to {night.ShadowReach:0} m");
 
             GraphicsMode.Set(false);
-            var faithful = Lit(ctx, chapter, mission, zrdr, MoonlitMissions.None, moonward);
-            var faithfulListed = Lit(ctx, chapter, mission, zrdr, listed, moonward);
+            var faithful = Lit(ctx, chapter, mission, zrdr, MoonlitMissions.None);
+            var faithfulListed = Lit(ctx, chapter, mission, zrdr, listed);
             ctx.Check(!faithfulListed.Night && faithfulListed == faithful,
                 $"Original lights the listed world exactly as unlisted: {faithfulListed} against {faithful}");
         }
@@ -82,7 +82,7 @@ internal static class MoonlitMissionSuites
     }
 
     // One weather rig built over the mission under the dome, read back as the lit result.
-    private static LitWorld Lit(TestContext ctx, string chapter, string mission, ZrdrSet zrdr, MoonlitMissions list, Vector3 moonward)
+    private static LitWorld Lit(TestContext ctx, string chapter, string mission, ZrdrSet zrdr, MoonlitMissions list)
     {
         var root = new Node3D { Name = "moonlit-mission" };
         var sun = new DirectionalLight3D { Name = "moonlit-mission-sun" };
@@ -97,14 +97,8 @@ internal static class MoonlitMissionSuites
         {
             ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.PlanFor(ShadowQualitySetting.High), GraphicsMode.Enhanced,
                 hard: false, renderer: (_, _) => { });
-            var authored = WeatherState.Load(zrdr);
-            var orientations = new List<Vector3> { moonward };
-            foreach (var name in authored?.ZoneNames ?? Array.Empty<string>())
-                orientations.Add(authored!.Zone(name).SunOrientation);
-
-            // One opaque card 1000 m up, cast under every bearing the rig can choose.
-            var card = new CloudShadowRaster.Caster(new Vector3(0f, 1000f, 0f), 400f, 1f, CloudShadowRaster.Mask.Solid);
-            var clouds = CloudShadow.Bake(new[] { card }, orientations, orientations[^1], night: false);
+            // A cloudy mission's shadows, starting by day, so only the rig's night verdict can stop them.
+            var clouds = CloudShadow.Create(Vector2.Zero, CloudShadowPattern.DriftSource.Fixed, cloudy: true, night: false);
             root.AddChild(clouds);
 
             var env = new Godot.Environment();

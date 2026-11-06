@@ -487,12 +487,13 @@ void fragment() {
     // Foam is matte where it covers the water.
     ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), 0.25, sheet), 0.6, foam_mix);
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
+    AO = csky_cloud_ao(v_shade);
 }
 
 void light() {
     vec3 csky_diffuse, csky_specular;
     csky_terrain_light(LIGHT_IS_DIRECTIONAL ? csky_terrain_sun(v_shade) : 1.0, NORMAL, LIGHT, VIEW, LIGHT_COLOR, ATTENUATION, ROUGHNESS,
         0.04, SPECULAR_AMOUNT, csky_diffuse, csky_specular);
-    DIFFUSE_LIGHT += csky_diffuse;
+    DIFFUSE_LIGHT += csky_diffuse + (LIGHT_IS_DIRECTIONAL ? csky_cloud_tint(v_shade) : vec3(0.0));
     SPECULAR_LIGHT += csky_specular;
 }
