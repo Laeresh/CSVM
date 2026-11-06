@@ -63,6 +63,9 @@ public partial class Launcher : Node3D
     // The --export-gltf= one-shot and F10's ad-hoc glTF save, see src\Tooling\GltfExporter.cs's
     // entry. Constructed once from the launch spec alongside the capture director.
     private Tooling.GltfExporter _gltfExporter = null!;
+
+    // --control=: the agent's command line into this run, null unless the flag was passed.
+    private Tooling.ControlChannel? _control;
     // The master seed every subsystem generator derives from (see Utils.Rng). Pinned runs take the
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
@@ -297,6 +300,14 @@ public partial class Launcher : Node3D
         Flight.Ai.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Tooling.CaptureDirector(_spec);
         _gltfExporter = new Tooling.GltfExporter(_spec);
+        if (_spec.ControlPort is int controlPort)
+        {
+            _control = new Tooling.ControlChannel(controlPort)
+            {
+                Cutscene = () => _session?.Cutscene,
+                Plane = () => _session is { Rigs.Count: > 0 } s ? s.Rigs[0].Controller : _session?.Plane,
+            };
+        }
         // Built alongside the other process-scoped services, ahead of every probe's early quit
         // and of --dump-config: its hitch monitor is what registers the five hitchMonitor.* keys.
         _instruments = new FrameInstruments(_spec, GetViewport().GetViewportRid());
@@ -984,6 +995,7 @@ public partial class Launcher : Node3D
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
             _session?.Plane, _menu.Host is { Shown: true } || _sourceScreen != null || _spec.MovieName != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
+        _control?.Tick(GetViewport(), GetTree(), delta);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
         // launchscreen on the debrief, here where a QueueFree is safe.
