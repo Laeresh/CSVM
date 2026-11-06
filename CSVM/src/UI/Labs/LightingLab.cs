@@ -421,6 +421,8 @@ public sealed partial class LightingLab : Node
         panel.OffsetRight = -8;
         panel.OffsetTop = 40;
         panel.OffsetBottom = -16;
+        // A row wider than the column widens the panel leftward, never past the screen's right edge.
+        panel.GrowHorizontal = Control.GrowDirection.Begin;
 
         var margin = new MarginContainer();
         foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
@@ -466,8 +468,10 @@ public sealed partial class LightingLab : Node
         scroll.AddChild(rows);
         box.AddChild(scroll);
 
-        var buttons = new HBoxContainer();
-        buttons.AddThemeConstantOverride("separation", 4);
+        // Three buttons outgrow the column at the default font, so they wrap onto a second line.
+        var buttons = new HFlowContainer();
+        buttons.AddThemeConstantOverride("h_separation", 4);
+        buttons.AddThemeConstantOverride("v_separation", 4);
         buttons.AddChild(Btn("Revert to saved", RevertToSaved));
         var chapter = Btn("Save to chapter", () => SaveToChapter());
         var mission = Btn("Save to this mission", () => SaveToMission());
@@ -492,7 +496,12 @@ public sealed partial class LightingLab : Node
     {
         rows.AddChild(new Label { Text = "PARKED PLANE", Modulate = Amber });
         var line = new HBoxContainer();
-        var planes = new OptionButton { FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var planes = new OptionButton
+        {
+            FocusMode = Control.FocusModeEnum.None,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            FitToLongestItem = false,
+        };
         var names = _planes.Contains(_plane, StringComparer.OrdinalIgnoreCase) ? _planes : _planes.Prepend(_plane).ToList();
         for (int i = 0; i < names.Count; i++)
         {
