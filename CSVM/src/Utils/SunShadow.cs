@@ -12,7 +12,8 @@ public static class SunShadow
 {
     /// <summary>Copy every shadow setting from <paramref name="from"/> to <paramref name="to"/>,
     /// the distance clamped to <paramref name="maxDistance"/>, the far plane of the camera
-    /// <paramref name="to"/> serves.</summary>
+    /// <paramref name="to"/> serves. ⚠ Never copy the pancake size. The session sun's deep one
+    /// raises the depth bias, which a short-range pass with centimetre casters cannot take.</summary>
     public static void Copy(DirectionalLight3D from, DirectionalLight3D to, float maxDistance)
     {
         to.ShadowEnabled = from.ShadowEnabled;
