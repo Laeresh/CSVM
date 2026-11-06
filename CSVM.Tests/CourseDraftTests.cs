@@ -196,7 +196,7 @@ public class CourseDraftTests
         Assert.Equal(GateDirection.Reverse, draft.Course.Sequence[1].Direction);
         Assert.Equal((1, "b"), (draft.SelectedEntry, draft.SelectedId));
         var gate = draft.Course.Gates[1];
-        Assert.True(CourseDraft.FlownWay(gate, draft.Course.Sequence[1]).IsEqualApprox(-gate.Forward));
+        Assert.True(gate.FlownWay(draft.Course.Sequence[1].Direction).IsEqualApprox(-gate.Forward));
         Assert.True(draft.Flip(1));
         Assert.Equal(GateDirection.Forward, draft.Course.Sequence[1].Direction);
         Assert.False(draft.Flip(2));

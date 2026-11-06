@@ -193,6 +193,63 @@ internal static class PauseSheetSuites
         ctx.Note($"composed {sheets.Count} pause sheets and drove one over a live pause state");
     }
 
+    [Suite("pause-exit-pointer",
+        "the pause sheet's EXIT as the launcher runs it: a keyboard seat's sheet hides the OS pointer, "
+        + "the launcher queues the session's free and shows Original in the same frame, and the OS "
+        + "pointer stays hidden over the menu's own once the freed sheet leaves the tree")]
+    internal static void PauseExitPointer(TestContext ctx)
+    {
+        MenuSuiteHost.RequireLayout(ctx);
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null || Blackboard(ctx, FilmedEnvironment, FilmedType) is not { } sheet)
+        {
+            return;
+        }
+
+        var pause = new Flight.Modes.PauseState();
+        var board = OriginalPauseBoard.Build(
+            pause, _ => new MenuInput { Keyboard = true }, ctx.DataRoot, ctx.Data.Rimage, sheet, () => PauseReadout.Empty);
+        var registry = new PresentationRegistry();
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "pause-exit-pointer");
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
+        {
+            Planes = planes,
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        ctx.Host.AddChild(board);
+        try
+        {
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            pause.TryToggle(0);
+            ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
+                $"ABLE-TO-FAIL CONTROL: the keyboard seat's sheet hides the OS pointer ({Godot.Input.MouseMode})");
+
+            // Launcher.ReturnToMenu: the session (and the sheet under it) queued for free, then the
+            // menu shown in the same call, the pause never resumed.
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            ctx.Host.RemoveChild(board);
+            host.Tick(1f / 60f);
+            ctx.Check(host.Shown && Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
+                $"the OS pointer is hidden over Original's own on the frame after the sheet leaves the tree ({Godot.Input.MouseMode})");
+        }
+        finally
+        {
+            if (board.IsInsideTree())
+            {
+                ctx.Host.RemoveChild(board);
+            }
+
+            board.QueueFree();
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, "pause-exit-pointer");
+        }
+    }
+
     /// <summary>The Instant Action pause sheets end to end: every environment and mission type
     /// resolves its own blackboard dialog, and the composition is the load screen's board under the
     /// pause screen's four strips.</summary>

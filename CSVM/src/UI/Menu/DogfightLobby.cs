@@ -126,6 +126,7 @@ public sealed class DogfightLobby
     private readonly Dictionary<int, DogfightRosterMessage> _rosterSent = new();
     private readonly Dictionary<int, LobbyPlaneRulesMessage> _rulesSent = new();
     private readonly Dictionary<int, LobbyTeamsMessage> _teamsSent = new();
+    private readonly Dictionary<int, LobbyCourseMessage> _courseSent = new();
     private readonly List<PlaneRefusal> _refusals = new();
     private readonly NetTeamBook _teams;
     private readonly DogfightBots _bots = new();
@@ -141,6 +142,11 @@ public sealed class DogfightLobby
 
     // How many seats flew when this machine marked Ready. A change in them clears the mark.
     private int _readySeats;
+    // The host's course and its word, null until a course was first picked. A guest's parse of the
+    // word it last heard, kept until another arrives.
+    private Flight.Modes.Course? _course;
+    private LobbyCourseMessage? _courseWord;
+    private (LobbyCourseMessage Word, Flight.Modes.Course? Course, string Refusal)? _heard;
     private string[] _launchNames = Array.Empty<string>();
     private DogfightScore[] _scores = Array.Empty<DogfightScore>();
     private RaceTableRow[] _raceScores = Array.Empty<RaceTableRow>();
@@ -185,6 +191,11 @@ public sealed class DogfightLobby
     /// <summary>How many seats a host gave the guest at a peer: its first, and each further one the
     /// player cap left room for. One each unless the door says otherwise.</summary>
     public Func<int, int> SeatsOf { get; init; } = _ => 1;
+
+    /// <summary>The courses a host may pick in a chapter (the door's <see cref="NetPlayFeature.Courses"/>).
+    /// A Stunt Race offers a chapter with any, Danger Zones or not, and flies its first where it has
+    /// no Danger Zones. Null offers none.</summary>
+    public Func<string, IReadOnlyList<Flight.Modes.Course>>? Courses { get; init; }
 
     /// <summary>The callsigns a new bot row draws from, the shipped pilot names
     /// (<c>Session/Roster/BotSeats.cs</c>). Empty, every bot is called <c>Bot n</c>.</summary>
@@ -274,6 +285,25 @@ public sealed class DogfightLobby
     public DogfightOptionsMessage Options => IsHost
         ? _options with { HostLandsOnScores = Shown }
         : _wire.DogfightOptions ?? _options with { Epoch = 0 };
+
+    /// <summary>The course a Stunt Race flies here, null for the Danger Zones. The host reads its own
+    /// pick. A guest reads the host's course once its JSON parses and matches the hash it came with.</summary>
+    public Flight.Modes.Course? Course => IsHost ? _course : Heard().Course;
+
+    /// <summary>Why a guest refused the host's course, empty when it took it or heard none.</summary>
+    public string CourseRefusal => IsHost ? "" : Heard().Refusal;
+
+    /// <summary>Whether this guest's Stunt Race stands on a host's course its lobby refused. Its
+    /// launch would be refused, so it may not stand Ready (<see cref="CourseRefusal"/> says why).</summary>
+    public bool RefusesCourse => !IsHost && IsStuntRace(Options) && CourseRefusal.Length > 0;
+
+    /// <summary>The course word every machine's launch builds its run from: the host's own, or the
+    /// one a guest holds. Null for the Danger Zones.</summary>
+    public LobbyCourseMessage? LobbyCourse => IsHost ? (_course == null ? null : _courseWord) : _wire.LobbyCourse;
+
+    /// <summary>The course file name a launch from this lobby flies, null for the Danger Zones or
+    /// any type but a Stunt Race. A guest takes it from its host's word, never from a choice of its own.</summary>
+    public string? LaunchCourse => IsStuntRace(Options) ? LobbyCourse?.Name : null;
 
     /// <summary>The stock airframe this pilot picked, an index into the eleven.</summary>
     public byte Airframe => _picks[0].Airframe;
@@ -544,12 +574,13 @@ public sealed class DogfightLobby
     /// <summary>Whether the Environment box offers <paramref name="environment"/> under
     /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and NW Lighthouse, the two
     /// chapters with no <c>MP2</c> map, as the mission script's type change does. Stunt Race greys
-    /// every chapter whose Instant Action data ships no Danger Zones, which is Above the Clouds.</summary>
-    public static bool Offers(DogfightMissionType type, int environment) =>
+    /// a chapter that ships no Danger Zones (Above the Clouds) and has none of <paramref name="courses"/>.</summary>
+    public static bool Offers(DogfightMissionType type, int environment, Func<string, IReadOnlyList<Flight.Modes.Course>>? courses = null) =>
         environment is >= 0 and < EnvironmentCount && type switch
         {
             DogfightMissionType.CaptureTheFlag => EnvironmentChapters[environment] is not ("C1C" or "C1B"),
-            DogfightMissionType.StuntRace => MenuChapters.DangerZonesFor(EnvironmentChapters[environment]),
+            DogfightMissionType.StuntRace => MenuChapters.DangerZonesFor(EnvironmentChapters[environment])
+                || courses?.Invoke(EnvironmentChapters[environment]).Count > 0,
             _ => true,
         };
 
@@ -643,14 +674,14 @@ public sealed class DogfightLobby
     };
 
     /// <summary>Picks the environment. Refused on a guest, outside the seven, and on one the type
-    /// greys (<see cref="Offers"/>).</summary>
+    /// greys (<see cref="Offers"/>). Another chapter drops the picked course for the Danger Zones.</summary>
     public bool SetEnvironment(int environment) =>
-        Offers(TypeOf(_options), environment) && Change(_options with { Environment = (byte)environment });
+        Offers(TypeOf(_options), environment, Courses) && Change(_options with { Environment = (byte)environment });
 
     /// <summary>Picks the mission type. Refused on a guest and for a greyed type. Capture the Flag
     /// and Zeppelin vs Zeppelin tick Restrict Number of Teams at two teams exactly. Stunt Race arms
     /// the Time box alone at <see cref="StuntRaceDefaultMinutes"/>. A type moves off an environment
-    /// it greys to the first it offers.</summary>
+    /// it greys to the first it offers. Any type but a Stunt Race drops the picked course.</summary>
     public bool SetMissionType(DogfightMissionType type)
     {
         if (!Flies(type))
@@ -664,7 +695,7 @@ public sealed class DogfightLobby
         }
 
         int environment = _options.Environment;
-        while (!Offers(type, environment))
+        while (!Offers(type, environment, Courses))
         {
             environment = (environment + 1) % EnvironmentCount;
         }
@@ -715,6 +746,31 @@ public sealed class DogfightLobby
     /// Flag.</summary>
     public bool SetFlagHomeToCapture(bool required) =>
         IsCtf(_options) && Change(_options with { FlagHomeToCapture = required });
+
+    /// <summary>Picks <paramref name="course"/> for a Stunt Race, null for the Danger Zones. A new
+    /// course starts a new round and goes to every guest, and to each one that joins later. Refused
+    /// on a guest, for a course <see cref="Flight.Modes.Course.FitsWire"/> leaves out, and outside a Stunt
+    /// Race on the course's chapter. The Danger Zones are refused where the chapter ships none. An options change
+    /// off either drops the pick for the Danger Zones, or for the first course where the chapter has none.</summary>
+    public bool SetCourse(Flight.Modes.Course? course)
+    {
+        if (!IsHost || (course == null ? !ZonesUnder(_options) : !Flight.Modes.Course.FitsWire(course) || !StandsUnder(_options, course)))
+        {
+            return false;
+        }
+
+        if (course == null ? _course == null
+            : _course != null && Flight.Modes.Course.WordFor(0, course) == Flight.Modes.Course.WordFor(0, _course))
+        {
+            return true;
+        }
+
+        _course = course;
+        _options = _options with { Epoch = NextEpoch() };
+        _ready = false;
+        _courseWord = course == null ? LobbyCourseMessage.None(_options.Epoch) : Flight.Modes.Course.WordFor(_options.Epoch, course);
+        return true;
+    }
 
     /// <summary>Creates a team under <paramref name="name"/> with this pilot its captain. A guest
     /// asks its host. Refused while this pilot is Ready or on a team, and for a blank name.</summary>
@@ -900,7 +956,8 @@ public sealed class DogfightLobby
 
     /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
     /// on the next step. False, and no mark, when the rules refuse this pilot's plane or a picked
-    /// ammunition or rocket; <see cref="ReadyRefusals"/> then names each reason.</summary>
+    /// ammunition or rocket; <see cref="ReadyRefusals"/> then names each reason. A guest that
+    /// <see cref="RefusesCourse"/> is refused too.</summary>
     public bool SetReady(bool ready)
     {
         _refusals.Clear();
@@ -1121,6 +1178,11 @@ public sealed class DogfightLobby
     private static byte PickedAirframe(CoopPickMessage? pick) =>
         pick is not { } heard ? DogfightLobbySeat.NoPick : heard.Airframe < AirframeCount ? heard.Airframe : DefaultAirframe;
 
+    // Whether these options may fly the Danger Zones: anything but a Stunt Race, or one in a chapter
+    // that ships them.
+    private static bool ZonesUnder(DogfightOptionsMessage options) =>
+        !IsStuntRace(options) || MenuChapters.DangerZonesFor(ChapterOf(options.Environment));
+
     // Every row's team, one player a row: a bot, or one seat of a machine.
     private List<(byte Team, int Seats)> Weighed()
     {
@@ -1257,7 +1319,7 @@ public sealed class DogfightLobby
             seat.Fit = rules.Enforce(seat.Fit);
         }
 
-        return _refusals.Count > 0;
+        return _refusals.Count > 0 || RefusesCourse;
     }
 
     // One reason a Ready check refuses, named once however many seats share it.
@@ -1324,14 +1386,47 @@ public sealed class DogfightLobby
 
         _options = changed with { Epoch = NextEpoch() };
         _ready = false;
+
+        // Options that move off the course's chapter or off a Stunt Race take the Danger Zones, or the
+        // chapter's first course where it ships none. The guests hear that word ahead of this round's options.
+        var kept = _course != null && StandsUnder(_options, _course) ? _course
+            : ZonesUnder(_options) ? null : Courses?.Invoke(ChapterOf(_options.Environment)).FirstOrDefault();
+        if (!ReferenceEquals(kept, _course))
+        {
+            _course = kept;
+            _courseWord = kept == null ? LobbyCourseMessage.None(_options.Epoch) : Flight.Modes.Course.WordFor(_options.Epoch, kept);
+        }
+
         return true;
     }
+
+    // A course flies only in its own chapter's Stunt Race under these options.
+    private bool StandsUnder(DogfightOptionsMessage options, Flight.Modes.Course course) =>
+        IsStuntRace(options) && string.Equals(ChapterOf(options.Environment), course.Chapter, StringComparison.OrdinalIgnoreCase);
 
     // The team boxes take a press only where the type neither fixes them nor flies without teams.
     private bool TeamsEditable() => !FixesTeams(_options) && !IsStuntRace(_options);
 
     // Round 0 is a guest's "heard nothing", so the count wraps past it.
     private byte NextEpoch() => (byte)(_options.Epoch == byte.MaxValue ? 1 : _options.Epoch + 1);
+
+    // A guest parses each word once, when it differs from the last one heard.
+    private (Flight.Modes.Course? Course, string Refusal) Heard()
+    {
+        if (_wire.LobbyCourse is not { } word)
+        {
+            return (null, "");
+        }
+
+        if (_heard is not { } heard || heard.Word != word)
+        {
+            var course = Flight.Modes.Course.FromWord(word, null, out string refusal);
+            heard = (word, course, refusal);
+            _heard = heard;
+        }
+
+        return (heard.Course, heard.Refusal);
+    }
 
     private string OwnName() => NetSeats.ShownName(_name(), IsHost);
 
@@ -1483,6 +1578,13 @@ public sealed class DogfightLobby
                 _rulesSent[peer] = rules;
             }
 
+            // The course goes before its round's options, so a Ready under that round heard it.
+            if (_courseWord is { } course && (!_courseSent.TryGetValue(peer, out var had) || had != course))
+            {
+                _wire.Tell(peer, course);
+                _courseSent[peer] = course;
+            }
+
             if (!_optionsSent.TryGetValue(peer, out var sent) || sent != Options)
             {
                 _wire.Tell(peer, Options);
@@ -1514,6 +1616,7 @@ public sealed class DogfightLobby
                 _rosterSent.Remove(gone);
                 _rulesSent.Remove(gone);
                 _teamsSent.Remove(gone);
+                _courseSent.Remove(gone);
             }
         }
     }

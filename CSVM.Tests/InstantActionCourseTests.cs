@@ -11,8 +11,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Instant Action's Course option over a stand-in course list. It covers the chapters it makes
-/// eligible for stunt flying, its rows, the solo rule and its exit. The spec that exit derives is
-/// set against the one <c>--stunt --course=</c> builds.
+/// eligible for stunt flying, its rows, and its exit solo and as a race. The spec that exit derives
+/// is set against the one <c>--stunt --course=</c> builds.
 /// </summary>
 public class InstantActionCourseTests
 {
@@ -85,53 +85,43 @@ public class InstantActionCourseTests
     }
 
     [Fact]
-    public void ACourseIsOfferedToOneSeatWithNoBotRowsOnAStuntRunAlone()
+    public void ACourseIsOfferedOnAStuntRunWhateverTheBoardHolds()
     {
         var ia = StuntOnC1();
         ia.SelectCourse(2);
 
-        Assert.True(ia.OffersCourse(1, 0));
-        Assert.Equal(Sample, ia.LaunchCourse(1, 0));
-        Assert.False(ia.OffersCourse(2, 0));
-        Assert.Null(ia.LaunchCourse(2, 0));
-        Assert.False(ia.OffersCourse(1, 1));
-        Assert.Null(ia.LaunchCourse(1, 1));
+        Assert.True(ia.OffersCourse);
+        Assert.Equal(Sample, ia.LaunchCourse);
 
         ia.SelectMissionType(0);
-        Assert.False(ia.OffersCourse(1, 0));
-        Assert.Null(ia.LaunchCourse(1, 0));
+        Assert.False(ia.OffersCourse);
+        Assert.Null(ia.LaunchCourse);
     }
 
     [Fact]
-    public void AChapterWithCoursesAloneOffersStuntFlyingOnlyToASoloBoard()
+    public void AChapterWithCoursesAloneOffersStuntFlyingAndTheCourseToASecondSeatAndABotRow()
     {
         var ia = Feature(new Dictionary<string, string[]> { ["C2B"] = new[] { "cloud_loop" } });
         ia.SelectEnvironment(1);
         ia.ConfirmEnvironment();
+        Assert.True(ia.StuntOffered("C2B"));
+        Assert.True(ia.AllowsEnvironment(1, InstantActionFeature.StuntKey));
         ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
+        Assert.True(ia.OffersCourse);
 
-        foreach (var (seats, bots) in new[] { (2, 0), (1, 1) })
-        {
-            ia.SetBoard(seats, bots);
-            Assert.False(ia.StuntOffered("C2B"));
-            Assert.False(ia.AllowsEnvironment(1, InstantActionFeature.StuntKey));
-            Assert.DoesNotContain(ia.MissionTypes, m => m.Key == InstantActionFeature.StuntKey);
-            Assert.NotEqual(InstantActionFeature.StuntKey, ia.MissionType.Key);
-            ia.SetBoard(1, 0);
-            Assert.True(ia.StuntOffered("C2B"));
-        }
+        var two = ia.BuildExit(new[] { Seat, Seat });
+        Assert.Equal(("C2B", "cloud_loop", 2), (two.Chapter, two.Course, two.Seats.Count));
+        Assert.Null(two.InstantAction);
 
-        // A chapter with Danger Zones offers it to any board.
-        ia.SelectEnvironment(0);
-        ia.ConfirmEnvironment();
-        ia.SelectMissionType(2);
-        ia.SetBoard(2, 1);
-        Assert.True(ia.StuntOffered("C1"));
-        Assert.Equal(InstantActionFeature.StuntKey, ia.MissionType.Key);
+        ia.RaceBots = true;
+        var bot = new VsBotEntry("player_kestrel", Net.NetBotSkill.Veteran, 0, "Bot 1");
+        var withBot = ia.BuildExit(new[] { Seat }, bots: new[] { bot });
+        Assert.Equal(("cloud_loop", 1), (withBot.Course, withBot.Bots?.Count));
+        Assert.Null(withBot.InstantAction);
     }
 
     [Fact]
-    public void ASoloCourseLeavesAsTheCourseWithNoDefAndASecondPilotOrABotFliesTheDangerZones()
+    public void ACourseLeavesWithNoDefAndASecondPilotAndRacingBotsFlyItInTheRaceWindow()
     {
         var ia = StuntOnC1();
         ia.SelectCourse(2);
@@ -142,16 +132,22 @@ public class InstantActionCourseTests
         Assert.Equal(Sample, solo.Course);
         Assert.Null(solo.InstantAction);
         Assert.Null(solo.Bots);
+        Assert.Null(solo.Match);
         Assert.Same(MenuReturnDestination.InstantAction, MenuReturnDestination.ForLaunch(solo));
 
-        var two = ia.BuildExit(new[] { Seat, Seat });
-        Assert.Null(two.Course);
-        Assert.NotNull(two.InstantAction);
-
+        // A bot row the toggle leaves off stays on the board, and the run stays solo.
         var bot = new VsBotEntry("player_kestrel", Net.NetBotSkill.Veteran, 0, "Bot 1");
-        var withBot = ia.BuildExit(new[] { Seat }, bots: new[] { bot });
-        Assert.Null(withBot.Course);
-        Assert.Equal(InstantActionFeature.StuntKey, withBot.InstantAction!.MissionType);
+        var idle = ia.BuildExit(new[] { Seat }, bots: new[] { bot });
+        Assert.Equal((Sample, (IReadOnlyList<VsBotEntry>?)null, (VersusRules?)null), (idle.Course, idle.Bots, idle.Match));
+
+        ia.RaceBots = true;
+        ia.SelectRaceWindow(2);
+        var race = ia.BuildExit(new[] { Seat, Seat }, bots: new[] { bot });
+        Assert.Equal(Sample, race.Course);
+        Assert.Null(race.InstantAction);
+        Assert.Equal(new[] { bot }, race.Bots);
+        Assert.Equal(new VersusRules(0, 10, MissionType: DogfightMissionType.StuntRace), race.Match);
+        Assert.Same(MenuReturnDestination.InstantAction, MenuReturnDestination.ForLaunch(race));
     }
 
     [Fact]
@@ -176,15 +172,78 @@ public class InstantActionCourseTests
         Assert.Equal(cli.PlaneName, menu.PlaneName);
         Assert.Equal(cli.IaDef, menu.IaDef);
         Assert.Equal(cli.VsBots.Count, menu.VsBots.Count);
+        Assert.Equal(DogfightMissionType.Deathmatch, menu.MissionType);
+        Assert.Equal(cli.MissionType, menu.MissionType);
+    }
+
+    [Fact]
+    public void AMenuCourseWithTwoSeatsAndABotRowIsTheSpecTheCommandLineBuilds()
+    {
+        var bot = new VsBotEntry("player_kestrel", Net.NetBotSkill.Ace, 0, "Bot 1");
+        var menu = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), "C1", new[] { "player_fury", "player_bhawk" },
+            MenuMode.Stunt, bots: new[] { bot }, course: Sample);
+        var cli = SessionSpec.Parse(new[] { "--stunt", $"--course=C1/{Sample}", "--plane=player_fury,player_bhawk", "--vs-bot=player_kestrel:skill=ace" });
+
+        Assert.Null(menu.CourseRefusal);
+        Assert.Null(cli.CourseRefusal);
+        Assert.Equal(cli.Course, menu.Course);
+        Assert.Equal(cli.Chapter, menu.Chapter);
+        Assert.Equal(cli.Mission, menu.Mission);
+        Assert.Equal(cli.Stunt, menu.Stunt);
+        Assert.Equal(cli.Players, menu.Players);
+        Assert.Equal(2, menu.Players);
+        Assert.Equal(cli.VsBots.Select(b => (b.Plane, b.Skill)), menu.VsBots.Select(b => (b.Plane, b.Skill)));
+        Assert.Equal(DogfightMissionType.StuntRace, menu.MissionType);
+        Assert.Equal(cli.MissionType, menu.MissionType);
+        Assert.Equal(cli.VsKills, menu.VsKills);
+        Assert.Equal(cli.VsTimeMinutes, menu.VsTimeMinutes);
+    }
+
+    [Fact]
+    public void TheTwoSeatBotRaceCourseExitDerivesTheSpecTheCommandLineBuildsInThePickedWindow()
+    {
+        var ia = StuntOnC1();
+        ia.SelectCourse(2);
+        ia.RaceBots = true;
+        ia.SelectRaceWindow(2);
+        var bot = new VsBotEntry("player_kestrel", Net.NetBotSkill.Ace, 0, "Bot 1");
+        var exit = ia.BuildExit(new[] { Seat, new MenuSeatChoice("player_bhawk", Array.Empty<int>()) }, bots: new[] { bot });
+
+        // The launcher's own call over the exit.
+        var menu = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), exit.Chapter, exit.Seats.Select(s => s.PlaneNode).ToList(),
+            exit.Mode, exit.InstantAction, vsKills: exit.Match?.KillTarget, vsTimeMinutes: exit.Match?.TimeLimitMinutes,
+            vsLives: exit.Match?.Lives, missionType: exit.Match?.MissionType ?? DogfightMissionType.Deathmatch, bots: exit.Bots, course: exit.Course);
+        var cli = SessionSpec.Parse(new[] { "--stunt", $"--course=C1/{Sample}", "--players=2", "--plane=player_fury,player_bhawk", "--vs-bot=player_kestrel:skill=ace" });
+
+        Assert.Null(menu.CourseRefusal);
+        Assert.Null(cli.CourseRefusal);
+        Assert.Equal(cli.Course, menu.Course);
+        Assert.Equal(cli.Chapter, menu.Chapter);
+        Assert.Equal(cli.Mission, menu.Mission);
+        Assert.Equal(cli.Stunt, menu.Stunt);
+        Assert.Equal(cli.Versus, menu.Versus);
+        Assert.Equal(cli.Players, menu.Players);
+        Assert.Equal(cli.IaDef, menu.IaDef);
+        Assert.Equal(cli.VsBots.Select(b => (b.Plane, b.Skill)), menu.VsBots.Select(b => (b.Plane, b.Skill)));
+        Assert.Equal(DogfightMissionType.StuntRace, menu.MissionType);
+        Assert.Equal(cli.MissionType, menu.MissionType);
+        Assert.Equal(0, menu.VsKills);
+        Assert.Equal(cli.VsKills, menu.VsKills);
+
+        // The one field the command line cannot set: the race window the Race Time box picked. Each
+        // match clock is its own window.
+        Assert.Equal(10, menu.StuntRaceMinutes);
+        Assert.Equal(menu.StuntRaceMinutes, menu.VsTimeMinutes);
+        Assert.Equal(cli.StuntRaceMinutes, cli.VsTimeMinutes);
     }
 
     [Fact]
     public void AMenuCourseKeepsTheCommandLinesRefusalsAndTheCommandLinesCourseRidesNoMenuLaunch()
     {
         var bare = SessionSpec.Parse(Array.Empty<string>());
-        var two = SessionSpec.FromMenu(bare, "C1", new[] { "player_fury", "player_kestrel" }, MenuMode.Stunt, course: Sample);
-        Assert.Equal(("C1", Sample), two.Course);
-        Assert.NotNull(two.CourseRefusal);
+        var bareStage = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--stage=empty" }), "C1", new[] { "player_fury" }, MenuMode.Stunt, course: Sample);
+        Assert.Equal(("C1", Sample), bareStage.Course);
+        Assert.NotNull(bareStage.CourseRefusal);
 
         var flown = SessionSpec.Parse(new[] { $"--course=C1/{Sample}" });
         Assert.NotNull(flown.Course);

@@ -1,3 +1,5 @@
+using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Flight.Airframe;
@@ -17,10 +19,6 @@ internal static class CourseLaunchSuites
     private const string Chapter = "C1";
     private const string Sample = "sample_out_and_back";
 
-    // How far short of a gate the aircraft is placed, and how many steps it may take to cross.
-    private const float LeadM = 8f;
-    private const int CrossSteps = 20;
-
     [Suite("course-launch",
         "the shipped sample course lists and loads from res:// and a game-folder file of its name wins "
         + "it; a --det --stunt --course= C1 session spawns on the start point, draws the gates and flies "
@@ -33,6 +31,33 @@ internal static class CourseLaunchSuites
     {
         Sources(ctx);
         FlyCourse(ctx);
+    }
+
+    [Suite("course-race-local",
+        "a --stunt --course=C1/sample_out_and_back race of two split screen panes, and a menu-built one of a "
+        + "pane and an ace race bot: every seat flies its own run of the course, the drawn course carries one cue set "
+        + "per pane, and each pane flown through every entry records its best under the course key in the launch's "
+        + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands every course pylon whole")]
+    internal static void CourseRaceLocal(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            string split = Scores(ctx, "split");
+            var panes = SessionSpec.Parse(new[] { "--stunt", $"--course={Chapter}/{Sample}", "--plane=player_pfighter,player_fury", "--mute", "--no-pads", $"--scores={split}" });
+            LocalRace(ctx, "split screen", panes, roster: null, split, flown: new[] { 0, 1 });
+
+            string botted = Scores(ctx, "bot");
+            var bot = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--scores={botted}" }), Chapter, new[] { "player_pfighter" },
+                MenuMode.Stunt, vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace,
+                bots: new[] { new VsBotEntry("player_fury", Net.NetBotSkill.Ace, 0, "Bot 1") }, course: Sample);
+            LocalRace(ctx, "race bot", bot, SeatFields.LocalVersusField(bot, ctx.Data.Messages), botted, flown: new[] { 0 });
+        }
+        finally
+        {
+            ambient.Restore();
+        }
     }
 
     // The library's two reads in the engine: res:// for the shipped file, an OS folder for the game's.
@@ -131,7 +156,7 @@ internal static class CourseLaunchSuites
             // Each pass below starts inside a Danger Zone marker's radius of the gate centre.
             int photographs = 0;
             plane.StuntShots = new StuntCapture(run, Chapter, _ => ++photographs > 0);
-            ctx.Check(LeadM < StuntMission.DzRadius, $"each pass starts {LeadM} m from the gate centre, inside the {StuntMission.DzRadius} m camera radius");
+            ctx.Check(CourseFlight.LeadM < StuntMission.DzRadius, $"each pass starts {CourseFlight.LeadM} m from the gate centre, inside the {StuntMission.DzRadius} m camera radius");
 
             Step(plane, 5);
             Ground(ctx, pane, course);
@@ -141,8 +166,8 @@ internal static class CourseLaunchSuites
 
             // Out of order and the wrong way: the second entry's gate, then the first gate backwards.
             var first = course.Sequence[0];
-            Through(plane, run, course, course.Sequence[1]);
-            Through(plane, run, course, first with { Direction = Flip(first.Direction) });
+            CourseFlight.Through(() => Step(plane, 1), plane, run, course, course.Sequence[1]);
+            CourseFlight.Through(() => Step(plane, 1), plane, run, course, first with { Direction = Flip(first.Direction) });
             ctx.Check(run.CompletedCount == 0 && run.Elapsed == 0f,
                 $"ABLE-TO-FAIL CONTROL: the second entry's gate and the first gate flown backwards count nothing, and the clock stands at {run.Elapsed}");
 
@@ -151,7 +176,7 @@ internal static class CourseLaunchSuites
             for (int i = 0; i < course.Sequence.Count; i++)
             {
                 var entry = course.Sequence[i];
-                bool crossed = Through(plane, run, course, entry);
+                bool crossed = CourseFlight.Through(() => Step(plane, 1), plane, run, course, entry);
                 ctx.Check(crossed && run.CompletedCount == i + 1,
                     $"entry {i + 1}, {entry.GateId} {entry.Direction}, counts in order: {run.CompletedCount}/{run.TotalCount}, crashed={plane.Crashed}");
                 if (i == 0)
@@ -193,24 +218,6 @@ internal static class CourseLaunchSuites
         }
     }
 
-    // The aircraft placed short of the entry's gate centre and flown through it the entry's way, at
-    // the gate's pose now. True once the run counts a further entry.
-    private static bool Through(FlightController plane, StuntMission run, Course course, SequenceEntry entry)
-    {
-        var gate = course.Gates.First(x => x.Id == entry.GateId);
-        var centre = CourseGateShape.OpeningCentre(gate);
-        float lead = entry.Direction == GateDirection.Forward ? LeadM : -LeadM;
-        var pose = CourseMotion.Pose(gate, run.SimSeconds());
-        plane.RespawnAt(pose * (centre + (Vector3.Back * lead)), pose * (centre + (Vector3.Forward * lead)));
-        int before = run.CompletedCount;
-        for (int i = 0; i < CrossSteps && run.CompletedCount == before; i++)
-        {
-            Step(plane, 1);
-        }
-
-        return run.CompletedCount > before;
-    }
-
     // The solo board's record, read back from the file. The course key holds the run's total and
     // penalty count; the seeded Danger Zone entry is the only other key.
     private static void Recorded(TestContext ctx, string scores, string dzKey, string courseKey, StuntMission run)
@@ -246,7 +253,7 @@ internal static class CourseLaunchSuites
         var flashes = new string?[run.TotalCount];
         for (int i = 0; i < run.TotalCount; i++)
         {
-            Through(plane, run, course, course.Sequence[i]);
+            CourseFlight.Through(() => Step(plane, 1), plane, run, course, course.Sequence[i]);
             flashes[i] = hud.FlashLine;
             if (i == 1)
             {
@@ -267,6 +274,101 @@ internal static class CourseLaunchSuites
         var after = ScoreStore.Load(scores);
         ctx.Check(run.Elapsed > bestTotal && after.GetBest(courseKey) == bestTotal && after.GetSplits(courseKey)?.SequenceEqual(best) == true,
             $"the slower run ({run.Elapsed} s against {bestTotal} s) leaves the stored best and its splits");
+    }
+
+    private static string Scores(TestContext ctx, string cell)
+    {
+        string path = Path.Combine(ctx.ScratchDir, "course-race-local", cell + "_scores.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.Delete(path);
+        return path;
+    }
+
+    // The race built from `spec`, each seat on its own course run. Once the window opens the `flown`
+    // panes are placed through every entry, and their bests are read back from the file.
+    private static void LocalRace(TestContext ctx, string cell, SessionSpec spec, Net.NetSeat[]? roster, string scores, int[] flown)
+    {
+        ctx.Check(spec is { Course: not null, CourseRefusal: null, Stunt: true } && spec.Players + spec.VsBots.Count == 2,
+            $"[{cell}] the spec flies {spec.Course} with {spec.Players} pane(s) and {spec.VsBots.Count} bot(s), refusal {spec.CourseRefusal ?? "none"}");
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, 1, roster);
+        try
+        {
+            var session = end.Session;
+            var seats = end.Built ? session.SeatRigs.Select(r => r.Controller).ToArray() : Array.Empty<FlightController?>();
+            var runs = seats.Select(s => s?.Stunt).ToArray();
+            if (session.RaceDirector?.Race is not { } race || runs.Length != 2 || runs[0]?.Course is not { } course
+                || runs[1]?.Course != course || ReferenceEquals(runs[0], runs[1]))
+            {
+                ctx.Check(false, $"[{cell}] the session builds a race of two seats, each on its own run of the course ({runs.Length} seat(s))");
+                return;
+            }
+
+            if (session.FindChild("course_visuals", true, false) is not CourseVisuals visuals || visuals.Cues.Count != spec.Players)
+            {
+                ctx.Check(false, $"[{cell}] the course is drawn, with one cue set per pane");
+                return;
+            }
+
+            var peers = new[] { session };
+            bool opened = CourseFlight.Until(peers, () => race.MayStartRun);
+            foreach (int i in flown)
+            {
+                var plane = seats[i]!;
+                plane.UseKeyboard = false;
+                plane.PadDevices = Array.Empty<int>();
+                int crossed = course.Sequence.Count(entry => CourseFlight.Through(peers, plane, runs[i]!, course, entry));
+                CourseFlight.Until(peers, () => race.Of(i)?.BestTime != null);
+                string key = race.Of(i)?.ScoreKey ?? "";
+                float? board = race.Of(i)?.BestTime;
+                float? best = ScoreStore.Load(scores).GetBest(key);
+                ctx.Check(opened && crossed == course.Sequence.Count && key.StartsWith($"course/{Chapter}/{Sample}/{course.Hash}/", StringComparison.Ordinal)
+                        && best is > 0f && best == board,
+                    $"[{cell}] seat {i} crosses {crossed} of {course.Sequence.Count} entries and records its best under '{key}' ({CourseFlight.Seconds(best)}, board {CourseFlight.Seconds(board)})");
+            }
+
+            if (seats[1] is { IsBotSeat: true })
+            {
+                BotCuts(ctx, cell, visuals, runs[1]!, course);
+            }
+        }
+        finally
+        {
+            end.Close();
+        }
+    }
+
+    // The bot's run brushes a pylon gate's left course pylon and another racer's cut takes the right.
+    // The drawing follows the bot's run, so the left is cut. The run's reset, the path every rerun
+    // takes, stands both whole: one shared restore.
+    private static void BotCuts(TestContext ctx, string cell, CourseVisuals visuals, StuntMission run, Course course)
+    {
+        int g = course.Gates.ToList().FindIndex(x => x.Kind == CourseGateKind.PylonGate);
+        if (g < 0)
+        {
+            ctx.Check(false, $"[{cell}] the course has a pylon gate to brush");
+            return;
+        }
+
+        var gate = course.Gates[g];
+        var stump = (ShaderMaterial)visuals.GateNodes[g].GetNode<MeshInstance3D>("pylon_left").MaterialOverride;
+        var right = (ShaderMaterial)visuals.GateNodes[g].GetNode<MeshInstance3D>("pylon_right").MaterialOverride;
+        float Top() => stump.GetShaderParameter("clip_hi_m").AsSingle();
+        float RightTop() => right.GetShaderParameter("clip_hi_m").AsSingle();
+        float height = 0.4f * gate.Height;
+        float radius = Mathf.Lerp(CourseGateShape.PylonBaseRadius(gate), CourseGateShape.PylonTopRadius(gate), height / gate.Height);
+        var pose = CourseMotion.Pose(gate, run.SimSeconds());
+        run.Relocated();
+        run.Update(pose * new Vector3((-0.5f * gate.Width) - radius - 10f, height, 0.3f), 1f);
+        run.Update(pose * new Vector3((-0.5f * gate.Width) - radius - 0.5f, height, 0.3f), 1f);
+        double now = run.SimSeconds();
+        visuals.Cut(g, CourseElement.RightCoursePylon, height, now);
+        visuals.Pose(now + 0.1);
+        ctx.Check(Top() < gate.Height && RightTop() < gate.Height,
+            $"[{cell}] the bot's touch cuts {gate.Id}'s left course pylon at {Top().ToString("0.00", CultureInfo.InvariantCulture)} m, beside another racer's cut");
+        run.Reset();
+        visuals.Pose(now + 0.2);
+        ctx.Check(Top() == CoursePylonCut.NoClipM && RightTop() == CoursePylonCut.NoClipM,
+            $"[{cell}] the bot's rerun stands every course pylon whole, the other racer's cut included");
     }
 
     private static GateDirection Flip(GateDirection d) => d == GateDirection.Forward ? GateDirection.Reverse : GateDirection.Forward;

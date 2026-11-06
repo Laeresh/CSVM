@@ -95,7 +95,8 @@ public sealed record MenuNetLaunch(INetTransport Transport, bool IsHost);
 /// line's own kill target and time limit. A network match carries the open wire, null on every
 /// local launch. A local Dogfight carries the join board's bot rows in <paramref name="Bots"/>,
 /// seated after the panes; a network host's come from its lobby instead. A Stunt Flying launch of
-/// an authored course names it in <paramref name="Course"/>, flown as <c>--course=</c> flies it.</summary>
+/// an authored course, or a lobby's Stunt Race on its host's, names it in <paramref name="Course"/>,
+/// flown as <c>--course=</c> flies it.</summary>
 public sealed record LaunchExit(
     string Chapter,
     IReadOnlyList<MenuSeatChoice> Seats,

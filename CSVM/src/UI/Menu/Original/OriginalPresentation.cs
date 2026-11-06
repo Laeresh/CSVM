@@ -815,6 +815,12 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     public void Tick(float dt)
     {
+        // Held, not set once: a session freed under the menu restores its pause sheet's pointer after Show.
+        if (_shown && Input.MouseMode != Input.MouseModeEnum.Hidden)
+        {
+            Input.MouseMode = Input.MouseModeEnum.Hidden;
+        }
+
         if (!_shown || _shell == null || _host == null || _devices == null || _host.Seats.Count == 0 || _view == null)
         {
             return;
@@ -1226,6 +1232,25 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (tab == "ctf" && host.Dogfight is { } flag)
         {
             flag.SetMissionType(Spec.DogfightMissionType.CaptureTheFlag);
+            NetDoorAid.SettleDogfight(host, guests);
+        }
+
+        if (tab is "course" or "course-zones" && host.Dogfight is { } race)
+        {
+            // A Stunt Race on NW Boeing Field, every door listing the shipped courses, over the first
+            // of them or the Danger Zones.
+            foreach (var door in guests.Prepend(host))
+            {
+                door.Courses = CSVM.Flight.Modes.CourseLibrary.ShippedChoices;
+            }
+
+            race.SetMissionType(Spec.DogfightMissionType.StuntRace);
+            race.SetEnvironment(DogfightLobby.EnvironmentOf("C1"));
+            if (tab == "course")
+            {
+                race.SetCourse(CSVM.Flight.Modes.CourseLibrary.ShippedChoices("C1").FirstOrDefault());
+            }
+
             NetDoorAid.SettleDogfight(host, guests);
         }
 
