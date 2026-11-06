@@ -412,8 +412,11 @@ covers it.
   real saved profiles unless it names its own store; pass `--profiles=` with an absolute path under
   `.scratch/` alongside every `--campaign=`.**
 - **LOG-22**, **A `*.godot.log` mirror is not that run's log: exclude it when sweeping
-  `.scratch/logs/` for what a run did or did not print.** Every quit copies Godot's shared log, so
-  one deliberate probe was replayed by every later mirror.
+  `.scratch/logs/` for what a run did or did not print.** A launch without `--log-file` copies
+  Godot's shared log at its quit, which every worktree writes, so one deliberate probe was replayed
+  by every later mirror. `RunGame.ps1`, `RunDev.ps1` and `RunProbe.ps1` pass their own
+  `--log-file` (`game-*.godot.log`, `probe-*.godot.log`), which holds that run alone and is never
+  mirrored; the startup line `engine log=` names which of the two a run has.
 - **LOG-23**, **`Log` formats invariantly only the holes its call interpolates; give a number
   formatted OUTSIDE a `Log.*` call `Log.Format` or `FormattableString.Invariant`.** A collider
   census read `3,8×3,0×5,6 m` on a German machine, which no suite sees under the invariant culture.
