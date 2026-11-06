@@ -482,6 +482,7 @@
     "plane-shader-reuse": 0.287,
     "plane-wobble-walk": 0.438,
     "player-destroy-choreography": 1.848,
+    "post-processing-live": 6.26,
     "prop-slot-edges": 0.768,
     "puffer-distance-fade": 0.006,
     "puffer-draw-order": 0.006,

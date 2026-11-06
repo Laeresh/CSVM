@@ -97,11 +97,16 @@ public static class EnhancedLook
     private const float TonemapAgxWhite = 6.0f;
     private const float TonemapAgxContrast = 1.0f;
 
+    // TUNE, the Post-processing grade, picked by eye against the original over every chapter (#299).
+    // A steeper AgX curve, then post-tonemap contrast and saturation.
+    private const float GradeAgxContrast = 1.25f;
+    private const float GradeContrast = 1.1f;
+    private const float GradeSaturation = 1.15f;
+
     // The zone default FOG_COLOR (Effects/Weather.cs's no-weather zone), which is the colour a
     // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);
-
 
     /// <summary>Gets a value indicating whether this process has switched the graphics mode live, which
     /// is when a load warms the other mode's shaders by default.</summary>
@@ -219,6 +224,7 @@ public static class EnhancedLook
         // Before the water, which then builds over the decals as they draw.
         session?.FollowShadowDecals();
         ApplyWaterQuality(session);
+        session?.FollowGrade();
         LogVegetationQuality();
         LogVegetationModels();
     }
@@ -384,7 +390,19 @@ public static class EnhancedLook
         env.TonemapMode = enhanced ? TonemapMode : fresh.TonemapMode;
         env.TonemapExposure = enhanced ? TonemapExposure : fresh.TonemapExposure;
         env.TonemapAgxWhite = enhanced ? TonemapAgxWhite : fresh.TonemapAgxWhite;
-        env.TonemapAgxContrast = enhanced ? TonemapAgxContrast : fresh.TonemapAgxContrast;
+        ApplyGrade(env, enhanced);
+    }
+
+    /// <summary>The colour grade on one Environment: on under Enhanced with
+    /// <see cref="PostProcessingSetting.Enabled"/>, a fresh Environment's values otherwise.</summary>
+    public static void ApplyGrade(Godot.Environment env, bool enhanced)
+    {
+        var fresh = new Godot.Environment();
+        bool grade = enhanced && PostProcessingSetting.Enabled;
+        env.TonemapAgxContrast = grade ? GradeAgxContrast : enhanced ? TonemapAgxContrast : fresh.TonemapAgxContrast;
+        env.AdjustmentEnabled = grade;
+        env.AdjustmentContrast = grade ? GradeContrast : fresh.AdjustmentContrast;
+        env.AdjustmentSaturation = grade ? GradeSaturation : fresh.AdjustmentSaturation;
     }
 
     private static void LogViewDistance() =>
