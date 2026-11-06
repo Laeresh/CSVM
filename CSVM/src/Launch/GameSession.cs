@@ -2805,9 +2805,9 @@ public partial class GameSession : Node3D
         var tunes = Effects.CloudShadowChapters.Load().For(_spec.Chapter);
         var drift = tunes.Drift(authored);
         _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
-        _cloudShadow.Tunes = tunes;
+        _cloudShadow.Tune = tunes;
         _plane.AddChild(_cloudShadow);
-        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} darkness={_cloudShadow.Tunes.Darkness:0.##} ambient={_cloudShadow.Tunes.Ambient:0.##} size={_cloudShadow.Tunes.PatternSize:0}m coverage={_cloudShadow.Tunes.Coverage:0.##} softness={_cloudShadow.Tunes.Softness:0.###} speed={(tunes.DriftSpeed > 0f ? tunes.DriftSpeed.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "mission")} heading={(tunes.Heading is { } h ? h.ToString("0", System.Globalization.CultureInfo.InvariantCulture) : "mission")}");
+        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

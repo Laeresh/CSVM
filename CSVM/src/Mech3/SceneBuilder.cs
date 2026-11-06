@@ -899,13 +899,13 @@ void fragment() {
     /// own diffuse and specular from <c>csky_terrain_shadow.gdshaderinc</c>, the directional light
     /// scaled by <paramref name="sun"/>. That is the arm's expression for the bake's share at its
     /// fragment. <paramref name="specular"/> is the arm's SPECULAR, which <c>light()</c> cannot
-    /// read.</summary>
-    internal static string TerrainShadowLight(string sun, float specular, string? tintAt = null) => $@"
+    /// read. The cloud lab's tint is read at the world position <paramref name="tintAt"/>.</summary>
+    internal static string TerrainShadowLight(string sun, float specular, string tintAt) => $@"
 void light() {{
     vec3 csky_diffuse, csky_specular;
     csky_terrain_light(LIGHT_IS_DIRECTIONAL ? {sun} : 1.0, NORMAL, LIGHT, VIEW, LIGHT_COLOR, ATTENUATION, ROUGHNESS,
         {(0.16f * specular * specular).ToString("0.0####", System.Globalization.CultureInfo.InvariantCulture)}, SPECULAR_AMOUNT, csky_diffuse, csky_specular);
-    DIFFUSE_LIGHT += csky_diffuse{(tintAt != null ? $" + (LIGHT_IS_DIRECTIONAL ? csky_cloud_tint({tintAt}) : vec3(0.0))" : "")};
+    DIFFUSE_LIGHT += csky_diffuse + (LIGHT_IS_DIRECTIONAL ? csky_cloud_tint({tintAt}) : vec3(0.0));
     SPECULAR_LIGHT += csky_specular;
 }}";
 

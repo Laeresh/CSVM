@@ -32,7 +32,7 @@ internal static class CloudShadowSuites
             ctx.Check(CloudShadow.Live == cloudy && on.W == CloudShadowPattern.Darkness
                 && Mathf.IsEqualApprox(on.Z, 1f / CloudShadowPattern.PatternSize),
                 $"Enhanced, the word on, a cloudy day: the darkness {on.W} at one over {CloudShadowPattern.PatternSize} m");
-            var expected = CloudShadowPattern.Offset(drift, ShaderTime.Unwrapped);
+            var expected = CloudShadowPattern.Offset(drift, ShaderTime.Unwrapped, CloudShadowPattern.PatternSize, 0, 0);
             ctx.Check(Mathf.IsEqualApprox(on.X, expected.X) && Mathf.IsEqualApprox(on.Y, expected.Y),
                 $"at the drift's offset for the shader clock ({on.X:0.##},{on.Y:0.##}) against ({expected.X:0.##},{expected.Y:0.##})");
 

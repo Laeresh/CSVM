@@ -16,7 +16,8 @@ namespace CSVM.Effects;
 /// </summary>
 internal sealed partial class CloudShadow : Node
 {
-    // The globals the include declares: offset X/Z, one over the cell, darkness; and the edge band.
+    // The globals the include declares: offset X/Z, one over the cell, darkness; the edge band; the
+    // lab's tint; and the ambient share.
     private static readonly StringName Param = "csky_cloud_shadow";
     private static readonly StringName EdgeParam = "csky_cloud_shadow_edge";
     private static readonly StringName TintParam = "csky_cloud_shadow_tint";
@@ -46,7 +47,7 @@ internal sealed partial class CloudShadow : Node
     /// <summary>The node whose state the globals carry, null while the off state stands.</summary>
     public static CloudShadow? Live { get; private set; }
 
-    /// <summary>The value the main global holds with nothing drawn: a darkness of 0.</summary>
+    /// <summary>The value the main global holds with nothing drawn: a darkness of 0 at the default cell.</summary>
     public static Vector4 OffValue => new(0f, 0f, 1f / CloudShadowPattern.PatternSize, 0f);
 
     /// <summary>The main global's last written value. A mirror, since the renderer refuses to read a
@@ -67,12 +68,11 @@ internal sealed partial class CloudShadow : Node
         }
     }
 
-    /// <summary>The tunes this session draws, the shipped ones until the cloud lab edits them.</summary>
-    public CloudShadowPattern.Tune Tunes { get; set; } = CloudShadowPattern.Tune.Default;
+    /// <summary>The tunes this session draws: the chapter's, until the cloud lab edits them.</summary>
+    public CloudShadowPattern.Tune Tune { get; set; } = CloudShadowPattern.Tune.Default;
 
     /// <summary>The cloud lab's tint, the light added under a shadow's core. Black adds nothing.</summary>
     public Vector3 Tint { get; set; }
-
 
     /// <summary>Where <see cref="Drift"/> came from.</summary>
     public CloudShadowPattern.DriftSource Source { get; }
@@ -124,11 +124,8 @@ internal sealed partial class CloudShadow : Node
 
     /// <summary>The offset the pattern is read at now, in metres along X and Z. It wraps at the tuned
     /// lattice's period, so the repeat is seamless at any size.</summary>
-    public Vector2 Offset()
-    {
-        double t = ShaderTime.Unwrapped, period = CloudShadowPattern.Cells * (double)Tunes.Clamped().PatternSize;
-        return new Vector2((float)Wrap((-_drift.X * t) + _shiftX, period), (float)Wrap((-_drift.Y * t) + _shiftZ, period));
-    }
+    public Vector2 Offset() =>
+        CloudShadowPattern.Offset(_drift, ShaderTime.Unwrapped, Tune.Clamped().PatternSize, _shiftX, _shiftZ);
 
     /// <summary>Takes a zone apply's day or night, written at once.</summary>
     public void FollowZone(bool night)
@@ -203,8 +200,6 @@ internal sealed partial class CloudShadow : Node
         return xf;
     }
 
-    private static double Wrap(double x, double period) => x - (Math.Floor(x / period) * period);
-
     private static void Write(Vector4 value, Vector2 edge, Vector3 tint, float ambient)
     {
         if (!_registered)
@@ -237,7 +232,7 @@ internal sealed partial class CloudShadow : Node
             Write(OffValue, CloudShadowPattern.Edge, Vector3.Zero, 0f);
             return;
         }
-        var tunes = Tunes.Clamped();
+        var tunes = Tune.Clamped();
         var offset = Offset();
         Write(new Vector4(offset.X, offset.Y, 1f / tunes.PatternSize, tunes.Darkness), tunes.Edge, Tint, tunes.Ambient);
     }

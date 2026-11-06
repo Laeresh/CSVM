@@ -17,17 +17,20 @@ public class CloudShadowPatternTests
     public void TheOffsetRunsAgainstTheDriftWrappedIntoOnePeriod()
     {
         // A point reads the pattern at its X/Z plus the offset, so the offset runs against the drift.
-        var offset = CloudShadowPattern.Offset(new Vector2(6f, -2f), 10.0);
-        Assert.Equal(CloudShadowPattern.Period - 60f, offset.X, 1);
+        var offset = CloudShadowPattern.Offset(new Vector2(6f, -2f), 10.0, 100f, 0, 0);
+        Assert.Equal((CloudShadowPattern.Cells * 100f) - 60f, offset.X, 1);
         Assert.Equal(20f, offset.Y, 3);
+        // A shift carried over from an earlier drift adds before the wrap.
+        Assert.Equal(25f, CloudShadowPattern.Offset(new Vector2(0f, -2f), 10.0, 100f, 0, 5).Y, 3);
     }
 
     [Fact]
     public void TheOffsetStaysInsideOnePeriodOverHours()
     {
-        var offset = CloudShadowPattern.Offset(new Vector2(20f, -20f), 3600.0 * 50);
-        Assert.InRange(offset.X, 0f, CloudShadowPattern.Period);
-        Assert.InRange(offset.Y, 0f, CloudShadowPattern.Period);
+        float period = CloudShadowPattern.Cells * CloudShadowPattern.PatternSize;
+        var offset = CloudShadowPattern.Offset(new Vector2(20f, -20f), 3600.0 * 50, CloudShadowPattern.PatternSize, 0, 0);
+        Assert.InRange(offset.X, 0f, period);
+        Assert.InRange(offset.Y, 0f, period);
     }
 
     [Fact]

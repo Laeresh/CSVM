@@ -29,6 +29,7 @@ internal sealed partial class CloudLab : Node
     private readonly string? _savePath;
     private readonly List<(Row Row, HSlider Slider, Label Value)> _rows = new();
     private Vector2 _startDrift;
+    private float _heading;
     private CloudShadowPattern.Tune _saved = CloudShadowPattern.Tune.Default;
     private string _note = "";
     private CanvasLayer? _layer;
@@ -93,8 +94,9 @@ internal sealed partial class CloudLab : Node
     {
         if (_clouds() is not { } clouds)
             return;
-        clouds.Tunes = _saved;
+        clouds.Tune = _saved;
         clouds.Drift = _saved.Drift(_startDrift);
+        _heading = SavedHeading();
         clouds.Tint = Vector3.Zero;
         SyncRows();
         Log.Info("ui", $"cloud lab: reverted {Describe()}");
@@ -114,8 +116,8 @@ internal sealed partial class CloudLab : Node
         }
         try
         {
-            clouds.Tunes = clouds.Tunes with { DriftSpeed = clouds.Drift.Length(), Heading = CloudShadowPattern.HeadingOf(clouds.Drift) };
-            CloudShadowChapters.Save(_savePath, _chapter, clouds.Tunes);
+            clouds.Tune = clouds.Tune with { DriftSpeed = clouds.Drift.Length(), Heading = _heading };
+            CloudShadowChapters.Save(_savePath, _chapter, clouds.Tune);
         }
         catch (Exception ex) when (ex is System.IO.InvalidDataException or System.IO.IOException or UnauthorizedAccessException)
         {
@@ -124,7 +126,7 @@ internal sealed partial class CloudLab : Node
             UpdateStatus();
             return null;
         }
-        _saved = clouds.Tunes.Clamped();
+        _saved = clouds.Tune.Clamped();
         _note = $"saved {_chapter} to {_savePath}";
         Log.Info("ui", $"cloud lab: saved {_chapter} {Describe()} to {_savePath}");
         SyncRows();
@@ -140,41 +142,49 @@ internal sealed partial class CloudLab : Node
     }
 
     private static string ValueText(Row row, CloudShadow c) =>
-        $"{row.Get(c).ToString(row.Format)}   (saved {row.Default().ToString(row.Format)})";
+        $"{row.Field.Show(row.Get(c))}   (saved {row.Field.Show(row.Saved())})";
 
     private string Describe() => _clouds() is { } c
         ? string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"darkness={c.Tunes.Darkness:0.##} ambient={c.Tunes.Ambient:0.##} size={c.Tunes.PatternSize:0}m coverage={c.Tunes.Coverage:0.##} softness={c.Tunes.Softness:0.###} drift=({c.Drift.X:0.#},{c.Drift.Y:0.#})m/s tint={(c.Tint != Vector3.Zero ? "on" : "off")}")
+            $"{c.Tune.Describe()} drift=({c.Drift.X:0.#},{c.Drift.Y:0.#})m/s tint={(c.Tint != Vector3.Zero ? "on" : "off")}")
         : "no cloud shadows standing";
 
+    // The saved heading, else the session's starting drift's, so a saved speed of 0 keeps a direction.
+    private float SavedHeading() => _saved.Heading ?? CloudShadowPattern.HeadingOf(_startDrift);
+
+    // A row per tune. Speed and heading move the live drift, whose heading the lab holds itself, so a
+    // speed taken through 0 keeps its direction.
     private List<Row> Rows()
     {
-        var start = _startDrift;
-        return new List<Row>
+        var rows = new List<Row>();
+        foreach (var f in CloudShadowPattern.Fields)
         {
-            new("Darkness (sun taken under a core)", 0f, 1f, 0.01f, c => c.Tunes.Darkness,
-                (c, v) => c.Tunes = c.Tunes with { Darkness = v }, () => _saved.Darkness, "0.00"),
-            new("Size (one shadow, m)", 50f, 3000f, 10f, c => c.Tunes.PatternSize,
-                (c, v) => c.Tunes = c.Tunes with { PatternSize = v }, () => _saved.PatternSize, "0"),
-            new("Coverage (share of ground shaded)", 0f, 1f, 0.01f, c => c.Tunes.Coverage,
-                (c, v) => c.Tunes = c.Tunes with { Coverage = v }, () => _saved.Coverage, "0.00"),
-            new("Softness (edge width)", 0.005f, 0.4f, 0.005f, c => c.Tunes.Softness,
-                (c, v) => c.Tunes = c.Tunes with { Softness = v }, () => _saved.Softness, "0.000"),
-            new("Ambient taken (ambient light under a core)", 0f, 1f, 0.01f, c => c.Tunes.Ambient,
-                (c, v) => c.Tunes = c.Tunes with { Ambient = v }, () => _saved.Ambient, "0.00"),
-            new("Drift speed (m/s, saved)", 0f, 100f, 0.5f, c => c.Drift.Length(),
-                (c, v) => c.Drift = CloudShadowPattern.Toward(CloudShadowPattern.HeadingOf(c.Drift), v),
-                () => _saved.Drift(start).Length(), "0.0"),
-            new("Drift heading (deg from +X toward +Z, as the sea's wind)", 0f, 359f, 1f,
-                c => CloudShadowPattern.HeadingOf(c.Drift), (c, v) => c.Drift = CloudShadowPattern.Toward(v, c.Drift.Length()),
-                () => CloudShadowPattern.HeadingOf(_saved.Drift(start)), "0"),
-        };
+            if (f == CloudShadowPattern.SpeedField)
+            {
+                rows.Add(new(f, c => c.Drift.Length(), (c, v) => c.Drift = CloudShadowPattern.Toward(_heading, v),
+                    () => _saved.Drift(_startDrift).Length()));
+            }
+            else if (f == CloudShadowPattern.HeadingField)
+            {
+                rows.Add(new(f, _ => _heading, (c, v) =>
+                {
+                    _heading = v;
+                    c.Drift = CloudShadowPattern.Toward(v, c.Drift.Length());
+                }, SavedHeading));
+            }
+            else
+            {
+                rows.Add(new(f, c => f.Get(c.Tune) ?? 0f, (c, v) => c.Tune = f.With(c.Tune, v), () => f.Get(_saved) ?? 0f));
+            }
+        }
+        return rows;
     }
 
     private void BuildUi()
     {
         _startDrift = _clouds()?.Drift ?? Vector2.Zero;
-        _saved = _clouds()?.Tunes.Clamped() ?? CloudShadowPattern.Tune.Default;
+        _saved = _clouds()?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
+        _heading = SavedHeading();
         _layer = new CanvasLayer { Layer = HudLayers.Lab, Visible = false };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -229,7 +239,7 @@ internal sealed partial class CloudLab : Node
     private void AddRow(VBoxContainer box, Row row)
     {
         var head = new HBoxContainer();
-        var name = Small(row.Label);
+        var name = Small(row.Field.Label);
         name.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         name.AutowrapMode = TextServer.AutowrapMode.Off;
         head.AddChild(name);
@@ -241,9 +251,9 @@ internal sealed partial class CloudLab : Node
         // No keyboard focus, so WASD keeps flying the camera after a click.
         var slider = new HSlider
         {
-            MinValue = row.Min,
-            MaxValue = row.Max,
-            Step = row.Step,
+            MinValue = row.Field.Min,
+            MaxValue = row.Field.Max,
+            Step = row.Field.Step,
             FocusMode = Control.FocusModeEnum.None,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
@@ -287,12 +297,12 @@ internal sealed partial class CloudLab : Node
             ? "drawing"
             : "not drawing (needs Enhanced, the Cloud Shadows option on, a cloudy mission and a day zone)";
         var offset = c.Offset();
-        _status.Text = $"{draws} · drift from {c.Source}\n"
-            + $"pattern offset ({offset.X:0} m, {offset.Y:0} m) · clock {ShaderTime.Unwrapped:0.0} s"
+        _status.Text = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{draws} · drift from {c.Source}\npattern offset ({offset.X:0} m, {offset.Y:0} m) · clock {ShaderTime.Unwrapped:0.0} s")
             + (_note.Length > 0 ? $"\n{_note}" : "");
     }
 
-    // One slider: its label, range, step, how it reads and writes the shadows, and its unit.
-    private sealed record Row(string Label, float Min, float Max, float Step, Func<CloudShadow, float> Get,
-        Action<CloudShadow, float> Set, Func<float> Default, string Format);
+    // One slider: its tune, how it reads and writes the shadows, and its saved value.
+    private sealed record Row(CloudShadowPattern.Field Field, Func<CloudShadow, float> Get, Action<CloudShadow, float> Set,
+        Func<float> Saved);
 }

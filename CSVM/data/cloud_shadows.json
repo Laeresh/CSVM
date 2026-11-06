@@ -1,5 +1,5 @@
 {
-  "_about": "Per-chapter Enhanced cloud shadow tunes (Effects/CloudShadowChapters.cs). A chapter or field left out takes the constants in Effects/CloudShadowPattern.cs. The cloud lab (Shift+F4 in --freecam) saves the chapter it runs on.",
+  "_about": "Per-chapter Enhanced cloud shadow tunes (Effects/CloudShadowChapters.cs). A chapter or field left out takes the constants in Effects/CloudShadowPattern.cs. The cloud lab (Shift+F4 in --freecam) saves the chapter it runs on. Darkness and ambient 0 draw no shadow, for a chapter whose sky is clear. Heading is degrees from +X toward +Z, as ocean_seas.json's wind.",
   "C2": {
     "darkness": 0.7,
     "ambient": 0.87,
@@ -44,6 +44,14 @@
     "softness": 0.12,
     "speed": 10,
     "heading": 20
+  },
+  "C3": {
+    "darkness": 0,
+    "ambient": 0
+  },
+  "C5": {
+    "darkness": 0,
+    "ambient": 0
   },
   "C1C": {
     "darkness": 0.77,

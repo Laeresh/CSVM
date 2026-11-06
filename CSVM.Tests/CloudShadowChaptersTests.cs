@@ -49,7 +49,7 @@ public class CloudShadowChaptersTests
     }
 
     [Fact]
-    public void A_saved_speed_keeps_the_missions_heading_and_zero_keeps_its_speed()
+    public void A_saved_speed_keeps_the_missions_heading_and_an_unset_one_its_speed()
     {
         var tune = CloudShadowChapters.Parse("""{ "C2": { "speed": 25 } }""").For("C2");
         var mission = new Godot.Vector2(3.2f, 2.4f);
@@ -59,6 +59,28 @@ public class CloudShadowChaptersTests
         Assert.Equal(0.8f, drift.X / drift.Length(), 3);
         Assert.Equal(mission.X, CloudShadowPattern.Tune.Default.Drift(mission).X, 4);
         Assert.Equal(mission.Y, CloudShadowPattern.Tune.Default.Drift(mission).Y, 4);
+    }
+
+    [Fact]
+    public void A_saved_speed_of_zero_holds_the_pattern_still_after_a_save()
+    {
+        var still = CloudShadowPattern.Tune.Default with { DriftSpeed = 0f, Heading = 90f };
+
+        var read = CloudShadowChapters.Parse(CloudShadowChapters.WithEntry(null, "C1", still)).For("C1");
+        Assert.Equal(still, read);
+        Assert.Equal(Godot.Vector2.Zero, read.Drift(new Godot.Vector2(3.2f, 2.4f)));
+    }
+
+    [Fact]
+    public void Every_field_is_written_read_and_described_through_the_one_table()
+    {
+        var tune = new CloudShadowPattern.Tune(0.7f, 330f, 0.26f, 0.07f, 0.87f, 9.5f, 291f);
+
+        Assert.Equal(tune, CloudShadowChapters.Parse(CloudShadowChapters.WithEntry(null, "C2", tune)).For("C2"));
+        Assert.Equal("darkness=0.70 ambient=0.87 size=330 coverage=0.26 softness=0.070 speed=9.5 heading=291", tune.Describe());
+        Assert.EndsWith("speed=mission heading=mission", CloudShadowPattern.Tune.Default.Describe());
+        // The file holds the size to the lab's slider.
+        Assert.Equal(3000f, (CloudShadowPattern.Tune.Default with { PatternSize = 5000f }).Clamped().PatternSize);
     }
 
     [Fact]

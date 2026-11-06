@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -21,7 +22,7 @@ public sealed class CloudShadowChapters
     public const string DefaultPath = "res://data/cloud_shadows.json";
 
     /// <summary>An entry's field names, in the order the lab writes them.</summary>
-    public static readonly IReadOnlyList<string> Keys = new[] { "darkness", "ambient", "size", "coverage", "softness", "speed", "heading" };
+    public static readonly IReadOnlyList<string> Keys = CloudShadowPattern.Fields.Select(f => f.Key).ToArray();
 
     private static readonly JsonSerializerOptions Written = new()
     {
@@ -105,10 +106,11 @@ public sealed class CloudShadowChapters
 
         string name = chapter.ToUpperInvariant();
         var entry = new JsonObject();
-        foreach (var k in Keys)
+        var held = tune.Clamped();
+        foreach (var f in CloudShadowPattern.Fields)
         {
-            if (Get(tune.Clamped(), k) is { } v)
-                entry[k] = JsonValue.Create(Math.Round((double)v, 3));
+            if (f.Get(held) is { } v)
+                entry[f.Key] = JsonValue.Create(Math.Round((double)v, 3));
         }
 
         // Rebuilt key by key, since a JsonObject cannot replace a member in its place.
@@ -147,29 +149,6 @@ public sealed class CloudShadowChapters
     public CloudShadowPattern.Tune For(string chapter) =>
         _entries.TryGetValue(chapter, out var tune) ? tune : CloudShadowPattern.Tune.Default;
 
-    private static float? Get(CloudShadowPattern.Tune t, string key) => key switch
-    {
-        "darkness" => t.Darkness,
-        "ambient" => t.Ambient,
-        "size" => t.PatternSize,
-        "coverage" => t.Coverage,
-        "speed" => t.DriftSpeed,
-        "heading" => t.Heading,
-        _ => t.Softness,
-    };
-
-    private static CloudShadowPattern.Tune? With(CloudShadowPattern.Tune t, string key, float v) => key switch
-    {
-        "darkness" => t with { Darkness = v },
-        "ambient" => t with { Ambient = v },
-        "size" => t with { PatternSize = v },
-        "coverage" => t with { Coverage = v },
-        "softness" => t with { Softness = v },
-        "speed" => t with { DriftSpeed = v },
-        "heading" => t with { Heading = v },
-        _ => null,
-    };
-
     private static CloudShadowPattern.Tune ReadEntry(string chapter, JsonObject fields, List<string> warnings)
     {
         var tune = CloudShadowPattern.Tune.Default;
@@ -182,12 +161,12 @@ public sealed class CloudShadowChapters
                 warnings.Add($"{chapter}: '{key}' is not a number, it takes the default");
                 continue;
             }
-            if (With(tune, key, (float)number) is not { } next)
+            if (CloudShadowPattern.Fields.FirstOrDefault(f => f.Key == key) is not { } field)
             {
                 warnings.Add($"{chapter}: '{key}' is not a cloud shadow field ({string.Join("/", Keys)}), ignored");
                 continue;
             }
-            tune = next;
+            tune = field.With(tune, (float)number);
         }
         var clamped = tune.Clamped();
         if (clamped != tune)

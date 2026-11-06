@@ -1,10 +1,10 @@
 #ifndef CSKY_CLOUD_SHADOW_INC
 #define CSKY_CLOUD_SHADOW_INC
 
-// The Enhanced cloud shadows (Effects/CloudShadow.cs owns both globals). The vec4 is the pattern's
-// drift offset in metres (X, Z), one over the lattice cell in metres, and the darkness at a shadow's
-// core; a darkness of 0 draws nothing. The vec2 is the noise band over which a shadow's edge ramps.
-// The tunes behind both live in Effects/CloudShadowPattern.cs.
+// The Enhanced cloud shadows (Effects/CloudShadow.cs owns all four globals, the tint and ambient ones
+// declared below). The vec4 is the pattern's drift offset in metres (X, Z), one over the lattice cell
+// in metres, and the darkness at a shadow's core; a darkness of 0 draws nothing. The vec2 is the noise
+// band over which a shadow's edge ramps. The tunes behind them live in Effects/CloudShadowPattern.cs.
 global uniform vec4 csky_cloud_shadow;
 global uniform vec2 csky_cloud_shadow_edge;
 

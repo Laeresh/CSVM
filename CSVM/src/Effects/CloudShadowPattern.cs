@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Effects;
@@ -7,9 +9,9 @@ namespace CSVM.Effects;
 /// <summary>
 /// The Enhanced cloud shadows' tunes and drift, with no engine object touched. The pattern itself
 /// lives only in <c>csky_cloud_shadow.gdshaderinc</c>: value noise over a world-anchored lattice of
-/// <see cref="PatternSize"/> cells, wrapping every <see cref="Period"/> metres. The drift is chosen
-/// from the mission (<see cref="ChooseDrift"/>). A remake-only rule: the original casts no cloud
-/// shadow. <see cref="CloudShadow"/> publishes the result.
+/// one tuned size per cell, wrapping every <see cref="Cells"/> cells. The drift is chosen from the
+/// mission (<see cref="ChooseDrift"/>). A remake-only rule: the original casts no cloud shadow.
+/// <see cref="CloudShadow"/> publishes the result.
 /// </summary>
 public static class CloudShadowPattern
 {
@@ -32,16 +34,38 @@ public static class CloudShadowPattern
     /// <summary>TUNE: the noise band a shadow's edge ramps across, half each side of its centre.</summary>
     public const float Softness = 0.12f;
 
-    /// <summary>TUNE: the drift's speed in metres per second, along the direction the mission gives
-    /// (<see cref="ChooseDrift"/>). 0 keeps the mission's own speed.</summary>
-    public const float DriftSpeed = 0f;
-
     /// <summary>TUNE: the fastest drift a ceiling scroll gives, metres per second. The scroll's speed
     /// in metres rests on an estimate of the ceiling's height (<see cref="CeilingDrift"/>).</summary>
     public const float MaxCeilingDrift = 20f;
 
     /// <summary>The cells one lattice repeats over. The shader wraps its corners at this and twice it.</summary>
     public const int Cells = 256;
+
+    /// <summary>The drift's speed in metres per second. Unset keeps the mission's own.</summary>
+    public static readonly Field SpeedField = new("speed", "Drift speed (m/s)", 0f, 100f, 0.5f, "0.0",
+        t => t.DriftSpeed, (t, v) => t with { DriftSpeed = v });
+
+    /// <summary>The drift's heading in degrees from +X toward +Z, as the sea's wind. Unset keeps the mission's own.</summary>
+    public static readonly Field HeadingField = new("heading", "Drift heading (deg from +X toward +Z, as the sea's wind)", 0f, 360f, 1f, "0",
+        t => t.Heading, (t, v) => t with { Heading = v }, Wraps: true);
+
+    /// <summary>Every tune, in the order the chapters file and the cloud lab list them. The one table
+    /// of each tune's key, label, range and format.</summary>
+    public static readonly IReadOnlyList<Field> Fields = new[]
+    {
+        new Field("darkness", "Darkness (sun taken under a core)", 0f, 1f, 0.01f, "0.00",
+            t => t.Darkness, (t, v) => t with { Darkness = v }),
+        new Field("ambient", "Ambient taken (ambient light under a core)", 0f, 1f, 0.01f, "0.00",
+            t => t.Ambient, (t, v) => t with { Ambient = v }),
+        new Field("size", "Size (one shadow, m)", 50f, 3000f, 10f, "0",
+            t => t.PatternSize, (t, v) => t with { PatternSize = v }),
+        new Field("coverage", "Coverage (share of ground shaded)", 0f, 1f, 0.01f, "0.00",
+            t => t.Coverage, (t, v) => t with { Coverage = v }),
+        new Field("softness", "Softness (edge width)", 0.005f, 0.4f, 0.005f, "0.000",
+            t => t.Softness, (t, v) => t with { Softness = v }),
+        SpeedField,
+        HeadingField,
+    };
 
     // Below this, metres per second, a source offers no drift and the next one is read.
     private const float MinDrift = 0.05f;
@@ -62,9 +86,6 @@ public static class CloudShadowPattern
     /// <summary>TUNE: the drift where the mission offers no ceiling scroll and no sideways wind, metres
     /// per second along X and Z.</summary>
     public static Vector2 FixedDrift => new(3.2f, 2.4f);
-
-    /// <summary>The distance in metres after which the pattern repeats exactly, along X and Z.</summary>
-    public static float Period => Cells * PatternSize;
 
     /// <summary>The noise band a shadow's edge ramps over, low then high.</summary>
     public static Vector2 Edge => Tune.Default.Edge;
@@ -118,12 +139,14 @@ public static class CloudShadowPattern
     }
 
     /// <summary>The offset the pattern is read at after <paramref name="seconds"/> of
-    /// <paramref name="velocity"/>, wrapped into one <see cref="Period"/>. A point reads the pattern
-    /// at its own X/Z plus this, so the pattern moves with the velocity.</summary>
-    public static Vector2 Offset(Vector2 velocity, double seconds)
+    /// <paramref name="velocity"/> plus a <paramref name="shiftX"/>, <paramref name="shiftZ"/> carried
+    /// over from earlier drifts, wrapped into one period of <see cref="Cells"/> cells of
+    /// <paramref name="patternSize"/>. A point reads the pattern at its own X/Z plus this, so the
+    /// pattern moves with the velocity.</summary>
+    public static Vector2 Offset(Vector2 velocity, double seconds, float patternSize, double shiftX, double shiftZ)
     {
-        double period = Period;
-        return new Vector2((float)Wrap(-velocity.X * seconds, period), (float)Wrap(-velocity.Y * seconds, period));
+        double period = Cells * (double)patternSize;
+        return new Vector2((float)Wrap((-velocity.X * seconds) + shiftX, period), (float)Wrap((-velocity.Y * seconds) + shiftZ, period));
     }
 
     /// <summary>A drift of <paramref name="speed"/> metres per second toward <paramref name="degrees"/>,
@@ -141,25 +164,52 @@ public static class CloudShadowPattern
     private static double Wrap(double x, double period) => x - (Math.Floor(x / period) * period);
 
     /// <summary>The pattern's tunes as one session draws them. The constants are the defaults; the
-    /// cloud lab edits a live copy. A null <see cref="Heading"/> keeps the mission's direction.</summary>
+    /// cloud lab edits a live copy. A null <see cref="DriftSpeed"/> or <see cref="Heading"/> keeps
+    /// the mission's own.</summary>
     public readonly record struct Tune(float Darkness, float PatternSize, float Coverage, float Softness, float Ambient,
-        float DriftSpeed, float? Heading)
+        float? DriftSpeed, float? Heading)
     {
         /// <summary>The shipped tunes.</summary>
         public static Tune Default => new(CloudShadowPattern.Darkness, CloudShadowPattern.PatternSize,
-            CloudShadowPattern.Coverage, CloudShadowPattern.Softness, CloudShadowPattern.Ambient, CloudShadowPattern.DriftSpeed, null);
+            CloudShadowPattern.Coverage, CloudShadowPattern.Softness, CloudShadowPattern.Ambient, null, null);
 
         /// <summary>The noise band a shadow's edge ramps over, low then high.</summary>
         public Vector2 Edge => new(1f - Coverage - Softness, 1f - Coverage + Softness);
 
-        /// <summary>Each tune held to the range the shader draws sensibly, the heading wrapped into a turn.</summary>
-        public Tune Clamped() => new(Math.Clamp(Darkness, 0f, 1f), Math.Clamp(PatternSize, 50f, 5000f),
-            Math.Clamp(Coverage, 0f, 1f), Math.Clamp(Softness, 0.005f, 0.5f), Math.Clamp(Ambient, 0f, 1f),
-            Math.Clamp(DriftSpeed, 0f, 100f), Heading is { } h ? Mathf.PosMod(h, 360f) : null);
+        /// <summary>Each set tune held to its <see cref="Field"/>'s range, the heading wrapped into a turn.</summary>
+        public Tune Clamped()
+        {
+            var t = this;
+            foreach (var f in Fields)
+            {
+                if (f.Get(t) is { } v)
+                    t = f.With(t, f.Hold(v));
+            }
+            return t;
+        }
 
         /// <summary>The <paramref name="mission"/> drift turned to <see cref="Heading"/> and set to
-        /// <see cref="DriftSpeed"/>; a null heading or a speed of 0 keeps the mission's.</summary>
+        /// <see cref="DriftSpeed"/>, each unset one kept as the mission's.</summary>
         public Vector2 Drift(Vector2 mission) =>
-            Toward(Heading ?? HeadingOf(mission), DriftSpeed > 0f ? DriftSpeed : mission.Length());
+            Toward(Heading ?? HeadingOf(mission), DriftSpeed ?? mission.Length());
+
+        /// <summary>Every tune as <c>key=value</c>, invariant, an unset drift tune as <c>mission</c>.</summary>
+        public string Describe()
+        {
+            var t = this;
+            return string.Join(" ", Fields.Select(f => $"{f.Key}={(f.Get(t) is { } v ? f.Show(v) : "mission")}"));
+        }
+    }
+
+    /// <summary>One tune as the chapters file and the cloud lab name it: its key, label, range, slider
+    /// step and display format. It reads and writes a <see cref="Tune"/>.</summary>
+    public sealed record Field(string Key, string Label, float Min, float Max, float Step, string Format,
+        Func<Tune, float?> Get, Func<Tune, float, Tune> With, bool Wraps = false)
+    {
+        /// <summary><paramref name="value"/> in the display format, invariant.</summary>
+        public string Show(float value) => value.ToString(Format, CultureInfo.InvariantCulture);
+
+        /// <summary><paramref name="value"/> held inside the range, or wrapped into it.</summary>
+        public float Hold(float value) => Wraps ? Mathf.PosMod(value, Max) : Math.Clamp(value, Min, Max);
     }
 }
