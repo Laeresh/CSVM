@@ -127,6 +127,22 @@ public sealed class StuntMission
     /// metres. The rail's pose trails its cursor, so this carries the pose through the opening.</summary>
     public const float EntryRunOutM = 60f;
 
+    /// <summary>Remake-only rule: how far past the opening an entry's exit must clear the world,
+    /// metres (<see cref="FitLines"/>). About three seconds of a race bot's flight.</summary>
+    public const float EntryExitM = 250f;
+
+    /// <summary>Remake-only rule: how far below an entry's line the world must stay, metres, away
+    /// from the opening (<see cref="FitLines"/>).</summary>
+    public const float EntryClearM = 8f;
+
+    /// <summary>Remake-only rule: how near the opening the world may come up under an entry's line,
+    /// metres (<see cref="FitLines"/>). A pylon gate stands on the ground.</summary>
+    public const float EntryOpeningM = 40f;
+
+    /// <summary>Remake-only rule: the steepest slope an entry's lead-in or exit takes, tan 35 degrees
+    /// (<see cref="FitLines"/>), and the step its search takes.</summary>
+    public const float MaxEntrySlope = 0.7f;
+
     /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race). Empty in a
     /// solo run, so single-player logs read exactly as before, but with four pilots clearing zones
     /// in one shared world the completion lines are otherwise indistinguishable.</summary>
@@ -135,6 +151,9 @@ public sealed class StuntMission
     // Messages key for the run-start intro line ("Fly through all the Danger Zones to
     // win!"), the marker HUD's one-shot banner.
     private const string IntroMsgKey = "MSG_BRF_IASF_OBJ2";
+
+    // The step FitLines' slope search takes.
+    private const float EntrySlopeStep = 0.05f;
 
     private readonly List<StuntZone> _zones;
     private readonly HashSet<StuntGate> _crossedGates = new();
@@ -149,6 +168,12 @@ public sealed class StuntMission
     private readonly (Vector3 Centre, float Radius)[] _gateBounds = Array.Empty<(Vector3, float)>();
     private readonly int[] _firstElement = Array.Empty<int>();
     private readonly bool[] _touching = Array.Empty<bool>();
+
+    // Per sequence entry, how far its line's start and end stand above level, and how far past the
+    // opening it runs, metres (FitLines).
+    private float[] _leadRise = Array.Empty<float>();
+    private float[] _runRise = Array.Empty<float>();
+    private float[] _runOut = Array.Empty<float>();
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
     private bool _clockStarted;
@@ -386,6 +411,71 @@ public sealed class StuntMission
         return Course != null
             ? new StuntMission(zones, Course, _apertures, _entryGates) { GateMotion = GateMotion, SimSeconds = SimSeconds }
             : new StuntMission(zones) { IntroLine = IntroLine };
+    }
+
+    /// <summary>Tilts each course entry's line, which a race bot runs with no crash check, clear of the
+    /// world <paramref name="blocked"/> reports, at the gate's rest pose. A buried or crossed lead-in
+    /// starts higher, so the line dives into the opening. An exit meeting the world within
+    /// <see cref="EntryExitM"/>, else 150 or 100 m, climbs. Each takes the least slope clearing by
+    /// <see cref="EntryClearM"/>; with none up to <see cref="MaxEntrySlope"/> it stays level, warned.
+    /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public void FitLines(Func<Vector3, Vector3, bool> blocked)
+    {
+        ArgumentNullException.ThrowIfNull(blocked);
+        if (Course == null)
+            return;
+
+        // A ray cast from inside a body strikes nothing, so a buried end shows only from the other.
+        bool Clear(Vector3 a, Vector3 b) => !blocked(a, b) && !blocked(b, a);
+
+        // The straight from the opening along `way`, raised by `slope`. Its margin below spares the
+        // opening's surroundings, where a low gate's ground is meant to be.
+        bool Fits(Vector3 opening, Vector3 way, float metres, float slope)
+        {
+            var far = opening + (way * metres) + (Vector3.Up * (metres * slope));
+            var near = opening.Lerp(far, EntryOpeningM / metres);
+            var down = Vector3.Down * EntryClearM;
+            return Clear(opening, far) && Clear(near + down, far + down);
+        }
+
+        float? Slope(Vector3 opening, Vector3 way, float metres)
+        {
+            for (float slope = 0f; slope <= MaxEntrySlope + 1e-4f; slope += EntrySlopeStep)
+            {
+                if (Fits(opening, way, metres, slope))
+                    return slope;
+            }
+
+            return null;
+        }
+
+        _leadRise = new float[_zones.Count];
+        _runRise = new float[_zones.Count];
+        _runOut = new float[_zones.Count];
+        for (int i = 0; i < _zones.Count; i++)
+        {
+            var (centre, way) = EntryAxis(i);
+            float? lead = Slope(centre, -way, EntryLeadInM);
+            float? run = null;
+            _runOut[i] = EntryRunOutM;
+            foreach (float metres in new[] { EntryExitM, EntryExitM * 0.6f, EntryExitM * 0.4f })
+            {
+                if (Slope(centre, way, metres) is { } slope)
+                {
+                    // A climbing exit is ridden to the end the fit cleared. Off the rail at EntryRunOutM,
+                    // a bot sinks back under its line before the flight law climbs.
+                    run = slope;
+                    _runOut[i] = slope > 0f ? metres : EntryRunOutM;
+                    break;
+                }
+            }
+
+            if (lead == null || run == null)
+                Log.Warn("flight", $"course entry {i + 1} ({_zones[i].PathName}): no line up to a {Mathf.RadToDeg(Mathf.Atan(MaxEntrySlope)):0} degree slope clears the world {(lead == null ? "before" : "after")} the gate; it stays level there");
+            _leadRise[i] = (lead ?? 0f) * EntryLeadInM;
+            _runRise[i] = (run ?? 0f) * _runOut[i];
+            _zones[i].Route = EntryLine(i);
+        }
     }
 
     /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
@@ -776,19 +866,25 @@ public sealed class StuntMission
         return true;
     }
 
-    // Entry i's line, through its gate's opening the way the entry is flown. It follows the gate's
-    // motion at the sim time, as the aperture does. That motion never tilts the gate's axis, so the
-    // opening centre's travel moves the whole line.
+    // Entry i's opening centre at rest, and the way it is flown.
+    private (Vector3 Centre, Vector3 Way) EntryAxis(int i)
+    {
+        var gate = Course!.Gates[_entryGates[i]];
+        return (_apertures[_entryGates[i]].Rest * CourseGateShape.OpeningCentre(gate), gate.FlownWay(Course.Sequence[i].Direction));
+    }
+
+    // Entry i's line, through its gate's opening the way the entry is flown, tilted as FitLines left
+    // it. It follows the gate's motion at the sim time, as the aperture does. That motion never tilts
+    // the gate's axis, so the opening centre's travel moves the whole line.
     private DangerZoneRibbon EntryLine(int i)
     {
         int g = _entryGates[i];
-        var gate = Course!.Gates[g];
-        var local = CourseGateShape.OpeningCentre(gate);
+        var local = CourseGateShape.OpeningCentre(Course!.Gates[g]);
         var rest = _apertures[g].Rest;
-        var centre = rest * local;
-        var way = gate.FlownWay(Course.Sequence[i].Direction);
-        return DangerZoneRibbon.ForEntry(gate.Id, i + 1, centre, way, EntryLeadInM, EntryRunOutM,
-            () => (rest * GateMotion(g, SimSeconds()) * local) - centre);
+        var (centre, way) = EntryAxis(i);
+        return DangerZoneRibbon.ForEntry(Course.Gates[g].Id, i + 1, centre, way, EntryLeadInM, _runOut.Length > i ? _runOut[i] : EntryRunOutM,
+            () => (rest * GateMotion(g, SimSeconds()) * local) - centre,
+            _leadRise.Length > i ? _leadRise[i] : 0f, _runRise.Length > i ? _runRise[i] : 0f);
     }
 
     // A course step tests the next entry alone. One segment thus advances at most one entry, and a

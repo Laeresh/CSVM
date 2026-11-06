@@ -29,6 +29,11 @@ public sealed class GameClock
     /// Orthogonal to the mode, every mode can halt.</summary>
     public bool Halted;
 
+    /// <summary>The <c>--control=</c> channel's hold, kept apart from <see cref="Halted"/> because a
+    /// flight seat rewrites that one from its pause state every frame. Steps through
+    /// <see cref="StepOnce"/> like a halt.</summary>
+    public bool ScriptHeld;
+
     /// <summary>Time-scale multiplier (the animation lab's 0.1×–4× transport). 1 = real speed.</summary>
     public float Scale = 1f;
 
@@ -93,7 +98,7 @@ public sealed class GameClock
     /// <summary>True when GameSession requests <see cref="Steps"/> simulation steps from its frame
     /// callback instead of one from its physics callback. <see cref="SimHeld"/> and
     /// <see cref="AuthoredAnimationHeld"/> zero <see cref="PhysicsDt"/> without setting this.</summary>
-    public bool ParentDriven => Halted || Mode != RunMode.Realtime;
+    public bool ParentDriven => Halted || ScriptHeld || Mode != RunMode.Realtime;
 
     /// <summary>Queue exactly one step through a halt (the <c>.</c> transport key).</summary>
     public void StepOnce() => _stepPending = true;
@@ -111,7 +116,7 @@ public sealed class GameClock
             Dt = FixedDt;
             Steps = 0;
         }
-        else if (Halted)
+        else if (Halted || ScriptHeld)
         {
             Dt = FixedDt;
             Steps = _stepPending ? 1 : 0;

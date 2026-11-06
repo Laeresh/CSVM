@@ -521,11 +521,119 @@ internal static class StuntRaceBotSuites
         }
     }
 
+    [Suite("stunt-race-bot-course-world",
+        "a local stunt race of one pane and four veteran bots, a Fury, a Warhawk, a Peacemaker and a Brigand, on "
+        + "each shipped course for 240 s: each entry's line is fitted clear of the built world, so C1's p2 lead-in, "
+        + "buried in the plateau's edge, starts higher and C1's p1 exit, toward the face past it, climbs; no bot "
+        + "strikes the world more than twice, where each bot but the Peacemaker struck the face past C1's p1 about "
+        + "fifty times, its crash return riding it back into the face; bridging between entries (#281), every bot "
+        + "completes a C1 run in under 50 s and clears at least 12 C2 entries, where going round the best C1 runs "
+        + "took 51 s and more and no bot cleared 9 C2 entries. Each bot's seconds per entry are noted")]
+    internal static void CourseBotsClearTheWorld(TestContext ctx)
+    {
+        const int MostCrashes = 2;
+
+        // Bridged (#281), every bot's best C1 run is under this, s, and each clears this many C2 entries.
+        // Going round instead, the best C1 runs took 51 s and more, and no bot cleared 9 C2 entries.
+        const float BridgedC1BestS = 50f;
+        const int BridgedC2Entries = 12;
+        string[] planes = { "player_fury", "player_warhawk", "player_peacemaker", "player_brigand" };
+        foreach (var (chapter, name) in new[] { ("C1", "sample_out_and_back"), ("C2", CourseName) })
+        {
+            string cell = $"{chapter}/{name}";
+            Course(ctx, chapter);
+            var spec = CourseRace(ctx, chapter, name, planes.Select((p, i) => new VsBotEntry(p, NetBotSkill.Veteran, 0, $"Bot{i}")).ToArray());
+            var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
+            if (roster is not { Length: 5 })
+            {
+                ctx.Check(false, $"[{cell}] the local launch seats a pane and four bots ({roster?.Length ?? 0} seat(s))");
+                continue;
+            }
+
+            var ambient = NetCombatSuites.Ambient.Save();
+            var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+            try
+            {
+                var session = end.Session;
+                if (!end.Built || session.RaceDirector?.Race is not { } race
+                    || session.SeatRigs.Skip(1).Select(r => r.Controller).ToArray() is not { Length: 4 } seated
+                    || seated.Any(b => b is not { Stunt.Course: not null }))
+                {
+                    ctx.Check(false, $"[{cell}] the session builds a race of a pane and four bots, each on its own run of the course");
+                    continue;
+                }
+
+                var bots = seated.Select(b => b!).ToArray();
+                var crashes = bots.Select(_ => new List<string>()).ToArray();
+                var entries = bots.Select(_ => new List<string>()).ToArray();
+                var down = new bool[bots.Length];
+                var cleared = new int[bots.Length];
+                var since = new int[bots.Length];
+                int limit = Steps(240f);
+                for (int s = 1; s <= limit; s++)
+                {
+                    StepTimed(session, s);
+                    for (int b = 0; b < bots.Length; b++)
+                    {
+                        var run = bots[b].Stunt!;
+                        if (bots[b].Crashed && !down[b])
+                        {
+                            var p = bots[b].WorldPosition;
+                            crashes[b].Add($"{CourseFlight.Seconds(s * GameClock.FixedDt)} s before {run.Zones[Math.Min(run.CompletedCount, run.Zones.Count - 1)].PathName} at ({p.X:0}, {p.Y:0}, {p.Z:0})");
+                        }
+
+                        down[b] = bots[b].Crashed;
+                        if (run.CompletedCount != cleared[b])
+                        {
+                            entries[b].Add($"{run.Zones.First(z => z.CompletionOrder == run.CompletedCount - 1).PathName} {(s - since[b]) * GameClock.FixedDt:0}");
+                            cleared[b] = run.CompletedCount;
+                            since[b] = s;
+                        }
+                    }
+                }
+
+                var lines = bots[0].Stunt!.Zones.Select(z => z.Route!).ToList();
+                float Rise(string gate, bool exit) => lines.First(l => l.Name == gate) is var l ? l.End(exit).Y - l.Opening!.Value.Y : 0f;
+                ctx.Note($"[{cell}] line rises before/after the opening, m: {string.Join(", ", lines.Select(l => $"{l.Name} {Rise(l.Name, false):0}/{Rise(l.Name, true):0}"))}");
+                if (chapter == "C1")
+                {
+                    ctx.Check(Rise("p2", false) > 0f && Rise("p1", true) > 0f,
+                        $"ABLE-TO-FAIL CONTROL: [{cell}] the fit sees the world: p2's lead-in starts {Rise("p2", false):0} m up and p1's exit ends {Rise("p1", true):0} m up");
+                }
+
+                for (int b = 0; b < bots.Length; b++)
+                {
+                    var racer = race.Of(b + 1)!;
+                    ctx.Note($"[{cell}] {planes[b]}: {racer.RunsFinished} run(s), best {Time(racer)}; seconds per entry {string.Join(", ", entries[b])}");
+                    ctx.Check(crashes[b].Count <= MostCrashes,
+                        $"[{cell}] {planes[b]} strikes the world at most {MostCrashes} times in 240 s ({crashes[b].Count}: {string.Join("; ", crashes[b].Take(4))})");
+                    if (chapter == "C1")
+                    {
+                        ctx.Check(racer.RunsFinished >= 1 && racer.BestTime < BridgedC1BestS,
+                            $"[{cell}] {planes[b]} completes a run in under {BridgedC1BestS:0} s ({racer.RunsFinished}, best {Time(racer)})");
+                    }
+                    else
+                    {
+                        ctx.Check(entries[b].Count >= BridgedC2Entries,
+                            $"[{cell}] {planes[b]} clears at least {BridgedC2Entries} entries in 240 s ({entries[b].Count})");
+                    }
+                }
+            }
+            finally
+            {
+                end.Close();
+                ambient.Restore();
+            }
+        }
+    }
+
     // A course race's spec over the shipped course, one pane and the given bots, as the menu builds it.
-    private static SessionSpec CourseRace(TestContext ctx, string chapter, params VsBotEntry[] bots)
+    private static SessionSpec CourseRace(TestContext ctx, string chapter, params VsBotEntry[] bots) => CourseRace(ctx, chapter, CourseName, bots);
+
+    private static SessionSpec CourseRace(TestContext ctx, string chapter, string name, params VsBotEntry[] bots)
     {
         var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
-            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace, bots: bots, course: CourseName);
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace, bots: bots, course: name);
         ctx.Check(spec is { Course: not null, CourseRefusal: null, Stunt: true, VsBots.Count: > 0 },
             $"the course race spec flies {spec.Course} with {spec.VsBots.Count} bot(s), refusal {spec.CourseRefusal ?? "none"}");
         return spec;

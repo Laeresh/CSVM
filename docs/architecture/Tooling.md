@@ -66,6 +66,14 @@ saves them side by side or alone. `SaveScreenshot`, the F12 save every screen sh
 export's executable) on the worker it lands on. F11 reads each pane's own camera through the pure
 `PlacementLines`: a `--freecam` line, `--fov=` off the external base, each aircraft's `--fly` line.
 
+## src/Tooling/ControlChannel.cs
+`--control=<port>`: a loopback line protocol an agent drives a live run through, built in
+`Launcher._Ready` and `Tick()`ed from its `_Process` after the capture. A worker thread owns the
+socket and queues each line; the main thread runs one command per frame and answers it, so nothing
+touches the tree off it. It holds the sim through `GameClock.ScriptHeld` from the first frame a
+clock exists, skips or fast-forwards the session's cutscene, and parks a camera of its own as the
+viewport's current one. `scripts/Control.ps1` is the client and lists the verbs.
+
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.
 `Export(node, path)` works on a throwaway `Utils/SceneCopy`, frees hidden `Node3D`s (damage is baked by

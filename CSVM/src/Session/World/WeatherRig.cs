@@ -324,6 +324,9 @@ public sealed class WeatherRig
     public IEnumerable<Vector3> SunOrientations =>
         _weather is { } weather ? weather.ZoneNames.Select(zone => LightOrientation(weather.Zone(zone))) : new[] { _sun.Rotation };
 
+    /// <summary>The mission's parsed weather, null where the mission carries none.</summary>
+    public WeatherState? Mission => _weather;
+
     /// <summary>Whether the zone the last zone apply lit the session with is a night zone
     /// (<see cref="IsNightZone"/>), false until one has.</summary>
     public bool NightApplied => _appliedZone is { } fog && IsNightZone(fog);
@@ -1471,7 +1474,7 @@ public sealed class WeatherRig
         var orientation = LightOrientation(fog);
         _sun.Rotation = orientation;
         Effects.TerrainShadow.Live?.Publish(orientation);
-        Effects.CloudShadow.Live?.FollowZone(orientation, IsNightZone(fog));
+        Effects.CloudShadow.Live?.FollowZone(IsNightZone(fog));
         // The plain globals, in both modes. Each view's own copy rides FogViewTable whenever the
         // views disagree. The direction points toward the light.
         WriteSunDirection(_sun);

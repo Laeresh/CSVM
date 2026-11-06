@@ -952,6 +952,14 @@ a grabbed handle, else the held-H ground drag, else lights the handle under the 
 Each `CourseDraft.Changed` rebuilds the `CourseVisuals`, the amber box and the `CourseSequenceOverlay`. A sequence panel has a flat
 button row per entry (rebuilt only when `Course.Sequence` is a new list), Up, Down, Flip, Remove and Add again; a row click (`ChooseEntry`) eases the camera 0.6 s behind the gate on that entry's approach via `SpectatorCamera.LookFrom`, and a right click cancels it.
 
+## src/UI/Labs/CloudLab.cs
+The cloud lab (Shift+F4), built by `InspectionLabs.BuildCloudLab` in `--freecam` alone. A panel down the right edge holds
+one slider per `Effects/CloudShadowPattern.cs` `Tune` field and the drift's speed and heading, each beside its saved value.
+Every edit writes the `Effects/CloudShadow.cs` globals at once, so no shader rebuilds. A switch tints the shadows red, so the
+pattern and its drift show plainly; the tint is never saved. Revert to saved, and Save, which writes the chapter's entry
+through `Effects/CloudShadowChapters.cs` into the source tree's file and is off in an exported build. The status line says
+whether the shadows draw, since a clear or night mission shows none.
+
 ## src/UI/Labs/CourseDraft.cs
 The course lab's edits, engine-free: the course, its selected gate and selected entry (the insertion point), and `Changed` after
 each edit. `Place` adds a default-sized gate (`PylonWidthM`, `PylonHeightM`, `RingDiameterM`, a ring `RingAboveGroundM` up,

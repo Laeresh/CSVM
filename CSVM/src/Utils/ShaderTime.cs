@@ -37,6 +37,10 @@ public static class ShaderTime
     /// <summary>The value this frame's shaders read, wrapped as they read it.</summary>
     public static float Seconds => (float)Wrap(_time);
 
+    /// <summary>The same clock unwrapped, in double precision, for a reader that wraps it at a period
+    /// of its own.</summary>
+    public static double Unwrapped => _time;
+
     /// <summary>Declares the uniform. Must run before the first shader that reads it is built,
     /// Godot refuses to compile a shader referencing an unregistered global.</summary>
     public static void RegisterGlobal()

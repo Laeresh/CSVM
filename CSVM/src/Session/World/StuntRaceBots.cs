@@ -23,6 +23,10 @@ internal sealed class StuntRaceBots
     // How far below a zone's entry the fill-time probe looks for the built world, metres.
     private const float WorldProbeM = 3000f;
 
+    // Remake-only: the radius of the tube a course line or a bot's join is probed as, metres. About a
+    // wing's half span, and the rail's wander off its line.
+    private const float LineTubeM = 6f;
+
     // How far past a struck body the route's cast resumes, metres, and how many bodies one chord's
     // cast may pass through. Neither is a game value.
     private const float StruckStepM = 0.5f;
@@ -41,6 +45,11 @@ internal sealed class StuntRaceBots
     private readonly BotOrderLog _log = new();
     private readonly Dictionary<int, int> _respawns = new();
 
+    // Each bot's runs started and entries cleared at its last crash return (Rejoin), and the bots down
+    // since their last return.
+    private readonly Dictionary<int, (int Runs, int Cleared)> _returnedAt = new();
+    private readonly HashSet<int> _crashed = new();
+
     // Each zone's targets, found when a bot first takes it. The blocking structure each route end
     // cannot see, found when a pick first reads that end.
     private readonly Dictionary<StuntZone, List<DestructibleRegistry.Instance>> _targets = new();
@@ -48,6 +57,9 @@ internal sealed class StuntRaceBots
 
     // The bot whose world queries decide the ends, every bot's world being the same.
     private readonly FlightController _lead;
+
+    // Whether every bot run's course lines have been fitted to the world (FitLines).
+    private bool _linesFit;
 
     private StuntRaceBots(StuntRace race, IReadOnlyList<PlayerRig> seats, List<(int, StuntBotObjective)> bots, bool runsSawWorld, FlightController lead)
     {
@@ -59,6 +71,7 @@ internal sealed class StuntRaceBots
         foreach (var (_, objective) in bots)
         {
             objective.Shut = Shut;
+            objective.Blocked = (a, b) => TubeBlocked(a, b) || TubeBlocked(b, a);
         }
     }
 
@@ -101,7 +114,11 @@ internal sealed class StuntRaceBots
                     sawWorld = SeesWorld(run.Zones, blocked);
                 }
 
-                var objective = new StuntBotObjective(roster[seat].Skill, rng) { Runs = runs, Approach = StuntBotObjective.Spread(new Random(Rng.IntSeedFor($"{Rng.StuntBotApproaches}{seat}"))) };
+                var objective = new StuntBotObjective(roster[seat].Skill, rng)
+                {
+                    Runs = runs,
+                    Approach = StuntBotObjective.Spread(new Random(Rng.IntSeedFor($"{Rng.StuntBotApproaches}{seat}"))),
+                };
                 pilot.CruiseThrottle = objective.CruiseThrottle;
                 bots.Add((seat, objective));
             }
@@ -121,18 +138,25 @@ internal sealed class StuntRaceBots
 
         foreach (var (seat, objective) in _bots)
         {
+            if (_seats[seat].Controller is { Crashed: true })
+            {
+                _crashed.Add(seat);
+            }
+
             if (_seats[seat].Controller is not { Pilot: { } pilot, Stunt: { } run } bot
                 || !GodotObject.IsInstanceValid(bot) || bot.Crashed || bot.StartCount.Running)
             {
                 continue;
             }
 
+            FitLines();
             var at = bot.WorldPosition;
             if (_respawns.GetValueOrDefault(seat) != bot.RespawnCount)
             {
                 _respawns[seat] = bot.RespawnCount;
                 objective.Returned();
-                Rejoin(seat, bot, run, at);
+                Rejoin(seat, bot, run, at, _crashed.Remove(seat));
+                at = bot.WorldPosition;
             }
 
             if (run.AllComplete && _race.MayStartRun && BotObjective)
@@ -355,11 +379,69 @@ internal sealed class StuntRaceBots
         return unseen != null && Live(unseen, out _);
     }
 
+    // A bot runs a course entry's line with no crash check, so every bot run's lines are fitted clear of
+    // the world, once. ⚠ Not at For: the build's frame has not yet placed the world's moved colliders
+    // in the physics space, and rays pass through them.
+    private void FitLines()
+    {
+        if (_linesFit || !GodotObject.IsInstanceValid(_lead))
+        {
+            return;
+        }
+
+        _linesFit = true;
+        foreach (var (seat, _) in _bots)
+        {
+            _seats[seat].Controller?.Stunt?.FitLines(TubeBlocked);
+        }
+    }
+
+    // Whether the world blocks a tube LineTubeM about the straight, cast as five rays. One ray down the
+    // middle passes the C1 face past p1 that bots on the rail strike a few metres off their line.
+    private bool TubeBlocked(Vector3 from, Vector3 to)
+    {
+        var dir = (to - from).Normalized();
+        var side = dir.Cross(Vector3.Up);
+        side = (side.LengthSquared() > 1e-6f ? side.Normalized() : Vector3.Right) * LineTubeM;
+        var up = side.Cross(dir).Normalized() * LineTubeM;
+        foreach (var offset in new[] { Vector3.Zero, side, -side, up, -up })
+        {
+            if (_lead.WorldBlocksLine(from + offset, to + offset))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // A crash's return puts the bot on the route of the zone it cleared last, often low between
     // walls. It rides that ribbon on out as the route goes, rather than flying free from there.
-    private void Rejoin(int seat, FlightController bot, StuntMission run, Vector3 at)
+    private void Rejoin(int seat, FlightController bot, StuntMission run, Vector3 at, bool crashed)
     {
-        if (!BotObjective || run.AllComplete || run.ReturnPose() is not { } pose || at.DistanceTo(pose.Position) > 1f)
+        if (!BotObjective || run.AllComplete)
+        {
+            return;
+        }
+
+        // ⚠ A second crash in a run with no entry cleared since must not replay the first. The return
+        // repeats exactly, so the bot strikes one spot until the window shuts. It goes to the next
+        // entry's line start, which FitLines cleared, and joins there.
+        if (crashed && run.Course != null)
+        {
+            var progress = (_race.Of(seat)?.RunsStarted ?? 0, run.CompletedCount);
+            bool again = _returnedAt.TryGetValue(seat, out var was) && was == progress;
+            _returnedAt[seat] = progress;
+            if (again && run.Zones[run.CompletedCount].Route is { Opening: { } opening } next)
+            {
+                bot.RespawnAt(next.End(false), opening);
+                _respawns[seat] = bot.RespawnCount;
+                Log.Info("flight", $"stunt race: bot seat {seat} crashed again before {next.Name}, so it returns to that entry's line");
+                return;
+            }
+        }
+
+        if (run.ReturnPose() is not { } pose || at.DistanceTo(pose.Position) > 1f)
         {
             return;
         }
