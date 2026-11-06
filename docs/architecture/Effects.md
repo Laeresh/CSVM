@@ -151,19 +151,32 @@ cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `cs
 side by it. `SunAt` reads the texture as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
 
 ## src/Effects/CloudShadow.cs
-The Enhanced cloud shadows' one owner, a node under the world root (`Launch/GameSession.cs`'s `BuildCloudShadow`). `CastersOf`
-gathers the clouds once, before the world merge: every visible placed cloud sprite (`SceneBuilder.PlacedCloudMaterials`) and
-every card of the `FogVolumeClutter` field, each with its authored size, opacity and mask; the deck and the domes cast nothing.
-It writes the `csky_cloud_shadow*` globals, whose `csky_cloud_sun` multiplies into `csky_terrain_sun`, so ground, water,
-buildings and vegetation darken and no aircraft arm does. It draws under Enhanced with `Utils/CloudShadowSetting.cs` on, by
-day (`WeatherRig.ApplyZone` calls `FollowZone` with the zone's sun); otherwise darkness 0 reads exactly 1. `Bake` casts and
-uploads every zone sun's map at load, so a zone change or a live switch only writes globals. It rides the terrain shadow's `light()`. `cloud-shadow-globals`. Read `CloudShadowRaster.cs` next.
+The Enhanced cloud shadows' one owner, a node under the world root (`Launch/GameSession.cs`'s `BuildCloudShadow`). It writes
+the four `csky_cloud_shadow*` globals `csky_cloud_shadow.gdshaderinc` declares: the pattern and darkness, the edge band, the
+ambient share and the cloud lab's tint. `csky_cloud_sun` multiplies into `csky_terrain_sun` and `csky_cloud_ao` into the
+lit arms' AO, so the ground, water and buildings darken; the unshaded vegetation takes `csky_cloud_unlit` on its albedo,
+and no aircraft arm reads any of them. It draws under Enhanced with `Utils/CloudShadowSetting.cs` on, in a mission with a
+cloud field, placed clouds or a deck, outside a night zone (`WeatherRig.ApplyZone` calls `FollowZone`); otherwise darkness
+0, which reads exactly 1. Read every frame, so no shader is rebuilt. `CeilingDriftOf` reads a scrolling dome's arrays.
+Only shaders carrying the terrain shadow's `light()` read it, so `--terrain-shadows=off` drops it. Read `CloudShadowPattern.cs` next.
 
-## src/Effects/CloudShadowRaster.cs
-The cloud shadows' map, engine-free: each cloud card faces the sun, so its authored mask is cast along the sun onto the
-sea-level plane, and a point reads the texel its own sun ray crosses there (`Foot`), whatever its height. Overlapping cards
-multiply what they let through. `Darkness` is the one TUNE; counts, sizes and opacities are the clouds' own data. A sun
-below `MinSunHeight` casts nothing. `Through` reads the map as the shader does. `CloudShadowRasterTests`.
+## src/Effects/CloudShadowPattern.cs
+The cloud shadows' tunes and drift, with no engine object touched: the pattern's cell, coverage, darkness, softness and
+ambient share (the noise itself is only in the shader), and the offset that drifts it (`Offset`, wrapped every `Cells`
+cells of the tuned size). `ChooseDrift` takes the below-deck ceiling's scroll (`CeilingDrift`, each triangle's UV-to-X/Z
+map, its top put at the band centre), else the authored wind's sideways part, else `FixedDrift`. Every tune is TUNE. A
+session draws one `Tune`: the constants, or the chapter's entry from `CloudShadowChapters.cs`, whose speed and heading
+(degrees from +X toward +Z, as the sea's wind) replace the mission drift's own where set. `Fields` is the one table of
+each tune's key, label, range and format, which the file, `Tune.Clamped`, `Tune.Describe` and the cloud lab all read.
+`CloudShadowPatternTests`.
+
+## src/Effects/CloudShadowChapters.cs
+The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's
+`BuildCloudShadow`: one object per chapter with `darkness`, `ambient`, `size`, `coverage`, `softness`, `speed` and
+`heading`. A missing chapter or field takes the constants; a bad field is a warning, a value out of range is held inside it.
+A chapter whose sky is clear holds darkness and ambient 0, which draws no shadow.
+`WithEntry` writes one chapter's entry for the cloud lab and keeps every other key in place, and refuses a file it cannot
+read. `SourceTreePath` is null in an exported build. `CloudShadowChaptersTests`.
 
 ## src/Effects/TerrainShadowRaster.cs
 The bake's compute, with no engine object touched: the ground triangles' plane heights at the texel centres (`Cell`, 4 m

@@ -51,20 +51,21 @@ public sealed partial class HudLayoutEditor : Control
     private readonly PauseState _pause;
     private readonly OptionsStore? _store;
     private readonly Dictionary<Key, bool> _keyPrev = new();
-    private HudLayout _draft;
+
+    // Set by Open's Load, which measures the pane and so waits until the editor stands in it.
+    private HudLayout _draft = null!;
     private HudElement _selected = HudElement.LeftDials;
     private bool _dragging;
     private bool _mousePrev;
     private Vector2 _grab;
 
     private HudLayoutEditor(FlightHud hud, IReadOnlyList<FlightController> seats, PauseState pause,
-        OptionsStore? store, HudLayout start)
+        OptionsStore? store)
     {
         _hud = hud;
         _seats = seats;
         _pause = pause;
         _store = store;
-        _draft = start;
         MouseFilter = MouseFilterEnum.Ignore;
         FocusMode = FocusModeEnum.None;
         Name = "hud_layout_editor";
@@ -104,8 +105,8 @@ public sealed partial class HudLayoutEditor : Control
             return null;
         }
 
-        var start = Active() ?? HudLayoutPlacement.OriginalLayout;
-        var editor = new HudLayoutEditor(pilot.PilotHud, seats, pause!, store, start);
+        var start = Active();
+        var editor = new HudLayoutEditor(pilot.PilotHud, seats, pause!, store);
         pause!.Raise(HaltReason.Editing);
         foreach (var seat in seats)
         {
@@ -177,9 +178,9 @@ public sealed partial class HudLayoutEditor : Control
         _selected = HudLayout.Elements[at];
     }
 
-    /// <summary>Replaces the draft with <paramref name="layout"/> whole, the S and O keys. A layout
-    /// measured from the reading box is re-measured from the pane's edges where it stands now.</summary>
-    public void Load(HudLayout layout)
+    /// <summary>Replaces the draft with <paramref name="layout"/> whole, the S and O keys. Null is the
+    /// original, spelt from where it draws on this pane, so a save without a move keeps it there.</summary>
+    public void Load(HudLayout? layout)
     {
         var (box, pane, scale) = Frame();
         SetDraft(HudLayoutPlacement.ToPane(layout, box, pane, scale));
@@ -369,7 +370,7 @@ public sealed partial class HudLayoutEditor : Control
         if (presses[Key.S])
             Load(HudLayoutPlacement.Sides);
         if (presses[Key.O])
-            Load(HudLayoutPlacement.OriginalLayout);
+            Load(null);
         var move = new Vector2(
             (presses[Key.Right] ? step : 0f) - (presses[Key.Left] ? step : 0f),
             (presses[Key.Down] ? step : 0f) - (presses[Key.Up] ? step : 0f));

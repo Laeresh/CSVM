@@ -324,6 +324,9 @@ public sealed class WeatherRig
     public IEnumerable<Vector3> SunOrientations =>
         _weather is { } weather ? weather.ZoneNames.Select(zone => LightOrientation(weather.Zone(zone))) : new[] { _sun.Rotation };
 
+    /// <summary>The mission's parsed weather, null where the mission carries none.</summary>
+    public WeatherState? Mission => _weather;
+
     /// <summary>Whether the zone the last zone apply lit the session with is a night zone
     /// (<see cref="IsNightZone"/>), false until one has.</summary>
     public bool NightApplied => _appliedZone is { } fog && IsNightZone(fog);
@@ -584,6 +587,11 @@ public sealed class WeatherRig
     /// frame in the pass's own basis.</summary>
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
+
+    /// <summary>Drops a pair <see cref="RegisterExtraLighting"/> took, before its pass is freed, so
+    /// a later zone change writes no freed light.</summary>
+    public void UnregisterExtraLighting(DirectionalLight3D sun)
+        => _extraLighting.RemoveAll(e => ReferenceEquals(e.Sun, sun));
 
     /// <summary>The tune <paramref name="zone"/> lights with under Enhanced, the lab's edit before the file's.</summary>
     public ZoneLighting LightingFor(string zone)
@@ -1580,7 +1588,7 @@ public sealed class WeatherRig
         var orientation = LightOrientation(fog);
         _sun.Rotation = orientation;
         Effects.TerrainShadow.Live?.Publish(orientation);
-        Effects.CloudShadow.Live?.FollowZone(orientation, IsNightZone(fog));
+        Effects.CloudShadow.Live?.FollowZone(IsNightZone(fog));
         // The plain globals, in both modes. Each view's own copy rides FogViewTable whenever the
         // views disagree. The direction points toward the light.
         WriteSunDirection(_sun);

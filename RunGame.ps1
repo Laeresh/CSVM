@@ -107,6 +107,13 @@ if ($GameArgs.Count -gt 0) {
 } else {
     Write-Host "Launching Godot: launchscreen ($($EngineArgs -join ' ') -- $($UserArgs -join ' '))" -ForegroundColor Cyan
 }
+$Stamp   = Get-Date -Format "yyyyMMdd-HHmmss"
+$LogDir  = Join-Path $RepoRoot ".scratch\logs"
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+# #312: without one, Godot writes its log under the user data dir that every worktree shares.
+if ($EngineArgs -notcontains '--log-file') {
+    $EngineArgs = @($EngineArgs) + @("--log-file", ('"' + (Join-Path $LogDir "game-$Stamp.godot.log") + '"'))
+}
 # SHELL-19: -ArgumentList quotes nothing itself and this repo path contains a space.
 $LaunchArgs = @("--path", ('"' + $ProjectDir + '"'), "res://scenes/Main.tscn") + @($EngineArgs) + @("--") + $UserArgs
 # The window is created WITHOUT focus (display/window/size/no_focus) so a scripted run never takes
@@ -134,9 +141,6 @@ public static IntPtr FindForPid(uint target) {
 # AttachConsole and prints its whole engine chatter over whatever terminal (or chat
 # transcript) launched it. The engine's own categorized log always lands in
 # .scratch/logs/ regardless; these files catch what only raw stdout/stderr sees.
-$Stamp   = Get-Date -Format "yyyyMMdd-HHmmss"
-$LogDir  = Join-Path $RepoRoot ".scratch\logs"
-New-Item -ItemType Directory -Force $LogDir | Out-Null
 $OutFile = Join-Path $LogDir "game-$Stamp.out"
 $ErrFile = Join-Path $LogDir "game-$Stamp.err"
 # A launch that drives and ends itself is admitted against the machine-wide memory ledger first;

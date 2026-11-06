@@ -665,18 +665,11 @@ void fragment() {
     /// <summary>Gets whether <see cref="ShadowDecals"/> are hidden; a decal built later takes it.</summary>
     public bool ShadowDecalsHidden { get; private set; }
 
-    /// <summary>Every placed cloud sprite's material with its authored texture's name, in either mode. A
-    /// pooled swap is made only for a texture the builder's billboard predicate passes, which the world's
-    /// builder sets to <c>WorldBuilder.IsCloudSpriteTexture</c>. ⚠ Read it on the world's builder only;
-    /// another builder's predicate may pass other sprites.</summary>
-    public IEnumerable<(ShaderMaterial Material, string TextureName)> PlacedCloudMaterials
-    {
-        get
-        {
-            foreach (var swap in _pooledSwaps)
-                yield return (swap.Material, swap.TexName);
-        }
-    }
+    /// <summary>Whether this builder has drawn any placed cloud sprite, in either mode. A pooled swap is
+    /// made only for a texture the builder's billboard predicate passes, which the world's builder sets
+    /// to <c>WorldBuilder.IsCloudSpriteTexture</c>. ⚠ Read it on the world's builder only; another
+    /// builder's predicate may pass other sprites.</summary>
+    public bool PlacesClouds => _pooledSwaps.Count > 0;
 
     public int ColliderCount { get; private set; }
 
@@ -906,13 +899,13 @@ void fragment() {
     /// own diffuse and specular from <c>csky_terrain_shadow.gdshaderinc</c>, the directional light
     /// scaled by <paramref name="sun"/>. That is the arm's expression for the bake's share at its
     /// fragment. <paramref name="specular"/> is the arm's SPECULAR, which <c>light()</c> cannot
-    /// read.</summary>
-    internal static string TerrainShadowLight(string sun, float specular) => $@"
+    /// read. The cloud lab's tint is read at the world position <paramref name="tintAt"/>.</summary>
+    internal static string TerrainShadowLight(string sun, float specular, string tintAt) => $@"
 void light() {{
     vec3 csky_diffuse, csky_specular;
     csky_terrain_light(LIGHT_IS_DIRECTIONAL ? {sun} : 1.0, NORMAL, LIGHT, VIEW, LIGHT_COLOR, ATTENUATION, ROUGHNESS,
         {(0.16f * specular * specular).ToString("0.0####", System.Globalization.CultureInfo.InvariantCulture)}, SPECULAR_AMOUNT, csky_diffuse, csky_specular);
-    DIFFUSE_LIGHT += csky_diffuse;
+    DIFFUSE_LIGHT += csky_diffuse + (LIGHT_IS_DIRECTIONAL ? csky_cloud_tint({tintAt}) : vec3(0.0));
     SPECULAR_LIGHT += csky_specular;
 }}";
 
@@ -2914,9 +2907,12 @@ void fragment() {{");
             sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)
             sb.AppendLine(CoverageLines);
+        // A cloud shadow's share of the ambient light; AO reaches the ambient term alone.
+        if (terrainShadow)
+            sb.AppendLine("    AO = csky_cloud_ao(v_terrain_pos);");
         sb.AppendLine("}");
         if (terrainShadow)
-            sb.AppendLine(TerrainShadowLight("csky_terrain_sun(v_terrain_pos)", waterLit ? WaterSpecular : 0f));
+            sb.AppendLine(TerrainShadowLight("csky_terrain_sun(v_terrain_pos)", waterLit ? WaterSpecular : 0f, "v_terrain_pos"));
         return sb.ToString();
     }
 

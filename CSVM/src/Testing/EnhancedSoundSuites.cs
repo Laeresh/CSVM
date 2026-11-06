@@ -311,6 +311,22 @@ internal static class EnhancedSoundSuites
             ctx.Check(onSecond == 1 && onFirst == 0,
                 $"a second local pilot's strike sounds on that pilot's own mix ({onSecond}) and not the first's ({onFirst})");
 
+            // A networked victim's router claims the strike before its controller sees it. SessionNet
+            // does so for a seat flown elsewhere, NetWorldLink for an AI on a guest.
+            enemy.HitRouter = _ => true;
+            float routedHealth = enemy.Damage.WholeArmor + enemy.Damage.WholeHealth;
+            int routed = Volley(enemyAt, 1);
+            ctx.Check(routed == 1 && enemy.Damage.WholeArmor + enemy.Damage.WholeHealth == routedHealth,
+                $"a strike the victim's hit router claims spends nothing here and still sounds the gunner's confirm ({routed})");
+            // A seat flown elsewhere carries no FlightAudio: its replayed round sounds on no mix here.
+            second.Audio = null;
+            secondBefore = secondAudio.HitConfirms;
+            int onFirstRemote = Volley(enemyAt, 1, shooter: second.PlayerIndex);
+            ctx.Check(onFirstRemote == 0 && secondAudio.HitConfirms == secondBefore,
+                $"a claimed strike by a seat not flown here sounds none ({onFirstRemote}, {secondAudio.HitConfirms - secondBefore})");
+            second.Audio = secondAudio;
+            enemy.HitRouter = null;
+
             SoundModeSetting.HitConfirmOn = false;
             ctx.Check(Volley(enemyAt, 1) == 0, $"with its row off, a strike on the enemy sounds none");
             SoundModeSetting.Apply(SoundModeSetting.Original, null);

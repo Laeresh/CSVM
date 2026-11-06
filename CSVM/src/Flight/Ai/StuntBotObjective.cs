@@ -120,8 +120,25 @@ public sealed class StuntBotObjective
     /// metres. The rail closes a lock-range offset within it, so the bot meets the gate on the line.</summary>
     public const float JoinRailM = 150f;
 
+    /// <summary>Remake-only rule: the tightest turn a bridge to a course entry may take, metres (#281).
+    /// A 4 g turn at the rail's 69.3 m/s cruise is 126 m, so the rail turns no tighter than a plane
+    /// could there.</summary>
+    public const float BridgeRadiusM = 125f;
+
+    /// <summary>Remake-only rule: the farthest a course entry's opening may stand for a bridge, metres.
+    /// A course's gates stand 250 to 500 m apart.</summary>
+    public const float BridgeReachM = 700f;
+
+    /// <summary>Remake-only rule: the share of its tier's <see cref="FluffChance"/> a bot fluffs a course
+    /// entry with. A course has some twenty entries to a Danger Zone run's five.</summary>
+    public const float CourseFluffShare = 0.25f;
+
     // How finely a join looks for the line's nearest point, metres.
     private const float JoinSearchStepM = 5f;
+
+    // How finely a bridge is laid and checked, metres, and how many steps its world cast waits after a block.
+    private const float BridgeStepM = 20f;
+    private const int BridgeRecastSteps = 15;
 
     // Remake-only rule: the sine of the bearing off the track's reverse inside which an aim counts as
     // dead astern, 30 degrees. Rule: docs/org/aiPilot.md "Stunt race bots".
@@ -138,6 +155,9 @@ public sealed class StuntBotObjective
     private static readonly float[] LockBearingsDeg = { -30f, -15f, 0f, 15f, 30f };
     private static readonly float[] LockSpeedsMps = { 60f, 90f, TopLockSpeedMps };
 
+    // The handle lengths a bridge's cubic tries, as shares of the bot's reach to the opening.
+    private static readonly float[] BridgeHandleShares = { 0.4f, 0.3f, 0.5f };
+
     private readonly Random _rng;
     private int _zone = -1;
     private bool _farEnd;
@@ -151,6 +171,9 @@ public sealed class StuntBotObjective
     private bool? _inbound;
     private int _turnSide;
     private int _lastSide;
+
+    // Steps until a bridge's world cast may run again (Bridge).
+    private int _bridgeWait;
 
     /// <summary>A bot of tier <paramref name="tier"/> whose fluffs draw on <paramref name="rng"/>.</summary>
     public StuntBotObjective(NetBotSkill tier, Random rng)
@@ -177,6 +200,11 @@ public sealed class StuntBotObjective
     /// <summary>Whether a run may not enter a route from the end named, for now, as it may not from a
     /// refused one. Null shuts none. StuntRaceBots shuts an end that cannot see a structure to shoot.</summary>
     public Func<DangerZoneRibbon, bool, bool>? Shut { get; set; }
+
+    /// <summary>Whether the world blocks the straight between two points. A bot joins a course entry's
+    /// line only where its straight to the opening is clear, since the rail it joins has no crash
+    /// check. Null blocks nothing.</summary>
+    public Func<Vector3, Vector3, bool>? Blocked { get; set; }
 
     /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
@@ -310,6 +338,21 @@ public sealed class StuntBotObjective
 
         if (zoneRun)
         {
+            // On a flown course entry's exit, the next entry may be bridged already. A climbing exit runs on
+            // for up to 250 m, past where a course's next gate still leaves room for a bridge (#281).
+            if (_zone >= 0 && _zone < zones.Count && zones[_zone].Completed && next >= 0 && next != _zone
+                && zones[next].Route is { IsCourseEntry: true } onward && Bridge(onward, at, velocity) is { } early)
+            {
+                _zone = next;
+                PickEnd(zones[next], at);
+                _running = true;
+                return new StuntBotOrder(StuntBotLeg.Run, next, early.End(false), false, "bridges to the entry")
+                {
+                    Start = StuntBotStart.Join,
+                    Ribbon = early,
+                };
+            }
+
             _running = true;
             return new StuntBotOrder(StuntBotLeg.Run, _zone, at, _farEnd, "flies the zone");
         }
@@ -345,21 +388,29 @@ public sealed class StuntBotObjective
         }
 
         var start = InCone(entry, into, along, at, velocity) ? StuntBotStart.Approach
-            : CanJoin(_route, at, velocity) ? StuntBotStart.Join
+            : CanJoin(_route, at, velocity, Blocked) ? StuntBotStart.Join
             : StuntBotStart.None;
+        var ribbon = _route;
+        if (start == StuntBotStart.None && Bridge(_route, at, velocity) is { } bridge)
+        {
+            start = StuntBotStart.Join;
+            ribbon = bridge;
+        }
+
         if (start != StuntBotStart.None)
         {
-            if (_rng.NextDouble() < FluffChance)
+            if (_rng.NextDouble() < (_route.IsCourseEntry ? FluffChance * CourseFluffShare : FluffChance))
             {
                 _fluffing = true;
                 return new StuntBotOrder(StuntBotLeg.Fluff, next, over + (Vector3.Up * FluffAboveM), _farEnd, "fluffs the zone");
             }
 
             _running = true;
-            return new StuntBotOrder(StuntBotLeg.Run, next, entry, _farEnd, start == StuntBotStart.Join ? "joins the entry's line" : "flies the zone")
+            string why = ribbon != _route ? "bridges to the entry" : start == StuntBotStart.Join ? "joins the entry's line" : "flies the zone";
+            return new StuntBotOrder(StuntBotLeg.Run, next, entry, _farEnd, why)
             {
                 Start = start,
-                Ribbon = _route,
+                Ribbon = ribbon,
             };
         }
 
@@ -387,8 +438,9 @@ public sealed class StuntBotObjective
     }
 
     // A course entry's line, the bot within lock range of it and JoinRailM or more short of its opening.
-    // It must track along the line inside the cone's angle. The rail can then take it at once.
-    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity)
+    // It must track along the line inside the cone's angle, its straight to the opening clear. The rail
+    // can then take it at once.
+    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity, Func<Vector3, Vector3, bool>? blocked)
     {
         var into = Into(line, false);
         var track = Flat(velocity);
@@ -399,7 +451,47 @@ public sealed class StuntBotObjective
         }
 
         var (segment, t) = line.NearestTo(at, JoinSearchStepM);
-        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM;
+        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM && blocked?.Invoke(at, opening) != true;
+    }
+
+    // The cubic from `a` to `d` with handles `b` and `c`, as n + 1 points.
+    private static List<Vector3> Curve(Vector3 a, Vector3 b, Vector3 c, Vector3 d, int n)
+    {
+        var points = new List<Vector3>(n + 2);
+        for (int i = 0; i <= n; i++)
+        {
+            float t = (float)i / n;
+            float u = 1f - t;
+            points.Add((a * (u * u * u)) + (b * (3f * u * u * t)) + (c * (3f * u * t * t)) + (d * (t * t * t)));
+        }
+
+        return points;
+    }
+
+    // Whether a bridge's points turn no tighter than BridgeRadiusM and climb or dive no steeper than
+    // the line fit's slope.
+    private static bool Flyable(List<Vector3> points)
+    {
+        for (int i = 1; i < points.Count; i++)
+        {
+            var chord = points[i] - points[i - 1];
+            if (Mathf.Abs(chord.Y) > Flat(chord).Length() * StuntMission.MaxEntrySlope)
+            {
+                return false;
+            }
+
+            if (i + 1 < points.Count)
+            {
+                var onward = points[i + 1] - points[i];
+                float turn = chord.AngleTo(onward);
+                if (turn > 1e-4f && Mathf.Min(chord.Length(), onward.Length()) / turn < BridgeRadiusM)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     // Short of the entry inside the cone's reach and angle, and tracking toward it.
@@ -437,6 +529,63 @@ public sealed class StuntBotObjective
         return green && red;
     }
 
+    // A course entry's bridge, flown on the rail at once. It curves from the bot along its track into the
+    // opening along the line, then takes the line's exit. Null where it turns tighter than BridgeRadiusM or
+    // passes the fit's slope. Null nearer than JoinRailM, past BridgeReachM, or where Blocked strikes it.
+    // ⚠ The world cast waits BridgeRecastSteps after a block: it costs a tube per chord.
+    private DangerZoneRibbon? Bridge(DangerZoneRibbon line, Vector3 at, Vector3 velocity)
+    {
+        _bridgeWait = Math.Max(0, _bridgeWait - 1);
+        if (line.Opening is not { } opening || velocity.LengthSquared() < 1f)
+        {
+            return null;
+        }
+
+        var arrive = (opening - line.End(false)).Normalized();
+        float reach = at.DistanceTo(opening);
+        if (reach < JoinRailM || reach > BridgeReachM || (opening - at).Dot(arrive) < JoinRailM)
+        {
+            return null;
+        }
+
+        List<Vector3>? points = null;
+        foreach (float share in BridgeHandleShares)
+        {
+            points = Curve(at, at + (velocity.Normalized() * (reach * share)), opening - (arrive * (reach * share)), opening, Mathf.CeilToInt(reach / BridgeStepM));
+            if (Flyable(points))
+            {
+                break;
+            }
+
+            points = null;
+        }
+
+        if (points == null)
+        {
+            return null;
+        }
+
+        points.Add(line.End(true));
+        if (Blocked != null)
+        {
+            if (_bridgeWait > 0)
+            {
+                return null;
+            }
+
+            for (int i = 1; i < points.Count; i++)
+            {
+                if (Blocked(points[i - 1], points[i]))
+                {
+                    _bridgeWait = BridgeRecastSteps;
+                    return null;
+                }
+            }
+        }
+
+        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points);
+    }
+
     // Where the bot aims on its own approach line into `entry`: a point that moves with it, never a
     // fixed one. In, it is LookAheadM (or the bot's offset, if more) short of the bot's place along the
     // line; out, LookAheadM beyond it. ⚠ Do not aim at a fixed point: a bot meeting it from the side circles it.
@@ -446,10 +595,10 @@ public sealed class StuntBotObjective
         float along = to.Dot(line);
         float ahead = Mathf.Max(LookAheadM, (to - (line * along)).Length());
 
-        // Out once it would meet the line past the entry. In again past its lead-in and a U-turn's width past
-        // the shortest lead-in. Both go farther by as much as it is off the line beyond LookAheadM.
-        // ⚠ Do not drop the U-turn: it ends that far off the line, raising `ahead`, and the bot flies out again.
-        float turnIn = Mathf.Max(Approach.LeadInM, ShortestLeadInM + UTurnWidth);
+        // Out once it would meet the line past the entry. In past its lead-in and a U-turn past the shortest
+        // lead-in, plus its offset beyond LookAheadM. A course entry drops the U-turn: a bridge takes it mid-turn.
+        // ⚠ Do not drop it elsewhere: it ends that far off the line, raising `ahead`, and the bot flies out again.
+        float turnIn = _route?.IsCourseEntry == true ? Approach.LeadInM : Mathf.Max(Approach.LeadInM, ShortestLeadInM + UTurnWidth);
         _inbound = _inbound switch
         {
             null or true => along - ahead >= 0f,

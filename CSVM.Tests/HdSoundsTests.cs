@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -6,6 +7,7 @@ using CSVM.Extraction;
 using CSVM.Flight.Audio;
 using CSVM.Mech3;
 using CSVM.Tooling;
+using CSVM.Utils;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -179,6 +181,40 @@ public class HdSoundsTests
         Assert.Equal(1, WavFile.ParseMonoOrStereo(Wav()).Channels);
         Assert.Equal(2, WavFile.ParseMonoOrStereo(WithChannels(Wav(), 2)).Channels);
         Assert.Throws<InvalidDataException>(() => WavFile.ParseMonoOrStereo(WithChannels(Wav(), 4)));
+    }
+
+    [Fact]
+    public void APackWavWithNoFramesIsRefusedSoTheOriginalPlays()
+    {
+        Assert.Throws<InvalidDataException>(() => WavFile.ParseMonoOrStereo(WavWriter.Pcm16(Array.Empty<short>(), 22050)));
+    }
+
+    [Fact]
+    public void APackWavTheDecoderCannotReadPlaysTheOriginalRatherThanThrowing()
+    {
+        // Block align 0 (the file's bytes 32-33) divides by zero in an unguarded MS ADPCM decoder.
+        var adpcm = WavWriter.MsAdpcm(new short[] { 0, 1000, -1000, 0 }, 22050);
+        adpcm[32] = adpcm[33] = 0;
+        var root = TestData.TempDir();
+        string folder = Path.Combine(root, "HDSounds", "pack");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "boom.wav"), adpcm);
+        var packWas = HdSounds.Current;
+        bool wasEnhanced = SoundModeSetting.EnhancedOn;
+        using var pack = HdSounds.Open(root, "HDSounds");
+        using var archive = new SoundArchive(_ => null);
+        try
+        {
+            HdSounds.Current = pack;
+            SoundModeSetting.EnhancedOn = true;
+            // The archive lacks boom.wav as well, so the original's answer is null and no Godot stream is built.
+            Assert.Null(archive.Find("boom.wav", looped: false, warn: false));
+        }
+        finally
+        {
+            HdSounds.Current = packWas;
+            SoundModeSetting.EnhancedOn = wasEnhanced;
+        }
     }
 
     // The canonical fmt chunk's channel count sits at the file's byte 22.

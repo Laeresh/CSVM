@@ -1744,7 +1744,11 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    unattended return, since nobody presses R for it. The return stands it on that zone's route,
    often low between walls, so it locks straight onto the ribbon there and rides it out
    (`AiPilot.RejoinDangerZone`) rather than flying free from it. The next pick is made where that
-   ride ends, not at the return point.
+   ride ends, not at the return point. On a course, a second crash in a run with no entry cleared
+   since returns the bot to the start of the next entry's line instead, where it joins: the return
+   and its ride repeat exactly, so C2's Peacemaker otherwise struck the structure past `p12` until
+   the window shut. A crash before the first entry counts too, since the rerun's start repeats as
+   well: C1's Warhawk struck the cables short of `p1` twice in a row.
 6. On the rail a bot sweeps one origin point, as every AI def does (`ContactConditions.OnRail`),
    never its person's hull or its person def's wing probes. C2's `dzpath2` arch, the 9.7 m slot in
    the warning above, is narrower than a wingspan at the rail's roll, so a hull or wing probe meets
@@ -1753,17 +1757,47 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its gate's opening the way the entry is flown: from 250 m short of the opening's centre
    (`StuntMission.EntryLeadInM`) to 60 m past it (`EntryRunOutM`), both the remake's own lengths.
    The lead-in is long enough for the rail to close a lock-range offset before the opening; the
-   run-out carries the rail's trailing pose through it. The bot takes the next entry alone, in
+   run-out carries the rail's trailing pose through it. A bot on the rail has no crash check, and a
+   course's author places gates by eye, so each line is tilted clear of the world once the race
+   steps (`StuntMission.FitLines`, called from `StuntRaceBots`). A lead-in that the world buries or
+   crosses starts higher, so the line dives into the opening. An exit that meets the world within
+   250 m (`EntryExitM`) climbs, or where no slope clears 250 m, the least that clears 150 m, then
+   100 m: the avoid-crash probe's look-ahead takes over past the rail's end. A climbing exit runs
+   on to the length it cleared, since a bot let off the rail at 60 m sinks back under its line
+   before the flight law climbs, and struck C1's plateau lip past `p1`. Each takes the least slope, in steps of 0.05 up to tan 35 degrees,
+   whose straight clears the world by 8 m below (`EntryClearM`) away from the 40 m about the
+   opening (`EntryOpeningM`). Without one the line stays level, with a warning. The probe is a tube
+   of five rays 6 m about the straight, cast from both ends: one ray down the middle passes the
+   face past C1's `p1` that bots on the rail strike a few metres off their line, and a ray from
+   inside a body strikes nothing. Fitted when the build's frame has passed, since the world's moved
+   colliders reach the physics space only then. C1's `p2` lead-in, buried in the plateau's edge,
+   starts 50 m higher. The bot takes the next entry alone, in
    sequence order, and runs its line one way only, so a reverse entry is crossed from its named
-   side; the line takes no row of the run table and no lead-in check, since the course's scoring is
+   side; the line takes no row of the run table and no rail check, since the course's scoring is
    its apertures', not the line's gates. Gates stand closer than a zone's cone reach, so a bot past
    the line's start also takes the run when it is within the 105 m lock range of the line, at least
    150 m short of the opening (`StuntBotObjective.JoinRailM`) and tracking within 30 degrees of the
-   line: it locks on at once where the line passes nearest (`AiPilot.RejoinDangerZone`). A fluff on a
+   line: it locks on at once where the line passes nearest (`AiPilot.RejoinDangerZone`), provided
+   the tube from it to the opening is clear (`StuntBotObjective.Blocked`). Where neither the cone
+   nor the join takes it, it bridges: a cubic from the bot along its track into the opening along
+   the fitted line, then the line's exit, flown on the rail at once (`AiPilot.RejoinDangerZone`).
+   A bridge stands 150 to 700 m from the opening (`JoinRailM`, `BridgeReachM`), with the bot at
+   least 150 m short of the opening's plane. It turns no tighter than 125 m (`BridgeRadiusM`, a
+   4 g turn at the rail's 69.3 m/s cruise, which 187.5 m refused at every sharp C2 bend), climbs
+   or dives no steeper than the fit's tan 35 degrees, and the tube down each 20 m chord is clear;
+   the cubic's handles try 0.4, 0.3 and 0.5 of the reach, and after a blocked cast it waits 15
+   steps. A bot riding a flown entry's exit bridges to the next as soon as one fits, since a
+   climbing exit runs on past where a course's next gate leaves room. Going round for a course
+   entry it turns in at its own lead-in, with no U-turn allowance, since a bridge takes it during
+   the turn and the 825 m fly-out carried it past the bridge's reach. Without bridges a bot met
+   most course gates only after a go-round sized for Danger Zones a kilometre apart (#281). A
+   course entry is fluffed at a quarter of the tier's odds (`CourseFluffShare`), since a course
+   has some twenty entries; a bridge taken on a flown entry's exit draws no fluff. A fluff on a
    course passes over the gate rather than the line's start. A balloon ring's line moves with the
    ring, read at the run's sim time as the aperture is. The cone, steering, tiers, return ride and
    shooting along the line are those above.
-   Regressions: the `stunt-race-bot-course` and `stunt-race-bot-course-blocker` suites.
+   Regressions: the `stunt-race-bot-course`, `stunt-race-bot-course-blocker` and
+   `stunt-race-bot-course-world` suites, and `CourseRunTests`.
 
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
 join board's bot rows on a menu Stunt Flying run with its race toggle on, which they make a race.

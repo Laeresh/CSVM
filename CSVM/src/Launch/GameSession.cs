@@ -862,6 +862,7 @@ public partial class GameSession : Node3D
         FollowShadowDecals();
         FollowTerrainShadow();
         BuildCloudShadow();
+        _labs!.BuildCloudLab(() => _cloudShadow);
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -1224,6 +1225,18 @@ public partial class GameSession : Node3D
     {
         _raceDirector?.Leave(toLobby: _menuDriven);
         _exitSession();
+    }
+
+    /// <summary>The Post-processing word on the world's Environment and each cockpit pass's copy.</summary>
+    internal void FollowGrade()
+    {
+        if (_env != null)
+            EnhancedLook.ApplyGrade(_env, GraphicsMode.Enhanced);
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.Dressing.Pass?.Env is { } env)
+                EnhancedLook.ApplyGrade(env, GraphicsMode.Enhanced);
+        }
     }
 
     /// <summary>Hides the original's painted shadow decals while our shadow maps draw: Enhanced, with a
@@ -2771,29 +2784,32 @@ public partial class GameSession : Node3D
     }
 
     // The cloud shadows stand over every full weathered world in either mode, since the node itself
-    // reads the mode, the word and the zone. The clouds are gathered once, before the world merge, while
-    // each placed sprite is still its own node. The deck and the domes ride the camera, so neither casts.
+    // reads the mode, the word and the zone. Built once: the clouds and the drift never change.
     private void BuildCloudShadow()
     {
         var weather = _sky?.Weather;
-        if (!_fullWorld || _plane == null || _worldScene == null || weather == null || _sessionTextures == null)
+        if (!_fullWorld || _plane == null || _worldScene == null || weather == null)
             return;
-        var skip = new List<Node>();
-        foreach (var rig in _rigs)
+        var deck = _unplacedWatch?.CloudDeck;
+        bool cloudy = deck != null || _sky!.CloudField is { InstanceCount: > 0 } || _worldScene.PlacesClouds;
+        Vector2? ceiling = null;
+        // The ceiling is the dome a camera below the band sees, zone_id 1, only where a deck stands.
+        if (deck != null && weather.Mission is { HasCloudBand: true } mission && _rigs.Count > 0)
         {
-            if (rig.Horizon != null)
-                skip.Add(rig.Horizon);
+            foreach (var dome in _rigs[0].HorizonDomes)
+            {
+                if (dome.ZoneId == 1)
+                    ceiling = Effects.CloudShadow.CeilingDriftOf(dome.Node, _worldScene, mission.CloudBandCentre);
+            }
         }
-        if (_unplacedWatch?.CloudDeck is { } deck)
-            skip.Add(deck);
-        var field = _sky!.CloudField;
-        var casters = Effects.CloudShadow.CastersOf(_plane, _worldScene, field, _sessionTextures, skip);
-        int fieldCards = field == null ? 0 : field.InstanceCount;
-        // Every zone sun is cast now, in either mode, so a zone change or a live switch casts nothing.
-        var suns = weather.SunOrientations.Append(weather.SunOrientation);
-        _cloudShadow = Effects.CloudShadow.Bake(casters, suns, weather.SunOrientation, weather.NightApplied);
+        var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
+        var (authored, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
+        var tunes = Effects.CloudShadowChapters.Load().For(_spec.Chapter);
+        var drift = tunes.Drift(authored);
+        _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
+        _cloudShadow.Tune = tunes;
         _plane.AddChild(_cloudShadow);
-        Log.Info("world", $"cloud shadows: {casters.Count - fieldCards} placed cloud(s) + {fieldCards} cloud field card(s) cast night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()}{_cloudShadow.Timing}");
+        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
@@ -3137,8 +3153,8 @@ public partial class GameSession : Node3D
     // One interior render pass per rig, on that player's own HUD parent. Splitscreen therefore gets
     // a pass per pane rather than one for the window (--no-cockpit-pass and the stereo path build
     // none). Built after the rigs, since the interior it moves is the plane build's and the sun and
-    // environment it copies are the session's. ⚠ An airframe swap rebuilds the interior and leaves
-    // this pass holding the old node. It hides itself rather than drawing a freed one (Sync).
+    // environment it copies are the session's. An airframe swap rebuilds the interior, so the swap
+    // replaces the pass as well (ReseatCockpitPass).
     private void BuildCockpitPasses()
     {
         if (!Flight.Hud.CockpitOverlay.InteriorInPass(_spec.CockpitPass, Flight.Hud.XrCockpit.Live))
@@ -3146,17 +3162,32 @@ public partial class GameSession : Node3D
             return;
         }
         foreach (var rig in _rigs)
-        {
-            if (rig.Controller is not { } controller)
-                continue;
-            var overlay = controller.Dressing.BuildPass(rig.HudParent, _sun, _env);
-            // The overlay's cloned sun/env carry the zone live at its build; registering them
-            // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
-            // since the faithful path's aircraft light moves per zone as well.
-            if (overlay?.Sun != null)
-                _sky?.Weather?.RegisterExtraLighting(overlay.Sun, overlay.Env);
-        }
+            BuildCockpitPass(rig);
         Log.Info("flight", $"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
+    }
+
+    private void BuildCockpitPass(PlayerRig rig)
+    {
+        if (rig.Controller is not { } controller)
+            return;
+        var overlay = controller.Dressing.BuildPass(rig.HudParent, _sun, _env);
+        // The overlay's cloned sun/env carry the zone live at its build; registering them
+        // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
+        // since the faithful path's aircraft light moves per zone as well.
+        if (overlay?.Sun != null)
+            _sky?.Weather?.RegisterExtraLighting(overlay.Sun, overlay.Env);
+    }
+
+    // #293: the outgoing pass holds the old interior, which no frame syncs again, so it stays drawn
+    // over the new airframe's interior. A seat that had no pass (stereo, a remote copy) gets none.
+    private void ReseatCockpitPass(PlayerRig rig, Flight.Hud.CockpitOverlay? outgoing)
+    {
+        if (outgoing == null || !IsInstanceValid(outgoing))
+            return;
+        if (outgoing.Sun != null)
+            _sky?.Weather?.UnregisterExtraLighting(outgoing.Sun);
+        Drop(outgoing);
+        BuildCockpitPass(rig);
     }
 
     // A board menu's Restart item. An Instant Action or campaign mission is REBUILT by the
@@ -3252,9 +3283,10 @@ public partial class GameSession : Node3D
             return default;
         }
 
+        var owner = order.Owner ?? _rigs[0];
+        var outgoingPass = owner.Controller?.Dressing.Pass;
         try
         {
-            var owner = order.Owner ?? _rigs[0];
             var result = _flightRoster.RunSwap(owner, order,
                 AirframeHandover.Resolves(_spec.Chapter, _spec.Mission));
             _wire.RewireSeat(owner, SkipSwapRewire);
@@ -3265,6 +3297,10 @@ public partial class GameSession : Node3D
         {
             Log.Warn("flight", $"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return default;
+        }
+        finally
+        {
+            ReseatCockpitPass(owner, outgoingPass);
         }
     }
 
@@ -3284,6 +3320,7 @@ public partial class GameSession : Node3D
             return;
         }
 
+        var outgoingPass = _rigs[0].Controller?.Dressing.Pass;
         try
         {
             var order = new AirframeSwapOrder(new AirframeSwapCode(0, string.Empty, planeNode), null, _rigs[0]);
@@ -3293,6 +3330,10 @@ public partial class GameSession : Node3D
         catch (Exception e)
         {
             Log.Warn("flight", $"xr tune: swap to '{planeNode}' failed: {e.Message}");
+        }
+        finally
+        {
+            ReseatCockpitPass(_rigs[0], outgoingPass);
         }
     }
 

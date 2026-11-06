@@ -403,8 +403,9 @@ rows).
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.
 - `src/Effects/TerrainShadow.cs`, the Enhanced terrain's baked sun shadow, one texture per zone sun, published to the world-lit arms' `light()`.
-- `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: gathers the mission's clouds and writes the `csky_cloud_shadow*` globals every sun term reads, by day.
-- `src/Effects/CloudShadowRaster.cs`, the map of the shadows the clouds cast along the sun onto the sea-level plane, engine-free.
+- `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: the `csky_cloud_shadow*` globals every sun term reads, drawn by day in a cloudy mission.
+- `src/Effects/CloudShadowPattern.cs`, the cloud shadows' world-anchored noise pattern and its drift source (ceiling scroll, sideways wind, fixed), engine-free.
+- `src/Effects/CloudShadowChapters.cs`, the shipped per-chapter cloud shadow tunes in `CSVM/data/cloud_shadows.json`: read with warnings, and one chapter's entry written by the cloud lab.
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
@@ -562,9 +563,10 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
-- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F4, `--freecam` only): a slider per zone lighting field over a held or followed zone, a parked plane to turn through the sun, with Save into the shipped lighting file.
+- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F5, `--freecam` only): a slider per zone lighting field over a held or followed zone, a parked plane to turn through the sun, with Save into the shipped lighting file.
 - `src/UI/Labs/LabParking.cs`, the clear-reach ray the weapon and lighting labs park an aircraft along.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
+- `src/UI/Labs/CloudLab.cs`, the cloud lab (Shift+F4, `--freecam` only): a slider per cloud shadow tune and the drift's speed and heading, applied live, a red tint, with Save into the shipped per-chapter file.
 - `src/UI/Labs/SoundLab.cs`, the sound lab (Shift+F9, a flight under `--sound-lab` only): a slider per Enhanced Sound amount and the hit confirm's group, applied live, a readout of the flown engine slot, with Save into the shipped tuning file, or into a sound pack's override while one plays.
 - `src/UI/Labs/CourseLab.cs`, the course editor lab (Shift+F3, `--freecam` only, opened by `--course-edit`): lists, opens, starts and saves air race courses, places gates and the start point by click, with sliders and a held drag, and edits the sequence in a side panel whose row click flies the camera there.
 - `src/UI/Labs/CourseDraft.cs`, the course lab's edited course, selected gate and selected entry: ids, placement facing the camera after the selected entry, a ring's height above ground, reorder, add again with a direction, flip, remove, delete, and the save target.
@@ -733,6 +735,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VegetationQualitySetting.cs`, the Enhanced vegetation's quality (original, rich): the flag/saved/config `WordSetting` lookup over rich (original on an integrated GPU drawing two or more panes), and `RichOn`, what the clutter reads, recut live.
 - `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
 - `src/Utils/CloudShadowSetting.cs`, whether Enhanced draws the cloud shadows (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, read every frame.
+- `src/Utils/PostProcessingSetting.cs`, whether Enhanced grades the lit world (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, applied live.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.

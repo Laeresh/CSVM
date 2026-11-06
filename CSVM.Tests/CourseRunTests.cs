@@ -161,6 +161,45 @@ public class CourseRunTests
     }
 
     [Fact]
+    public void FittedLinesDiveOverAHillBeforeTheGateAndClimbOverACliffAfterIt()
+    {
+        // A's opening stands at y 15, flown toward -Z. A hill tops 40 m from 100 to 300 m before it
+        // and a cliff 35 m from 120 to 300 m after it. A ray from inside a box strikes nothing, as
+        // Godot's does, so only a cast from both ends sees a buried line end.
+        var hill = new Aabb(new Vector3(-50f, -10f, 100f), new Vector3(100f, 50f, 200f));
+        var cliff = new Aabb(new Vector3(-50f, -10f, -300f), new Vector3(100f, 45f, 180f));
+        bool Blocked(Vector3 a, Vector3 b)
+        {
+            if (hill.HasPoint(a) || cliff.HasPoint(a))
+                return false;
+            for (float t = 0f; t <= 1f; t += 0.002f)
+            {
+                if (hill.HasPoint(a.Lerp(b, t)) || cliff.HasPoint(a.Lerp(b, t)))
+                    return true;
+            }
+            return false;
+        }
+
+        var run = Run(Fwd(A));
+        run.FitLines(Blocked);
+        var line = run.Zones[0].Route!;
+
+        // The least whole slope step clearing each by 8 m: 0.35 over the hill's near edge, 0.25 over the
+        // cliff's. The climbing exit runs on to the length it cleared.
+        Assert.Equal(15f + (0.35f * StuntMission.EntryLeadInM), line.End(false).Y, 1);
+        Assert.Equal(15f + (0.25f * StuntMission.EntryExitM), line.End(true).Y, 1);
+        Assert.Equal(-StuntMission.EntryExitM, line.End(true).Z, 1);
+        Assert.True(line.Opening!.Value.DistanceTo(new Vector3(0f, 15f, 0f)) < 0.01f, $"{line.Opening}");
+
+        // A world that blocks every slope leaves the line level, and a clear one leaves it alone.
+        run.FitLines((a, b) => true);
+        Assert.Equal((15f, 15f), (run.Zones[0].Route!.End(false).Y, run.Zones[0].Route!.End(true).Y));
+        run.FitLines((a, b) => false);
+        Assert.Equal((15f, 15f), (run.Zones[0].Route!.End(false).Y, run.Zones[0].Route!.End(true).Y));
+        Assert.Equal(-StuntMission.EntryRunOutM, run.Zones[0].Route!.End(true).Z, 1);
+    }
+
+    [Fact]
     public void ATapAfterAMovingRingReturnsToWhereTheRingStandsNotItsRest()
     {
         var run = Run(Fwd(B));

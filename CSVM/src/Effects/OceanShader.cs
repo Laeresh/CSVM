@@ -1072,10 +1072,11 @@ void fragment() {
     // Lost slope detail turns into roughness, so the far sea keeps a glossy sheen, not a mirror.
     // Foam is matte where it covers the water.
     ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + Literal(SceneBuilder.WaterRoughness) + @", sheet), " + Literal(FoamRoughness) + @", foam_mix);
-    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
+    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);" + (ShadowQualitySetting.TerrainShadows ? @"
+    AO = csky_cloud_ao(v_shade);" : "") + @"
 }");
         if (ShadowQualitySetting.TerrainShadows)
-            sb.AppendLine(SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_shade)", SceneBuilder.WaterSpecular));
+            sb.AppendLine(SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_shade)", SceneBuilder.WaterSpecular, "v_shade"));
         return sb.ToString();
     }
 

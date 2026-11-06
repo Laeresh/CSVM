@@ -361,6 +361,36 @@ public class StuntBotObjectiveTests
     }
 
     [Fact]
+    public void ACourseBotBridgesToTheNextEntryWhereAPlaneCouldTurnThere()
+    {
+        // One pylon gate at the origin flown north. A bot 150 m off its line and 450 m short, flying
+        // north, is outside the cone and too far off the line to join. A bridge from there turns no
+        // tighter than BridgeRadiusM. It leaves from the bot, passes the opening and ends on the exit.
+        var gate = new CourseGate("g", CourseGateKind.PylonGate, Vector3.Zero, 0f, 40f, 30f, 0f);
+        var run = StuntMission.ForCourse(new Course("c1", "test", new SpawnPoint(Vector3.Zero, 0f), new[] { gate },
+            new[] { new SequenceEntry("g", GateDirection.Forward) }))!;
+        var line = run.Zones[0].Route!;
+        var at = new Vector3(150, 15, 450);
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99));
+        var order = bot.Decide(run.Zones, at, North, zoneRun: false);
+        Assert.True(order is { Leg: StuntBotLeg.Run, Start: StuntBotStart.Join, Ribbon: not null }, $"{order}");
+        var bridge = order.Ribbon!;
+        Assert.NotSame(line, bridge);
+        Assert.True(bridge.End(false).DistanceTo(at) < 0.5f, $"{bridge.End(false)}");
+        var (segment, t) = bridge.NearestTo(line.Opening!.Value);
+        Assert.True(bridge.PointAt(segment, t).DistanceTo(line.Opening!.Value) < 1f);
+        Assert.True(bridge.End(true).IsEqualApprox(line.End(true)), $"{bridge.End(true)}");
+
+        // ABLE-TO-FAIL CONTROL: 300 m off and 200 m short, the bridge would turn tighter than a plane.
+        bot.Returned();
+        Assert.True(bot.Decide(run.Zones, new Vector3(300, 15, 200), North, zoneRun: false) is { Start: StuntBotStart.None });
+
+        // ABLE-TO-FAIL CONTROL: a world that blocks it leaves the bot steering.
+        var walled = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Blocked = (_, _) => true };
+        Assert.True(walled.Decide(run.Zones, at, North, zoneRun: false) is { Start: StuntBotStart.None });
+    }
+
+    [Fact]
     public void NearestReadsTheRunAPickTakesARefusedEndIncluded()
     {
         // The first zone's nearer end is refused, so its run enters from the far end, whose lead-in

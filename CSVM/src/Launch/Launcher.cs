@@ -63,6 +63,9 @@ public partial class Launcher : Node3D
     // The --export-gltf= one-shot and F10's ad-hoc glTF save, see src\Tooling\GltfExporter.cs's
     // entry. Constructed once from the launch spec alongside the capture director.
     private Tooling.GltfExporter _gltfExporter = null!;
+
+    // --control=: the agent's command line into this run, null unless the flag was passed.
+    private Tooling.ControlChannel? _control;
     // The master seed every subsystem generator derives from (see Utils.Rng). Pinned runs take the
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
@@ -297,6 +300,14 @@ public partial class Launcher : Node3D
         Flight.Ai.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Tooling.CaptureDirector(_spec);
         _gltfExporter = new Tooling.GltfExporter(_spec);
+        if (_spec.ControlPort is int controlPort)
+        {
+            _control = new Tooling.ControlChannel(controlPort)
+            {
+                Cutscene = () => _session?.Cutscene,
+                Plane = () => _session is { Rigs.Count: > 0 } s ? s.Rigs[0].Controller : _session?.Plane,
+            };
+        }
         // Built alongside the other process-scoped services, ahead of every probe's early quit
         // and of --dump-config: its hitch monitor is what registers the five hitchMonitor.* keys.
         _instruments = new FrameInstruments(_spec, GetViewport().GetViewportRid());
@@ -361,7 +372,10 @@ public partial class Launcher : Node3D
         Log.Info("core", $"user={UserData.Root}{(UserData.Portable ? " (portable)" : "")}");
         // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
         // this is then the only pointer to the traces our own sink cannot see.
-        Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
+        if (EngineLogFileArg() is { } own)
+            Log.Info("core", $"engine log={own} (--log-file)");
+        else
+            Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
         foreach (var (old, replacement) in _spec.Deprecated)
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
@@ -984,6 +998,7 @@ public partial class Launcher : Node3D
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
             _session?.Plane, _menu.Host is { Shown: true } || _sourceScreen != null || _spec.MovieName != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
+        _control?.Tick(GetViewport(), GetTree(), delta);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
         // launchscreen on the debrief, here where a QueueFree is safe.
@@ -1045,6 +1060,22 @@ public partial class Launcher : Node3D
         // it was a child ticking itself: the capture director reads the menu as it stood before
         // this frame's presses, as it always did.
         _menu.Host?.Tick(MenuStep(delta));
+    }
+
+    /// <summary>The path Godot's own <c>--log-file</c> names, or null. ⚠ Read off the process
+    /// command line: Godot consumes that flag, so <c>OS.GetCmdlineArgs()</c> never returns it.</summary>
+    internal static string? EngineLogFileArg()
+    {
+        var args = System.Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--log-file")
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
@@ -1145,7 +1176,9 @@ public partial class Launcher : Node3D
     /// here may take the quit with it.</summary>
     private void MirrorEngineLog()
     {
-        if (Log.SinkPath is not { } sinkPath)
+        // #312: Godot keys the default log on the project name, so every worktree shares it. A run
+        // given its own --log-file has nothing here to copy.
+        if (Log.SinkPath is not { } sinkPath || EngineLogFileArg() != null)
         {
             return;
         }

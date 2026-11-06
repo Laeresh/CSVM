@@ -105,5 +105,12 @@ aircraft's own shadow stays visible at 4096 at both the C3 chase pose (`--chapte
 same pose 40 m higher, at every level from 0 to 0.5 degrees; at 2048 it fades. A tighter first split (0.08 of
 the shadow distance) bought nothing measurable.
 
-Shipped levels: Off (no shadow), Low (0 / SoftLow, blur 1, 4096), Medium (0.25 / SoftMedium, 4096),
-High (0.5 / SoftHigh, 4096), Ultra (1.0 / SoftUltra, 8192, the shipped look and the default).
+With the cascades' near plane 1500 m up the light (`EnhancedLook.ShadowPancakeSize`), the top rung
+loses the aircraft's own shadow the same way. On `player_pfighter` in C1C/M01 under a 20-degree side
+light, SoftUltra keeps the upper wing's shadow on the lower wing solid at 0.2 degrees and below,
+breaks it into dots and holes at 0.25, and draws none at 0.5 or 1.0. Bias and the near plane's
+height do not move it. 0.15 sharpens the world's shadow-map edges only on thin casters (masts and
+rigging); the terrain's baked shadow keeps its one-texel floor.
+
+Shipped levels: Off (no shadow), Low (0 / SoftLow, blur 1, 4096), Medium (0.15 / SoftMedium, 4096),
+High (0.15 / SoftHigh, 4096), Ultra (0.15 / SoftUltra, 8192, the default).

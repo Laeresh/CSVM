@@ -372,7 +372,7 @@ public sealed record SessionSpec
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || CopyGameFiles != null
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpMoonlit || DumpTileGrid
-        || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest;
+        || DumpSticks || DumpPath != null || DamageTest || EffectsTest || WeaponTest || ControlPort != null;
 
     /// <summary>Resolved. The chapter world is built instead of a single parked plane.</summary>
     public bool WorldMode { get; private set; }
@@ -774,6 +774,7 @@ public sealed record SessionSpec
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
         : RunTests ? "--run-tests"
+        : ControlPort != null ? "--control"
         : "";
 
     /// <summary><c>--det</c> was passed outright, rather than implied.</summary>
@@ -1238,6 +1239,11 @@ public sealed record SessionSpec
     public bool DebugMem { get; private set; }
 
     public bool NoFocus { get; private set; }
+
+    /// <summary><c>--control=&lt;port&gt;</c>: an agent drives this run over a loopback socket
+    /// (<c>Tooling/ControlChannel.cs</c>). Null when absent.</summary>
+    public int? ControlPort { get; private set; }
+
     /// <summary><c>--hd=</c>: the HD texture pack folder, under the data root unless rooted. Empty
     /// reads no pack. Null when absent, which leaves config.json's <c>textures.hd</c>.</summary>
     public string? Hd { get; private set; }
@@ -1835,6 +1841,7 @@ public sealed record SessionSpec
             else if (arg == "--tex-census") { s.TexCensus = true; }
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
             else if (arg == "--no-focus") { s.NoFocus = true; }
+            else if (arg.StartsWith("--control=")) { s.ControlPort = int.Parse(arg["--control=".Length..], CultureInfo.InvariantCulture); }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }

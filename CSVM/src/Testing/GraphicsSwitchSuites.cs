@@ -297,6 +297,54 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("post-processing-live",
+        "the Post-processing word on a C1 Enhanced flight: on grades the world's Environment and every cockpit pass's "
+        + "copy, a live move to off puts the bare AgX tonemap back on them and on again regrades them, and a switch "
+        + "to Original leaves no grade")]
+    internal static void PostProcessingFollowsLive(TestContext ctx)
+    {
+        RequireData(ctx);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var launched = PostProcessingSetting.Lookup.Current;
+        void Word(string word) =>
+            PostProcessingSetting.Lookup.ResolveFrom(word, null, new SettingContext(Det: true, Enhanced: true, Panes: 1));
+        try
+        {
+            Word(PostProcessingSetting.On);
+            var rig = Open(ctx, true, 1, "C1");
+            try
+            {
+                if (!rig.Built)
+                {
+                    ctx.Check(false, $"the Enhanced C1 session builds");
+                    return;
+                }
+
+                var envs = rig.Session.Rigs.Select(r => r.Controller?.Dressing.Pass?.Env).OfType<Godot.Environment>().Prepend(rig.Env).ToList();
+                bool Graded() => envs.All(e => e.AdjustmentEnabled && e.TonemapAgxContrast > 1f);
+                bool Bare() => envs.All(e => !e.AdjustmentEnabled && e.TonemapAgxContrast == 1f);
+                ctx.Check(Graded(), $"on grades {envs.Count} Environment(s) at build");
+                Word(PostProcessingSetting.Off);
+                EnhancedLook.FollowWordSettings(rig.Session);
+                ctx.Check(Bare(), $"a live move to off puts the bare tonemap back");
+                Word(PostProcessingSetting.On);
+                EnhancedLook.FollowWordSettings(rig.Session);
+                ctx.Check(Graded(), $"on again regrades");
+                Switch(rig, false);
+                ctx.Check(!rig.Env.AdjustmentEnabled, $"Original leaves no grade");
+            }
+            finally
+            {
+                rig.Close();
+            }
+        }
+        finally
+        {
+            PostProcessingSetting.Lookup.Take(launched.Word == null ? PostProcessingSetting.FallbackFor(det: false) : launched);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-view-distance",
         "the Enhanced clutter cells follow a live View Distance change: moved from Normal to Very Far "
         + "the cells are cut and ranged as a session built at Very Far cuts them, farther than at "

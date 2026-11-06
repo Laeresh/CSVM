@@ -382,7 +382,7 @@ internal sealed class InspectionLabs
         Log.Info("ui", $"ocean lab ready (Shift+F1), save {savePath ?? "off in an exported build"}");
     }
 
-    /// <summary>The lighting lab (Shift+F4), in <c>--freecam</c> over a world with weather alone. It puts
+    /// <summary>The lighting lab (Shift+F5), in <c>--freecam</c> over a world with weather alone. It puts
     /// the zone's Enhanced tune on sliders, applied live through <paramref name="weather"/>, and saves
     /// into the shipped file. Its parked plane is the anim lab's stage prop (<see cref="ParkedProp"/>).</summary>
     public void BuildLightingLab(BuildState state, WeatherRig? weather, LiveryResolver livery)
@@ -397,7 +397,19 @@ internal sealed class InspectionLabs
         {
             Debug = spec.DebugLighting,
         });
-        Log.Info("ui", $"lighting lab ready (Shift+F4), save {savePath ?? "off in an exported build"}");
+        Log.Info("ui", $"lighting lab ready (Shift+F5), save {savePath ?? "off in an exported build"}");
+    }
+
+    /// <summary>The cloud lab (Shift+F4), in <c>--freecam</c> alone: the cloud shadows' tunes, drift and
+    /// tint on sliders, applied live to <paramref name="clouds"/>. Save writes the shipped file.
+    /// Every other mode builds none.</summary>
+    public void BuildCloudLab(Func<CloudShadow?> clouds)
+    {
+        if (!_in.Spec.Freecam)
+            return;
+        string? savePath = CloudShadowChapters.SourceTreePath();
+        _in.WorldRoot.AddChild(new CloudLab(clouds, _in.Spec.Chapter.ToUpperInvariant(), savePath));
+        Log.Info("ui", $"cloud lab ready (Shift+F4), save {savePath ?? "off in an exported build"}");
     }
 
     /// <summary>The vegetation lab (Shift+F2), in <c>--freecam</c> on a vegetation chapter alone. It puts

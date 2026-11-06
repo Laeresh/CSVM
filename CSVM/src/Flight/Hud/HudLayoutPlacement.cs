@@ -8,8 +8,8 @@ namespace CSVM.Flight.Hud;
 /// pane pixels, from the reading box, the pane size and the HUD scale (<see cref="HudMetrics"/>). A
 /// null layout is the original's own formulas, so <see cref="Shift"/> is exactly zero for it. A layout
 /// measures in reference pixels from the reading box, or the pane's edges for Sides and a custom one.
-/// It keeps every element inside the pane. The preset is <see cref="Sides"/>, the editor's first draft
-/// <see cref="OriginalLayout"/>; docs/architecture/Flight.md says what to read next.
+/// It keeps every element inside the pane. The preset is <see cref="Sides"/>; the editor's first draft
+/// with nothing saved is <see cref="ToPane"/> of null. docs/architecture/Flight.md says what to read next.
 /// </summary>
 public static class HudLayoutPlacement
 {
@@ -31,25 +31,13 @@ public static class HudLayoutPlacement
         },
         paneRelative: true);
 
-    /// <summary>The original's placement spelt as a layout, which the editor starts from while no
-    /// custom layout is saved. It matches the original on every pane 16:9 or wider. A narrower pane's
-    /// column outdent is the one rule a layout does not carry.</summary>
-    public static readonly HudLayout OriginalLayout = new(new[]
-    {
-        new HudPlacement(HudAnchor.Start, HudAnchor.End, GaugeCluster.LeftColumnMargin, GaugeCluster.ColumnBottomY - HudMetrics.ReferenceHeight),
-        new HudPlacement(HudAnchor.End, HudAnchor.End, -GaugeCluster.RightColumnMargin, GaugeCluster.ColumnBottomY - HudMetrics.ReferenceHeight),
-        new HudPlacement(HudAnchor.Centre, HudAnchor.Start, 0f, CompassTape.RefTopMargin),
-        new HudPlacement(HudAnchor.End, HudAnchor.End,
-            -(GaugeCluster.SpdCenterFromRight + GaugeCluster.SpdRadius + ThrottlePlate.GapRef),
-            GaugeCluster.SpdCenterY + GaugeCluster.SpdRadius - HudMetrics.ReferenceHeight),
-    });
-
     /// <summary>The placement a layout kind names. Original is null, drawn by the original's own
-    /// formulas. Custom is the saved placement, or the original's until one is saved.</summary>
+    /// formulas. Custom is the saved placement, or null until one is saved. A fixed layout cannot stand
+    /// in for the original, whose columns outdent on a pane narrower than 16:9.</summary>
     public static HudLayout? Resolve(HudLayoutKind kind, HudLayout? custom) => kind switch
     {
         HudLayoutKind.Sides => Sides,
-        HudLayoutKind.Custom => custom ?? OriginalLayout,
+        HudLayoutKind.Custom => custom,
         _ => null,
     };
 
@@ -123,22 +111,23 @@ public static class HudLayoutPlacement
         layout.PaneRelative ? new Rect2(Vector2.Zero, paneSize) : box;
 
     /// <summary><paramref name="layout"/> re-measured from the pane's own edges, every element left
-    /// where it stands on this pane to the reference pixel. The editor's drafts are all pane-relative.</summary>
-    public static HudLayout ToPane(HudLayout layout, Rect2 box, Vector2 paneSize, float scale)
+    /// where it stands on this pane to the reference pixel. A null layout is the original's own
+    /// placement on this pane. The editor's drafts are all pane-relative.</summary>
+    public static HudLayout ToPane(HudLayout? layout, Rect2 box, Vector2 paneSize, float scale)
     {
-        if (layout.PaneRelative)
+        if (layout is { PaneRelative: true })
         {
             return layout;
         }
 
         var pane = new Rect2(Vector2.Zero, paneSize);
-        var moved = layout.InPane();
+        var placements = new HudPlacement[HudLayout.Elements.Count];
         foreach (var element in HudLayout.Elements)
         {
-            moved = moved.With(element, PlacementFor(Place(element, layout, box, paneSize, scale), pane, scale));
+            placements[(int)element] = PlacementFor(Place(element, layout, box, paneSize, scale), pane, scale);
         }
 
-        return moved;
+        return new HudLayout(placements, paneRelative: true);
     }
 
     /// <summary>How far <paramref name="layout"/> moves <paramref name="element"/> from the original's

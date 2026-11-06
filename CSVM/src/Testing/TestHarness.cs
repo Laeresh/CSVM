@@ -497,18 +497,12 @@ public static class TestHarness
 
     // The engine log Godot's `--log-file` is writing, or null when launched without it. Error
     // lines are flushed as printed, so reading it while the process holds it open is sound.
-    // ⚠ Read the command line directly, not `OS.GetCmdlineArgs()`: Godot hands that back only
-    // args its own parser did not recognise, and `--log-file` is one it consumes. Falls back to
-    // the project's own rotating log (desktop default) if the flag is absent.
+    // Falls back to the project's own rotating log (desktop default) if the flag is absent.
     private static string? EngineLogPath()
     {
-        var args = System.Environment.GetCommandLineArgs();
-        for (int i = 0; i < args.Length - 1; i++)
+        if (Launch.Launcher.EngineLogFileArg() is { } passed)
         {
-            if (args[i] == "--log-file")
-            {
-                return args[i + 1];
-            }
+            return passed;
         }
         string setting = ProjectSettings.GetSetting("debug/file_logging/log_path").AsString();
         if (setting.Length == 0)

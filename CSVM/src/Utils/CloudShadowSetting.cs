@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace CSVM.Utils;
 
 /// <summary>
-/// Whether Enhanced draws the shadows the mission's clouds cast (<c>Effects.CloudShadow</c>), one of
+/// Whether Enhanced draws the drifting cloud shadows (<c>Effects.CloudShadow</c>), one of
 /// <see cref="Words"/>. In <see cref="Lookup"/>, <c>--cloud-shadows=</c> beats the saved
 /// <c>cloudShadows</c> option, which beats the <see cref="Key"/> config key, then
 /// <see cref="Default"/>. Under <c>--det</c> only the flag survives, over <see cref="Off"/>, so a
@@ -58,7 +58,7 @@ public static class CloudShadowSetting
         Detail = static enhanced => !enhanced
             ? "Enhanced Graphics only: the original world casts no cloud shadow."
             : ShadowQualitySetting.TerrainShadows
-                ? "The clouds cast their shadows on the ground and the water by day. Applies at once."
+                ? "Soft shadows of passing clouds drift over the ground and the water by day. Applies at once."
                 : "Terrain shadows only: this launch runs --terrain-shadows=off, so no cloud shadow draws.",
         Shown = static _ => Word,
         Fallback = static context => FallbackFor(context.Det),

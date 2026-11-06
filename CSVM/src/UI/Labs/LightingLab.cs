@@ -12,7 +12,7 @@ using Godot;
 namespace CSVM.UI.Labs;
 
 /// <summary>
-/// The lighting lab (Shift+F4), built in <c>--freecam</c> alone. Its right-edge panel holds a slider
+/// The lighting lab (Shift+F5), built in <c>--freecam</c> alone. Its right-edge panel holds a slider
 /// per <see cref="ZoneLighting"/> field for the camera's zone or one the dropdown holds
 /// (<see cref="WeatherRig.ForceZone"/>). An edit reaches the session
 /// sun, the Environment and the cockpit and spyglass suns through the weather rig. Save writes this
@@ -138,7 +138,7 @@ public sealed partial class LightingLab : Node
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4, ShiftPressed: true })
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F5, ShiftPressed: true })
         {
             Toggle();
             GetViewport().SetInputAsHandled();
@@ -479,7 +479,7 @@ public sealed partial class LightingLab : Node
             box.AddChild(Small("Save is off in an exported build: its lighting lives inside the pck.", Dim));
         _status = Small("");
         box.AddChild(_status);
-        box.AddChild(Small("* marks a field this mission overrides · RMB looks, the sliders take the left button · Shift+F4 hides this panel", Dim));
+        box.AddChild(Small("* marks a field this mission overrides · RMB looks, the sliders take the left button · Shift+F5 hides this panel", Dim));
 
         margin.AddChild(box);
         panel.AddChild(margin);

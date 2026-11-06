@@ -402,7 +402,7 @@ internal static class HudLayoutSuites
             return;
         }
 
-        editor.Load(HudLayoutPlacement.OriginalLayout);
+        editor.Load(null);
         editor.Close(save: false);
         ctx.Check(HudLayoutSetting.Custom == saved && store.Load().HudLayoutCustom == saved!.Format()
             && seats.All(s => s.PilotHud.Layout == saved) && pause.Reasons == HaltReason.None,
