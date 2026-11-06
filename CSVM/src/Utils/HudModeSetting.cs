@@ -68,8 +68,12 @@ public static class HudModeSetting
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
     /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps). It reads
     /// <paramref name="saved"/>, the options file read here when null.</summary>
-    public static string? SavedWord(bool det, OptionsDef? saved = null) =>
+    public static string? SavedWord(bool det, OptionsDef? saved) =>
         det ? null : (saved ?? OptionsStore.UserOptions().Load()).HudMode;
+
+    /// <summary>The saved word read from the file. ⚠ Keep this one-argument shape: display-det-guard
+    /// finds every SavedWord(bool) reader by reflection.</summary>
+    public static string? SavedWord(bool det) => SavedWord(det, null);
 
     /// <summary>The launch's read: stores the saved word's mode as <see cref="Current"/> through
     /// <see cref="SavedWord"/>, so <paramref name="det"/> reads none, and logs it.</summary>
