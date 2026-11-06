@@ -129,6 +129,18 @@ public class EnhancedSoundTests
     }
 
     [Fact]
+    public void ACommentInTheFileIsSkippedAsSaveSkipsIt()
+    {
+        var problems = new List<string>();
+        var read = EnhancedSoundTuning.Parse(
+            Encoding.UTF8.GetBytes("{\n  // louder hits\n  \"bulletHitGain\": 1.5, /* note */ \"enginePitchFull\": 1.3\n}"),
+            problems);
+        Assert.Empty(problems);
+        Assert.Equal(1.5f, read.BulletHitGain);
+        Assert.Equal(1.3f, read.EnginePitchFull);
+    }
+
+    [Fact]
     public void ASavedTuningKeepsTheFilesNoteAndOrderAndReadsBackExactly()
     {
         string shippedText = File.ReadAllText(ShippedPath);
