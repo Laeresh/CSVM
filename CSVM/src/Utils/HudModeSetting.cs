@@ -18,8 +18,9 @@ public enum HudMode
 /// <summary>
 /// The player's HUD mode as a word, <c>full</c>, <c>minimal</c> or <c>none</c>, saved as
 /// <c>hudMode</c> in the options file. A remake-only setting: the saved word beats Full, and no
-/// deterministic run reads the file. The launch and every options apply set <see cref="Current"/>,
-/// and the flight's cycle key steps and saves it. Each pilot pane follows it every frame
+/// deterministic run reads the file. A launch reads the saved word into <see cref="Current"/> (none
+/// under <c>--det</c>), and an options apply re-reads it except under <c>--det</c>. The flight's
+/// cycle key steps and saves it. Each pilot pane follows it every frame
 /// (<c>Flight.Hud.FlightHud.SetHudMode</c>). docs/architecture/Utils.md.
 /// </summary>
 public static class HudModeSetting
@@ -68,10 +69,23 @@ public static class HudModeSetting
     /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps).</summary>
     public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().HudMode;
 
-    /// <summary>Stores the saved word's mode as <see cref="Current"/> through <see cref="SavedWord"/>,
-    /// so <paramref name="det"/> reads none, and logs it. The launch and every options apply call it
-    /// after the file is written.</summary>
+    /// <summary>The launch's read: stores the saved word's mode as <see cref="Current"/> through
+    /// <see cref="SavedWord"/>, so <paramref name="det"/> reads none, and logs it.</summary>
     public static void ApplySaved(bool det) => Apply(SavedWord(det));
+
+    /// <summary>An options apply's read: the saved word, as <see cref="ApplySaved"/>, after the file is
+    /// written. Under <paramref name="det"/> it changes nothing, so an unrelated accept never
+    /// overwrites the cycle key's steps. Returns whether it applied.</summary>
+    public static bool ApplyAfterOptions(bool det)
+    {
+        if (det)
+        {
+            return false;
+        }
+
+        ApplySaved(det: false);
+        return true;
+    }
 
     /// <summary>Stores <paramref name="word"/>'s mode as <see cref="Current"/> and logs it.</summary>
     public static void Apply(string? word)
