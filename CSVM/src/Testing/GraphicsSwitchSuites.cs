@@ -1837,6 +1837,17 @@ internal static class GraphicsSwitchSuites
                         && decks.Count > 0 && decks.All(d => Wears(d, WeatherRig.CloudTintParam)) && sprites,
                     $"a cloud tint reaches the deck ({decks.Count}) and the cloud sprites (sprite tinted {sprites}, tint {weather.CloudTint.X:0.###})");
 
+                // Shift on a tint slider: its two siblings move by the same delta, each held in its range.
+                lab.Set("sun_r", 0.4f);
+                lab.Set("sun_g", 0.6f);
+                lab.Set("sun_b", 1.9f);
+                lab.SetLinked("sun_r", 0.6f);
+                var linked = lab.Edited;
+                lab.SetLinked("exposure", 1.3f);
+                ctx.Check(Mathf.IsEqualApprox(linked.SunR, 0.6f) && Mathf.IsEqualApprox(linked.SunG, 0.8f) && linked.SunB == 2f
+                        && lab.Edited.Exposure == 1.3f && lab.Edited.SunG == linked.SunG,
+                    $"a linked tint move carries its siblings by the delta, clamped (sun {linked.SunR:0.##}/{linked.SunG:0.##}/{linked.SunB:0.##}), and a non-tint field moves alone");
+
                 string json = $"{{ \"{Chapter}\": {{ \"{held}\": {{ \"exposure\": 1.2 }}, \"{Mission}\": {{ \"{held}\": {{ \"sun_r\": 0.9 }} }} }} }}";
                 weather.ReloadLighting(LightingTable.Parse(json));
                 lab.RevertToSaved();

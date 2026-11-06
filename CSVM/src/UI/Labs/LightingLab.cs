@@ -219,6 +219,16 @@ public sealed partial class LightingLab : Node
         Commit();
     }
 
+    /// <summary>Sets one field as a Shift-held slider does and applies at once. A tint channel moves its
+    /// two sibling channels by the same delta, each clamped to its range. The hue offsets hold while the
+    /// brightness moves. Any other field moves alone.</summary>
+    public void SetLinked(string key, float value)
+    {
+        var field = ZoneLighting.Find(key) ?? throw new ArgumentException($"'{key}' is not a lighting field", nameof(key));
+        Edit(Linked(Edited, field, value));
+        Commit();
+    }
+
     /// <summary>One overridden field back to the chapter's value, no longer the mission's (not saved).</summary>
     public void ResetToChapter(string key)
     {
@@ -307,6 +317,28 @@ public sealed partial class LightingLab : Node
         var label = new Label { Text = text, Modulate = colour ?? new Color(1, 1, 1, 0.75f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         label.AddThemeFontSizeOverride("font_size", 11);
         return label;
+    }
+
+    // The other two channels of the red, green and blue tint a field belongs to, by its key's
+    // `_r`/`_g`/`_b` suffix. Empty for a field that is no tint channel.
+    private static ZoneLighting.Field[] TintSiblings(ZoneLighting.Field field)
+    {
+        string key = field.Key;
+        if (key.Length < 3 || key[^2] != '_' || "rgb".IndexOf(key[^1]) < 0)
+            return Array.Empty<ZoneLighting.Field>();
+        string stem = key[..^1];
+        var siblings = "rgb".Where(c => c != key[^1]).Select(c => ZoneLighting.Find(stem + c)).ToList();
+        return siblings.All(s => s != null) ? siblings.Select(s => s!).ToArray() : Array.Empty<ZoneLighting.Field>();
+    }
+
+    // The tune with one field at its value and, for a tint channel, its siblings moved by the same delta.
+    private static ZoneLighting Linked(ZoneLighting tune, ZoneLighting.Field field, float value)
+    {
+        float delta = Math.Clamp(value, field.Min, field.Max) - field.Get(tune);
+        var moved = field.With(tune, value);
+        foreach (var sibling in TintSiblings(field))
+            moved = sibling.With(moved, Math.Clamp(sibling.Get(tune) + delta, sibling.Min, sibling.Max));
+        return moved;
     }
 
     private ZoneLighting EditOf(string zone) =>
@@ -489,7 +521,7 @@ public sealed partial class LightingLab : Node
             box.AddChild(Small("Save is off in an exported build: its lighting lives inside the pck.", Dim));
         _status = Small("");
         box.AddChild(_status);
-        box.AddChild(Small("* marks a field this mission overrides · RMB looks, the sliders take the left button · Shift+F5 hides this panel", Dim));
+        box.AddChild(Small("* marks a field this mission overrides · Shift on a tint slider moves its red, green and blue together · RMB looks, the sliders take the left button · Shift+F5 hides this panel", Dim));
 
         margin.AddChild(box);
         panel.AddChild(margin);
@@ -571,7 +603,11 @@ public sealed partial class LightingLab : Node
         {
             if (_syncing)
                 return;
-            Edit(field.With(Edited, (float)v));
+            // Shift moves the tint's siblings too; SyncRows writes their sliders under the guard.
+            bool linked = Input.IsKeyPressed(Key.Shift) && TintSiblings(field).Length > 0;
+            Edit(linked ? Linked(Edited, field, (float)v) : field.With(Edited, (float)v));
+            if (linked)
+                SyncRows();
             value.Text = ValueText(field);
             _pending = ApplyDelay;
             SetProcess(true);
