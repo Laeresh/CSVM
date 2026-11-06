@@ -1718,15 +1718,15 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("lighting-lab",
-        "the lighting lab stands in an Enhanced --freecam C2 session and nowhere in a --fly one: a held zone "
+        "the lighting lab stands in an Enhanced --freecam C1 session and nowhere in a --fly one: a held zone "
         + "stays held through the camera's steps, an edit reaches the live sun, ambient, tonemap and shadow fields "
         + "and a registered clone's, off restores the untuned values and on brings the edit back, a grade edit reaches "
-        + "the Environment while Post-processing is on, is ignored while it is off and comes back on a live toggle, a mission override "
+        + "the Environment while Post-processing is on, is ignored while it is off and comes back on a live toggle, a sky tint reaches every dome by the fog colour's factor, a cloud tint reaches the deck and the cloud sprites, a mission override "
         + "reads through its chapter entry, Save to chapter and Save to this mission write the sparse blocks, and a "
         + "reset drops an override")]
     internal static void LightingLabEdits(TestContext ctx)
     {
-        const string Chapter = "C2";
+        const string Chapter = "C1";
         const string Mission = "IA1";
         RequireData(ctx, Chapter);
         bool wasEnhanced = GraphicsMode.Enhanced;
@@ -1811,6 +1811,31 @@ internal static class GraphicsSwitchSuites
                 EnhancedLook.FollowWordSettings(freecam.Session);
                 ctx.Check(env.AdjustmentEnabled && env.TonemapAgxContrast == 1.4f && env.AdjustmentSaturation == 0.9f,
                     $"a live toggle back on puts the zone's tuned grade back, not the constants (saturation {env.AdjustmentSaturation:0.##})");
+
+                // The sky tint reaches the dome by the factor the fog colour takes, the cloud tint the deck and the sprites.
+                var fog0 = weather.FogGlobals.ColorLinear;
+                lab.Set("sky_r", 0.5f);
+                lab.Set("sky_g", 0.5f);
+                lab.Set("sky_b", 0.5f);
+                lab.Set("cloud_r", 0.4f);
+                lab.Set("cloud_g", 0.4f);
+                lab.Set("cloud_b", 0.4f);
+                var fog1 = weather.FogGlobals.ColorLinear;
+                var skyTint = WeatherRig.LinearTint(0.5f, 0.5f, 0.5f);
+                var fogRatio = fog0.X > 0.01f ? fog1.X / fog0.X : skyTint.X;
+                bool Wears(Node root, string global) => NodesOf<GeometryInstance3D>(root)
+                    .Any(g => Materials(g).Any(m => m.Shader?.Code?.Contains(global, StringComparison.Ordinal) == true));
+                var domes = freecam.Session.Rigs.SelectMany(r => r.HorizonDomes).Select(d => d.Node).ToList();
+                var decks = freecam.Session.Rigs.Select(r => r.Deck).OfType<Node3D>().ToList();
+                bool sprites = NodesOf<GeometryInstance3D>(freecam.Session).Any(g => Materials(g)
+                    .Any(m => m.Shader?.Code is { } code && code.Contains("csky_facade_modelview", StringComparison.Ordinal)
+                        && code.Contains(WeatherRig.CloudTintParam, StringComparison.Ordinal)));
+                ctx.Check(weather.SkyTint.IsEqualApprox(skyTint) && Mathf.Abs(fogRatio - skyTint.X) < 0.02f
+                        && domes.Count > 0 && domes.All(d => Wears(d, WeatherRig.SkyTintParam)),
+                    $"a sky tint reaches every dome ({domes.Count}) by the factor the fog colour takes (dome {skyTint.X:0.###}, fog {fogRatio:0.###})");
+                ctx.Check(weather.CloudTint.IsEqualApprox(WeatherRig.LinearTint(0.4f, 0.4f, 0.4f))
+                        && decks.Count > 0 && decks.All(d => Wears(d, WeatherRig.CloudTintParam)) && sprites,
+                    $"a cloud tint reaches the deck ({decks.Count}) and the cloud sprites (sprite tinted {sprites}, tint {weather.CloudTint.X:0.###})");
 
                 string json = $"{{ \"{Chapter}\": {{ \"{held}\": {{ \"exposure\": 1.2 }}, \"{Mission}\": {{ \"{held}\": {{ \"sun_r\": 0.9 }} }} }} }}";
                 weather.ReloadLighting(LightingTable.Parse(json));

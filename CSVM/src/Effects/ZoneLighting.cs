@@ -38,6 +38,10 @@ public sealed record ZoneLighting
             "over FOG_COLOR; the night rule reads the authored colour"),
         new("sky_g", "Sky + fog tint green", Sky, 0f, 2f, 0.01f, l => l.SkyG, (l, v) => l with { SkyG = v }),
         new("sky_b", "Sky + fog tint blue", Sky, 0f, 2f, 0.01f, l => l.SkyB, (l, v) => l with { SkyB = v }),
+        new("cloud_r", "Cloud tint red", Cloud, 0f, 2f, 0.01f, l => l.CloudR, (l, v) => l with { CloudR = v },
+            "over the cloud deck and every cloud sprite; fog still takes them with distance"),
+        new("cloud_g", "Cloud tint green", Cloud, 0f, 2f, 0.01f, l => l.CloudG, (l, v) => l with { CloudG = v }),
+        new("cloud_b", "Cloud tint blue", Cloud, 0f, 2f, 0.01f, l => l.CloudB, (l, v) => l with { CloudB = v }),
         new("exposure", "Exposure", Tonemap, 0.25f, 4f, 0.01f, l => l.Exposure, (l, v) => l with { Exposure = v }),
         new("white", "AgX white", Tonemap, 1f, 16f, 0.1f, l => l.White, (l, v) => l with { White = v }),
         new("grade_agx_contrast", "AgX contrast", Grade, 0.5f, 2f, 0.01f, l => l.GradeAgxContrast, (l, v) => l with { GradeAgxContrast = v },
@@ -59,6 +63,7 @@ public sealed record ZoneLighting
     private const string Sun = "Sun";
     private const string Ambient = "Ambient";
     private const string Sky = "Sky + fog";
+    private const string Cloud = "Cloud tint";
     private const string Tonemap = "Tonemap";
     private const string Grade = "Post-processing grade";
     private const string Shadows = "Shadows";
@@ -103,6 +108,16 @@ public sealed record ZoneLighting
 
     /// <summary>The sky tint's blue channel.</summary>
     public float SkyB { get; init; } = 1f;
+
+    /// <summary>A multiplier on the cloud deck's and the cloud sprites' colour, red channel, so the
+    /// clouds can sit darker or bluer than the sky.</summary>
+    public float CloudR { get; init; } = 1f;
+
+    /// <summary>The cloud tint's green channel.</summary>
+    public float CloudG { get; init; } = 1f;
+
+    /// <summary>The cloud tint's blue channel.</summary>
+    public float CloudB { get; init; } = 1f;
 
     /// <summary>The AgX tonemap's exposure. Neutral by default.</summary>
     public float Exposure { get; init; } = 1f;

@@ -33,6 +33,14 @@ public sealed class WeatherRig
     /// <inheritdoc cref="VolumeFogDataParam"/>
     public const string VolumeFogCountParam = "csky_fog_volume_count";
 
+    /// <summary>The global the horizon dome multiplies in under Enhanced: the zone tune's sky tint, linear.
+    /// The fog colour takes the same tint, so the dome and the haze stay matched.</summary>
+    public const string SkyTintParam = "csky_tune_sky_tint";
+
+    /// <summary>The global the cloud deck and every cloud sprite multiply in under Enhanced: the zone
+    /// tune's cloud tint, linear.</summary>
+    public const string CloudTintParam = "csky_tune_cloud_tint";
+
     /// <summary>The D of a padding plane in <see cref="VolumeFogData"/>. With a zero normal, every
     /// point lies this deep inside it. So it neither cuts the ray nor thins the fog.</summary>
     public const float VolumeUnboundD = 1e9f;
@@ -343,6 +351,13 @@ public sealed class WeatherRig
     /// aircraft blocks (<c>Flight/Airframe/GroundShadowLaw</c>).</summary>
     public (Vector3 Diffuse, Vector3 Ambient) SunlightRgb { get; private set; } = DefaultSunlightRgb;
 
+    /// <summary>The <see cref="SkyTintParam"/> this rig last wrote, a mirror the suites read, since the
+    /// renderer reads no global back.</summary>
+    public Vector3 SkyTint { get; private set; } = Vector3.One;
+
+    /// <summary>The <see cref="CloudTintParam"/> this rig last wrote, a mirror like <see cref="SkyTint"/>.</summary>
+    public Vector3 CloudTint { get; private set; } = Vector3.One;
+
     /// <summary>The mission's weather zones, the lighting lab's choices; empty with no weather.json.</summary>
     public IReadOnlyList<string> ZoneNames => _weather?.ZoneNames ?? (IReadOnlyList<string>)Array.Empty<string>();
 
@@ -523,6 +538,18 @@ public sealed class WeatherRig
             RenderingServer.GlobalShaderParameterType.Sampler2D, default);
         RenderingServer.GlobalShaderParameterAdd(VolumeFogCountParam,
             RenderingServer.GlobalShaderParameterType.Int, 0);
+        RenderingServer.GlobalShaderParameterAdd(SkyTintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+        RenderingServer.GlobalShaderParameterAdd(CloudTintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+    }
+
+    /// <summary>A tint as the shaders multiply it in: linear, and exactly white for an untinted
+    /// <paramref name="r"/>, <paramref name="g"/>, <paramref name="b"/>, so an untuned frame is unchanged.</summary>
+    public static Vector3 LinearTint(float r, float g, float b)
+    {
+        if (r == 1f && g == 1f && b == 1f)
+            return Vector3.One;
+        var linear = new Color(r, g, b).SrgbToLinear();
+        return new Vector3(linear.R, linear.G, linear.B);
     }
 
     /// <summary>The RGBA float texels of <see cref="VolumeFogDataParam"/>, <paramref name="width"/>
@@ -1647,6 +1674,11 @@ public sealed class WeatherRig
         var sunColor = fog.SunColorDiffuse * new Color(tune.SunR, tune.SunG, tune.SunB);
         var ambientColor = fog.SunColorAmbient * new Color(tune.AmbientR, tune.AmbientG, tune.AmbientB);
         var skyColor = SkyTinted(fog.FogColor, tune);
+        // The dome takes the sky tint the fog colour does, or a far fogged surface stands out against it.
+        SkyTint = LinearTint(tune.SkyR, tune.SkyG, tune.SkyB);
+        CloudTint = LinearTint(tune.CloudR, tune.CloudG, tune.CloudB);
+        RenderingServer.GlobalShaderParameterSet(SkyTintParam, SkyTint);
+        RenderingServer.GlobalShaderParameterSet(CloudTintParam, CloudTint);
         ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
         foreach (var (sun, env) in _extraLighting)
             ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);

@@ -36,6 +36,8 @@ public sealed class LightingTableTests
         Assert.Equal((1.07f, 1.8f, 1f, 6f), (d.SunEnergy, d.AmbientEnergy, d.Exposure, d.White));
         Assert.Equal((0.05f, 1.25f, 0.12f, 0.17f, 0.42f, 0.8f), (d.ShadowBias, d.NormalBias, d.Split1, d.Split2, d.Split3, d.FadeStart));
         Assert.Equal((1.25f, 1.1f, 1.15f), (d.GradeAgxContrast, d.GradeContrast, d.GradeSaturation));
+        Assert.Equal((1f, 1f, 1f), (d.CloudR, d.CloudG, d.CloudB));
+        Assert.Equal((1f, 1f, 1f), (d.SkyR, d.SkyG, d.SkyB));
         Assert.False(d.TurnsSun);
         Assert.False(d.TunesEnvironment);
         Assert.True((d with { GradeSaturation = 1.3f }).TunesEnvironment);
@@ -54,6 +56,9 @@ public sealed class LightingTableTests
         Assert.Equal((1.25f, 1.2f, 1.3f), (table.For("C5", "M02", "zone1").GradeAgxContrast,
             table.For("C5", "M02", "zone1").GradeContrast, table.For("C5", "M02", "zone1").GradeSaturation));
         Assert.Equal(1.1f, table.For("C5", "IA1", "zone1").GradeContrast);
+        var tinted = LightingTable.Parse("""{ "C1": { "ZONE2": { "cloud_b": 0.5 }, "M01": { "ZONE2": { "cloud_r": 0.3 } } } }""");
+        Assert.Empty(tinted.Warnings);
+        Assert.Equal((0.3f, 1f, 0.5f), (tinted.For("C1", "M01", "zone2").CloudR, tinted.For("C1", "M01", "zone2").CloudG, tinted.For("C1", "M01", "zone2").CloudB));
         Assert.Equal(1.2f, table.For("C5", "M02", "zone1").Exposure);
         Assert.Equal(0.9f, table.For("C5", "M02", "zone1").SunEnergy);
         Assert.Equal(1.4f, table.For("C5", "IA1", "zone1").SunEnergy);
@@ -132,6 +137,9 @@ public sealed class LightingTableTests
         Assert.Equal(4f, LightingDebug.WithFields(ZoneLighting.Default, "exposure:40").Exposure);
         Assert.Equal("grade_saturation:0.8", LightingDebug.FilterTokens("grade_saturation:0.8"));
         Assert.Equal(0.8f, LightingDebug.WithFields(ZoneLighting.Default, "grade_saturation:0.8").GradeSaturation);
+        var clouds = LightingDebug.WithFields(ZoneLighting.Default, LightingDebug.FilterTokens("cloud_r:0.4,cloud_g:0.4,cloud_b:0.6"));
+        Assert.Equal((0.4f, 0.4f, 0.6f), (clouds.CloudR, clouds.CloudG, clouds.CloudB));
+        Assert.Equal("cloud_r:0.40,cloud_g:0.40,cloud_b:0.60", clouds.Describe());
     }
 
     private static List<string> Keys(JsonObject o)

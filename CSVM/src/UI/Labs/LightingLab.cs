@@ -118,7 +118,13 @@ public sealed partial class LightingLab : Node
             PickZone(zone);
         if (LightingDebug.SetsFields(debug))
         {
-            Edit(LightingDebug.WithFields(Edited, debug));
+            // With no zone named, every zone takes the fields. The camera's first state edge may move
+            // the world off the zone shown here before the capture.
+            foreach (string each in LightingDebug.Word(debug, "zone") != null ? new[] { ShownZone } : _weather.ZoneNames)
+            {
+                _edits[each] = LightingDebug.WithFields(EditOf(each), debug);
+                _weather.SetLighting(each, _edits[each]);
+            }
             Commit();
         }
         if (LightingDebug.Has(debug, "off"))

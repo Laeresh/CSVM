@@ -370,6 +370,11 @@ public sealed class SceneBuilder
     /// before building: it keys the shader.</summary>
     internal bool NoShadowReceive;
 
+    /// <summary>The lighting tune's tint that bias surfaces built while it is set take under Enhanced.
+    /// It is the dome's sky tint or the cloud deck's cloud tint. <c>WorldBuilder</c> sets it around those builds.
+    /// Set before building: it keys the shader, the material and the mesh.</summary>
+    internal SurfaceTint Tint;
+
     /// <summary>Polygons this builder draws nothing for, by identity (<see cref="CockpitPlate"/>
     /// on the stereo interior's builder). Each one's surface group is still formed, so every later
     /// group keeps the rank, and so the depth bias, it builds with otherwise. Null omits nothing.
@@ -539,14 +544,14 @@ void fragment() {
     // about every one of them: scroll rate, ClampUv, NoClutter, the model's own Lit/Fogged render
     // flags, and Pass. Dropping one hands a cached material back at the wrong setting.
     // Non-scrolling surfaces all key on (0,0), so the common path's cache behaviour is unchanged.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade), Material> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint), Material> _materialCache = new();
     // Keyed by (model index, force-double-sided, force-lit, clutter-fade): every override is baked
     // into the built surfaces (sidedness into the geometry groups, `lit` and the fade into which
     // material/shader a surface gets), so a forced build must not be handed back for the same
     // model referenced normally. No model in this install is referenced both ways (the deck's 144
     // tiles have exclusive model indices), so this is defence. `ForceLit` is the deck-underside
     // exception (`WorldBuilder.Add`); `ClutterFade` is ClutterBuilder's 3D-decoration build.
-    private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
+    private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade, SurfaceTint Tint), ArrayMesh?> _meshCache = new();
     // A model pack replacement as this builder draws it: the shared import's surfaces under this
     // builder's materials. The model index is in the key because its render flags reach the materials.
     private readonly Dictionary<(ArrayMesh Import, int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh> _replacementCache = new();
@@ -555,7 +560,7 @@ void fragment() {
     private readonly Dictionary<(Material? Source, int Rank, bool DoubleSided, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, bool ClutterFade), Material> _packMaterialCache = new();
     // The ground-layer twin of a blended _materialCache entry, under the same key. It is a twin, not
     // a key component, so no opaque or scissored material is ever split in two.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade), Material> _groundLayerCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint), Material> _groundLayerCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     // A built mesh's painted shadow decal surfaces, split off it (ShadowDecalTextures).
     private readonly Dictionary<ArrayMesh, ArrayMesh> _decalMeshes = new();
@@ -640,6 +645,10 @@ void fragment() {
         BlendCard = 4,
         ScissorCard = 8,
     }
+
+    /// <summary>Which lighting-tune tint a built surface takes under Enhanced (<see cref="Tint"/>). The
+    /// dome takes <c>csky_tune_sky_tint</c> and the deck <c>csky_tune_cloud_tint</c>.</summary>
+    public enum SurfaceTint { None, Sky, Cloud }
 
     // The rendering-side spelling of ClassifyBillboard's two cylindrical cases: the mesh
     // spins about one fixed world axis to face the camera on the other two, so a tree card or
@@ -1946,10 +1955,10 @@ void light() {{
     private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
         bool clutterFade = false)
     {
-        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit, clutterFade), out var cached))
+        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit, clutterFade, Tint), out var cached))
             return cached;
         var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit, clutterFade);
-        _meshCache[(meshIndex, forceDoubleSided, forceLit, clutterFade)] = mesh;
+        _meshCache[(meshIndex, forceDoubleSided, forceLit, clutterFade, Tint)] = mesh;
         return mesh;
     }
 
@@ -2290,7 +2299,7 @@ void light() {{
         UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool groundLayer = false)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass, clutterFade);
+        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass, clutterFade, Tint);
         if (!_materialCache.TryGetValue(key, out var mat))
         {
             mat = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
@@ -2505,7 +2514,7 @@ void light() {{
 
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
-    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
+    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. 2^27 and up the tint. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage, 262144 race ghost, 524288 base sea. Then
     // 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow, 33554432 surf ring, 67108864 painted coast.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
@@ -2531,6 +2540,8 @@ void light() {{
         bool underInterior = xrInterior && XrUnderInterior;
         // The stereo text sets the ghost's dither at the surface's depth; a launch's path never changes.
         bool stereoGhost = raceGhost && StereoFacing.Live;
+        // Only the fullbright or world-lit arms of the dome and the deck take a tune's tint.
+        var tint = shaded ? SurfaceTint.None : Tint;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
@@ -2538,7 +2549,8 @@ void light() {{
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
             | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
-            | (NoShadowReceive ? 16777216 : 0) | (oceanSurf ? 33554432 : 0) | (paintedCoast ? 67108864 : 0);
+            | (NoShadowReceive ? 16777216 : 0) | (oceanSurf ? 33554432 : 0) | (paintedCoast ? 67108864 : 0)
+            | ((int)tint << 27);
         bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
@@ -2546,7 +2558,7 @@ void light() {{
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
                 debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
-                noShadowReceive, oceanSurf, paintedCoast),
+                noShadowReceive, oceanSurf, paintedCoast, tint),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2561,7 +2573,7 @@ void light() {{
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
         bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
-        bool noShadowReceive = false, bool oceanSurf = false, bool paintedCoast = false)
+        bool noShadowReceive = false, bool oceanSurf = false, bool paintedCoast = false, SurfaceTint tint = SurfaceTint.None)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2814,6 +2826,9 @@ void fragment() {{");
             sb.AppendLine("    base_col *= albedo_color;");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
+        // The lighting tune's sky or cloud tint, before the fog, so a distant tinted surface still fades to the fog colour.
+        if (tint != SurfaceTint.None && GraphicsMode.Enhanced)
+            sb.AppendLine(tint == SurfaceTint.Sky ? "    ALBEDO *= csky_tune_sky_tint;" : "    ALBEDO *= csky_tune_cloud_tint;");
         // The footprint is taken in the gate's uniform flow, never under the swash's own branches. A ramp
         // still draws past the coastline, so its film fades out there (CoastSwashCarry) instead of stopping.
         if (swash)
@@ -3029,6 +3044,9 @@ void fragment() {{
         string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light_at(CAMERA_POSITION_WORLD)";
         if (glow && GraphicsMode.Enhanced)
             lightTerm = $"col.rgb * {EmissiveLiteral}";
+        // Every non-glow billboard is a placed cloud sprite, which takes the lighting tune's cloud tint.
+        else if (GraphicsMode.Enhanced)
+            lightTerm += " * csky_tune_cloud_tint";
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({lightTerm}, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);"
             : $"    ALBEDO = {lightTerm};");
