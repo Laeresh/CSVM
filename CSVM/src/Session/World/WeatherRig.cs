@@ -558,6 +558,11 @@ public sealed class WeatherRig
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
 
+    /// <summary>Drops a pair <see cref="RegisterExtraLighting"/> took, before its pass is freed, so
+    /// a later zone change writes no freed light.</summary>
+    public void UnregisterExtraLighting(DirectionalLight3D sun)
+        => _extraLighting.RemoveAll(e => ReferenceEquals(e.Sun, sun));
+
     /// <summary>A live graphics-mode switch: write the current zone again, since both the fog range
     /// and which lighting arm drives the sun and ambient depend on the mode. A rig with no zone
     /// written yet has nothing to redo.</summary>

@@ -3151,8 +3151,8 @@ public partial class GameSession : Node3D
     // One interior render pass per rig, on that player's own HUD parent. Splitscreen therefore gets
     // a pass per pane rather than one for the window (--no-cockpit-pass and the stereo path build
     // none). Built after the rigs, since the interior it moves is the plane build's and the sun and
-    // environment it copies are the session's. ⚠ An airframe swap rebuilds the interior and leaves
-    // this pass holding the old node. It hides itself rather than drawing a freed one (Sync).
+    // environment it copies are the session's. An airframe swap rebuilds the interior, so the swap
+    // replaces the pass as well (ReseatCockpitPass).
     private void BuildCockpitPasses()
     {
         if (!Flight.Hud.CockpitOverlay.InteriorInPass(_spec.CockpitPass, Flight.Hud.XrCockpit.Live))
@@ -3160,17 +3160,32 @@ public partial class GameSession : Node3D
             return;
         }
         foreach (var rig in _rigs)
-        {
-            if (rig.Controller is not { } controller)
-                continue;
-            var overlay = controller.Dressing.BuildPass(rig.HudParent, _sun, _env);
-            // The overlay's cloned sun/env carry the zone live at its build; registering them
-            // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
-            // since the faithful path's aircraft light moves per zone as well.
-            if (overlay?.Sun != null)
-                _sky?.Weather?.RegisterExtraLighting(overlay.Sun, overlay.Env);
-        }
+            BuildCockpitPass(rig);
         Log.Info("flight", $"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
+    }
+
+    private void BuildCockpitPass(PlayerRig rig)
+    {
+        if (rig.Controller is not { } controller)
+            return;
+        var overlay = controller.Dressing.BuildPass(rig.HudParent, _sun, _env);
+        // The overlay's cloned sun/env carry the zone live at its build; registering them
+        // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
+        // since the faithful path's aircraft light moves per zone as well.
+        if (overlay?.Sun != null)
+            _sky?.Weather?.RegisterExtraLighting(overlay.Sun, overlay.Env);
+    }
+
+    // #293: the outgoing pass holds the old interior, which no frame syncs again, so it stays drawn
+    // over the new airframe's interior. A seat that had no pass (stereo, a remote copy) gets none.
+    private void ReseatCockpitPass(PlayerRig rig, Flight.Hud.CockpitOverlay? outgoing)
+    {
+        if (outgoing == null || !IsInstanceValid(outgoing))
+            return;
+        if (outgoing.Sun != null)
+            _sky?.Weather?.UnregisterExtraLighting(outgoing.Sun);
+        Drop(outgoing);
+        BuildCockpitPass(rig);
     }
 
     // A board menu's Restart item. An Instant Action or campaign mission is REBUILT by the
@@ -3266,9 +3281,10 @@ public partial class GameSession : Node3D
             return default;
         }
 
+        var owner = order.Owner ?? _rigs[0];
+        var outgoingPass = owner.Controller?.Dressing.Pass;
         try
         {
-            var owner = order.Owner ?? _rigs[0];
             var result = _flightRoster.RunSwap(owner, order,
                 AirframeHandover.Resolves(_spec.Chapter, _spec.Mission));
             _wire.RewireSeat(owner, SkipSwapRewire);
@@ -3279,6 +3295,10 @@ public partial class GameSession : Node3D
         {
             Log.Warn("flight", $"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return default;
+        }
+        finally
+        {
+            ReseatCockpitPass(owner, outgoingPass);
         }
     }
 
@@ -3298,6 +3318,7 @@ public partial class GameSession : Node3D
             return;
         }
 
+        var outgoingPass = _rigs[0].Controller?.Dressing.Pass;
         try
         {
             var order = new AirframeSwapOrder(new AirframeSwapCode(0, string.Empty, planeNode), null, _rigs[0]);
@@ -3307,6 +3328,10 @@ public partial class GameSession : Node3D
         catch (Exception e)
         {
             Log.Warn("flight", $"xr tune: swap to '{planeNode}' failed: {e.Message}");
+        }
+        finally
+        {
+            ReseatCockpitPass(_rigs[0], outgoingPass);
         }
     }
 
