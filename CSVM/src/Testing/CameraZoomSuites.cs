@@ -114,17 +114,28 @@ internal static class CameraZoomSuites
             $"a settled zoom ({cam.ZoomAxis}) writes nothing ({store.Load().CameraZoom})");
         cam.CycleCockpitViews();
         cam.SelectChase();
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"a switch to the cockpit and back resets it ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && cam.ZoomShown == CameraZoomMemory.NearEnd,
+            $"a switch to the cockpit and back snaps it to the near end, shown value too, as 0042c33d writes both ({cam.ZoomAxis}, shown {cam.ZoomShown})");
         ZoomOut(cam, held);
         cam.EnterFlyby();
         cam.SelectChase();
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"so does the flyby and back ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && cam.ZoomShown == CameraZoomMemory.NearEnd,
+            $"so does the flyby and back ({cam.ZoomAxis}, shown {cam.ZoomShown})");
         ZoomOut(cam, held);
+        float shown = cam.ZoomShown;
         Centre(cam);
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"and the centre key in free-look ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && shown > 0f && cam.ZoomShown == shown,
+            $"the centre key in free-look resets the target alone, as 0042d566 writes, so the shown value eases after it ({cam.ZoomAxis}, shown {cam.ZoomShown})");
+        ZoomOut(cam, held);
+        float inChase = cam.ZoomAxis;
+        cam.ResetToChase();
+        ctx.Check(cam.ZoomAxis == inChase && inChase > 0.4f,
+            $"a death with chase already selected keeps it, since FUN_0042c280 returns at once on the mode it holds ({cam.ZoomAxis} of {inChase})");
+        cam.CycleCockpitViews();
         ZoomOut(cam, held);
         cam.ResetToChase();
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"and the death camera's return ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && cam.ZoomShown == CameraZoomMemory.NearEnd,
+            $"and a death in the cockpit snaps it with the return to the chase view ({cam.ZoomAxis}, shown {cam.ZoomShown})");
 
         var saved = store.Load();
         saved.CameraZoom = 0.5f;

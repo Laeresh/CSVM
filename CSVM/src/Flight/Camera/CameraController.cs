@@ -286,6 +286,9 @@ public sealed class CameraController
     /// <summary>The zoom axis's target, 0 at the near end to 1, for a suite to read the axis by.</summary>
     public float ZoomAxis => _zoomTarget;
 
+    /// <summary>The zoom axis's shown value, which eases after <see cref="ZoomAxis"/>.</summary>
+    public float ZoomShown => _zoomShown;
+
     // Whether the zoom outlives the original's three resets (CameraZoomMemory, the Keep Camera Zoom box).
     private bool KeepsZoom => _zoomMemory.Keep;
 
@@ -375,14 +378,15 @@ public sealed class CameraController
     public void ResetToChase()
     {
         // No cut counted: a static camera holds the frame now, and the respawn's Snap is the cut.
+        bool changes = ViewMode != PilotViewMode.Chase || FlybyActive;
         FlybyActive = false;
         ViewMode = _headset != null ? _openingView : PilotViewMode.Chase;
         Head.Reset();
-        // Read as the chase mode entered from the static camera that held the frame; an open
-        // question in docs/org/cameraViews.md.
-        if (ViewMode == PilotViewMode.Chase)
+        // FUN_0042c280 returns at once on the mode it already holds (0042c28f), so a pilot shot down
+        // with chase selected keeps the zoom. The flyby is the original's mode 9, a change.
+        if (ViewMode == PilotViewMode.Chase && changes)
         {
-            ResetZoomUnlessKept();
+            ResetZoomUnlessKept(snap: true);
         }
     }
 
@@ -416,7 +420,7 @@ public sealed class CameraController
             // The original's centre slot zeroes the zoom with the angles, in free-look alone.
             if (input.Center && Head.Mode == LookMode.FreeLook)
             {
-                ResetZoomUnlessKept();
+                ResetZoomUnlessKept(snap: false);
             }
         }
     }
@@ -964,7 +968,7 @@ public sealed class CameraController
             Shot++;
             if (mode == PilotViewMode.Chase)
             {
-                ResetZoomUnlessKept();
+                ResetZoomUnlessKept(snap: true);
             }
         }
 
@@ -973,12 +977,19 @@ public sealed class CameraController
     }
 
     // The original's reset of the zoom axis to its near end, skipped while the option keeps the zoom.
-    // The target alone is written, so the shown trim eases in; unverified (docs/org/cameraViews.md).
-    private void ResetZoomUnlessKept()
+    // A mode change writes the shown value too, so it snaps (0042c33d). The centre key writes the
+    // target alone (0042d566), so the shown trim eases in.
+    private void ResetZoomUnlessKept(bool snap)
     {
-        if (!KeepsZoom)
+        if (KeepsZoom)
         {
-            _zoomTarget = CameraZoomMemory.NearEnd;
+            return;
+        }
+
+        _zoomTarget = CameraZoomMemory.NearEnd;
+        if (snap)
+        {
+            _zoomShown = CameraZoomMemory.NearEnd;
         }
     }
 
