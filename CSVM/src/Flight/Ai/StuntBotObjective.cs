@@ -178,6 +178,11 @@ public sealed class StuntBotObjective
     /// refused one. Null shuts none. StuntRaceBots shuts an end that cannot see a structure to shoot.</summary>
     public Func<DangerZoneRibbon, bool, bool>? Shut { get; set; }
 
+    /// <summary>Whether the world blocks the straight between two points. A bot joins a course entry's
+    /// line only where its straight to the opening is clear, since the rail it joins has no crash
+    /// check. Null blocks nothing.</summary>
+    public Func<Vector3, Vector3, bool>? Blocked { get; set; }
+
     /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
     public float CruiseThrottle => Tier switch
@@ -345,7 +350,7 @@ public sealed class StuntBotObjective
         }
 
         var start = InCone(entry, into, along, at, velocity) ? StuntBotStart.Approach
-            : CanJoin(_route, at, velocity) ? StuntBotStart.Join
+            : CanJoin(_route, at, velocity, Blocked) ? StuntBotStart.Join
             : StuntBotStart.None;
         if (start != StuntBotStart.None)
         {
@@ -387,8 +392,9 @@ public sealed class StuntBotObjective
     }
 
     // A course entry's line, the bot within lock range of it and JoinRailM or more short of its opening.
-    // It must track along the line inside the cone's angle. The rail can then take it at once.
-    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity)
+    // It must track along the line inside the cone's angle, its straight to the opening clear. The rail
+    // can then take it at once.
+    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity, Func<Vector3, Vector3, bool>? blocked)
     {
         var into = Into(line, false);
         var track = Flat(velocity);
@@ -399,7 +405,7 @@ public sealed class StuntBotObjective
         }
 
         var (segment, t) = line.NearestTo(at, JoinSearchStepM);
-        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM;
+        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM && blocked?.Invoke(at, opening) != true;
     }
 
     // Short of the entry inside the cone's reach and angle, and tracking toward it.

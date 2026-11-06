@@ -112,13 +112,19 @@ public sealed class DangerZoneRibbon
         return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty };
     }
 
-    /// <summary>A course sequence entry's straight line: from <paramref name="before"/> metres short of
+    /// <summary>A course sequence entry's line: from <paramref name="before"/> metres short of
     /// <paramref name="opening"/> along <paramref name="way"/> to <paramref name="after"/> metres past it,
-    /// <see cref="IsCourseEntry"/> and moved by <paramref name="drift"/>.</summary>
+    /// its start <paramref name="leadRise"/> and its end <paramref name="runRise"/> metres above level.
+    /// It is <see cref="IsCourseEntry"/> and moved by <paramref name="drift"/>.</summary>
     public static DangerZoneRibbon ForEntry(string name, int index, Vector3 opening, Vector3 way, float before, float after,
-        Func<Vector3> drift)
+        Func<Vector3> drift, float leadRise = 0f, float runRise = 0f)
     {
-        var line = FromPolyline(name, index, new[] { opening - (way * before), opening, opening + (way * after) });
+        var line = FromPolyline(name, index, new[]
+        {
+            opening - (way * before) + (Vector3.Up * leadRise),
+            opening,
+            opening + (way * after) + (Vector3.Up * runRise),
+        });
         return new DangerZoneRibbon(name, index, line.Segments, line.Lanes) { IsCourseEntry = true, Drift = drift };
     }
 
