@@ -203,14 +203,14 @@ internal sealed class LiveSettings
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
         // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
-        SpyglassScaleSetting.ApplySaved(spec.Det);
+        SpyglassScaleSetting.ApplySaved(spec.Det, options);
         // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.
         // Under --det the apply leaves it alone, so a pick there never overwrites the panes' F2 steps.
-        HudModeSetting.ApplyAfterOptions(spec.Det);
+        HudModeSetting.ApplyAfterOptions(spec.Det, options);
         // The panes follow the layout each frame. Under --det the apply leaves it alone, keeping the editor's pick.
-        HudLayoutSetting.ApplyAfterOptions(spec.Det);
+        HudLayoutSetting.ApplyAfterOptions(spec.Det, options);
         // Each camera reads the switch live, so a pick over the pause sheet takes the flying panes too.
-        CameraZoomMemory.ApplySaved(spec.Det);
+        CameraZoomMemory.ApplySaved(spec.Det, options);
         // Each word setting resolved again with the applied word in the saved slot, so its flag still
         // beats it, and a headset's profile too.
         WordSettings.ResolveAll(Flags(spec), applied.Words, spec.Det);

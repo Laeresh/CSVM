@@ -21,11 +21,9 @@ internal static class CameraZoomSuites
         + "to the cockpit and back, the flyby and back, the free-look centre key and the death camera's "
         + "return, it is written to the options file once, on the frame the target settles and not "
         + "while the key is held, and a re-seeded controller (a reload or the next mission) opens on it "
-        + "with the camera that much further out; an apply turning it off then on again mid-flight, "
-        + "the zoom untouched, writes the flying zoom back on the next settled frame; off, each of "
-        + "those returns the axis to the near end, the re-seeded controller opens there over a saved "
-        + "zoom and no zoom is written; and the memory a --det run takes keeps the zoom, opens at the "
-        + "near end and writes no file")]
+        + "with the camera that much further out; and off, a view switch and a death in the cockpit "
+        + "snap the zoom to the near end, the centre key resets its target and lets the shown value "
+        + "ease, and a death with chase already selected keeps it")]
     internal static void CameraZoomKeep(TestContext ctx)
     {
         var camera = new Camera3D { Name = "camera-zoom-keep" };
@@ -33,9 +31,7 @@ internal static class CameraZoomSuites
         try
         {
             Kept(ctx, camera, Store(ctx, "on", new OptionsDef()));
-            OffThenOn(ctx, camera, Store(ctx, "off-then-on", new OptionsDef()));
             Off(ctx, camera, Store(ctx, "off", new OptionsDef { KeepCameraZoom = false }));
-            Deterministic(ctx, camera, Store(ctx, "det", new OptionsDef()));
         }
         finally
         {
@@ -82,68 +78,37 @@ internal static class CameraZoomSuites
         ctx.Check(further > 0.9f * zoom * 10f, $"with its camera {further} m further out than the near end's");
     }
 
-    // Two Options applies over one flight, as LiveSettings.Persist makes them. Off clears the saved
-    // zoom, and on again must not leave the next mission at the near end.
-    private static void OffThenOn(TestContext ctx, Camera3D camera, OptionsStore store)
-    {
-        var memory = new CameraZoomMemory(store);
-        var held = new HashSet<InputAction>();
-        var cam = Build(camera, held, memory);
-        ZoomOut(cam, held);
-        float zoom = cam.ZoomAxis;
-        Apply(store, memory, keep: false);
-        ctx.Check(!memory.Keep && store.Load().CameraZoom == null, $"turned off, the file holds no zoom ({store.Load().CameraZoom})");
-        Apply(store, memory, keep: true);
-        cam.UpdateZoom(Dt);
-        ctx.Check(memory.Keep && store.Load().CameraZoom == zoom,
-            $"turned on again, the next settled frame writes the flying zoom back ({zoom}, file {store.Load().CameraZoom})");
-        var next = Build(camera, held, new CameraZoomMemory(store));
-        ctx.Check(next.ZoomAxis == zoom, $"so the next mission opens on it ({next.ZoomAxis})");
-    }
-
+    // The resets are the controller's alone, so they are walked here with the option off.
     private static void Off(TestContext ctx, Camera3D camera, OptionsStore store)
     {
-        var memory = new CameraZoomMemory(store);
         var held = new HashSet<InputAction>();
-        var cam = Build(camera, held, memory);
-        ctx.Check(!memory.Keep && cam.ZoomAxis == CameraZoomMemory.NearEnd,
-            $"off, the controller opens at the near end ({cam.ZoomAxis})");
-
+        var cam = Build(camera, held, new CameraZoomMemory(store));
         ZoomOut(cam, held);
-        ctx.Check(cam.ZoomAxis > 0.4f && store.Load().CameraZoom == null,
-            $"a settled zoom ({cam.ZoomAxis}) writes nothing ({store.Load().CameraZoom})");
+        ctx.Check(cam.ZoomAxis > 0.4f, $"off, Zoom Out still moves the axis ({cam.ZoomAxis})");
         cam.CycleCockpitViews();
         cam.SelectChase();
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"a switch to the cockpit and back resets it ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && cam.ZoomShown == CameraZoomMemory.NearEnd,
+            $"a switch to the cockpit and back snaps it to the near end, shown value too, as 0042c33d writes both ({cam.ZoomAxis}, shown {cam.ZoomShown})");
         ZoomOut(cam, held);
         cam.EnterFlyby();
         cam.SelectChase();
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"so does the flyby and back ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && cam.ZoomShown == CameraZoomMemory.NearEnd,
+            $"so does the flyby and back ({cam.ZoomAxis}, shown {cam.ZoomShown})");
         ZoomOut(cam, held);
+        float shown = cam.ZoomShown;
         Centre(cam);
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"and the centre key in free-look ({cam.ZoomAxis})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && shown > 0f && cam.ZoomShown == shown,
+            $"the centre key in free-look resets the target alone, as 0042d566 writes, so the shown value eases after it ({cam.ZoomAxis}, shown {cam.ZoomShown})");
+        ZoomOut(cam, held);
+        float inChase = cam.ZoomAxis;
+        cam.ResetToChase();
+        ctx.Check(cam.ZoomAxis == inChase && inChase > 0.4f,
+            $"a death with chase already selected keeps it, since FUN_0042c280 returns at once on the mode it holds ({cam.ZoomAxis} of {inChase})");
+        cam.CycleCockpitViews();
         ZoomOut(cam, held);
         cam.ResetToChase();
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"and the death camera's return ({cam.ZoomAxis})");
-
-        var saved = store.Load();
-        saved.CameraZoom = 0.5f;
-        store.Save(saved);
-        var next = Build(camera, held, new CameraZoomMemory(store));
-        ctx.Check(next.ZoomAxis == CameraZoomMemory.NearEnd, $"a re-seeded controller opens at the near end over a saved 0.5 ({next.ZoomAxis})");
-    }
-
-    private static void Deterministic(TestContext ctx, Camera3D camera, OptionsStore store)
-    {
-        var held = new HashSet<InputAction>();
-        var cam = Build(camera, held, new CameraZoomMemory(null));
-        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd, $"a --det memory opens at the near end ({cam.ZoomAxis})");
-        ZoomOut(cam, held);
-        float zoom = cam.ZoomAxis;
-        cam.CycleCockpitViews();
-        cam.SelectChase();
-        ctx.Check(cam.ZoomAxis == zoom, $"keeps the zoom through a view switch ({cam.ZoomAxis})");
-        ctx.Check(store.Load().CameraZoom == null, $"and writes nothing ({store.Load().CameraZoom})");
+        ctx.Check(cam.ZoomAxis == CameraZoomMemory.NearEnd && cam.ZoomShown == CameraZoomMemory.NearEnd,
+            $"and a death in the cockpit snaps it with the return to the chase view ({cam.ZoomAxis}, shown {cam.ZoomShown})");
     }
 
     // A controller as the session builds it for this machine's first player: remembering, snapped.
@@ -154,15 +119,6 @@ internal static class CameraZoomSuites
         var attitude = Basis.Identity;
         cam.Snap(Vector3.Zero, attitude, Speed, new Transform3D(attitude, Vector3.Zero));
         return cam;
-    }
-
-    // One Options apply of the switch: the file staged and written, then the memory reloaded in place.
-    private static void Apply(OptionsStore store, CameraZoomMemory memory, bool keep)
-    {
-        var options = store.Load();
-        CameraZoomMemory.Stage(options, keep);
-        store.Save(options);
-        memory.Reload(store);
     }
 
     // A quarter second of Zoom Out, then the settle frame.

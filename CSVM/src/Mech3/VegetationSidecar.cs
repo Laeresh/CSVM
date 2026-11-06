@@ -305,6 +305,25 @@ public sealed class VegetationSidecar
         }
     }
 
+    /// <summary>The object a lab's Save rewrites: <paramref name="existing"/> through <see cref="ParseWhole"/>,
+    /// or an empty object when there is no text. Throws <see cref="InvalidDataException"/> naming the
+    /// <paramref name="file"/> when the text is not a JSON object, so a Save never replaces a file it cannot read.</summary>
+    public static JsonObject ObjectToRewrite(string? existing, string file)
+    {
+        if (string.IsNullOrWhiteSpace(existing))
+            return new JsonObject();
+
+        try
+        {
+            return ParseWhole(existing) as JsonObject
+                ?? throw new InvalidDataException($"the {file} file is not a JSON object, so Save leaves it as it is");
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
+        {
+            throw new InvalidDataException($"the {file} file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
+        }
+    }
+
     /// <summary>The file's text with <paramref name="chapter"/>'s entry replaced by <paramref name="entry"/>,
     /// each kind writing only its nonzero fields. Every other key keeps its place and value; a chapter the
     /// file lacks is appended. Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is
@@ -312,23 +331,7 @@ public sealed class VegetationSidecar
     public static string WithEntry(string? existing, string chapter, VegetationEntry entry)
     {
         string name = Canonical(chapter) ?? throw new ArgumentException($"'{chapter}' is not a vegetation chapter", nameof(chapter));
-        JsonObject root;
-        if (string.IsNullOrWhiteSpace(existing))
-        {
-            root = new JsonObject();
-        }
-        else
-        {
-            try
-            {
-                root = ParseWhole(existing) as JsonObject
-                    ?? throw new InvalidDataException("the vegetation file is not a JSON object, so Save leaves it as it is");
-            }
-            catch (Exception ex) when (ex is JsonException or ArgumentException)
-            {
-                throw new InvalidDataException($"the vegetation file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
-            }
-        }
+        var root = ObjectToRewrite(existing, "vegetation");
 
         // Rebuilt key by key, since a JsonObject cannot replace a member in its place.
         var rebuilt = new JsonObject();

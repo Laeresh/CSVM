@@ -107,13 +107,9 @@ internal static class EnhancedSoundSuites
                 }
             }
 
-            var originalIdle = EngineAudioCurves.Engine(stats, idle, 1f, true);
-            var originalFull = EngineAudioCurves.Engine(stats, full, 1f, true);
+            // The tuning's wider span against the decoded curve is EnhancedSoundTests'.
             var enhancedIdle = EngineAudioCurves.Engine(stats, idle, 1f, true, tuning);
             var enhancedFull = EngineAudioCurves.Engine(stats, full, 1f, true, tuning);
-            ctx.Check(enhancedFull.Pitch - enhancedIdle.Pitch > originalFull.Pitch - originalIdle.Pitch
-                      && enhancedIdle.Volume < enhancedFull.Volume,
-                $"Enhanced Sound's idle and full throttle are further apart: pitch {enhancedIdle.Pitch:0.00}..{enhancedFull.Pitch:0.00} against {originalIdle.Pitch:0.00}..{originalFull.Pitch:0.00}, gain {enhancedIdle.Volume:0.00}..{enhancedFull.Volume:0.00} against {originalIdle.Volume:0.00}..{originalFull.Volume:0.00}");
 
             // The cockpit loop with its own option off: flat under Original Sound, the remix's curve
             // under Enhanced Sound, which pitches every view.

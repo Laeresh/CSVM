@@ -247,7 +247,7 @@ public sealed class OptionsDef
     /// <summary>The Voice level, on the same range as <see cref="AudioMusic"/>.</summary>
     public int? AudioVoice { get; set; }
 
-    /// <summary>The sound mode, one of <see cref="SoundModeSetting.Words"/>. Null is "never set" and
+    /// <summary>The sound mode, <see cref="SoundModeSetting.Original"/> or <see cref="SoundModeSetting.Enhanced"/>. Null is "never set" and
     /// reads as Enhanced Sound.</summary>
     public string? SoundMode { get; set; }
 

@@ -41,10 +41,8 @@ internal static class HudLayoutSuites
         "the HUD layout on live panes of seven shapes cut from a 16:9 and a 32:9 window (single 16:9, "
         + "ultrawide 21:9, 2P stacked, 4P grid; single 32:9, 2P side by side and 4P grid on 32:9): a pane given Original hands no layout to "
         + "its dials, tape and plate and the tape stands where a pane never given a layout puts it; "
-        + "Sides hands its layout to all three and puts every element whole inside the pane and apart from "
-        + "the rest, the columns at the pane's edges at the original's height, nothing over the "
-        + "bottom centre, the tape where the original puts it; a custom placement anchored to the pane's right "
-        + "edge keeps its margin there on every shape, past the reading box on a wider pane; and the cockpit view and the text block are untouched")]
+        + "Sides hands its layout to all three and the live tape stands where the layout and the original "
+        + "put it; a custom layout reaches the dials; and the cockpit view and the text block are untouched")]
     internal static void HudLayoutPlacementSuite(TestContext ctx)
     {
         var root = ctx.Host.GetTree().Root;
@@ -80,6 +78,25 @@ internal static class HudLayoutSuites
         {
             root.Size = before;
         }
+    }
+
+    /// <summary>Bare HUD controls with no game data, for the HUD suites. They stand in for the textured
+    /// dials, tape, plate, pipper and marker HUD where a suite reads only placement or visibility.
+    /// Processing is off, so no bare control steps itself; a suite steps the one it reads.</summary>
+    internal static FlightHud AttachBare(FlightHud hud, CanvasLayer canvas)
+    {
+        hud.Compass = new CompassTape { ProcessMode = Node.ProcessModeEnum.Disabled };
+        hud.Gauges = new GaugeCluster { ProcessMode = Node.ProcessModeEnum.Disabled };
+        hud.ThrottlePlate = ThrottlePlate.Build();
+        if (hud.ThrottlePlate != null)
+        {
+            hud.ThrottlePlate.ProcessMode = Node.ProcessModeEnum.Disabled;
+        }
+
+        hud.Reticle = new ImpactReticle { ProcessMode = Node.ProcessModeEnum.Disabled };
+        hud.TargetHud = new TargetHud { ProcessMode = Node.ProcessModeEnum.Disabled };
+        hud.Attach(canvas, canvas, null, null);
+        return hud;
     }
 
     private static void Shapes(TestContext ctx, Vector2I window)
@@ -195,39 +212,18 @@ internal static class HudLayoutSuites
         ctx.Check(hud.Gauges!.Layout == null && tape.Layout == null && hud.ThrottlePlate!.Layout == null
             && tape.Position == plain,
             $"{name} {pane}: Original hands no layout on and the tape stands where it always did ({tape.Position} vs {plain})");
-        ctx.Check(HudLayout.Elements.All(e => HudLayoutPlacement.Shift(e, null, box, pane, scale) == Vector2.Zero),
-            $"…and moves no element by any amount");
 
+        // Each layout's placement math is HudLayoutTests'. Here the live controls take the layout,
+        // and the tape lands where the layout puts it on this pane's own frame.
         hud.SetHudLayout(HudLayoutPlacement.Sides);
         StepTape(tape);
-        var rects = HudLayout.Elements.ToDictionary(e => e, e => HudLayoutPlacement.Place(e, HudLayoutPlacement.Sides, box, pane, scale));
+        var sidesTape = HudLayoutPlacement.Place(HudElement.CompassTape, HudLayoutPlacement.Sides, box, pane, scale).Position;
         ctx.Check(hud.Gauges!.Layout == HudLayoutPlacement.Sides && hud.ThrottlePlate!.Layout == HudLayoutPlacement.Sides
-            && tape.Position.IsEqualApprox(rects[HudElement.CompassTape].Position),
-            $"{name}: Sides reaches all three, the live tape at {tape.Position} where the layout puts it ({rects[HudElement.CompassTape].Position})");
-        var whole = new Rect2(Vector2.Zero, pane);
-        ctx.Check(rects.Values.All(whole.Encloses),
-            $"…every element whole inside the pane ({Describe(rects)})");
-        ctx.Check(rects.All(a => rects.All(b => a.Key == b.Key || !a.Value.Intersects(b.Value))),
-            $"…and apart from the rest");
-        float margin = HudLayoutPlacement.SidesMargin * scale;
-        var left = rects[HudElement.LeftDials];
-        var right = rects[HudElement.RightDials];
-        float originalY = HudLayoutPlacement.OriginalRect(HudElement.LeftDials, box, pane, scale).Position.Y;
-        ctx.Check(Mathf.IsEqualApprox(left.Position.X, margin) && Mathf.IsEqualApprox(right.End.X, pane.X - margin)
-            && Mathf.Abs(left.Position.Y - originalY) < 0.5f && Mathf.Abs(right.Position.Y - originalY) < 0.5f,
-            $"…the columns at the pane's edges ({pane}) at the original's height {originalY} ({left}, {right})");
-        var bottomCentre = new Rect2(pane.X / 3f, pane.Y / 2f, pane.X / 3f, pane.Y / 2f);
-        var compass = rects[HudElement.CompassTape];
-        ctx.Check(!rects.Values.Any(r => r.Intersects(bottomCentre)) && tape.Position.IsEqualApprox(plain),
-            $"…nothing over the bottom centre, and the tape where the original puts it ({compass}, {plain})");
+            && tape.Position.IsEqualApprox(sidesTape) && tape.Position.IsEqualApprox(plain),
+            $"{name}: Sides reaches all three, the live tape at {tape.Position} where the layout puts it ({sidesTape}), where the original puts it ({plain})");
 
         hud.SetHudLayout(custom);
-        var placed = HudLayoutPlacement.Place(HudElement.RightDials, custom, box, pane, scale);
-        ctx.Check(hud.Gauges!.Layout == custom && whole.Encloses(placed)
-            && Mathf.IsEqualApprox(placed.End.X, pane.X - (40f * scale)),
-            $"{name}: a custom right column keeps its 40 px margin from the pane's right edge ({placed}, pane {pane})");
-        ctx.Check(pane.X <= box.Size.X + 1f || placed.End.X > box.End.X,
-            $"…past the reading box on a pane wider than it ({placed}, box {box})");
+        ctx.Check(hud.Gauges!.Layout == custom, $"{name}: a custom layout reaches the dials");
 
         hud.SetCockpitView(true);
         untouched.SetCockpitView(true);
@@ -236,26 +232,13 @@ internal static class HudLayoutSuites
             $"…and the cockpit view under a layout shows what it showed under none");
     }
 
-    // A pane with every part, attached on a canvas inside the viewport. Processing is off, so no bare
-    // control steps itself; the suite steps the tape alone, which reads no texture to place itself.
+    // A pane with every part, attached on a canvas inside the viewport. The suite steps the tape
+    // alone, which reads no texture to place itself.
     private static FlightHud Pane(SubViewport view)
     {
         var canvas = new CanvasLayer();
         view.AddChild(canvas);
-        var hud = new FlightHud
-        {
-            Compass = new CompassTape { ProcessMode = Node.ProcessModeEnum.Disabled },
-            Gauges = new GaugeCluster { ProcessMode = Node.ProcessModeEnum.Disabled },
-            ThrottlePlate = ThrottlePlate.Build(),
-            Reticle = new ImpactReticle { ProcessMode = Node.ProcessModeEnum.Disabled },
-            TargetHud = new TargetHud { ProcessMode = Node.ProcessModeEnum.Disabled },
-        };
-        hud.Attach(canvas, canvas, null, null);
-        if (hud.ThrottlePlate != null)
-        {
-            hud.ThrottlePlate.ProcessMode = Node.ProcessModeEnum.Disabled;
-        }
-
+        var hud = AttachBare(new FlightHud(), canvas);
         hud.SetThrottlePlateShown(true);
         return hud;
     }
@@ -264,9 +247,6 @@ internal static class HudLayoutSuites
 
     private static (Rect2 Box, Vector2 Pane, float Scale) Frame(Control control) =>
         (HudMetrics.ReadingBox(control), control.GetViewportRect().Size, HudMetrics.Scale(control));
-
-    private static string Describe(Dictionary<HudElement, Rect2> rects) =>
-        string.Join(", ", rects.Select(r => $"{r.Key} {r.Value}"));
 
     private static SubViewport View(TestContext ctx, Vector2I size, List<GodotObject> made)
     {
@@ -288,16 +268,7 @@ internal static class HudLayoutSuites
         made.Add(rig);
         var canvas = new CanvasLayer();
         view.AddChild(canvas);
-        var hud = rig.PilotHud;
-        hud.Compass = new CompassTape { ProcessMode = Node.ProcessModeEnum.Disabled };
-        hud.Gauges = new GaugeCluster { ProcessMode = Node.ProcessModeEnum.Disabled };
-        hud.ThrottlePlate = ThrottlePlate.Build();
-        if (hud.ThrottlePlate != null)
-        {
-            hud.ThrottlePlate.ProcessMode = Node.ProcessModeEnum.Disabled;
-        }
-
-        hud.Attach(canvas, canvas, null, null);
+        AttachBare(rig.PilotHud, canvas);
         return rig;
     }
 
