@@ -494,6 +494,9 @@ public sealed partial class Puffer : Node3D
         // final pass runs an unstable sort over each equal-key, equal-texture run.
         if (sorting && drawn > 1)
             Array.Sort(_drawKeys, _drawItems, 0, drawn);
+        // Every mode keeps an identity basis (above), so the node's Y alone moves the midpoint
+        // into the frame the positions are written in.
+        _renderer.SetBandMidpoint(_ambience.BandMidpoint - nodeOrigin.Y);
         for (int i = 0; i < drawn; i++)
         {
             ref var item = ref _drawItems[i];
@@ -517,10 +520,9 @@ public sealed partial class Puffer : Node3D
     /// <summary>The far band's depth multiplier: the original's global fade factor over the View
     /// Distance <paramref name="reach"/>, so both band ends move out by it. An infinite
     /// reach gives 0, which never far-culls. ⚠ Must return <paramref name="globalFadeFactor"/>
-    /// itself at reach 1, so Original stays the decode bit for bit. See
-    /// <c>docs/org/puffer.md</c>.</summary>
-    internal static float FarBandFactor(float globalFadeFactor, float reach) =>
-        reach == 1f ? globalFadeFactor : globalFadeFactor / reach;
+    /// itself at reach 1, so Original stays the decode bit for bit. An IEEE division by 1 is exact,
+    /// so a plain division keeps it. See <c>docs/org/puffer.md</c>.</summary>
+    internal static float FarBandFactor(float globalFadeFactor, float reach) => globalFadeFactor / reach;
 
     // A fade band's `1/width`, with the engine's own degenerate case: both of its
     // setters store the raw difference first and only invert it

@@ -975,8 +975,11 @@ clock offset) and sends it; the host checks that the sender flies the seat and r
 guests. A receiver drops another window's touch, an unknown pylon and a non-finite height or time,
 and draws the rest at the stamp read back onto its own clock, never later than its now. The touch is
 visual only: no race, run, penalty or hit test takes it, and the touching machine alone times its own
-penalty. Nothing restores over the wire: a window's rerun resets every local run on every machine,
-and any local run's reset stands every course pylon whole.
+penalty. Nothing restores over the wire, and any local run's reset stands every course pylon whole
+on its own machine. The host's new window resets every local run on every machine, so every
+machine stands them whole. A single run's rerun (a pilot's held rerun, a bot's next run) resets
+that run alone, so its own machine stands them whole at once, and on every other machine a cut
+stump regrows on its own within the shared regrow time (`CoursePylonCut.SharedRegrowSeconds`).
 
 **Wire compatibility.** A build without these ids drops them as unknown. Builds share a lobby only
 on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.

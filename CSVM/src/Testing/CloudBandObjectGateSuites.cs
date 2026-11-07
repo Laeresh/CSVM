@@ -5,6 +5,7 @@ using System.Text;
 using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;
@@ -126,6 +127,162 @@ internal static class CloudBandObjectGateSuites
 
         ctx.WriteArtifact("test-cloud-band-object-gate.txt", report.ToString());
         ctx.Note($"{BandChapter}/{BandMission}: a zeppelin above the band's {F(centre)} m midpoint is culled for a camera under the band and drawn for one above it, and the mirror holds");
+    }
+
+    // An ungated particle above the band draws against the sky dome for a camera under the deck,
+    // since the deck tiles are culled there. The original zones every particle by its own height
+    // against the band's midpoint (0x473580), and the rounds follow the same rule here.
+    [Suite("cloud-band-point-gate",
+        "a puffer particle and a tracer round above C1C/M01's band midpoint draw only for a camera "
+        + "above the band, one below it only for a camera under it, a camera in a fog volume draws "
+        + "both, and a mission with no band gates nothing")]
+    internal static void CloudBandPointGate(TestContext ctx)
+    {
+        ZrdrSet missionZrdr = ctx.MissionZrdr(BandChapter, BandMission);
+        ctx.RequireData(missionZrdr, $"{BandChapter}/{BandMission} zrdr");
+        var weather = WeatherState.Load(missionZrdr)
+            ?? throw new SuiteSkippedException($"{BandChapter}/{BandMission} carries no weather.zrd");
+        ctx.Check(weather.HasCloudBand, $"{BandChapter}/{BandMission} authors a CLOUD_COVER band");
+        if (!weather.HasCloudBand)
+        {
+            return;
+        }
+        float centre = weather.CloudBandCentre;
+        uint state1 = ZoneGate.CullMask(FullMask, 1);
+        uint state2 = ZoneGate.CullMask(FullMask, 2);
+        uint state3 = ZoneGate.CullMask(FullMask, 3);
+
+        uint low = ZoneGate.PointLayers(ZoneGate.PointZone(centre - 1f, centre));
+        uint high = ZoneGate.PointLayers(ZoneGate.PointZone(centre, centre));
+        ctx.Check((state1 & low) != 0 && (state1 & high) == 0,
+            $"a camera under the band draws a point below the {F(centre)} m midpoint and not one at or above it");
+        ctx.Check((state2 & high) != 0 && (state2 & low) == 0, $"a camera above the band draws the mirror");
+        ctx.Check((state3 & low) != 0 && (state3 & high) != 0,
+            $"a camera in a fog volume draws both, the callback's -1 for camera state 3");
+        ctx.Check((FullMask & low) != 0 && (FullMask & high) != 0, $"an ungated camera draws both");
+        ctx.Same(1u, ZoneGate.PointLayers(ZoneGate.PointZone(centre + 500f, null)),
+            $"with no band a point stays on the world's layer 1");
+
+        var report = new StringBuilder();
+        PufferSides(ctx, centre, state1, state2, report);
+        TracerSides(ctx, centre, state1, state2, report);
+        ctx.WriteArtifact("test-cloud-band-point-gate.txt", report.ToString());
+    }
+
+    // A real emitter renderer behind a puffer fed the session ambience's midpoint, one puff each side.
+    private static void PufferSides(TestContext ctx, float centre, uint state1, uint state2, StringBuilder report)
+    {
+        var state = new PufferState
+        {
+            Name = "band_puffer",
+            Number = 1,
+            TimeInterval = 1f / 60f,
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 5f,
+            LifetimeMax = 5f,
+        };
+        var amb = new EffectAmbience();
+        amb.SetBandMidpoint(centre);
+        var atlas = Utils.TextureUpload.Create(Image.CreateEmpty(2, 2, false, Image.Format.Rgba8));
+        var gpu = new MultiMeshEmitterRenderer(atlas, 1, new[] { false }, softParticles: false);
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true, ambience: amb);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float Step = 1f / 60f;
+            puffer.Emit(new Vector3(0f, centre - 150f, 0f), Basis.Identity, Step);
+            puffer.Emit(new Vector3(0f, centre + 150f, 0f), Basis.Identity, Step);
+            puffer._Process(Step);
+            var sides = gpu.BandSides;
+            report.AppendLine($"puffer: below {sides.Below} on 0x{sides.BelowLayers:x}, above {sides.Above} on 0x{sides.AboveLayers:x}");
+            ctx.Check(sides.Below > 0 && sides.Above > 0,
+                $"the puffer draws its puffs in both side lists below={sides.Below} above={sides.Above}");
+            ctx.Check((state1 & sides.AboveLayers) == 0 && (state1 & sides.BelowLayers) != 0,
+                $"a camera under the band draws the low puff and not the high one, layers 0x{sides.BelowLayers:x}/0x{sides.AboveLayers:x}");
+            ctx.Check((state2 & sides.BelowLayers) == 0 && (state2 & sides.AboveLayers) != 0,
+                $"a camera above the band draws the high puff and not the low one");
+
+            amb.SetBandMidpoint(null);
+            puffer._Process(Step);
+            var open = gpu.BandSides;
+            ctx.Check(open.Above == 0 && open.BelowLayers == 1u,
+                $"with no band every puff draws on layer 1 below={open.Below} above={open.Above} layers=0x{open.BelowLayers:x}");
+
+            // Another system's mask (the cockpit's own-view hide, a hull's zone gate) wins: the
+            // emitter keeps it and stops splitting by height.
+            const uint Foreign = 1u << 9;
+            MultiMeshInstance3D? lower = null;
+            foreach (var child in puffer.GetChildren())
+            {
+                if (child is MultiMeshInstance3D list)
+                {
+                    lower = list;
+                    break;
+                }
+            }
+            ctx.Check(lower != null, $"the emitter's first draw list is its lower one");
+            if (lower == null)
+            {
+                return;
+            }
+            lower.Layers = Foreign;
+            amb.SetBandMidpoint(centre);
+            puffer._Process(Step);
+            var ridden = gpu.BandSides;
+            ctx.Same(Foreign, lower.Layers, $"the emitter leaves a mask another system wrote");
+            ctx.Same(0, ridden.Above, $"and draws every puff in that list rather than splitting them");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A live projectile pool given the same ambience: a round each side of the midpoint.
+    private static void TracerSides(TestContext ctx, float centre, uint state1, uint state2, StringBuilder report)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures(BandChapter);
+        ctx.RequireData(texturesPath, $"{BandChapter} textures");
+        WeaponDef? gun = null;
+        foreach (var w in WeaponDefs.Load(ctx.Zrdr, null).All)
+        {
+            if (w.IsGun)
+            {
+                gun = w;
+                break;
+            }
+        }
+        ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+        if (gun == null)
+        {
+            return;
+        }
+        var amb = new EffectAmbience();
+        amb.SetBandMidpoint(centre);
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null, ambience: amb);
+        try
+        {
+            ctx.Host.AddChild(pool);
+            pool.Spawn(gun, new Transform3D(Basis.Identity, new Vector3(0f, centre - 150f, 0f)), Vector3.Zero, shooterId: 0);
+            pool.Spawn(gun, new Transform3D(Basis.Identity, new Vector3(500f, centre + 150f, 0f)), Vector3.Zero, shooterId: 1);
+            pool._Process(1f / 60f);
+            var sides = pool.TracerSides();
+            report.AppendLine($"tracers: below {sides.Below} on 0x{sides.BelowLayers:x}, above {sides.Above} on 0x{sides.AboveLayers:x}");
+            ctx.Same(1, sides.Below, $"the low round's streak draws in the below-band pool");
+            ctx.Same(1, sides.Above, $"the high round's streak draws in the above-band pool");
+            ctx.Check((state1 & sides.AboveLayers) == 0 && (state1 & sides.BelowLayers) != 0,
+                $"a camera under the band draws the low tracer and not the high one");
+            ctx.Check((state2 & sides.BelowLayers) == 0 && (state2 & sides.AboveLayers) != 0,
+                $"a camera above the band draws the high tracer and not the low one");
+        }
+        finally
+        {
+            pool.Free();
+            textures.Dispose();
+        }
     }
 
     private static void AboveTheBand(TestContext ctx, ObjectZoneGate gate, WeatherState weather,

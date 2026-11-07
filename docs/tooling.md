@@ -1048,7 +1048,7 @@ enough free.
   `RunProbe.ps1 -TimeoutSec`.
 - **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
   from a handle the ledger holds on the process, after it exits or is killed) under its kind in
-  `history.json`; the estimate is the highest of the kind's last 20 peaks plus 25 percent, and
+  `history.json`; the estimate is the highest of the kind's last 20 peaks plus 10 percent, and
   never below the kind's seed. An `engine-shard` or `engine-headless` peak is recorded only from
   the windowed shard or a headless shard of a complete-catalog `RunTests.ps1` run under the default
   shard plan (the default `-Shards`, gaming mode off, no `-RealData`): a filtered shard stays small,

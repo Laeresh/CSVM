@@ -156,7 +156,8 @@ earlier run on.
 **The climb replaces the wind sway, it does not play over it.** `drop_ladder` calls
 `gen_drop_ladder` with `WAIT_FOR_COMPLETION`, and it is inside `gen_drop_ladder` that each rung's
 `ladder_drop` script is followed by a `looprN` sequence holding `ladder_loop` in a `LOOP_COUNT -1`.
-Stopping `drop_ladder` at step 1 is what ends that loop. `cabpkup_ladder` then re-parents the very
+Stopping `drop_ladder` at step 1 is what ends that loop, because a stop reaches every animation the
+stopped one called ([`sequences.md`](sequences.md), "Stopping a caller"). `cabpkup_ladder` then re-parents the very
 same `rope_ladder` object from the aircraft's `ladder_pos` to the `caboose`, zeroes `ladder_roll`,
 and drives the ladder root plus all six rungs from its own `OBJECT_MOTION_SI_SCRIPT` `ALL_NAMES`
 record (node index 2 and 4 through 9 against script slots 0 through 6), ending by setting

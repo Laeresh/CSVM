@@ -892,6 +892,11 @@ public sealed class WeatherRig
         // Opened by --no-fog, since a band that hides nothing must not keep hiding aeroplanes.
         _objectGate.Tick(_gatedObjects?.Invoke() ?? _noObjects, _weather, _fogWhiteout.Armed,
             _fogVolumes, _spec.NoZoneCull || _spec.NoFog);
+        // The particles' and rounds' half of the same gate, opened by the same flags. Each point
+        // is judged against the band's midpoint alone, never the fog volumes (ZoneGate.PointZone).
+        _ambience.SetBandMidpoint(!_spec.NoZoneCull && !_spec.NoFog && _weather is { HasCloudBand: true } banded
+            ? banded.CloudBandCentre
+            : null);
 
         foreach (var rig in rigs)
         {

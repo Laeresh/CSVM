@@ -223,8 +223,8 @@ public sealed partial class CourseVisuals : Node3D
     /// <summary>Follows every run flown on this machine among <paramref name="seats"/>, each local
     /// pane's and each local bot's, once the roster is built. With more than one of
     /// <paramref name="racers"/> the stump regrows sooner. A remote seat flies no run here; the race
-    /// link hands its touches to <see cref="Cut"/>. ⚠ Do not let any rerun restore only its own cuts:
-    /// one shared restore is the rule.</summary>
+    /// link hands its touches to <see cref="Cut"/>. Any local run's reset stands every course pylon
+    /// whole here only; other machines see it regrow. ⚠ Do not restore only a run's own cuts.</summary>
     public CourseVisuals FollowSeats(IReadOnlyList<PlayerRig> seats, int racers)
     {
         var runs = new List<StuntMission>();

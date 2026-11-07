@@ -902,6 +902,34 @@ choreography runs 3.0 s.
 ⚠ `0` and `null` are different authored states for this flag (**3,639** vs **53,019** events), and
 only a set flag holds.
 
+## Stopping a caller
+
+`STOP_ANIMATION` (dispatch slot 25, `FUN_004ebc80`) resolves its name and hands the definition to
+the stop worker `FUN_004ebbb0`, which acts only on a running definition (`+0xa0` 2 or 6). Its
+teardown `FUN_004ed190` walks the definition's call table (`+0x104`, `0x48`-byte entries, count
+`+0xe2`). Each entry holding a callee (`+0x44`) and a non-zero `+0x40` gets `FUN_004ebbb0` on that
+callee, and the entry's `+0x44` is cleared. `CALL_ANIMATION` is what fills `+0x44`: it stores the
+instance `FUN_004edf80` returns into the entry the event names (`004eb557`-`004eb55d`). A stop
+therefore reaches every animation the stopped one called, and theirs in turn, since the worker
+recurses through the same teardown.
+
+The authored case is the C1/M02 pickup. `drop_ladder` calls `gen_drop_ladder`, whose rung sequences
+hold `ladder_loop` in a `LOOP_COUNT -1`, and the pickup's `STOP_ANIMATION [drop_ladder]` is the only
+event that ends that loop ([`ladderSwitch.md`](ladderSwitch.md), "The ladder through the pickup").
+Stopping only the named definition leaves the wind sway running under the climb, and it takes the
+rungs back once `cabpkup_ladder`'s script ends. CSVM records each started callee on the calling
+instance (`AnimInstance.Callees`) and stops the live ones with it.
+
+`drop_ladder` is only stoppable because the waited call is its last event. The original holds a
+waited call while the callee runs, last event included (`004eba0e`, above), so a caller whose
+`LOOP{-1}` callee never ends stays running. CSVM releases a wait on the last event (the section
+above), so `AnimRuntime` parks such a retired instance (`_heldOpen`) and a later stop of its name
+stops its callees as the original's would. ⚠ `ANIM_STATE` still reads that caller as `EXECUTED`
+3 where the original reads `RUNNING` 2.
+
+⚠ The second guard, the entry's `+0x40`, is not decoded. CSVM stops every recorded callee, which
+reads `+0x40` as always set on an entry that has started one.
+
 ## Timed events, and what a handler reports back
 
 The stepper needs each dispatched event's run time to place the next one. Two handlers traced

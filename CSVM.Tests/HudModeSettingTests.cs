@@ -82,6 +82,27 @@ public class HudModeSettingTests
         }
     }
 
+    // What a mission change or a restart reads: Launcher.LaunchSession applies the saved word.
+    [Fact]
+    public void ALaunchStartsInTheSavedModeAndADetLaunchInFull()
+    {
+        var before = HudModeSetting.Current;
+        try
+        {
+            var store = new OptionsStore(TestData.TempDir());
+            store.Save(new OptionsDef { HudMode = "none" });
+            HudModeSetting.Current = HudMode.Full;
+            HudModeSetting.ApplySaved(det: false, store.Load());
+            Assert.Equal(HudMode.None, HudModeSetting.Current);
+            HudModeSetting.ApplySaved(det: true, store.Load());
+            Assert.Equal(HudMode.Full, HudModeSetting.Current);
+        }
+        finally
+        {
+            HudModeSetting.Current = before;
+        }
+    }
+
     [Fact]
     public void AnOptionsAcceptUnderDetKeepsTheSteppedMode()
     {

@@ -341,7 +341,10 @@ public sealed partial class SoundLab : Node
     {
         if (_readout == null)
             return;
-        string mode = SoundModeSetting.EnhancedOn ? "Enhanced Sound" : "Original Sound, so the engine and hit sliders are silent";
+        // Original Sound's hit confirm reads EnhancedSoundTuning.WithoutPack, which a pack's override never reaches.
+        string mode = SoundModeSetting.EnhancedOn ? "Enhanced Sound"
+            : Extraction.HdSounds.Current.HasOverride ? "Original Sound, so no edit here plays: the hit confirm skips the pack's override"
+            : "Original Sound, so the engine, bullet hit and canopy hit sliders do nothing";
         _readout.Text = _reading() is { } r
             ? Invariant($"throttle {r.Throttle:0.00}   engine pitch {r.Pitch:0.000}   gain {r.Gain:0.000}{(r.EngineSounding ? "" : " (silent)")}\n{mode}")
             : $"no flown aircraft\n{mode}";

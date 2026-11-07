@@ -123,8 +123,8 @@ public sealed class OptionsChoices
     /// <summary>The Voice level, null while never set.</summary>
     public int? AudioVoice { get; set; }
 
-    /// <summary>The <see cref="SoundModeSetting.Words"/> word, null while never set, which reads as
-    /// Enhanced Sound.</summary>
+    /// <summary>The <see cref="SoundModeSetting.Original"/> or <see cref="SoundModeSetting.Enhanced"/>
+    /// word, null while never set, which reads as Enhanced Sound.</summary>
     public string? SoundMode { get; set; }
 
     /// <summary>The Hit Confirm switch, null while never set, which reads as the sound mode reads.</summary>

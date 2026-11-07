@@ -86,23 +86,7 @@ public sealed class CloudShadowChapters
     /// so a Save never replaces a file it cannot read.</summary>
     public static string WithEntry(string? existing, string chapter, CloudShadowPattern.Tune tune)
     {
-        JsonObject root;
-        if (string.IsNullOrWhiteSpace(existing))
-        {
-            root = new JsonObject();
-        }
-        else
-        {
-            try
-            {
-                root = Mech3.VegetationSidecar.ParseWhole(existing) as JsonObject
-                    ?? throw new InvalidDataException("the cloud shadows file is not a JSON object, so Save leaves it as it is");
-            }
-            catch (Exception ex) when (ex is JsonException or ArgumentException)
-            {
-                throw new InvalidDataException($"the cloud shadows file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
-            }
-        }
+        var root = Mech3.VegetationSidecar.ObjectToRewrite(existing, "cloud shadows");
 
         string name = chapter.ToUpperInvariant();
         var entry = new JsonObject();

@@ -43,6 +43,9 @@ public sealed class RecordingEmitterRenderer : IEmitterRenderer
     /// <summary>The largest atlas column ever written, the flipbook actually advancing.</summary>
     public float MaxFrame { get; private set; }
 
+    /// <summary>The band midpoint the emitter handed over before its last writes, in its own Y.</summary>
+    public float? BandMidpoint { get; private set; }
+
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
         Owner = owner;
@@ -55,6 +58,8 @@ public sealed class RecordingEmitterRenderer : IEmitterRenderer
         if (capacity > Capacity)
             Capacity = capacity;
     }
+
+    public void SetBandMidpoint(float? localY) => BandMidpoint = localY;
 
     public void Write(int index, Vector3 position, float size, float frame, float alpha, Color color)
     {
