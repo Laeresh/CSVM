@@ -317,9 +317,10 @@ public sealed class VegetationSidecarTests
     }
 
     /// <summary>The shipped C1 mask thickens the field edges and clears the grassland beside the east-west strips and
-    /// on their western approach. Grassland away from the airfield stays neutral.</summary>
+    /// on their western approach. It clears the zeppelin landing circle, the grass1 disc about 1 km across at
+    /// -5250, -5382. Grassland away from the airfield stays neutral.</summary>
     [Fact]
-    public void TheShippedC1MaskHedgesTheFieldsAndClearsTheStrips()
+    public void TheShippedC1MaskHedgesTheFieldsAndClearsTheStripsAndTheZeppelinCircle()
     {
         byte[] bytes = File.ReadAllBytes(Path.Combine(TestData.RepoRoot, "CSVM", "data", VegetationMask.PathFor("C1")));
         var mask = VegetationMask.FromBytes(bytes, -12288f, -12288f, 0f, 0f);
@@ -327,6 +328,8 @@ public sealed class VegetationSidecarTests
         Assert.Equal(0f, mask.At(-5000f, -4230f));
         Assert.Equal(0f, mask.At(-6300f, -4230f));
         Assert.Equal(1f, mask.At(-3700f, -4500f));
+        Assert.All(new[] { (-5250f, -5382f), (-5740f, -5382f), (-4760f, -5382f), (-5250f, -5870f) }, p => Assert.Equal(0f, mask.At(p.Item1, p.Item2)));
+        Assert.Equal(1f, mask.At(-5900f, -5382f));
     }
 
     /// <summary>Save writes the chapter's entry with only nonzero values, in a fixed order. Every other key

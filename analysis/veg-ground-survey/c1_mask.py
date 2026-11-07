@@ -1,5 +1,6 @@
 """Writes C1's vegetation mask (CSVM/data/vegetation/C1.bin): hedgerows along the
-crop fields' edges, sparse field interiors, bare ground around the landing strips, neutral everywhere else.
+crop fields' edges, sparse field interiors, bare ground around the landing strips and over the zeppelin landing circle,
+neutral everywhere else.
 
 usage: python c1_mask.py [out.bin] [interior_byte=2] [hedge_byte=255] [side_m=150] [end_m=600]
 
@@ -13,6 +14,8 @@ classed by the ground texture under its centre (layer 0, up-facing, the walk sur
 - Strips. Each tarmac01 (the runway texture: centre line, edge marks) piece of at least STRIP_TEXELS is a strip, boxed
   along its principal axis. A texel inside the box grown by side_m to each side and end_m off each end is 0 (bare), so
   no added stamp stands beside a strip or under its approach.
+- Zeppelin circle. The landing circle (grass1, laid nowhere else in C1, round the tether_field square) grown by a texel
+  so no bilinear sample inside it reads a neutral texel, is 0. That bares its grass tufts too, as beside the strips.
 - Rails. The railway's own polygons (RAIL) are skipped, so a texel under or beside it is classed by the ground beneath:
   a field there is interior, with no hedge lining the rails. The engine keeps every added stamp off the rails themselves.
 - Every other texel is 128. A texel goes below neutral only where neither it nor any of its eight neighbours is ground
@@ -38,6 +41,7 @@ TEXEL = SIZE / N
 CROPS = ("crop04.tif", "crop05.tif")
 STRIP, STRIP_TEXELS = "tarmac01.tif", 300  # about 4 ha; the smaller tarmac01 pieces are joins inside the margins
 RAIL = "gantry_tracks2.tif"  # the railway, rastered as the ground under it so no hedge lines it
+CIRCLE = ("grass1.tif", "tether_field.tif")  # the zeppelin landing circle and the tether field at its centre
 
 
 def raster():
@@ -153,6 +157,7 @@ def mask(tex, names, U, stamped, interior=2, hedge=255, side=150.0, end=600.0):
     out[edge] = hedge
     safe = ringed(~np.isin(tex, [names.index(t) for t in stamped if t in names]))
     zone, boxes = strips(tex, names, side, end)
+    zone |= ndimage.binary_dilation(np.isin(tex, [names.index(t) for t in CIRCLE]), np.ones((3, 3)))
     out[zone & safe] = 0
     assert not ((out < 128) & ~safe).any()
     return out, edge, zone & safe, boxes
@@ -164,6 +169,6 @@ if __name__ == "__main__":
     tex, names, U, stamped = raster()
     out, edge, cleared, boxes = mask(tex, names, U, stamped, *(int(v) for v in a[1:3]), *(float(v) for v in a[3:5]))
     out.tofile(path)
-    print(f"{path}: {edge.sum()} edge texels, {cleared.sum()} cleared beside {len(boxes)} strips")
+    print(f"{path}: {edge.sum()} edge texels, {cleared.sum()} cleared beside {len(boxes)} strips and over the zeppelin circle")
     for mid, deg, length, width in boxes:
         print(f"  strip at ({mid[0]:.0f}, {mid[1]:.0f}) heading {deg} deg, {length} x {width} m")
