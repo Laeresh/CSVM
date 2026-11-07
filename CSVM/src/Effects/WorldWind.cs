@@ -154,6 +154,11 @@ public sealed class EffectAmbience
     /// <see cref="Vector3.Zero"/> until someone steps a wind into it.</summary>
     public Vector3 Wind { get; private set; }
 
+    /// <summary>The cloud band's midpoint this frame, which a point effect's zone is judged
+    /// against (<see cref="Mech3.ZoneGate.PointZone"/>). Null where nothing is gated: no band, an
+    /// open gate, or nobody wired one in.</summary>
+    public float? BandMidpoint { get; private set; }
+
     /// <summary>Whether any camera pose has been published. False means "no camera known", and the
     /// camera-distance fade is skipped entirely rather than measured against the origin, the right
     /// answer for every caller that has no camera to give (the unit suites, the plane viewer, the
@@ -178,6 +183,14 @@ public sealed class EffectAmbience
     {
         Writable();
         Wind = wind;
+    }
+
+    /// <summary>Publishes this frame's <see cref="BandMidpoint"/>. Throws on <see cref="Still"/>,
+    /// for the same reason <see cref="SetWind"/> does.</summary>
+    public void SetBandMidpoint(float? midpoint)
+    {
+        Writable();
+        BandMidpoint = midpoint;
     }
 
     /// <summary>Publishes this frame's one camera pose, replacing whatever was published before.
