@@ -187,6 +187,95 @@ internal static class ClutterCardDepthSuites
         }
     }
 
+    // The ground quad across the pane at one depth, wide enough to cover it with margin.
+    internal static void PosePlate(Node3D plate, Camera3D eye, float z)
+    {
+        var basis = plate.Transform.Basis.Orthonormalized();
+        float scale = 6f * Mathf.Abs(z) * Mathf.Tan(Mathf.DegToRad(eye.Fov / 2f));
+        plate.Transform = new Transform3D(basis.Scaled(new Vector3(scale, scale, scale)),
+            new Vector3(0f, 0f, z));
+    }
+
+    // One mesh and one material as a plate. The mesh's authored centre is cancelled and its span
+    // normalised to one unit on the child. The parent's scale is then the plate's width in metres,
+    // whatever the source's own corner coordinates are.
+    internal static Node3D? PlateOf(Mesh? mesh, Material? material)
+    {
+        if (mesh == null)
+        {
+            return null;
+        }
+        var box = mesh.GetAabb();
+        float span = Mathf.Max(box.Size.X, box.Size.Z);
+        if (span <= 0f)
+        {
+            return null;
+        }
+        var plate = new Node3D
+        {
+            Transform = new Transform3D(Basis.FromEuler(new Vector3(Mathf.Pi / 2f, 0f, 0f)), Vector3.Zero),
+        };
+        plate.AddChild(new MeshInstance3D
+        {
+            Mesh = mesh,
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Transform = new Transform3D(
+                Basis.Identity.Scaled(Vector3.One / span),
+                -(box.Position + (box.Size / 2f)) / span),
+        });
+        return plate;
+    }
+
+    internal static MeshInstance3D? FirstMesh(Node? node)
+    {
+        if (node is MeshInstance3D { Mesh: not null } found)
+        {
+            return found;
+        }
+        for (int i = 0; node != null && i < node.GetChildCount(); i++)
+        {
+            if (FirstMesh(node.GetChild(i)) is { } below)
+            {
+                return below;
+            }
+        }
+        return null;
+    }
+
+    // The pane's pixels after a forced draw. 3D geometry reaches the rendering server as it enters
+    // the tree. Unlike a canvas item, it photographs from inside a suite's single frame.
+    internal static byte[] Shot(SubViewport pane)
+    {
+        // ⚠ Push every transform to the rendering server first. A Node3D queues its transform
+        // notification for the scene tree's next flush, which a suite never reaches. An ordinary
+        // MeshInstance3D would otherwise draw at the identity and be clipped away.
+        Settle(pane);
+        // ⚠ Twice. A MultiMesh's instance buffer is uploaded with the frame that follows the write.
+        // A single draw photographs the previous pose, and every count comes out of step by one.
+        RenderingServer.ForceDraw();
+        RenderingServer.ForceDraw();
+        var img = pane.GetTexture()?.GetImage();
+        return img == null || img.IsEmpty() ? Array.Empty<byte>() : img.GetData();
+    }
+
+    internal static int Differing(byte[] a, byte[] b, bool[]? mask = null)
+    {
+        if (a.Length == 0 || a.Length != b.Length)
+        {
+            return -1;
+        }
+        int changed = 0;
+        for (int i = 0; i + Channels <= a.Length; i += Channels)
+        {
+            if ((mask == null || mask[i / Channels]) && Moved(a, b, i))
+            {
+                changed++;
+            }
+        }
+        return changed;
+    }
+
     // Which card kinds took the archive's soft-alpha verdict and so draw blended. A blended card
     // that writes no depth is drawn in its MultiMesh's buffer order against every other card, which
     // is what puts a far tree over a near one, so the count belongs in the record beside the
@@ -383,15 +472,6 @@ internal static class ClutterCardDepthSuites
         eye.Fov = Mathf.Clamp(Mathf.RadToDeg(2f * Mathf.Atan(span * 0.8f / range)), 1f, 60f);
     }
 
-    // The ground quad across the pane at one depth, wide enough to cover it with margin.
-    private static void PosePlate(Node3D plate, Camera3D eye, float z)
-    {
-        var basis = plate.Transform.Basis.Orthonormalized();
-        float scale = 6f * Mathf.Abs(z) * Mathf.Tan(Mathf.DegToRad(eye.Fov / 2f));
-        plate.Transform = new Transform3D(basis.Scaled(new Vector3(scale, scale, scale)),
-            new Vector3(0f, 0f, z));
-    }
-
     // The broadest world mesh this chapter skins with a ground-layer material, as a plate. The
     // material is the real one off the real mesh. The question is what that material's place in the
     // transparency sort does, and a stand-in built here would answer it about itself instead.
@@ -472,53 +552,6 @@ internal static class ClutterCardDepthSuites
         return PlateOf(mesh, material);
     }
 
-    // One mesh and one material as a plate. The mesh's authored centre is cancelled and its span
-    // normalised to one unit on the child. The parent's scale is then the plate's width in metres,
-    // whatever the source's own corner coordinates are.
-    private static Node3D? PlateOf(Mesh? mesh, Material? material)
-    {
-        if (mesh == null)
-        {
-            return null;
-        }
-        var box = mesh.GetAabb();
-        float span = Mathf.Max(box.Size.X, box.Size.Z);
-        if (span <= 0f)
-        {
-            return null;
-        }
-        var plate = new Node3D
-        {
-            Transform = new Transform3D(Basis.FromEuler(new Vector3(Mathf.Pi / 2f, 0f, 0f)), Vector3.Zero),
-        };
-        plate.AddChild(new MeshInstance3D
-        {
-            Mesh = mesh,
-            MaterialOverride = material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            Transform = new Transform3D(
-                Basis.Identity.Scaled(Vector3.One / span),
-                -(box.Position + (box.Size / 2f)) / span),
-        });
-        return plate;
-    }
-
-    private static MeshInstance3D? FirstMesh(Node? node)
-    {
-        if (node is MeshInstance3D { Mesh: not null } found)
-        {
-            return found;
-        }
-        for (int i = 0; node != null && i < node.GetChildCount(); i++)
-        {
-            if (FirstMesh(node.GetChild(i)) is { } below)
-            {
-                return below;
-            }
-        }
-        return null;
-    }
-
     // Two instances of the kind in one MultiMesh, both parked until a pose asks for them.
     private static MultiMeshInstance3D Cards(ClutterBuilder.KindExport kind)
     {
@@ -571,22 +604,6 @@ internal static class ClutterCardDepthSuites
             : new Color(0f, far, 1f / far, 0f));
     }
 
-    // The pane's pixels after a forced draw. 3D geometry reaches the rendering server as it enters
-    // the tree, so unlike a canvas item it photographs from inside a suite's single frame.
-    private static byte[] Shot(SubViewport pane)
-    {
-        // ⚠ Push every transform to the rendering server first. A Node3D queues its transform
-        // notification for the scene tree's next flush, and a suite never reaches one, so an
-        // ordinary MeshInstance3D would otherwise draw at the identity and be clipped away.
-        Settle(pane);
-        // ⚠ Twice. A MultiMesh's instance buffer is uploaded with the frame that follows the write,
-        // so a single draw photographs the previous pose and every count comes out of step by one.
-        RenderingServer.ForceDraw();
-        RenderingServer.ForceDraw();
-        var img = pane.GetTexture()?.GetImage();
-        return img == null || img.IsEmpty() ? Array.Empty<byte>() : img.GetData();
-    }
-
     private static void Settle(Node node)
     {
         if (node is Node3D spatial)
@@ -623,23 +640,6 @@ internal static class ClutterCardDepthSuites
             n += set ? 1 : 0;
         }
         return n;
-    }
-
-    private static int Differing(byte[] a, byte[] b, bool[]? mask = null)
-    {
-        if (a.Length == 0 || a.Length != b.Length)
-        {
-            return -1;
-        }
-        int changed = 0;
-        for (int i = 0; i + Channels <= a.Length; i += Channels)
-        {
-            if ((mask == null || mask[i / Channels]) && Moved(a, b, i))
-            {
-                changed++;
-            }
-        }
-        return changed;
     }
 
     // Pixels the subject drew over an empty frame and then contributed nothing to once the backdrop

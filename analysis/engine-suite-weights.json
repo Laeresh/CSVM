@@ -153,6 +153,7 @@
     "cloud-band-object-gate": 0.027,
     "cloud-band-point-gate": 0.17,
     "cloud-field-fade": 3.337,
+    "cloud-puff-cutout-order": 1.36,
     "cloud-puffs": 5.522,
     "clutter-activation": 1.131,
     "clutter-cells": 0.708,
