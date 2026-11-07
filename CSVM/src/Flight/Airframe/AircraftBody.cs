@@ -53,7 +53,10 @@ public sealed partial class AircraftBody : AnimatableBody3D
             _hulls[i] = p.Hull;
             float reach = 0f;
             foreach (var v in p.Hull.Points)
+            {
                 reach = Mathf.Max(reach, v.Length());
+                HalfSpan = Mathf.Max(HalfSpan, Mathf.Abs((p.Local * v).X));
+            }
             bound = Mathf.Max(bound, p.Local.Origin.Length() + reach);
             AddChild(new CollisionShape3D { Shape = p.Shape, Transform = p.Local });
         }
@@ -69,6 +72,9 @@ public sealed partial class AircraftBody : AnimatableBody3D
     /// <summary>Radius of a sphere at the body origin containing every collision hull, the cheap
     /// reject a per-step proximity scan runs before any per-hull distance work.</summary>
     public float BoundRadius { get; }
+
+    /// <summary>How far the hulls reach either side of the body's centreline, metres: half the span.</summary>
+    public float HalfSpan { get; }
 
     /// <summary>This body's RID as a reusable one-entry exclusion list, what the owning plane's
     /// own queries (and its rounds' hit rays) pass so a plane never collides with itself.</summary>

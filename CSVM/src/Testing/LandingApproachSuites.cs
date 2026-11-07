@@ -103,6 +103,9 @@ internal static class LandingApproachSuites
     // drop_ladder's callee, holding each rung's ladder_loop wind sway in a LOOP_COUNT -1.
     private const string GenDropLadderAnim = "gen_drop_ladder";
 
+    // The most the pickup's view may move in one step: the caboose it rides covers about 0.5 m.
+    private const float MaxViewStepM = 5f;
+
     // How long the flare's smoke is sampled for. Short on purpose: the sample spends the pickup
     // window's own seconds, and the rest of the drive still has to fly the approach inside it.
     private const float FlareSampleS = 0.3f;
@@ -2757,12 +2760,17 @@ internal static class LandingApproachSuites
                 float climb = 0f;
                 int cabpkupLadder = 0;
                 float swaying = 0f;
+                // The episode's view, frame to frame, through the frame the definition ends on.
+                var viewBefore = ctx.Camera.GlobalPosition;
+                float viewJump = 0f;
                 for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
                 {
                     world.Runtime.Advance(StepDt);
                     cutscene.Tick();
                     director.Step(StepDt);
                     played += StepDt;
+                    viewJump = Mathf.Max(viewJump, ctx.Camera.GlobalPosition.DistanceTo(viewBefore));
+                    viewBefore = ctx.Camera.GlobalPosition;
                     if (world.Runtime.AnimStateOf("caboosepickup") == 2)
                     {
                         climb += StepDt;
@@ -2781,7 +2789,8 @@ internal static class LandingApproachSuites
                     $"{climb:0.##} s of it; {ClimbLadderAnim} reached state {cabpkupLadder}, " +
                     $"drop_ladder state {world.Runtime.AnimStateOf(LadderSwitch.DropAnim)}, " +
                     $"rung1 swung {rungTravel:0.###} m in the ladder's own frame over the climb, " +
-                    $"{GenDropLadderAnim} live for {swaying:0.##} s of it; " +
+                    $"{GenDropLadderAnim} live for {swaying:0.##} s of it, the view's largest one-step move " +
+                    $"{viewJump:0.##} m; " +
                     $"ladder chain {(ladderRoot != null ? ChainOf(ladderRoot) : "-")}; script misses: " +
                     string.Join(", ", world.Runtime.UnhandledEventCounts
                         .Where(kv => kv.Key.StartsWith("ObjectMotionSiScript", StringComparison.Ordinal))
@@ -2795,6 +2804,8 @@ internal static class LandingApproachSuites
                     $"and its rungs actually move in the ladder's own frame while the person climbs them");
                 ctx.Check(swaying == 0f,
                     $"the pickup's stop of drop_ladder also stops the {GenDropLadderAnim} it called (#313)");
+                ctx.Check(viewJump < MaxViewStepM,
+                    $"the view rides the caboose to the handoff, never cutting to camera1 dropped off it (#314)");
             }
             finally
             {

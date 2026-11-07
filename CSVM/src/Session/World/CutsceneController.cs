@@ -628,7 +628,13 @@ public sealed partial class CutsceneController : Node
         }
 
         PollFastForward();
-        MirrorCamera();
+        // ⚠ Do not mirror past the handoff: code 1 gives the view back. CM07's pickup drops camera1
+        // off the caboose in that instant, so its pose is then near the world origin.
+        if (Presenting || !_codes.Contains(CodeHandoff))
+        {
+            MirrorCamera();
+        }
+
         StagePlayerAircraft();
         // The fit first: the pin stretches the card to the pane this frame's fit measured.
         FrameBars();
