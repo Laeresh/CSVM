@@ -1328,10 +1328,12 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
-        var pose = OutOfFlight && _playerMarker.Visible
-            ? AnimRuntime.WorldTransform(_playerMarker, out _)
-            : (Transform3D?)null;
         var owner = OwnerPilot;
+        // An unposed marker is the original's `player` node left on the vehicle, so the aircraft
+        // stays put. CM07's pickup raises 11 before it moves `player` under the caboose.
+        var pose = !OutOfFlight || !_playerMarker.Visible ? (Transform3D?)null
+            : MarkerParked() ? owner?.GlobalTransform
+            : AnimRuntime.WorldTransform(_playerMarker, out _);
         bool ownerIsPane = false;
         foreach (var pilot in Pilots())
         {
