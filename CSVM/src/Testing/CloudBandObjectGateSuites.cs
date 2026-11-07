@@ -129,9 +129,9 @@ internal static class CloudBandObjectGateSuites
         ctx.Note($"{BandChapter}/{BandMission}: a zeppelin above the band's {F(centre)} m midpoint is culled for a camera under the band and drawn for one above it, and the mirror holds");
     }
 
-    // #287: fire puffs, smoke and tracers above C1C/M01's band drew for a camera under it, against
-    // the sky dome, because only hulls were gated. The original zones every particle by its own
-    // height against the band's midpoint (0x473580), and the rounds follow the same rule here.
+    // An ungated particle above the band draws against the sky dome for a camera under the deck,
+    // since the deck tiles are culled there. The original zones every particle by its own height
+    // against the band's midpoint (0x473580), and the rounds follow the same rule here.
     [Suite("cloud-band-point-gate",
         "a puffer particle and a tracer round above C1C/M01's band midpoint draw only for a camera "
         + "above the band, one below it only for a camera under it, a camera in a fog volume draws "
