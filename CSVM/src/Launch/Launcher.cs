@@ -514,7 +514,7 @@ public partial class Launcher : Node3D
         // gamez/texture/mission paths resolve per session in StartSession.
         // A synthetic tree's build bound the Original shell's view to its root; its game data takes that view.
         _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec, () => Tooling.SyntheticGameData.Build(Extraction.RofFiles.For(dataRoot)));
-        BindRofFiles();
+        BindGameData();
         _probeRunner = new Tooling.ProbeRunner(_paths);
         // --dump: the game files' models into a folder for analysis scripts, then quit.
         if (_spec.DumpPath is { } dumpFolder)
@@ -1564,7 +1564,7 @@ public partial class Launcher : Node3D
 
             Log.Info("core", $"game files: {source.Location}, picked");
             _paths = _paths with { Game = source, Data = GameData.Load(source, _paths.Data.ModFolder) };
-            BindRofFiles();
+            BindGameData();
             _probeRunner = new Tooling.ProbeRunner(_paths);
 
             // The pick's own menus may not read either, which asks again with the fault named.
@@ -1579,12 +1579,14 @@ public partial class Launcher : Node3D
     }
 
     // The game data's UI archive view, bound to the data root for the consumers that hold only a
-    // root. A synthetic tree bound its own while it was built, and has no game files to read.
-    private void BindRofFiles()
+    // root, and planes.zbd's shipped polygon patches. A synthetic tree bound its own view while it
+    // was built, and has no game files to patch.
+    private void BindGameData()
     {
         if (!_spec.SyntheticData)
         {
             Extraction.RofFiles.Bind(_paths.DataRoot, _paths.Data.Rof);
+            _paths.Data.Planes?.ApplyShippedPolygonPatches("planes");
         }
     }
 
