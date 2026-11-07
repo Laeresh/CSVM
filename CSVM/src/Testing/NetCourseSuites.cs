@@ -161,14 +161,25 @@ internal static class NetCourseSuites
         }
 
         var lobbies = new[] { host, guest };
-        Race(ctx, "lobby", course, word, ownJson: null, seed: 9608, spec: (root, machine) =>
+
+        // ⚠ Restore the ambient: a race session leaves its globals set, and world-turrets after it read
+        // a zeppelin's rounds as doing no damage.
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
         {
-            var options = lobbies[machine].Options;
-            var rules = DogfightLobby.RulesOf(options);
-            return SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--scores={Path.Combine(root, $"scores{machine}.json")}" }),
-                DogfightLobby.ChapterOf(options.Environment), new[] { Plane }, DogfightLobby.LaunchMode(options),
-                vsTimeMinutes: rules.TimeLimitMinutes, missionType: rules.MissionType, course: lobbies[machine].LaunchCourse, fromLobby: true);
-        });
+            Race(ctx, "lobby", course, word, ownJson: null, seed: 9608, spec: (root, machine) =>
+            {
+                var options = lobbies[machine].Options;
+                var rules = DogfightLobby.RulesOf(options);
+                return SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--scores={Path.Combine(root, $"scores{machine}.json")}" }),
+                    DogfightLobby.ChapterOf(options.Environment), new[] { Plane }, DogfightLobby.LaunchMode(options),
+                    vsTimeMinutes: rules.TimeLimitMinutes, missionType: rules.MissionType, course: lobbies[machine].LaunchCourse, fromLobby: true);
+            });
+        }
+        finally
+        {
+            ambient.Restore();
+        }
     }
 
     private static void Race(TestContext ctx, string cell, Course course, LobbyCourseMessage word, string? ownJson, int seed,
