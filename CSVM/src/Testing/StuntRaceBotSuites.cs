@@ -627,6 +627,83 @@ internal static class StuntRaceBotSuites
         }
     }
 
+    [Suite("stunt-race-bot-course-balmoral",
+        "a local C2 stunt race of one pane, two veteran Balmoral bots and a veteran Fury for 300 s: each bot's course "
+        + "lines are fitted to its own airframe, so a Balmoral, 26 m across, flies p9's line knife-edge under the bridge "
+        + "where the Fury flies it level, and clears p9 within 10 s of p8, where it took 50 to 110 s; it strikes the "
+        + "world only past p12 and p17, whose tunnels no straight line takes a Balmoral through, where it struck the "
+        + "ground in the bend before p16 too. Each bot's seconds per entry and strikes are noted")]
+    internal static void CourseBotsFitTheirAirframes(TestContext ctx)
+    {
+        const float P9WithinS = 10f;
+        string[] planes = { "player_balmoral", "player_balmoral", "player_fury" };
+        Course(ctx, "C2");
+        var spec = CourseRace(ctx, "C2", planes.Select((p, i) => new VsBotEntry(p, NetBotSkill.Veteran, 0, $"Bot{i}")).ToArray());
+        var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
+        if (roster is not { Length: 4 })
+        {
+            ctx.Check(false, $"the local launch seats a pane and three bots ({roster?.Length ?? 0} seat(s))");
+            return;
+        }
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end.Session;
+            if (!end.Built || session.SeatRigs.Skip(1).Select(r => r.Controller).ToArray() is not { Length: 3 } seated
+                || seated.Any(b => b is not { Stunt.Course: not null }))
+            {
+                ctx.Check(false, $"the session builds a race of a pane and three bots, each on its own run of the course");
+                return;
+            }
+
+            var bots = seated.Select(b => b!).ToArray();
+            var strikes = bots.Select(_ => new List<string>()).ToArray();
+            var entries = bots.Select(_ => new List<(string Gate, float Seconds)>()).ToArray();
+            var down = new bool[bots.Length];
+            var since = new int[bots.Length];
+            var cleared = new int[bots.Length];
+            int limit = Steps(300f);
+            for (int s = 1; s <= limit; s++)
+            {
+                StepTimed(session, s);
+                for (int b = 0; b < bots.Length; b++)
+                {
+                    var run = bots[b].Stunt!;
+                    if (bots[b].Crashed && !down[b])
+                        strikes[b].Add(run.Zones[Math.Min(run.CompletedCount, run.Zones.Count - 1)].PathName);
+                    down[b] = bots[b].Crashed;
+                    if (run.CompletedCount != cleared[b])
+                    {
+                        entries[b].Add((run.Zones.First(z => z.CompletionOrder == run.CompletedCount - 1).PathName, (s - since[b]) * GameClock.FixedDt));
+                        cleared[b] = run.CompletedCount;
+                        since[b] = s;
+                    }
+                }
+            }
+
+            DangerZoneRibbon P9(int b) => bots[b].Stunt!.Zones.Select(z => z.Route!).First(l => l.Name == "p9");
+            ctx.Check(P9(0).KnifeEdge && P9(1).KnifeEdge, $"each Balmoral's p9 line is flown knife-edge ({P9(0).KnifeEdge}, {P9(1).KnifeEdge})");
+            ctx.Check(!P9(2).KnifeEdge, $"ABLE-TO-FAIL CONTROL: the Fury's p9 line is flown level ({P9(2).KnifeEdge})");
+            for (int b = 0; b < bots.Length; b++)
+            {
+                ctx.Note($"{planes[b]} bot {b}: seconds per entry {string.Join(", ", entries[b].Select(e => $"{e.Gate} {e.Seconds:0}"))}; strikes before {string.Join(", ", strikes[b])}");
+                if (b < 2)
+                {
+                    var p9 = entries[b].Where(e => e.Gate == "p9").Select(e => e.Seconds).ToList();
+                    ctx.Check(p9.Count > 0 && p9.All(t => t <= P9WithinS), $"{planes[b]} bot {b} clears p9 within {P9WithinS:0} s of p8 each time ({string.Join(", ", p9.Select(t => $"{t:0}"))})");
+                    ctx.Check(strikes[b].All(gate => gate is "p14" or "p18"), $"{planes[b]} bot {b} strikes the world only past p12 or p17 (before {string.Join(", ", strikes[b])})");
+                }
+            }
+        }
+        finally
+        {
+            end.Close();
+            ambient.Restore();
+        }
+    }
+
     // A course race's spec over the shipped course, one pane and the given bots, as the menu builds it.
     private static SessionSpec CourseRace(TestContext ctx, string chapter, params VsBotEntry[] bots) => CourseRace(ctx, chapter, CourseName, bots);
 

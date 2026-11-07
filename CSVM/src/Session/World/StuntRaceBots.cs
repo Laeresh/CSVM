@@ -23,8 +23,8 @@ internal sealed class StuntRaceBots
     // How far below a zone's entry the fill-time probe looks for the built world, metres.
     private const float WorldProbeM = 3000f;
 
-    // Remake-only: the radius of the tube a course line or a bot's join is probed as, metres. About a
-    // wing's half span, and the rail's wander off its line.
+    // Remake-only: the tube a course line, a join or a bridge is probed as, metres. Its wing rays reach
+    // the airframe's own wingtips (AircraftBody.HalfSpan), at least this; its others reach this.
     private const float LineTubeM = 6f;
 
     // How far past a struck body the route's cast resumes, metres, and how many bodies one chord's
@@ -68,10 +68,10 @@ internal sealed class StuntRaceBots
         _bots = bots;
         _lead = lead;
         RunsSawWorld = runsSawWorld;
-        foreach (var (_, objective) in bots)
+        foreach (var (seat, objective) in bots)
         {
             objective.Shut = Shut;
-            objective.Blocked = (a, b) => TubeBlocked(a, b) || TubeBlocked(b, a);
+            objective.Blocked = PlaneBlocked(seat);
         }
     }
 
@@ -392,19 +392,29 @@ internal sealed class StuntRaceBots
         _linesFit = true;
         foreach (var (seat, _) in _bots)
         {
-            _seats[seat].Controller?.Stunt?.FitLines(TubeBlocked);
+            // Each run lays its own lines, so each is fitted to its own airframe.
+            _seats[seat].Controller?.Stunt?.FitLines(PlaneBlocked(seat));
         }
     }
 
-    // Whether the world blocks a tube LineTubeM about the straight, cast as five rays. One ray down the
-    // middle passes the C1 face past p1 that bots on the rail strike a few metres off their line.
-    private bool TubeBlocked(Vector3 from, Vector3 to)
+    // Whether the world blocks the seat's plane down a straight at the attitude it is flown there. The
+    // tube's rays, cheap, go first both ways. The plane's own hulls are swept only along a straight they pass.
+    private Func<Vector3, Vector3, Basis, bool> PlaneBlocked(int seat)
     {
-        var dir = (to - from).Normalized();
-        var side = dir.Cross(Vector3.Up);
-        side = (side.LengthSquared() > 1e-6f ? side.Normalized() : Vector3.Right) * LineTubeM;
-        var up = side.Cross(dir).Normalized() * LineTubeM;
-        foreach (var offset in new[] { Vector3.Zero, side, -side, up, -up })
+        var bot = _seats[seat].Controller;
+        float reach = Mathf.Max(LineTubeM, bot?.Body?.HalfSpan ?? 0f);
+        return (a, b, attitude) => TubeBlocked(a, b, attitude, reach) || TubeBlocked(b, a, attitude, reach)
+            || (bot != null && GodotObject.IsInstanceValid(bot) && bot.WorldBlocksHulls(a, b, attitude));
+    }
+
+    // Whether the world blocks a tube about the straight, cast as seven rays. They are the middle, each
+    // wing at half and full `reach`, and LineTubeM to either side of the wings. One ray down the middle
+    // passes the C1 face past p1 that bots on the rail strike a few metres off their line.
+    private bool TubeBlocked(Vector3 from, Vector3 to, Basis attitude, float reach)
+    {
+        var side = attitude.X.Normalized() * reach;
+        var up = attitude.Y.Normalized() * LineTubeM;
+        foreach (var offset in new[] { Vector3.Zero, side, -side, side * 0.5f, side * -0.5f, up, -up })
         {
             if (_lead.WorldBlocksLine(from + offset, to + offset))
             {
