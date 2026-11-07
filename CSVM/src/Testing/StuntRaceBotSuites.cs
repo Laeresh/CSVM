@@ -706,13 +706,13 @@ internal static class StuntRaceBotSuites
 
     [Suite("stunt-race-bot-course-examples",
         "a local stunt race of one pane and three veteran bots, a Fury, a Peacemaker and a Balmoral, on each "
-        + "Instant Action example course (C1B Island Loop, C3 Harbour Ring Run, C4 Crater Lakes, C5 River Run) for "
+        + "Instant Action example course (C1B Island Loop, C3 Harbour Ring Run, C3 Valley Run, C4 Crater Lakes, C5 River Run) for "
         + "240 s: no bot strikes the world and every bot completes a run. Each bot's runs, best time and seconds per "
         + "entry are noted")]
     internal static void CourseBotsFlyTheExampleCourses(TestContext ctx)
     {
         string[] planes = { "player_fury", "player_peacemaker", "player_balmoral" };
-        foreach (var (chapter, name) in new[] { ("C1B", "Island_Loop"), ("C3", "Harbour_Ring_Run"), ("C4", "Crater_Lakes"), ("C5", "River_Run") })
+        foreach (var (chapter, name) in new[] { ("C1B", "Island_Loop"), ("C3", "Harbour_Ring_Run"), ("C3", "Valley_Run"), ("C4", "Crater_Lakes"), ("C5", "River_Run") })
         {
             string cell = $"{chapter}/{name}";
             Course(ctx, chapter);
