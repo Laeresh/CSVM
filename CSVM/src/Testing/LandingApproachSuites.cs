@@ -238,7 +238,8 @@ internal static class LandingApproachSuites
         + "train stages the passenger and flare rig, ladder sensor and docking cone from their "
         + "library root, the train's own pickup_timing opens land_on in its first flyable "
         + "phase, the landing trigger discovers that late-created cone, and flying it starts "
-        + "the hosted pickup cutscene beside the caboose, faces the passenger, runs to handoff "
+        + "the hosted pickup cutscene beside the caboose, its out-of-flight code holding the "
+        + "aircraft where it flew until the film poses player, faces the passenger, runs to handoff "
         + "and clears the primary pickup objective")]
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
@@ -2395,8 +2396,34 @@ internal static class LandingApproachSuites
             }
             ctx.Check(arm.Count > 0 && arm[0].Visible,
                 $"the train's pickup_timing opens land_on in its first flyable phase");
-            ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
-                $"flying CM07's staged train approach starts '{pickup.Anim}'");
+            // cabpkup_player raises 11 before it moves `player` under the caboose, so the
+            // staged pose read in that dispatch is the one to watch.
+            var host = world.Runtime.CallbackHost;
+            float? moved = null;
+            world.Runtime.CallbackHost = (code, anim, root) =>
+            {
+                var before = rig.GlobalPosition;
+                bool hosted = host!(code, anim, root);
+                if (code == CutsceneController.CodeOutOfFlight && moved == null)
+                {
+                    moved = rig.GlobalPosition.DistanceTo(before);
+                    report.AppendLine($"code 11 staged the aircraft at {rig.GlobalPosition}, {moved:0.#} m from where it flew");
+                }
+
+                return hosted;
+            };
+            try
+            {
+                ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
+                    $"flying CM07's staged train approach starts '{pickup.Anim}'");
+            }
+            finally
+            {
+                world.Runtime.CallbackHost = host;
+            }
+
+            ctx.Check(moved is < 1f,
+                $"the code-11 dispatch leaves the aircraft where it flew, not at the world origin");
             ctx.Check(cutscene.Playing,
                 $"'{pickup.Anim}' takes ownership of the session instead of ending immediately");
             var gated = ObjectiveForInactive(script, "pickup_objective");
