@@ -1720,7 +1720,7 @@ internal static class GraphicsSwitchSuites
     [Suite("lighting-lab",
         "the lighting lab stands in an Enhanced --freecam C1 session and nowhere in a --fly one: a held zone "
         + "stays held through the camera's steps, an edit reaches the live sun, ambient, tonemap and shadow fields "
-        + "and a registered clone's, off restores the untuned values and on brings the edit back, a grade edit reaches "
+        + "and a registered clone's, off restores the untuned values and on brings the edit back, the night switch relights the zone and back, a grade edit reaches "
         + "the Environment while Post-processing is on, is ignored while it is off and comes back on a live toggle, a sky tint reaches every dome by the fog colour's factor, a cloud tint reaches the deck and the cloud sprites, a mission override "
         + "reads through its chapter entry, Save to chapter and Save to this mission write the sparse blocks, and a "
         + "reset drops an override")]
@@ -1795,6 +1795,16 @@ internal static class GraphicsSwitchSuites
                 lab.SetOff(false);
                 ctx.Check(Mathf.IsEqualApprox(sun.LightEnergy, sun0 * 2f) && env.TonemapExposure == 1.5f,
                     $"on brings the edit back (sun {sun.LightEnergy:0.###})");
+
+                bool night0 = lab.Weather.NightApplied;
+                lab.SetNight(!night0);
+                Step(freecam);
+                ctx.Check(lab.Weather.NightApplied != night0 && lab.Weather.Moonlit != night0,
+                    $"the night switch relights the zone at once (night {night0} -> {lab.Weather.NightApplied}, sun {sun.LightEnergy:0.###})");
+                lab.SetNight(night0);
+                Step(freecam);
+                ctx.Check(lab.Weather.NightApplied == night0 && Mathf.IsEqualApprox(sun.LightEnergy, sun0 * 2f),
+                    $"switching it back restores the tuned day light (sun {sun.LightEnergy:0.###})");
 
                 PostWord(PostProcessingSetting.On);
                 lab.Set("grade_agx_contrast", 1.4f);

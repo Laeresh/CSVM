@@ -387,6 +387,9 @@ public sealed class WeatherRig
         }
     }
 
+    /// <summary>Whether the mission lights as a moonlit mission: the file's night flag, or the lab's switch since.</summary>
+    public bool Moonlit { get; private set; }
+
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
     /// top at or above it. Pure, so two cameras either side get independently correct answers.
@@ -668,6 +671,30 @@ public sealed class WeatherRig
             _labLighting[zone] = tune.Clamped();
         _tuned.Clear();
         ReapplyZone();
+    }
+
+    /// <summary>The lab's night switch: every zone marked moonlit or cleared, and lit again at once, its
+    /// bearing, energies, fog range and cloud shadows with it.</summary>
+    public void SetMoonlit(bool moonlit)
+    {
+        if (_weather == null || moonlit == Moonlit)
+            return;
+        Moonlit = moonlit;
+        _weather.SetMoonlit(moonlit);
+        // The views hold copies of the zone records, and ZoneNameOf matches them by value.
+        if (_appliedZone is { } applied)
+            _appliedZone = applied with { Moonlit = moonlit };
+        foreach (var view in _views.Values.Append(_baseFog))
+        {
+            if (view.Zone is { } zone)
+            {
+                view.Zone = zone with { Moonlit = moonlit };
+                view.Sun = ZoneSun(view.Zone.Value);
+            }
+        }
+        _tuned.Clear();
+        ReapplyZone();
+        Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} {(moonlit ? "lit as a moonlit mission" : "lit as authored, not moonlit")} by the lighting lab");
     }
 
     /// <summary>Holds every view in <paramref name="zone"/>'s weather and light whatever its camera
@@ -1397,9 +1424,10 @@ public sealed class WeatherRig
         _weather = WeatherState.Load(missionZrdr);
         _lighting ??= LightingTable.Load();
         _tuned.Clear();
-        if (_weather != null && _lighting.Night(_spec.Chapter, _spec.Mission))
+        Moonlit = _weather != null && _lighting.Night(_spec.Chapter, _spec.Mission);
+        if (Moonlit)
         {
-            _weather.MarkMoonlit();
+            _weather!.SetMoonlit(true);
             Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} is a moonlit mission (night in lighting.json), lit as night under Enhanced");
         }
         // No zone apply follows a world with no weather, so a previous session's tune is put back here.

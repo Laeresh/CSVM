@@ -640,9 +640,9 @@ The shipped Enhanced lighting tune, `CSVM/data/lighting.json`, keyed chapter, th
 folder, then weather zone. A chapter zone block holds the `Effects/ZoneLighting.cs` fields that differ from
 the defaults, and a mission block those that differ from its chapter's, so a chapter edit still
 reaches the mission. A mission's `night` flag makes it a moonlit mission: `WeatherRig` marks its
-zones (`WeatherState.MarkMoonlit`), which `IsNightZone` counts as night under Enhanced alone. It ships
-empty, and a malformed entry is a warning. `WithZone` is the lighting lab's write, keeping every other
-key in place. `--dump-moonlit` prints the candidates (`Tooling/Probes.Moonlit`). Rule: [../org/weather.md](../org/weather.md).
+zones (`WeatherState.SetMoonlit`), which `IsNightZone` counts as night under Enhanced alone. It ships
+empty, and a malformed entry is a warning. `WithZone` is the lighting lab's write, the night flag with
+it, keeping every other key in place. `--dump-moonlit` prints the candidates (`Tooling/Probes.Moonlit`). Rule: [../org/weather.md](../org/weather.md).
 
 ## src/Session/World/FogViewTable.cs
 The per-view atmosphere table: every camera drawing the shared world (each splitscreen pane and each

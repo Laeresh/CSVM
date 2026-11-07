@@ -18,7 +18,7 @@ namespace CSVM.UI.Labs;
 /// sun, the Environment and the cockpit and spyglass suns through the weather rig. Save writes this
 /// zone's chapter block or the mission's sparse block into <c>lighting.json</c> from the source tree,
 /// and is off in an exported build. A field the mission overrides is marked, with a reset to the
-/// chapter's value. A parked plane ahead of the camera turns through the sun on its sliders.
+/// chapter's value. Night lights the mission as moonlit, and a parked plane turns through the sun on its sliders.
 /// </summary>
 public sealed partial class LightingLab : Node
 {
@@ -52,6 +52,7 @@ public sealed partial class LightingLab : Node
     private Label? _status;
     private OptionButton? _zones;
     private CheckButton? _off;
+    private CheckButton? _night;
     private bool _open;
     private bool _syncing;
     private float _pending = -1f;
@@ -240,12 +241,14 @@ public sealed partial class LightingLab : Node
         Commit();
     }
 
-    /// <summary>The shown zone back to the file's tune and overrides, applied at once.</summary>
+    /// <summary>The shown zone back to the file's tune and overrides, and the mission to the file's night
+    /// flag, applied at once.</summary>
     public void RevertToSaved()
     {
         string zone = ShownZone;
         _edits.Remove(zone);
         _overrides.Remove(zone);
+        SetNight(SavedNight());
         _note = "reverted to the saved tune";
         Commit();
     }
@@ -254,13 +257,17 @@ public sealed partial class LightingLab : Node
     public void SetOff(bool off)
     {
         _weather.LightingOff = off;
-        if (_off != null && _off.ButtonPressed != off)
-        {
-            _syncing = true;
-            _off.ButtonPressed = off;
-            _syncing = false;
-        }
+        Check(_off, off);
         Log.Info("ui", $"lighting lab: tune {(off ? "off, untuned look" : "on")}");
+        UpdateStatus();
+    }
+
+    /// <summary>The mission lit as a moonlit mission or as authored, applied at once; either Save writes it.</summary>
+    public void SetNight(bool night)
+    {
+        _weather.SetMoonlit(night);
+        Check(_night, night);
+        Log.Info("ui", $"lighting lab: {_chapter}/{_mission} night {(night ? "on" : "off")}");
         UpdateStatus();
     }
 
@@ -353,6 +360,18 @@ public sealed partial class LightingLab : Node
 
     private ZoneLighting ChapterSaved(string zone) => _weather.Lighting.ChapterLighting(_chapter, zone);
 
+    private bool SavedNight() => _weather.Lighting.Night(_chapter, _mission);
+
+    // A checkbox moved to match a state set from code, without its handler firing back.
+    private void Check(CheckButton? box, bool on)
+    {
+        if (box == null || box.ButtonPressed == on)
+            return;
+        _syncing = true;
+        box.ButtonPressed = on;
+        _syncing = false;
+    }
+
     // A new value for the shown zone; an overridden field keeps its mark and takes the value.
     private void Edit(ZoneLighting edit) => _edits[ShownZone] = edit.Clamped();
 
@@ -381,7 +400,7 @@ public sealed partial class LightingLab : Node
             mission[key] = ZoneLighting.Find(key)!.Get(edit);
         try
         {
-            LightingTable.Save(SavePath, _chapter, _mission, zone, chapter, mission);
+            LightingTable.Save(SavePath, _chapter, _mission, zone, chapter, mission, _weather.Moonlit);
             var table = LightingTable.Parse(File.ReadAllText(SavePath, Encoding.UTF8));
             _weather.ReloadLighting(table);
             _overrides[zone] = new HashSet<string>(table.MissionFields(_chapter, _mission, zone).Keys, StringComparer.OrdinalIgnoreCase);
@@ -483,6 +502,14 @@ public sealed partial class LightingLab : Node
                 SetOff(on);
         };
         top.AddChild(_off);
+        _night = new CheckButton { Text = "Night", FocusMode = Control.FocusModeEnum.None, ButtonPressed = _weather.Moonlit };
+        _night.TooltipText = "This mission lit as a moonlit mission: capped sun and ambient, light from the dome's moon, authored fog range, no cloud shadows";
+        _night.Toggled += on =>
+        {
+            if (!_syncing)
+                SetNight(on);
+        };
+        top.AddChild(_night);
         box.AddChild(top);
 
         var scroll = new ScrollContainer
@@ -665,9 +692,11 @@ public sealed partial class LightingLab : Node
         if (_status == null)
             return;
         string zone = _pick != null ? $"{ShownZone} held" : $"{ShownZone}, the camera's";
-        string saved = Edited == _weather.Lighting.For(_chapter, _mission, ShownZone) ? "matches the saved tune" : "unsaved changes";
+        bool matches = Edited == _weather.Lighting.For(_chapter, _mission, ShownZone) && _weather.Moonlit == SavedNight();
+        string saved = matches ? "matches the saved tune" : "unsaved changes";
         string off = _weather.LightingOff ? " · tune OFF (untuned look)" : "";
-        _status.Text = $"{zone} · {Overrides.Count} override(s) · {saved}{off}{(_note.Length > 0 ? $"\n{_note}" : "")}";
+        string night = _weather.NightApplied ? " · night" : "";
+        _status.Text = $"{zone} · {Overrides.Count} override(s) · {saved}{night}{off}{(_note.Length > 0 ? $"\n{_note}" : "")}";
     }
 
     private Button Btn(string text, Action pressed)

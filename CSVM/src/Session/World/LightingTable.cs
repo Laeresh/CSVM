@@ -128,10 +128,11 @@ public sealed class LightingTable
     /// <summary>The file's text with one zone's chapter block and mission block written. The chapter
     /// block holds <paramref name="chapterLighting"/>'s differences from the defaults. The mission
     /// block holds the <paramref name="missionFields"/> that differ from the chapter's. An empty block
-    /// is dropped, and so is a mission left with no zone and no night flag. Throws
-    /// <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
+    /// is dropped, and so is a mission left with no zone and no night flag. A non-null
+    /// <paramref name="night"/> sets the mission's flag, false removing it; null leaves it as the file has it.
+    /// Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
     public static string WithZone(string? existing, string chapter, string? mission, string zone,
-        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields)
+        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null)
     {
         JsonObject root;
         if (string.IsNullOrWhiteSpace(existing))
@@ -157,6 +158,10 @@ public sealed class LightingTable
         if (mission != null)
         {
             var missionNode = Child(chapterNode, mission);
+            if (night == true)
+                missionNode[Key(missionNode, NightKey)] = true;
+            else if (night == false)
+                Remove(missionNode, NightKey);
             var over = chapterLighting.Over(missionFields).Differences(chapterLighting);
             Put(missionNode, zoneKey, Block(over));
             if (missionNode.Count == 0)
@@ -170,10 +175,10 @@ public sealed class LightingTable
     /// <summary>Writes one zone's blocks into the file at <paramref name="diskPath"/>
     /// (<see cref="WithZone"/>), creating it when absent.</summary>
     public static void Save(string diskPath, string chapter, string? mission, string zone,
-        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields)
+        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
-        File.WriteAllText(diskPath, WithZone(existing, chapter, mission, zone, chapterLighting, missionFields),
+        File.WriteAllText(diskPath, WithZone(existing, chapter, mission, zone, chapterLighting, missionFields, night),
             new UTF8Encoding(false));
     }
 
@@ -288,19 +293,21 @@ public sealed class LightingTable
     // Sets a block in its place, or drops the key when the block is empty.
     private static void Put(JsonObject parent, string key, JsonObject block)
     {
-        string? at = null;
+        if (block.Count == 0)
+            Remove(parent, key);
+        else
+            parent[Key(parent, key)] = block;
+    }
+
+    // The key as the object spells it in any case, else as given.
+    private static string Key(JsonObject parent, string key)
+    {
         foreach (var (k, _) in parent)
         {
             if (k.Equals(key, StringComparison.OrdinalIgnoreCase))
-                at = k;
+                return k;
         }
-        if (block.Count == 0)
-        {
-            if (at != null)
-                parent.Remove(at);
-            return;
-        }
-        parent[at ?? key] = block;
+        return key;
     }
 
     private static void Remove(JsonObject parent, string key)

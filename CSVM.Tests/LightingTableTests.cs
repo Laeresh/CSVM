@@ -122,6 +122,20 @@ public sealed class LightingTableTests
     }
 
     [Fact]
+    public void ASaveWritesOrClearsTheNightFlag()
+    {
+        var none = new Dictionary<string, float>();
+        string on = LightingTable.WithZone("{}", "C1", "M01", "zone1", ZoneLighting.Default, none, night: true);
+        Assert.True(LightingTable.Parse(on).Night("C1", "M01"));
+        Assert.Equal(new[] { "night" }, Keys((JsonObject)JsonNode.Parse(on)!["C1"]!["M01"]!));
+        // Null keeps the file's flag; false drops it, and the mission with it once nothing is left.
+        Assert.True(LightingTable.Parse(LightingTable.WithZone(on, "C1", "M01", "zone1", ZoneLighting.Default, none)).Night("C1", "M01"));
+        string off = LightingTable.WithZone(on, "C1", "M01", "zone1", ZoneLighting.Default, none, night: false);
+        Assert.False(LightingTable.Parse(off).Night("C1", "M01"));
+        Assert.Empty(Keys((JsonObject)JsonNode.Parse(off)!));
+    }
+
+    [Fact]
     public void TheDebugGrammarKeepsWhatTheLabReads()
     {
         var rejected = new List<string>();
