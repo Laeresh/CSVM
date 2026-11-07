@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
@@ -168,7 +169,7 @@ public class CourseRunTests
         // Godot's does, so only a cast from both ends sees a buried line end.
         var hill = new Aabb(new Vector3(-50f, -10f, 100f), new Vector3(100f, 50f, 200f));
         var cliff = new Aabb(new Vector3(-50f, -10f, -300f), new Vector3(100f, 45f, 180f));
-        bool Blocked(Vector3 a, Vector3 b)
+        bool Blocked(Vector3 a, Vector3 b, Basis attitude)
         {
             if (hill.HasPoint(a) || cliff.HasPoint(a))
                 return false;
@@ -192,12 +193,52 @@ public class CourseRunTests
         Assert.True(line.Opening!.Value.DistanceTo(new Vector3(0f, 15f, 0f)) < 0.01f, $"{line.Opening}");
 
         // A world that blocks every slope leaves the line level, and a clear one leaves it alone.
-        run.FitLines((a, b) => true);
+        run.FitLines((a, b, _) => true);
         Assert.Equal((15f, 15f), (run.Zones[0].Route!.End(false).Y, run.Zones[0].Route!.End(true).Y));
-        run.FitLines((a, b) => false);
+        run.FitLines((a, b, _) => false);
         Assert.Equal((15f, 15f), (run.Zones[0].Route!.End(false).Y, run.Zones[0].Route!.End(true).Y));
         Assert.Equal(-StuntMission.EntryRunOutM, run.Zones[0].Route!.End(true).Z, 1);
     }
+
+    [Fact]
+    public void ALineTooNarrowForThePlaneLevelIsFlownKnifeEdge()
+    {
+        // Pillars stand 9 m either side of A's exit from 90 to 130 m out, full height. A plane reaching
+        // 13 m along its wings fits between them only with its wings upright.
+        var pillars = new[]
+        {
+            new Aabb(new Vector3(9f, -10f, -130f), new Vector3(30f, 400f, 40f)),
+            new Aabb(new Vector3(-39f, -10f, -130f), new Vector3(30f, 400f, 40f)),
+        };
+        var run = Run(Fwd(A));
+        run.FitLines(TubeAgainst(pillars, reach: 13f));
+        var line = run.Zones[0].Route!;
+        Assert.True(line.KnifeEdge);
+        Assert.Equal(-StuntMission.EntryExitM, line.End(true).Z, 1);
+
+        // ABLE-TO-FAIL CONTROL: a plane reaching 5 m flies between them level.
+        run.FitLines(TubeAgainst(pillars, reach: 5f));
+        Assert.False(run.Zones[0].Route!.KnifeEdge);
+    }
+
+    [Fact]
+    public void AnExitWithAPostOnItsLineTurnsPastIt()
+    {
+        // A post stands 1 to 4 m right of A's exit, 108 to 112 m out. The exit turns 5 degrees left of
+        // it, flown level and ridden to its end.
+        var post = new[] { new Aabb(new Vector3(1f, -10f, -112f), new Vector3(3f, 400f, 4f)) };
+        var run = Run(Fwd(A));
+        run.FitLines(TubeAgainst(post, reach: 5f));
+        var line = run.Zones[0].Route!;
+        Assert.False(line.KnifeEdge);
+        Assert.Equal(-StuntMission.EntryExitM * Mathf.Sin(Mathf.DegToRad(5f)), line.End(true).X, 1);
+        Assert.Equal(-StuntMission.EntryExitM * Mathf.Cos(Mathf.DegToRad(5f)), line.End(true).Z, 1);
+
+        // ABLE-TO-FAIL CONTROL: with no post the exit runs straight on.
+        run.FitLines(TubeAgainst(Array.Empty<Aabb>(), reach: 5f));
+        Assert.Equal(0f, run.Zones[0].Route!.End(true).X, 3);
+    }
+
 
     [Fact]
     public void ATapAfterAMovingRingReturnsToWhereTheRingStandsNotItsRest()
@@ -292,4 +333,21 @@ public class CourseRunTests
         run.Update(centre - along);
         run.Update(centre + along);
     }
+
+    // A straight is blocked where its middle or a ray along the attitude's wings, at half or the whole reach, meets a box.
+    private static Func<Vector3, Vector3, Basis, bool> TubeAgainst(Aabb[] boxes, float reach) => (a, b, attitude) =>
+    {
+        foreach (float share in new[] { 0f, 0.5f, -0.5f, 1f, -1f })
+        {
+            var off = attitude.X * (reach * share);
+            for (float t = 0f; t <= 1f; t += 0.002f)
+            {
+                var p = (a + off).Lerp(b + off, t);
+                if (Array.Exists(boxes, box => box.HasPoint(p)))
+                    return true;
+            }
+        }
+
+        return false;
+    };
 }

@@ -51,6 +51,11 @@ public sealed class DangerZoneRibbon
     /// from its first vertex only, and only while its entry is the run's next.</summary>
     public bool IsCourseEntry { get; private init; }
 
+    /// <summary>Whether the rail flies this ribbon knife-edge, its wings upright
+    /// (<see cref="DangerZoneRail.KnifeFrame"/>). A course entry's line is, where no line flown level
+    /// fits the plane (<see cref="StuntMission.FitLines"/>), and so is a bridge onto it.</summary>
+    public bool KnifeEdge { get; private init; }
+
     /// <summary>A course entry's gate opening centre, where it stands now; null on any other ribbon.</summary>
     public Vector3? Opening => IsCourseEntry ? PointAt(0, Segments[0].Length) : null;
 
@@ -82,7 +87,7 @@ public sealed class DangerZoneRibbon
     /// build (<c>FUN_00445ef0</c>). The difficulty is the node's own, see
     /// <see cref="Difficulty"/>.</summary>
     public static DangerZoneRibbon FromPolyline(string name, int index, IReadOnlyList<Vector3> vertices,
-        IReadOnlyList<Vector3>? laneOffsets = null, int difficulty = 0)
+        IReadOnlyList<Vector3>? laneOffsets = null, int difficulty = 0, bool knifeEdge = false)
     {
         if (vertices.Count < 2)
             throw new ArgumentException($"'{name}': a ribbon needs at least two vertices", nameof(vertices));
@@ -109,23 +114,24 @@ public sealed class DangerZoneRibbon
         var lanes = new List<Vector3> { Vector3.Zero };
         if (laneOffsets != null)
             lanes.AddRange(laneOffsets);
-        return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty };
+        return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty, KnifeEdge = knifeEdge };
     }
 
     /// <summary>A course sequence entry's line: from <paramref name="before"/> metres short of
-    /// <paramref name="opening"/> along <paramref name="way"/> to <paramref name="after"/> metres past it,
-    /// its start <paramref name="leadRise"/> and its end <paramref name="runRise"/> metres above level.
-    /// It is <see cref="IsCourseEntry"/> and moved by <paramref name="drift"/>.</summary>
+    /// <paramref name="opening"/> along <paramref name="way"/> to <paramref name="after"/> metres past it
+    /// along <paramref name="runWay"/>, <paramref name="way"/> when null. Its start stands
+    /// <paramref name="leadRise"/> and its end <paramref name="runRise"/> metres above level. It is
+    /// <see cref="IsCourseEntry"/>, moved by <paramref name="drift"/>, and flown <see cref="KnifeEdge"/> when asked.</summary>
     public static DangerZoneRibbon ForEntry(string name, int index, Vector3 opening, Vector3 way, float before, float after,
-        Func<Vector3> drift, float leadRise = 0f, float runRise = 0f)
+        Func<Vector3> drift, float leadRise = 0f, float runRise = 0f, Vector3? runWay = null, bool knifeEdge = false)
     {
         var line = FromPolyline(name, index, new[]
         {
             opening - (way * before) + (Vector3.Up * leadRise),
             opening,
-            opening + (way * after) + (Vector3.Up * runRise),
+            opening + ((runWay ?? way) * after) + (Vector3.Up * runRise),
         });
-        return new DangerZoneRibbon(name, index, line.Segments, line.Lanes) { IsCourseEntry = true, Drift = drift };
+        return new DangerZoneRibbon(name, index, line.Segments, line.Lanes) { IsCourseEntry = true, Drift = drift, KnifeEdge = knifeEdge };
     }
 
     /// <summary>The point <paramref name="t"/> metres into segment <paramref name="segment"/>,
@@ -429,13 +435,26 @@ public sealed class DangerZoneRail
         return new Basis(right, up, -direction).Orthonormalized();
     }
 
+    /// <summary>Remake-only: the frame a <see cref="DangerZoneRibbon.KnifeEdge"/> ribbon asks for, the nose
+    /// along the direction and "up" level to its right, so the wings stand upright.</summary>
+    /// <remarks>⚠ Do not turn "up" toward the bend: where a line's bend changes side, the frame would roll
+    /// half a turn on the line.</remarks>
+    public static Basis KnifeFrame(Vector3 direction, Vector3 curvature)
+    {
+        var side = direction.Cross(Vector3.Up);
+        if (side.LengthSquared() < 1e-6f)
+            return RailFrame(direction, curvature);
+        var up = side.Normalized();
+        return new Basis(up.Cross(-direction).Normalized(), up, -direction).Orthonormalized();
+    }
+
     /// <summary>One sim step on the rail. Returns false once the cursor has left the ribbon.</summary>
     public bool Step(float dt)
     {
         if (Run.Done)
             return false;
         var direction = Run.Direction;
-        var target = RailFrame(direction, Run.Curvature);
+        var target = Run.Ribbon.KnifeEdge ? KnifeFrame(direction, Run.Curvature) : RailFrame(direction, Run.Curvature);
         float rate = Run.OnLastSegment ? ExitAttitudeRatePerS : AttitudeRatePerS;
         float blend = Mathf.Min(1f, rate * dt);
         Attitude = blend >= 1f
