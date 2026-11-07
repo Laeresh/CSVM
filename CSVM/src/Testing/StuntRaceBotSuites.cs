@@ -704,6 +704,85 @@ internal static class StuntRaceBotSuites
         }
     }
 
+    [Suite("stunt-race-bot-course-examples",
+        "a local stunt race of one pane and three veteran bots, a Fury, a Peacemaker and a Balmoral, on each "
+        + "Instant Action example course (C1B Island Loop, C3 Harbour Ring Run, C3 Valley Run, C4 Crater Lakes, C5 River Run) for "
+        + "240 s: no bot strikes the world and every bot completes a run. Each bot's runs, best time and seconds per "
+        + "entry are noted")]
+    internal static void CourseBotsFlyTheExampleCourses(TestContext ctx)
+    {
+        string[] planes = { "player_fury", "player_peacemaker", "player_balmoral" };
+        foreach (var (chapter, name) in new[] { ("C1B", "Island_Loop"), ("C3", "Harbour_Ring_Run"), ("C3", "Valley_Run"), ("C4", "Crater_Lakes"), ("C5", "River_Run") })
+        {
+            string cell = $"{chapter}/{name}";
+            Course(ctx, chapter);
+            var spec = CourseRace(ctx, chapter, name, planes.Select((p, i) => new VsBotEntry(p, NetBotSkill.Veteran, 0, $"Bot{i}")).ToArray());
+            var roster = SeatFields.LocalVersusField(spec, ctx.Data.Messages);
+            if (roster is not { Length: 4 })
+            {
+                ctx.Check(false, $"[{cell}] the local launch seats a pane and three bots ({roster?.Length ?? 0} seat(s))");
+                continue;
+            }
+
+            var ambient = NetCombatSuites.Ambient.Save();
+            var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+            try
+            {
+                var session = end.Session;
+                if (!end.Built || session.RaceDirector?.Race is not { } race
+                    || session.SeatRigs.Skip(1).Select(r => r.Controller).ToArray() is not { Length: 3 } seated
+                    || seated.Any(b => b is not { Stunt.Course: not null }))
+                {
+                    ctx.Check(false, $"[{cell}] the session builds a race of a pane and three bots, each on its own run of the course");
+                    continue;
+                }
+
+                var bots = seated.Select(b => b!).ToArray();
+                var crashes = bots.Select(_ => new List<string>()).ToArray();
+                var entries = bots.Select(_ => new List<string>()).ToArray();
+                var down = new bool[bots.Length];
+                var cleared = new int[bots.Length];
+                var since = new int[bots.Length];
+                int limit = Steps(240f);
+                for (int s = 1; s <= limit; s++)
+                {
+                    StepTimed(session, s);
+                    for (int b = 0; b < bots.Length; b++)
+                    {
+                        var run = bots[b].Stunt!;
+                        if (bots[b].Crashed && !down[b])
+                        {
+                            var p = bots[b].WorldPosition;
+                            crashes[b].Add($"{CourseFlight.Seconds(s * GameClock.FixedDt)} s before {run.Zones[Math.Min(run.CompletedCount, run.Zones.Count - 1)].PathName} at ({p.X:0}, {p.Y:0}, {p.Z:0})");
+                        }
+
+                        down[b] = bots[b].Crashed;
+                        if (run.CompletedCount != cleared[b])
+                        {
+                            entries[b].Add($"{run.Zones.First(z => z.CompletionOrder == run.CompletedCount - 1).PathName} {(s - since[b]) * GameClock.FixedDt:0}");
+                            cleared[b] = run.CompletedCount;
+                            since[b] = s;
+                        }
+                    }
+                }
+
+                for (int b = 0; b < bots.Length; b++)
+                {
+                    var racer = race.Of(b + 1)!;
+                    ctx.Note($"[{cell}] {planes[b]}: {racer.RunsFinished} run(s), best {Time(racer)}; seconds per entry {string.Join(", ", entries[b])}");
+                    ctx.Check(crashes[b].Count == 0,
+                        $"[{cell}] {planes[b]} never strikes the world in 240 s ({crashes[b].Count}: {string.Join("; ", crashes[b].Take(4))})");
+                    ctx.Check(racer.RunsFinished >= 1, $"[{cell}] {planes[b]} completes a run in 240 s ({racer.RunsFinished}, best {Time(racer)})");
+                }
+            }
+            finally
+            {
+                end.Close();
+                ambient.Restore();
+            }
+        }
+    }
+
     // A course race's spec over the shipped course, one pane and the given bots, as the menu builds it.
     private static SessionSpec CourseRace(TestContext ctx, string chapter, params VsBotEntry[] bots) => CourseRace(ctx, chapter, CourseName, bots);
 

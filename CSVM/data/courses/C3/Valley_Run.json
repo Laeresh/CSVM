@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "title": "Valley Run",
+  "start": {
+    "pos": [-7471.8, 60, -4996.9],
+    "heading": -94
+  },
+  "gates": [
+    { "id": "p1", "kind": "pylons", "pos": [-6823.4, 0, -4951.6], "heading": -94, "width": 40, "height": 35 },
+    { "id": "p2", "kind": "pylons", "pos": [-6537.5, 3.6, -4913.6], "heading": -121.2, "width": 40, "height": 60 },
+    { "id": "r1", "kind": "ring", "pos": [-5908.5, 55.1, -4987.5], "heading": -59.6, "diameter": 40 },
+    { "id": "p3", "kind": "pylons", "pos": [-5707.9, 0, -5192.1], "heading": -42.1, "width": 40, "height": 55 },
+    { "id": "r2", "kind": "ring", "pos": [-5473.5, 52.5, -5362.5], "heading": -64.3, "diameter": 40 },
+    { "id": "p4", "kind": "pylons", "pos": [-5237.5, 0, -5274.2], "heading": -145.8, "width": 40, "height": 60 },
+    { "id": "r3", "kind": "ring", "pos": [-4927.1, 118.8, -4987.5], "heading": -106.5, "diameter": 40 },
+    { "id": "r4", "kind": "ring", "pos": [-4582.4, 54, -4657.4], "heading": -143.9, "diameter": 40 },
+    { "id": "p5", "kind": "pylons", "pos": [-3941, 2.2, -4566], "heading": -102.8, "width": 40, "height": 55 },
+    { "id": "p6", "kind": "pylons", "pos": [-3698.3, 0, -4576.7], "heading": -83, "width": 40, "height": 30 }
+  ],
+  "sequence": [
+    { "gate": "p1", "dir": "forward" },
+    { "gate": "p2", "dir": "forward" },
+    { "gate": "r1", "dir": "forward" },
+    { "gate": "p3", "dir": "forward" },
+    { "gate": "r2", "dir": "forward" },
+    { "gate": "p4", "dir": "forward" },
+    { "gate": "r3", "dir": "forward" },
+    { "gate": "r4", "dir": "forward" },
+    { "gate": "p5", "dir": "forward" },
+    { "gate": "p6", "dir": "forward" }
+  ]
+}

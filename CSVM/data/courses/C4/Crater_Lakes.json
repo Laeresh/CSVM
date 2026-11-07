@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "title": "Crater Lakes",
+  "start": {
+    "pos": [-5433.1, 567, -6468.8],
+    "heading": 60.9
+  },
+  "gates": [
+    { "id": "p1", "kind": "pylons", "pos": [-5869.9, 517, -6712.2], "heading": 60.9, "width": 40, "height": 30 },
+    { "id": "p2", "kind": "pylons", "pos": [-6490, 517, -6599.9], "heading": 108.3, "width": 40, "height": 30 },
+    { "id": "p3", "kind": "pylons", "pos": [-6555.7, 517, -5968.6], "heading": -175.4, "width": 40, "height": 30 },
+    { "id": "p4", "kind": "pylons", "pos": [-7027.6, 517.5, -5515.3], "heading": 124.7, "width": 40, "height": 30 },
+    { "id": "r1", "kind": "ring", "pos": [-6982.3, 578.9, -4981.3], "heading": -162.8, "diameter": 40 },
+    { "id": "p5", "kind": "pylons", "pos": [-7006.2, 517, -4312.9], "heading": 173.9, "width": 40, "height": 30 },
+    { "id": "p6", "kind": "pylons", "pos": [-7486.4, 517, -4072.1], "heading": 104.6, "width": 40, "height": 30 },
+    { "id": "p7", "kind": "pylons", "pos": [-8002.9, 517.3, -4544.5], "heading": 38.5, "width": 40, "height": 30 },
+    { "id": "p8", "kind": "pylons", "pos": [-7739.1, 517, -5023.5], "heading": -41.3, "width": 40, "height": 30 },
+    { "id": "r2", "kind": "ring", "pos": [-7446, 595.4, -5560.7], "heading": -25.6, "diameter": 40 }
+  ],
+  "sequence": [
+    { "gate": "p1", "dir": "forward" },
+    { "gate": "p2", "dir": "forward" },
+    { "gate": "p3", "dir": "forward" },
+    { "gate": "p4", "dir": "forward" },
+    { "gate": "r1", "dir": "forward" },
+    { "gate": "p5", "dir": "forward" },
+    { "gate": "p6", "dir": "forward" },
+    { "gate": "p7", "dir": "forward" },
+    { "gate": "p8", "dir": "forward" },
+    { "gate": "r2", "dir": "forward" }
+  ]
+}
