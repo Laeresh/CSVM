@@ -72,7 +72,7 @@ export's executable) on the worker it lands on. F11 reads each pane's own camera
 socket and queues each line; the main thread runs one command per frame and answers it, so nothing
 touches the tree off it. It holds the sim through `GameClock.ScriptHeld` from the first frame a
 clock exists, skips or fast-forwards the session's cutscene, and parks a camera of its own as the
-viewport's current one. `scripts/Control.ps1` is the client and lists the verbs.
+viewport's current one, drawing the layers of the camera it stood down. `scripts/Control.ps1` is the client and lists the verbs.
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.
