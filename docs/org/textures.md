@@ -490,8 +490,9 @@ mip 0 and the other did not, and it eroded every cutout's silhouette. The render
 alone changes nothing; the edge built-in is what turns it on. With the built-in set and `ALPHA`
 written, Godot 4.7 counts the shader as alpha (`uses_alpha && (!uses_alpha_clip ||
 uses_alpha_antialiasing)` in its forward clustered `uses_alpha_pass`), so an Enhanced cutout draws
-in the transparent pass, not the opaque one: sorted per instance by render priority and depth with
-the blends, and blended through `BLEND_MODE_ALPHA_TO_COVERAGE`, which mixes `SRC_ALPHA` over the
+in the transparent pass, not the opaque one. `SceneBuilder.CutoutRenderPriority` draws a world
+cutout ahead of every blend, which is the order the opaque pass gave it; it writes depth, so a
+blend behind it is rejected and a blend in front composites over it. It is blended through `BLEND_MODE_ALPHA_TO_COVERAGE`, which mixes `SRC_ALPHA` over the
 target on the covered samples. Two cutout surfaces of one instance therefore overlap their
 partial edge pixels in the sort's tie order (`analysis/goldens/README.md`).
 `alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why the plain
