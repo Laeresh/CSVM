@@ -867,9 +867,10 @@ internal static class MenuOriginalConnectionSuites
             door.Lan.SearchAddress = Loopback;
         }
 
-        // Both doors list the shipped courses, as a --det launch does.
-        hostDoor.Courses = CourseLibrary.ShippedChoices;
-        guestDoor.Courses = CourseLibrary.ShippedChoices;
+        // Both doors list NW Boeing Field's shipped courses alone. Hawai'ian Islands ships one too, and
+        // without it the lobby still shows the race's description there.
+        hostDoor.Courses = BoeingCourses;
+        guestDoor.Courses = BoeingCourses;
         var ends = new List<End>();
         var hostExits = new List<MenuExit>();
         var guestExits = new List<MenuExit>();
@@ -3553,6 +3554,10 @@ internal static class MenuOriginalConnectionSuites
     // One team refuses LAUNCH!; the guest's own team lets it go, each seat carrying its team.
     // The Type list's fourth row, picked on Above the Clouds. The race moves to the next environment
     // with a course and arms the Time box at its default on both ends.
+    // The shipped courses of NW Boeing Field (C1), none for any other chapter.
+    private static IReadOnlyList<Course> BoeingCourses(string chapter) =>
+        chapter == "C1" ? CourseLibrary.ShippedChoices(chapter) : Array.Empty<Course>();
+
     private static bool PickTheStuntRace(TestContext ctx, End host, End guest, List<End> ends)
     {
         var lobby = host.Door.Dogfight!;
@@ -3601,11 +3606,11 @@ internal static class MenuOriginalConnectionSuites
 
         // A game-folder course on Above the Clouds offers it the race too.
         var aloft = CourseLibrary.ShippedChoices("C1")[0] with { Chapter = "C1C" };
-        host.Door.Courses = chapter => chapter == "C1C" ? new[] { aloft } : CourseLibrary.ShippedChoices(chapter);
+        host.Door.Courses = chapter => chapter == "C1C" ? new[] { aloft } : BoeingCourses(chapter);
         Pump(host);
         ctx.Check(Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0") is { Enabled: true },
             $"the Environment list offers Above the Clouds once it has a course ({Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0")?.Enabled})");
-        host.Door.Courses = CourseLibrary.ShippedChoices;
+        host.Door.Courses = BoeingCourses;
         Pump(host);
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey + ":4");
 

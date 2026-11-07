@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "title": "Harbour Ring Run",
+  "start": {
+    "pos": [-8118.5, 50, -4046.2],
+    "heading": -150.9
+  },
+  "gates": [
+    { "id": "p1", "kind": "pylons", "pos": [-7875.5, 0, -3609.2], "heading": -150.9, "width": 40, "height": 30 },
+    { "id": "p2", "kind": "pylons", "pos": [-8024.4, 0, -3084.8], "heading": 153.7, "width": 40, "height": 30 },
+    { "id": "p3", "kind": "pylons", "pos": [-8459.2, 0, -2699.9], "heading": 126, "width": 40, "height": 30 },
+    { "id": "r1", "kind": "ring", "pos": [-9069.6, 42.5, -2825.3], "heading": 69.1, "diameter": 40 },
+    { "id": "p4", "kind": "pylons", "pos": [-9181.5, 0, -3354.9], "heading": 0, "width": 40, "height": 30 },
+    { "id": "p5", "kind": "pylons", "pos": [-9046.8, 0, -3940.1], "heading": -16.1, "width": 40, "height": 30 },
+    { "id": "r2", "kind": "ring", "pos": [-9230.2, 62.4, -4433.7], "heading": 29.8, "diameter": 40 },
+    { "id": "p6", "kind": "pylons", "pos": [-9131.7, 0, -4993.9], "heading": -19.1, "width": 40, "height": 30 },
+    { "id": "p7", "kind": "pylons", "pos": [-8510.7, 0, -5230.7], "heading": -78, "width": 40, "height": 30 },
+    { "id": "r3", "kind": "ring", "pos": [-7891, 88.1, -4964.2], "heading": -120.1, "diameter": 40 },
+    { "id": "p8", "kind": "pylons", "pos": [-7286.2, 0, -5310.2], "heading": -51, "width": 40, "height": 30 },
+    { "id": "p9", "kind": "pylons", "pos": [-7040.2, 0, -5813.8], "heading": -19.6, "width": 40, "height": 30 },
+    { "id": "p10", "kind": "pylons", "pos": [-7348.9, 0, -6205.7], "heading": 51.4, "width": 40, "height": 30 },
+    { "id": "p11", "kind": "pylons", "pos": [-7426.8, 0, -6700.8], "heading": -2.2, "width": 40, "height": 30 },
+    { "id": "r4", "kind": "ring", "pos": [-7075.2, 35, -7174.1], "heading": -44.5, "diameter": 40 },
+    { "id": "p12", "kind": "pylons", "pos": [-7145.9, 0, -7728.6], "heading": 18.3, "width": 40, "height": 30 }
+  ],
+  "sequence": [
+    { "gate": "p1", "dir": "forward" },
+    { "gate": "p2", "dir": "forward" },
+    { "gate": "p3", "dir": "forward" },
+    { "gate": "r1", "dir": "forward" },
+    { "gate": "p4", "dir": "forward" },
+    { "gate": "p5", "dir": "forward" },
+    { "gate": "r2", "dir": "forward" },
+    { "gate": "p6", "dir": "forward" },
+    { "gate": "p7", "dir": "forward" },
+    { "gate": "r3", "dir": "forward" },
+    { "gate": "p8", "dir": "forward" },
+    { "gate": "p9", "dir": "forward" },
+    { "gate": "p10", "dir": "forward" },
+    { "gate": "p11", "dir": "forward" },
+    { "gate": "r4", "dir": "forward" },
+    { "gate": "p12", "dir": "forward" }
+  ]
+}

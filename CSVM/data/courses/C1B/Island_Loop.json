@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "title": "Island Loop",
+  "start": {
+    "pos": [-5691, 50, -5443.9],
+    "heading": 151.4
+  },
+  "gates": [
+    { "id": "p1", "kind": "pylons", "pos": [-5930.6, 0, -5005.1], "heading": 151.4, "width": 40, "height": 30 },
+    { "id": "p2", "kind": "pylons", "pos": [-6599.8, 0, -5076.7], "heading": 73.9, "width": 40, "height": 30 },
+    { "id": "p3", "kind": "pylons", "pos": [-7291.8, 0, -5043.3], "heading": 96.6, "width": 40, "height": 30 },
+    { "id": "p4", "kind": "pylons", "pos": [-7866.6, 0, -5116.8], "heading": 79.2, "width": 40, "height": 30 },
+    { "id": "r1", "kind": "ring", "pos": [-8326.3, 55, -5464], "heading": 46.5, "diameter": 40 },
+    { "id": "p5", "kind": "pylons", "pos": [-8399.5, 0, -6082.2], "heading": -1.5, "width": 40, "height": 30 },
+    { "id": "p6", "kind": "pylons", "pos": [-8002.6, 0, -6379.5], "heading": -65.8, "width": 40, "height": 30 },
+    { "id": "r2", "kind": "ring", "pos": [-7360.4, 46.4, -6373.1], "heading": -96, "diameter": 40 },
+    { "id": "p7", "kind": "pylons", "pos": [-6796.2, 0, -6572.2], "heading": -64.6, "width": 40, "height": 30 },
+    { "id": "p8", "kind": "pylons", "pos": [-6206.5, 0, -6518.6], "heading": -102.3, "width": 40, "height": 30 },
+    { "id": "p9", "kind": "pylons", "pos": [-6092.4, 0, -6010.2], "heading": 179.6, "width": 40, "height": 30 },
+    { "id": "r3", "kind": "ring", "pos": [-6487.9, 62.3, -5420.1], "heading": 140, "diameter": 40 }
+  ],
+  "sequence": [
+    { "gate": "p1", "dir": "forward" },
+    { "gate": "p2", "dir": "forward" },
+    { "gate": "p3", "dir": "forward" },
+    { "gate": "p4", "dir": "forward" },
+    { "gate": "r1", "dir": "forward" },
+    { "gate": "p5", "dir": "forward" },
+    { "gate": "p6", "dir": "forward" },
+    { "gate": "r2", "dir": "forward" },
+    { "gate": "p7", "dir": "forward" },
+    { "gate": "p8", "dir": "forward" },
+    { "gate": "p9", "dir": "forward" },
+    { "gate": "r3", "dir": "forward" }
+  ]
+}

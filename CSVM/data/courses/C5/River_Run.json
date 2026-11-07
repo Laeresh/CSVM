@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "title": "River Run",
+  "start": {
+    "pos": [-2209.7, 77.4, -10201.5],
+    "heading": 115.6
+  },
+  "gates": [
+    { "id": "p1", "kind": "pylons", "pos": [-2660.6, 0, -9985.5], "heading": 115.6, "width": 40, "height": 30 },
+    { "id": "p2", "kind": "pylons", "pos": [-3190.2, 0, -9517.2], "heading": 134.7, "width": 40, "height": 30 },
+    { "id": "p3", "kind": "pylons", "pos": [-3448.4, 0, -8952.3], "heading": 160.2, "width": 40, "height": 30 },
+    { "id": "r1", "kind": "ring", "pos": [-3311.5, 47.2, -8407.1], "heading": -157.7, "diameter": 40 },
+    { "id": "p4", "kind": "pylons", "pos": [-3359.7, 0, -7783.1], "heading": 169.6, "width": 40, "height": 30 },
+    { "id": "p5", "kind": "pylons", "pos": [-3113.2, 0, -7308.5], "heading": -143.1, "width": 40, "height": 30 },
+    { "id": "p6", "kind": "pylons", "pos": [-2491.8, 0, -7153.8], "heading": -96.1, "width": 40, "height": 30 },
+    { "id": "r2", "kind": "ring", "pos": [-2054, 43.3, -7592.8], "heading": -35.2, "diameter": 40 },
+    { "id": "p7", "kind": "pylons", "pos": [-2124.7, 0, -8147.8], "heading": 17, "width": 40, "height": 30 },
+    { "id": "p8", "kind": "pylons", "pos": [-2691.5, 0, -8485.6], "heading": 67.2, "width": 40, "height": 30 },
+    { "id": "r3", "kind": "ring", "pos": [-2835.5, 46.3, -9059.4], "heading": 3.6, "diameter": 40 },
+    { "id": "p9", "kind": "pylons", "pos": [-2724.9, 0, -9630.6], "heading": -14.7, "width": 40, "height": 30 }
+  ],
+  "sequence": [
+    { "gate": "p1", "dir": "forward" },
+    { "gate": "p2", "dir": "forward" },
+    { "gate": "p3", "dir": "forward" },
+    { "gate": "r1", "dir": "forward" },
+    { "gate": "p4", "dir": "forward" },
+    { "gate": "p5", "dir": "forward" },
+    { "gate": "p6", "dir": "forward" },
+    { "gate": "r2", "dir": "forward" },
+    { "gate": "p7", "dir": "forward" },
+    { "gate": "p8", "dir": "forward" },
+    { "gate": "r3", "dir": "forward" },
+    { "gate": "p9", "dir": "forward" }
+  ]
+}
