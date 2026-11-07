@@ -471,6 +471,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<AnimInstance> _instances = new();
 
+    // Retired instances the original would still be running, kept for a stop of their name to reach
+    // their callees (HoldOpenIfWaiting).
+    private readonly List<AnimInstance> _heldOpen = new();
+
     // _instances as a set, for the walks' per-instance liveness test. ⚠ Every Add, Remove and Clear
     // of _instances updates it too; a missed site advances a stopped instance or skips a live one.
     private readonly HashSet<AnimInstance> _live = new();
@@ -1258,6 +1262,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _instances.Clear();
         _live.Clear();
+        _heldOpen.Clear();
         Motions.Reset();
         Emitters.Reset();
         _inputNodes.Clear();
@@ -2229,6 +2234,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (Retirable(inst) && _live.Remove(inst))
         {
             _instances.Remove(inst);
+            HoldOpenIfWaiting(inst);
             FinishInputGoverned(inst.Def, inst.Anchor);
             OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
         }
@@ -2784,6 +2790,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (string.IsNullOrEmpty(animName))
             return;
+        List<(AnimInstance Callee, bool Waited)>? callees = null;
         for (int i = _instances.Count - 1; i >= 0; i--)
         {
             var inst = _instances[i];
@@ -2791,20 +2798,73 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             if (anchor != null && inst.Anchor != anchor)
                 continue;
-            if (_startingInstances.Count > 0 && _startingInstances.Peek() is { Protect: true } top
-                && ReferenceEquals(top.Inst, inst))
-                continue;
-            _instances.RemoveAt(i);
-            _live.Remove(inst);
-            if (tearDown)
+            if (RemoveInstance(i, inst, tearDown) is { } called)
+                (callees ??= new()).AddRange(called);
+        }
+        if (tearDown)
+        {
+            for (int i = _heldOpen.Count - 1; i >= 0; i--)
             {
-                TearDownResourcesOf(inst.Def, inst.Anchor);
-                _inputNodes.Remove((inst.Def, inst.Anchor));
-                _templateStage.Reveal(inst.Def, inst.Anchor, visible: false);
+                var held = _heldOpen[i];
+                if (!string.Equals(held.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase)
+                    || (anchor != null && held.Anchor != anchor))
+                    continue;
+                _heldOpen.RemoveAt(i);
+                (callees ??= new()).AddRange(held.Callees!);
+                held.Callees = null;
             }
-            // Start's seamless restart (tearDown false) keeps the entry, exactly as it keeps
-            // the resources the new instance re-asserts.
-            OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+        }
+        // ⚠ After the walk, not inside it: a callee's removal shifts the indices it is walking.
+        StopCallees(callees);
+    }
+
+    // The original keeps running an instance whose waited callee is still live, since the wait
+    // holds even its last event. CSVM retires it, so it is parked for a later stop of its name.
+    // Decode: docs/org/sequences.md, "Stopping a caller".
+    private void HoldOpenIfWaiting(AnimInstance inst)
+    {
+        if (inst.Callees is not { } callees || !callees.Exists(c => c.Waited && _live.Contains(c.Callee)))
+            return;
+        // Pruned here so a long session's finished callers do not pile up.
+        _heldOpen.RemoveAll(h => !h.Callees!.Exists(c => _live.Contains(c.Callee)));
+        _heldOpen.Add(inst);
+    }
+
+    // Removes one live instance, returning the callees a tearing-down stop owes a stop too.
+    private List<(AnimInstance Callee, bool Waited)>? RemoveInstance(int i, AnimInstance inst, bool tearDown)
+    {
+        if (_startingInstances.Count > 0 && _startingInstances.Peek() is { Protect: true } top
+            && ReferenceEquals(top.Inst, inst))
+            return null;
+        _instances.RemoveAt(i);
+        _live.Remove(inst);
+        List<(AnimInstance Callee, bool Waited)>? callees = null;
+        if (tearDown)
+        {
+            TearDownResourcesOf(inst.Def, inst.Anchor);
+            _inputNodes.Remove((inst.Def, inst.Anchor));
+            _templateStage.Reveal(inst.Def, inst.Anchor, visible: false);
+            callees = inst.Callees;
+            inst.Callees = null;
+        }
+        // Start's seamless restart (tearDown false) keeps the entry, exactly as it keeps
+        // the resources the new instance re-asserts.
+        OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+        return callees;
+    }
+
+    // ⚠ A stopped caller stops every live instance its CALL_ANIMATION started, recursively. It is
+    // what ends gen_drop_ladder's looping rung sway when drop_ladder stops (#313).
+    // Decode: docs/org/sequences.md, "Stopping a caller".
+    private void StopCallees(List<(AnimInstance Callee, bool Waited)>? callees)
+    {
+        while (callees is { Count: > 0 })
+        {
+            var callee = callees[^1].Callee;
+            callees.RemoveAt(callees.Count - 1);
+            int at = _instances.IndexOf(callee);
+            if (at >= 0 && RemoveInstance(at, callee, tearDown: true) is { } more)
+                callees.AddRange(more);
         }
     }
 
@@ -3157,6 +3217,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             if (!instant && _rangePasses.Count > 0)
                                 ClaimRangePass(def, anchor, target);
                             Start(target, startAnchor);
+                            if (InstanceOf(def, anchor) is { } caller
+                                && InstanceOf(target, startAnchor) is { } callee
+                                && !ReferenceEquals(caller, callee))
+                            {
+                                (caller.Callees ??= new()).Add((callee, waitOn != null));
+                            }
                             // ⚠ Reveal the mesh too, after Start. On a stage that hides its
                             // templates, an unrevealed callee shows its particles and none of its
                             // authored geometry, because puffers draw at world level.
@@ -4190,6 +4256,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (Retirable(inst) && _live.Remove(inst))
         {
             _instances.Remove(inst);
+            HoldOpenIfWaiting(inst);
             FinishInputGoverned(inst.Def, inst.Anchor);
             FinishEffectInstance(inst.Def, inst.Anchor);
             _templateStage.RetireWhenIdle(inst.Def, inst.Anchor);
