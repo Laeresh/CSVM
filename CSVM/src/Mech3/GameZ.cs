@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
@@ -41,8 +42,9 @@ public struct GameZLight
 /// </summary>
 public sealed class GameZ
 {
-    /// <summary>The shipped polygon fixes: per chapter, polygons whose authored priority ties a coplanar
-    /// layer the original z-fights with. Keys beginning with <c>_</c> are prose.</summary>
+    /// <summary>The shipped polygon fixes, per chapter or <c>planes</c> (for <c>planes.zbd</c>). A fix raises
+    /// a priority that ties a coplanar layer, or mends UVs that break a texture across a seam. Keys
+    /// beginning with <c>_</c> are prose.</summary>
     public const string PolygonPatchesPath = "res://data/polygon_patches.json";
 
     // The original's surface-type registry, restricted to the labels mech3ax's extraction has
@@ -132,14 +134,15 @@ public sealed class GameZ
         foreach (var w in warnings)
             Utils.Log.Warn("world", $"polygon patches: {w}");
         if (applied > 0)
-            Utils.Log.Info("world", $"polygon patches: {applied} polygon(s) of {chapter} take a new priority");
+            Utils.Log.Info("world", $"polygon patches: {applied} polygon(s) of {chapter} patched");
         return applied;
     }
 
-    /// <summary>Sets the priority of each polygon <paramref name="json"/> lists under <paramref name="chapter"/>,
-    /// an entry being <c>{node, polygon, texture, priority}</c> with <c>polygon</c> the index in the node's mesh.
-    /// An entry whose node, polygon or texture does not match only warns, so a different install is never
-    /// patched blind. Returns the polygons patched.</summary>
+    /// <summary>Patches each polygon <paramref name="json"/> lists under <paramref name="chapter"/>. An entry
+    /// is <c>{node, polygon, texture}</c>, <c>polygon</c> being the index in the node's mesh. It adds a
+    /// <c>priority</c>, a <c>uv</c> map of corner index to <c>[u, v]</c>, or both. An entry whose node,
+    /// polygon, texture or corner does not match only warns, so a different install is never patched
+    /// blind. Returns the polygons patched.</summary>
     public int ApplyPolygonPatches(string chapter, string json, List<string> warnings)
     {
         JsonElement entries = default;
@@ -164,17 +167,28 @@ public sealed class GameZ
         foreach (var e in entries.EnumerateArray())
         {
             string node, texture;
-            int index, priority;
+            int index;
+            int? priority = null;
+            var uvs = new List<(int Corner, Vector2 Uv)>();
             try
             {
                 node = e.GetProperty("node").GetString() ?? "";
                 index = e.GetProperty("polygon").GetInt32();
                 texture = e.GetProperty("texture").GetString() ?? "";
-                priority = e.GetProperty("priority").GetInt32();
+                if (e.TryGetProperty("priority", out var p))
+                    priority = p.GetInt32();
+                if (e.TryGetProperty("uv", out var uv))
+                {
+                    foreach (var c in uv.EnumerateObject())
+                        uvs.Add((int.Parse(c.Name, CultureInfo.InvariantCulture), new Vector2(c.Value[0].GetSingle(), c.Value[1].GetSingle())));
+                }
+
+                if (priority == null && uvs.Count == 0)
+                    throw new KeyNotFoundException();
             }
-            catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or FormatException)
+            catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or FormatException or IndexOutOfRangeException)
             {
-                warnings.Add($"{chapter}: entry {e} lacks node, polygon, texture or priority, skipped");
+                warnings.Add($"{chapter}: entry {e} lacks node, polygon, texture, or a priority or uv, skipped");
                 continue;
             }
 
@@ -189,9 +203,11 @@ public sealed class GameZ
                     continue;
                 var poly = polys[index];
                 int m = poly.MaterialIndex;
-                if (m < 0 || m >= Materials.Count || !string.Equals(Materials[m].TextureName, texture, StringComparison.OrdinalIgnoreCase))
+                if (m < 0 || m >= Materials.Count || !string.Equals(Materials[m].TextureName, texture, StringComparison.OrdinalIgnoreCase)
+                    || uvs.Exists(c => c.Corner < 0 || c.Corner >= (poly.UvCoords?.Count ?? 0)))
                     continue;
-                poly.Priority = priority;
+                poly.Priority = priority ?? poly.Priority;
+                uvs.ForEach(c => poly.UvCoords![c.Corner] = c.Uv);
                 hits++;
             }
 

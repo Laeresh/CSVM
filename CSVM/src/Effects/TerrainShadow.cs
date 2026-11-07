@@ -181,7 +181,7 @@ internal sealed partial class TerrainShadow : Node
     // 2 tan(a) (1 + tan(e)^2) to first order, the second factor turning the horizontal width into a height.
     private static Vector2 Soft(Baked baked)
     {
-        float angular = ShadowQualitySetting.HardShadows ? 0f : ShadowQualitySetting.Sun.AngularDistance;
+        float angular = ShadowQualitySetting.HardShadows ? 0f : ShadowQualitySetting.Sun.AngularDistance * ShadowQualitySetting.Softness;
         var sun = baked.Sun;
         float horizontal = MathF.Max(MathF.Sqrt((sun.X * sun.X) + (sun.Z * sun.Z)), 1e-4f);
         float tan = sun.Y / horizontal;

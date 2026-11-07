@@ -619,6 +619,8 @@ public sealed class WorldBuilder
         // The dome builds with no model pack context, so no sky node is ever replaced.
         string? chapter = _scene.HdChapter;
         _scene.HdChapter = null;
+        // The dome takes the zone tune's sky tint, the one the fog colour takes, or the two split apart.
+        _scene.Tint = SceneBuilder.SurfaceTint.Sky;
         Node3D? built;
         try
         {
@@ -630,6 +632,7 @@ public sealed class WorldBuilder
         finally
         {
             _scene.HdChapter = chapter;
+            _scene.Tint = SceneBuilder.SurfaceTint.None;
         }
         if (built == null)
             return null;
@@ -1293,22 +1296,31 @@ public sealed class WorldBuilder
             return;
         var node = _gamez.Nodes[nodeIndex];
         bool isDeck = _deckNodes.Contains(nodeIndex);
-        // ⚠ Deck tiles are the one exception to the world's backface culling: authored
-        // single-sided, but flown through, so the quad reads from both faces (weather.md has the
-        // other two). applyActive starts EVERY node of the subtree at its own record's ACTIVE bit.
-        var built = _scene.BuildSubtree(node, SkipWorldNode, n => NoCollisionNode(_gamez, n),
-            forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck, applyActive: true);
-        if (built != null)
+        // The deck takes the zone tune's cloud tint; its undimmed twin is looked up under the same key.
+        _scene.Tint = isDeck ? SceneBuilder.SurfaceTint.Cloud : SceneBuilder.SurfaceTint.None;
+        try
         {
-            if (IsParkedAtOrigin(node, built))
+            // ⚠ Deck tiles are the one exception to the world's backface culling. They are authored
+            // single-sided but flown through, so the quad reads from both faces; weather.md has the
+            // other two exceptions. Every node of the subtree starts at its own ACTIVE bit (applyActive).
+            var built = _scene.BuildSubtree(node, SkipWorldNode, n => NoCollisionNode(_gamez, n),
+                forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck, applyActive: true);
+            if (built != null)
             {
-                _parkedAtOrigin.Add((node, built));
+                if (IsParkedAtOrigin(node, built))
+                {
+                    _parkedAtOrigin.Add((node, built));
+                }
+                if (isDeck)
+                {
+                    RecordDeckUndimmedMesh(node);
+                }
+                (isDeck ? deck : root).AddChild(built);
             }
-            if (isDeck)
-            {
-                RecordDeckUndimmedMesh(node);
-            }
-            (isDeck ? deck : root).AddChild(built);
+        }
+        finally
+        {
+            _scene.Tint = SceneBuilder.SurfaceTint.None;
         }
     }
 
@@ -1357,7 +1369,9 @@ public sealed class WorldBuilder
             (P(innerMaxX, innerMinZ), P(outerMaxX, innerMinZ), P(outerMaxX, innerMaxZ), P(innerMaxX, innerMaxZ)),
             (P(outerMinX, innerMinZ), P(innerMinX, innerMinZ), P(innerMinX, innerMaxZ), P(outerMinX, innerMaxZ)),
         };
+        _scene.Tint = SceneBuilder.SurfaceTint.Cloud;
         var mi = new MeshInstance3D { Mesh = _scene.BuildFlatQuadMesh(quads), Name = "deck_annulus" };
+        _scene.Tint = SceneBuilder.SurfaceTint.None;
         mi.SetMeta(DeckExtensionMeta, true);
         deck.AddChild(mi);
     }

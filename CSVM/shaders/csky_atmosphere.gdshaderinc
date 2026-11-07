@@ -22,6 +22,10 @@ global uniform vec3 csky_fog_color;
 global uniform vec2 csky_fog_range;      // x = near (clear), y = far (full fog), horizontal metres
 global uniform vec2 csky_fog_alt;        // fragment altitude: full fog below x, fades to none at y
 global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (M2-polish item 6)
+// The zone lighting tune's tints, linear, Enhanced text only (Session/World/WeatherRig.cs): the dome
+// takes the sky tint the fog colour takes, the cloud deck and every cloud sprite the cloud tint.
+global uniform vec3 csky_tune_sky_tint = vec3(1.0);
+global uniform vec3 csky_tune_cloud_tint = vec3(1.0);
 
 // The per-view fog table (Session/World/FogViewTable.cs). Splitscreen panes and spyglass pictures
 // each sit in their own camera weather state, so each wears its own zone's fog, world light and

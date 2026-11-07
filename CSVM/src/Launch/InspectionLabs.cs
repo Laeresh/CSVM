@@ -165,17 +165,8 @@ internal sealed class InspectionLabs
         // and is indexed, or a hook definition resolves nothing and plays placeless.
         if (spec.PlaneNames.Count > 0)
         {
-            long mark = StartupProfile.Mark();
-            var planesGamez = state.Data.Planes ?? throw new System.IO.FileNotFoundException("the game data holds no planes.zbd");
-            StartupProfile.Record("gamez", mark);
-            mark = StartupProfile.Mark();
-            var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,
-                scheme: livery.SchemeFor(0, state.Zrdr, livery.NewPaintRng(),
-                    livery.PatternsForPlane(planesGamez, spec.PlaneName)),
-                patterns: livery.Patterns, dockingHook: true);
-            var parked = parkedBuilder.Build(spec.PlaneName);
-            StartupProfile.Record("plane", mark);
-            state.MeshInstances += parkedBuilder.MeshInstanceCount;
+            var (parked, meshes) = ParkedProp(state, livery, spec.PlaneName);
+            state.MeshInstances += meshes;
             worldRoot.AddChild(parked);
             parked.Position = spawnPos;
             if ((spawnLook - spawnPos).LengthSquared() > 1e-6f)
@@ -389,6 +380,24 @@ internal sealed class InspectionLabs
             StartOpen = SeaState.OverridesOpen(spec.DebugOcean),
         });
         Log.Info("ui", $"ocean lab ready (Shift+F1), save {savePath ?? "off in an exported build"}");
+    }
+
+    /// <summary>The lighting lab (Shift+F5), in <c>--freecam</c> over a world with weather alone. It puts
+    /// the zone's Enhanced tune on sliders, applied live through <paramref name="weather"/>, and saves
+    /// into the shipped file. Its parked plane is the anim lab's stage prop (<see cref="ParkedProp"/>).</summary>
+    public void BuildLightingLab(BuildState state, WeatherRig? weather, LiveryResolver livery)
+    {
+        var spec = _in.Spec;
+        if (!spec.Freecam || weather == null || weather.ZoneNames.Count == 0)
+            return;
+        string? savePath = LightingTable.SourceTreePath();
+        _in.WorldRoot.AddChild(new LightingLab(spec.Chapter.ToUpperInvariant(), spec.Mission.ToUpperInvariant(),
+            weather, _in.Camera, savePath, Flight.Hangar.StockAirframes.Nodes, spec.PlaneName,
+            plane => ParkedProp(state, livery, plane).Model)
+        {
+            Debug = spec.DebugLighting,
+        });
+        Log.Info("ui", $"lighting lab ready (Shift+F5), save {savePath ?? "off in an exported build"}");
     }
 
     /// <summary>The cloud lab (Shift+F4), in <c>--freecam</c> alone: the cloud shadows' tunes, drift and
@@ -699,6 +708,22 @@ internal sealed class InspectionLabs
 
             return huds;
         }));
+    }
+
+    // A parked stage prop: the named aircraft in the Fortune Hunters livery with no FlightController.
+    // It carries its docking-hook group so a hook definition resolves on it. Unparented.
+    private static (Node3D Model, int MeshInstances) ParkedProp(BuildState state, LiveryResolver livery, string plane)
+    {
+        long mark = StartupProfile.Mark();
+        var planesGamez = state.Data.Planes ?? throw new System.IO.FileNotFoundException("the game data holds no planes.zbd");
+        StartupProfile.Record("gamez", mark);
+        mark = StartupProfile.Mark();
+        var builder = new PlaneBuilder(planesGamez, state.Textures,
+            scheme: livery.SchemeFor(0, state.Zrdr, livery.NewPaintRng(), livery.PatternsForPlane(planesGamez, plane)),
+            patterns: livery.Patterns, dockingHook: true);
+        var model = builder.Build(plane);
+        StartupProfile.Record("plane", mark);
+        return (model, builder.MeshInstanceCount);
     }
 
     /// <summary>What one session's labs are built over.</summary>

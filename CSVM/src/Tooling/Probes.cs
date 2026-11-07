@@ -595,11 +595,11 @@ public static class Probes
 
     // ---- moonlit candidates --------------------------------------------------------------------
 
-    /// <summary>--dump-moonlit (docs/cli.md): the moonlit list's candidate table. It prints one row per
+    /// <summary>--dump-moonlit (docs/cli.md): the moonlit candidate table. It prints one row per
     /// weather zone of each flown world whose dome draws a moon card there. A row holds the authored
     /// <c>SUNLIGHT</c> pair and the fog-colour night verdict. It also says whether the dome draws a sun
-    /// card and whether the list names the world. The cards are read off the gamez (<see cref="WorldBuilder.SkyCardsOf"/>).</summary>
-    public static MoonlitResult Moonlit(Spec.GameData data, Session.World.MoonlitMissions list)
+    /// card and whether lighting.json flags the world night. The cards are read off the gamez (<see cref="WorldBuilder.SkyCardsOf"/>).</summary>
+    public static MoonlitResult Moonlit(Spec.GameData data, Session.World.LightingTable list)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new MoonlitResult();
@@ -607,16 +607,16 @@ public static class Probes
         sb.AppendLine("# Moonlit mission candidates: every flown world whose dome draws a moon card.");
         sb.AppendLine("# One row per weather zone of such a world with a sun or moon card; 'flown' marks the zone a flight starts in.");
         sb.AppendLine("# night by fog: WeatherRig.IsNightZone's FOG_COLOR rule, what the world gets today.");
-        sb.AppendLine("# sun card: the Enhanced light aims at a sun before a moon. A listed world lights every zone as night.");
-        sb.AppendLine($"# A pick is one '<chapter>/<mission>' entry in {Session.World.MoonlitMissions.DefaultPath}.");
+        sb.AppendLine("# sun card: the Enhanced light aims at a sun before a moon. A flagged world lights every zone as night.");
+        sb.AppendLine($"# A pick is a mission's \"night\": true in {Session.World.LightingTable.DefaultPath}.");
         sb.AppendLine();
-        sb.AppendLine($"{"world",-10} {"zone",-6} {"flown",-5} {"diffuse",7} {"ambient",7}  {"night by fog",-12} {"sun card",-8} {"moon card",-9} listed");
+        sb.AppendLine($"{"world",-10} {"zone",-6} {"flown",-5} {"diffuse",7} {"ambient",7}  {"night by fog",-12} {"sun card",-8} {"moon card",-9} night flag");
 
         foreach (var chapter in AiChapters)
         {
             foreach (var mission in DiscoverMissions(chapter))
             {
-                string world = Session.World.MoonlitMissions.Key(chapter, mission);
+                string world = $"{chapter}/{mission}";
                 try
                 {
                     var part = data.LoadChapter(chapter, mission);
@@ -648,7 +648,7 @@ public static class Probes
                         r.Rows++;
                         sb.AppendLine($"{world,-10} {zone,-6} {(zone.Equals(flown, StringComparison.OrdinalIgnoreCase) ? "yes" : "no"),-5} "
                             + $"{fog.SunDiffuse,7:0.###} {fog.SunAmbient,7:0.###}  {(Session.World.WeatherRig.IsNightZone(fog) ? "night" : "day"),-12} "
-                            + $"{(sun != null ? "yes" : "no"),-8} {(moon != null ? "yes" : "no"),-9} {(list.Lists(chapter, mission) ? "yes" : "no")}");
+                            + $"{(sun != null ? "yes" : "no"),-8} {(moon != null ? "yes" : "no"),-9} {(list.Night(chapter, mission) ? "yes" : "no")}");
                     }
                 }
                 catch (Exception e)
@@ -662,7 +662,7 @@ public static class Probes
         sb.AppendLine();
         sb.AppendLine($"# {r.Worlds} world(s) read, {r.Candidates.Count} with a moon card, {r.Rows} row(s); "
             + $"{r.NoWeather.Count} folder(s) carry no weather.json: {string.Join(", ", r.NoWeather)}");
-        sb.AppendLine($"# listed now: {(list.Worlds.Count == 0 ? "none" : string.Join(", ", list.Worlds))}");
+        sb.AppendLine($"# flagged night now: {(list.NightMissions.Any() ? string.Join(", ", list.NightMissions) : "none")}");
         r.Text = sb.ToString();
         r.Summary = r.Errors.Count == 0
             ? $"moonlit dump: {r.Candidates.Count} candidate world(s) of {r.Worlds} read, {r.Rows} zone row(s)"

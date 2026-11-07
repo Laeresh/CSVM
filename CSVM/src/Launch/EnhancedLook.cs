@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Spec;
@@ -20,25 +21,6 @@ public static class EnhancedLook
     // session with no weather.json keeps it; it sits mid-range of the shipped zones' pushed nears
     // (2000-4200 m).
     private const float ShadowMaxDistance = 3000f;
-
-    // TUNE, paired with the distance above and judged the same way (WeatherRig.ApplyEnhancedLighting
-    // sets the flown-mission copy). Fades the last cascade out before this fallback distance rather
-    // than cutting at a hard edge.
-    private const float ShadowFadeStart = 0.8f;
-
-    // TUNE, judged at the controls. Lower values put dithered acne over lit surfaces at C1's 25°
-    // sun, and higher ones dissolve a hangar's shadow. These keep the building and aircraft
-    // silhouettes. The ground and the water cast no shadow map (WorldBuilder.IsShadowlessGround), so
-    // neither can band itself. Their sun shade is the terrain bake's (Effects.TerrainShadow).
-    private const float ShadowBias = 0.05f;
-    private const float ShadowNormalBias = 1.25f;
-
-    // TUNE. Fractions of ShadowMaxDistance, tighter than Godot's 0.1/0.2/0.5. A player reads the
-    // aircraft's own shadow and the buildings it passes, all within a few hundred metres. The
-    // outer cascades only carry a skyline into the haze.
-    private const float ShadowSplit1 = 0.12f;
-    private const float ShadowSplit2 = 0.17f;
-    private const float ShadowSplit3 = 0.42f;
 
     // TUNE. ⚠ Do not drop this toward Godot's 20 m default. Godot's soft shadow widens the penumbra
     // by the receiver's depth over the caster's, both from the cascade's near plane. A shallow near
@@ -96,23 +78,18 @@ public static class EnhancedLook
 
     // TUNE, judged at the controls against a C4 horizon, a C1 horizon and C5 at night. AgX rolls
     // off the far-ridge washout the authored sun energy produces, and keeps the night city's
-    // contrast where Filmic reads flatter. Exposure stays neutral. The AgX white point recovers the
-    // horizon, since AgX ignores the general TonemapWhite.
+    // contrast where Filmic reads flatter. The exposure, white point and Post-processing grade are a
+    // zone tune's (ZoneLighting), at their defaults here.
     private const Godot.Environment.ToneMapper TonemapMode = Godot.Environment.ToneMapper.Agx;
-    private const float TonemapExposure = 1.0f;
-    private const float TonemapAgxWhite = 6.0f;
-    private const float TonemapAgxContrast = 1.0f;
-
-    // TUNE, the Post-processing grade, picked by eye against the original over every chapter (#299).
-    // A steeper AgX curve, then post-tonemap contrast and saturation.
-    private const float GradeAgxContrast = 1.25f;
-    private const float GradeContrast = 1.1f;
-    private const float GradeSaturation = 1.15f;
 
     // The zone default FOG_COLOR (Effects/Weather.cs's no-weather zone), which is the colour a
     // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);
+
+    // The shadow fade start, biases and splits, the tonemap's exposure and white, and the grade are a
+    // zone tune's plain values. Their defaults hold here, and WeatherRig writes a tune over them.
+    private static readonly ZoneLighting Untuned = ZoneLighting.Default;
 
     /// <summary>Gets a value indicating whether this process has switched the graphics mode live, which
     /// is when a load warms the other mode's shaders by default.</summary>
@@ -324,14 +301,14 @@ public static class EnhancedLook
         sun.ShadowEnabled = true;
         sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
         sun.DirectionalShadowMaxDistance = ShadowMaxDistance;
-        sun.DirectionalShadowFadeStart = ShadowFadeStart;
-        sun.DirectionalShadowSplit1 = ShadowSplit1;
-        sun.DirectionalShadowSplit2 = ShadowSplit2;
-        sun.DirectionalShadowSplit3 = ShadowSplit3;
+        sun.DirectionalShadowFadeStart = Untuned.FadeStart;
+        sun.DirectionalShadowSplit1 = Untuned.Split1;
+        sun.DirectionalShadowSplit2 = Untuned.Split2;
+        sun.DirectionalShadowSplit3 = Untuned.Split3;
         sun.DirectionalShadowBlendSplits = true;
         sun.DirectionalShadowPancakeSize = ShadowPancakeSize;
-        sun.ShadowBias = ShadowBias;
-        sun.ShadowNormalBias = ShadowNormalBias;
+        sun.ShadowBias = Untuned.ShadowBias;
+        sun.ShadowNormalBias = Untuned.NormalBias;
         ApplyShadowQuality(sun, true);
     }
 
@@ -396,22 +373,17 @@ public static class EnhancedLook
         // Without the tonemap the HDR values a lit world produces clip instead of rolling off. No
         // bisect door closes it, since every enhanced frame's exposure depends on it.
         env.TonemapMode = enhanced ? TonemapMode : fresh.TonemapMode;
-        env.TonemapExposure = enhanced ? TonemapExposure : fresh.TonemapExposure;
-        env.TonemapAgxWhite = enhanced ? TonemapAgxWhite : fresh.TonemapAgxWhite;
+        env.TonemapExposure = enhanced ? Untuned.Exposure : fresh.TonemapExposure;
+        env.TonemapAgxWhite = enhanced ? Untuned.White : fresh.TonemapAgxWhite;
         ApplyGrade(env, enhanced);
     }
 
     /// <summary>The colour grade on one Environment: on under Enhanced with
-    /// <see cref="PostProcessingSetting.Enabled"/>, a fresh Environment's values otherwise.</summary>
-    public static void ApplyGrade(Godot.Environment env, bool enhanced)
-    {
-        var fresh = new Godot.Environment();
-        bool grade = enhanced && PostProcessingSetting.Enabled;
-        env.TonemapAgxContrast = grade ? GradeAgxContrast : enhanced ? TonemapAgxContrast : fresh.TonemapAgxContrast;
-        env.AdjustmentEnabled = grade;
-        env.AdjustmentContrast = grade ? GradeContrast : fresh.AdjustmentContrast;
-        env.AdjustmentSaturation = grade ? GradeSaturation : fresh.AdjustmentSaturation;
-    }
+    /// <see cref="PostProcessingSetting.Enabled"/>, a fresh Environment's values otherwise. It grades
+    /// with <paramref name="tune"/>, the active zone's for a live toggle, the untuned grade when null.
+    /// <see cref="WeatherRig.WriteGrade"/> owns the write.</summary>
+    public static void ApplyGrade(Godot.Environment env, bool enhanced, ZoneLighting? tune = null) =>
+        WeatherRig.WriteGrade(env, enhanced, tune ?? Untuned);
 
     private static void LogViewDistance() =>
         Log.Info("world", $"view distance: clutter reach x{ViewDistance.EnhancedReach():0.#} (applied live)");

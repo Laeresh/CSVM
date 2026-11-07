@@ -379,12 +379,12 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
-    /// <summary><c>--dump-moonlit</c>: print and write the moonlit list's candidate table
+    /// <summary><c>--dump-moonlit</c>: print and write the moonlit candidate table
     /// (<see cref="Probes.Moonlit"/>); false when no world was read or one failed to decode.</summary>
     public bool DumpMoonlit()
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Moonlit(_paths.Data, Session.World.MoonlitMissions.Load());
+        var r = Probes.Moonlit(_paths.Data, Session.World.LightingTable.Load());
         Log.Raw(r.Text);
         WriteScratch("moonlit_dump.txt", r.Text);
         Log.Info("core", $"{r.Summary} → ./.scratch/moonlit_dump.txt");

@@ -869,6 +869,8 @@ public partial class GameSession : Node3D
                 state.Zrdr, _ambience);
             _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
         }
+        if (state.NodeSubtree == null)
+            _labs!.BuildLightingLab(state, _sky?.Weather, _liveryResolver);
         var gamez = state.Gamez;
         // The labs' ground under the cursor, built on the first ray, so a session that never asks never pays for it.
         var ground = new Lazy<Vector3[]>(() =>
@@ -1228,12 +1230,14 @@ public partial class GameSession : Node3D
     /// <summary>The Post-processing word on the world's Environment and each cockpit pass's copy.</summary>
     internal void FollowGrade()
     {
+        // The active zone's tuned grade, so a toggle never puts the untuned grade over a tuned zone.
+        var tune = _sky?.Weather?.ActiveTune;
         if (_env != null)
-            EnhancedLook.ApplyGrade(_env, GraphicsMode.Enhanced);
+            EnhancedLook.ApplyGrade(_env, GraphicsMode.Enhanced, tune);
         foreach (var rig in _rigs)
         {
             if (rig.Controller?.Dressing.Pass?.Env is { } env)
-                EnhancedLook.ApplyGrade(env, GraphicsMode.Enhanced);
+                EnhancedLook.ApplyGrade(env, GraphicsMode.Enhanced, tune);
         }
     }
 
