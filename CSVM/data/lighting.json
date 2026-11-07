@@ -1,3 +1,133 @@
 {
-  "_about": "The Enhanced lighting tune (src/Session/World/LightingTable.cs), read only under Enhanced graphics. Keyed chapter, then an optional mission folder, then weather zone ('ZONE1' to 'ZONE3' as the mission's weather.json authors them), e.g. {\"C5\": {\"ZONE1\": {\"exposure\": 1.1}, \"M02\": {\"night\": true, \"ZONE1\": {\"sun_energy\": 1.2}}}}. A chapter zone block holds only the fields that differ from the defaults; a mission zone block only those that differ from its chapter's. A mission's 'night' flag makes it a moonlit mission (CONTEXT.md): every zone takes the night path, the capped energies and the light aimed at the dome's moon. The field names, ranges and meanings are ZoneLighting.Fields (src/Effects/ZoneLighting.cs). The lighting lab (Shift+F4 in --freecam) writes one zone here when run from the source tree; --debug-lighting=<field>:<value>,... overrides it for one launch. An empty file draws the untuned Enhanced look."
+  "_about": "The Enhanced lighting tune (src/Session/World/LightingTable.cs), read only under Enhanced graphics. Keyed chapter, then an optional mission folder, then weather zone ('ZONE1' to 'ZONE3' as the mission's weather.json authors them), e.g. {\"C5\": {\"ZONE1\": {\"exposure\": 1.1}, \"M02\": {\"night\": true, \"ZONE1\": {\"sun_energy\": 1.2}}}}. A chapter zone block holds only the fields that differ from the defaults; a mission zone block only those that differ from its chapter's. A mission's 'night' flag makes it a moonlit mission (CONTEXT.md): every zone takes the night path, the capped energies and the light aimed at the dome's moon. The field names, ranges and meanings are ZoneLighting.Fields (src/Effects/ZoneLighting.cs). The lighting lab (Shift+F5 in --freecam) writes one zone and the mission's night flag here when run from the source tree; --debug-lighting=<field>:<value>,... overrides it for one launch. An empty file draws the untuned Enhanced look.",
+  "C1": {
+    "ZONE1": {
+      "sun_energy": 0.6,
+      "ambient_energy": 0.61,
+      "sky_r": 0.5,
+      "sky_g": 0.5,
+      "sky_b": 0.5,
+      "cloud_r": 0.5,
+      "cloud_g": 0.5,
+      "cloud_b": 0.5,
+      "exposure": 1.05,
+      "grade_contrast": 1.01,
+      "grade_saturation": 0.88,
+      "shadow_softness": 0.85
+    },
+    "ZONE2": {
+      "sky_r": 0.5,
+      "sky_g": 0.5,
+      "sky_b": 0.47,
+      "cloud_r": 0.5,
+      "cloud_g": 0.5,
+      "cloud_b": 0.5
+    }
+  },
+  "C2": {
+    "ZONE1": {
+      "sun_energy": 2,
+      "sun_r": 1.5,
+      "sun_g": 1.5,
+      "sun_b": 0.9,
+      "ambient_energy": 0.7,
+      "sky_r": 1.01,
+      "grade_saturation": 1.3
+    }
+  },
+  "C1B": {
+    "ZONE1": {
+      "sun_energy": 0.7,
+      "ambient_energy": 0.9,
+      "cloud_r": 0.31,
+      "cloud_g": 0.31,
+      "cloud_b": 0.31
+    }
+  },
+  "C1C": {
+    "ZONE2": {
+      "ambient_energy": 0.51,
+      "sky_r": 0.5,
+      "sky_g": 0.5,
+      "sky_b": 0.5,
+      "cloud_r": 0.5,
+      "cloud_g": 0.5,
+      "cloud_b": 0.5
+    },
+    "ZONE1": {
+      "sun_energy": 0.62,
+      "ambient_energy": 0.51,
+      "sky_r": 0.39,
+      "sky_g": 0.39,
+      "sky_b": 0.39,
+      "cloud_r": 0.46,
+      "cloud_g": 0.45,
+      "cloud_b": 0.46,
+      "white": 5.9,
+      "grade_contrast": 1.09
+    }
+  },
+  "C3": {
+    "ZONE1": {
+      "sun_energy": 1.2,
+      "ambient_energy": 1.25,
+      "ambient_b": 0.99,
+      "sky_g": 1.07,
+      "sky_b": 1.16
+    }
+  },
+  "C4": {
+    "ZONE2": {
+      "sun_energy": 0.34,
+      "sun_r": 0.57,
+      "sun_g": 0.71,
+      "sun_b": 0.71,
+      "ambient_energy": 0.65,
+      "ambient_b": 0.99,
+      "sky_r": 0.5,
+      "sky_g": 0.5,
+      "sky_b": 0.5,
+      "cloud_r": 0.5,
+      "cloud_g": 0.5,
+      "cloud_b": 0.5,
+      "exposure": 0.99,
+      "grade_contrast": 1.02,
+      "grade_saturation": 1
+    },
+    "ZONE1": {
+      "sun_energy": 0.31,
+      "sun_r": 1.16,
+      "sun_g": 1.26,
+      "sun_b": 1.26,
+      "ambient_energy": 0.97,
+      "ambient_r": 1.12,
+      "ambient_g": 1.12,
+      "ambient_b": 1.12,
+      "sky_r": 0.7,
+      "sky_g": 0.7,
+      "sky_b": 0.7,
+      "exposure": 1.01,
+      "grade_saturation": 1.02
+    }
+  },
+  "C5": {
+    "ZONE3": {
+      "sun_energy": 0.76,
+      "ambient_energy": 1.1
+    },
+    "ZONE1": {
+      "sun_energy": 1.03,
+      "sun_r": 0.91,
+      "sun_g": 0.92,
+      "ambient_energy": 1.55,
+      "ambient_r": 0.87,
+      "ambient_g": 0.88,
+      "sky_r": 0.99,
+      "sky_g": 0.99,
+      "sky_b": 0.99,
+      "grade_agx_contrast": 1.19,
+      "grade_contrast": 1.03,
+      "grade_saturation": 0.98
+    }
+  }
 }
