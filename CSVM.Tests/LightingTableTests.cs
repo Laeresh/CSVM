@@ -20,13 +20,11 @@ public sealed class LightingTableTests
     private static string ShippedPath => Path.Combine(TestData.RepoRoot, "CSVM", "data", "lighting.json");
 
     [Fact]
-    public void TheShippedFileReadsCleanAndTunesNothing()
+    public void TheShippedFileReadsClean()
     {
         var table = LightingTable.Parse(File.ReadAllText(ShippedPath));
         Assert.Empty(table.Warnings);
-        Assert.Empty(table.NightMissions);
-        Assert.Equal(ZoneLighting.Default, table.For("C1C", "M01", "zone2"));
-        Assert.False(table.Night("C1C", "M01"));
+        Assert.Equal(ZoneLighting.Default, table.For("NOCHAPTER", "M01", "zone1"));
     }
 
     [Fact]
