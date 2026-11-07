@@ -930,7 +930,7 @@ public sealed record SessionSpec
     public bool DumpAi { get; private set; }
     public string DumpAiChapter { get; private set; } = "";
 
-    /// <summary><c>--dump-moonlit</c>: the moonlit list's candidate table. It lists every flown world
+    /// <summary><c>--dump-moonlit</c>: the moonlit candidate table. It lists every flown world
     /// whose dome draws a moon card, with its authored <c>SUNLIGHT</c> pair and night verdict. Pure
     /// data, with no world and no scene (<c>Tooling/Probes.Moonlit</c>).</summary>
     public bool DumpMoonlit { get; private set; }
@@ -1076,6 +1076,10 @@ public sealed record SessionSpec
     /// lab's overrides for this launch, filtered through <see cref="Effects.SeaState.FilterOverrides"/>
     /// and null outside <c>--freecam</c>, the only mode the lab exists in.</summary>
     public string? DebugOcean { get; private set; }
+    /// <summary>Resolved. <c>--debug-lighting=zone:&lt;name&gt;,&lt;field&gt;:&lt;value&gt;,...[,plane:,heading:,pitch:,bank:,off,open]</c>:
+    /// the lighting lab's twin, filtered through <see cref="Effects.LightingDebug.FilterTokens"/> and null outside
+    /// <c>--freecam</c>, the only mode the lab exists in.</summary>
+    public string? DebugLighting { get; private set; }
 
     /// <summary><c>--debug-wake=speed[,turn]</c>: the wave ocean sails its first wake ship on an arc,
     /// at the speed in m/s and turning the degrees a second. A capture then shows a chosen speed and turn.</summary>
@@ -1530,6 +1534,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-damage=")) { s.DebugDamage = arg["--debug-damage=".Length..]; }
             else if (arg == "--debug-ocean") { s.DebugOcean ??= ""; }
             else if (arg.StartsWith("--debug-ocean=")) { s.DebugOcean = arg["--debug-ocean=".Length..]; }
+            else if (arg == "--debug-lighting") { s.DebugLighting ??= ""; }
+            else if (arg.StartsWith("--debug-lighting=")) { s.DebugLighting = arg["--debug-lighting=".Length..]; }
             else if (arg.StartsWith("--debug-wake=")) { s.DebugWake = ParseDebugWake(arg["--debug-wake=".Length..]); }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }
             else if (arg == "--dump-markers") { s.DumpMarkers = true; }
@@ -2790,6 +2796,11 @@ public sealed record SessionSpec
             Warn("ui", "--debug-ocean is the --freecam ocean lab's twin; ignoring it here");
             DebugOcean = null;
         }
+        if (DebugLighting != null && Mode != SessionMode.Freecam)
+        {
+            Warn("ui", "--debug-lighting is the --freecam lighting lab's twin; ignoring it here");
+            DebugLighting = null;
+        }
         // A preset with nothing to apply to would otherwise be a silent no-op, and a run that shows
         // no damage would read as the staging being broken rather than as the flag being unused.
         if (AiHullDamage != null && AiPlanes == null)
@@ -2812,6 +2823,8 @@ public sealed record SessionSpec
             "is not node=/pool=/hp=/kill/reset/tick=/open");
         DebugOcean = FilterSpec(DebugOcean, Effects.SeaState.FilterOverrides, "--debug-ocean token",
             "is not open or <field>:<number> over a SeaState field");
+        DebugLighting = FilterSpec(DebugLighting, Effects.LightingDebug.FilterTokens, "--debug-lighting token",
+            "is not open/off, zone:/plane:<name>, heading:/pitch:/bank:<deg> or <field>:<number> over a ZoneLighting field");
 
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.

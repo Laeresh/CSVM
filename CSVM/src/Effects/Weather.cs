@@ -230,13 +230,13 @@ public sealed class WeatherState
     }
 
 
-    /// <summary>Marks every zone of this mission <see cref="ZoneWeather.Moonlit"/>, for a world the
-    /// moonlit list names (<c>Session/World/MoonlitMissions</c>). The authored values stay as read;
-    /// only <c>WeatherRig.IsNightZone</c> reads the mark, and only under Enhanced.</summary>
-    public void MarkMoonlit()
+    /// <summary>Marks every zone of this mission <see cref="ZoneWeather.Moonlit"/> or clears the mark, for a
+    /// world the lighting table flags as night (<c>Session/World/LightingTable</c>). The authored values stay
+    /// as read; only <c>WeatherRig.IsNightZone</c> reads the mark, and only under Enhanced.</summary>
+    public void SetMoonlit(bool moonlit)
     {
         foreach (var zone in new List<string>(_zones.Keys))
-            _zones[zone] = _zones[zone] with { Moonlit = true };
+            _zones[zone] = _zones[zone] with { Moonlit = moonlit };
     }
 
     /// <summary>One zone's weather ("zone1"/"zone2"/"zone3"), fog, world light and sun bearing;
@@ -469,7 +469,7 @@ public sealed class WeatherState
     /// original's zone-apply writes together (docs/formats/weather.md). <see cref="SunOrientation"/> is
     /// a <see cref="DirectionalLight3D"/> <c>Rotation</c> in radians. ⚠ It is the shading direction,
     /// not the <c>sun</c> billboard's position. <see cref="SunBicolored"/> is <c>SUNLIGHT_BICOLORED</c>
-    /// (docs/org/vertexLighting.md). <see cref="Moonlit"/> is not authored (<see cref="MarkMoonlit"/>).</summary>
+    /// (docs/org/vertexLighting.md). <see cref="Moonlit"/> is not authored (<see cref="SetMoonlit"/>).</summary>
     public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient, bool SunBicolored = false, bool Moonlit = false);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of

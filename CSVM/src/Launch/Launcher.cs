@@ -637,7 +637,7 @@ public partial class Launcher : Node3D
             GetTree().Quit(_probeRunner.DumpAi(_spec) ? 0 : 1);
             return;
         }
-        // --dump-moonlit: the moonlit list's candidate table, read off the weather and the domes'
+        // --dump-moonlit: the moonlit candidate table, read off the weather and the domes'
         // sky cards with no world built. See Probes.Moonlit.
         if (_spec.DumpMoonlit)
         {

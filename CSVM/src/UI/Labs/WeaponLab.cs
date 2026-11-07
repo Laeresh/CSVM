@@ -33,8 +33,6 @@ public sealed partial class WeaponLab : Node3D
     private const float MaxStandoff = 1100f;      // far enough to watch a rocket fly its full course
     private const float DefaultStandoff = 90f;
     private const float RayLength = 20000f;       // past the far side of the largest chapter
-    private const float ClearanceProbeStart = 0.5f;  // m off the struck face, so the back-ray leaves it
-    private const float ClearanceMargin = 2f;     // m kept clear of whatever the back-ray struck
 
     // Where --weapon-camera=<frames> parks the free camera relative to the eye it took over, so the
     // hand-back it measures is from somewhere the orbit did not put it.
@@ -575,7 +573,7 @@ public sealed partial class WeaponLab : Node3D
         dir = dir.Normalized();
         // Probe the point itself so the readout names a real body when there is one under the aim,
         // rather than reporting "default" for a building the tester deliberately aimed at.
-        var query = PhysicsRayQueryParameters3D.Create(point - (dir * ClearanceProbeStart), point + (dir * ClearanceProbeStart), CollisionLayers.World);
+        var query = PhysicsRayQueryParameters3D.Create(point - (dir * LabParking.ClearanceProbeStart), point + (dir * LabParking.ClearanceProbeStart), CollisionLayers.World);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         var body = hit.Count > 0 ? hit["collider"].As<Node>() : null;
         PlaceOn(point, dir, body, body != null ? NameOfStruck(body) : "(world point)", aimOnly: false);
@@ -645,17 +643,11 @@ public sealed partial class WeaponLab : Node3D
     // ray just hit is not itself the obstruction.
     private float ClampedStandoff(Vector3 point, Vector3 dir)
     {
-        var back = -dir;
-        var start = point + (back * ClearanceProbeStart);
-        var query = PhysicsRayQueryParameters3D.Create(start, point + (back * _standoff), CollisionLayers.World);
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count == 0)
+        var (clamped, blocked) = LabParking.ClearReach(GetWorld3D().DirectSpaceState, point, -dir, _standoff, MinStandoff);
+        if (blocked is { } at)
         {
-            return _standoff;
+            Log.Info("ui", $"weapon lab: stand-off clamped {_standoff:0} -> {clamped:0} m, geometry {at:0} m back along the aim");
         }
-        float blocked = (hit["position"].AsVector3() - point).Length();
-        float clamped = Mathf.Max(MinStandoff, blocked - ClearanceMargin);
-        Log.Info("ui", $"weapon lab: stand-off clamped {_standoff:0} -> {clamped:0} m, geometry {blocked:0} m back along the aim");
         return clamped;
     }
 

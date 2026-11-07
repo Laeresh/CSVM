@@ -486,8 +486,9 @@ public sealed partial class FogVolumeClutter : Node3D
         string vcol = lit ? "clamp(COLOR.rgb * v_light, 0.0, 1.0)" : "COLOR.rgb";
         // Every fvol card is `fog: false`, so no zone fog hides it. Under a night zone Enhanced darkens
         // it toward the fog over the extended reach, as it does the city clutter.
+        // The lighting tune's cloud tint rides the enhanced grade alone, so the faithful text cannot move.
         string source = enhanced
-            ? "mix(graded, csky_fog_color_at(CAMERA_POSITION_WORLD), "
+            ? "mix(graded * csky_tune_cloud_tint, csky_fog_color_at(CAMERA_POSITION_WORLD), "
               + "csky_night_fog(csky_fog_color_at(CAMERA_POSITION_WORLD)) ? v_dark : 0.0)"
             : "col.rgb";
         string albedo = fogged

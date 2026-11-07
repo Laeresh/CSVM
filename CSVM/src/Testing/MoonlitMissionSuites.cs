@@ -11,9 +11,9 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The moonlit list on the weather rig. A fixture lists one day world, which is lit under each
+/// <summary>The lighting table's night flag on the weather rig. A fixture flags one day world, which is lit under each
 /// graphics mode beside the same world unlisted. Its dome draws a moon and no sun. Module entry:
-/// docs/architecture/Session.md on MoonlitMissions. ⚠ The graphics mode and the cloud shadow
+/// docs/architecture/Session.md on LightingTable. ⚠ The graphics mode and the cloud shadow
 /// word are put back in a finally, so the rest of the run reads its own.</summary>
 internal static class MoonlitMissionSuites
 {
@@ -21,7 +21,7 @@ internal static class MoonlitMissionSuites
     private static readonly Vector3 MoonAt = new(-400f, 400f, 0f);
 
     [Suite("moonlit-mission",
-        "A day world the moonlit list names is lit as night under Enhanced: the fog rule's night energies, "
+        "A day world lighting.json flags as night is lit as night under Enhanced: the fog rule's night energies, "
         + "the light aimed at the dome's moon, the authored fog range and no cloud shadows, while the "
         + "sun keeps casting the aircraft's shadow maps. Under Original the listed world lights exactly "
         + "as unlisted, and an unlisted world is the day control")]
@@ -38,9 +38,9 @@ internal static class MoonlitMissionSuites
 
         var zone = authored.Zone(authored.ResolveZone("zone2", Array.Empty<HorizonZone>()));
         ctx.Check(!WeatherRig.IsNightZone(zone), $"{chapter}/{mission}'s flown zone is a day zone by its fog colour");
-        var listed = MoonlitMissions.Parse($"{{ \"missions\": [\"{chapter.ToLowerInvariant()}/{mission}\"] }}");
-        ctx.Check(listed.Warnings.Count == 0 && listed.Lists(chapter, mission),
-            $"the fixture list names {chapter}/{mission} ({string.Join("; ", listed.Warnings)})");
+        var listed = LightingTable.Parse($"{{ \"{chapter.ToLowerInvariant()}\": {{ \"{mission}\": {{ \"night\": true }} }} }}");
+        ctx.Check(listed.Warnings.Count == 0 && listed.Night(chapter, mission),
+            $"the fixture table flags {chapter}/{mission} as night ({string.Join("; ", listed.Warnings)})");
 
         bool wasEnhanced = GraphicsMode.Enhanced;
         var wasWord = CloudShadowSetting.Lookup.Current;
@@ -50,7 +50,7 @@ internal static class MoonlitMissionSuites
             var moonward = WeatherRig.OrientationToward(MoonAt.Normalized());
 
             GraphicsMode.Set(true);
-            var day = Lit(ctx, chapter, mission, zrdr, MoonlitMissions.None);
+            var day = Lit(ctx, chapter, mission, zrdr, LightingTable.None);
             var night = Lit(ctx, chapter, mission, zrdr, listed);
             var caps = WeatherRig.EnhancedEnergies(zone with { FogColor = Colors.Black });
             ctx.Check(!day.Night && night.Night, $"Enhanced: unlisted lights as day, listed as night (day {day.Night}, listed {night.Night})");
@@ -69,7 +69,7 @@ internal static class MoonlitMissionSuites
                 $"the listed world's sun still casts the aircraft's shadow maps, out to {night.ShadowReach:0} m");
 
             GraphicsMode.Set(false);
-            var faithful = Lit(ctx, chapter, mission, zrdr, MoonlitMissions.None);
+            var faithful = Lit(ctx, chapter, mission, zrdr, LightingTable.None);
             var faithfulListed = Lit(ctx, chapter, mission, zrdr, listed);
             ctx.Check(!faithfulListed.Night && faithfulListed == faithful,
                 $"Original lights the listed world exactly as unlisted: {faithfulListed} against {faithful}");
@@ -82,7 +82,7 @@ internal static class MoonlitMissionSuites
     }
 
     // One weather rig built over the mission under the dome, read back as the lit result.
-    private static LitWorld Lit(TestContext ctx, string chapter, string mission, ZrdrSet zrdr, MoonlitMissions list)
+    private static LitWorld Lit(TestContext ctx, string chapter, string mission, ZrdrSet zrdr, LightingTable list)
     {
         var root = new Node3D { Name = "moonlit-mission" };
         var sun = new DirectionalLight3D { Name = "moonlit-mission-sun" };
@@ -104,7 +104,7 @@ internal static class MoonlitMissionSuites
             var env = new Godot.Environment();
             var rig = new PlayerRig { Index = 0, Camera = camera, HudParent = root };
             var weather = new WeatherRig(SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}" }),
-                root, sun, env: env, moonlit: list);
+                root, sun, env: env, lighting: list);
             weather.Build(zrdr, new List<PlayerRig> { rig }, Array.Empty<HorizonZone>(),
                 _ => rig.HorizonDomes.Add(new HorizonDome(dome, -1)));
             return new LitWorld(weather.NightApplied, sun.LightEnergy, env.AmbientLightEnergy, sun.Rotation,
