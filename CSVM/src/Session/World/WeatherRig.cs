@@ -953,7 +953,9 @@ public sealed class WeatherRig
                     c.A = band;
                 }
                 LogVolumeWhiteout(rig.Index, volume);
-                rig.Whiteout.Color = c;
+                // The cloud tint, so a darkened deck is not entered through a bright curtain; untuned and Original multiply by one.
+                var tune = ActiveTune;
+                rig.Whiteout.Color = new Color(c.R * tune.CloudR, c.G * tune.CloudG, c.B * tune.CloudB, c.A);
             }
 
             // The deck sits at its own authored altitude, X/Z-following the camera only, never

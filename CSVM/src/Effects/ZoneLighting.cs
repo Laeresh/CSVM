@@ -39,7 +39,7 @@ public sealed record ZoneLighting
         new("sky_g", "Sky + fog tint green", Sky, 0f, 2f, 0.01f, l => l.SkyG, (l, v) => l with { SkyG = v }),
         new("sky_b", "Sky + fog tint blue", Sky, 0f, 2f, 0.01f, l => l.SkyB, (l, v) => l with { SkyB = v }),
         new("cloud_r", "Cloud tint red", Cloud, 0f, 2f, 0.01f, l => l.CloudR, (l, v) => l with { CloudR = v },
-            "over the cloud deck and every cloud sprite; fog still takes them with distance"),
+            "over the cloud deck, every cloud sprite and the whiteout; fog still takes them with distance"),
         new("cloud_g", "Cloud tint green", Cloud, 0f, 2f, 0.01f, l => l.CloudG, (l, v) => l with { CloudG = v }),
         new("cloud_b", "Cloud tint blue", Cloud, 0f, 2f, 0.01f, l => l.CloudB, (l, v) => l with { CloudB = v }),
         new("exposure", "Exposure", Tonemap, 0.25f, 4f, 0.01f, l => l.Exposure, (l, v) => l with { Exposure = v }),
@@ -109,7 +109,7 @@ public sealed record ZoneLighting
     /// <summary>The sky tint's blue channel.</summary>
     public float SkyB { get; init; } = 1f;
 
-    /// <summary>A multiplier on the cloud deck's and the cloud sprites' colour, red channel, so the
+    /// <summary>A multiplier on the cloud deck's, cloud sprites' and whiteout's colour, red channel, so the
     /// clouds can sit darker or bluer than the sky.</summary>
     public float CloudR { get; init; } = 1f;
 
