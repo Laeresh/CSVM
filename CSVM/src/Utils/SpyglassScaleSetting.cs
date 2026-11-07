@@ -43,8 +43,14 @@ public static class SpyglassScaleSetting
     public static ResolvedWord Resolve(string? savedWord) => Lookup.Resolve(null, savedWord, null, Default);
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps).</summary>
-    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().SpyglassScale;
+    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps). It reads
+    /// <paramref name="saved"/>, the options file read here when null.</summary>
+    public static string? SavedWord(bool det, OptionsDef? saved) =>
+        det ? null : (saved ?? OptionsStore.UserOptions().Load()).SpyglassScale;
+
+    /// <summary>The saved word read from the file. ⚠ Keep this one-argument shape: display-det-guard
+    /// finds every SavedWord(bool) reader by reflection.</summary>
+    public static string? SavedWord(bool det) => SavedWord(det, null);
 
     /// <summary>Resolves <paramref name="savedWord"/> and stores its factor as <see cref="Current"/>.
     /// Returns the word and its source for the caller's log line.</summary>
@@ -58,9 +64,9 @@ public static class SpyglassScaleSetting
     /// <summary>Stores the saved word's factor as <see cref="Current"/> through <see cref="SavedWord"/>,
     /// so <paramref name="det"/> reads none, and logs the word and its source. The launch and every
     /// options apply call it after the file is written.</summary>
-    public static void ApplySaved(bool det)
+    public static void ApplySaved(bool det, OptionsDef? saved = null)
     {
-        var resolved = Apply(SavedWord(det));
+        var resolved = Apply(SavedWord(det, saved));
         Log.Info("flight", $"spyglass scale={resolved.Word} source={Lookup.SourceName(resolved.Source)}");
     }
 

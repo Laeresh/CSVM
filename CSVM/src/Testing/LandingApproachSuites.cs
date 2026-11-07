@@ -100,6 +100,9 @@ internal static class LandingApproachSuites
     // root and six rungs from one script (docs/org/ladderSwitch.md, "The ladder through the climb").
     private const string ClimbLadderAnim = "cabpkup_ladder";
 
+    // drop_ladder's callee, holding each rung's ladder_loop wind sway in a LOOP_COUNT -1.
+    private const string GenDropLadderAnim = "gen_drop_ladder";
+
     // How long the flare's smoke is sampled for. Short on purpose: the sample spends the pickup
     // window's own seconds, and the rest of the drive still has to fly the approach inside it.
     private const float FlareSampleS = 0.3f;
@@ -2753,6 +2756,7 @@ internal static class LandingApproachSuites
                 float played = 0f;
                 float climb = 0f;
                 int cabpkupLadder = 0;
+                float swaying = 0f;
                 for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
                 {
                     world.Runtime.Advance(StepDt);
@@ -2767,12 +2771,17 @@ internal static class LandingApproachSuites
                         var rungNow = RungInLadder(rung, ladderRoot);
                         rungTravel += rungNow.DistanceTo(rungBefore);
                         rungBefore = rungNow;
+                        if (world.Runtime.AnimStateOf(GenDropLadderAnim) == 2)
+                        {
+                            swaying += StepDt;
+                        }
                     }
                 }
                 report.AppendLine($"pickup episode ran {played:0.##} s, caboosepickup live for " +
                     $"{climb:0.##} s of it; {ClimbLadderAnim} reached state {cabpkupLadder}, " +
                     $"drop_ladder state {world.Runtime.AnimStateOf(LadderSwitch.DropAnim)}, " +
-                    $"rung1 swung {rungTravel:0.###} m in the ladder's own frame over the climb; " +
+                    $"rung1 swung {rungTravel:0.###} m in the ladder's own frame over the climb, " +
+                    $"{GenDropLadderAnim} live for {swaying:0.##} s of it; " +
                     $"ladder chain {(ladderRoot != null ? ChainOf(ladderRoot) : "-")}; script misses: " +
                     string.Join(", ", world.Runtime.UnhandledEventCounts
                         .Where(kv => kv.Key.StartsWith("ObjectMotionSiScript", StringComparison.Ordinal))
@@ -2784,6 +2793,8 @@ internal static class LandingApproachSuites
                     $"'{ClimbLadderAnim}' runs over the climb, so the ladder is animated rather than parked");
                 ctx.Check(rungTravel > 0.05f,
                     $"and its rungs actually move in the ladder's own frame while the person climbs them");
+                ctx.Check(swaying == 0f,
+                    $"the pickup's stop of drop_ladder also stops the {GenDropLadderAnim} it called (#313)");
             }
             finally
             {

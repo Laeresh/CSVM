@@ -83,6 +83,11 @@ public sealed class AnimInstance
             : new SequenceRunner?[def.Sequences.Count];
     }
 
+    /// <summary>The instances this one's <c>CALL_ANIMATION</c> events started, and whether the call
+    /// waited, which a stop of this one stops too. Decode: docs/org/sequences.md, "Stopping a
+    /// caller".</summary>
+    public List<(AnimInstance Callee, bool Waited)>? Callees { get; set; }
+
     /// <summary>Every runner still executing, slots in index order first. Allocates a snapshot; the
     /// runtime's own hot paths use <see cref="Finished"/> and <see cref="Live"/> instead.</summary>
     public IReadOnlyList<SequenceRunner> Runners

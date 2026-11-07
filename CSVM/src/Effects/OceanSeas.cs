@@ -111,23 +111,7 @@ public sealed class OceanSeas
     public static string WithEntry(string? existing, string chapter, SeaState sea)
     {
         string name = Canonical(chapter) ?? throw new ArgumentException($"'{chapter}' is not a sea chapter", nameof(chapter));
-        JsonObject root;
-        if (string.IsNullOrWhiteSpace(existing))
-        {
-            root = new JsonObject();
-        }
-        else
-        {
-            try
-            {
-                root = Mech3.VegetationSidecar.ParseWhole(existing) as JsonObject
-                    ?? throw new InvalidDataException("the seas file is not a JSON object, so Save leaves it as it is");
-            }
-            catch (Exception ex) when (ex is JsonException or ArgumentException)
-            {
-                throw new InvalidDataException($"the seas file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
-            }
-        }
+        var root = Mech3.VegetationSidecar.ObjectToRewrite(existing, "seas");
 
         var entry = new JsonObject();
         var written = sea.Written();

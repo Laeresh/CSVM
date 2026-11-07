@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace CSVM.Utils;
 
 /// <summary>
@@ -21,10 +19,6 @@ public static class SoundModeSetting
     /// <summary>The word a launch with nothing saved plays.</summary>
     public const string Default = Enhanced;
 
-    /// <summary>Every word the options file may carry, with Original first. The row is a checkbox, ticked
-    /// for <see cref="Enhanced"/>.</summary>
-    public static readonly IReadOnlyList<string> Words = new[] { Original, Enhanced };
-
     /// <summary>Whether the running process plays Enhanced Sound. Off until a launch or an apply
     /// sets it, so a suite or a tool that never resolves the option hears Original Sound.</summary>
     public static bool EnhancedOn { get; set; }
@@ -33,11 +27,12 @@ public static class SoundModeSetting
     /// sets it.</summary>
     public static bool HitConfirmOn { get; set; }
 
-    /// <summary>Whether <paramref name="word"/> is one of <see cref="Words"/>.</summary>
+    /// <summary>Whether <paramref name="word"/> is <see cref="Original"/> or <see cref="Enhanced"/>,
+    /// the only words the options file may carry.</summary>
     public static bool IsWord(string? word) => word is Original or Enhanced;
 
     /// <summary>Whether <paramref name="savedWord"/> plays Enhanced Sound: the saved word, else
-    /// <see cref="Default"/>. A word outside <see cref="Words"/> reads as never set.</summary>
+    /// <see cref="Default"/>. A word <see cref="IsWord"/> refuses reads as never set.</summary>
     public static bool IsEnhanced(string? savedWord) => (IsWord(savedWord) ? savedWord : Default) == Enhanced;
 
     /// <summary>Whether the hit confirm plays: the saved switch, else on exactly when the mode is

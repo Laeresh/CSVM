@@ -64,27 +64,43 @@ public static class HudLayoutSetting
     public static ResolvedWord Resolve(string? savedWord) => Lookup.Resolve(null, savedWord, null, Default);
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps).</summary>
-    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().HudLayout;
+    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps). It reads
+    /// <paramref name="saved"/>, the options file read here when null.</summary>
+    public static string? SavedWord(bool det, OptionsDef? saved) =>
+        det ? null : (saved ?? OptionsStore.UserOptions().Load()).HudLayout;
 
-    /// <summary>The saved custom placement a launch reads, or null under <paramref name="det"/>.</summary>
-    public static string? SavedCustom(bool det) => det ? null : OptionsStore.UserOptions().Load().HudLayoutCustom;
+    /// <summary>The saved word read from the file. ⚠ Keep this one-argument shape: display-det-guard
+    /// finds every SavedWord(bool) reader by reflection.</summary>
+    public static string? SavedWord(bool det) => SavedWord(det, null);
+
+    /// <summary>The saved custom placement a launch reads, or null under <paramref name="det"/>. It
+    /// reads <paramref name="saved"/>, the options file read here when null.</summary>
+    public static string? SavedCustom(bool det, OptionsDef? saved = null) =>
+        det ? null : (saved ?? OptionsStore.UserOptions().Load()).HudLayoutCustom;
 
     /// <summary>The launch's read: stores the saved word and custom placement and logs them. Under
     /// <paramref name="det"/> it reads neither, so a deterministic launch runs Original.</summary>
-    public static void ApplySaved(bool det) => Apply(SavedWord(det), SavedCustom(det));
+    public static void ApplySaved(bool det, OptionsDef? saved = null)
+    {
+        if (!det)
+        {
+            saved ??= OptionsStore.UserOptions().Load();
+        }
+
+        Apply(SavedWord(det, saved), SavedCustom(det, saved));
+    }
 
     /// <summary>An options apply's read: the saved word and placement, as <see cref="ApplySaved"/>.
     /// Under <paramref name="det"/> it changes nothing, so an unrelated accept never overwrites the
     /// layout the run's own editor saved. Returns whether it applied.</summary>
-    public static bool ApplyAfterOptions(bool det)
+    public static bool ApplyAfterOptions(bool det, OptionsDef? saved = null)
     {
         if (det)
         {
             return false;
         }
 
-        ApplySaved(det: false);
+        ApplySaved(det: false, saved);
         return true;
     }
 

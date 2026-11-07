@@ -78,7 +78,9 @@ $MemDeferredExitCode = 3
 # The engine's own refusal below the floor; must equal MemoryAdmission.TripwireExitCode.
 $MemTripwireExitCode = 75
 $MemHistoryDepth = 20
-$MemEstimateMargin = 1.25
+# A full shard's peaks vary by a few percent across runs, so a wider margin only reserves memory
+# no launch ever touches.
+$MemEstimateMargin = 1.10
 $MemRetrySec = 2
 $MemUpdateSec = 30
 
@@ -164,7 +166,7 @@ function Read-MemHistory {
 
 <#
 .SYNOPSIS
-The estimate per kind in GB: the highest of the kind's last 20 recorded peaks plus 25 percent,
+The estimate per kind in GB: the highest of the kind's last 20 recorded peaks plus 10 percent,
 never below the kind's seed.
 #>
 function Get-MemEstimates {

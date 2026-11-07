@@ -227,24 +227,7 @@ public sealed record EnhancedSoundTuning
     /// lacks and <paramref name="tuning"/> leaves at <paramref name="under"/>'s value stays out.</summary>
     public static string WithValues(string? existing, EnhancedSoundTuning tuning, EnhancedSoundTuning? under = null)
     {
-        JsonObject root;
-        if (string.IsNullOrWhiteSpace(existing))
-        {
-            root = new JsonObject();
-        }
-        else
-        {
-            try
-            {
-                root = Mech3.VegetationSidecar.ParseWhole(existing) as JsonObject
-                    ?? throw new InvalidDataException("the tuning file is not a JSON object, so Save leaves it as it is");
-            }
-            catch (Exception ex) when (ex is JsonException or ArgumentException)
-            {
-                throw new InvalidDataException($"the tuning file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
-            }
-        }
-
+        var root = Mech3.VegetationSidecar.ObjectToRewrite(existing, "tuning");
         var written = tuning.Written();
         var values = new Dictionary<string, JsonNode>(StringComparer.Ordinal);
         foreach (var field in Fields)

@@ -116,16 +116,9 @@ public sealed class SoundArchive : IDisposable
         _zip = null;
     }
 
-    private static byte[] Read(ZipArchive archive, string entryPath)
-    {
-        var entry = archive.GetEntry(entryPath) ?? throw new FileNotFoundException(entryPath);
-        using var s = entry.Open();
-        using var ms = new MemoryStream();
-        s.CopyTo(ms);
-        return ms.ToArray();
-    }
-
-    private static AudioStreamWav WavStream(WavFile wav, bool looped)
+    /// <summary>The 16-bit Godot stream of <paramref name="wav"/>, looping its whole length when
+    /// <paramref name="looped"/>. The menu's cue sounds build theirs here too.</summary>
+    internal static AudioStreamWav WavStream(WavFile wav, bool looped)
     {
         var data = new byte[wav.Samples.Length * 2];
         Buffer.BlockCopy(wav.Samples, 0, data, 0, data.Length);
@@ -138,6 +131,15 @@ public sealed class SoundArchive : IDisposable
             LoopMode = looped ? AudioStreamWav.LoopModeEnum.Forward : AudioStreamWav.LoopModeEnum.Disabled,
             LoopEnd = wav.Frames,
         };
+    }
+
+    private static byte[] Read(ZipArchive archive, string entryPath)
+    {
+        var entry = archive.GetEntry(entryPath) ?? throw new FileNotFoundException(entryPath);
+        using var s = entry.Open();
+        using var ms = new MemoryStream();
+        s.CopyTo(ms);
+        return ms.ToArray();
     }
 
     private static AudioStreamOggVorbis OggStream(byte[] bytes, bool looped)
