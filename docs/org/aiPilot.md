@@ -1758,20 +1758,34 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    (`StuntMission.EntryLeadInM`) to 60 m past it (`EntryRunOutM`), both the remake's own lengths.
    The lead-in is long enough for the rail to close a lock-range offset before the opening; the
    run-out carries the rail's trailing pose through it. A bot on the rail has no crash check, and a
-   course's author places gates by eye, so each line is tilted clear of the world once the race
-   steps (`StuntMission.FitLines`, called from `StuntRaceBots`). A lead-in that the world buries or
-   crosses starts higher, so the line dives into the opening. An exit that meets the world within
-   250 m (`EntryExitM`) climbs, or where no slope clears 250 m, the least that clears 150 m, then
-   100 m: the avoid-crash probe's look-ahead takes over past the rail's end. A climbing exit runs
-   on to the length it cleared, since a bot let off the rail at 60 m sinks back under its line
-   before the flight law climbs, and struck C1's plateau lip past `p1`. Each takes the least slope, in steps of 0.05 up to tan 35 degrees,
-   whose straight clears the world by 8 m below (`EntryClearM`) away from the 40 m about the
-   opening (`EntryOpeningM`). Without one the line stays level, with a warning. The probe is a tube
-   of five rays 6 m about the straight, cast from both ends: one ray down the middle passes the
-   face past C1's `p1` that bots on the rail strike a few metres off their line, and a ray from
-   inside a body strikes nothing. Fitted when the build's frame has passed, since the world's moved
-   colliders reach the physics space only then. C1's `p2` lead-in, buried in the plateau's edge,
-   starts 50 m higher. The bot takes the next entry alone, in
+   course's author places gates by eye, so each line is laid clear of the world once the race
+   steps (`StuntMission.FitLines`, called from `StuntRaceBots`). Each bot's run lays its own lines,
+   fitted to its own airframe. A lead-in that the world buries or crosses starts higher, so the line
+   dives into the opening. An exit that meets the world within 250 m (`EntryExitM`) climbs, or where
+   no slope clears 250 m, the least that clears 150 m, then 100 m: the avoid-crash probe's
+   look-ahead takes over past the rail's end. Each takes the least slope, in steps of 0.05 up to
+   tan 35 degrees, whose straight clears the world by 8 m below (`EntryClearM`) away from the 40 m
+   about the opening (`EntryOpeningM`), and at it the least turn off the gate's axis, 5 degrees at
+   a time up to 15. Where no line flown level fits the plane at a length, a line flown knife-edge
+   is tried before the next shorter length (`DangerZoneRibbon.KnifeEdge`): level, as climbing
+   would strike the structure it passes under, through any of 35 places up to 3 m above or below
+   and 6 m across the opening's centre. Its lower wing is its margin below. A Balmoral, 26 m
+   across, flies C2's `p9` knife-edge between a roof 13 m over the line and ground 16 m under it,
+   where level it struck the bridge or went round for 50 to 110 s. Without any the line stays
+   straight and level, with a warning. A climbing, turned or knife-edge exit runs on to the length
+   it cleared, since a bot let off the rail at 60 m sinks back under its line before the flight
+   law climbs, and struck C1's plateau lip past `p1`. The test is the plane flown down the
+   straight at the rail's attitude there: a tube of seven rays cast from both ends, the middle,
+   each wing at half and full half-span (`AircraftBody.HalfSpan`, at least 6 m) and 6 m to either
+   side of the wings, then the airframe's own hulls swept down a straight the rays pass
+   (`FlightController.WorldBlocksHulls`). One ray down the middle passes the face past C1's `p1`
+   that bots on the rail strike a few metres off their line, and a ray from inside a body strikes
+   nothing. Rays alone passed thin structures a Balmoral's wing struck. Fitted when the build's
+   frame has passed, since the world's moved colliders reach the physics space only then. C1's
+   `p2` lead-in, buried in the plateau's edge, starts 50 m higher. A Balmoral has no straight
+   line through C2's `p12` and `p17` tunnels: `p12`'s exit gap stands 7 m off the gate's axis
+   past a building beside the gate, and under `p17`'s deck 25 m stand clear over a building, so
+   it strikes the world past each. The bot takes the next entry alone, in
    sequence order, and runs its line one way only, so a reverse entry is crossed from its named
    side; the line takes no row of the run table and no rail check, since the course's scoring is
    its apertures', not the line's gates. Gates stand closer than a zone's cone reach, so a bot past
@@ -1784,7 +1798,8 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    A bridge stands 150 to 700 m from the opening (`JoinRailM`, `BridgeReachM`), with the bot at
    least 150 m short of the opening's plane. It turns no tighter than 125 m (`BridgeRadiusM`, a
    4 g turn at the rail's 69.3 m/s cruise, which 187.5 m refused at every sharp C2 bend), climbs
-   or dives no steeper than the fit's tan 35 degrees, and the tube down each 20 m chord is clear;
+   or dives no steeper than the fit's tan 35 degrees, and the plane down each 20 m chord, banked as
+   the rail banks it there (knife-edge onto a knife-edge line), is clear;
    the cubic's handles try 0.4, 0.3 and 0.5 of the reach, and after a blocked cast it waits 15
    steps. A bot riding a flown entry's exit bridges to the next as soon as one fits, since a
    climbing exit runs on past where a course's next gate leaves room. Going round for a course

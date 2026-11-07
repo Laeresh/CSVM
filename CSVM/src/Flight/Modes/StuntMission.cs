@@ -155,6 +155,17 @@ public sealed class StuntMission
     // The step FitLines' slope search takes.
     private const float EntrySlopeStep = 0.05f;
 
+    // Remake-only: the turns off the gate's axis, degrees, FitLines tries for a lead-in or exit, least first.
+    private static readonly float[] EntryTurnsDeg = { 0f, 5f, -5f, 10f, -10f, 15f, -15f };
+
+    // The lengths FitLines tries for an exit, metres, longest first.
+    private static readonly float[] ExitLengthsM = { EntryExitM, EntryExitM * 0.6f, EntryExitM * 0.4f };
+
+    // Remake-only: how far above and across the opening's centre, metres, FitLines tries a knife-edge
+    // line, least first. C2's p9 passes between a roof 13 m over its centre and ground 16 m under it.
+    private static readonly float[] EntryKnifeLiftsM = { 0f, -1f, 1f, -2f, 2f, -3f, 3f };
+    private static readonly float[] EntryKnifeSlidesM = { 0f, -3f, 3f, -6f, 6f };
+
     private readonly List<StuntZone> _zones;
     private readonly HashSet<StuntGate> _crossedGates = new();
 
@@ -169,11 +180,17 @@ public sealed class StuntMission
     private readonly int[] _firstElement = Array.Empty<int>();
     private readonly bool[] _touching = Array.Empty<bool>();
 
-    // Per sequence entry, how far its line's start and end stand above level, and how far past the
-    // opening it runs, metres (FitLines).
+    // Per sequence entry, as FitLines left it: its line's start and end heights over level and its run past
+    // the opening, metres. Then the ways its lead-in and exit are flown, and whether it is flown knife-edge.
     private float[] _leadRise = Array.Empty<float>();
     private float[] _runRise = Array.Empty<float>();
     private float[] _runOut = Array.Empty<float>();
+    private Vector3[] _leadWay = Array.Empty<Vector3>();
+    private Vector3[] _runWay = Array.Empty<Vector3>();
+    private bool[] _knifeEdge = Array.Empty<bool>();
+
+    // Per sequence entry, how far from the opening's centre its line passes, metres (FitLines).
+    private Vector3[] _shift = Array.Empty<Vector3>();
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
     private bool _clockStarted;
@@ -413,37 +430,60 @@ public sealed class StuntMission
             : new StuntMission(zones) { IntroLine = IntroLine };
     }
 
-    /// <summary>Tilts each course entry's line, which a race bot runs with no crash check, clear of the
-    /// world <paramref name="blocked"/> reports, at the gate's rest pose. A buried or crossed lead-in
-    /// starts higher, so the line dives into the opening. An exit meeting the world within
-    /// <see cref="EntryExitM"/>, else 150 or 100 m, climbs. Each takes the least slope clearing by
-    /// <see cref="EntryClearM"/>; with none up to <see cref="MaxEntrySlope"/> it stays level, warned.
-    /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
-    public void FitLines(Func<Vector3, Vector3, bool> blocked)
+    /// <summary>Lays each course entry's line clear of the world at the gate's rest pose; a race bot runs
+    /// it with no crash check. The test, <paramref name="blocked"/>, takes a straight and the way the
+    /// wings point. Lead-in and exit (<see cref="EntryExitM"/>, else 150 or 100 m) take the least slope
+    /// clearing by <see cref="EntryClearM"/>, then the least turn off the gate's axis. Where no level
+    /// line fits, it is <see cref="DangerZoneRibbon.KnifeEdge"/>; where neither does, straight and level,
+    /// warned. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public void FitLines(Func<Vector3, Vector3, Basis, bool> blocked)
     {
         ArgumentNullException.ThrowIfNull(blocked);
         if (Course == null)
             return;
 
-        // A ray cast from inside a body strikes nothing, so a buried end shows only from the other.
-        bool Clear(Vector3 a, Vector3 b) => !blocked(a, b) && !blocked(b, a);
+        // A ray cast from inside a body strikes nothing, so a buried end shows only from the other. The
+        // attitude is the rail's on a straight flown along `flown`.
+        bool Clear(Vector3 a, Vector3 b, Vector3 flown, bool knife)
+        {
+            var attitude = knife ? DangerZoneRail.KnifeFrame(flown, Vector3.Zero) : DangerZoneRail.RailFrame(flown, Vector3.Zero);
+            return !blocked(a, b, attitude) && !blocked(b, a, attitude);
+        }
 
-        // The straight from the opening along `way`, raised by `slope`. Its margin below spares the
-        // opening's surroundings, where a low gate's ground is meant to be.
-        bool Fits(Vector3 opening, Vector3 way, float metres, float slope)
+        // The straight from the opening along `way`, raised by `slope`, flown toward the opening on a
+        // lead-in. Its margin below spares the opening's surroundings, where a low gate's ground is meant
+        // to be. A knife-edge line's lower wing is its margin: one cast below would strike every low gate's ground.
+        bool Fits(Vector3 opening, Vector3 way, float metres, float slope, bool knife, bool lead)
         {
             var far = opening + (way * metres) + (Vector3.Up * (metres * slope));
             var near = opening.Lerp(far, EntryOpeningM / metres);
             var down = Vector3.Down * EntryClearM;
-            return Clear(opening, far) && Clear(near + down, far + down);
+            var flown = (lead ? opening - far : far - opening).Normalized();
+            return Clear(opening, far, flown, knife) && (knife || Clear(near + down, far + down, flown, knife: false));
         }
 
-        float? Slope(Vector3 opening, Vector3 way, float metres)
+        // A knife-edge line stays level: one passes under a structure a climb would strike.
+        (Vector3 Way, float Slope)? Side(Vector3 opening, Vector3 way, float metres, bool knife, bool lead)
         {
-            for (float slope = 0f; slope <= MaxEntrySlope + 1e-4f; slope += EntrySlopeStep)
+            for (float slope = 0f; slope <= (knife ? 0f : MaxEntrySlope) + 1e-4f; slope += EntrySlopeStep)
             {
-                if (Fits(opening, way, metres, slope))
-                    return slope;
+                foreach (float turn in EntryTurnsDeg)
+                {
+                    var turned = way.Rotated(Vector3.Up, Mathf.DegToRad(turn));
+                    if (Fits(opening, turned, metres, slope, knife, lead))
+                        return (turned, slope);
+                }
+            }
+
+            return null;
+        }
+
+        (Vector3 Way, float Slope, float Metres)? Exit(Vector3 opening, Vector3 way, bool knife)
+        {
+            foreach (float metres in ExitLengthsM)
+            {
+                if (Side(opening, way, metres, knife, lead: false) is { } side)
+                    return (side.Way, side.Slope, metres);
             }
 
             return null;
@@ -452,28 +492,57 @@ public sealed class StuntMission
         _leadRise = new float[_zones.Count];
         _runRise = new float[_zones.Count];
         _runOut = new float[_zones.Count];
+        _leadWay = new Vector3[_zones.Count];
+        _runWay = new Vector3[_zones.Count];
+        _knifeEdge = new bool[_zones.Count];
+        _shift = new Vector3[_zones.Count];
         for (int i = 0; i < _zones.Count; i++)
         {
             var (centre, way) = EntryAxis(i);
-            float? lead = Slope(centre, -way, EntryLeadInM);
-            float? run = null;
-            _runOut[i] = EntryRunOutM;
-            foreach (float metres in new[] { EntryExitM, EntryExitM * 0.6f, EntryExitM * 0.4f })
+            var level = Side(centre, -way, EntryLeadInM, knife: false, lead: true);
+            (Vector3 Way, float Slope)? lead = null;
+            (Vector3 Way, float Slope, float Metres)? run = null;
+
+            // ⚠ Try level, then knife-edge at every place in the opening, before a shorter exit. Off the end
+            // of a short one, the bot flies on into what cut it short (C2's p12 at 106 m).
+            var across = way.Cross(Vector3.Up).Normalized();
+            foreach (float metres in ExitLengthsM)
             {
-                if (Slope(centre, way, metres) is { } slope)
+                if (level != null && Side(centre, way, metres, knife: false, lead: false) is { } levelRun)
                 {
-                    // A climbing exit is ridden to the end the fit cleared. Off the rail at EntryRunOutM,
-                    // a bot sinks back under its line before the flight law climbs.
-                    run = slope;
-                    _runOut[i] = slope > 0f ? metres : EntryRunOutM;
+                    (lead, run) = (level, (levelRun.Way, levelRun.Slope, metres));
                     break;
                 }
+
+                foreach (var shift in EntryKnifeShifts(across))
+                {
+                    if (Side(centre + shift, way, metres, knife: true, lead: false) is { } knifeRun
+                        && Side(centre + shift, -way, EntryLeadInM, knife: true, lead: true) is { } knifeLead)
+                    {
+                        (lead, run, _knifeEdge[i], _shift[i]) = (knifeLead, (knifeRun.Way, knifeRun.Slope, metres), true, shift);
+                        break;
+                    }
+                }
+
+                if (run != null)
+                    break;
             }
 
+            // With neither, the level parts that fit stand.
+            lead ??= level;
+            run ??= Exit(centre, way, knife: false);
+
             if (lead == null || run == null)
-                Log.Warn("flight", $"course entry {i + 1} ({_zones[i].PathName}): no line up to a {Mathf.RadToDeg(Mathf.Atan(MaxEntrySlope)):0} degree slope clears the world {(lead == null ? "before" : "after")} the gate; it stays level there");
-            _leadRise[i] = (lead ?? 0f) * EntryLeadInM;
-            _runRise[i] = (run ?? 0f) * _runOut[i];
+                Log.Warn("flight", $"course entry {i + 1} ({_zones[i].PathName}): no line, level or knife-edge, clears the world {(lead == null ? "before" : "after")} the gate; it stays straight and level there");
+
+            // A climbing, turned or knife-edge exit is ridden to the end the fit cleared. Off the rail at
+            // EntryRunOutM, a bot sinks back under its line before the flight law climbs.
+            bool ridden = run is { } r && (r.Slope > 0f || r.Way != way || _knifeEdge[i]);
+            _runOut[i] = ridden ? run!.Value.Metres : EntryRunOutM;
+            _leadWay[i] = -(lead?.Way ?? -way);
+            _runWay[i] = run?.Way ?? way;
+            _leadRise[i] = (lead?.Slope ?? 0f) * EntryLeadInM;
+            _runRise[i] = (run?.Slope ?? 0f) * _runOut[i];
             _zones[i].Route = EntryLine(i);
         }
     }
@@ -866,6 +935,16 @@ public sealed class StuntMission
         return true;
     }
 
+    // The places FitLines tries a knife-edge line through, as offsets from the opening's centre, least first.
+    private static IEnumerable<Vector3> EntryKnifeShifts(Vector3 across)
+    {
+        foreach (float lift in EntryKnifeLiftsM)
+        {
+            foreach (float slide in EntryKnifeSlidesM)
+                yield return (Vector3.Up * lift) + (across * slide);
+        }
+    }
+
     // Entry i's opening centre at rest, and the way it is flown.
     private (Vector3 Centre, Vector3 Way) EntryAxis(int i)
     {
@@ -882,9 +961,11 @@ public sealed class StuntMission
         var local = CourseGateShape.OpeningCentre(Course!.Gates[g]);
         var rest = _apertures[g].Rest;
         var (centre, way) = EntryAxis(i);
-        return DangerZoneRibbon.ForEntry(Course.Gates[g].Id, i + 1, centre, way, EntryLeadInM, _runOut.Length > i ? _runOut[i] : EntryRunOutM,
+        bool fit = _leadWay.Length > i;
+        var opening = centre + (fit ? _shift[i] : Vector3.Zero);
+        return DangerZoneRibbon.ForEntry(Course.Gates[g].Id, i + 1, opening, fit ? _leadWay[i] : way, EntryLeadInM, fit ? _runOut[i] : EntryRunOutM,
             () => (rest * GateMotion(g, SimSeconds()) * local) - centre,
-            _leadRise.Length > i ? _leadRise[i] : 0f, _runRise.Length > i ? _runRise[i] : 0f);
+            fit ? _leadRise[i] : 0f, fit ? _runRise[i] : 0f, fit ? _runWay[i] : way, fit && _knifeEdge[i]);
     }
 
     // A course step tests the next entry alone. One segment thus advances at most one entry, and a
