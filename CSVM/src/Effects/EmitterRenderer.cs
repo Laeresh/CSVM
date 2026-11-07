@@ -24,6 +24,11 @@ public interface IEmitterRenderer
     /// calls this when its authored emission outgrows the pool it was sized with.</summary>
     void Grow(int capacity);
 
+    /// <summary>The cloud band's midpoint for this frame's writes, in the owner's own Y, or null
+    /// where nothing is gated. A particle draws only for cameras on its own side of it
+    /// (<see cref="Mech3.ZoneGate.PointZone"/>). Called once per frame, before the writes.</summary>
+    void SetBandMidpoint(float? localY);
+
     /// <summary>One live particle's state this frame: world <paramref name="position"/>, uniform
     /// <paramref name="size"/>, atlas column <paramref name="frame"/>, <paramref name="alpha"/>
     /// envelope and ramp <paramref name="color"/>.</summary>
@@ -240,6 +245,20 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     private Layer? _mix;
     private Layer? _add;
 
+    // The same two blends for particles at or above the cloud band's midpoint, which only a camera
+    // above the band draws. Built on the first such particle, so an emitter that never climbs
+    // through a band keeps one MultiMesh.
+    private Layer? _mixAbove;
+    private Layer? _addAbove;
+
+    // What Attach was handed, kept to build an above-band list late.
+    private Node3D? _owner;
+    private int _capacity;
+    private float _cullMargin;
+
+    // This frame's band midpoint in the owner's Y, null where nothing is gated.
+    private float? _midpoint;
+
     /// <summary>Builds the renderer for an already-packed <paramref name="atlas"/> of
     /// <paramref name="frameCount"/> side-by-side frames. <paramref name="additiveFrames"/> flags
     /// each atlas column whose texture carries the additive bit (<c>docs/org/textures.md</c>) and
@@ -271,7 +290,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     /// <summary>Diagnostics: how many particles the last published frame put in each blend's draw
     /// list, which is how a suite asserts the per-frame routing without reading pixels.</summary>
-    public (int Mixed, int Additive) DrawnCounts => (_mix?.Drawn ?? 0, _add?.Drawn ?? 0);
+    public (int Mixed, int Additive) DrawnCounts =>
+        ((_mix?.Drawn ?? 0) + (_mixAbove?.Drawn ?? 0), (_add?.Drawn ?? 0) + (_addAbove?.Drawn ?? 0));
+
+    /// <summary>Diagnostics: how many particles the last published frame drew on each side of the
+    /// cloud band's midpoint, and the visual layers each side's lists carry.</summary>
+    public (int Below, uint BelowLayers, int Above, uint AboveLayers) BandSides =>
+        ((_mix?.Drawn ?? 0) + (_add?.Drawn ?? 0), (_mix ?? _add)?.Layers ?? 0u,
+         (_mixAbove?.Drawn ?? 0) + (_addAbove?.Drawn ?? 0), (_mixAbove ?? _addAbove)?.Layers ?? 0u);
 
     private bool AnyAdditive
     {
@@ -312,6 +338,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         // absorbed into EmitterDirector's EffectPoolMiss scope; fires alone only when nothing else
         // is already open.
         using var _ = PerfSample.Scope(PerfSite.MaterialCreate);
+        _owner = owner;
+        _capacity = capacity;
+        _cullMargin = cullMargin;
         if (!AllAdditive)
             _mix = Layer.Build(this, owner, capacity, cullMargin, additive: false);
         if (AnyAdditive)
@@ -320,16 +349,27 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     public void Grow(int capacity)
     {
+        _capacity = Mathf.Max(_capacity, capacity);
         _mix?.Grow(capacity);
         _add?.Grow(capacity);
+        _mixAbove?.Grow(capacity);
+        _addAbove?.Grow(capacity);
     }
+
+    // ⚠ An emitter whose layers another system moved (an airframe's zone gate, the cockpit's own-view
+    // hide) rides that system. Splitting it by height would undo the other's verdict.
+    public void SetBandMidpoint(float? localY) =>
+        _midpoint = (_mix ?? _add) is { OwnsLayers: false } ? null : localY;
 
     public void Write(int index, Vector3 position, float size, float frame, float alpha, Color color)
     {
         // The shader picks its column with the same rounding, so a particle lands in the list that
         // draws the frame it is actually showing.
         int col = Mathf.Clamp(Mathf.FloorToInt(frame + 0.5f), 0, _additiveFrames.Length - 1);
-        var layer = _additiveFrames[col] ? _add : _mix;
+        bool additive = _additiveFrames[col];
+        var layer = Mech3.ZoneGate.PointZone(position.Y, _midpoint) == 2
+            ? AboveList(additive)
+            : additive ? _add : _mix;
         bool enhanced = GraphicsMode.Enhanced;
         layer?.Write(position, size, frame, alpha, color, enhanced ? _columnGain[col] : 1f,
             enhanced ? _columnShade[col] : 0f);
@@ -337,8 +377,12 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     public void Show(int liveCount)
     {
-        _mix?.Publish();
-        _add?.Publish();
+        uint below = Mech3.ZoneGate.PointLayers(_midpoint == null ? -1 : 1);
+        uint above = Mech3.ZoneGate.PointLayers(2);
+        _mix?.Publish(below);
+        _add?.Publish(below);
+        _mixAbove?.Publish(above);
+        _addAbove?.Publish(above);
     }
 
     // One variant's text under a graphics mode, a pure function of its four arguments. The stereo
@@ -409,6 +453,16 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         return code;
     }
 
+    // The above-band list of one blend, built on first use. Null before Attach, like the others.
+    private Layer? AboveList(bool additive)
+    {
+        if (_owner == null)
+            return null;
+        if (additive)
+            return _addAbove ??= Layer.Build(this, _owner, _capacity, _cullMargin, additive: true);
+        return _mixAbove ??= Layer.Build(this, _owner, _capacity, _cullMargin, additive: false);
+    }
+
     // One blend's draw list. The write cursor counts up across a frame's writes and is published
     // and reset by Show, so neither half has to know the emitter's own packed indices.
     private sealed class Layer
@@ -429,7 +483,16 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         private int _capacity;
         private int _shown;
 
+        // The mask this list last wrote, starting at the engine's default layer 1.
+        private uint _ownLayers = 1u;
+
         public int Drawn { get; private set; }
+
+        public uint Layers => _mmi?.Layers ?? 0u;
+
+        // Whether the node still carries the mask this list last wrote. Once another system writes
+        // one, the list never writes again.
+        public bool OwnsLayers => _mmi == null || _mmi.Layers == _ownLayers;
 
         public static Layer Build(MultiMeshEmitterRenderer owner, Node3D parent, int capacity,
             float cullMargin, bool additive)
@@ -512,8 +575,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             b[at + 19] = shade;
         }
 
-        public void Publish()
+        public void Publish(uint layers)
         {
+            // Written only on a change, like the count below, and never over another system's mask.
+            if (_mmi != null && OwnsLayers && _mmi.Layers != layers)
+            {
+                _mmi.Layers = layers;
+                _ownLayers = layers;
+            }
             // The buffer must cover the whole capacity; the slots past the cursor are not drawn.
             if (_mm != null && _written > 0)
                 _mm.Buffer = _buffer;

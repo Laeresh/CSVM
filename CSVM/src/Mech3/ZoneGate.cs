@@ -38,6 +38,19 @@ public static class ZoneGate
     public static bool Draws(int zoneId, int cameraState) =>
         zoneId <= 0 || zoneId == cameraState;
 
+    /// <summary>The zone of a point effect (a puffer particle, a gun round) at height
+    /// <paramref name="y"/>. It is 1 below the band's <paramref name="midpoint"/> and 2 at or above
+    /// it. A mission with no band (null) leaves it −1, ungated. This is the original's particle
+    /// callback <c>0x473580</c>; decode: docs/formats/weather/atmosphere.md.</summary>
+    public static int PointZone(float y, float? midpoint) =>
+        midpoint is not { } mid ? -1 : y < mid ? 1 : 2;
+
+    /// <summary>The visual layers a point effect of <paramref name="zone"/> draws on. A zoned point
+    /// also carries zone 3's bit. The callback answers −1 for a camera in state 3, so a camera
+    /// inside a fog volume draws every particle. An ungated point keeps layer 1.</summary>
+    public static uint PointLayers(int zone) =>
+        zone is 1 or 2 ? LayerFor(zone) | LayerFor(3) : 1u;
+
     /// <summary>One camera's cull mask with the zone band narrowed to
     /// <paramref name="cameraState"/> alone, every other bit is left exactly as it was, so this
     /// composes with the per-player band and with any mode-specific mask.</summary>

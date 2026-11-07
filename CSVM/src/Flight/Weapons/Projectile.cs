@@ -416,15 +416,13 @@ public sealed partial class ProjectilePool : Node3D
     // was removed). Held rather than resolved per draw.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
     private readonly HashSet<string> _flyoutLogged = new();
-    // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures), built in _Ready.
-    private readonly MultiMesh[] _muzzleMm = new MultiMesh[MuzzleAmmoTextures.Length];
-    // One MultiMesh per tracer texture (TracerTextures), built in _Ready; one shared per-mesh
-    // instance-count scratch array, cleared and refilled every frame in RenderTracers.
-    private readonly MultiMesh[] _tracerMm = new MultiMesh[TracerTextures.Length];
-    private readonly int[] _tracerCounts = new int[TracerTextures.Length];
-    // The tip discs, index-parallel to the streak pools above: one instance per round, so one
-    // shared count array serves both and _tracerCounts is reused for the tip pools too.
-    private readonly MultiMesh[] _tipMm = new MultiMesh[TipTextures.Length];
+    // One pool per muzzle-flash ammo texture (MuzzleAmmoTextures), built in _Ready.
+    private readonly BandedPool[] _muzzleMm = new BandedPool[MuzzleAmmoTextures.Length];
+    // One pool per tracer texture (TracerTextures), built in _Ready, refilled every frame in
+    // RenderTracers.
+    private readonly BandedPool[] _tracerMm = new BandedPool[TracerTextures.Length];
+    // The tip discs, index-parallel to the streak pools above: one instance per round.
+    private readonly BandedPool[] _tipMm = new BandedPool[TipTextures.Length];
     // The per-round working set behind the TracerMinPixels floor: one sample per bound viewer,
     // cleared and refilled per round (distance is per round), so the floor allocates nothing
     // after the first frame.
@@ -435,8 +433,8 @@ public sealed partial class ProjectilePool : Node3D
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
     private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
     private Node3D _casingModels = null!;    // container for the pooled shell-casing instances
-    private MultiMesh _impactMm = null!;
-    private MultiMesh _smokeMm = null!;
+    private BandedPool _impactMm = null!;
+    private BandedPool _smokeMm = null!;
     private int _sfxNext;
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
@@ -1007,18 +1005,18 @@ public sealed partial class ProjectilePool : Node3D
         // into a screen-vertical bar. One MultiMesh per texture; the streak mesh is the authored
         // crossed pair (docs/org/tracers.md), so it reads solid without consulting the camera.
         for (int i = 0; i < TracerTextures.Length; i++)
-            _tracerMm[i] = AddMultiMesh(TracerTextures[i], MaxProjectiles, additive: true, billboard: false, out _, CrossedStreakMesh());
+            _tracerMm[i] = AddBandedPool(TracerTextures[i], MaxProjectiles, additive: true, crossed: true);
         // The tip discs. Carried on a plain quad rather than the authored octagon: the texture is a
         // radial disc with its own alpha, so the carrier's corners only matter if the art's corners
         // are opaque, swap in a real 8-gon here if they turn out to be.
         for (int i = 0; i < TipTextures.Length; i++)
-            _tipMm[i] = AddMultiMesh(TipTextures[i], MaxProjectiles, additive: true, billboard: false, out _);
+            _tipMm[i] = AddBandedPool(TipTextures[i], MaxProjectiles, additive: true);
         for (int i = 0; i < MuzzleAmmoTextures.Length; i++)
-            _muzzleMm[i] = AddMultiMesh(MuzzleAmmoTextures[i], MaxFlashes, additive: true, billboard: false, out _);
-        _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
+            _muzzleMm[i] = AddBandedPool(MuzzleAmmoTextures[i], MaxFlashes, additive: true);
+        _impactMm = AddBandedPool("slug_muzzle2", MaxFlashes, additive: true);
         // Smoke (the muzzlepuffer puffs): the authored puffer textures (smoke101), alpha-blended
         // rather than additive so the puffs read as smoke.
-        _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
+        _smokeMm = AddBandedPool("smoke101", MaxSmoke, additive: false);
         _flyoutModels = new Node3D { Name = "flyout" };
         AddChild(_flyoutModels);
         _impactFxModels = new Node3D { Name = "impact_fx" };
@@ -1453,18 +1451,38 @@ public sealed partial class ProjectilePool : Node3D
 
     internal void UnregisterAircraft(AircraftBody body) => _aircraft.Remove(body);
 
+    /// <summary>The tracer streaks drawn this frame each side of the cloud band's midpoint, summed
+    /// over the ammo textures, and the visual layers each side carries.</summary>
+    internal (int Below, uint BelowLayers, int Above, uint AboveLayers) TracerSides()
+    {
+        int below = 0, above = 0;
+        uint belowLayers = 0u, aboveLayers = 0u;
+        foreach (var pool in _tracerMm)
+        {
+            var sides = pool.Sides;
+            below += sides.Below;
+            above += sides.Above;
+            belowLayers |= sides.BelowLayers;
+            aboveLayers |= sides.AboveLayers;
+        }
+        return (below, belowLayers, above, aboveLayers);
+    }
+
     /// <summary>Where each muzzle-flash quad drawn this frame is pinned, in world space: the
     /// texture's left edge, which <see cref="RenderSprites"/> keeps on the muzzle as the quad
     /// shrinks. The instrument behind the flash-to-muzzle gap suite.</summary>
     internal IEnumerable<Vector3> DrawnMuzzleFlashAnchors()
     {
         var toWorld = GlobalTransform;
-        foreach (var mm in _muzzleMm)
+        foreach (var pool in _muzzleMm)
         {
-            for (int i = 0; i < mm.VisibleInstanceCount; i++)
+            foreach (var mm in pool.Meshes)
             {
-                var xf = toWorld * mm.GetInstanceTransform(i);
-                yield return xf.Origin - (xf.Basis.X * 0.5f);
+                for (int i = 0; i < mm.VisibleInstanceCount; i++)
+                {
+                    var xf = toWorld * mm.GetInstanceTransform(i);
+                    yield return xf.Origin - (xf.Basis.X * 0.5f);
+                }
             }
         }
     }
@@ -1844,39 +1862,6 @@ public sealed partial class ProjectilePool : Node3D
         return true;
     }
 
-    private static void RenderSprites(MultiMesh mm, List<Sprite> sprites)
-    {
-        int n = 0;
-        foreach (var s in sprites)
-        {
-            float k = 1f - s.Age / s.Life;            // shrink + fade over life
-            float size = s.Size * (0.6f + 0.4f * k);
-            var orient = s.Orient;
-            var origin = s.Pos;
-            if (s.Anchor is { } anchor)
-            {
-                // Pos/Orient are LOCAL to the anchor node, so the flash rides the plane. An anchor
-                // freed or unparented mid-flash skips the draw for the sprite's last few ms.
-                if (!GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
-                    continue;
-                var xf = anchor.GlobalTransform;
-                var b = xf.Basis.Orthonormalized();
-                orient = b * orient;
-                origin = xf.Origin + (b * origin);
-            }
-            var basis = new Basis(orient.X * size, orient.Y * size, orient.Z * size);
-            // QuadMesh's default UV puts U=0 (the texture's left edge) at local X=-0.5, anchoring
-            // there keeps it pinned to Pos as the quad shrinks over its life.
-            var pos = s.AnchorLeft ? origin + orient.X * (size * 0.5f) : origin;
-            mm.SetInstanceTransform(n, new Transform3D(basis, pos));
-            var c = s.Tint;
-            c.A = k;
-            mm.SetInstanceColor(n, c);
-            n++;
-        }
-        mm.VisibleInstanceCount = n;
-    }
-
     // A shape's local bounds from the server's own data (the same read ColliderOverlay makes for
     // the clutter bodies). A kind this does not read (a heightmap, a world boundary) reports a
     // zero box at the shape origin, which aims the cover ray at the shape's placement rather than
@@ -1915,6 +1900,51 @@ public sealed partial class ProjectilePool : Node3D
         for (int i = 1; i < points.Length; i++)
             box = box.Expand(points[i]);
         return box;
+    }
+
+    private void RenderSprites(BandedPool pool, List<Sprite> sprites)
+    {
+        var toWorld = GlobalTransform;
+        float? midpoint = _ambience.BandMidpoint;
+        pool.Begin();
+        foreach (var s in sprites)
+        {
+            float k = 1f - s.Age / s.Life;            // shrink + fade over life
+            float size = s.Size * (0.6f + 0.4f * k);
+            var orient = s.Orient;
+            var origin = s.Pos;
+            if (s.Anchor is { } anchor)
+            {
+                // Pos/Orient are LOCAL to the anchor node, so the flash rides the plane. An anchor
+                // freed or unparented mid-flash skips the draw for the sprite's last few ms.
+                if (!GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
+                    continue;
+                var xf = anchor.GlobalTransform;
+                var b = xf.Basis.Orthonormalized();
+                orient = b * orient;
+                origin = xf.Origin + (b * origin);
+            }
+            var basis = new Basis(orient.X * size, orient.Y * size, orient.Z * size);
+            // QuadMesh's default UV puts U=0 (the texture's left edge) at local X=-0.5. Anchoring
+            // there keeps it pinned to Pos as the quad shrinks over its life.
+            var pos = s.AnchorLeft ? origin + orient.X * (size * 0.5f) : origin;
+            var c = s.Tint;
+            c.A = k;
+            pool.Add(new Transform3D(basis, pos), c, Mech3.ZoneGate.PointZone((toWorld * origin).Y, midpoint));
+        }
+        pool.End(midpoint != null);
+    }
+
+    // A BandedPool of `cap` instances a side. `crossed` takes the authored tracer streak's mesh
+    // instead of the unit quad. The above-band side is built on its first instance.
+    private BandedPool AddBandedPool(string texture, int cap, bool additive, bool crossed = false)
+    {
+        var below = AddMultiMesh(texture, cap, additive, billboard: false, out var belowMmi, crossed ? CrossedStreakMesh() : null);
+        return new BandedPool(below, belowMmi, () =>
+        {
+            var above = AddMultiMesh(texture, cap, additive, billboard: false, out var aboveMmi, crossed ? CrossedStreakMesh() : null);
+            return (above, aboveMmi);
+        });
     }
 
     // Builds one pooled sprite/streak pool: a MultiMesh of `cap`
@@ -3270,7 +3300,13 @@ public sealed partial class ProjectilePool : Node3D
         float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);
         float cfgWidth = Config.GetFloat("weapons.tracerWidth", TracerWidth);
         float minPixels = Config.GetFloat("weapons.tracerMinPixels", TracerMinPixels);
-        System.Array.Clear(_tracerCounts, 0, _tracerCounts.Length);
+        var toWorld = GlobalTransform;
+        float? midpoint = _ambience.BandMidpoint;
+        for (int i = 0; i < _tracerMm.Length; i++)
+        {
+            _tracerMm[i].Begin();
+            _tipMm[i].Begin();
+        }
         // Rounds step at 60 Hz and this draws every frame, so a raw sim position is held then
         // jumped while the camera moves smoothly. Draw part way through the current step instead
         // (CSVM.Utils.RenderPoses). The fraction is 1 outside a realtime clock.
@@ -3322,23 +3358,19 @@ public sealed partial class ProjectilePool : Node3D
             // The mesh's local +Y is its front; the round's position is the streak's TAIL, hence
             // the +half-length origin offset below.
             var basis = new Basis(xAxis * width, yAxis * len, zAxis * width);
-            var mm = _tracerMm[p.TracerIdx];
-            int n = _tracerCounts[p.TracerIdx]++;
-            mm.SetInstanceTransform(n, new Transform3D(basis, drawPos + yAxis * (len * 0.5f)));
-            mm.SetInstanceColor(n, p.Tint);
+            // The round's own position decides the side, so its streak and tip never split.
+            int zone = Mech3.ZoneGate.PointZone((toWorld * drawPos).Y, midpoint);
+            _tracerMm[p.TracerIdx].Add(new Transform3D(basis, drawPos + yAxis * (len * 0.5f)), p.Tint, zone);
             // The tip disc: perpendicular to flight (its quad spans the two width axes, its normal
-            // is the flight direction), TracerTipOffset ahead of the round. Same instance index as
-            // the streak, so one count array serves both pools.
-            var tip = _tipMm[p.TracerIdx];
-            tip.SetInstanceTransform(
-                n,
-                new Transform3D(new Basis(xAxis * TracerTipSize, zAxis * TracerTipSize, yAxis), drawPos + yAxis * TracerTipOffset));
-            tip.SetInstanceColor(n, p.Tint);
+            // is the flight direction), TracerTipOffset ahead of the round.
+            _tipMm[p.TracerIdx].Add(
+                new Transform3D(new Basis(xAxis * TracerTipSize, zAxis * TracerTipSize, yAxis), drawPos + yAxis * TracerTipOffset),
+                p.Tint, zone);
         }
         for (int i = 0; i < _tracerMm.Length; i++)
         {
-            _tracerMm[i].VisibleInstanceCount = _tracerCounts[i];
-            _tipMm[i].VisibleInstanceCount = _tracerCounts[i];
+            _tracerMm[i].End(midpoint != null);
+            _tipMm[i].End(midpoint != null);
         }
     }
 
@@ -3529,6 +3561,75 @@ public sealed partial class ProjectilePool : Node3D
             {
                 Health = Mathf.Max(0f, Health - healthDamage);
             }
+        }
+    }
+
+    // One pooled sprite list drawn as two MultiMeshes, one each side of the cloud band's midpoint.
+    // A round or a flash draws only for cameras on its own side (Mech3.ZoneGate.PointZone).
+    // Without a band every instance takes the lower list, on the world's layer. The upper list is
+    // built on its first instance, so a session with nothing above a band adds no node.
+    private sealed class BandedPool
+    {
+        private readonly MultiMesh _below;
+        private readonly MultiMeshInstance3D _belowMmi;
+        private readonly System.Func<(MultiMesh, MultiMeshInstance3D)> _makeAbove;
+        private MultiMesh? _above;
+        private MultiMeshInstance3D? _aboveMmi;
+        private int _belowCount;
+        private int _aboveCount;
+
+        public BandedPool(MultiMesh below, MultiMeshInstance3D belowMmi, System.Func<(MultiMesh, MultiMeshInstance3D)> makeAbove)
+        {
+            _below = below;
+            _belowMmi = belowMmi;
+            _makeAbove = makeAbove;
+        }
+
+        public IEnumerable<MultiMesh> Meshes
+        {
+            get
+            {
+                yield return _below;
+                if (_above != null)
+                    yield return _above;
+            }
+        }
+
+        // This frame's counts on each side, and the layers each side carries.
+        public (int Below, uint BelowLayers, int Above, uint AboveLayers) Sides =>
+            (_below.VisibleInstanceCount, _belowMmi.Layers, _above?.VisibleInstanceCount ?? 0, _aboveMmi?.Layers ?? 0u);
+
+        public void Begin()
+        {
+            _belowCount = 0;
+            _aboveCount = 0;
+        }
+
+        public void Add(Transform3D xf, Color color, int zone)
+        {
+            bool above = zone == 2;
+            if (above && _above == null)
+                (_above, _aboveMmi) = _makeAbove();
+            var mm = above ? _above! : _below;
+            int n = above ? _aboveCount++ : _belowCount++;
+            if (n >= mm.InstanceCount)
+                return;
+            mm.SetInstanceTransform(n, xf);
+            mm.SetInstanceColor(n, color);
+        }
+
+        public void End(bool banded)
+        {
+            _below.VisibleInstanceCount = Mathf.Min(_belowCount, _below.InstanceCount);
+            uint below = Mech3.ZoneGate.PointLayers(banded ? 1 : -1);
+            if (_belowMmi.Layers != below)
+                _belowMmi.Layers = below;
+            if (_above == null || _aboveMmi == null)
+                return;
+            _above.VisibleInstanceCount = Mathf.Min(_aboveCount, _above.InstanceCount);
+            uint above = Mech3.ZoneGate.PointLayers(2);
+            if (_aboveMmi.Layers != above)
+                _aboveMmi.Layers = above;
         }
     }
 

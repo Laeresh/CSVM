@@ -2753,6 +2753,12 @@ public partial class FlightController : Node3D
     internal bool WorldBlocksLine(Vector3 from, Vector3 to) =>
         World.Ray(from, to, CollisionLayers.World, null, out _);
 
+    /// <summary>Whether this plane's hulls, held at <paramref name="attitude"/> and swept down the straight,
+    /// meet static world geometry. A stunt race bot's course lines are fitted with it, since rays pass
+    /// between thin structures a wing strikes.</summary>
+    internal bool WorldBlocksHulls(Vector3 from, Vector3 to, Basis attitude) =>
+        Collider != null && World.Sweep(Collider.Parts, new Transform3D(attitude, from), to - from, CollisionLayers.World, null, out _);
+
     /// <summary>The static world body the segment strikes first, and where, or null on a clear
     /// line. A stunt race bot reads it for the structures across a zone's route.</summary>
     internal (Node Body, Vector3 At)? WorldStruckAlong(Vector3 from, Vector3 to) =>

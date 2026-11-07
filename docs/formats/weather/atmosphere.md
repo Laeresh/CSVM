@@ -125,6 +125,15 @@ between the two lies inside the fully-opaque core, which is what keeps the misma
 moving the band or thinning `THICKNESS` exposes it, the same way it exposes the deck's regime
 flip above. C1C/M01: band 1055–1110, midpoint 1082.5, core 1067.5–1097.5.
 
+**A puffer particle is zoned by its own height, per particle.** World init `FUN_004735b0`
+installs the callback `0x473580` only when the mission authors a band. The puffer draw
+`FUN_0054e6e0` asks it for each particle and runs the answer through the same gate. It
+answers 0xff when the camera state `0064ef6c` is 3 (inside an armed volume). Otherwise it
+answers 1 for a particle below the midpoint `0071c2cc` and 2 at or above it, so a fire or smoke
+trail above the band is not drawn for a camera under the deck. Gun rounds take no zone in the
+original (the round update `FUN_005b0770` has no gate). CSVM gates them by the same rule,
+because a tracer above the band drawn against the dome reads as showing through the deck.
+
 **Ruled out, with the readers enumerated.** There is no per-object cull against `TOP`/`BOTTOM`
 themselves and no fog term keyed on an object's height. Every reader of `0071dcd4` (`TOP`),
 `0071dcd8` (`BOTTOM`), `0071c2d0` and `0071c2d4` is: world init `FUN_004735b0`, the per-frame

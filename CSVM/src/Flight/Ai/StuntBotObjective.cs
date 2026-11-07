@@ -201,10 +201,10 @@ public sealed class StuntBotObjective
     /// refused one. Null shuts none. StuntRaceBots shuts an end that cannot see a structure to shoot.</summary>
     public Func<DangerZoneRibbon, bool, bool>? Shut { get; set; }
 
-    /// <summary>Whether the world blocks the straight between two points. A bot joins a course entry's
-    /// line only where its straight to the opening is clear, since the rail it joins has no crash
-    /// check. Null blocks nothing.</summary>
-    public Func<Vector3, Vector3, bool>? Blocked { get; set; }
+    /// <summary>Whether the world blocks the bot flown down the straight between two points at the
+    /// attitude, the third. A bot joins a course entry's line, or bridges to it, only where that is
+    /// clear, since the rail it joins has no crash check. Null blocks nothing.</summary>
+    public Func<Vector3, Vector3, Basis, bool>? Blocked { get; set; }
 
     /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
@@ -440,7 +440,7 @@ public sealed class StuntBotObjective
     // A course entry's line, the bot within lock range of it and JoinRailM or more short of its opening.
     // It must track along the line inside the cone's angle, its straight to the opening clear. The rail
     // can then take it at once.
-    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity, Func<Vector3, Vector3, bool>? blocked)
+    private static bool CanJoin(DangerZoneRibbon line, Vector3 at, Vector3 velocity, Func<Vector3, Vector3, Basis, bool>? blocked)
     {
         var into = Into(line, false);
         var track = Flat(velocity);
@@ -451,8 +451,12 @@ public sealed class StuntBotObjective
         }
 
         var (segment, t) = line.NearestTo(at, JoinSearchStepM);
-        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM && blocked?.Invoke(at, opening) != true;
+        return at.DistanceTo(line.PointAt(segment, t)) <= DangerZoneRibbon.LockRangeM && blocked?.Invoke(at, opening, Attitude(line, (opening - at).Normalized(), Vector3.Zero)) != true;
     }
+
+    // The rail's attitude flying `direction` on `line` or a bridge onto it, bending toward `bend`.
+    private static Basis Attitude(DangerZoneRibbon line, Vector3 direction, Vector3 bend) =>
+        line.KnifeEdge ? DangerZoneRail.KnifeFrame(direction, bend) : DangerZoneRail.RailFrame(direction, bend);
 
     // The cubic from `a` to `d` with handles `b` and `c`, as n + 1 points.
     private static List<Vector3> Curve(Vector3 a, Vector3 b, Vector3 c, Vector3 d, int n)
@@ -573,9 +577,12 @@ public sealed class StuntBotObjective
                 return null;
             }
 
+            // Each chord's wings are banked as the rail's frame asks there: toward the bend, or upright on a
+            // knife-edge line.
             for (int i = 1; i < points.Count; i++)
             {
-                if (Blocked(points[i - 1], points[i]))
+                var bend = i + 1 < points.Count ? points[i + 1] - (points[i] * 2f) + points[i - 1] : Vector3.Zero;
+                if (Blocked(points[i - 1], points[i], Attitude(line, (points[i] - points[i - 1]).Normalized(), bend)))
                 {
                     _bridgeWait = BridgeRecastSteps;
                     return null;
@@ -583,7 +590,7 @@ public sealed class StuntBotObjective
             }
         }
 
-        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points);
+        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points, knifeEdge: line.KnifeEdge);
     }
 
     // Where the bot aims on its own approach line into `entry`: a point that moves with it, never a

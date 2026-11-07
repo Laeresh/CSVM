@@ -386,7 +386,7 @@ public class StuntBotObjectiveTests
         Assert.True(bot.Decide(run.Zones, new Vector3(300, 15, 200), North, zoneRun: false) is { Start: StuntBotStart.None });
 
         // ABLE-TO-FAIL CONTROL: a world that blocks it leaves the bot steering.
-        var walled = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Blocked = (_, _) => true };
+        var walled = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Blocked = (_, _, _) => true };
         Assert.True(walled.Decide(run.Zones, at, North, zoneRun: false) is { Start: StuntBotStart.None });
     }
 
