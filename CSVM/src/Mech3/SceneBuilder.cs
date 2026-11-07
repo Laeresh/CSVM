@@ -74,7 +74,15 @@ public sealed class SceneBuilder
     /// transparent draw, so a clutter card standing on it composites over it.
     /// ⚠ Not the depth sort. A card kind is one chapter-wide MultiMesh sorted on the forest's
     /// centre, and a strip sorted nearer paints over the card's soft edge.</summary>
-    public const int GroundLayerRenderPriority = -1;
+    public const int GroundLayerRenderPriority = CutoutRenderPriority - 1;
+
+    /// <summary>The render priority of a scissored world surface. Enhanced's alpha-to-coverage puts a
+    /// cutout in the transparent pass, where it writes depth and still sorts with the blends. Drawn
+    /// ahead of them, it rejects a blend behind it and takes one in front over it. That is the
+    /// order it had in the opaque pass.
+    /// ⚠ Not the depth sort. The puff field is one MultiMesh sorted on its centre, so a zeppelin's
+    /// windows sorted nearer painted over every cloud in front of them (#317).</summary>
+    public const int CutoutRenderPriority = -1;
 
     /// <summary>The render priority of an opaque painted ramp, which Enhanced blends out over the waves. Below
     /// the ground layer, so it draws before every strip and decal laid over it, as it did opaque.</summary>
@@ -2452,9 +2460,16 @@ void light() {{
     // Records the verdict a world material's shader was generated for. Every constructor that can
     // make a blended or scissored surface calls it. The depth_draw_never variants live on the
     // billboard shaders, so a census reaching only the bias path would call them opaque.
-    private void NoteAlpha(Material mat, bool blend, bool scissor) =>
+    private void NoteAlpha(Material mat, bool blend, bool scissor)
+    {
         _materialAlpha[mat] = blend ? TransparencyClass.BlendSurface
             : scissor ? TransparencyClass.ScissorSurface : TransparencyClass.None;
+        // A sky sprite's live mode switch turns a cutout into a blend, which takes the default back.
+        if (scissor)
+            mat.RenderPriority = CutoutRenderPriority;
+        else if (mat.RenderPriority == CutoutRenderPriority)
+            mat.RenderPriority = 0;
+    }
 
     // A ShaderMaterial that pulls the geometry toward the eye (or pushes it away, negative
     // priority) by a fraction of its view distance.
