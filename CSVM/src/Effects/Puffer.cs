@@ -494,6 +494,9 @@ public sealed partial class Puffer : Node3D
         // final pass runs an unstable sort over each equal-key, equal-texture run.
         if (sorting && drawn > 1)
             Array.Sort(_drawKeys, _drawItems, 0, drawn);
+        // Every mode keeps an identity basis (above), so the node's Y alone moves the midpoint
+        // into the frame the positions are written in.
+        _renderer.SetBandMidpoint(_ambience.BandMidpoint - nodeOrigin.Y);
         for (int i = 0; i < drawn; i++)
         {
             ref var item = ref _drawItems[i];
