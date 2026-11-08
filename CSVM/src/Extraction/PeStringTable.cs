@@ -17,12 +17,17 @@ public static class PeStringTable
     private const uint ResourceTypeString = 6;
     private const uint SubdirectoryBit = 0x80000000;
 
-    /// <summary>Every string in <paramref name="pe"/>'s string tables by id, ascending. Empty when
-    /// the file has no resource section. Throws <see cref="InvalidDataException"/> on a file that
-    /// is not a PE.</summary>
-    public static SortedDictionary<int, string> Read(byte[] pe)
+    /// <summary><see cref="Read(byte[], out int)"/> without the language.</summary>
+    public static SortedDictionary<int, string> Read(byte[] pe) => Read(pe, out _);
+
+    /// <summary>Every string in <paramref name="pe"/>'s string tables by id, ascending. The
+    /// language is the ID the first string block carries (<c>0x409</c> US English, <c>0x407</c>
+    /// German), 0 with no block. Empty when the file has no resource section. Throws
+    /// <see cref="InvalidDataException"/> on a file that is not a PE.</summary>
+    public static SortedDictionary<int, string> Read(byte[] pe, out int language)
     {
         var strings = new SortedDictionary<int, string>();
+        language = 0;
         var (sections, resourceRva, _) = Headers(pe);
         if (resourceRva == 0)
         {
@@ -45,8 +50,10 @@ public static class PeStringTable
                     continue;
                 }
 
-                foreach (var (_, leafOffset) in Entries(pe, root + (int)(blockTarget & ~SubdirectoryBit)))
+                // The third level is keyed by language; a localised build relabels every block.
+                foreach (var (leafLanguage, leafOffset) in Entries(pe, root + (int)(blockTarget & ~SubdirectoryBit)))
                 {
+                    language = language != 0 ? language : (int)leafLanguage;
                     int leaf = root + (int)leafOffset;
                     int start = ToFileOffset(U32(pe, leaf), sections);
                     int end = start + (int)U32(pe, leaf + 4);

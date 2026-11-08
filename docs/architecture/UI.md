@@ -8,10 +8,10 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/UI/Menu/InstantActionPresets.cs
 The original's Instant Action Table of Contents as data: the 19 preset scenarios, in the shared menu
-namespace beside the feature that applies them. Each row is transcribed by NAME rather than by the
-record's own dropdown indices, so it diffs line for line against the decode; `Resolve` does the
-name-to-index step against `InstantActionFeature`'s rosters, every presentation's single source of
-order. Presets fly stock airframes, so nothing here waits on the hangar. The record layout, the
+namespace beside the feature that applies them. A row names its environment by chapter code and
+its mission type, aircraft, militias and skills by name, never by the record's dropdown indices, so
+no roster reordering invalidates it; `Resolve` finds the indices in `InstantActionFeature`'s
+rosters, every presentation's single source of order. Presets fly stock airframes, so nothing here waits on the hangar. The record layout, the
 offsets, the sentinel substitution for an unused wave slot and each preset's configuration are in
 [../formats/instant-action.md](../formats/instant-action.md), "Table of Contents presets".
 
@@ -1601,8 +1601,9 @@ fault with its section, row and file. `Schema` carries the rule for its own bump
 and the reconciliation against what the screens draw are [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalRosters.cs
-The two rosters the Original local lobby lists. `Chapters` is the shared `MenuChapters` roster
-with a short label per code; `Airframes` is the eleven stock names in the string table's own
+The two rosters the Original local lobby lists. `Chapters` is the shared `MenuChapters` roster,
+which the lobby names through `OriginalLobbyScreen.ChapterWord`, the Multiplayer box's own word;
+`Airframes` is the eleven stock names in the string table's own
 order, resolved to their `planes.zbd` nodes through the Instant Action decode, so the
 name-to-node map has one home. `Roster(customs)` appends the saved custom planes through the
 shared player setup's roster rule, which is what every picker reads and what the
@@ -1636,12 +1637,14 @@ always one of these. The namespace seam this whole
 folder is held to, and the two scans that enforce it, are in [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuChapters.cs
-The shared chapter roster: the eight chapter worlds as `MenuChapter(Code, DangerZones)` in code
-order, with `For(mode)` (Stunt Flying only the six carrying Danger Zones), `Find` and
-`DangerZonesFor`. The codes are separate terrain databases, not lighting variants
-([../formats/spawns.md](../formats/spawns.md)); the flag says whether the chapter's `ia.json`
-ships a `dzones` list, which is why Stunt Flying withholds the other two. Shared so that the
-Free Flight feature, the Instant Action feature and the Original local lobby read one roster. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`.
+The shared chapter roster every mode reads: the eight chapter worlds as `MenuChapter(Code,
+DangerZones)` in code order, with `For(mode)` (Stunt Flying only the six with Danger Zones), `Find`
+and `DangerZonesFor`. The codes are separate terrain databases, not lighting variants
+([../formats/spawns.md](../formats/spawns.md)); the flag says whether `ia.json` ships `dzones`.
+`Name(code, strings)` is the one name every mode shows for a chapter, an English table by
+remake-only rule, or the game's own word from one langui row when `strings` is a translation
+([../formats/instant-action.md](../formats/instant-action.md#environment-mapping)). Coverage:
+`CSVM.Tests/FreeFlightFeatureTests.cs`, `CSVM.Tests/MenuChapterNamesTests.cs`.
 
 ## src/UI/Menu/FreeFlightFeature.cs
 Free Flight as a shared `IMenuFeature`: the chapter
@@ -1736,7 +1739,7 @@ count, then `HostFallbackLines`, which waits for the master server's outcome: th
 (`RouterStatus`, `PinholeStatus`; `HostPinholeStatus` omits an address already named), what a
 guest types (`HostAddressStatus` on the board), an advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
 `WaitingStatus`, naming a join by code by its code), why a guest cannot join by code (`NoMasterServer`, `NoWebRtc`, `CodeJoinUnavailable`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out, which a host's band also ends on (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both
-versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in as a delegate, since only the caller holds the langui table.
+versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in as a delegate and a Dogfight's environment is named in the caller's langui table, since only the caller holds it.
 
 ## src/UI/Menu/FolderButtonText.cs
 The words a folder button's screen shows, CSVM's own: `DesktopModeOnly`, which the version stamp's

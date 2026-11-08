@@ -127,7 +127,7 @@ public class InstantActionPresetsTests
     {
         Assert.Equal(3, InstantActionFeature.MissionTypesFor("C2B").Count);
         var gemini = InstantActionPresets.Resolve(7, WaveSlots); // Death of the Gemini
-        Assert.Equal("the clouds", InstantActionPresets.All[7].Environment);
+        Assert.Equal("C2B", InstantActionPresets.All[7].Environment);
         Assert.Equal("zeppelin_run", InstantActionPresets.All[7].MissionType);
         Assert.Equal(2, gemini.MissionTypeIndex);
     }

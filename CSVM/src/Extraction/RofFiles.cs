@@ -257,7 +257,8 @@ public sealed class RofFiles
 
             try
             {
-                rows.AddRange(UiStringTable.Rows(dll, PeStringTable.Read(game.ReadAllBytes(path)), symbols));
+                var table = PeStringTable.Read(game.ReadAllBytes(path), out int language);
+                rows.AddRange(UiStringTable.Rows(dll, table, symbols, language));
             }
             catch (Exception e) when (e is InvalidDataException or IOException)
             {

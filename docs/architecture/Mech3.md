@@ -551,14 +551,14 @@ object. `Of` builds a table from pairs, for `Tooling/SyntheticMessages.cs`; `Fro
 template's `%1`…`%9` placeholders (the HUD strings' format).
 
 ## src/Mech3/UiStrings.cs
-The original's UI string table by id, read from `ui_strings.json` (`Extraction/RofFiles.cs`). Only the `langui`
-rows are kept, since ids repeat across the file's two merged tables and every menu range this
-remake reads sits in that one. `FormatMessage` positional placeholders (`%1!d!`) convert to
-composite format rather than going to printf, and a leading `[FONTID]` tag is stripped as a
-renderer directive rather than text; `Face` answers the tag a row carries, from its `font` field or
-that stripped prefix, for a screen that draws the row in its own face. `Parse` takes the JSON itself, so the table and its formatting
-test off engine; `Empty` is the fallback that lets a menu draw on a missing extraction. Ids and
-rows: [../formats/strings.md](../formats/strings.md).
+The original's UI string table by id, from `ui_strings.json` (`Extraction/RofFiles.cs`). Only the
+`langui` rows are kept: ids repeat across the two merged tables, and every menu range read is
+langui's. `FormatMessage` placeholders (`%1!d!`) convert to composite format, and a leading
+`[FONTID]` tag is stripped as a renderer directive; `Face` answers the tag a row carries. `Parse`
+takes the JSON itself, so the table tests off engine; `Empty` lets a menu draw on a missing
+extraction. `Language` is the rows' resource language ID, and `IsTranslation` holds when its
+primary language is not English, which turns the menus' chapter names to the game's own words.
+Ids and rows: [../formats/strings.md](../formats/strings.md).
 
 ## src/Mech3/TgaImage.cs
 The engine-free TGA decoder behind the hangar's art under the UI archive's `ASSETS/GRAPHICS`, and the

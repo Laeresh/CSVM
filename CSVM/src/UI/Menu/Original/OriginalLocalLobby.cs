@@ -299,7 +299,7 @@ public sealed class OriginalLocalLobby : IOriginalScreenModule
         bool rules = Versus;
         if (Tab == LobbyTab.Mission)
         {
-            MapRows(rows, _chapters[Map].Label, Versus ? _lobby.TypeWord((int)DogfightMissionType.Deathmatch) : "Free Flight", true, false);
+            MapRows(rows, _lobby.ChapterWord(_chapters[Map].Code), Versus ? _lobby.TypeWord((int)DogfightMissionType.Deathmatch) : "Free Flight", true, false);
             VictoryRows(rows, options, BoxValue(TimeKey), BoxValue(ScoreKey), rules, rules);
             LivesRows(rows, options, BoxValue(LivesKey), rules);
         }
@@ -350,7 +350,7 @@ public sealed class OriginalLocalLobby : IOriginalScreenModule
             var maps = new string[_chapters.Count];
             for (int i = 0; i < maps.Length; i++)
             {
-                maps[i] = _chapters[i].Label;
+                maps[i] = _lobby.ChapterWord(_chapters[i].Code);
             }
 
             return maps;

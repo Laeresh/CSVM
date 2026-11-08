@@ -29,15 +29,23 @@ public sealed class UiStrings
     // text; a row naming none is absent.
     private readonly Dictionary<int, string> _faces;
 
-    private UiStrings(Dictionary<int, string> byId, Dictionary<int, string> faces)
+    private UiStrings(Dictionary<int, string> byId, Dictionary<int, string> faces, int language)
     {
         _byId = byId;
         _faces = faces;
+        Language = language;
     }
 
     /// <summary>A table with no strings in it. Every lookup falls back, so a menu built on a
     /// missing extraction still draws.</summary>
-    public static UiStrings Empty { get; } = new(new Dictionary<int, string>(), new Dictionary<int, string>());
+    public static UiStrings Empty { get; } = new(new Dictionary<int, string>(), new Dictionary<int, string>(), 0);
+
+    /// <summary>The resource language ID of <c>langui.dll</c>'s strings, 0 where the rows name none.</summary>
+    public int Language { get; }
+
+    /// <summary>Whether the table is a translation: a language read, and its primary language (the
+    /// ID's low 10 bits) not English, <c>0x09</c>.</summary>
+    public bool IsTranslation => Language != 0 && (Language & 0x3FF) != 0x09;
 
     /// <summary>Reads the table in the game files bound to <paramref name="dataRoot"/>, or null
     /// when it is absent or unreadable. The caller decides what a missing table means; the menus
@@ -64,6 +72,7 @@ public sealed class UiStrings
     {
         var byId = new Dictionary<int, string>();
         var faces = new Dictionary<int, string>();
+        int language = 0;
         using var doc = JsonDocument.Parse(json);
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
         {
@@ -82,6 +91,11 @@ public sealed class UiStrings
                 || text.ValueKind != JsonValueKind.String)
             {
                 continue;
+            }
+
+            if (language == 0 && row.TryGetProperty("language", out var lang) && lang.TryGetInt32(out int read))
+            {
+                language = read;
             }
 
             if (!byId.ContainsKey(key))
@@ -104,7 +118,7 @@ public sealed class UiStrings
             }
         }
 
-        return new UiStrings(byId, faces);
+        return new UiStrings(byId, faces, language);
     }
 
     /// <summary>One <c>FormatMessage</c> string as a .NET composite format: <c>%1!d!</c> becomes

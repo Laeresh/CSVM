@@ -103,13 +103,7 @@ public sealed class DogfightLobby
     /// respawn fan were authored for. A remake-only choice.</summary>
     public const int DefaultFillTo = 8;
 
-    // The Environment box's words in the string table's order, and the chapter each is flown on.
-    private static readonly string[] EnvironmentNames =
-    {
-        "Above the Clouds", "Hawai'ian Islands", "Hollywood Studio", "Manhattan",
-        "NW Boeing Field", "NW Lighthouse", "Sky Haven (Rockies)",
-    };
-
+    // The chapter each Environment row is flown on, in the string table's order.
     // ⚠ Above the Clouds is C1C, not Instant Action's clouds chapter C2B. The two ship the same MP1
     // and MP3 layouts, so the data alone cannot tell them apart; the row's number (below) does.
     private static readonly string[] EnvironmentChapters = { "C1C", "C3", "C2", "C5", "C1", "C1B", "C4" };
@@ -488,10 +482,10 @@ public sealed class DogfightLobby
         }
     }
 
-    /// <summary>The environment's words as the Environment box and the games list write them, or ""
-    /// outside the seven.</summary>
-    public static string EnvironmentName(int environment) =>
-        environment is >= 0 and < EnvironmentCount ? EnvironmentNames[environment] : "";
+    /// <summary>The environment's chapter name (<see cref="MenuChapters.Name"/>) as the Environment
+    /// box and the games list write it, or "" outside the seven.</summary>
+    public static string EnvironmentName(int environment, Mech3.UiStrings? strings = null) =>
+        environment is >= 0 and < EnvironmentCount ? MenuChapters.Name(EnvironmentChapters[environment], strings) : "";
 
     /// <summary>The chapter an environment is flown on.</summary>
     public static string ChapterOf(int environment) => EnvironmentChapters[Math.Clamp(environment, 0, EnvironmentCount - 1)];
@@ -572,7 +566,7 @@ public sealed class DogfightLobby
             or DogfightMissionType.ZeppelinVsZeppelin or DogfightMissionType.StuntRace;
 
     /// <summary>Whether the Environment box offers <paramref name="environment"/> under
-    /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and NW Lighthouse, the two
+    /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and The Ocean, the two
     /// chapters with no <c>MP2</c> map, as the mission script's type change does. Stunt Race greys
     /// a chapter that ships no Danger Zones (Above the Clouds) and has none of <paramref name="courses"/>.</summary>
     public static bool Offers(DogfightMissionType type, int environment, Func<string, IReadOnlyList<Flight.Modes.Course>>? courses = null) =>
