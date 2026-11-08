@@ -55,10 +55,11 @@ applied when the stick is released.
 ⚠ `fd_speed` was documented here as "the full-throttle level-speed equilibrium". **Treat that as
 unconfirmed.** The original's own name for the field is `FakeDynSpeed`, its tuner *measures*
 `TopSpeed` separately from it, and at runtime it is read as a normalising reference speed
-(`speed/fd_speed` fractions, an AI target speed, a clamp) rather than solved for. Working the
-decoded drag polar backwards from each airframe's `fd_speed` also fails to close, the Balmoral
-misses by 60 %. See [org/flightModel.md](../org/flightModel.md#thrustfactor-is-the-engines-power-factor--resolved);
-the flight-model plan's B12/B13 own the question.
+(`speed/fd_speed` fractions, an AI target speed, a clamp) rather than solved for. Nine of the
+eleven player airframes solve to within 1 % of it anyway; the Balmoral does not (126 mph against
+its 176.7), and that miss is authored, the weakest engine in the game against the Warhawk's drag
+factor, not a reader or model defect. See [org/flightModel.md](../org/flightModel.md#thrustfactor-is-the-engines-power-factor--resolved)
+and the Drag section's solve table there.
 
 **The 13th `dynamics` field: `ThrustFactor` is not authored, it is engine power.** The shipped
 Dynamics tuner names thirteen per-plane values where only twelve are authored keys. The extra one,
