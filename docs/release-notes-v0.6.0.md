@@ -47,7 +47,7 @@ Zones. This is a remake addition; the original has no such mode.
 - **Making one:** starting with `-- --course-edit=C1` opens the course editor over that chapter,
   and Shift+F3 shows or hides it. It places gates and the start point, reuses a gate in either
   direction, and saves into a `Courses` folder beside the executable. A course file there wins over
-  a shipped one of the same name. `docs/cli.md` in the repository has the editor's controls.
+  a shipped one of the same name. `docs/course-editor.md` in the repository explains the editor.
 
 **Enhanced light and shadow**
 
