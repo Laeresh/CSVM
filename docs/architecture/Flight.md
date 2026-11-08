@@ -981,10 +981,10 @@ One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon 
 heading and sizes, with `FlownWay` the way an entry crosses it), the `SequenceEntry` list naming pool gates by id with a
 `GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come from the file's path;
 the name is the id everywhere (`--course=`, `--course-edit=`, the library, the score key), and the optional `title`, a
-string, is what a player sees (`DisplayName`, the name where it is blank). `Parse` reads a file or rejects it whole,
+string, is what a player sees (`DisplayName`, the name where it is blank). The optional `planes` (`Planes`, null for all) bars the other airframes through `Limits` (`NetPlaneRules.CourseBarred`), and `Refuses` names a launch plane it bars. `Parse` reads a file or rejects it whole,
 `ToJson` writes the same shape, `FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, `FromWord` its check of a lobby word (`WordFor` builds one, `FitsWire` says whether it can be sent), and `Hash`
-digests pool, sequence and start but not the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course
-bests, so a retitle keeps them. Read `CourseLibrary` for where the files live.
+digests pool, sequence and start but not the name, title, planes or ids; `ScoreStore.KeyFor` adds chapter and name for course
+bests, so a retitle or a new plane list keeps them. Read `CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
 A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its course pylons from the

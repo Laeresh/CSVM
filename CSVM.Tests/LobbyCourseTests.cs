@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Net;
+using CSVM.Session.Roster;
 using CSVM.Spec;
 using CSVM.UI.Menu;
 using Xunit;
@@ -344,6 +345,115 @@ public sealed class LobbyCourseTests
         Assert.False(host.SetCourse(null));
         Assert.True(host.SetEnvironment(DogfightLobby.EnvironmentOf("C1")));
         Assert.Null(host.Course);
+    }
+
+    [Fact]
+    public void ACourseThatRefusesAPlaneBarsItForPeopleAndBotsAndLeavingItLeavesNoBar()
+    {
+        const int balmoral = 2;
+        const int fury = 7;
+        var (host, guests, wires) = Lobbies(2, _ => true);
+
+        // A Dogfight's rules stand into the race: customs allowed, nitro on the list, the list not in force.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.True(host.SetAllowCustomPlanes(true));
+        Assert.True(host.SetOutlawed(NetPlaneRules.NitroFlag, true));
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Assert.True(host.SetEnvironment(DogfightLobby.EnvironmentOf("C1")));
+        var standing = host.Rules;
+        Assert.True(host.AddBot());
+        int bot = host.Bots[0].Id;
+        Assert.True(host.SetBotAirframe(bot, balmoral));
+        guests[0].Pick(balmoral, default);
+        Settle(host, guests, wires);
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests, wires);
+        Assert.True(host.Players[1].Ready);
+
+        var noBalmoral = Harbour() with { Planes = Enumerable.Range(0, 11).Where(a => a != balmoral).ToList() };
+        Assert.True(host.SetCourse(noBalmoral));
+        Settle(host, guests, wires);
+
+        // The guest ready in a Balmoral loses its Ready, and its next Ready names the airframe.
+        Assert.False(guests[0].Ready);
+        Assert.False(host.Players[1].Ready);
+        Assert.False(guests[0].SetReady(true));
+        Assert.Equal(new[] { PlaneRefusal.Airframe }, guests[0].ReadyRefusals);
+        Assert.Equal(1 << balmoral, guests[0].Rules.CourseBarred);
+        Assert.Equal((standing.AllowCustom, standing.Outlawing, standing.Outlawed), (guests[0].Rules.AllowCustom, guests[0].Rules.Outlawing, guests[0].Rules.Outlawed));
+
+        // The bot row on a Balmoral is back on Random, which never draws one, and the row's list greys it.
+        Assert.True(host.Bots[0].RandomPlane);
+        Assert.False(host.AdmitsBotAirframe(balmoral));
+        Assert.False(host.SetBotAirframe(bot, balmoral));
+        Assert.DoesNotContain(Enumerable.Range(0, 500), seed => BotSeats.DrawPair(null, false, new Random(seed), host.Rules)?.Plane == "player_balmoral");
+
+        // ABLE-TO-FAIL CONTROL: another plane takes Ready, and the Danger Zones leave no bar behind.
+        guests[0].Pick(fury, default);
+        Assert.True(guests[0].SetReady(true));
+        Assert.True(host.SetCourse(null));
+        Settle(host, guests, wires);
+        Assert.Equal(standing, host.Rules);
+        Assert.Equal(0, guests[0].Rules.CourseBarred);
+        Assert.True(host.AdmitsBotAirframe(balmoral));
+        guests[0].Pick(balmoral, default);
+        Assert.True(guests[0].SetReady(true));
+        Assert.Contains(Enumerable.Range(0, 500), seed => BotSeats.DrawPair(null, false, new Random(seed), host.Rules)?.Plane == "player_balmoral");
+    }
+
+    [Fact]
+    public void AGuestThatReadsNoPlanesListMayReadyInARefusedPlaneButTheHostNeverCountsIt()
+    {
+        const int balmoral = 2;
+        const int fury = 7;
+        var (host, guests, wires) = Lobbies(2, _ => true);
+        var course = Harbour() with { Planes = new[] { fury } };
+        Assert.True(host.SetCourse(course));
+        Settle(host, guests, wires);
+
+        // An older build's guest parses the same word without the list, which hashes alike, so it sees no bar.
+        wires[0].Tell(1, Course.WordFor(host.Options.Epoch, course with { Planes = null }));
+        Settle(host, guests, wires);
+        Assert.Equal(course.Hash, guests[0].Course?.Hash);
+        Assert.Equal(0, guests[0].Rules.CourseBarred);
+        guests[0].Pick(balmoral, default);
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests, wires);
+        Assert.True(guests[0].Ready);
+        Assert.False(host.Players[1].Ready);
+        Assert.False(guests[0].Players[guests[0].You].Ready);
+
+        // ABLE-TO-FAIL CONTROL: the plane the host's course admits counts.
+        guests[0].Pick(fury, default);
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests, wires);
+        Assert.True(host.Players[1].Ready);
+    }
+
+    [Fact]
+    public void ARaceHeldToOnePlaneSeatsOnlyThatPlaneACustomBuildOfItIncluded()
+    {
+        const int fury = 7;
+        var (host, guests, wires) = Lobbies(2, _ => true);
+        host.Show();
+        Assert.True(host.SetCourse(Harbour() with { Planes = new[] { fury } }));
+        Settle(host, guests, wires);
+
+        Assert.All(Enumerable.Range(0, 11).Where(a => a != fury), a => Assert.False(host.AdmitsBotAirframe(a)));
+        Assert.All(Enumerable.Range(0, 200), seed => Assert.Equal("player_fury", BotSeats.DrawPair(null, false, new Random(seed), host.Rules)?.Plane));
+        host.Pick(0, default);
+        Assert.False(host.SetReady(true));
+        Assert.True(guests[0].PickCustom(new NetPlaneBuild { Name = "Wrong", Airframe = 3, Engine = NetPlaneBuild.StockEngine }, default));
+        Assert.False(guests[0].SetReady(true));
+        Assert.Equal(new[] { PlaneRefusal.Airframe }, guests[0].ReadyRefusals);
+
+        // ABLE-TO-FAIL CONTROL: the Fury takes Ready, stock or a custom build of it.
+        host.Pick(fury, default);
+        Assert.True(host.SetReady(true));
+        Assert.True(guests[0].PickCustom(new NetPlaneBuild { Name = "Mine", Airframe = fury, Engine = NetPlaneBuild.StockEngine }, default));
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests, wires);
+        Assert.True(host.AllReady);
     }
 
     private static Course Harbour() => Parse(Json);

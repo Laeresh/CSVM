@@ -1810,7 +1810,8 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    `p2` lead-in, buried in the plateau's edge, starts 50 m higher. A Balmoral has no straight
    line through C2's `p12` and `p17` tunnels: `p12`'s exit gap stands 7 m off the gate's axis
    past a building beside the gate, and under `p17`'s deck 25 m stand clear over a building, so
-   it strikes the world past each. The bot takes the next entry alone, in
+   it strikes the world past each, and the course's file refuses the Balmoral (its `planes` list,
+   `Flight/Modes/Course.cs`). The bot takes the next entry alone, in
    sequence order, and runs its line one way only, so a reverse entry is crossed from its named
    side; the line takes no row of the run table and no rail check, since the course's scoring is
    its apertures', not the line's gates. Gates stand closer than a zone's cone reach, so a bot past

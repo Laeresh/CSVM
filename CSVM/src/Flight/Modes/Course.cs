@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CSVM.Net;
 using Godot;
 
 namespace CSVM.Flight.Modes;
@@ -59,15 +60,25 @@ public sealed record Course(
     private static readonly JsonDocumentOptions ReaderOptions =
         new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
+    // The eleven stock nodes a planes list names, in airframe-id order, as Flight.Hangar.StockAirframes
+    // keeps them. Read from Mech3, since nothing in Flight outside Hangar may name Hangar.
+    private static readonly string[] Nodes = Mech3.InstantAction.Airframes.Select(a => a.Node).ToArray();
+
     /// <summary>The file's optional <c>title</c>, the name a player sees; empty where it has none.
     /// ⚠ Not in <see cref="Hash"/> nor the score key: retitling a course keeps its bests.</summary>
     public string Title { get; init; } = string.Empty;
+
+    /// <summary>The airframes the file's optional <c>planes</c> admits, by id
+    /// (the stock order) in file order, null where it names none and every plane races.
+    /// ⚠ Never put it in <see cref="Hash"/> or the score key: the board times the gates. A guest reads
+    /// the list from the host's own JSON, so both ends hold the same one.</summary>
+    public IReadOnlyList<int>? Planes { get; init; }
 
     /// <summary>What every screen calls the course: <see cref="Title"/>, or <see cref="Name"/> where it is blank.</summary>
     public string DisplayName => string.IsNullOrWhiteSpace(Title) ? Name : Title;
 
     /// <summary>A stable hex digest of the gate pool (in file order, ids left out), the sequence and
-    /// the start point. The name, title, chapter and gate ids are not in it. The score key adds the
+    /// the start point. The name, title, planes, chapter and gate ids are not in it. The score key adds the
     /// name and chapter (<see cref="ScoreStore.KeyFor"/>), and any moved gate starts a fresh board.</summary>
     public string Hash
     {
@@ -97,9 +108,42 @@ public sealed record Course(
         }
     }
 
+    /// <summary>Whether the course admits airframe <paramref name="airframe"/>, a stock pick or a
+    /// custom build of it.</summary>
+    public bool Admits(int airframe) => Planes == null || Planes.Contains(airframe);
+
+    /// <summary><paramref name="rules"/> with the airframes this course leaves out barred, the
+    /// outlaw list left as it stands (<see cref="NetPlaneRules.CourseBarred"/>).</summary>
+    public NetPlaneRules Limits(NetPlaneRules rules)
+    {
+        int barred = 0;
+        for (int airframe = 0; airframe < Nodes.Length; airframe++)
+        {
+            barred |= Admits(airframe) ? 0 : 1 << airframe;
+        }
+
+        return rules with { CourseBarred = (ushort)barred };
+    }
+
+    /// <summary>Why the course refuses a launch seating <paramref name="planes"/>, stock nodes, or
+    /// null where it admits each. A node outside the eleven passes, as a bot's does.</summary>
+    public string? Refuses(IEnumerable<string> planes)
+    {
+        foreach (string plane in planes)
+        {
+            if (IdOf(plane) is { } airframe && !Admits(airframe))
+            {
+                return $"it admits only {string.Join(", ", Planes!.Select(a => Nodes[a]))}, not {plane}";
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The course <paramref name="json"/> describes, or null with the reason in
     /// <paramref name="error"/>. Rejected: not JSON, a missing or mistyped field, an unknown token.
-    /// Also rejected: a size not above 0, a duplicate gate id, a sequence entry naming no gate.</summary>
+    /// Also rejected: a size not above 0, a duplicate gate id, a sequence entry naming no gate. So is
+    /// an empty <c>planes</c> list, or one naming a plane twice or outside the eleven.</summary>
     public static Course? Parse(string chapter, string name, string json, out string error)
     {
         try
@@ -122,6 +166,7 @@ public sealed record Course(
                 title = titled.ValueKind == JsonValueKind.String ? titled.GetString()! : throw new FormatException("course \"title\" is not a string");
             }
 
+            var planes = root.TryGetProperty("planes", out var listed) ? ReadPlanes(listed) : null;
             var start = Field(root, "start", "course");
             var gates = new List<CourseGate>();
             foreach (var g in Field(root, "gates", "course").EnumerateArray())
@@ -154,6 +199,7 @@ public sealed record Course(
                 chapter, name, new SpawnPoint(Vec(Field(start, "pos", "start")), Number(start, "heading", "start")), gates, sequence)
             {
                 Title = title,
+                Planes = planes,
             };
         }
         catch (Exception e) when (e is JsonException or FormatException or InvalidOperationException)
@@ -211,8 +257,8 @@ public sealed record Course(
         Net.RaceStandingMessage.Carries(course.Sequence.Count) && WordFor(0, course).Fits;
 
     /// <summary>The course as indented JSON, the shape <see cref="Parse"/> reads. The top level holds
-    /// <c>version</c>, <c>title</c> where one is set, <c>start</c> {<c>pos</c>, <c>heading</c>},
-    /// <c>gates</c> and <c>sequence</c>.
+    /// <c>version</c>, <c>title</c> and <c>planes</c> (stock nodes) where set, <c>start</c>
+    /// {<c>pos</c>, <c>heading</c>}, <c>gates</c> and <c>sequence</c>.
     /// A gate is {<c>id</c>, <c>kind</c> <c>pylons</c>|<c>ring</c>, <c>pos</c>, <c>heading</c>} plus
     /// <c>width</c> and <c>height</c>, or <c>diameter</c>. An entry is {<c>gate</c>, <c>dir</c>
     /// <c>forward</c>|<c>reverse</c>}, and a position is [x, y, z].</summary>
@@ -226,6 +272,17 @@ public sealed record Course(
             if (!string.IsNullOrWhiteSpace(Title))
             {
                 w.WriteString("title", Title);
+            }
+
+            if (Planes != null)
+            {
+                w.WriteStartArray("planes");
+                foreach (int airframe in Planes)
+                {
+                    w.WriteStringValue(Nodes[airframe]);
+                }
+
+                w.WriteEndArray();
             }
 
             w.WriteStartObject("start");
@@ -287,6 +344,36 @@ public sealed record Course(
             ? new CourseGate(id, CourseGateKind.PylonGate, position, heading, Size(g, "width", where), Size(g, "height", where), 0f)
             : new CourseGate(id, CourseGateKind.BalloonRing, position, heading, 0f, 0f, Size(g, "diameter", where));
         return gate;
+    }
+
+    private static int? IdOf(string node)
+    {
+        int at = Array.FindIndex(Nodes, n => string.Equals(n, node, StringComparison.OrdinalIgnoreCase));
+        return at < 0 ? null : at;
+    }
+
+    private static List<int> ReadPlanes(JsonElement listed)
+    {
+        if (listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() == 0)
+        {
+            throw new FormatException("course \"planes\" is not a list of one or more stock plane nodes");
+        }
+
+        var planes = new List<int>();
+        foreach (var plane in listed.EnumerateArray())
+        {
+            string? node = plane.ValueKind == JsonValueKind.String ? plane.GetString() : plane.GetRawText();
+            int airframe = IdOf(node ?? "")
+                ?? throw new FormatException($"course \"planes\" names unknown plane \"{node}\", expected one of {string.Join(", ", Nodes)}");
+            if (planes.Contains(airframe))
+            {
+                throw new FormatException($"course \"planes\" names \"{node}\" twice");
+            }
+
+            planes.Add(airframe);
+        }
+
+        return planes;
     }
 
     private static JsonElement Field(JsonElement owner, string name, string where) =>

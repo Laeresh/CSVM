@@ -1357,7 +1357,8 @@ planes, and its guests fly stock.
 The original seats no bot in a multiplayer match, so how the outlaw list binds a host's bots is a
 remake-only rule: it binds them as it binds the people. A bot's hand-set airframe is refused when
 the rules refuse a person's stock pick of it (airframe, stock engine, stock gun calibres), and a
-rules change puts a bot standing on one back on Random. The launch draws a Random bot only on an
+rules change puts a bot standing on one back on Random. So does a Stunt Race course whose `planes`
+list leaves its airframe out, whose bar (`NetPlaneRules.CourseBarred`) binds bots and people alike. The launch draws a Random bot only on an
 admitted airframe and only from the militia/airframe pairs whose militia def the list allows whole.
 An AI gun is a slug round of its calibre, and an ordnance id is the rocket-table row it sits on. The
 rocket rows cover the aerial torpedo: the list's rows are named by langui 3380+i, the rocket table's

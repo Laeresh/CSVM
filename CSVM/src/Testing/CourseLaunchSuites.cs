@@ -20,6 +20,11 @@ internal static class CourseLaunchSuites
     private const string Chapter = "C1";
     private const string Sample = "sample_out_and_back";
 
+    // The shipped course that refuses a plane, the Balmoral, and that plane's node.
+    private const string RefusingChapter = "C2";
+    private const string Refusing = "Hollywood_Track_1";
+    private const string Refused = "player_balmoral";
+
     [Suite("course-launch",
         "the shipped sample course lists and loads from res:// and a game-folder file of its name wins "
         + "it; a --det --stunt --course= C1 session spawns on the start point, draws the gates and flies "
@@ -41,13 +46,18 @@ internal static class CourseLaunchSuites
         + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands every course pylon whole; "
         + "both split screen panes, holding 1.5 s before time up, are on their approach and in a run at time up, "
         + "seat 0's crash short of the first entry ends its part at once, and seat 1's run, started at its first "
-        + "entry after time up, counts and its finish ends the race long before the cap")]
+        + "entry after time up, counts and its finish ends the race long before the cap. On C2/Hollywood_Track_1, "
+        + "which refuses the Balmoral, a launch seating one as a pane or a named bot is refused with the reason, "
+        + "and seven Random bots draw none")]
     internal static void CourseRaceLocal(TestContext ctx)
     {
         ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(RefusingChapter), $"{RefusingChapter} gamez");
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
+            RefusedPlanes(ctx);
+
             string split = Scores(ctx, "split");
             var panes = SessionSpec.Parse(new[] { "--stunt", $"--course={Chapter}/{Sample}", "--plane=player_pfighter,player_fury", "--mute", "--no-pads", $"--scores={split}" });
             LocalRace(ctx, "split screen", panes, roster: null, split, flown: new[] { 0, 1 });
@@ -62,6 +72,36 @@ internal static class CourseLaunchSuites
         {
             ambient.Restore();
         }
+    }
+
+    // A local race on the course that refuses the Balmoral, built as Instant Action's join board builds
+    // it. A Balmoral pane or named bot refuses the launch, and Random bots draw around it.
+    private static void RefusedPlanes(TestContext ctx)
+    {
+        var cli = SessionSpec.Parse(new[] { "--mute", "--no-pads" });
+        SessionSpec Race(string pane, params string?[] bots) => SessionSpec.FromMenu(cli, RefusingChapter, new[] { pane }, MenuMode.Stunt,
+            vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: Refusing,
+            bots: bots.Select((plane, i) => new VsBotEntry(plane, Net.NetBotSkill.Veteran, 0, $"Bot {i + 1}")).ToArray());
+        foreach (var (cell, spec) in new[] { ("pane", Race(Refused, "player_fury")), ("bot", Race("player_fury", Refused)), ("control", Race("player_fury", "player_fury")) })
+        {
+            var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, 1, SeatFields.LocalVersusField(spec, ctx.Data.Messages), exitSession: () => { });
+            try
+            {
+                string refusal = end.Session.MenuRefusal ?? "";
+                ctx.Check(cell == "control" ? end.Built && refusal.Length == 0 : !end.Built && refusal.Contains($"not {Refused}", StringComparison.Ordinal),
+                    $"[{cell}] {RefusingChapter}/{Refusing} {(cell == "control" ? "ABLE-TO-FAIL CONTROL: builds with no Balmoral on it" : "refuses a Balmoral launch")}: '{refusal}'");
+            }
+            finally
+            {
+                end.Close();
+            }
+        }
+
+        var random = Race("player_fury", null, null, null, null, null, null, null);
+        var rules = SeatFields.CourseRules(random, new CourseLibrary(CourseLibrary.ShippedRoot, null));
+        var bots = SeatFields.LocalVersusField(random, ctx.Data.Messages, rules)?.Where(seat => seat.IsBot).Select(seat => seat.PlaneNode).ToArray() ?? Array.Empty<string>();
+        ctx.Check(rules is { } barred && !barred.AirframeAllowed(2) && bots.Length == 7 && !bots.Contains(Refused),
+            $"seven Random bots draw under the course's bar on the Balmoral and none flies one: {string.Join(", ", bots)}");
     }
 
     // The library's two reads in the engine: res:// for the shipped file, an OS folder for the game's.

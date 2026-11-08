@@ -416,7 +416,7 @@ Custom planes on the wire. `NetPlaneBuild` is one plane's airframe, engine, armo
 and paint as the saved record holds them, and `PlaneBuildMessage` carries one: a guest seat's pick under
 `MineAt` its place, or a seat's build at launch. `NetPlaneRules` is the host's Allow Custom Planes, Outlaw Components and the
 original's 34-flag outlaw list; `Refuses` and `Enforce` are the original's Ready check, so every end
-judges a plane alike. `LobbyPlaneRulesMessage` sends the rules. Decode:
+judges a plane alike. `CourseBarred` holds the airframes a Stunt Race's course leaves out, read off the course on every end and never sent. `LobbyPlaneRulesMessage` sends the rules. Decode:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetPositionalMessages.cs

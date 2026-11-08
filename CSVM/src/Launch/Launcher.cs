@@ -839,7 +839,7 @@ public partial class Launcher : Node3D
 
         // Before the build, because the session reads its wire in its own constructor.
         _net.OpenCli(_spec, _paths.Data.Messages);
-        _net.SeatLocalField(_spec, _paths.Data.Messages);
+        _net.SeatLocalField(_spec, _paths.Data.Messages, Flight.Modes.CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det));
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -1837,7 +1837,7 @@ public partial class Launcher : Node3D
         StepSortieSeed();
         // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
         // one does. It follows the seed step, since its draws read the master.
-        _net.SeatLocalField(_spec, _paths.Data.Messages);
+        _net.SeatLocalField(_spec, _paths.Data.Messages, Flight.Modes.CourseLibrary.ForLaunch(_paths.DataRoot, _spec.Det));
         BindMenuPads(pads);
         BeginLaunch();
     }

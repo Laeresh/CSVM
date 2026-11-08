@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Modes;
 using Godot;
 
@@ -312,5 +313,21 @@ public sealed class CourseDraft
     {
         Course = Course with { Title = title };
         Changed?.Invoke();
+    }
+
+    /// <summary>Admits or refuses stock airframe <paramref name="airframe"/>. Admitting all eleven
+    /// drops the list, so the file names none. Refused outside the eleven and for the last one admitted.</summary>
+    public bool SetAdmitted(int airframe, bool admitted)
+    {
+        int count = StockAirframes.Nodes.Count;
+        var planes = Enumerable.Range(0, count).Where(a => a == airframe ? admitted : Course.Admits(a)).ToList();
+        if (airframe < 0 || airframe >= count || planes.Count == 0)
+        {
+            return false;
+        }
+
+        Course = Course with { Planes = planes.Count == count ? null : planes };
+        Changed?.Invoke();
+        return true;
     }
 }
