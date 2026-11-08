@@ -141,6 +141,10 @@ public sealed class StuntBotObjective
     /// docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float RailRampMps2 = 4.4704f;
 
+    /// <summary>Remake-only rule: the rate a bot's rail sheds speed above its cruise or a line's limit,
+    /// about 1 g, under half the decoded rail's. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float RailBrakeMps2 = 10f;
+
     // How finely a join looks for the line's nearest point, metres.
     private const float JoinSearchStepM = 5f;
 
@@ -224,9 +228,10 @@ public sealed class StuntBotObjective
     };
 
     /// <summary>The rail pace of a bot flying <paramref name="stats"/>, walked to at
-    /// <see cref="RailRampMps2"/>. Its cruise is the plane's level top speed at full lever on the AI force
-    /// path (<see cref="FlightModel.LevelTopSpeed"/>).</summary>
-    public static DangerZoneRail.Pace RailPaceFor(PlaneStats stats) => new(FlightModel.LevelTopSpeed(stats, aiForcePath: true), RailRampMps2);
+    /// <see cref="RailRampMps2"/> and <see cref="RailBrakeMps2"/>. Its cruise is the plane's level top speed
+    /// at full lever on the AI force path (<see cref="FlightModel.LevelTopSpeed"/>).</summary>
+    public static DangerZoneRail.Pace RailPaceFor(PlaneStats stats) =>
+        new(FlightModel.LevelTopSpeed(stats, aiForcePath: true), RailRampMps2, RailBrakeMps2);
 
     /// <summary>One bot's own approach, drawn on <paramref name="rng"/>: a line within
     /// <see cref="ApproachSpreadDeg"/> of the ribbon's and a lead-in within <see cref="LeadInSpreadM"/>
@@ -598,7 +603,7 @@ public sealed class StuntBotObjective
             }
         }
 
-        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points, knifeEdge: line.KnifeEdge);
+        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points, knifeEdge: line.KnifeEdge, speedLimit: line.SpeedLimitMps);
     }
 
     // Where the bot aims on its own approach line into `entry`: a point that moves with it, never a

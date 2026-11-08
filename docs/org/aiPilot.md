@@ -1744,8 +1744,10 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    [flightModel.md](flightModel.md) "Part-throttle equilibrium". A Bloodhawk rails at about 300 mph,
    a Devastator 251, and a Balmoral 126, under its 176.7 mph `fd_speed` and under the decoded cruise
    too. Each airframe's is flown once per session. The climb term stays the decoded 10 mph per unit
-   of climb. The rail walks its speed there at 10 mph per second (`RailRampMps2`), a fifth of the
-   decoded rate, at which a fighter locking near its top speed visibly brakes onto every line. Beyond
+   of climb. The rail walks its speed up at 10 mph per second (`RailRampMps2`), a fifth of the
+   decoded rate, at which a fighter locking near its top speed visibly brakes onto every line, and
+   sheds speed at 10 m/s², about 1 g (`RailBrakeMps2`). On a course a line can cap the cruise at the
+   decoded 155 mph (`DangerZoneRibbon.SpeedLimitMps`, 7 below), so a bot slows for a tight gate. Beyond
    1 km of every person the far-field plant flies `fd_speed` plus 5 m/s instead, so a Balmoral bot
    out of sight locks faster than its rail and slows over some 6 s; the near field, where a person
    sees it, matches its rail. A campaign racer keeps the decoded rail. The tier sets only the odds that a try is fluffed (0.05 ace, 0.2 veteran, 0.35 novice). A
@@ -1786,7 +1788,13 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    where level it struck the bridge or went round for 50 to 110 s. Without any the line stays
    straight and level, with a warning. A climbing, turned or knife-edge exit runs on to the length
    it cleared, since a bot let off the rail at 60 m sinks back under its line before the flight
-   law climbs, and struck C1's plateau lip past `p1`. The test is the plane flown down the
+   law climbs, and struck C1's plateau lip past `p1`. An exit that clears less than 250 m, or
+   nothing, marks its entry tight: that entry's line and the line before it cap the rail's cruise
+   at the decoded 155 mph, and a bridge onto either keeps the cap. A bot off the rail past a short
+   exit must turn away from what cut it short, and at a fighter's top speed it has half the time it
+   has at 155 mph: past C2's `p12`, whose exit clears 100 m before a building at 106 m and from
+   which no bridge to `p14` fits, faster bots struck the building more often. The cap on the line
+   before gives the 1 g brake room to slow. The test is the plane flown down the
    straight at the rail's attitude there: a tube of seven rays cast from both ends, the middle,
    each wing at half and full half-span (`AircraftBody.HalfSpan`, at least 6 m) and 6 m to either
    side of the wings, then the airframe's own hulls swept down a straight the rays pass

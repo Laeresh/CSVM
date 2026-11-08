@@ -241,6 +241,22 @@ public class CourseRunTests
 
 
     [Fact]
+    public void AShortExitLimitsItsLineAndTheLineBeforeToTheDecodedCruise()
+    {
+        // A wall stands 120 to 130 m past B, over any slope or turn the fit tries. B's exit clears only
+        // 100 m. The run flies A, A again, then B.
+        var wall = new[] { new Aabb(new Vector3(-500f, -10f, -330f), new Vector3(1000f, 410f, 10f)) };
+        var run = Run(Fwd(A), Fwd(A), Fwd(B));
+        run.FitLines(TubeAgainst(wall, reach: 5f));
+        Assert.Equal(new float?[] { null, DangerZoneRail.CruiseSpeedMps, DangerZoneRail.CruiseSpeedMps },
+            new[] { run.Zones[0].Route!.SpeedLimitMps, run.Zones[1].Route!.SpeedLimitMps, run.Zones[2].Route!.SpeedLimitMps });
+
+        // ABLE-TO-FAIL CONTROL: with no wall no line is limited.
+        run.FitLines(TubeAgainst(Array.Empty<Aabb>(), reach: 5f));
+        Assert.All(run.Zones, z => Assert.Null(z.Route!.SpeedLimitMps));
+    }
+
+    [Fact]
     public void ATapAfterAMovingRingReturnsToWhereTheRingStandsNotItsRest()
     {
         var run = Run(Fwd(B));

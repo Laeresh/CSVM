@@ -189,6 +189,10 @@ public sealed class StuntMission
     private Vector3[] _runWay = Array.Empty<Vector3>();
     private bool[] _knifeEdge = Array.Empty<bool>();
 
+    // Per sequence entry, whether its exit clears the world short of EntryExitM, or not at all (FitLines).
+    // A bot slows to the decoded rail cruise on its line and the line before it.
+    private bool[] _tight = Array.Empty<bool>();
+
     // Per sequence entry, how far from the opening's centre its line passes, metres (FitLines).
     private Vector3[] _shift = Array.Empty<Vector3>();
     private Vector3 _lastPlanePos;
@@ -495,6 +499,7 @@ public sealed class StuntMission
         _leadWay = new Vector3[_zones.Count];
         _runWay = new Vector3[_zones.Count];
         _knifeEdge = new bool[_zones.Count];
+        _tight = new bool[_zones.Count];
         _shift = new Vector3[_zones.Count];
         for (int i = 0; i < _zones.Count; i++)
         {
@@ -543,8 +548,12 @@ public sealed class StuntMission
             _runWay[i] = run?.Way ?? way;
             _leadRise[i] = (lead?.Slope ?? 0f) * EntryLeadInM;
             _runRise[i] = (run?.Slope ?? 0f) * _runOut[i];
-            _zones[i].Route = EntryLine(i);
+            _tight[i] = run is not { } cleared || cleared.Metres < EntryExitM;
         }
+
+        // A line's limit reads the next entry's exit, so every exit is fitted first.
+        for (int i = 0; i < _zones.Count; i++)
+            _zones[i].Route = EntryLine(i);
     }
 
     /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
@@ -963,9 +972,11 @@ public sealed class StuntMission
         var (centre, way) = EntryAxis(i);
         bool fit = _leadWay.Length > i;
         var opening = centre + (fit ? _shift[i] : Vector3.Zero);
+        bool slow = fit && (_tight[i] || (i + 1 < _tight.Length && _tight[i + 1]));
         return DangerZoneRibbon.ForEntry(Course.Gates[g].Id, i + 1, opening, fit ? _leadWay[i] : way, EntryLeadInM, fit ? _runOut[i] : EntryRunOutM,
             () => (rest * GateMotion(g, SimSeconds()) * local) - centre,
-            fit ? _leadRise[i] : 0f, fit ? _runRise[i] : 0f, fit ? _runWay[i] : way, fit && _knifeEdge[i]);
+            fit ? _leadRise[i] : 0f, fit ? _runRise[i] : 0f, fit ? _runWay[i] : way, fit && _knifeEdge[i],
+            slow ? DangerZoneRail.CruiseSpeedMps : null);
     }
 
     // A course step tests the next entry alone. One segment thus advances at most one entry, and a

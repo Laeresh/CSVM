@@ -174,7 +174,7 @@ public class DangerZoneRibbonTests
         {
             new Vector3(0f, 400f, 0f), new Vector3(3000f, 400f, 0f), new Vector3(6000f, 400f, 0f),
         });
-        var pace = new DangerZoneRail.Pace(120f, 5f);
+        var pace = new DangerZoneRail.Pace(120f, 2f, 5f);
         var rail = new DangerZoneRail(new DangerZoneRun(ribbon, false), new Vector3(0f, 400f, 0f), Basis.Identity,
             new Vector3(130f, 0f, 0f), 130f, pace);
         for (int i = 0; i < 60; i++)
@@ -190,6 +190,16 @@ public class DangerZoneRibbonTests
 
         Assert.Equal(120f, rail.Speed, 1);
 
+        // Locked below the cruise, it walks up at its own, slower rate.
+        var rising = new DangerZoneRail(new DangerZoneRun(ribbon, false), new Vector3(0f, 400f, 0f), Basis.Identity,
+            new Vector3(100f, 0f, 0f), 100f, pace);
+        for (int i = 0; i < 60; i++)
+        {
+            rising.Step(Dt);
+        }
+
+        Assert.Equal(102f, rising.Speed, 1);
+
         // ABLE-TO-FAIL CONTROL: unpaced, the same lock walks down to the decoded cruise at 50 mph a second.
         var decoded = new DangerZoneRail(new DangerZoneRun(ribbon, false), new Vector3(0f, 400f, 0f), Basis.Identity,
             new Vector3(130f, 0f, 0f), 130f);
@@ -199,6 +209,39 @@ public class DangerZoneRibbonTests
         }
 
         Assert.Equal(130f - DangerZoneRail.SpeedRateMps2, decoded.Speed, 1);
+    }
+
+    [Fact]
+    public void ALimitedLineBrakesAFasterPaceDownToItsLimit()
+    {
+        var limited = DangerZoneRibbon.ForEntry("p1", 1, new Vector3(0f, 400f, 0f), Vector3.Right, 3000f, 3000f,
+            () => Vector3.Zero, speedLimit: 70f);
+        var pace = new DangerZoneRail.Pace(130f, 2f, 10f);
+        var rail = new DangerZoneRail(new DangerZoneRun(limited, false), limited.End(false), Basis.Identity,
+            new Vector3(130f, 0f, 0f), 130f, pace);
+        for (int i = 0; i < 60 * 3; i++)
+        {
+            rail.Step(Dt);
+        }
+
+        Assert.Equal(100f, rail.Speed, 1);
+        for (int i = 0; i < 60 * 5; i++)
+        {
+            rail.Step(Dt);
+        }
+
+        Assert.Equal(70f, rail.Speed, 1);
+
+        // ABLE-TO-FAIL CONTROL: the same line unlimited holds the pace's cruise.
+        var open = DangerZoneRibbon.ForEntry("p1", 1, new Vector3(0f, 400f, 0f), Vector3.Right, 3000f, 3000f, () => Vector3.Zero);
+        var free = new DangerZoneRail(new DangerZoneRun(open, false), open.End(false), Basis.Identity,
+            new Vector3(130f, 0f, 0f), 130f, pace);
+        for (int i = 0; i < 60 * 8; i++)
+        {
+            free.Step(Dt);
+        }
+
+        Assert.Equal(130f, free.Speed, 1);
     }
 
     [Fact]
