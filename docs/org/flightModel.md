@@ -468,6 +468,21 @@ Nine of eleven land inside 1 %. The autogyro and the Balmoral are the outliers, 
 two airframes that are not conventional fighters. Under the `C_L` reading the same solve is not
 even close.
 
+⚠ **The Balmoral's 126 mph is authored, not a plant defect, and no missing term closes it. Do not
+tune its power, its drag or the curve to reach `fd_speed`.** Its stock engine (id 41, power 0.30)
+is the weakest in the game and its `drag_factor` 1.70 is the Warhawk's, whose engine is 1.00.
+Reaching 176.7 mph would take power 0.72 at that drag or drag 0.71 at that power, so no engine
+count or other whole factor is absent. The thrust assembly (`0x48fce2`–`0x48fde1`) multiplies
+only `ThrustFactor` and `RefArea`, the drag coefficient (`FUN_0041ada0`) takes Mach alone, and
+the mission variants (`britbalmoral`, `rbalmoral`, `wbalmoral`) inherit the same `dynamics`
+block. `fd_speed` is `FakeDynSpeed`, a reference the engine never solves for: the AI's far-field
+cruise `fd_speed · throttle` and the gauge fractions read it, so an AI Balmoral cruises near
+177 mph far off and holds 126 mph once in near-field physics, in the original as here. The
+original's own figure at the controls is unread: no footage of a player-flown Balmoral exists
+(the `CAP-14` "Balmoral" clips are a fighter grazing one), so a full-throttle level Instant Action
+flight in the original, airspeed needle near 91° for 126 mph against 127° for 177 mph, is the
+one check that could reopen this.
+
 ⚠ **The absolute scale against `CAP-05` does not close, and the force path is now verified
 byte-complete, see "The force scale, settled" below.** The four zero-thrust decelerations
 (0.36/1.11/2.82/3.74 m/s² at `V/fd_speed` = 0.25/0.35/0.46/0.50) come out **≈2–3.6× too strong**
@@ -1902,9 +1917,9 @@ EnginePower · (0.84M + 0.112)² · (0.12 − M/60) / (M³ · pow(1.33k, 1.41M))
     = DragFactor · (0.12 + 0.8M + 0.5M²)
 ```
 
-The Balmoral still misses (it solves at ≈ 0.71 × its own `fd_speed`), so the caveat stands for the
-rest of the set, but the "`fd_speed` is a pure normalising reference" reading is now the weaker
-one.
+The Balmoral still misses (it solves at ≈ 0.71 × its own `fd_speed`, an authored miss, see the
+Drag section's solve table), so the caveat stands for the rest of the set, but the "`fd_speed` is
+a pure normalising reference" reading is now the weaker one.
 
 ## `ThrustFactor` is the engine's power factor, resolved
 
@@ -2004,7 +2019,8 @@ Note that **every player airframe's stock engine is its Lvl-2 row**, not Lvl-1: 
 polar corrected to Mach and the thrust `pow` recovered, the absolute test below *does* close: nine
 of eleven airframes solve to within 1 % of their own `fd_speed`. What follows is the state of the
 question before those two corrections, kept because the Balmoral (0.71×) and the autogyro (0.94×)
-still miss and the residual is unexplained.
+still miss. The Balmoral's residual is authored data, settled under the Drag section's solve
+table; the autogyro's is open.
 
 The table above is a *rank* test, and it is
 clean. The absolute test is not: assuming `fd_speed` is the full-throttle level equilibrium and
