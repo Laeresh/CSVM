@@ -271,7 +271,7 @@ public class StuntBotObjectiveTests
 
     /// <summary>A bot whose approach point lies inside the turn it flies at its speed closes its lever,
     /// where full lever would circle the point. ABLE-TO-FAIL CONTROL: a point outside it keeps the lever full.</summary>
-    [Fact]
+    [ExtractedDataFact]
     public void ABotClosesItsLeverWhileItsAimLiesInsideItsTurn()
     {
         float LeverFor(float east)
