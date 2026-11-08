@@ -121,8 +121,8 @@ public sealed class StuntBotObjective
     public const float JoinRailM = 150f;
 
     /// <summary>Remake-only rule: the tightest turn a bridge to a course entry may take, metres (#281).
-    /// A 4 g turn at the decoded rail's 69.3 m/s cruise is 126 m. A faster bot's rail takes it harder,
-    /// since a wider radius refuses every sharp C2 bend.</summary>
+    /// A 4 g turn at the decoded rail's 69.3 m/s cruise is 126 m. A faster bot's rail slows for it
+    /// (<see cref="DangerZoneRail.CornerSpeed"/>).</summary>
     public const float BridgeRadiusM = 125f;
 
     /// <summary>Remake-only rule: the farthest a course entry's opening may stand for a bridge, metres.
@@ -141,7 +141,7 @@ public sealed class StuntBotObjective
     /// docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float RailRampMps2 = 4.4704f;
 
-    /// <summary>Remake-only rule: the rate a bot's rail sheds speed above its cruise or a line's limit,
+    /// <summary>Remake-only rule: the rate a bot's rail sheds speed for a bend ahead or above its cruise,
     /// about 1 g, under half the decoded rail's. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float RailBrakeMps2 = 10f;
 
@@ -228,10 +228,52 @@ public sealed class StuntBotObjective
     };
 
     /// <summary>The rail pace of a bot flying <paramref name="stats"/>, walked to at
-    /// <see cref="RailRampMps2"/> and <see cref="RailBrakeMps2"/>. Its cruise is the plane's level top speed
-    /// at full lever on the AI force path (<see cref="FlightModel.LevelTopSpeed"/>).</summary>
-    public static DangerZoneRail.Pace RailPaceFor(PlaneStats stats) =>
-        new(FlightModel.LevelTopSpeed(stats, aiForcePath: true), RailRampMps2, RailBrakeMps2);
+    /// <see cref="RailRampMps2"/> and <see cref="RailBrakeMps2"/>. Its cruise is the plane's level top
+    /// speed at full lever on the AI force path (<see cref="FlightModel.LevelTopSpeed"/>). It takes a bend
+    /// at the plane's own turn (<see cref="TurnAccelFor"/>).</summary>
+    public static DangerZoneRail.Pace RailPaceFor(PlaneStats stats)
+    {
+        float top = FlightModel.LevelTopSpeed(stats, aiForcePath: true);
+        return new(top, RailRampMps2, RailBrakeMps2, TurnAccelFor(stats, top));
+    }
+
+    /// <summary>The turn a bot's plane holds at full lever under an order held 90 degrees off its track,
+    /// m/s². It is the mean v² over the radius flown after the turn's first quarter. Flown on the AI force
+    /// path from level flight at <paramref name="topSpeedMps"/>, for at most two minutes.</summary>
+    public static float TurnAccelFor(PlaneStats stats, float topSpeedMps)
+    {
+        var model = new FlightModel(stats, aiForcePath: true);
+        model.Reset(new Vector3(0f, 500f, 0f), Basis.Identity, topSpeedMps, CruiseThrottle);
+        var pilot = new AiPilot
+        {
+            TargetAltitude = 500f,
+            CruiseThrottle = CruiseThrottle,
+            Machine = new AiModeMachine(new Random(1)),
+        };
+        float Track() => Mathf.Atan2(model.VelocityDir.X, model.VelocityDir.Z);
+        float dt = GameClock.FixedDt;
+        float turned = 0f;
+        float path = 0f;
+        float speedSq = 0f;
+        int samples = 0;
+        float last = Track();
+        for (int i = 0; i < Mathf.RoundToInt(120f / dt) && Mathf.Abs(turned) < 2f * Mathf.Tau; i++)
+        {
+            pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(new Basis(Vector3.Up, -Mathf.Pi / 2f) * model.VelocityDir);
+            model.Step(pilot.Next(model, dt), dt);
+            turned += Mathf.Wrap(Track() - last, -Mathf.Pi, Mathf.Pi);
+            last = Track();
+            if (Mathf.Abs(turned) > Mathf.Pi / 2f)
+            {
+                path += model.Speed * dt;
+                speedSq += model.Speed * model.Speed;
+                samples++;
+            }
+        }
+
+        float radius = path / Mathf.Max(Mathf.Abs(turned) - (Mathf.Pi / 2f), 1e-3f);
+        return samples > 0 && radius > 1f ? speedSq / samples / radius : float.PositiveInfinity;
+    }
 
     /// <summary>One bot's own approach, drawn on <paramref name="rng"/>: a line within
     /// <see cref="ApproachSpreadDeg"/> of the ribbon's and a lead-in within <see cref="LeadInSpreadM"/>
@@ -603,7 +645,7 @@ public sealed class StuntBotObjective
             }
         }
 
-        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points, knifeEdge: line.KnifeEdge, speedLimit: line.SpeedLimitMps);
+        return DangerZoneRibbon.FromPolyline(line.Name, line.Index, points, knifeEdge: line.KnifeEdge);
     }
 
     // Where the bot aims on its own approach line into `entry`: a point that moves with it, never a

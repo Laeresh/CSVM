@@ -1736,23 +1736,34 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    made once for every zone end at session start, against the built world, and shared by all the
    session's bots (`StuntBotObjective.RunsFrom`); no race frame pays for it. A campaign racer and a
    person fly the route as it is.
-4. A bot flies as fast as its plane allows. Its lever is full between zones and on the approach
-   whatever its tier (`StuntBotObjective.CruiseThrottle`, held by `AiPilot.CruiseThrottle`). Its
-   rail cruises at its plane's level top speed at full lever (`StuntBotObjective.RailPaceFor`, held
-   by `AiPilot.RailPace`), not the decoded 155 mph: the AI force path's near-field equilibrium,
-   flown from `fd_speed` (`FlightModel.LevelTopSpeed`), the decoded solve of
-   [flightModel.md](flightModel.md) "Part-throttle equilibrium". A Bloodhawk rails at about 300 mph,
-   a Devastator 251, and a Balmoral 126, under its 176.7 mph `fd_speed` and under the decoded cruise
-   too. Each airframe's is flown once per session. The climb term stays the decoded 10 mph per unit
-   of climb. The rail walks its speed up at 10 mph per second (`RailRampMps2`), a fifth of the
-   decoded rate, at which a fighter locking near its top speed visibly brakes onto every line, and
-   sheds speed at 10 m/s², about 1 g (`RailBrakeMps2`). On a course a line can cap the cruise at the
-   decoded 155 mph (`DangerZoneRibbon.SpeedLimitMps`, 7 below), so a bot slows for a tight gate. Beyond
-   1 km of every person the far-field plant flies `fd_speed` plus 5 m/s instead, so a Balmoral bot
-   out of sight locks faster than its rail and slows over some 6 s; the near field, where a person
-   sees it, matches its rail. A campaign racer keeps the decoded rail. The tier sets only the odds that a try is fluffed (0.05 ace, 0.2 veteran, 0.35 novice). A
-   fluffed try passes 100 m over the entry (`FluffAboveM`) and comes round for another, from
-   whichever end is nearer then.
+4. A bot flies as fast as its plane allows and the course ahead lets it, with no rule for any one
+   gate. Two figures of its plane, each flown once per airframe per session on the AI force path,
+   set its pace (`StuntBotObjective.RailPaceFor`, held by `AiPilot.RailPace`):
+   - Its top speed, the level equilibrium at full lever (`FlightModel.LevelTopSpeed`), the decoded
+     solve of [flightModel.md](flightModel.md) "Part-throttle equilibrium": a Peacemaker about
+     290 mph, a Fury 281, a Brigand 240, a Warhawk 201, a Balmoral 126.
+   - Its turn, the mean v²/r it holds at full lever under an order held 90 degrees off its track
+     (`StuntBotObjective.TurnAccelFor`): about 6.1 g for a Peacemaker, 6.0 a Fury, 5.4 a Brigand,
+     5.0 a Warhawk, 2.2 a Balmoral.
+
+   The rail cruises at the top speed, not the decoded 155 mph, less the decoded 10 mph per unit of
+   climb, and never faster than it could still brake to each bend ahead at the bend's own speed,
+   the one whose turn is the plane's (`DangerZoneRail.CornerSpeed`). It looks as far ahead as
+   braking from the top speed takes. It walks its speed up at 10 mph per second (`RailRampMps2`),
+   a fifth of the decoded rate, at which a fighter locking near its top speed visibly brakes onto
+   every line, and sheds it at 10 m/s², about 1 g (`RailBrakeMps2`). A course's lines are straight,
+   so a bot slows on the bridges between them and on a Danger Zone ribbon's bends.
+
+   Off the rail its lever is full whatever its tier (`StuntBotObjective.CruiseThrottle`, held by
+   `AiPilot.CruiseThrottle`), except while the point it flies for lies inside the turn it flies at
+   its present speed on the side of that point: there the lever closes until the turn fits. At full
+   lever a fighter circles an approach point it meets from the side: on C3 Valley Run's `p5` the
+   fighters flew 90 to 135 s round the lead-in point. Beyond 1 km of every person the far-field
+   plant flies `fd_speed` plus 5 m/s instead, so a Balmoral bot out of sight locks faster than its
+   rail and slows over some 3 s; the near field, where a person sees it, matches its rail. A
+   campaign racer keeps the decoded rail. The tier sets only the odds that a try is fluffed (0.05
+   ace, 0.2 veteran, 0.35 novice). A fluffed try passes 100 m over the entry (`FluffAboveM`) and
+   comes round for another, from whichever end is nearer then.
 5. A completed run starts again while the window is open, as a person reruns, and the board keeps
    its best. A crash returns it to its last zone after `AircraftLifecycle.AutoRespawnDelay`, the
    unattended return, since nobody presses R for it. The return stands it on that zone's route,
@@ -1788,13 +1799,7 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    where level it struck the bridge or went round for 50 to 110 s. Without any the line stays
    straight and level, with a warning. A climbing, turned or knife-edge exit runs on to the length
    it cleared, since a bot let off the rail at 60 m sinks back under its line before the flight
-   law climbs, and struck C1's plateau lip past `p1`. An exit that clears less than 250 m, or
-   nothing, marks its entry tight: that entry's line and the line before it cap the rail's cruise
-   at the decoded 155 mph, and a bridge onto either keeps the cap. A bot off the rail past a short
-   exit must turn away from what cut it short, and at a fighter's top speed it has half the time it
-   has at 155 mph: past C2's `p12`, whose exit clears 100 m before a building at 106 m and from
-   which no bridge to `p14` fits, faster bots struck the building more often. The cap on the line
-   before gives the 1 g brake room to slow. The test is the plane flown down the
+   law climbs, and struck C1's plateau lip past `p1`. The test is the plane flown down the
    straight at the rail's attitude there: a tube of seven rays cast from both ends, the middle,
    each wing at half and full half-span (`AircraftBody.HalfSpan`, at least 6 m) and 6 m to either
    side of the wings, then the airframe's own hulls swept down a straight the rays pass
@@ -1818,7 +1823,7 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    A bridge stands 150 to 700 m from the opening (`JoinRailM`, `BridgeReachM`), with the bot at
    least 150 m short of the opening's plane. It turns no tighter than 125 m (`BridgeRadiusM`, a
    4 g turn at the decoded rail's 69.3 m/s cruise, which 187.5 m refused at every sharp C2 bend; a
-   faster bot's rail takes it at more g), climbs
+   faster bot's rail slows for it, 4 above), climbs
    or dives no steeper than the fit's tan 35 degrees, and the plane down each 20 m chord, banked as
    the rail banks it there (knife-edge onto a knife-edge line), is clear;
    the cubic's handles try 0.4, 0.3 and 0.5 of the reach, and after a blocked cast it waits 15

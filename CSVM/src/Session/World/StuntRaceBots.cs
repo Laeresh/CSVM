@@ -109,7 +109,7 @@ internal sealed class StuntRaceBots
                 }
 
                 seated.Add((seat, bot, pilot, run, pace));
-                Log.Info("flight", $"stunt race: bot seat {seat} rails at {pace.CruiseMps / PhysicsConstants.MphToMs:0} mph");
+                Log.Info("flight", $"stunt race: bot seat {seat} rails at {pace.CruiseMps / PhysicsConstants.MphToMs:0} mph, turning at {pace.TurnMps2 / 9.81f:0.0} g");
             }
         }
 

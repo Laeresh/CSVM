@@ -56,11 +56,6 @@ public sealed class DangerZoneRibbon
     /// fits the plane (<see cref="StuntMission.FitLines"/>), and so is a bridge onto it.</summary>
     public bool KnifeEdge { get; private init; }
 
-    /// <summary>Remake-only: the fastest cruise a rail walks toward on this ribbon, m/s, or null for none.
-    /// A course entry's line has one where it or the next entry's exit is short
-    /// (<see cref="StuntMission.FitLines"/>), and so does a bridge onto it.</summary>
-    public float? SpeedLimitMps { get; private init; }
-
     /// <summary>A course entry's gate opening centre, where it stands now; null on any other ribbon.</summary>
     public Vector3? Opening => IsCourseEntry ? PointAt(0, Segments[0].Length) : null;
 
@@ -92,7 +87,7 @@ public sealed class DangerZoneRibbon
     /// build (<c>FUN_00445ef0</c>). The difficulty is the node's own, see
     /// <see cref="Difficulty"/>.</summary>
     public static DangerZoneRibbon FromPolyline(string name, int index, IReadOnlyList<Vector3> vertices,
-        IReadOnlyList<Vector3>? laneOffsets = null, int difficulty = 0, bool knifeEdge = false, float? speedLimit = null)
+        IReadOnlyList<Vector3>? laneOffsets = null, int difficulty = 0, bool knifeEdge = false)
     {
         if (vertices.Count < 2)
             throw new ArgumentException($"'{name}': a ribbon needs at least two vertices", nameof(vertices));
@@ -119,18 +114,16 @@ public sealed class DangerZoneRibbon
         var lanes = new List<Vector3> { Vector3.Zero };
         if (laneOffsets != null)
             lanes.AddRange(laneOffsets);
-        return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty, KnifeEdge = knifeEdge, SpeedLimitMps = speedLimit };
+        return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty, KnifeEdge = knifeEdge };
     }
 
     /// <summary>A course sequence entry's line: from <paramref name="before"/> metres short of
     /// <paramref name="opening"/> along <paramref name="way"/> to <paramref name="after"/> metres past it
     /// along <paramref name="runWay"/>, <paramref name="way"/> when null. Its start stands
     /// <paramref name="leadRise"/> and its end <paramref name="runRise"/> metres above level. It is
-    /// <see cref="IsCourseEntry"/>, moved by <paramref name="drift"/>, and flown <see cref="KnifeEdge"/> when asked,
-    /// under <paramref name="speedLimit"/> if one is given.</summary>
+    /// <see cref="IsCourseEntry"/>, moved by <paramref name="drift"/>, and flown <see cref="KnifeEdge"/> when asked.</summary>
     public static DangerZoneRibbon ForEntry(string name, int index, Vector3 opening, Vector3 way, float before, float after,
-        Func<Vector3> drift, float leadRise = 0f, float runRise = 0f, Vector3? runWay = null, bool knifeEdge = false,
-        float? speedLimit = null)
+        Func<Vector3> drift, float leadRise = 0f, float runRise = 0f, Vector3? runWay = null, bool knifeEdge = false)
     {
         var line = FromPolyline(name, index, new[]
         {
@@ -138,13 +131,7 @@ public sealed class DangerZoneRibbon
             opening,
             opening + ((runWay ?? way) * after) + (Vector3.Up * runRise),
         });
-        return new DangerZoneRibbon(name, index, line.Segments, line.Lanes)
-        {
-            IsCourseEntry = true,
-            Drift = drift,
-            KnifeEdge = knifeEdge,
-            SpeedLimitMps = speedLimit,
-        };
+        return new DangerZoneRibbon(name, index, line.Segments, line.Lanes) { IsCourseEntry = true, Drift = drift, KnifeEdge = knifeEdge };
     }
 
     /// <summary>The point <paramref name="t"/> metres into segment <paramref name="segment"/>,
@@ -403,6 +390,9 @@ public sealed class DangerZoneRail
     /// <summary>The closing rate ramps up over the first 1/0.6 s after the lock.</summary>
     public const float OffsetRampPerS = 0.6f;
 
+    // How finely CornerSpeed samples the run ahead, metres.
+    private const float CornerLookStepM = 10f;
+
     private Vector3 _point;
     private Vector3 _offset;
     private Vector3 _offsetVelocity;
@@ -425,8 +415,8 @@ public sealed class DangerZoneRail
 
     public DangerZoneRun Run { get; }
 
-    /// <summary>The cruise this rail's speed walks toward, before the climb-angle term and any ribbon's
-    /// limit, and how fast.</summary>
+    /// <summary>The cruise this rail's speed walks toward, before the bends ahead and the climb-angle
+    /// term, and how fast.</summary>
     public Pace Paced { get; }
 
     public Vector3 Position { get; private set; }
@@ -480,7 +470,7 @@ public sealed class DangerZoneRail
             ? target
             : new Basis(Attitude.GetRotationQuaternion().Slerp(target.GetRotationQuaternion(), blend));
 
-        float cruise = Mathf.Min(Paced.CruiseMps, Run.Ribbon.SpeedLimitMps ?? float.MaxValue) - (ClimbSpeedPenaltyMps * direction.Y);
+        float cruise = Mathf.Min(Paced.CruiseMps, CornerSpeed()) - (ClimbSpeedPenaltyMps * direction.Y);
         Speed = Mathf.MoveToward(Speed, cruise, (Speed > cruise ? Paced.BrakeMps2 : Paced.RateMps2) * dt);
 
         // The rail point trails the cursor through a short exponential, and the residual offset
@@ -498,17 +488,63 @@ public sealed class DangerZoneRail
         return !Run.Done;
     }
 
+    /// <summary>The fastest speed the rail may hold at the cursor. From it, braking at
+    /// <see cref="Pace.BrakeMps2"/> reaches each bend ahead at its own speed, the one that turns it at
+    /// <see cref="Pace.TurnMps2"/>. It looks as far ahead as braking from the cruise to rest takes.</summary>
+    public float CornerSpeed()
+    {
+        if (float.IsPositiveInfinity(Paced.TurnMps2))
+            return float.MaxValue;
+
+        var ribbon = Run.Ribbon;
+        int segment = Run.Segment;
+        float t = Run.T;
+        float horizon = Paced.CruiseMps * Paced.CruiseMps / (2f * Paced.BrakeMps2);
+        float fastest = float.MaxValue;
+        for (float along = 0f; along <= horizon; along += CornerLookStepM)
+        {
+            // The curvature of the cubic, |r' x r''| / |r'|^3.
+            var d1 = ribbon.TangentAt(segment, t);
+            float length = d1.Length();
+            if (length > 1e-6f)
+            {
+                float bend = d1.Cross(ribbon.CurvatureAt(segment, t)).Length() / (length * length * length);
+                if (bend > 1e-6f)
+                    fastest = Mathf.Min(fastest, Mathf.Sqrt((Paced.TurnMps2 / bend) + (2f * Paced.BrakeMps2 * along)));
+            }
+
+            float step = CornerLookStepM / Mathf.Max(length, 1e-3f);
+            t += Run.Reversed ? -step : step;
+            while (!Run.Reversed && t > ribbon.Segments[segment].Length)
+            {
+                if (segment == ribbon.Segments.Count - 1)
+                    return fastest;
+                t -= ribbon.Segments[segment++].Length;
+            }
+
+            while (Run.Reversed && t < 0f)
+            {
+                if (segment == 0)
+                    return fastest;
+                t += ribbon.Segments[--segment].Length;
+            }
+        }
+
+        return fastest;
+    }
+
     private static Vector3 Shrink(Vector3 v, float by)
     {
         float length = v.Length();
         return length - by <= 0f ? Vector3.Zero : v * ((length - by) / length);
     }
 
-    /// <summary>The cruise a rail's speed walks toward, m/s, under any <see cref="DangerZoneRibbon.SpeedLimitMps"/>,
-    /// and the rates it walks up and down at, m/s².</summary>
-    public readonly record struct Pace(float CruiseMps, float RateMps2, float BrakeMps2)
+    /// <summary>A rail's pace: the cruise its speed walks toward, m/s, and the rates it walks up and down
+    /// at, m/s². It takes a bend at no more than <c>TurnMps2</c> of turn (<see cref="CornerSpeed"/>).</summary>
+    public readonly record struct Pace(float CruiseMps, float RateMps2, float BrakeMps2, float TurnMps2)
     {
-        /// <summary>The decoded rail's: a 155 mph cruise walked to at 50 mph per second either way.</summary>
-        public static Pace Decoded => new(CruiseSpeedMps, SpeedRateMps2, SpeedRateMps2);
+        /// <summary>The decoded rail's: a 155 mph cruise walked to at 50 mph per second either way, at
+        /// any bend.</summary>
+        public static Pace Decoded => new(CruiseSpeedMps, SpeedRateMps2, SpeedRateMps2, float.PositiveInfinity);
     }
 }

@@ -174,7 +174,7 @@ public class DangerZoneRibbonTests
         {
             new Vector3(0f, 400f, 0f), new Vector3(3000f, 400f, 0f), new Vector3(6000f, 400f, 0f),
         });
-        var pace = new DangerZoneRail.Pace(120f, 2f, 5f);
+        var pace = new DangerZoneRail.Pace(120f, 2f, 5f, float.PositiveInfinity);
         var rail = new DangerZoneRail(new DangerZoneRun(ribbon, false), new Vector3(0f, 400f, 0f), Basis.Identity,
             new Vector3(130f, 0f, 0f), 130f, pace);
         for (int i = 0; i < 60; i++)
@@ -212,36 +212,49 @@ public class DangerZoneRibbonTests
     }
 
     [Fact]
-    public void ALimitedLineBrakesAFasterPaceDownToItsLimit()
+    public void APacedRailBrakesAheadOfABendToTheSpeedItsTurnAllows()
     {
-        var limited = DangerZoneRibbon.ForEntry("p1", 1, new Vector3(0f, 400f, 0f), Vector3.Right, 3000f, 3000f,
-            () => Vector3.Zero, speedLimit: 70f);
-        var pace = new DangerZoneRail.Pace(130f, 2f, 10f);
-        var rail = new DangerZoneRail(new DangerZoneRun(limited, false), limited.End(false), Basis.Identity,
-            new Vector3(130f, 0f, 0f), 130f, pace);
-        for (int i = 0; i < 60 * 3; i++)
+        // 1500 m straight, then a quarter circle of 200 m radius, then straight again. Every vertex stands
+        // the bend's chord apart; the spline still bends some 15% tighter where the straight meets the arc.
+        const int arcSteps = 9;
+        float chord = 2f * 200f * Mathf.Sin(Mathf.Pi / 4f / arcSteps);
+        var points = new List<Vector3>();
+        for (int k = (int)(1500f / chord); k >= 1; k--)
+            points.Add(new Vector3(1500f - (k * chord), 400f, 0f));
+        for (int k = 0; k <= arcSteps; k++)
         {
-            rail.Step(Dt);
+            float a = Mathf.Pi / 2f * k / arcSteps;
+            points.Add(new Vector3(1500f + (200f * Mathf.Sin(a)), 400f, -200f + (200f * Mathf.Cos(a))));
         }
 
-        Assert.Equal(100f, rail.Speed, 1);
-        for (int i = 0; i < 60 * 5; i++)
+        for (int k = 1; k * chord <= 1000f; k++)
+            points.Add(new Vector3(1700f, 400f, -200f - (k * chord)));
+        var ribbon = DangerZoneRibbon.FromPolyline("bend", 1, points);
+
+        // 40 m/s² of turn takes a 200 m radius at about 89 m/s, and the junction's 170 m at 82.
+        var pace = new DangerZoneRail.Pace(130f, 2f, 10f, 40f);
+        var rail = new DangerZoneRail(new DangerZoneRun(ribbon, false), points[0], Basis.Identity, new Vector3(130f, 0f, 0f), 130f, pace);
+        Assert.True(rail.CornerSpeed() >= 130f, "a bend beyond the braking horizon slows nothing yet");
+        float slowest = float.MaxValue;
+        float atBend = 0f;
+        for (int i = 0; i < 60 * 40 && rail.Step(Dt); i++)
         {
-            rail.Step(Dt);
+            slowest = Mathf.Min(slowest, rail.Speed);
+            if (atBend == 0f && rail.Run.Point.X >= 1500f)
+                atBend = rail.Speed;
         }
 
-        Assert.Equal(70f, rail.Speed, 1);
+        // It has braked by the bend's start, and slows no further than the bend's own speed.
+        Assert.InRange(atBend, 80f, 95f);
+        Assert.InRange(slowest, 80f, 95f);
 
-        // ABLE-TO-FAIL CONTROL: the same line unlimited holds the pace's cruise.
-        var open = DangerZoneRibbon.ForEntry("p1", 1, new Vector3(0f, 400f, 0f), Vector3.Right, 3000f, 3000f, () => Vector3.Zero);
-        var free = new DangerZoneRail(new DangerZoneRun(open, false), open.End(false), Basis.Identity,
-            new Vector3(130f, 0f, 0f), 130f, pace);
-        for (int i = 0; i < 60 * 8; i++)
-        {
-            free.Step(Dt);
-        }
-
-        Assert.Equal(130f, free.Speed, 1);
+        // ABLE-TO-FAIL CONTROL: with any turn allowed the same run holds its cruise through the bend.
+        var free = new DangerZoneRail(new DangerZoneRun(ribbon, false), points[0], Basis.Identity, new Vector3(130f, 0f, 0f), 130f,
+            pace with { TurnMps2 = float.PositiveInfinity });
+        float freeSlowest = float.MaxValue;
+        for (int i = 0; i < 60 * 40 && free.Step(Dt); i++)
+            freeSlowest = Mathf.Min(freeSlowest, free.Speed);
+        Assert.Equal(130f, freeSlowest, 1);
     }
 
     [Fact]

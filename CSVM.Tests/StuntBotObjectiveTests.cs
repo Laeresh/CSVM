@@ -263,6 +263,32 @@ public class StuntBotObjectiveTests
         Assert.InRange(balmoral.CruiseMps / mph, 124.5f, 127.5f);
         Assert.Equal(StuntBotObjective.RailRampMps2, bloodhawk.RateMps2);
         Assert.True(StuntBotObjective.RailRampMps2 < DangerZoneRail.SpeedRateMps2 / 2f);
+        Assert.True(StuntBotObjective.RailBrakeMps2 < DangerZoneRail.SpeedRateMps2 / 2f);
+
+        // Each plane's own turn, finite and between 1 and 15 g.
+        Assert.All(new[] { bloodhawk, balmoral }, p => Assert.InRange(p.TurnMps2, 9.8f, 147f));
+    }
+
+    /// <summary>A bot whose approach point lies inside the turn it flies at its speed closes its lever,
+    /// where full lever would circle the point. ABLE-TO-FAIL CONTROL: a point outside it keeps the lever full.</summary>
+    [Fact]
+    public void ABotClosesItsLeverWhileItsAimLiesInsideItsTurn()
+    {
+        float LeverFor(float east)
+        {
+            var model = new FlightModel(new PlaneStats());
+            model.Reset(new Vector3(0, 400, 0), Basis.Identity, 120f, 1f);
+            var pilot = Pilot(0f, 400f, StuntBotObjective.CruiseThrottle);
+            pilot.RailPace = new DangerZoneRail.Pace(130f, 4f, 10f, 40f);
+            var start = new Vector3(east, 400, 0);
+            var ribbon = DangerZoneRibbon.FromPolyline("dzpath1", 1, new[] { start, start + new Vector3(0, 0, -1000) });
+            Assert.True(pilot.FlyDangerZone(ribbon, farEnd: false, model.Position, "test"));
+            return pilot.Next(model, GameClock.FixedDt).Throttle;
+        }
+
+        // At 120 m/s on 40 m/s² of turn the circle's radius is 360 m.
+        Assert.Equal(0f, LeverFor(200f));
+        Assert.Equal(StuntBotObjective.CruiseThrottle, LeverFor(2000f));
     }
 
     [Fact]

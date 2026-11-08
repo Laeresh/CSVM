@@ -717,7 +717,7 @@ drawn by `Spread`), and in the approach cone the zone handed to `AiPilot.FlyDang
 (`RailClears`) the route gains a straight lead-in (`LeadInFor`), refused where the world blocks
 it; `RunsFrom` decides every zone end once for the session's bots. On a course it takes the next
 entry alone, one way, its line taking no row, and may join the line at once (`StuntBotStart.Join`). Every bot
-flies a full `CruiseThrottle` and rails at its plane's top speed (`RailPaceFor`); its tier sets the odds of a fluff. `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
+flies a full `CruiseThrottle` and rails at its plane's top speed, slowing for bends at its plane's turn (`RailPaceFor`); its tier sets the odds of a fluff. `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
 [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots"; read `StuntBotObjectiveTests.cs`.
 
 ## src/Flight/Ai/PursuitQuarry.cs
