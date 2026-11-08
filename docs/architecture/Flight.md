@@ -1259,9 +1259,9 @@ The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look,
 additions are `Frame(Aabb)`, `LookFrom(eye, target)` (keeping the free look's yaw and pitch in step), the `FollowNode`
 orbit lock (released by any translation input, re-locked by the target key through `OrbitLock.Next`
 over `GameSession.LockCandidateAircraft`'s roster) and a public `Camera` accessor; while locked the
-orbit answers the right stick and the triggers as well as the mouse. It is also the pane a pilot
-out of the mission watches from (`Session/Roster/SpectateHandoff.cs`), with `padDevices`/`useKeyboard`
-filtering each watcher to its own seat so two watchers move independently. Read `OrbitLock.cs` next.
+orbit answers the right stick and the triggers as well as the mouse. A pilot out of the mission
+watches from it (`SpectateHandoff.cs`) on its seat's own devices, the RMB look writing no mouse mode
+under the seat's hide (`SeatHidesPointer`); a debugging camera's look captures, then shows the pointer. Read `OrbitLock.cs` next.
 
 ## src/Flight/Camera/OrbitLock.cs
 `SpectatorCamera`'s re-lock rule, taken as positions and an index rather than nodes so it runs
@@ -1327,7 +1327,7 @@ display with somebody at the controls, so the test desktop and `--det` keep thei
 ## src/Flight/Camera/SeatMouse.cs
 The desktop mouse one flight seat holds while it flies: `MouseCapture`'s arithmetic plus the engine
 half it leaves out. `Step` takes the mouse on a wanted frame, hides the pointer unheld on a frame a
-cutscene has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
+cutscene or a spectator has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
 suite's stand-in); `Release` puts back only a capture or hide this seat made. `Stick` is the cursor offset
 the mouse-flying stick reads, off the virtual cursor while held and the pane's own pointer
 otherwise, and `LookTravel` is head-look's pan. `Allowed` is the session's once-resolved guard and

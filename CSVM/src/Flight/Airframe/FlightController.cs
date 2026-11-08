@@ -3974,21 +3974,22 @@ public partial class FlightController : Node3D
     private void StepMouseCapture(bool halted) =>
         Mouse.Step(WantsMouseCapture(halted), this, MouseSensitivity, WantsPointerHidden(halted));
 
-    // Whether this seat should hide the pointer it is not holding: a cutscene has the pane and no
-    // board stands over it. Inert is not asked, since the film's out-of-flight is what took the
-    // capture away.
-    private bool WantsPointerHidden(bool halted) => OwnsDesktopMouse(halted) && InCutscene;
+    // Whether this seat should hide the pointer it is not holding: a cutscene or a spectator has the
+    // pane and no board stands over it. Inert is not asked. Under a film the out-of-flight is what
+    // took the capture away, and a watcher's pane is its spectator's, inert aircraft or not.
+    private bool WantsPointerHidden(bool halted) => OwnsDesktopMouse(halted) && (InCutscene || Spectating);
 
     // Whether this seat should be holding the mouse. One physical mouse, so only the seat the
-    // keyboard flies asks for it. A watcher's pane belongs to its SpectatorCamera, which reads the
-    // right button itself. A halt belongs to whichever board went up.
-    private bool WantsMouseCapture(bool halted) => OwnsDesktopMouse(halted) && !Inert;
+    // keyboard flies asks for it. A watcher's look is its SpectatorCamera's, which reads the right
+    // button under the hide. A halt belongs to whichever board went up.
+    private bool WantsMouseCapture(bool halted) => OwnsDesktopMouse(halted) && !Inert && !Spectating;
 
     // Whether this seat is the one the desktop mouse answers to on this frame, under either the
-    // capture or the hide. ⚠ Add a guard here, not to one caller, or the two would disagree.
+    // capture or the hide. ⚠ Add a guard here, not to one caller, or the two would disagree. Inert
+    // and Spectating are the exceptions, on the capture alone, since those panes keep the hide.
     private bool OwnsDesktopMouse(bool halted) =>
         Mouse.Allowed && IsHumanPiloted && UseKeyboard && IsInsideTree()
-        && !Spectating && !halted && !Pause.Silenced;
+        && !halted && !Pause.Silenced;
 
     // Both levers on one value, for the writers that place an aircraft rather than fly it. The
     // original's spawn and launch writers set +0x124 and +0x128 together. A stale command left

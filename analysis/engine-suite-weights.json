@@ -237,6 +237,7 @@
     "flight-mouse-cutscene": 0.08,
     "flight-mouse-scheme": 0.011,
     "flight-mouse-scheme-live": 0.076,
+    "flight-mouse-spectate": 0.02,
     "flight-roster-transaction": 0.8,
     "flight-telemetry-gate": 0.506,
     "flyout-rack-pose": 0.083,

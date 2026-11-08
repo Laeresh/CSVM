@@ -82,7 +82,8 @@ pilot with no run left (`RaceSpectate.cs`). `Begin` pins the aircraft (`FlightCo
 releases the pane camera (`CameraOwned`) and creates a `SpectatorCamera` at the crash view's last pose;
 a pilot still flying also leaves the cockpit view for the spectator's HUD and is held (`FlightControlHold.All`).
 It follows the first other rig still `InPlay`, or starts free, with the pilot's own device filter; a
-false result means the pane already has a spectator. `ReleaseControls` drops the hold while the
+false result means the pane already has a spectator. The pilot's seat keeps the pointer hidden while
+it spectates, and its spectator's look writes no mouse mode (`SeatHidesPointer`). `ReleaseControls` drops the hold while the
 spectator stays, and `HandBack` undoes all of it on every pane and frees the tracked spectators.
 
 ## src/Session/Roster/RaceSpectate.cs
