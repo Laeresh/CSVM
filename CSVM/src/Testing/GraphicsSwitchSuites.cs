@@ -885,6 +885,8 @@ internal static class GraphicsSwitchSuites
                 var material = (ShaderMaterial)drawn[0].MaterialOverride;
                 string code = material.Shader.Code;
                 string card = ((ShaderMaterial)withModel[0].Rich!.Material!).Shader.Code;
+                ctx.Check(material.RenderPriority == Mech3.SceneBuilder.CutoutRenderPriority,
+                    $"a model draws at the cutout priority, ahead of the blends, so a truss in front of it covers it ({material.RenderPriority})");
                 ctx.Check(code.Contains("v_card = v_far * " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
                         && code.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_card)", StringComparison.Ordinal)
                         && card.Contains("v_alpha *= " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal),
