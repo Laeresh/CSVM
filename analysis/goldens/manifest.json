@@ -148,7 +148,7 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "a655ca197bf03031f982068e5979aefb",
+      "hash": "d524075a8aad445adf2820b0934bec83",
       "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean with surf and swash to the painted cliff foot and spray puffs there, blurred SSR, Rich swaying conifers handing over to canopy clumps past 1 km, SSAO, settled TAA; frame-sensitive 48.93 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -176,7 +176,7 @@
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "2118f03657a1c9b0e86653fdad65773f",
+      "hash": "624cac9939a3dcc84a07cff26f8a2b7d",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -190,7 +190,7 @@
     {
       "name": "c1-cockpit-xr-sim-enhanced",
       "frame": 120,
-      "hash": "94427d27115d3a02e20a909ea112160e",
+      "hash": "2d7e957ae51d82a462a14956628cf321",
       "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
     },
