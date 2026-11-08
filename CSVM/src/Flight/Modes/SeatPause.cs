@@ -93,10 +93,10 @@ public sealed class SeatPause
 
     /// <summary>One frame of the key, P, Esc or pad Start, one toggle per press. Esc opens the pause
     /// board rather than leaving the flight. <paramref name="allowPause"/> is the seat's own gate,
-    /// false on an AI or a bare suite rig. A <paramref name="remoteOwned"/> seat never stands under
-    /// the sheet, since its owner's machine holds it instead.</summary>
+    /// false on an AI or a bare suite rig. A seat no person flies here (<paramref name="unmanned"/>)
+    /// never stands under the sheet. Its owner's machine holds a remote seat, and a bot flies on.</summary>
     public PauseFrame Poll(bool allowPause, bool pauseHeld, PauseState? shared, int playerIndex,
-        GameClock? clock, bool remoteOwned)
+        GameClock? clock, bool unmanned)
     {
         bool pressed = allowPause && !Silenced && pauseHeld;
         if (pressed && !_pausePrev)
@@ -111,7 +111,7 @@ public sealed class SeatPause
         bool halted = shared?.ClockHeld ?? boardUp;
         if (clock != null)
             clock.Halted = halted;
-        SheetOverFlight = boardUp && !halted && !remoteOwned;
+        SheetOverFlight = boardUp && !halted && !unmanned;
         bool haltChanged = halted != _haltPrev;
         _haltPrev = halted;
         // Clearing is the pause board's own re-entry point: the B or Enter that dismissed the

@@ -1157,9 +1157,9 @@ One flight seat's pause key, polled once per rendered frame: the press edge that
 `PauseState` (or the bare clock without one), the halt mirrored into `GameClock.Halted`, and the
 two screens that silence the key, photo mode and the pause's options leaf, whose `End*` calls seed
 the edge from the hands so a held Escape does not resume. `SheetOverFlight` is the network pause's
-sheet over a running flight, which holds the whole seat and mutes its look controls. `Poll` returns
-a `PauseFrame` and the host performs its two edges, the audio's hold and the re-entry latch.
-`FlightController` owns one as `Pause`. Read `PauseState.cs` next.
+sheet over a running flight, holding a seat a person flies here and muting its look controls; a
+remote seat or a bot flies on. `Poll` returns a `PauseFrame` and the host performs its two edges,
+the audio's hold and the re-entry latch. `FlightController` owns one as `Pause`. Read `PauseState.cs` next.
 
 ## src/Flight/Audio/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the

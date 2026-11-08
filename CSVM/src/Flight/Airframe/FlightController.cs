@@ -3840,8 +3840,9 @@ public partial class FlightController : Node3D
     // One frame of the pause key, and what its edges ask of this seat. Returns the clock's halt.
     private bool PollPauseAndHalt(GameClock? clock)
     {
+        // ⚠ A bot seat polls too. Held by the sheet, its pilot would go unread and the race stall.
         var frame = Pause.Poll(AllowPause, _controls.Seat.Held(InputAction.Pause), PauseState, PlayerIndex,
-            clock, RemoteOwned);
+            clock, unmanned: RemoteOwned || !IsHumanPiloted);
         // The engine/whine/rattle loops hold their sample position through the halt; the
         // one-shots already in flight are left to play out.
         if (frame.HaltChanged)
