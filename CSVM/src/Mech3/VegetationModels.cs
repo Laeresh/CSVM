@@ -112,7 +112,8 @@ public static class VegetationModels
     {
         if (!Shaders.TryGetValue((lit, fogged, canopy), out var shader))
             Shaders[(lit, fogged, canopy)] = shader = new Shader { Code = ShaderCode(lit, fogged, canopy) };
-        var material = new ShaderMaterial { Shader = shader };
+        // A coverage cutout sorting with the blends paints over a truss in front of it (SceneBuilder.CutoutRenderPriority).
+        var material = new ShaderMaterial { Shader = shader, RenderPriority = SceneBuilder.CutoutRenderPriority };
         material.SetShaderParameter("albedo_tex", model.Albedo);
         material.SetShaderParameter("grade", model.Grade);
         material.SetShaderParameter("half_width", Math.Max(cardWidth / 2f, 0.1f));
