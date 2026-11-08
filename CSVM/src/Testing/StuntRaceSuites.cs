@@ -50,10 +50,12 @@ internal static class StuntRaceSuites
         + "open on READY then 3, 2, 1 in lockstep and the window clock starts at that GO with both "
         + "run clocks; P1 completes a run, holds respawn into a new run behind its own 3, 2, 1 "
         + "while P2 flies on, keeps its first time as its best until a faster run replaces it with "
-        + "that run's splits; both restart late and are in a run at time up; P1's hold, its tap in "
+        + "that run's splits; P1's late hold puts it in a run at time up, and P2, holding 1.5 s before "
+        + "time up, is on its approach behind its count, counted as in a run, its run starting at its GO "
+        + "after time up and counting; P1's hold, its tap in "
         + "flight and its crash's return in the final run are refused, the crash stopping P1's run with "
         + "its zone counted; P1 finished before time up keeps its pane, while after its final-run crash "
-        + "and the crash camera's time P1's pane spectates P2, the only racer its target key offers, and "
+        + "and the crash camera's time P1's pane spectates P2 on its approach, the only racer its target key offers, and "
         + "P2's pane flies on, P1's run HUD back over the wreck naming P2; P2 completes its run as the final run, faster than P1's best; the race ends on "
         + "P2's finish and its board ranks P2 then P1 by best run, with each pilot's best-run splits; "
         + "a new window hands P1's pane back")]
@@ -242,26 +244,32 @@ internal static class StuntRaceSuites
             ctx.Check(secondRun < firstRun && r1.BestTime == secondRun && r1.Splits.SequenceEqual(p1Splits),
                 $"P1's faster second run replaces its best, {StuntMission.FormatTime(firstRun)} to {StuntMission.FormatTime(secondRun)}, splits and all");
 
-            // Both restart late enough that their runs are still in progress at time up.
+            // P1 holds late enough that its run is in progress at time up. P2 holds a second and a
+            // half before time up, so its count runs past it.
             while (race.TimeLeft > 3.6f && race.Phase == StuntRacePhase.Open)
             {
                 Frame();
             }
-            Rerun(p1, p2);
-            while (p1.StartCount.Running || p2.StartCount.Running)
+            Rerun(p1);
+            while (race.TimeLeft > 1.5f && race.Phase == StuntRacePhase.Open)
+            {
+                Frame();
+            }
+            int p2Started = r2.RunsStarted;
+            Rerun(p2);
+            while (p1.StartCount.Running)
             {
                 Frame();
             }
             Frame();
-            Frames(12);
             ClearZone(run1, run1.Zones[0]);
-            ClearZone(run2, run2.Zones[0]);
             while (race.Phase == StuntRacePhase.Open)
             {
                 Frame();
             }
-            ctx.Check(race.Phase == StuntRacePhase.FinalRun && r1.InRun && r2.InRun,
-                $"at time up both runs are in progress and the race runs on as its final run: {race.Phase}, in a run={r1.InRun}/{r2.InRun}");
+            ctx.Check(race.Phase == StuntRacePhase.FinalRun && r1.InRun && r2.InRun && r2.OnApproach && p2.StartCount.Running
+                    && r2.RunsStarted == p2Started && run1.CompletedCount == 1,
+                $"at time up P1's run is in progress and P2, its hold taken before time up, is in a run on its approach behind its count, the race running on as its final run: {race.Phase}, in a run={r1.InRun}/{r2.InRun}, P2 on its approach={r2.OnApproach}, count running={p2.StartCount.Running}, runs started {r2.RunsStarted - p2Started}");
 
             // P1 cannot start another run in the final run.
             int respawns = p1.RespawnCount;
@@ -299,8 +307,17 @@ internal static class StuntRaceSuites
             ctx.Check(offered is { Count: 1 } && ReferenceEquals(offered[0], p2) && ReferenceEquals(watcher!.Follow, p2),
                 $"P1's target key cycles over the racers still in a run, P2 alone, and locks back onto it once released: {offered?.Count} offered, following P2={ReferenceEquals(watcher?.Follow, p2)}");
 
+            // P2's run starts at its GO, after time up, and counts.
+            while (p2.StartCount.Running)
+            {
+                Frame();
+            }
+            Frame();
+            ctx.Check(r2.InRun && !r2.OnApproach && r2.RunsStarted == p2Started + 1 && run2.Elapsed == Dt && race.Phase == StuntRacePhase.FinalRun,
+                $"P2's run starts at its own GO in the final run and the race counts it: runs started {r2.RunsStarted - p2Started}, on its approach={r2.OnApproach}, clock {run2.Elapsed:0.0000} s, {race.Phase}");
+
             // P2 completes its final run faster than P1's best; the race ends on it.
-            for (int k = 1; k < run2.TotalCount; k++)
+            for (int k = 0; k < run2.TotalCount; k++)
             {
                 Frames(2);
                 ClearZone(run2, run2.Zones[k]);

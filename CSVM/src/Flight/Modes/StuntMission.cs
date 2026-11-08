@@ -697,11 +697,12 @@ public sealed class StuntMission
     }
 
     /// <summary>The pilot's aeroplane is lost where no respawn is offered, a race's final run: the
-    /// run started flies no further. Its zones and clock stand as they were. Once per run; a run
-    /// not started or already complete has nothing to stop.</summary>
+    /// run flies no further. Its zones and clock stand as they were. Once per run; a complete run
+    /// has nothing to stop. ⚠ Do not skip a run whose clock has not started: a race counts a held
+    /// approach as in progress and waits on it.</summary>
     public void Stop()
     {
-        if (Stopped || AllComplete || !_clockStarted)
+        if (Stopped || AllComplete)
             return;
         Stopped = true;
         RunStopped?.Invoke();

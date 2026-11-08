@@ -909,7 +909,7 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4), course zone at 6 (`0xFF` for none), window at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
+| `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4, approach 5, which a host of an earlier build of the same minor refuses, "Mixed patch builds" below), course zone at 6 (`0xFF` for none), window at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
 | `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), window at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
 | `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), window at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then exactly as many splits of 4 bytes as the count says, the ranking run's, -1 for a zone it never cleared (24 bytes plus 4 per split, 1044 at the 255 most) |
 | `0x6A` | Race call | reliable, host to each guest (rerun, lobby) and guest to host (leave) | call at 4 (rerun 1, lobby 2, leave 3), window at 5, two reserved bytes (8 bytes) |
@@ -917,15 +917,28 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
 the step after its count's GO, each zone's first clearing with its run time, the finish, and a
-rerun that throws the run away. A crash in the final run is reported as an abandon too, and the
-host stops that run with the zones it reached. The owner numbers its runs from 1 within a window,
-and the window number is 0 for the first, one more for each rerun. The host takes a report only from the machine
-flying its seat and only under its own window. A start must carry a run number above the newest it
-heard from that seat, and any other report must name that newest run, so a repeated start or a
+held live respawn, sent as an abandon of the run in progress followed by the fresh run's approach.
+A crash in the final run is reported as an abandon, and the host stops that run, or that approach,
+with the zones it reached. The owner numbers its runs from 1 within a window, a start and an
+approach each taking a new number, and the window number is 0 for the first, one more for each
+rerun of the race. The host takes a report only from the machine
+flying its seat and only under its own window. A start or an approach must carry a run number above the newest it
+heard from that seat, and any other report must name that newest run, so a repeated one or a
 report of a run already superseded counts nothing. A zone or finish with no finite run time is dropped. The race
-then applies its own rules to what passes: a start counts only in the open window, by when it
-reaches the host, a finish after time up counts while the race runs, and nothing counts after the
-end. The host's own seats feed its race directly.
+then applies its own rules to what passes, by when it reaches the host. An approach in the open
+window holds the seat's place as a run in progress, whose start counts after time up; outside it
+the approach is an abandon. Any other start counts only in the open window, a finish after time
+up counts while the race runs, and nothing counts after the end. The host's own seats feed its
+race directly.
+
+**Mixed patch builds.** Builds that differ only in the patch number play together, so a patch adds
+nothing an earlier patch's host must understand, and the build word (`0x56`) carries MAJOR.MINOR
+alone, so a guest cannot tell which patch its host runs. The approach is therefore sent after the
+hold's abandon, never in its place. A host of an earlier patch, which knows no approach, takes the
+abandon and refuses the approach's newer run number as a run already superseded. It then counts
+the fresh run's start only in its open window, and refuses the abandon a crash on that approach
+names, a run it never took, so the pair plays the hold as a plain abandon. A host that knows the
+approach takes both, and a guest of an earlier patch sends only the abandon, which every host takes.
 
 **The leaderboard and the clock.** The host sends a racer's line whenever its record of that racer
 changes, then its clock once a second (`MatchStateCadence`'s tick) and at once on every change of

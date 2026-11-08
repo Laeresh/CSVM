@@ -261,7 +261,7 @@ public class StuntRaceTests
         Complete(run, run.Zones[1]);
         Assert.Equal(1, a.CurrentZones);
         run.Reset();
-        Assert.False(a.InRun);
+        Assert.Equal((true, true, 1), (a.InRun, a.OnApproach, a.RunsStarted));
 
         run.Tick(Dt);
         SetElapsed(run, 2f);
@@ -317,6 +317,82 @@ public class StuntRaceTests
         // A rerun's reset makes the run live again.
         runA.Reset();
         Assert.False(runA.Stopped);
+    }
+
+    [Fact]
+    public void AHoldBeforeTimeUpGrantsARunThatStartsAndFinishesAfterIt()
+    {
+        var race = new StuntRace(1f, 2);
+        var a = race.Add(0, "Bloodhawk");
+        var b = race.Add(1, "Kestrel");
+        race.BeginOpening(0f);
+        var run = FakeMission(2);
+        race.Follow(0, run);
+        run.Tick(Dt);
+        run.Reset(); // held before time up, the clock not yet started again
+
+        Advance(race, 1f);
+        Assert.Equal(StuntRacePhase.FinalRun, race.Phase);
+        Assert.Equal((true, true, 1), (a.InRun, a.OnApproach, a.RunsStarted));
+
+        // Nothing counts on the approach, and a pilot who never held starts nothing.
+        race.ZoneCleared(0, 0, 1f);
+        race.RunFinished(0, 1f);
+        Assert.Equal((0, 0), (a.CurrentZones, a.RunsFinished));
+        Assert.False(race.RunStarted(1));
+        Assert.Equal((false, 0), (b.InRun, b.RunsStarted));
+
+        run.Tick(Dt);
+        Assert.Equal((true, false, 2), (a.InRun, a.OnApproach, a.RunsStarted));
+        SetElapsed(run, 2f);
+        Complete(run, run.Zones[0]);
+        SetElapsed(run, 3f);
+        Complete(run, run.Zones[1]);
+        Assert.Equal((3f, 1, false), (a.BestTime, a.RunsFinished, a.InRun));
+        Assert.True(race.Ended);
+    }
+
+    [Fact]
+    public void ACrashOnTheApproachEndsThePilotsPartAtOnce()
+    {
+        var race = new StuntRace(1f, 2);
+        var a = race.Add(0, "Bloodhawk");
+        race.BeginOpening(0f);
+        var run = FakeMission(2);
+        race.Follow(0, run);
+        run.Tick(Dt);
+        run.Reset();
+        Advance(race, 1f);
+        int completed = 0;
+        race.RaceCompleted += () => completed++;
+
+        // ABLE-TO-FAIL CONTROL: the race waits on the approach.
+        Assert.Equal((StuntRacePhase.FinalRun, true), (race.Phase, a.InRun));
+
+        run.Stop();
+        Assert.True(run.Stopped);
+        Assert.Equal((false, false, 1), (a.InRun, a.OnApproach, a.RunsStarted));
+        Assert.True(race.Ended);
+        Assert.Equal(1, completed);
+        Assert.True(race.WindowElapsed < 1f + StuntRace.FinalRunCap);
+    }
+
+    [Fact]
+    public void AHoldOutsideTheOpenWindowIsAnAbandon()
+    {
+        var race = new StuntRace(1f, 2);
+        var a = race.Add(0, "Bloodhawk");
+        race.BeginOpening(1f);
+        Assert.False(race.RunReset(0)); // a new window's rerun, during its opening
+        Assert.False(a.InRun);
+
+        Advance(race, 1f);
+        Assert.True(race.RunStarted(0));
+        Advance(race, 1f);
+        Assert.Equal((StuntRacePhase.FinalRun, true), (race.Phase, a.InRun));
+        Assert.False(race.RunReset(0));
+        Assert.Equal((false, false), (a.InRun, a.OnApproach));
+        Assert.True(race.Ended);
     }
 
     [Fact]
