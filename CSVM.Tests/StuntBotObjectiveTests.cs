@@ -27,6 +27,10 @@ public class StuntBotObjectiveTests
     // Flying north (-Z) at 70 m/s.
     private static readonly Vector3 North = new(0, 0, -70);
 
+    // Every stock plane's rail pace, flown once for the whole class.
+    private static readonly Lazy<DangerZoneRail.Pace[]> StockPaces =
+        new(() => StockAirframes.Nodes.Select(p => StuntBotObjective.RailPaceFor(PlaneStats.Load(ZrdrPath, p))).ToArray());
+
     /// <summary>The shipped stunt courses, each chapter's IA1, and their zone counts
     /// (docs/formats/missions.md).</summary>
     public static TheoryData<string, int> StuntCourses => new()
@@ -238,13 +242,53 @@ public class StuntBotObjectiveTests
     }
 
     [Fact]
-    public void ATierSetsTheLeverAndTheOdds()
+    public void ATierSetsTheOdds()
     {
         var ace = new StuntBotObjective(NetBotSkill.Ace, new Random(1));
         var veteran = new StuntBotObjective(NetBotSkill.Veteran, new Random(1));
         var novice = new StuntBotObjective(NetBotSkill.Novice, new Random(1));
-        Assert.True(ace.CruiseThrottle > veteran.CruiseThrottle && veteran.CruiseThrottle > novice.CruiseThrottle);
         Assert.True(ace.FluffChance < veteran.FluffChance && veteran.FluffChance < novice.FluffChance);
+    }
+
+    /// <summary>Flown on the shipped stats: a bot's rail cruises at its plane's level top speed at full
+    /// lever, the decoded equilibrium, and walks there gently. A Bloodhawk rails near 300 mph; a Balmoral
+    /// below the decoded 155 mph cruise, since its top speed lies there.</summary>
+    [ExtractedDataFact]
+    public void ABotsRailPaceIsItsPlanesLevelTopSpeed()
+    {
+        const float mph = PhysicsConstants.MphToMs;
+        var bloodhawk = StuntBotObjective.RailPaceFor(PlaneStats.Load(ZrdrPath, "player_bhawk"));
+        var balmoral = StuntBotObjective.RailPaceFor(PlaneStats.Load(ZrdrPath, "player_balmoral"));
+        Assert.InRange(bloodhawk.CruiseMps / mph, 299f, 302f);
+        Assert.InRange(balmoral.CruiseMps / mph, 124.5f, 127.5f);
+        Assert.Equal(StuntBotObjective.RailRampMps2, bloodhawk.RateMps2);
+        Assert.True(StuntBotObjective.RailRampMps2 < DangerZoneRail.SpeedRateMps2 / 2f);
+        Assert.True(StuntBotObjective.RailBrakeMps2 < DangerZoneRail.SpeedRateMps2 / 2f);
+
+        // Each plane's own turn, finite and between 1 and 15 g.
+        Assert.All(new[] { bloodhawk, balmoral }, p => Assert.InRange(p.TurnMps2, 9.8f, 147f));
+    }
+
+    /// <summary>A bot whose approach point lies inside the turn it flies at its speed closes its lever,
+    /// where full lever would circle the point. ABLE-TO-FAIL CONTROL: a point outside it keeps the lever full.</summary>
+    [Fact]
+    public void ABotClosesItsLeverWhileItsAimLiesInsideItsTurn()
+    {
+        float LeverFor(float east)
+        {
+            var model = new FlightModel(new PlaneStats());
+            model.Reset(new Vector3(0, 400, 0), Basis.Identity, 120f, 1f);
+            var pilot = Pilot(0f, 400f, StuntBotObjective.CruiseThrottle);
+            pilot.RailPace = new DangerZoneRail.Pace(130f, 4f, 10f, 40f);
+            var start = new Vector3(east, 400, 0);
+            var ribbon = DangerZoneRibbon.FromPolyline("dzpath1", 1, new[] { start, start + new Vector3(0, 0, -1000) });
+            Assert.True(pilot.FlyDangerZone(ribbon, farEnd: false, model.Position, "test"));
+            return pilot.Next(model, GameClock.FixedDt).Throttle;
+        }
+
+        // At 120 m/s on 40 m/s² of turn the circle's radius is 360 m.
+        Assert.Equal(0f, LeverFor(200f));
+        Assert.Equal(StuntBotObjective.CruiseThrottle, LeverFor(2000f));
     }
 
     [Fact]
@@ -410,24 +454,20 @@ public class StuntBotObjectiveTests
     }
 
     /// <summary>Flown on the shipped stats: a go-round's U-turn width is twice the widest turn radius under
-    /// the 90 degree order. That covers every stock plane at every tier's lever. The stick is the
-    /// weakest a rating gives. The width is rounded up to 5 m, no more.</summary>
+    /// the 90 degree order. That covers every stock plane at the full lever every bot flies. The stick is
+    /// the weakest a rating gives. The width is rounded up to 5 m, no more.</summary>
     [ExtractedDataFact]
     public void TheUTurnWidthIsTheWidestPlanesUTurn()
     {
-        var radii = new List<(string Plane, NetBotSkill Tier, float Radius)>();
+        var radii = new List<(string Plane, float Radius)>();
         foreach (string plane in StockAirframes.Nodes)
         {
-            var stats = PlaneStats.Load(ZrdrPath, plane);
-            foreach (var tier in new[] { NetBotSkill.Novice, NetBotSkill.Veteran, NetBotSkill.Ace })
-            {
-                radii.Add((plane, tier, TurnRadius(stats, new StuntBotObjective(tier, new Random(1)).CruiseThrottle)));
-            }
+            radii.Add((plane, TurnRadius(PlaneStats.Load(ZrdrPath, plane), StuntBotObjective.CruiseThrottle)));
         }
 
         var widest = radii.MaxBy(r => r.Radius);
         Assert.True(2f * widest.Radius <= StuntBotObjective.UTurnWidthM && StuntBotObjective.UTurnWidthM - (2f * widest.Radius) < 5f,
-            string.Create(CultureInfo.InvariantCulture, $"widest U-turn {2f * widest.Radius:0.0} m ({widest.Plane} {widest.Tier}) against {StuntBotObjective.UTurnWidthM} m"));
+            string.Create(CultureInfo.InvariantCulture, $"widest U-turn {2f * widest.Radius:0.0} m ({widest.Plane}) against {StuntBotObjective.UTurnWidthM} m"));
     }
 
     /// <summary>Flown on the shipped stats: an ace bot of every stock plane goes round from beside or past
@@ -493,6 +533,24 @@ public class StuntBotObjectiveTests
         }
 
         Assert.Equal(LeadIns[chapter], string.Join(", ", led));
+    }
+
+    /// <summary>A session's run table is checked at its slowest and fastest bot's rail paces. At the
+    /// slowest and fastest stock plane's, each zone of every shipped course still has an end the rail
+    /// carries through.</summary>
+    [ExtractedDataTheory]
+    [MemberData(nameof(StuntCourses))]
+    public void EveryShippedZoneHasAnEntryTheRailCarriesThroughAtEveryStockPace(string chapter, int zones)
+    {
+        var course = Load(chapter);
+        Assert.Equal(zones, course.TotalCount);
+        var paces = StockPaces.Value;
+        var ends = new[] { paces.MinBy(p => p.CruiseMps), paces.MaxBy(p => p.CruiseMps) };
+        foreach (var zone in course.Zones)
+        {
+            Assert.True(new[] { false, true }.Any(far => StuntBotObjective.LeadInFor(zone, far, blocked: null, ends) != null),
+                $"{chapter} {zone.PathName} has no end the rail carries through at {ends[0].CruiseMps:0.0} and {ends[1].CruiseMps:0.0} m/s");
+        }
     }
 
     /// <summary>Every zone of a shipped course builds the route ribbon a bot runs, so no zone lacks
@@ -568,8 +626,8 @@ public class StuntBotObjectiveTests
         };
         var zones = Course();
         var model = new FlightModel(stats);
-        model.Reset(at, Basis.LookingAt(new Basis(Vector3.Up, Mathf.DegToRad(heading)) * Vector3.Forward, Vector3.Up), 80f, bot.CruiseThrottle);
-        var pilot = Pilot(heading, at.Y, bot.CruiseThrottle);
+        model.Reset(at, Basis.LookingAt(new Basis(Vector3.Up, Mathf.DegToRad(heading)) * Vector3.Forward, Vector3.Up), 80f, StuntBotObjective.CruiseThrottle);
+        var pilot = Pilot(heading, at.Y, StuntBotObjective.CruiseThrottle);
         bool turnedIn = false;
         int outAgain = 0;
         string? why = null;

@@ -382,6 +382,26 @@ public sealed class FlightModel
         return a <= 0f ? scale * (1f + AttitudeThrustUp * a) : scale;
     }
 
+    /// <summary>The speed <paramref name="stats"/> settles at flown level at full lever, m/s, on the
+    /// player or the AI force path's near field. It is flown from <c>fd_speed</c> until it holds within
+    /// 5 mm/s over a second. The Balmoral's lies well under its <c>fd_speed</c>.</summary>
+    public static float LevelTopSpeed(PlaneStats stats, bool aiForcePath)
+    {
+        var model = new FlightModel(stats, aiForcePath);
+        model.Reset(Vector3.Zero, Basis.Identity, stats.FdSpeed, 1f);
+        int perSecond = Mathf.RoundToInt(1f / GameClock.FixedDt);
+        for (int second = 0; second < 600; second++)
+        {
+            float was = model.Speed;
+            for (int i = 0; i < perSecond; i++)
+                model.Step(new FlightInput { Throttle = 1f }, GameClock.FixedDt);
+            if (Mathf.Abs(model.Speed - was) < 0.005f)
+                break;
+        }
+
+        return model.Speed;
+    }
+
     /// <summary>Thrust acceleration along the nose, m/s², at an airspeed and lever position, the
     /// original's thrust-available curve times the lever, LINEARLY. ⚠ The attitude scale is NOT
     /// included: <see cref="AttitudeThrustScale"/> is applied by the caller, so this stays the bare

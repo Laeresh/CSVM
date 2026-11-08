@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -89,42 +90,62 @@ internal sealed class StuntRaceBots
 
     /// <summary>One objective per bot seat flown here with a run of the course and its tier read off
     /// <paramref name="roster"/>. Every fluff is drawn on one seeded stream, and each bot's own approach
-    /// on its seat's. Null with none. Every zone
-    /// end's run is decided here, once for every bot, against the built world.</summary>
+    /// on its seat's. Each bot's rail flies its plane's top speed. Null with none. Every zone end's run
+    /// is decided here, once for every bot, against the built world.</summary>
     public static StuntRaceBots? For(StuntRace race, IReadOnlyList<PlayerRig> seats, IReadOnlyList<NetSeat> roster)
     {
-        var rng = new Random(Rng.IntSeedFor(Rng.StuntBots));
-        var bots = new List<(int, StuntBotObjective)>();
-        StuntBotObjective.RunTable? runs = null;
-        FlightController? lead = null;
-        bool sawWorld = false;
+        // A session's seats share one stats object per airframe, so each plane's top speed is flown once.
+        long paced = StartupProfile.Mark();
+        var byStats = new Dictionary<PlaneStats, DangerZoneRail.Pace>(ReferenceEqualityComparer.Instance);
+        var seated = new List<(int Seat, FlightController Bot, AiPilot Pilot, StuntMission Run, DangerZoneRail.Pace Pace)>();
         for (int seat = 0; seat < seats.Count && seat < roster.Count; seat++)
         {
             if (seats[seat].Controller is { IsBotSeat: true, Pilot: { } pilot, Stunt: { } run } bot)
             {
-                // Every run's zones share the course's routes, so one bot's run keys the table for all.
-                // A course entry's line is its own run and takes no row.
-                if (runs == null)
+                var pace = DangerZoneRail.Pace.Decoded;
+                if (bot.Stats is { } stats && !byStats.TryGetValue(stats, out pace))
                 {
-                    lead = bot;
-                    Func<Vector3, Vector3, bool> blocked = bot.WorldBlocksLine;
-                    long mark = StartupProfile.Mark();
-                    runs = StuntBotObjective.RunsFrom(run.Zones, blocked);
-                    StartupProfile.Record("lead_ins", mark);
-                    sawWorld = SeesWorld(run.Zones, blocked);
+                    byStats[stats] = pace = StuntBotObjective.RailPaceFor(stats);
                 }
 
-                var objective = new StuntBotObjective(roster[seat].Skill, rng)
-                {
-                    Runs = runs,
-                    Approach = StuntBotObjective.Spread(new Random(Rng.IntSeedFor($"{Rng.StuntBotApproaches}{seat}"))),
-                };
-                pilot.CruiseThrottle = objective.CruiseThrottle;
-                bots.Add((seat, objective));
+                seated.Add((seat, bot, pilot, run, pace));
+                Log.Info("flight", $"stunt race: bot seat {seat} rails at {pace.CruiseMps / PhysicsConstants.MphToMs:0} mph, turning at {pace.TurnMps2 / 9.81f:0.0} g");
             }
         }
 
-        return lead == null ? null : new StuntRaceBots(race, seats, bots, sawWorld, lead);
+        StartupProfile.Record("rail_paces", paced);
+        if (seated.Count == 0)
+        {
+            return null;
+        }
+
+        // Every run's zones share the course's routes, so one bot's run keys the table for all. A course
+        // entry's line is its own run and takes no row. The rail check flies the slowest and the fastest
+        // bot's pace, the two ends of the field's.
+        var lead = seated[0].Bot;
+        var zones = seated[0].Run.Zones;
+        Func<Vector3, Vector3, bool> blocked = lead.WorldBlocksLine;
+        long mark = StartupProfile.Mark();
+        var runs = StuntBotObjective.RunsFrom(zones, blocked,
+            new[] { seated.MinBy(s => s.Pace.CruiseMps).Pace, seated.MaxBy(s => s.Pace.CruiseMps).Pace }.Distinct().ToArray());
+        StartupProfile.Record("lead_ins", mark);
+        bool sawWorld = SeesWorld(zones, blocked);
+
+        var rng = new Random(Rng.IntSeedFor(Rng.StuntBots));
+        var bots = new List<(int, StuntBotObjective)>();
+        foreach (var (seat, _, pilot, _, pace) in seated)
+        {
+            var objective = new StuntBotObjective(roster[seat].Skill, rng)
+            {
+                Runs = runs,
+                Approach = StuntBotObjective.Spread(new Random(Rng.IntSeedFor($"{Rng.StuntBotApproaches}{seat}"))),
+            };
+            pilot.CruiseThrottle = StuntBotObjective.CruiseThrottle;
+            pilot.RailPace = pace;
+            bots.Add((seat, objective));
+        }
+
+        return new StuntRaceBots(race, seats, bots, sawWorld, lead);
     }
 
     /// <summary>One step of every bot, before the seats step. A bot behind its count, down, or in a

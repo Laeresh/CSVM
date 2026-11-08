@@ -390,16 +390,21 @@ public sealed class DangerZoneRail
     /// <summary>The closing rate ramps up over the first 1/0.6 s after the lock.</summary>
     public const float OffsetRampPerS = 0.6f;
 
+    // How finely CornerSpeed samples the run ahead, metres.
+    private const float CornerLookStepM = 10f;
+
     private Vector3 _point;
     private Vector3 _offset;
     private Vector3 _offsetVelocity;
     private float _sinceLock;
 
-    /// <summary>Locks the run at the aeroplane's present state: the offset from the rail point and
-    /// the velocity the rail motion does not account for are what the run then closes out.</summary>
-    public DangerZoneRail(DangerZoneRun run, Vector3 position, Basis attitude, Vector3 velocity, float speed)
+    /// <summary>Locks the run at the aeroplane's present state. The run then closes out its offset from
+    /// the rail point and the velocity the rail motion does not account for. Its speed walks toward
+    /// <paramref name="pace"/>'s cruise, the decoded one when null.</summary>
+    public DangerZoneRail(DangerZoneRun run, Vector3 position, Basis attitude, Vector3 velocity, float speed, Pace? pace = null)
     {
         Run = run;
+        Paced = pace ?? Pace.Decoded;
         _point = run.Point;
         _offset = position - _point;
         _offsetVelocity = velocity - (run.Direction * speed);
@@ -409,6 +414,10 @@ public sealed class DangerZoneRail
     }
 
     public DangerZoneRun Run { get; }
+
+    /// <summary>The cruise this rail's speed walks toward, before the bends ahead and the climb-angle
+    /// term, and how fast.</summary>
+    public Pace Paced { get; }
 
     public Vector3 Position { get; private set; }
 
@@ -461,8 +470,8 @@ public sealed class DangerZoneRail
             ? target
             : new Basis(Attitude.GetRotationQuaternion().Slerp(target.GetRotationQuaternion(), blend));
 
-        float cruise = CruiseSpeedMps - (ClimbSpeedPenaltyMps * direction.Y);
-        Speed = Mathf.MoveToward(Speed, cruise, SpeedRateMps2 * dt);
+        float cruise = Mathf.Min(Paced.CruiseMps, CornerSpeed()) - (ClimbSpeedPenaltyMps * direction.Y);
+        Speed = Mathf.MoveToward(Speed, cruise, (Speed > cruise ? Paced.BrakeMps2 : Paced.RateMps2) * dt);
 
         // The rail point trails the cursor through a short exponential, and the residual offset
         // coasts on its own velocity while both shrink at the ramped closing rate.
@@ -479,9 +488,63 @@ public sealed class DangerZoneRail
         return !Run.Done;
     }
 
+    /// <summary>The fastest speed the rail may hold at the cursor. From it, braking at
+    /// <see cref="Pace.BrakeMps2"/> reaches each bend ahead at its own speed, the one that turns it at
+    /// <see cref="Pace.TurnMps2"/>. It looks as far ahead as braking from the cruise to rest takes.</summary>
+    public float CornerSpeed()
+    {
+        if (float.IsPositiveInfinity(Paced.TurnMps2))
+            return float.MaxValue;
+
+        var ribbon = Run.Ribbon;
+        int segment = Run.Segment;
+        float t = Run.T;
+        float horizon = Paced.CruiseMps * Paced.CruiseMps / (2f * Paced.BrakeMps2);
+        float fastest = float.MaxValue;
+        for (float along = 0f; along <= horizon; along += CornerLookStepM)
+        {
+            // The curvature of the cubic, |r' x r''| / |r'|^3.
+            var d1 = ribbon.TangentAt(segment, t);
+            float length = d1.Length();
+            if (length > 1e-6f)
+            {
+                float bend = d1.Cross(ribbon.CurvatureAt(segment, t)).Length() / (length * length * length);
+                if (bend > 1e-6f)
+                    fastest = Mathf.Min(fastest, Mathf.Sqrt((Paced.TurnMps2 / bend) + (2f * Paced.BrakeMps2 * along)));
+            }
+
+            float step = CornerLookStepM / Mathf.Max(length, 1e-3f);
+            t += Run.Reversed ? -step : step;
+            while (!Run.Reversed && t > ribbon.Segments[segment].Length)
+            {
+                if (segment == ribbon.Segments.Count - 1)
+                    return fastest;
+                t -= ribbon.Segments[segment++].Length;
+            }
+
+            while (Run.Reversed && t < 0f)
+            {
+                if (segment == 0)
+                    return fastest;
+                t += ribbon.Segments[--segment].Length;
+            }
+        }
+
+        return fastest;
+    }
+
     private static Vector3 Shrink(Vector3 v, float by)
     {
         float length = v.Length();
         return length - by <= 0f ? Vector3.Zero : v * ((length - by) / length);
+    }
+
+    /// <summary>A rail's pace: the cruise its speed walks toward, m/s, and the rates it walks up and down
+    /// at, m/s². It takes a bend at no more than <c>TurnMps2</c> of turn (<see cref="CornerSpeed"/>).</summary>
+    public readonly record struct Pace(float CruiseMps, float RateMps2, float BrakeMps2, float TurnMps2)
+    {
+        /// <summary>The decoded rail's: a 155 mph cruise walked to at 50 mph per second either way, at
+        /// any bend.</summary>
+        public static Pace Decoded => new(CruiseSpeedMps, SpeedRateMps2, SpeedRateMps2, float.PositiveInfinity);
     }
 }
