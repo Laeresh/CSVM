@@ -29,7 +29,8 @@ internal static class DisplayScoresSuites
         + "before a hold; P1 holding Display Scores puts the race's standings in P1's pane alone, in "
         + "the original's HUD text, and hides P1's chat lines and its run status "
         + "and leaderboard lines while P2's stay; "
-        + "the release takes both back; a seat in no race shows nothing however long it holds")]
+        + "the release takes both back; a seat in no race shows nothing however long it holds; "
+        + "both race seats' targeting takes the next gate first")]
     internal static void StuntRaceDisplayScores(TestContext ctx)
     {
         ZrdrSet missionZrdr = ctx.MissionZrdr("C1", "IA1");
@@ -58,6 +59,8 @@ internal static class DisplayScoresSuites
             return;
         }
 
+        ctx.Check(p1.Targeting is { GateFirst: true } && p2.Targeting is { GateFirst: true },
+            $"a race seat's targeting takes the next gate first: {p1.Targeting?.GateFirst}/{p2.Targeting?.GateFirst}");
         race.BeginOpening(0f);
         HeldScores(ctx, seats, source, p1, p2, "race",
             lines => lines.Count == 3 && lines[0].StartsWith("  Player", StringComparison.Ordinal)
@@ -79,7 +82,7 @@ internal static class DisplayScoresSuites
         + "P2 holding Display Scores puts the match's scores in P2's pane alone, in the original's "
         + "name and score columns with the remake's kills and deaths after them, and hides P2's chat "
         + "lines and match line while "
-        + "P1's stay; the release takes both back")]
+        + "P1's stay; the release takes both back; neither seat's targeting takes a race's gate-first rule")]
     internal static void DogfightDisplayScores(TestContext ctx)
     {
         ctx.RequireMessages();
@@ -93,6 +96,9 @@ internal static class DisplayScoresSuites
             ctx.Check(false, $"both seats were built");
             return;
         }
+
+        ctx.Check(p1.Targeting is { GateFirst: false } && p2.Targeting is { GateFirst: false },
+            $"a seat in no race keeps the decoded cycle: GateFirst {p1.Targeting?.GateFirst}/{p2.Targeting?.GateFirst}");
 
         // The rule VersusDirector writes on every seat of a match.
         p1.Match = match;

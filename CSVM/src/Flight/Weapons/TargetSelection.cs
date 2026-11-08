@@ -39,6 +39,7 @@ public sealed class TargetSelection
 
     private readonly List<TargetRef> _ordered = new();  // the active cycle, in cycle order
     private readonly List<object> _attackers = new();   // the queue 0x24 walks backwards
+    private readonly HashSet<object> _gates = new();    // GateFirst: the objectives the last pass held
 
     // Sort's scratch, grown on demand: it runs per seat per rendered frame.
     private (int Sector, float DistSq, int Index)[] _sortKeys = System.Array.Empty<(int, float, int)>();
@@ -52,6 +53,8 @@ public sealed class TargetSelection
     private TargetClass? _resolvedClass;
     private bool _lostToDeath;
 
+    private bool _gateDue; // GateFirst: the next Resolve selects the first gate
+
     /// <summary>The pool this selector cycles over, rebuilt by <see cref="Rebuild"/>.</summary>
     public TargetPool Pool { get; } = new();
 
@@ -62,6 +65,14 @@ public sealed class TargetSelection
     /// a defence mission sends the pilot back to the objective. The mission-start acquire and the
     /// class keys keep the decoded order whichever way this stands.</summary>
     public bool NearestAfterKill { get; set; }
+
+    /// <summary>A remake-only rule for a race run, off everywhere else. Next Enemy pressed on anything
+    /// but the next gate (an objective on the Enemy cycle) selects the gate, ahead of the attacker
+    /// queue. Passing a gate selects the next one, whatever was selected and whatever
+    /// <see cref="NearestAfterKill"/> says.
+    /// ⚠ Never set it outside a race run: the decoded cycle and attacker queue are the original's
+    /// rules (docs/org/targeting.md), and every other mode keeps them.</summary>
+    public bool GateFirst { get; set; }
 
     /// <summary>Which cycle Next/Previous currently step, or <b>null for cleared</b>. Null is not
     /// "no target yet", it is `Target Nothing`, and it is why the clear STAYS cleared: with every
@@ -131,10 +142,11 @@ public sealed class TargetSelection
     }
 
     /// <summary>Re-sorts the active cycle against the plane's pose and re-finds the selection by
-    /// ENTITY (<c>FUN_004b6490(current, 0)</c>): the matching entry, or the list HEAD when it is
-    /// gone. That single rule is the whole lifecycle. A dead target, a target that left the class,
-    /// and a class change all drop to the head of the current cycle, not to the dead entry's
-    /// neighbour, because in every one of those cases the re-find simply fails.</summary>
+    /// ENTITY (<c>FUN_004b6490(current, 0)</c>). It takes the matching entry, or the list HEAD when
+    /// that is gone. That rule is the whole decoded lifecycle. A dead target, a target that left the
+    /// class and a class change all drop to the head, never to the dead entry's neighbour. In every
+    /// one of those cases the re-find simply fails. <see cref="GateFirst"/>'s gate passing is the
+    /// remake-only step ahead of it.</summary>
     public void Resolve(Vector3 position, Basis basis)
     {
         _ordered.Clear();
@@ -144,7 +156,15 @@ public sealed class TargetSelection
             Current = null;
             _resolvedClass = null;
             _lostToDeath = false;
+            _gates.Clear();
+            _gateDue = false;
             return;
+        }
+
+        if (GateFirst && GatePassed())
+        {
+            ActiveClass = cls = TargetClass.Enemy;
+            _gateDue = true;
         }
 
         var live = Pool.Of(cls);
@@ -155,7 +175,13 @@ public sealed class TargetSelection
 
         Sort(position, basis);
         bool lost = LostSelection(cls);
-        int idx = IndexOfSelected();
+        int idx = _gateDue ? FirstGate() : -1;
+        _gateDue = false;
+        if (idx < 0)
+        {
+            idx = IndexOfSelected();
+        }
+
         if (idx < 0 && _ordered.Count > 0)
         {
             // The re-resolve's head fallback: this is the auto-acquire AND the death switch. The
@@ -177,6 +203,14 @@ public sealed class TargetSelection
     /// shipped asset, so wiring <c>snd_select</c> to it would be an invention.</summary>
     public void NextEnemy()
     {
+        // A cleared selection holds an empty pool, so it cannot see the gate; the next Resolve can.
+        if (GateFirst && (ActiveClass == null || GateToTake()))
+        {
+            ActiveClass = TargetClass.Enemy;
+            _gateDue = true;
+            return;
+        }
+
         if (ActiveClass != TargetClass.Enemy)
         {
             ActiveClass = TargetClass.Enemy;
@@ -397,6 +431,68 @@ public sealed class TargetSelection
         }
 
         return best;
+    }
+
+    // GateFirst reads a passing off the pool: an objective the last pass held has left it. A run
+    // stops offering a cleared gate. True only while a next gate stands.
+    private bool GatePassed()
+    {
+        int kept = 0;
+        bool standing = false;
+        foreach (var t in Pool.Enemy)
+        {
+            if (t.Objective && t.Source is { } s)
+            {
+                standing = true;
+                kept += _gates.Contains(s) ? 1 : 0;
+            }
+        }
+
+        bool passed = kept < _gates.Count;
+        _gates.Clear();
+        foreach (var t in Pool.Enemy)
+        {
+            if (t.Objective && t.Source is { } s)
+            {
+                _gates.Add(s);
+            }
+        }
+
+        return passed && standing;
+    }
+
+    // Whether GateFirst's Next Enemy goes to the gate: one stands and the selection is not on it.
+    private bool GateToTake()
+    {
+        bool standing = false;
+        foreach (var t in Pool.Enemy)
+        {
+            if (t.Objective)
+            {
+                if (ReferenceEquals(t.Source, _selected))
+                {
+                    return false;
+                }
+
+                standing = true;
+            }
+        }
+
+        return standing;
+    }
+
+    // The first objective of the sorted cycle, or -1. Not the head: a hostile round sorts first too.
+    private int FirstGate()
+    {
+        for (int i = 0; i < _ordered.Count; i++)
+        {
+            if (_ordered[i].Objective)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private void StepIn(TargetClass cls, int dir)

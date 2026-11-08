@@ -941,6 +941,21 @@ the decoded head either way, since neither had a selection to lose. With the set
 behaviour is the decoded one unchanged. `TargetSelection.NearestAfterKill` is where it stands, and
 the `target-selection` suite pins both sides over one rig where the head and the nearest disagree.
 
+### A remake-only rule: the next gate first in a race
+
+In a stunt race the pilot wants the next gate back without stepping through every other racer, and
+a pad pilot has no Target Nearest Enemy key to jump to the head. `TargetSelection.GateFirst`, which
+`HumanFlightAdapter` sets on a race run's seats alone, changes two things. Next Enemy pressed on
+anything other than a gate (an objective on the Enemy cycle) selects the first gate in cycle order,
+ahead of the attacker queue; pressed on a gate it steps as decoded. A gate leaving the pool, which a
+run does when the gate is passed, selects the next gate whatever was selected and whatever
+`nearestAfterKill` says. It takes the first objective rather than the head, since a hostile round
+sorts first too. Next Enemy from a selection cleared with Target Nothing also takes the gate, while
+a gate passed with the selection cleared leaves it cleared. Every other mode keeps the decoded
+cycle and queue unchanged. The `stunt-race-gate-first` suite pins both sides, and the
+`stunt-race-display-scores` and `dogfight-display-scores` suites check that a race seat gets the
+rule and a seat in no race does not.
+
 ⚠ **The player and the AI share the field, not the rules.** `+0x948` is one field on the shared
 plane class; `FUN_0041fe10` writes it for an AI actor using rating biases and a standing-target
 hysteresis (`aiPilot.md`), and `FUN_004b5fb0` writes it for the local player using this page's

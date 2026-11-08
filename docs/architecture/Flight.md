@@ -89,9 +89,9 @@ each name read allocates a finalizable `StringName`. A human aircraft carrying t
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
 per pane, and it owns its `TargetPool`. The split between the action handlers, which only mutate the
 class and the selection identity, and `Resolve`, the per-frame pass that re-sorts and re-finds the
-selection by entity before falling back to the list head, is the original's, and that one fallback is
-the entire lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed re-find. `NearestAfterKill`, the remake setting off by default, is the one departure: it moves the lost-selection re-resolve alone onto the nearest entry by distance, leaving the acquire and every class change on the head. `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
-Godot node dependency; pinned by the `target-selection` and `target-flag` suites. Decode:
+selection by entity before falling back to the list head, is the original's, and that fallback is
+the whole decoded lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed re-find. The two remake-only rules are `NearestAfterKill` (a setting, off by default, that moves the lost-selection re-resolve alone onto the nearest entry by distance, leaving the acquire and every class change on the head) and `GateFirst` (set on a race run's seats alone: Next Enemy off a gate and a gate's passing both select the next gate). `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
+Godot node dependency; pinned by the `target-selection`, `target-flag` and `stunt-race-gate-first` suites. Decode:
 [../org/targeting.md](../org/targeting.md). Read `TargetHud.cs` for what draws the result.
 
 ## src/Flight/Weapons/SeatTargeting.cs
