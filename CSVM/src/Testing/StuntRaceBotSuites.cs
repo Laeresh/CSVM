@@ -978,7 +978,7 @@ internal static class StuntRaceBotSuites
             bool flyable = false;
             foreach (bool far in new[] { false, true })
             {
-                if (StuntBotObjective.LeadInFor(zone, far, blocked: null) is not { } metres)
+                if (StuntBotObjective.LeadInFor(zone, far, blocked: null, bot.Pilot?.RailPace is { } pace ? [pace] : null) is not { } metres)
                 {
                     continue;
                 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Net;
 using CSVM.Utils;
@@ -52,11 +53,10 @@ public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 P
 /// <summary>
 /// One stunt race bot's way round the course, a remake-only rule, since the original seats no bots.
 /// It takes next the open zone whose lead-in point is nearest, or a course's next entry, and holds it
-/// until a try ends. Between zones it steers freely for
-/// that point, short of the zone's nearer ribbon end. Inside the approach cone it hands the zone to the
-/// pilot, which runs it on its <c>dzpathN</c> ribbon as a campaign racer does. Its tier sets its cruise
-/// throttle and the odds of fluffing a zone, passing over its entry and coming round again. Values:
-/// docs/org/aiPilot.md "Stunt race bots".
+/// until a try ends. Between zones it steers freely for that point, short of the zone's nearer ribbon
+/// end. Inside the approach cone its pilot runs the zone's ribbon at the plane's top speed. Its tier
+/// sets the odds of fluffing a zone, passing over its entry and coming round again.
+/// Values: docs/org/aiPilot.md "Stunt race bots".
 /// </summary>
 public sealed class StuntBotObjective
 {
@@ -121,8 +121,8 @@ public sealed class StuntBotObjective
     public const float JoinRailM = 150f;
 
     /// <summary>Remake-only rule: the tightest turn a bridge to a course entry may take, metres (#281).
-    /// A 4 g turn at the rail's 69.3 m/s cruise is 126 m, so the rail turns no tighter than a plane
-    /// could there.</summary>
+    /// A 4 g turn at the decoded rail's 69.3 m/s cruise is 126 m. A faster bot's rail takes it harder,
+    /// since a wider radius refuses every sharp C2 bend.</summary>
     public const float BridgeRadiusM = 125f;
 
     /// <summary>Remake-only rule: the farthest a course entry's opening may stand for a bridge, metres.
@@ -132,6 +132,14 @@ public sealed class StuntBotObjective
     /// <summary>Remake-only rule: the share of its tier's <see cref="FluffChance"/> a bot fluffs a course
     /// entry with. A course has some twenty entries to a Danger Zone run's five.</summary>
     public const float CourseFluffShare = 0.25f;
+
+    /// <summary>Remake-only rule: every bot's lever between zones is full, whatever its tier.</summary>
+    public const float CruiseThrottle = 1f;
+
+    /// <summary>Remake-only rule: the rate a bot's rail walks its speed toward its cruise, 10 mph per
+    /// second. The decoded rail's, five times this, reads as braking at a lock. Rule:
+    /// docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float RailRampMps2 = 4.4704f;
 
     // How finely a join looks for the line's nearest point, metres.
     private const float JoinSearchStepM = 5f;
@@ -206,15 +214,6 @@ public sealed class StuntBotObjective
     /// clear, since the rail it joins has no crash check. Null blocks nothing.</summary>
     public Func<Vector3, Vector3, Basis, bool>? Blocked { get; set; }
 
-    /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
-    /// veteran and 0.7 for a novice.</summary>
-    public float CruiseThrottle => Tier switch
-    {
-        NetBotSkill.Ace => 1f,
-        NetBotSkill.Veteran => 0.85f,
-        _ => 0.7f,
-    };
-
     /// <summary>The odds of fluffing each try at a zone: a remake-only rule, 0.05 for an ace, 0.2 for a
     /// veteran and 0.35 for a novice.</summary>
     public float FluffChance => Tier switch
@@ -223,6 +222,11 @@ public sealed class StuntBotObjective
         NetBotSkill.Veteran => 0.2f,
         _ => 0.35f,
     };
+
+    /// <summary>The rail pace of a bot flying <paramref name="stats"/>, walked to at
+    /// <see cref="RailRampMps2"/>. Its cruise is the plane's level top speed at full lever on the AI force
+    /// path (<see cref="FlightModel.LevelTopSpeed"/>).</summary>
+    public static DangerZoneRail.Pace RailPaceFor(PlaneStats stats) => new(FlightModel.LevelTopSpeed(stats, aiForcePath: true), RailRampMps2);
 
     /// <summary>One bot's own approach, drawn on <paramref name="rng"/>: a line within
     /// <see cref="ApproachSpreadDeg"/> of the ribbon's and a lead-in within <see cref="LeadInSpreadM"/>
@@ -238,11 +242,13 @@ public sealed class StuntBotObjective
     /// <summary>The straight a bot's run on <paramref name="zone"/> adds before the entry, its last
     /// vertex when <paramref name="far"/> and else its first, metres. It is 0 when <see cref="RailClears"/> passes without
     /// one, else the shortest step that passes and <paramref name="blocked"/> leaves clear. It is null
-    /// when none up to <see cref="MaxLeadInM"/> does, so that end is refused.</summary>
-    public static float? LeadInFor(StuntZone zone, bool far, Func<Vector3, Vector3, bool>? blocked)
+    /// when none up to <see cref="MaxLeadInM"/> does, so that end is refused. The rail flies each of
+    /// <paramref name="paces"/>, the decoded one when null.</summary>
+    public static float? LeadInFor(StuntZone zone, bool far, Func<Vector3, Vector3, bool>? blocked, params DangerZoneRail.Pace[]? paces)
     {
         var ribbon = zone.Route ?? throw new ArgumentException($"'{zone.PathName}' has no ribbon", nameof(zone));
-        if (RailClears(zone, ribbon, far))
+        DangerZoneRail.Pace[] flown = paces is { Length: > 0 } ? paces : [DangerZoneRail.Pace.Decoded];
+        if (Array.TrueForAll(flown, p => RailClears(zone, ribbon, far, p)))
         {
             return 0f;
         }
@@ -250,7 +256,7 @@ public sealed class StuntBotObjective
         for (float metres = LeadInStepM; metres <= MaxLeadInM; metres += LeadInStepM)
         {
             var led = ribbon.WithLeadIn(far, metres);
-            if (RailClears(zone, led, far))
+            if (Array.TrueForAll(flown, p => RailClears(zone, led, far, p)))
             {
                 // A longer straight holds this one, so a blocked straight ends the search.
                 return blocked?.Invoke(led.End(far), ribbon.End(far)) == true ? null : metres;
@@ -263,8 +269,9 @@ public sealed class StuntBotObjective
     /// <summary>The ribbon a run flies from each end of each routed zone in <paramref name="zones"/>.
     /// It is the route with <see cref="LeadInFor"/>'s lead-in, or null where that end is refused. The
     /// decision does not depend on the bot, so a session makes it once for every bot. A course entry's
-    /// line takes no row: it is its own run, from its first vertex only.</summary>
-    public static RunTable RunsFrom(IEnumerable<StuntZone> zones, Func<Vector3, Vector3, bool>? blocked)
+    /// line takes no row: it is its own run, from its first vertex only. The rail check flies each of
+    /// <paramref name="paces"/>, the decoded one when none.</summary>
+    public static RunTable RunsFrom(IEnumerable<StuntZone> zones, Func<Vector3, Vector3, bool>? blocked, params DangerZoneRail.Pace[]? paces)
     {
         var ends = new RunTable();
         foreach (var zone in zones)
@@ -276,7 +283,7 @@ public sealed class StuntBotObjective
 
             foreach (bool far in new[] { false, true })
             {
-                ends[(ribbon, far)] = LeadInFor(zone, far, blocked) switch
+                ends[(ribbon, far)] = LeadInFor(zone, far, blocked, paces) switch
                 {
                     null => null,
                     > 0f and var metres => ribbon.WithLeadIn(far, metres),
@@ -290,8 +297,9 @@ public sealed class StuntBotObjective
 
     /// <summary>Whether the rail alone carries a pilot through both of <paramref name="zone"/>'s gates
     /// on <paramref name="ribbon"/> from the end <paramref name="far"/> names. It must from every lock
-    /// state just inside the lock range: each bearing, level and diving, at each speed.</summary>
-    public static bool RailClears(StuntZone zone, DangerZoneRibbon ribbon, bool far)
+    /// state just inside the lock range: each bearing, level and diving, at each speed. The rail flies
+    /// <paramref name="pace"/>, the decoded one when null.</summary>
+    public static bool RailClears(StuntZone zone, DangerZoneRibbon ribbon, bool far, DangerZoneRail.Pace? pace = null)
     {
         var entry = ribbon.End(far);
         var line = ribbon.EndTangentInto(far).Normalized();
@@ -307,7 +315,7 @@ public sealed class StuntBotObjective
                 var heading = (turn * pitch).Normalized();
                 foreach (float speed in LockSpeedsMps)
                 {
-                    if (!RailCarries(zone, ribbon, far, entry - (heading * (DangerZoneRibbon.LockRangeM - 1f)), heading, speed))
+                    if (!RailCarries(zone, ribbon, far, entry - (heading * (DangerZoneRibbon.LockRangeM - 1f)), heading, speed, pace))
                     {
                         return false;
                     }
@@ -515,10 +523,10 @@ public sealed class StuntBotObjective
     }
 
     // One rail run from a lock at `at`, flying `heading`: true once both gates have been crossed.
-    private static bool RailCarries(StuntZone zone, DangerZoneRibbon ribbon, bool far, Vector3 at, Vector3 heading, float speed)
+    private static bool RailCarries(StuntZone zone, DangerZoneRibbon ribbon, bool far, Vector3 at, Vector3 heading, float speed, DangerZoneRail.Pace? pace)
     {
         var run = new DangerZoneRun(ribbon, far);
-        var rail = new DangerZoneRail(run, at, Basis.LookingAt(heading, Vector3.Up), heading * speed, speed);
+        var rail = new DangerZoneRail(run, at, Basis.LookingAt(heading, Vector3.Up), heading * speed, speed, pace);
         bool green = false;
         bool red = false;
         var last = at;

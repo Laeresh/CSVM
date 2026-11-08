@@ -89,9 +89,13 @@ public sealed class AiPilot
     public DangerZoneRibbons? DangerZones;
 
     /// <summary>A stunt race bot's lever, or null. When set, the lever holds it in place of the law's
-    /// walk, except on the emergency climb-out. Its tier sets it (<see cref="StuntBotObjective"/>).
+    /// walk, except on the emergency climb-out (<see cref="StuntBotObjective.CruiseThrottle"/>).
     /// </summary>
     public float? CruiseThrottle;
+
+    /// <summary>A stunt race bot's rail pace, or null for the decoded rail's
+    /// (<see cref="StuntBotObjective.RailPaceFor"/>).</summary>
+    public DangerZoneRail.Pace? RailPace;
 
     /// <summary>A bot seat's ready torpedo's speed, m/s, or null. The host sets it each step. Against a
     /// gas bag the pursuit then steers on that round's own lead, not the 860 m/s gun solution, so the
@@ -379,7 +383,7 @@ public sealed class AiPilot
         bool reversed = ribbon.TangentAt(segment, t).Dot(-attitude.Z) < 0f;
         ZoneRun?.Release();
         StartDangerZoneRun(new DangerZoneRun(ribbon, reversed, segment, t), at, machine, why);
-        _rail = new DangerZoneRail(ZoneRun!, at, attitude, velocity, velocity.Length());
+        _rail = new DangerZoneRail(ZoneRun!, at, attitude, velocity, velocity.Length(), RailPace);
         machine.Enter(AiMode.NavigatingDangerZone, $"'{ribbon.Name}' rejoined ({why})");
         return true;
     }
@@ -723,7 +727,7 @@ public sealed class AiPilot
         if (range < DangerZoneRibbon.LockRangeM)
         {
             _rail = new DangerZoneRail(run, model.Position, model.Attitude,
-                model.VelocityDir * model.Speed, model.Speed);
+                model.VelocityDir * model.Speed, model.Speed, RailPace);
             machine.Enter(AiMode.NavigatingDangerZone,
                 FormattableString.Invariant($"'{run.Ribbon.Name}' locked at {range:0} m"));
         }

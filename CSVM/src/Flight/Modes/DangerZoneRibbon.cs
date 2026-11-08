@@ -395,11 +395,13 @@ public sealed class DangerZoneRail
     private Vector3 _offsetVelocity;
     private float _sinceLock;
 
-    /// <summary>Locks the run at the aeroplane's present state: the offset from the rail point and
-    /// the velocity the rail motion does not account for are what the run then closes out.</summary>
-    public DangerZoneRail(DangerZoneRun run, Vector3 position, Basis attitude, Vector3 velocity, float speed)
+    /// <summary>Locks the run at the aeroplane's present state. The run then closes out its offset from
+    /// the rail point and the velocity the rail motion does not account for. Its speed walks toward
+    /// <paramref name="pace"/>'s cruise, the decoded one when null.</summary>
+    public DangerZoneRail(DangerZoneRun run, Vector3 position, Basis attitude, Vector3 velocity, float speed, Pace? pace = null)
     {
         Run = run;
+        Paced = pace ?? Pace.Decoded;
         _point = run.Point;
         _offset = position - _point;
         _offsetVelocity = velocity - (run.Direction * speed);
@@ -409,6 +411,9 @@ public sealed class DangerZoneRail
     }
 
     public DangerZoneRun Run { get; }
+
+    /// <summary>The cruise this rail's speed walks toward, before the climb-angle term, and how fast.</summary>
+    public Pace Paced { get; }
 
     public Vector3 Position { get; private set; }
 
@@ -461,8 +466,8 @@ public sealed class DangerZoneRail
             ? target
             : new Basis(Attitude.GetRotationQuaternion().Slerp(target.GetRotationQuaternion(), blend));
 
-        float cruise = CruiseSpeedMps - (ClimbSpeedPenaltyMps * direction.Y);
-        Speed = Mathf.MoveToward(Speed, cruise, SpeedRateMps2 * dt);
+        float cruise = Paced.CruiseMps - (ClimbSpeedPenaltyMps * direction.Y);
+        Speed = Mathf.MoveToward(Speed, cruise, Paced.RateMps2 * dt);
 
         // The rail point trails the cursor through a short exponential, and the residual offset
         // coasts on its own velocity while both shrink at the ramped closing rate.
@@ -483,5 +488,12 @@ public sealed class DangerZoneRail
     {
         float length = v.Length();
         return length - by <= 0f ? Vector3.Zero : v * ((length - by) / length);
+    }
+
+    /// <summary>The cruise a rail's speed walks toward, m/s, and the rate it walks at, m/s².</summary>
+    public readonly record struct Pace(float CruiseMps, float RateMps2)
+    {
+        /// <summary>The decoded rail's: a 155 mph cruise walked to at 50 mph per second.</summary>
+        public static Pace Decoded => new(CruiseSpeedMps, SpeedRateMps2);
     }
 }

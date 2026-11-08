@@ -168,6 +168,40 @@ public class DangerZoneRibbonTests
     }
 
     [Fact]
+    public void APacedRailWalksToItsOwnCruiseAtItsOwnRate()
+    {
+        var ribbon = DangerZoneRibbon.FromPolyline("dzpath3", 3, new[]
+        {
+            new Vector3(0f, 400f, 0f), new Vector3(3000f, 400f, 0f), new Vector3(6000f, 400f, 0f),
+        });
+        var pace = new DangerZoneRail.Pace(120f, 5f);
+        var rail = new DangerZoneRail(new DangerZoneRun(ribbon, false), new Vector3(0f, 400f, 0f), Basis.Identity,
+            new Vector3(130f, 0f, 0f), 130f, pace);
+        for (int i = 0; i < 60; i++)
+        {
+            rail.Step(Dt);
+        }
+
+        Assert.Equal(125f, rail.Speed, 1);
+        for (int i = 0; i < 60 * 3; i++)
+        {
+            rail.Step(Dt);
+        }
+
+        Assert.Equal(120f, rail.Speed, 1);
+
+        // ABLE-TO-FAIL CONTROL: unpaced, the same lock walks down to the decoded cruise at 50 mph a second.
+        var decoded = new DangerZoneRail(new DangerZoneRun(ribbon, false), new Vector3(0f, 400f, 0f), Basis.Identity,
+            new Vector3(130f, 0f, 0f), 130f);
+        for (int i = 0; i < 60; i++)
+        {
+            decoded.Step(Dt);
+        }
+
+        Assert.Equal(130f - DangerZoneRail.SpeedRateMps2, decoded.Speed, 1);
+    }
+
+    [Fact]
     public void TheRailFrameBanksIntoTheBendAndStaysLevelOnAStraight()
     {
         var level = DangerZoneRail.RailFrame(Vector3.Right, Vector3.Zero);
