@@ -258,6 +258,9 @@ internal sealed class SessionBoards
             InputFor(rig.Index).Prime();
     }
 
+    /// <summary>Photo mode entered for a suite, as a board's Photo Mode row enters it.</summary>
+    internal void EnterPhotoModeForTest(int playerIndex) => EnterPhotoMode(playerIndex);
+
     // The reader a board menu drives its cursor from, for a roster seat. The readers are this
     // machine's players in order, so the seat goes through its local player first: a guest's own
     // seat is not 0. A seat with no local player here falls back to player 1, who always exists.

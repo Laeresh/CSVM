@@ -236,6 +236,57 @@ internal static class NetStuntRaceSuites
         }
     }
 
+    [Suite("net-stunt-race-photo",
+        "a two-machine Stunt Race with a host's bot over a 100 ms loopback: while the host's pilot, then "
+        + "the guest's, stands in photo mode from the pause sheet, the bot flies on in both worlds and "
+        + "both race windows keep counting down")]
+    internal static void ARaceFliesOnUnderPhotoMode(TestContext ctx)
+    {
+        const string cell = "photo";
+        const int botSeat = 2;
+        ZrdrSet missionZrdr = ctx.MissionZrdr(RaceChapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.ChapterGamez(RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var ends = OpenEnds(ctx, 9506, new int[2], roster => roster.Append(NetSeats.Bot(0, botSeat, "bot", roster[0].PlaneNode)).ToArray());
+        try
+        {
+            if (Seats(ctx, cell, ends) is not { } s)
+            {
+                return;
+            }
+
+            Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
+            var bots = new[] { s.Peers[0].SeatRigs[botSeat].Controller!, s.Peers[1].SeatRigs[botSeat].Controller! };
+            ctx.Check(bots[0].IsBotSeat && s.Peers[0].RaceDirector?.Bots != null,
+                $"[{cell}] the host flies a race bot in seat {botSeat}");
+            Frames(s.Peers, 120);
+            for (int machine = 0; machine < 2; machine++)
+            {
+                FliesOn(ctx, cell, s, bots, machine, photo: false);
+                var session = s.Peers[machine];
+                int owner = (machine == 0 ? s.Host : s.Guest).PlayerIndex;
+                session.Pause!.TryToggle(owner);
+                session.Boards!.EnterPhotoModeForTest(owner);
+                FliesOn(ctx, cell, s, bots, machine, photo: true);
+                session.Boards.ExitPhotoMode();
+                session.Pause.TryToggle(owner);
+            }
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
     /// <summary>A lobby race's launch arguments. A race spec is not <c>--det</c>, so without a named
     /// store a guest's best would land in the player's own stunt scores.</summary>
     internal static string[] RaceArgs(TestContext ctx) =>
@@ -591,8 +642,48 @@ internal static class NetStuntRaceSuites
         }
     }
 
+    // 120 frames on both machines, one machine's pilot in photo mode or flying. The bot flies on in
+    // both worlds, and both windows count down by the frames' time.
+    private static void FliesOn(TestContext ctx, string cell, RaceSeats s, FlightController[] bots, int machine, bool photo)
+    {
+        const int frames = 120;
+        var at = bots.Select(b => b.WorldPosition).ToArray();
+        var left = new[] { s.HostRace.TimeLeft, s.GuestRace.TimeLeft };
+        Frames(s.Peers, frames);
+        var moved = bots.Select((b, i) => b.WorldPosition.DistanceTo(at[i])).ToArray();
+        var counted = new[] { left[0] - s.HostRace.TimeLeft, left[1] - s.GuestRace.TimeLeft };
+        float due = frames * GameClock.FixedDt;
+        string who = machine == 0 ? "host" : "guest";
+        // A bot under the sheet's hold reads no pilot: on its rail it stands still, off it it flies on blind.
+        bool held = bots.Any(b => b.Pause.SheetOverFlight);
+        ctx.Check(!held && moved.All(m => m > 20f) && counted.All(c => Mathf.Abs(c - due) < 0.1f),
+            $"{(photo ? "" : "ABLE-TO-FAIL CONTROL: ")}[{cell}] with the {who}'s pilot {(photo ? "in photo mode" : "flying")}, the bot's pilot flies it on in both worlds and both windows count down (held by the sheet={held}, bot moved {moved[0]:0} m on the host, {moved[1]:0} m on the guest, on its rail={bots[0].Pilot?.ZoneRun != null}; windows counted {counted[0]:0.00}/{counted[1]:0.00} s of {due:0.00}; host clock halted={s.Peers[0].SimClock?.Halted}, guest's={s.Peers[1].SimClock?.Halted})");
+    }
+
+    // Steps as a rendered frame does. Every seat polls its pause, a bot's included, as each
+    // controller's _Process does. The clock then frames and the session steps.
+    private static void Frames(GameSession[] peers, int frames)
+    {
+        for (int f = 0; f < frames; f++)
+        {
+            foreach (var session in peers)
+            {
+                foreach (var rig in session.SeatRigs)
+                {
+                    if (rig.Controller is { Inert: false } seat)
+                    {
+                        seat.PollPauseForTest(session.SimClock);
+                    }
+                }
+            }
+
+            Step(peers);
+        }
+    }
+
     // Two sessions from the lobby's options over a clean 100 ms loopback, each exit counted.
-    private static List<NetCombatSuites.Ends> OpenEnds(TestContext ctx, int seed, int[] exits)
+    // `seated` reshapes the host's roster.
+    private static List<NetCombatSuites.Ends> OpenEnds(TestContext ctx, int seed, int[] exits, Func<NetSeat[], NetSeat[]>? seated = null)
     {
         var options = new DogfightOptionsMessage(1, (byte)DogfightLobby.EnvironmentOf(RaceChapter), (byte)DogfightMissionType.StuntRace,
             DogfightVictory.Time, 5, DogfightLobby.DefaultScore, false, DogfightLobby.DefaultLives, false);
@@ -602,6 +693,7 @@ internal static class NetStuntRaceSuites
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(Latency, 0.0, 0.0), new Random(seed));
         var roster = NetCombatSuites.Roster(2, spec);
+        roster = seated?.Invoke(roster) ?? roster;
         var ends = new List<NetCombatSuites.Ends>();
         for (int i = 0; i < 2; i++)
         {
