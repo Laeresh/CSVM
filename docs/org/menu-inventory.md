@@ -390,8 +390,10 @@ constants rather than reading a layout.
   list's lines, the splits in the chat pane, the context in the chat line, and Photo Mode, Restart
   and Back on the Create Team, Send and Leave Game plaques. A field past ten scrolls the scores page
   under its bar, and past seven the splits scroll under the chat pane's own control, the pane they
-  borrow; both bars' arrows join the board's cursor after the plaques, and the board takes no wheel
-  or thumb drag. The other three tabs stand unlabelled.
+  borrow. A course past ten zones keeps each zone's column at the scores page's Best width and scrolls
+  the zones across under a zone bar at the pane's foot, the chat control's art turned a quarter;
+  the bar is the remake's own. Every bar's arrows join the board's cursor after the plaques, and the
+  wheel and a thumb drag move each list. The other three tabs stand unlabelled.
   Every word on it but Game Scores is the remake's own. A guest's plane and ammo picks stay live,
   and a changed pick clears that guest's own Ready. Every seat signed on at a machine's join board
   flies the match, since the original has no split-screen network play: each further seat has a row

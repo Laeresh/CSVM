@@ -36,11 +36,10 @@ public sealed partial class OriginalRaceBoard : Control
     private RaceResultsSheet? _sheet;
     private BoardMenu? _menu;
     private MenuInput? _input;
-    private int _scoresTop;
-    private int _splitsTop;
+    private (int Scores, int Splits, int Zones) _tops;
 
-    // A held thumb: which list, where the pointer took it and the window's top then.
-    private (bool Splits, float StartY, int StartTop)? _drag;
+    // A held thumb: which list, where along its run the pointer took it and the window's top then.
+    private (RaceResultsList List, float Start, int StartTop)? _drag;
     private bool _wasPressed;
 
     // Wheel steps turned since the board last read them, positive toward a list's foot. The wheel is
@@ -70,8 +69,9 @@ public sealed partial class OriginalRaceBoard : Control
     /// to the board's own count of the mouse wheel; a suite replaces it.</summary>
     public Func<int> WheelSource { get; set; } = () => 0;
 
-    /// <summary>The first row each list shows, the standings' and the splits', for the suites.</summary>
-    internal (int Scores, int Splits) Tops => (_scoresTop, _splitsTop);
+    /// <summary>The first row each list shows, the standings', the splits' pilots and their zones, for
+    /// the suites.</summary>
+    internal (int Scores, int Splits, int Zones) Tops => _tops;
 
     /// <summary>The ranked rows as text, one line per pilot, for the suites and the log.</summary>
     internal IReadOnlyList<string> Rows => _rows;
@@ -173,6 +173,10 @@ public sealed partial class OriginalRaceBoard : Control
         }
     }
 
+    // The pointer in a list's own frame: the zone bar's window is transposed, x for y.
+    private static (float X, float Y) Along(RaceResultsList list, (float X, float Y, bool Pressed) at) =>
+        list == RaceResultsList.Zones ? (at.Y, at.X) : (at.X, at.Y);
+
     private void OnRaceCompleted()
     {
         _sheet = RaceResultsSheet.Of(_race, _zoneNames, _context, _exitLabel, RestartWithheld);
@@ -202,8 +206,7 @@ public sealed partial class OriginalRaceBoard : Control
             });
         }
 
-        _scoresTop = 0;
-        _splitsTop = 0;
+        _tops = (0, 0, 0);
         _drag = null;
         _wheel = 0;
         var menu = new BoardMenu(dismissable: false, items.ToArray());
@@ -232,8 +235,7 @@ public sealed partial class OriginalRaceBoard : Control
                 Exit?.Invoke();
                 break;
             case BoardMenuItem.Scroll when _sheet != null && _menu != null:
-                (_scoresTop, _splitsTop) = OriginalRaceResults.Scrolled(_sheet,
-                    OriginalRaceResults.Slots(_sheet)[_menu.Index], _scoresTop, _splitsTop);
+                _tops = OriginalRaceResults.Scrolled(_sheet, OriginalRaceResults.Slots(_sheet)[_menu.Index], _tops);
                 Compose();
                 break;
         }
@@ -248,8 +250,9 @@ public sealed partial class OriginalRaceBoard : Control
     }
 
     // The thumb and the wheel, the Original shell's rule on each list's ListWindow. A click on a
-    // thumb holds it while the button stays down, the window following the pointer down the track.
-    // A wheel step over a list moves it by rows. True while a thumb holds.
+    // thumb holds it while the button stays down, the window following the pointer along the track.
+    // A wheel step over a list moves it by rows, the zone bar before the splits' pane it lies in.
+    // True while a thumb holds.
     private bool ScrollByPointer((float X, float Y, bool Pressed)? pointer, int wheel, ref bool changed)
     {
         bool clicked = pointer is { Pressed: true } && !_wasPressed;
@@ -268,38 +271,57 @@ public sealed partial class OriginalRaceBoard : Control
                 return false;
             }
 
-            var held = OriginalRaceResults.Window(_sheet, drag.Splits, drag.Splits ? _splitsTop : _scoresTop);
-            changed |= ScrollTo(drag.Splits, held.TopAfterDrag(drag.StartTop, at.Y - drag.StartY));
+            var held = OriginalRaceResults.Window(_sheet, drag.List, TopOf(drag.List));
+            changed |= ScrollTo(drag.List, held.TopAfterDrag(drag.StartTop, Along(drag.List, at).Y - drag.Start));
             return true;
         }
 
-        foreach (bool splits in new[] { false, true })
+        foreach (var list in new[] { RaceResultsList.Zones, RaceResultsList.Scores, RaceResultsList.Splits })
         {
-            var window = OriginalRaceResults.Window(_sheet, splits, splits ? _splitsTop : _scoresTop);
-            if (clicked && window.OnThumb(at.X, at.Y))
+            // A list that fits draws no bar, so its box must not take a wheel meant for the pane under it.
+            var window = OriginalRaceResults.Window(_sheet, list, TopOf(list));
+            if (!window.Scrolls)
             {
-                _drag = (splits, at.Y, window.Top);
+                continue;
+            }
+
+            var (x, y) = Along(list, at);
+            if (clicked && window.OnThumb(x, y))
+            {
+                _drag = (list, y, window.Top);
                 return true;
             }
 
-            if (wheel != 0 && window.Contains(at.X, at.Y))
+            if (wheel != 0 && window.Contains(x, y))
             {
-                changed |= ScrollTo(splits, window.TopAfterWheel(wheel));
+                changed |= ScrollTo(list, window.TopAfterWheel(wheel));
+                break;
             }
         }
 
         return false;
     }
 
-    private bool ScrollTo(bool splits, int top)
+    private int TopOf(RaceResultsList list) => list switch
     {
-        ref int at = ref splits ? ref _splitsTop : ref _scoresTop;
-        if (at == top)
+        RaceResultsList.Scores => _tops.Scores,
+        RaceResultsList.Splits => _tops.Splits,
+        _ => _tops.Zones,
+    };
+
+    private bool ScrollTo(RaceResultsList list, int top)
+    {
+        if (TopOf(list) == top)
         {
             return false;
         }
 
-        at = top;
+        _tops = list switch
+        {
+            RaceResultsList.Scores => _tops with { Scores = top },
+            RaceResultsList.Splits => _tops with { Splits = top },
+            _ => _tops with { Zones = top },
+        };
         return true;
     }
 
@@ -317,7 +339,8 @@ public sealed partial class OriginalRaceBoard : Control
     {
         if (_sheet != null)
         {
-            _view?.Show(OriginalRaceResults.Compose(_sheet, _strings, _menu?.Index ?? 0, _pointer.Held, _scoresTop, _splitsTop),
+            _view?.Show(OriginalRaceResults.Compose(_sheet, _strings, _menu?.Index ?? 0, _pointer.Held, _tops.Scores, _tops.Splits,
+                    _tops.Zones),
                 BoardPalette.Paper, string.Empty, string.Empty);
         }
     }

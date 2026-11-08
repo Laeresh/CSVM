@@ -43,6 +43,9 @@ internal static class StuntRaceSuites
     // P1's crash camera time, short so the final run's clock P2 flies on stays under P1's best.
     private const int WatchFrames = 6;
 
+    // The longest shipped course's sequence entries, C2's Hollywood_Track_1, each a zone on the board.
+    private const int LongCourseEntries = 19;
+
     private static readonly int HoldFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / Dt) + 2;
 
     [Suite("stunt-race-time-attack",
@@ -577,7 +580,9 @@ internal static class StuntRaceSuites
         + "aircraft's, both scrolling when wider and every stock airframe name fitting its box, rests on Photo Mode and offers "
         + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
         + "Photo Mode, and a sixteen-pilot field scrolls the scores page and the splits to the sixteenth "
-        + "pilot by their arrows under the pointer and the pad, and by the wheel and a thumb drag; an install missing the art keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
+        + "pilot by their arrows under the pointer and the pad, and by the wheel and a thumb drag; a nineteen-entry course "
+        + "stands ten zones across in columns every time fits, the names fixed and the heading over its column, and its "
+        + "zone bar's arrows, the wheel and the thumb reach every pilot's split at every zone; an install missing the art keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
@@ -587,9 +592,11 @@ internal static class StuntRaceSuites
         var built = new List<Node>();
 
         // One race board built the way a session builds it, over a data root and a launch kind.
-        (Control Board, StuntRace Race, PauseState Pause) Build(string dataRoot, bool menuDriven, Action exit, int pilots = 3)
+        (Control Board, StuntRace Race, PauseState Pause) Build(string dataRoot, bool menuDriven, Action exit, int pilots = 3,
+            string[]? zones = null)
         {
-            var race = new StuntRace(60f, zoneNames.Length);
+            zones ??= zoneNames;
+            var race = new StuntRace(60f, zones.Length);
             race.Add(0, "Bloodhawk");
             race.Add(1, "Kestrel");
             race.Add(2, "Hoplite");
@@ -613,7 +620,7 @@ internal static class StuntRaceSuites
                 LockCandidates = () => Array.Empty<Node3D>(),
                 DataRoot = dataRoot,
             });
-            var board = boards.BuildRaceBoard(race, zoneNames, "C1   ·   Stunt Flying", () =>
+            var board = boards.BuildRaceBoard(race, zones, "C1   ·   Stunt Flying", () =>
             {
                 race.Rerun();
                 race.BeginOpening(0f);
@@ -718,6 +725,8 @@ internal static class StuntRaceSuites
             ctx.Check(board.Visible && indexAfterEnd == 0 && exits == 1 && photos == 1,
                 $"the pointer fires Back and Photo Mode on their plaques: rested on {indexAfterEnd}, {exits} exit(s), {photos} photo(s)");
             ScrollTheWideField(ctx, Build(ctx.DataRoot, menuDriven: true, () => { }, pilots: 16), Fly);
+            var longCourse = Enumerable.Range(1, LongCourseEntries).Select(entry => $"Entry {entry}").ToArray();
+            ScrollTheLongCourse(ctx, Build(ctx.DataRoot, menuDriven: true, () => { }, pilots: 16, zones: longCourse), Fly);
 
             // A root without the art keeps the chrome board; its exit row reads Back from the menu, Quit
             // Game otherwise.
@@ -1018,14 +1027,15 @@ internal static class StuntRaceSuites
     }
 
     // Both lists at their foot. A wheel notch over each moves that list one row up and a notch over
-    // the zone key moves neither. A thumb dragged a third of its free run moves a third of the rows.
+    // the zone key moves neither. One on the pane's foot, where no zone bar stands, moves the splits.
+    // A thumb dragged a third of its free run moves a third of the rows.
     // An arrow still moves a list one row after the drags.
     private static void WheelAndDragTheWideField(TestContext ctx, OriginalRaceBoard board, BoardMenu menu)
     {
         var sheet = board.Sheet!;
         var start = board.Tops;
-        var tops = new List<(int Scores, int Splits)>();
-        foreach (var (x, y) in new[] { (400f, 150f), (200f, 450f), (100f, 150f) })
+        var tops = new List<(int Scores, int Splits, int Zones)>();
+        foreach (var (x, y) in new[] { (400f, 150f), (200f, 450f), (100f, 150f), (400f, 535f) })
         {
             board.PointerSource = () => (x, y, false);
             board.WheelSource = () => -1;
@@ -1034,15 +1044,15 @@ internal static class StuntRaceSuites
             tops.Add(board.Tops);
         }
 
-        ctx.Check(start == (6, 9) && tops.SequenceEqual(new[] { (5, 9), (5, 8), (5, 8) }),
-            $"a wheel notch moves the scores page, then the splits, one row each, and one over the zone key neither: from {start} to {string.Join(", ", tops)}");
+        ctx.Check(start == (6, 9, 0) && tops.SequenceEqual(new[] { (5, 9, 0), (5, 8, 0), (5, 8, 0), (5, 7, 0) }),
+            $"a wheel notch moves the scores page, then the splits, one row each, one over the zone key neither, and one on the pane's foot, where no zone bar stands, moves the splits: from {start} to {string.Join(", ", tops)}");
 
         var dragged = new List<int>();
         foreach (bool splits in new[] { false, true })
         {
             foreach (float share in new[] { -1f, 1f / 3f })
             {
-                var w = OriginalRaceResults.Window(sheet, splits, splits ? board.Tops.Splits : board.Tops.Scores);
+                var w = OriginalRaceResults.Window(sheet, splits ? RaceResultsList.Splits : RaceResultsList.Scores, splits ? board.Tops.Splits : board.Tops.Scores);
                 float x = w.ThumbX + (w.ThumbWidth / 2f), y = w.ThumbY + (w.ThumbHeight / 2f);
                 float dy = share * (w.TrackHeight - w.ThumbHeight);
                 foreach (var (at, pressed) in new[] { (y, false), (y, true), (y + dy, true), (y + dy, false) })
@@ -1061,7 +1071,161 @@ internal static class StuntRaceSuites
         board.PointerSource = () => null;
         menu.MoveTo(OriginalRaceResults.Slots(sheet).ToList().IndexOf(OriginalRaceResults.SplitsDownRow));
         menu.Handle(0, accept: true, back: false);
-        ctx.Check(board.Tops == (2, 4), $"the splits' down arrow still moves its list one row after the drags: {board.Tops}");
+        ctx.Check(board.Tops == (2, 4, 0), $"the splits' down arrow still moves its list one row after the drags: {board.Tops}");
+    }
+
+    // The longest course under sixteen pilots. Its zones stand ten across in columns every time fits,
+    // under a zone bar whose arrows join the menu last. The bar's arrows, the keyboard and pad's
+    // Accept, the wheel and the thumb move the zones and the heading over them; the names stay fixed.
+    // Walking both bars shows every pilot's split at every zone.
+    private static void ScrollTheLongCourse(TestContext ctx, (Control Board, StuntRace Race, PauseState Pause) built,
+        Action<StuntRace, int, float[]> fly)
+    {
+        if (built.Board is not OriginalRaceBoard board)
+        {
+            ctx.Check(false, $"the long course builds the Original board, not {built.Board.GetType().Name}");
+            return;
+        }
+
+        for (int seat = 0; seat < 16; seat++)
+        {
+            fly(built.Race, seat, Enumerable.Range(1, LongCourseEntries).Select(zone => (zone * 3.1f) + (seat * 0.1f)).ToArray());
+        }
+
+        built.Race.Advance(61f);
+        if (board.Menu is not { } menu || board.Sheet is not { } sheet)
+        {
+            ctx.Check(false, $"the long course's end raises the board");
+            return;
+        }
+
+        var slots = OriginalRaceResults.Slots(sheet);
+        ctx.Check(menu.Items.Count == 9 && slots.Skip(7).SequenceEqual(new[] { OriginalRaceResults.ZonesLeftRow, OriginalRaceResults.ZonesRightRow }),
+            $"nineteen zones add the zone bar's two arrows after the other lists': {string.Join(",", slots)}");
+        var walked = new List<int> { menu.Index };
+        for (int step = 0; step < 8; step++)
+        {
+            menu.Handle(1, accept: false, back: false);
+            walked.Add(menu.Index);
+        }
+
+        ctx.Check(walked.SequenceEqual(Enumerable.Range(0, 9)), $"the cursor walks every slot to the zone bar's right arrow: {string.Join(",", walked)}");
+
+        var widest = board.Shown!.Lines.First(l => l.Text == "0:58.9") with { Text = "59:59.9" };
+        ctx.Check(TextWidth(widest) <= OriginalRaceResults.SplitColumn,
+            $"an hour's widest time measures {TextWidth(widest):0.0} px, inside the {OriginalRaceResults.SplitColumn} px column");
+
+        // Every pilot's split at every zone, read off the board as both bars walk it.
+        var seen = new HashSet<(string Pilot, int zone)>();
+        var faults = new List<string>();
+        var widths = new Dictionary<string, float>();
+        float Width(BoardLine line) => widths.TryGetValue(line.Text, out float w) ? w : widths[line.Text] = TextWidth(line);
+        void Read()
+        {
+            var shown = board.Shown!;
+            var heading = shown.Lines.Where(l => l.Y == 373f && l.X >= 134f).OrderBy(l => l.X).ToList();
+            var zones = heading.Select(l => int.Parse(l.Text, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+            foreach (var name in shown.Lines.Where(l => l.X == 38f && l.Y > 373f && l.Text.StartsWith('P')))
+            {
+                var cells = shown.Lines.Where(l => l.Y == name.Y && l.X >= 134f).OrderBy(l => l.X).ToList();
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    float right = i + 1 < cells.Count ? cells[i + 1].X : 759f;
+                    bool fits = cells[i].X + cells[i].Width <= right && cells[i].Width >= Width(cells[i])
+                                && i < heading.Count && heading[i].X == cells[i].X && heading[i].Width == cells[i].Width;
+                    if (!fits)
+                    {
+                        faults.Add($"{name.Text} cell {i} at {cells[i].X}+{cells[i].Width}");
+                    }
+
+                    int seat = int.Parse(name.Text[1..], System.Globalization.CultureInfo.InvariantCulture) - 1;
+                    if (i < zones.Count && cells[i].Text == StuntMission.FormatTime((zones[i] * 3.1f) + (seat * 0.1f)))
+                    {
+                        seen.Add((name.Text, zones[i]));
+                    }
+                }
+            }
+        }
+
+        var (rx, ry, rw, rh) = OriginalRaceResults.SlotRect(OriginalRaceResults.ZonesRightRow);
+        var tops = new List<int>();
+        for (int splits = 0; splits <= 9; splits += 3)
+        {
+            board.PointerSource = () => null;
+            menu.MoveTo(slots.ToList().IndexOf(OriginalRaceResults.ZonesLeftRow));
+            for (int press = 0; press < 12; press++)
+            {
+                menu.Handle(0, accept: true, back: false);
+            }
+
+            ScrollPilots(board, menu, slots, splits);
+            Read();
+            foreach (bool pressed in new[] { false }.Concat(Enumerable.Repeat(new[] { true, false }, 10).SelectMany(p => p)))
+            {
+                board.PointerSource = () => (rx + (rw / 2f), ry + (rh / 2f), pressed);
+                board._Process(Dt);
+                Read();
+            }
+
+            tops.Add(board.Tops.Zones);
+        }
+
+        ctx.Check(seen.Count == 16 * LongCourseEntries && faults.Count == 0,
+            $"walking both bars shows {seen.Count} of {16 * LongCourseEntries} splits, each in a column its time fits under its zone's number: {string.Join("; ", faults.Take(4))}");
+        ctx.Check(tops.All(t => t == LongCourseEntries - OriginalRaceResults.ZoneColumns) && board.Shown!.Lines.Any(l => l.Text == "P16" && l.X == 38f),
+            $"the right arrow stops at zone {LongCourseEntries} with the names in place: tops {string.Join(",", tops)}");
+        ZonesByWheelAndThumb(ctx, board, sheet);
+    }
+
+    // The splits' pilots moved to a first row by the pad's Accept on the chat pane's arrows.
+    private static void ScrollPilots(OriginalRaceBoard board, BoardMenu menu, IReadOnlyList<int> slots, int top)
+    {
+        while (board.Tops.Splits != Math.Min(top, 9))
+        {
+            menu.MoveTo(slots.ToList().IndexOf(board.Tops.Splits < top ? OriginalRaceResults.SplitsDownRow : OriginalRaceResults.SplitsUpRow));
+            menu.Handle(0, accept: true, back: false);
+        }
+    }
+
+    // The zone bar at its foot. A wheel notch over it moves the zones one left and leaves the pilots.
+    // Its thumb dragged to the track's head shows the first zone. Its arrows turn a quarter.
+    private static void ZonesByWheelAndThumb(TestContext ctx, OriginalRaceBoard board, RaceResultsSheet sheet)
+    {
+        var before = board.Tops;
+        board.PointerSource = () => (400f, 535f, false);
+        board.WheelSource = () => -1;
+        board._Process(Dt);
+        board.WheelSource = () => 0;
+        ctx.Check(board.Tops == before with { Zones = before.Zones - 1 },
+            $"a wheel notch over the zone bar moves the zones and not the pilots: {before} to {board.Tops}");
+
+        // The zones' window is transposed, so its thumb box's x is the authored y.
+        var w = OriginalRaceResults.Window(sheet, RaceResultsList.Zones, board.Tops.Zones);
+        float x = w.ThumbY + (w.ThumbHeight / 2f), y = w.ThumbX + (w.ThumbWidth / 2f);
+        foreach (var (at, pressed) in new[] { (x, false), (x, true), (x - 600f, true), (x - 600f, false) })
+        {
+            board.PointerSource = () => (at, y, pressed);
+            board._Process(Dt);
+        }
+
+        var arrows = board.Shown!.Pictures.Where(p => p.Revs == -0.25f && p.Art.Name != OriginalScrollBar.ThumbArt).ToList();
+        ctx.Check(board.Tops.Zones == 0 && board.Shown.Lines.Any(l => l.Text == "1" && l.X == 134f && l.Y == 373f) && arrows.Count == 2,
+            $"the thumb dragged to the head shows zone 1 again ({board.Tops}), the bar's two arrows a quarter turn ({arrows.Count})");
+    }
+
+    // A line's drawn width in authored pixels, in its own face at its own size.
+    private static float TextWidth(BoardLine line)
+    {
+        var view = new ComposedBoardView();
+        try
+        {
+            var font = (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            return font.GetStringSize(line.Text, HorizontalAlignment.Left, -1f, Math.Max(1, (int)Math.Round(line.Size))).X;
+        }
+        finally
+        {
+            view.Free();
+        }
     }
 
     // Two starts well above C1's terrain, clear of every zone and of each other.
