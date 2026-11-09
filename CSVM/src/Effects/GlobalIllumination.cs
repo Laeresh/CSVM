@@ -4,8 +4,8 @@ using Godot;
 namespace CSVM.Effects;
 
 /// <summary>
-/// Godot's real-time global illumination over the Enhanced world, behind <c>--proto-gi</c>: SDFGI
-/// plus SSIL. SDFGI is the engine's cascaded signed-distance-field GI over the static world the
+/// Godot's real-time global illumination over the Enhanced world, behind the Global Illumination option
+/// (<see cref="GlobalIlluminationSetting"/>): SDFGI plus SSIL. SDFGI is the engine's cascaded signed-distance-field GI over the static world the
 /// session builds, with no bake. Sunlit ground bounces into building shadow and the sky light is
 /// occluded under eaves and in streets. SSIL is the screen-space indirect light that fills what the
 /// cascades are too coarse for. Both are plain Environment switches, so this only sets them with
@@ -20,9 +20,6 @@ internal static class GlobalIllumination
     private const float SsilRadiusM = 20f;
     private const float SsilIntensity = 1.0f;
 
-    /// <summary>Gets or sets a value indicating whether the launch asked for GI. Off by default.</summary>
-    public static bool Enabled { get; set; }
-
     /// <summary>Gets or sets SDFGI's energy. Half by default: a sky at full energy over-fills a flat
     /// world's ground. The lighting lab's slider.</summary>
     public static float Energy { get; set; } = 0.5f;
@@ -35,13 +32,13 @@ internal static class GlobalIllumination
     /// Then the zone's flat ambient steps aside (<c>WeatherRig.WriteColorAmbient</c>) instead of doubling it.</summary>
     public static bool SkyLightLive { get; private set; }
 
-    /// <summary>Writes GI onto <paramref name="env"/>: on under Enhanced while enabled, a fresh
-    /// Environment's values otherwise. The faithful path and an unflagged launch read what they
+    /// <summary>Writes GI onto <paramref name="env"/>: on under Enhanced while the option stands on, a
+    /// fresh Environment's values otherwise. The faithful path and the option off read what they
     /// always did.</summary>
     public static void Apply(Godot.Environment env, bool enhanced)
     {
         var fresh = new Godot.Environment();
-        bool on = enhanced && Enabled;
+        bool on = enhanced && GlobalIlluminationSetting.Enabled;
         SkyLightLive = on;
         env.SdfgiEnabled = on;
         env.SdfgiCascades = on ? Cascades : fresh.SdfgiCascades;

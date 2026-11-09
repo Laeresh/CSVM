@@ -12,7 +12,7 @@ using Godot;
 namespace CSVM.UI.Labs;
 
 /// <summary>
-/// The lighting lab (Shift+F5), built in <c>--freecam</c> alone. Its right-edge panel holds a slider
+/// The lighting lab (Shift+F5), built in <c>--freecam</c> alone, its GI box unsaved. Its right-edge panel holds a slider
 /// per <see cref="ZoneLighting"/> field for the camera's zone or one the dropdown holds
 /// (<see cref="WeatherRig.ForceZone"/>). An edit reaches the session
 /// sun, the Environment and the cockpit and spyglass suns through the weather rig. Save writes this
@@ -53,6 +53,7 @@ public sealed partial class LightingLab : Node
     private OptionButton? _zones;
     private CheckButton? _off;
     private CheckButton? _night;
+    private CheckButton? _gi;
     private bool _open;
     private bool _syncing;
     private float _pending = -1f;
@@ -87,6 +88,10 @@ public sealed partial class LightingLab : Node
 
     /// <summary>The <c>--debug-lighting</c> value, applied when the lab enters the tree.</summary>
     public string? Debug { get; init; }
+
+    /// <summary>Gets what the Global Illumination box calls: GI on or off for this flight, the video
+    /// option unsaved. Null hides the box.</summary>
+    public Action<bool>? SetGlobalIllumination { get; init; }
 
     /// <summary>Whether the panel is showing. Nothing is built until it first opens.</summary>
     public bool IsOpen => _open;
@@ -532,6 +537,18 @@ public sealed partial class LightingLab : Node
         }
         scroll.AddChild(rows);
         box.AddChild(scroll);
+        if (SetGlobalIllumination is { } setGi)
+        {
+            _gi = new CheckButton { Text = "Global Illumination (this flight, not saved)", FocusMode = Control.FocusModeEnum.None };
+            _gi.Toggled += on =>
+            {
+                if (_syncing)
+                    return;
+                setGi(on);
+                Log.Info("ui", $"lighting lab: global illumination {(on ? "on" : "off")} for this flight");
+            };
+            box.AddChild(_gi);
+        }
         box.AddChild(VolumetricClouds.LabSlider("Clouds: god ray intensity", 0f, 4f, () => VolumetricClouds.ShaftScale, v => VolumetricClouds.ShaftScale = v));
         box.AddChild(VolumetricClouds.LabSlider("Terrain + object shadow strength", 0f, 1f, () => _weather.ShadowStrength, v => _weather.ShadowStrength = v));
         box.AddChild(VolumetricClouds.LabSlider("GI: ambient floor under SDFGI", 0f, 1f, () => GlobalIllumination.AmbientFloor, v =>
@@ -687,6 +704,8 @@ public sealed partial class LightingLab : Node
             if (_zones.Selected != at)
                 _zones.Select(at);
         }
+        if (_gi != null)
+            _gi.ButtonPressed = GlobalIlluminationSetting.Enabled;
         _syncing = false;
     }
 

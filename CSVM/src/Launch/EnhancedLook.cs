@@ -195,8 +195,8 @@ public static class EnhancedLook
     }
 
     /// <summary>What the session builds from the word settings, followed on the running world. That is
-    /// the clutter fade at the View Distance reach, the wave ocean and the vegetation. A setting
-    /// whose word changes another session build adds it here.</summary>
+    /// the clutter fade at the View Distance reach, the wave ocean, the vegetation, the volumetric
+    /// clouds and the GI. A setting whose word changes another session build adds it here.</summary>
     public static void FollowWordSettings(GameSession? session)
     {
         bool moved = WriteClutterFadeScale();
@@ -208,6 +208,9 @@ public static class EnhancedLook
         session?.FollowShadowDecals();
         ApplyWaterQuality(session);
         session?.FollowGrade();
+        // The clouds before the GI, whose zone reapply then lights under the held zone.
+        session?.FollowVolumetricClouds();
+        session?.FollowGlobalIllumination();
         LogVegetationQuality();
         LogVegetationModels();
     }

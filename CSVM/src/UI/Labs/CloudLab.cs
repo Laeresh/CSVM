@@ -13,7 +13,8 @@ namespace CSVM.UI.Labs;
 /// slider per cloud-shadow tune (<see cref="CloudShadowPattern.Tune"/>) and the drift's speed and
 /// heading. A tint lights the shadows red, so the pattern and its drift show plainly. Every
 /// edit only writes globals, so it applies at once. Save writes the chapter's tunes and the drift's
-/// speed and heading into <see cref="CloudShadowChapters"/>; the tint is never saved.
+/// speed and heading into <see cref="CloudShadowChapters"/>; the tint is never saved. A box switches
+/// the volumetric clouds for this flight without saving the video option.
 /// </summary>
 internal sealed partial class CloudLab : Node
 {
@@ -35,6 +36,7 @@ internal sealed partial class CloudLab : Node
     private string _note = "";
     private CanvasLayer? _layer;
     private CheckButton? _tint;
+    private CheckButton? _volumetric;
     private Label? _status;
     private bool _open;
     private bool _syncing;
@@ -52,6 +54,10 @@ internal sealed partial class CloudLab : Node
 
     /// <summary>Whether the panel is showing. Nothing is built until it first opens.</summary>
     public bool IsOpen => _open;
+
+    /// <summary>Gets what the Volumetric Clouds box calls: the clouds on or off for this flight, the
+    /// video option unsaved. Null hides the box.</summary>
+    public Action<bool>? SetVolumetric { get; init; }
 
     public override void _Ready() => SetProcess(false);
 
@@ -217,6 +223,18 @@ internal sealed partial class CloudLab : Node
             Log.Info("ui", $"cloud lab: {Describe()}");
         };
         box.AddChild(_tint);
+        if (SetVolumetric is { } setVolumetric)
+        {
+            _volumetric = new CheckButton { Text = "Volumetric Clouds (this flight, not saved)", FocusMode = Control.FocusModeEnum.None };
+            _volumetric.Toggled += on =>
+            {
+                if (_syncing)
+                    return;
+                setVolumetric(on);
+                Log.Info("ui", $"cloud lab: volumetric clouds {(on ? "on" : "off")} for this flight");
+            };
+            box.AddChild(_volumetric);
+        }
         box.AddChild(VolumetricClouds.LabSlider("Clouds: head taper", 0f, 0.8f, () => VolumetricClouds.Taper, v => VolumetricClouds.Taper = v));
         box.AddChild(VolumetricClouds.LabSlider("Deck: sun taken", 0f, 1f, () => VolumetricClouds.DeckSunTaken, v => VolumetricClouds.DeckSunTaken = v));
         box.AddChild(VolumetricClouds.LabSlider("Deck: ambient taken", 0f, 1f, () => VolumetricClouds.DeckAmbientTaken, v => VolumetricClouds.DeckAmbientTaken = v));
@@ -275,6 +293,10 @@ internal sealed partial class CloudLab : Node
 
     private void SyncRows()
     {
+        _syncing = true;
+        if (_volumetric != null)
+            _volumetric.ButtonPressed = VolumetricCloudsSetting.Enabled;
+        _syncing = false;
         if (_clouds() is not { } c)
             return;
         _syncing = true;

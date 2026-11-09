@@ -637,13 +637,14 @@ last-writer order. Under Enhanced every zone apply takes the zone's `Effects/Zon
 pushes a day zone's fog range out, which the sun's shadow distance follows; a night zone keeps its authored range, so a lit city fades into its near-black fog with the ground. Outside an armed fog volume an Enhanced view's fog also blends toward the volume zone's (`BlendFog`, range in reciprocal metres) over its camera's last 100 m to the nearest volume (`VolumeApproachMetres`), and its rig shows the volume zone's dome veiled in the outside fog colour, so the scene greys as a whole instead of jumping at the camera-state edge. `PublishVolumeFog` hands the shaders that zone's fog and every armed volume's face planes (`VolumeFogData`, globals registered by `RegisterGlobals`) and, under Enhanced, draws the volumes' body on the outside state's zone layer: each pixel seen through a volume from outside greys over the stretch of its view ray inside the volume, up to the scene depth. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Under Enhanced `ApplyZone` aims the sun at the zone's dome's `sun` billboard, or its `moon` for a night zone, where the chapter draws one (`LightOrientation`, `SkyAnchorOrientation`), so its shadow maps and the terrain bake agree with the sky; Original wears the authored bearing. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
 
 ## src/Session/World/VolumetricClouds.cs
-Volumetric clouds in place of the cloud deck, the fogvol cloud field and the placed cloud sprites, built by `--proto-clouds`
-under Enhanced alone (`Launch/GameSession.cs`'s `BuildVolumetricClouds`). The slab is one full-screen raymarch through the
-mission's cloud band over `shaders/csky_volumetric_clouds.gdshaderinc`, a deck torn by rifts with the sun's shafts under
-them. A band far above every placed cloud is refitted to their heights, or draws nothing with none placed. It holds the
-zone, turns night off and hides the deck (`WeatherRig.HideDeck`), the field and the placed sprites, which `Follow` restores
-on the faithful path. `PublishGround` writes the `csky_pc_*` globals the ground shadow and the split fog read. It sits in
-`Session.World`, not `Effects`, because it drives `WeatherRig`. Read `Effects/CloudShadow.cs` next, whose pattern it shares.
+Volumetric clouds in place of the cloud deck, the fogvol cloud field and the placed cloud sprites, under Enhanced while the
+Volumetric Clouds option (`Utils/VolumetricCloudsSetting.cs`) stands on; `GameSession.FollowVolumetricClouds` builds or frees
+the node live, and its exit restores the zone, night, fog and deck at once. The session's exit also clears `WeatherRig.NightOff`.
+The zone is held before the terrain bake only for a build with the option on; a live toggle leaves the bearing to the on-demand bake.
+The slab is one full-screen raymarch through the mission's cloud band over `shaders/csky_volumetric_clouds.gdshaderinc`, a deck
+torn by rifts with shafts under them; a band far above every placed cloud is refitted to their heights, or draws nothing with none
+placed. It hides the deck (`WeatherRig.HideDeck`), field and sprites, which `Follow` restores on the faithful path. `PublishGround`
+writes the `csky_pc_*` globals. It sits in `Session.World` because it drives `WeatherRig`. Read `Effects/CloudShadow.cs` next.
 
 ## src/Session/World/LightingTable.cs
 The shipped Enhanced lighting tune, `CSVM/data/lighting.json`, keyed chapter, then an optional mission

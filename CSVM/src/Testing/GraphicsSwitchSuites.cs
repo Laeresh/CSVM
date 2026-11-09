@@ -37,6 +37,13 @@ internal static class GraphicsSwitchSuites
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string FlatWaterChapter = "C2B";
 
+    // The chapter the volumetric clouds suite flies, the one B12's controls check names.
+    private const string CloudsChapter = "C1C";
+
+    // CloudsState with the clouds off and on.
+    private const string CloudsOff = "clouds=0 hold=False night_off=False deck_hidden=False";
+    private const string CloudsOn = "clouds=1 hold=True night_off=True deck_hidden=True";
+
     // The chapter the vegetation lab suite edits: every one of its clutter kinds is listed.
     private const string VegetationChapter = "C1";
 
@@ -484,6 +491,66 @@ internal static class GraphicsSwitchSuites
         finally
         {
             WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-volumetric-clouds-gi",
+        "the Volumetric Clouds and Global Illumination options follow a live apply in an Enhanced C1C flight: "
+        + "clouds on, off, on and off build the clouds node holding the zone, night off and the deck hidden, "
+        + "then free it with the zone hold, night flag, deck hide and ground-shadow global back at their off "
+        + "values; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
+    internal static void VolumetricCloudsAndGi(TestContext ctx)
+    {
+        RequireData(ctx, CloudsChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var wasClouds = VolumetricCloudsSetting.Lookup.Current;
+        var wasGi = GlobalIlluminationSetting.Lookup.Current;
+        try
+        {
+            ApplyOption(null, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Off);
+            ApplyOption(null, GlobalIlluminationSetting.Lookup, GlobalIlluminationSetting.Off);
+            var live = Open(ctx, enhanced: true, chapter: CloudsChapter);
+            try
+            {
+                if (!live.Built || live.Session.Weather is not { } weather)
+                {
+                    ctx.Check(false, $"the Enhanced {CloudsChapter} session builds with weather");
+                    return;
+                }
+
+                string off = CloudsState(live, weather);
+                ctx.Check(off == CloudsOff && PcGround() == Vector4.Zero,
+                    $"built with the option off, no clouds stand and nothing is held ({off}, csky_pc_ground {PcGround()})");
+                foreach (string word in new[] { VolumetricCloudsSetting.On, VolumetricCloudsSetting.Off, VolumetricCloudsSetting.On, VolumetricCloudsSetting.Off })
+                {
+                    ApplyOption(live, VolumetricCloudsSetting.Lookup, word);
+                    bool on = word == VolumetricCloudsSetting.On;
+                    string state = CloudsState(live, weather);
+                    // C1C draws a layer, so on writes the ground global.
+                    ctx.Check(on ? state == CloudsOn && PcGround() != Vector4.Zero : state == CloudsOff && PcGround() == Vector4.Zero,
+                        $"a live move to {word} {(on ? "builds the clouds and holds the zone" : "frees them and restores the zone")} ({state}, csky_pc_ground {PcGround()})");
+                }
+
+                foreach (string word in new[] { GlobalIlluminationSetting.On, GlobalIlluminationSetting.Off })
+                {
+                    ApplyOption(live, GlobalIlluminationSetting.Lookup, word);
+                    bool on = word == GlobalIlluminationSetting.On;
+                    ctx.Check(live.Env.SdfgiEnabled == on && live.Env.SsilEnabled == on,
+                        $"a live move of GI to {word} leaves SDFGI {(on ? "on" : "off")} (sdfgi={live.Env.SdfgiEnabled} ssil={live.Env.SsilEnabled})");
+                }
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            ctx.Check(!WeatherRig.NightOff, $"the closed session leaves the night flag off");
+        }
+        finally
+        {
+            ApplyOption(null, VolumetricCloudsSetting.Lookup, wasClouds.Word ?? VolumetricCloudsSetting.Default);
+            ApplyOption(null, GlobalIlluminationSetting.Lookup, wasGi.Word ?? GlobalIlluminationSetting.Default);
             Restore(wasEnhanced);
         }
     }
@@ -3147,6 +3214,27 @@ internal static class GraphicsSwitchSuites
         EnhancedLook.ApplyWaterQuality(rig.Session);
         Step(rig);
     }
+
+    // A word setting's live apply as an Options accept makes it, then the steps a reading waits for. The
+    // word rides the flag slot, so no saved option reaches it; a null rig only stores the word.
+    private static void ApplyOption(Rig? rig, WordSetting setting, string word)
+    {
+        setting.ResolveFrom(word, null, new SettingContext(Det: true, Enhanced: GraphicsMode.Enhanced, Panes: 1));
+        if (rig == null)
+            return;
+        setting.Apply?.Invoke(new LiveWorld(rig.Sun, rig.Session));
+        Step(rig);
+    }
+
+    // The clouds node count under the session, the zone hold, the night flag and the deck hide.
+    private static string CloudsState(Rig rig, WeatherRig weather)
+    {
+        int clouds = 0;
+        Walk(rig.Session, node => clouds += node is VolumetricClouds ? 1 : 0);
+        return $"clouds={clouds} hold={weather.HoldZone} night_off={WeatherRig.NightOff} deck_hidden={weather.HideDeck}";
+    }
+
+    private static Vector4 PcGround() => VolumetricClouds.PublishedGround;
 
     // A Vegetation Quality apply as the Options accept makes it, then the steps a reading waits for.
     private static void ApplyVegetation(Rig rig, string word)

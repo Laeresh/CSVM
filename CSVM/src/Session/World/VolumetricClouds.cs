@@ -10,7 +10,7 @@ namespace CSVM.Session.World;
 
 /// <summary>
 /// Volumetric clouds in place of the cloud deck, the fogvol field and the placed cloud sprites,
-/// under Enhanced alone (the flag <c>--proto-clouds</c>). The slab is one full-screen raymarch through
+/// under Enhanced alone (<see cref="VolumetricCloudsSetting"/>). The slab is one full-screen raymarch through
 /// the mission's cloud band, over the cloud shadows' own pattern. It draws cumulus heads over an
 /// overcast deck torn by rifts, with light shafts under them. It reads the depth buffer so terrain
 /// and aircraft occlude it, publishes its ground shadow to the terrain, and the faithful path
@@ -81,6 +81,10 @@ internal sealed partial class VolumetricClouds : Node3D
     /// <summary>Gets or sets the share of the ambient light the deck takes from the ground under it,
     /// through AO. Under SDFGI that dims the GI's bounce too. The cloud lab's slider.</summary>
     public static float DeckAmbientTaken { get; set; } = 0.6f;
+
+    /// <summary>Gets the <c>csky_pc_ground</c> global as last written, zero with no clouds drawing. A suite
+    /// reads it here, since reading a global back is an engine error outside the editor.</summary>
+    public static Vector4 PublishedGround { get; private set; }
 
     // The heads' shape the slab and its ground shadow share: taper, edge band, billow, lean.
     private static Vector4 HeadShape => new(Taper, HeadSoft, WarpM, ShearM);
@@ -568,6 +572,7 @@ internal sealed partial class VolumetricClouds : Node3D
     {
         if (!on || _bottom is not { } bottom || _top is not { } top)
         {
+            PublishedGround = Vector4.Zero;
             RenderingServer.GlobalShaderParameterSet("csky_pc_ground", Vector4.Zero);
             RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun", new Vector4(0f, 1f, 0f, 0f));
             RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
@@ -585,8 +590,8 @@ internal sealed partial class VolumetricClouds : Node3D
         }
         var sun = _weather.SunDirection;
         float deckY = bottom + DeckDepthM * 0.4f;
-        RenderingServer.GlobalShaderParameterSet("csky_pc_ground",
-            new Vector4(deckY, _hasDeck ? DeckSunTaken : 0f, DeckGaps, GapM));
+        PublishedGround = new Vector4(deckY, _hasDeck ? DeckSunTaken : 0f, DeckGaps, GapM);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_ground", PublishedGround);
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun",
             new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
         RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", HeadShape);

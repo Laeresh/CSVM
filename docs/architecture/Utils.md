@@ -417,6 +417,22 @@ Whether Enhanced grades the lit world (`Session/World/WeatherRig.cs`'s `WriteGra
 follows the session, which writes the active zone's tuned grade on the world's Environment and each cockpit pass's copy. The VIDEO page
 shows it as the Post-processing dropdown under Cloud Shadows.
 
+## src/Utils/VolumetricCloudsSetting.cs
+Whether Enhanced draws the volumetric clouds (`Session/World/VolumetricClouds.cs`) in place of the deck, the cloud field and
+the placed cloud sprites: `off` or `on`. It resolves as `ShadowDistanceSetting` does: `--volumetric-clouds=`, the saved
+`volumetricClouds` word, the `graphics.volumetricClouds` key, then `off` on every machine and under `--det`. Its live-apply
+hook follows the session, which builds the clouds or frees them (`GameSession.FollowVolumetricClouds`). `TakeUnsaved` is the
+cloud lab's toggle: it moves the run's word and never the options file, and the session's exit puts the resolved word back
+(`WordSetting.Retake`). The VIDEO page shows it as the Volumetric Clouds dropdown under Post-processing.
+
+## src/Utils/GlobalIlluminationSetting.cs
+Whether Enhanced lights the world with SDFGI plus SSIL (`Effects/GlobalIllumination.cs`): `off` or `on`. It resolves as
+`VolumetricCloudsSetting` does: `--global-illumination=`, the saved `globalIllumination` word, the
+`graphics.globalIllumination` key, then `off`. Its live-apply hook follows the session, which writes GI on the world's
+Environment and each cockpit pass's copy, then relights the zone (`GameSession.FollowGlobalIllumination`). `TakeUnsaved` is the
+lighting lab's toggle, unsaved as the cloud lab's is. The VIDEO page shows it as the Global Illumination dropdown under
+Volumetric Clouds.
+
 ## src/Utils/GroundCoverSetting.cs
 How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (`Mech3/GroundCoverShells.cs`) or `cards`
 (`Mech3/GroundCover.cs`), the default. It resolves as `VegetationModelsSetting` does: `--ground-cover=`, the saved

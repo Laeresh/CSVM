@@ -99,9 +99,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, options, live switches and tune layers
 
-11. ☐ Two Enhanced-only video options: Volumetric Clouds and Global Illumination
-12. ☐ Both options switch live in flight
-13. ☐ The cloud lab and the lighting lab toggle the options live
+11. ☑ Two Enhanced-only video options: Volumetric Clouds and Global Illumination
+12. ☑ Both options switch live in flight
+13. ☑ The cloud lab and the lighting lab toggle the options live
 14. ☐ `clouds` and `gi` lighting layers in `lighting.json`, edited by the lighting lab
 15. ☐ The prototype's live sliders become saved tune fields
 
@@ -174,7 +174,13 @@ this branch; the format gate reports them before the commit.
 
 # Wave B, options, live switches and tune layers
 
-## B11 ☐ Two Enhanced-only video options: Volumetric Clouds and Global Illumination
+## B11 ☑ Two Enhanced-only video options: Volumetric Clouds and Global Illumination
+
+**Landed.** `Utils/VolumetricCloudsSetting.cs` and `Utils/GlobalIlluminationSetting.cs` are registered word settings, off by default, resolved from `--volumetric-clouds=on|off` or `--global-illumination=on|off`, the saved word, the `graphics.*` key, then `off`, with `--det` keeping only the flag; the `--proto-*` flags are gone. The VIDEO page shows them as Off/On dropdowns under Post-processing, since the page's two authored checkbox lines are taken by Ocean Waves and Enhanced Graphics.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The video page shows "Volumetric Clouds" and "Global Illumination" checkboxes under Enhanced
 Graphics. They are saved with the other settings and replace `--proto-clouds` and `--proto-gi` as
@@ -201,7 +207,13 @@ saved on logs the cloud and GI lines, and with both off it logs neither.
 **⚠ Traps.** The options must do nothing under faithful graphics. `ProtoGi.Apply` already gates on
 `enhanced`; the cloud build gates on `GraphicsMode.Enhanced` through `ProtoClouds.Follow`.
 
-## B12 ☐ Both options switch live in flight
+## B12 ☑ Both options switch live in flight
+
+**Landed.** Each setting's live-apply hook follows the session (`EnhancedLook.FollowWordSettings`): `GameSession.FollowVolumetricClouds` builds the clouds node or drops it, whose exit restores the zone, night, fog and deck, and `FollowGlobalIllumination` rewrites GI on the world and cockpit Environments, then the zone. The zone is held before the bake only for a build with the option on, the session's exit clears `WeatherRig.NightOff`, and the `graphics-volumetric-clouds-gi` suite toggles both live.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Toggling either option mid-flight builds or removes the effect at once, with the zone,
 night, fog and lighting restored exactly when the clouds go off.
@@ -229,7 +241,13 @@ night, fog and lighting restored exactly when the clouds go off.
 - `WeatherRig.NightOff` is a static. It must be reset on every path that tears the clouds down, a session exit included.
 - The held zone changes the sun bearing. The terrain bake must have the new bearing's key, or the ground loses its shadows until the on-demand bake settles (0.25 s).
 
-## B13 ☐ The cloud lab and the lighting lab toggle the options live
+## B13 ☑ The cloud lab and the lighting lab toggle the options live
+
+**Landed.** The cloud lab has a Volumetric Clouds box and the lighting lab a Global Illumination box, each calling B12's follow after `TakeUnsaved`, which moves the run's word and never the options file. The session's exit puts the resolved word back (`WordSetting.Retake`), so the toggle lasts the flight (Decision 10).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The cloud lab (Shift+F4) has a Volumetric Clouds checkbox, and the lighting lab (Shift+F5) a
 Global Illumination checkbox. Each switches the effect live through B12's path.

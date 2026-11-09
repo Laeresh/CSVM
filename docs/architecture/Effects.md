@@ -171,9 +171,10 @@ each tune's key, label, range and format, which the file, `Tune.Clamped`, `Tune.
 `CloudShadowPatternTests`.
 
 ## src/Effects/GlobalIllumination.cs
-Godot's real-time global illumination over the Enhanced world, behind `--proto-gi`: SDFGI plus SSIL, on or off.
-`Enabled` is set from the flag at launch (`Launch/Launcher.cs`), and `Apply` writes it onto the session Environment
-from `Launch/EnhancedLook.cs`'s `ApplyEnvironment`: SDFGI with eight cascades at a 1.5 m finest cell and half vertical
+Godot's real-time global illumination over the Enhanced world, behind the Global Illumination option
+(`Utils/GlobalIlluminationSetting.cs`): SDFGI plus SSIL, on or off. `Apply` writes the option onto an Environment from
+`Launch/EnhancedLook.cs`'s `ApplyEnvironment` (the launch and a graphics switch) and from
+`GameSession.FollowGlobalIllumination` (a session build, an Options apply and the lighting lab's box): SDFGI with eight cascades at a 1.5 m finest cell and half vertical
 scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While SDFGI stands
 (`SkyLightLive`) the zone apply keeps only `AmbientFloor` of the flat ambient, since the cascades carry the sky light;
 `Energy` and `AmbientFloor` are the lighting lab's live sliders. Off, or on the faithful path, every field takes a fresh

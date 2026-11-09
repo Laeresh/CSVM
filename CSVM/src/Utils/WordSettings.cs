@@ -27,6 +27,8 @@ public static class WordSettings
         GroundCoverSetting.Lookup,
         CloudShadowSetting.Lookup,
         PostProcessingSetting.Lookup,
+        VolumetricCloudsSetting.Lookup,
+        GlobalIlluminationSetting.Lookup,
     };
 
     /// <summary>The panes the running session draws, which a fallback may read. 1 until
