@@ -23,7 +23,11 @@ internal sealed partial class ProtoClouds : Node3D
     /// <summary>The default variant, the one a bare <c>--proto-clouds</c> draws.</summary>
     public const string DefaultWord = "slab";
 
-    private const int ShellCount = 14;
+    // The authored band is the whiteout's thin sheet. The cumulus layer stands this much taller
+    // over the same floor, so the heads have room to tower.
+    private const float LayerDepthGain = 3f;
+    private const float LayerMinDepthM = 600f;
+    private const int ShellCount = 24;
     private const float ShellSizeM = 36000f;
     private const float PuffMapSize = 128;
     private const float PuffRadiusM = 170f;
@@ -93,7 +97,7 @@ internal sealed partial class ProtoClouds : Node3D
     public static (float? Bottom, float? Top) LayerOf(WeatherState? mission, IReadOnlyList<FogVolumeBox> volumes)
     {
         if (mission is { HasCloudBand: true })
-            return (mission.CloudBottom, mission.CloudTop);
+            return (mission.CloudBottom, Thickened(mission.CloudBottom, mission.CloudTop));
         if (volumes.Count == 0)
             return (null, null);
         float bottom = float.MaxValue, top = float.MinValue;
@@ -102,8 +106,13 @@ internal sealed partial class ProtoClouds : Node3D
             bottom = Mathf.Min(bottom, v.Box.Position.Y);
             top = Mathf.Max(top, v.Box.End.Y);
         }
-        return (bottom, top);
+        return (bottom, Thickened(bottom, top));
     }
+
+    /// <summary>The cumulus layer's top over the authored floor <paramref name="bottom"/>: the authored
+    /// depth to <paramref name="top"/> times <see cref="LayerDepthGain"/>, at least <see cref="LayerMinDepthM"/>.</summary>
+    public static float Thickened(float bottom, float top) =>
+        bottom + Mathf.Max((top - bottom) * LayerDepthGain, LayerMinDepthM);
 
     public override void _EnterTree()
     {
@@ -159,13 +168,13 @@ internal sealed partial class ProtoClouds : Node3D
         uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
         uniform float layer_bottom = 970.0;
         uniform float layer_top = 1130.0;
-        uniform float cover_bias = 0.25;
+        uniform float cover_bias = 0.15;
         uniform float detail_m = 180.0;
         uniform float erosion = 0.55;
         uniform float density_gain = 0.025;
         uniform int steps = 40;
         uniform vec3 sun_rgb = vec3(1.0, 0.96, 0.9);
-        uniform float ambient_gain = 0.9;
+        uniform float ambient_gain = 0.6;
         uniform float far_m = 24000.0;
         """;
 
@@ -188,7 +197,9 @@ internal sealed partial class ProtoClouds : Node3D
         vec3 pc_light(vec3 p, vec3 dir, float sun_t, vec3 cam) {
             float cos_theta = dot(dir, csky_sun_dir);
             float phase = mix(csky_pc_phase(cos_theta, 0.0), csky_pc_phase(cos_theta, 0.6), 0.5) * 4.0 * 3.14159265;
-            vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain;
+            // The sky lights the crown and little reaches the base, so the underside reads darker.
+            float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
+            vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain * mix(0.5, 1.0, h);
             // The floor stands in for the multiple scattering a thick cloud's shaded side still gets.
             float lit = mix(0.25, 1.0, sun_t);
             vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * lit * mix(0.6, 1.4, phase / (1.0 + phase));
@@ -436,8 +447,11 @@ internal sealed partial class ProtoClouds : Node3D
         int boxes = 0;
         foreach (var volume in _volumes)
         {
-            var box = volume.Box;
-            var map = PuffMap(box, sprites, box.Size.Y * 0.5f);
+            // The authored slab is thin; the box grows upward so the heads can tower over it.
+            var authored = volume.Box;
+            var box = new Aabb(authored.Position, new Vector3(authored.Size.X,
+                Thickened(authored.Position.Y, authored.End.Y) - authored.Position.Y, authored.Size.Z));
+            var map = PuffMap(authored, sprites, authored.Size.Y * 0.5f);
             AddBox(root, box, map, 1.0f);
             boxes++;
         }
@@ -450,12 +464,13 @@ internal sealed partial class ProtoClouds : Node3D
         }
         foreach (var (_, world) in _placedSprites)
         {
-            // A billboard's quad is thin, so the proxy takes the card's width as its depth.
+            // A billboard's quad is thin, so the proxy takes the card's width as its depth. It
+            // stands on the card's foot, so the cumulus keeps a flat base where the sprite's was.
             float depth = Mathf.Max(world.Size.X, world.Size.Y) * PlacedCloudDepthShare;
             var centre = world.GetCenter();
-            var size = new Vector3(Mathf.Max(world.Size.X, depth), Mathf.Max(world.Size.Y, depth * 0.5f), depth);
-            var box = new Aabb(centre - size * 0.5f, size);
-            AddBox(root, box, PuffMap(box, new[] { centre }, Mathf.Min(size.X, size.Z) * 0.45f), 1.4f);
+            var size = new Vector3(Mathf.Max(world.Size.X, depth), Mathf.Max(world.Size.Y, depth * 0.9f), depth);
+            var box = new Aabb(new Vector3(centre.X - size.X * 0.5f, world.Position.Y, centre.Z - size.Z * 0.5f), size);
+            AddBox(root, box, PuffMap(box, new[] { centre }, size.Y), 1.4f);
             boxes++;
         }
         return $"{boxes} proxy box(es) over {sprites.Count} field sprites and {_placedSprites.Count} placed clouds";

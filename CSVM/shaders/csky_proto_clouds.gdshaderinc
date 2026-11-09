@@ -49,23 +49,40 @@ float csky_pc_fbm(vec3 p) {
     return n / 0.875;
 }
 
-// The vertical profile of a layer between `bottom` and `top`: 0 at both faces, 1 through the
-// middle, with the flat base a stratus sheet reads with from below.
-float csky_pc_profile(float y, float bottom, float top) {
+// The cumulus column at a world point: the layer's coverage shaped into heads. Fuller coverage
+// towers higher (the column's own top is its coverage share of the layer), a low-frequency lobe
+// term breaks the heads apart, and the base stays flat.
+float csky_pc_column_top(vec3 p, float cover, float detail_m) {
+    float lobes = csky_pc_noise3(vec3(p.x, 0.0, p.z) / (detail_m * 5.0), 1911520717u);
+    return clamp(cover * mix(0.55, 1.25, lobes), 0.0, 1.0);
+}
+
+// The vertical profile of a column between `bottom` and `top` whose own top is `column_top` of
+// the layer: a hard flat base, full through the body, rounding off under the crown.
+float csky_pc_profile(float y, float bottom, float top, float column_top) {
     float h = clamp((y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
-    return smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
+    if (column_top <= 0.05) {
+        return 0.0;
+    }
+    return smoothstep(0.0, 0.06, h) * (1.0 - smoothstep(column_top * 0.55, column_top, h));
 }
 
 // Density at a world point of a layer whose horizontal coverage is `cover` in [0, 1] (1 under a
-// cloud's core). `detail_m` is the erosion cell in metres and `erosion` how deep the noise bites.
-// Zero outside the layer or in the clear.
+// cloud's core). `detail_m` is the erosion cell in metres and `erosion` how deep the noise bites,
+// lightly at the base and hard at the crown, so the bottom reads flat and the top billows.
 float csky_pc_density(vec3 p, float bottom, float top, float cover, float detail_m, float erosion) {
-    float prof = csky_pc_profile(p.y, bottom, top);
-    if (prof <= 0.0 || cover <= 0.0) {
+    if (cover <= 0.0) {
         return 0.0;
     }
+    float column_top = csky_pc_column_top(p, cover, detail_m);
+    float prof = csky_pc_profile(p.y, bottom, top, column_top);
+    if (prof <= 0.0) {
+        return 0.0;
+    }
+    float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
     float n = csky_pc_fbm(p / detail_m);
-    float d = cover * prof - erosion * (1.0 - n);
+    float bite = erosion * mix(0.3, 1.4, clamp(h / column_top, 0.0, 1.0));
+    float d = min(cover, 1.0) * prof - bite * (1.0 - n);
     return clamp(d, 0.0, 1.0);
 }
 
