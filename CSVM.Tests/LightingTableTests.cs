@@ -32,7 +32,7 @@ public sealed class LightingTableTests
     {
         var d = ZoneLighting.Default;
         Assert.Equal((1.07f, 1.8f, 1f, 6f), (d.SunEnergy, d.AmbientEnergy, d.Exposure, d.White));
-        Assert.Equal((0.05f, 1.25f, 0.12f, 0.17f, 0.42f, 0.8f), (d.ShadowBias, d.NormalBias, d.Split1, d.Split2, d.Split3, d.FadeStart));
+        Assert.Equal((0.05f, 1.25f, 0.03f, 0.12f, 0.42f, 0.8f), (d.ShadowBias, d.NormalBias, d.Split1, d.Split2, d.Split3, d.FadeStart));
         Assert.Equal((1.25f, 1.1f, 1.15f), (d.GradeAgxContrast, d.GradeContrast, d.GradeSaturation));
         Assert.Equal((1f, 1f, 1f), (d.CloudR, d.CloudG, d.CloudB));
         Assert.Equal((1f, 1f, 1f), (d.SkyR, d.SkyG, d.SkyB));
