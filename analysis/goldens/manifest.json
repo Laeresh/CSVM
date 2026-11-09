@@ -155,7 +155,7 @@
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "3027628e76c60b2ce153f2280eb9eac7",
+      "hash": "161d53249cbf9738f55358ded3e1c578",
       "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks lit out to their own fade, the far towers darkening into the black fog from 1,400 m, the far skyline fading into it, TAA, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -169,14 +169,14 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "dea8838d97b4bd2d5c9eff0ad74a8100",
+      "hash": "d084208b0d96d463109fe0714081300d",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "624cac9939a3dcc84a07cff26f8a2b7d",
+      "hash": "1525ca19d4fe1829c5480c153645966b",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -190,7 +190,7 @@
     {
       "name": "c1-cockpit-xr-sim-enhanced",
       "frame": 120,
-      "hash": "2d7e957ae51d82a462a14956628cf321",
+      "hash": "da4a135a0072bddb061086c513128ea0",
       "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -274,7 +274,7 @@
     {
       "name": "c1b-ocean-enhanced",
       "frame": 120,
-      "hash": "ce71e4b2cad1031d3c9522474f3001e6",
+      "hash": "fe925daa14cd7b273849d15140535ff3",
       "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming to the land edge, the surf's churning lace and breaking lines over the hidden ring, SSR, TAA, in the shipped C1B sea.",
       "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     },
