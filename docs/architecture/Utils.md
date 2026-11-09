@@ -400,6 +400,14 @@ Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `o
 every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
 description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
 
+## src/Utils/ShadowDistanceSetting.cs
+How far the Enhanced sun casts: `normal` (the zone's shadow distance, where its haze begins), `far` (1.5 times it) or `extreme`
+(2 times it). It resolves as `VegetationModelsSetting` does: `--shadow-distance=`, the saved `shadowDistance` word, the
+`graphics.shadowDistance` key, then `normal` on every machine and under `--det`. `SunShadow.Stretch` multiplies the sun's given
+distance by the scale and divides its three split fractions by it, so the near cascades keep their metres and only the far one
+reaches further, at coarser texels. A live change stretches the session sun again. The VIDEO page shows it as the Shadow Distance
+dropdown under Cloud Shadows.
+
 ## src/Utils/PostProcessingSetting.cs
 Whether Enhanced grades the lit world (`Session/World/WeatherRig.cs`'s `WriteGrade`, at the zone tune's grade): `off` or `on`. It resolves as
 `CloudShadowSetting` does: `--post-processing=`, the saved `postProcessing` word, the `graphics.postProcessing` key, then
@@ -437,7 +445,9 @@ cost. `Launcher` folds `EnhancedReach` into the clutter fade global at startup a
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
 plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
 graphics-mode switch, and `Launch/EnhancedLook.cs` resets the session sun from a fresh light
-through it. Below Flight and Session so both share one field list.
+through it. Below Flight and Session so both share one field list. It also keeps the session sun's given shadow distance and
+split fractions (`WriteDistance`, `WriteSplits`) and writes them under the Shadow Distance scale (`Stretch`); a copy takes
+the given splits, so the cockpit pass's short range never stretches.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
