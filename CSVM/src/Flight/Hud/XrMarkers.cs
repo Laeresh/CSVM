@@ -149,9 +149,9 @@ public sealed partial class XrMarkers : Node3D
             targets.MarksInWorld = true;
             font = ChromeType.Face(targets);
             (planePos, heading) = (targets.PlanePos, targets.HeadingDeg);
-            // The None HUD mode's lead-only rule (HudModeSetting.LeadOnly), as the flat draw takes it.
-            // No card, ring arrow or spyglass; selection runs on and the spyglass is released.
-            bool shows = Shows(targets) && !targets.LeadOnly;
+            // The None HUD mode (HudModeSetting.Textless). The cards carry their text, so a stereo
+            // session places no card, ring arrow or spyglass; selection runs on, the spyglass released.
+            bool shows = Shows(targets) && !targets.Textless;
             if (shows)
             {
                 targets.WorldMarks(_marks);

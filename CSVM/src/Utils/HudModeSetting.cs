@@ -54,9 +54,9 @@ public static class HudModeSetting
     /// <summary>The mode after <paramref name="mode"/>: Full, Minimal, None, then Full again.</summary>
     public static HudMode Next(HudMode mode) => (HudMode)(((int)mode + 1) % Words.Count);
 
-    /// <summary>Whether the markers draw the lead marker alone: None, outside the cockpit view. The
-    /// one rule the flat targeting HUD and a stereo session's world markers both follow.</summary>
-    public static bool LeadOnly(HudMode mode, bool cockpitView) => mode == HudMode.None && !cockpitView;
+    /// <summary>Whether the markers draw without text: None, outside the cockpit view. The flat
+    /// targeting HUD keeps the selection's box and arrow; a stereo session places no marker card.</summary>
+    public static bool Textless(HudMode mode, bool cockpitView) => mode == HudMode.None && !cockpitView;
 
     /// <summary>The message-stack line one press of the cycle key posts, e.g. <c>HUD: Minimal</c>.</summary>
     public static string Line(HudMode mode) => "HUD: " + LabelWords[(int)mode];
