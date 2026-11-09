@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, defects and cost
 
 31. ☐ The slab draws over the rain
-32. ☐ C2's horizon under the clouds (author's check)
+32. ☑ C2's horizon under the clouds (author's check)
 33. ☐ `TerrainShadow.SunAt` ignores the shadow strength
 34. ☐ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
 
@@ -350,7 +350,11 @@ rain was not checked against it in a live run.
 
 **Verify.** <TODO: a chapter with rain under a cloud layer, captured with the option on.>
 
-## D32 ☐ C2's horizon under the clouds (author's check)
+## D32 ☑ C2's horizon under the clouds (author's check)
+
+**Verified.** The author flew C2 with the clouds on: the horizon reads right, with no grey-blue band. The fix landed in A1.
+
+**Original approach (kept for reference).**
 
 **Goal.** C2's horizon shows no grey-blue band, and the far clouds fade into the fog.
 
