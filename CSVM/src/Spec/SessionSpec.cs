@@ -1089,6 +1089,10 @@ public sealed record SessionSpec
     /// (<c>Effects/ProtoClouds.cs</c>) in place of the deck and the cloud sprites, Enhanced only. Null
     /// builds none; the bare flag reads <c>slab</c>.</summary>
     public string? ProtoClouds { get; private set; }
+
+    /// <summary><c>--proto-gi[=sdfgi|ssil|both]</c>: the throwaway global-illumination prototype
+    /// (<c>Effects/ProtoGi.cs</c>) over the Enhanced world. Null leaves GI off; the bare flag reads <c>both</c>.</summary>
+    public string? ProtoGi { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-pointer=x,y[,down][,right]</c> (the Original presentation only): stand
     /// seat 0's pointer at that authored 800x600 point, its buttons held by the words that follow,
@@ -1544,6 +1548,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-wake=")) { s.DebugWake = ParseDebugWake(arg["--debug-wake=".Length..]); }
             else if (arg == "--proto-clouds") { s.ProtoClouds = Effects.ProtoClouds.DefaultWord; }
             else if (arg.StartsWith("--proto-clouds=")) { s.ProtoClouds = arg["--proto-clouds=".Length..]; }
+            else if (arg == "--proto-gi") { s.ProtoGi = "both"; }
+            else if (arg.StartsWith("--proto-gi=")) { s.ProtoGi = arg["--proto-gi=".Length..]; }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }
             else if (arg == "--dump-markers") { s.DumpMarkers = true; }
             else if (arg.StartsWith("--dump-markers=")) { s.DumpMarkers = true; s.DumpMarkersPlane = arg["--dump-markers=".Length..]; }

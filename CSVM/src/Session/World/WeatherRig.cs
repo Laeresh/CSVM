@@ -1106,7 +1106,8 @@ public sealed class WeatherRig
             return;
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = ambientColor;
-        env.AmbientLightEnergy = ambientEnergy;
+        // The GI prototype's SDFGI brings the sky light itself, so the flat fill steps aside.
+        env.AmbientLightEnergy = Effects.ProtoGi.SkyLightLive ? 0f : ambientEnergy;
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class

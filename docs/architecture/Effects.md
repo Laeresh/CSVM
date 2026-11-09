@@ -179,6 +179,15 @@ placed cloud over a puff map rasterised from the sprites' positions; `shells`, e
 march. It hides the originals through `WeatherRig.HideDeck`, the field's visibility and `SceneBuilder.IsPlacedCloudMaterial`,
 and `Follow` restores them on the faithful path. Read `CloudShadow.cs` next, whose pattern the slab and shells share.
 
+## src/Effects/ProtoGi.cs
+PROTOTYPE, throwaway: Godot's real-time global illumination over the Enhanced world, behind `--proto-gi=sdfgi|ssil|both`.
+`Configure` reads the flag's word at launch (`Launch/Launcher.cs`), and `Apply` writes the mode onto the session
+Environment from `Launch/EnhancedLook.cs`'s `ApplyEnvironment`: SDFGI with eight cascades at a 1.5 m finest cell and
+half vertical scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While
+SDFGI stands (`SkyLightLive`) the zone apply writes a zero flat ambient, since the cascades carry the sky light. Off,
+or on the faithful path, every field takes a fresh Environment's value. Read `ProtoClouds.cs` next, the prototype it
+stands beside.
+
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's
 `BuildCloudShadow`: one object per chapter with `darkness`, `ambient`, `size`, `coverage`, `softness`, `speed` and

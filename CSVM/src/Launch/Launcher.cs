@@ -1484,6 +1484,7 @@ public partial class Launcher : Node3D
         // Enhanced mode alone: the faithful path's world is fullbright, so none of these passes has
         // anything to work on. The cockpit pass duplicates this Environment
         // (CockpitOverlay.NewOverlay) and inherits the settings.
+        Effects.ProtoGi.Configure(_spec.ProtoGi);
         if (GraphicsMode.Enhanced)
             EnhancedLook.ApplyEnvironment(_env, true, _spec.SkippedPasses);
         AddChild(new WorldEnvironment { Environment = _env });
