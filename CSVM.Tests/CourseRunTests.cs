@@ -222,6 +222,33 @@ public class CourseRunTests
     }
 
     [Fact]
+    public void LinesFittedOneEntryAtATimeMatchLinesFittedTogether()
+    {
+        // A race lays its bots' lines one entry a step over the opening count (StuntRaceBots), in
+        // any order. A refit of one entry starts afresh.
+        var pillars = new[]
+        {
+            new Aabb(new Vector3(9f, -10f, -130f), new Vector3(30f, 400f, 40f)),
+            new Aabb(new Vector3(-39f, -10f, -130f), new Vector3(30f, 400f, 40f)),
+        };
+        var together = Run(Fwd(A), Fwd(B));
+        together.FitLines(TubeAgainst(pillars, reach: 13f));
+        var apart = Run(Fwd(A), Fwd(B));
+        apart.FitLine(TubeAgainst(pillars, reach: 13f), 1);
+        apart.FitLine(TubeAgainst(pillars, reach: 13f), 0);
+        for (int i = 0; i < 2; i++)
+        {
+            var (one, all) = (apart.Zones[i].Route!, together.Zones[i].Route!);
+            Assert.Equal(all.KnifeEdge, one.KnifeEdge);
+            Assert.True(one.End(false).IsEqualApprox(all.End(false)) && one.End(true).IsEqualApprox(all.End(true)), $"entry {i + 1}");
+        }
+
+        Assert.True(apart.Zones[0].Route!.KnifeEdge);
+        apart.FitLine(TubeAgainst(pillars, reach: 5f), 0);
+        Assert.False(apart.Zones[0].Route!.KnifeEdge);
+    }
+
+    [Fact]
     public void AnExitWithAPostOnItsLineTurnsPastIt()
     {
         // A post stands 1 to 4 m right of A's exit, 108 to 112 m out. The exit turns 5 degrees left of
