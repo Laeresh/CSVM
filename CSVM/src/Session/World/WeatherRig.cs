@@ -353,7 +353,7 @@ public sealed class WeatherRig
         set
         {
             _sun.ShadowOpacity = value;
-            RenderingServer.GlobalShaderParameterSet("csky_terrain_shadow_strength", value);
+            Effects.TerrainShadow.Strength = value;
         }
     }
 

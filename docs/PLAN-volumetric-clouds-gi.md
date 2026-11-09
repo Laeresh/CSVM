@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☐ The slab draws over the rain
 32. ☑ C2's horizon under the clouds (author's check)
-33. ☐ `TerrainShadow.SunAt` ignores the shadow strength
+33. ☑ `TerrainShadow.SunAt` ignores the shadow strength
 34. ☐ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
 
 ### Wave E, tuning and landing
@@ -300,7 +300,7 @@ stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second mu
 
 **Verify.** Move each slider, save, relaunch and see the value return. The log's tune line names the field.
 
-**⚠ Traps.** `TerrainShadow.SunAt` (the CPU twin) does not read the strength yet (D33). Anything that samples it will disagree with the shader until D33 lands.
+**⚠ Traps.** Shadow strength is set through `WeatherRig.ShadowStrength`, which writes `TerrainShadow.Strength` (D33). Never write the `csky_terrain_shadow_strength` global directly, or `SunAt` falls out of step with the shader.
 
 # Wave C, remove the prototype scaffolding
 
@@ -373,7 +373,13 @@ and judges the horizon. If far clouds read wrong, `haze_near_m` (8 km) becomes a
 
 **Verify.** The author's screenshot at the earlier report's spot.
 
-## D33 ☐ `TerrainShadow.SunAt` ignores the shadow strength
+## D33 ☑ `TerrainShadow.SunAt` ignores the shadow strength
+
+**Landed.** `TerrainShadow.Strength` is the one owner of `csky_terrain_shadow_strength`: `WeatherRig.ShadowStrength` sets it, it writes the global and keeps the value, since the renderer reads no global back. `SunAt` passes it to `TerrainShadowRaster.Lit`, which now computes `1 - strength * clamp(...)` as the shader does, and `TerrainShadowRasterTests` checks that at strengths 0, 0.5 and 1.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The CPU twin of the baked terrain shadow agrees with the shader at every strength.
 
@@ -381,7 +387,7 @@ and judges the horizon. If far clouds read wrong, `haze_near_m` (8 km) becomes a
 `1.0 - csky_terrain_shadow_strength * clamp(...)`; `TerrainShadow.SunAt` was not changed with it.
 
 **Approach.** Apply the same strength in `SunAt`.
-<TODO: list `SunAt`'s callers, to know what the disagreement reaches.>
+`SunAt` has one caller, the `graphics-terrain-shadow` suite (`GraphicsSwitchSuites.TerrainShadowBakes`), which reads a cliff's waterline as shaded and the open sea as lit. No gameplay or rendering code samples it, so the disagreement reached only that suite, and only with the lighting lab's slider moved below 1.
 
 **Model recommendation.** medium, low effort.
 

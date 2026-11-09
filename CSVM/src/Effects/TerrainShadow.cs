@@ -24,14 +24,16 @@ internal sealed partial class TerrainShadow : Node
     // bakes once where it stops.
     private const double OnDemandSettleSec = 0.25;
 
-    // The globals csky_terrain_shadow.gdshaderinc declares: the live texture, its world rect, and the
-    // penumbra's growth per metre of blocker distance with its one-texel floor.
+    // The globals csky_terrain_shadow.gdshaderinc declares: the texture, its world rect, the penumbra's
+    // growth per metre of blocker distance and its floor, and the shade's strength.
     private static readonly StringName MapParam = "csky_terrain_shadow";
     private static readonly StringName RectParam = "csky_terrain_shadow_rect";
     private static readonly StringName SoftParam = "csky_terrain_shadow_soft";
+    private static readonly StringName StrengthParam = "csky_terrain_shadow_strength";
 
     // What the globals hold with no bake live: one texel far below any world, so everything reads lit.
     private static ImageTexture? _none;
+    private static float _strength = 1f;
 
     private readonly Dictionary<Vector3, Baked> _baked = new();
     private Vector3[] _tris = Array.Empty<Vector3>();
@@ -52,6 +54,19 @@ internal sealed partial class TerrainShadow : Node
 
     /// <summary>The bake whose texture the globals carry, null while the defaults stand.</summary>
     public static TerrainShadow? Live { get; private set; }
+
+    /// <summary>Gets or sets the share of the sun the bake takes under full shade, 1 by default
+    /// (<c>WeatherRig.ShadowStrength</c>). It writes the strength global and keeps the
+    /// value for <see cref="SunAt"/>, since the renderer reads no global back outside the editor.</summary>
+    public static float Strength
+    {
+        get => _strength;
+        set
+        {
+            _strength = value;
+            RenderingServer.GlobalShaderParameterSet(StrengthParam, value);
+        }
+    }
 
     /// <summary>The world X/Z of the first texel's corner.</summary>
     public Vector2 Origin { get; private set; }
@@ -74,7 +89,7 @@ internal sealed partial class TerrainShadow : Node
         RenderingServer.GlobalShaderParameterAdd(MapParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _none);
         RenderingServer.GlobalShaderParameterAdd(RectParam, RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 0f, 1f, 1f));
         RenderingServer.GlobalShaderParameterAdd(SoftParam, RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(0f, 1f));
-        RenderingServer.GlobalShaderParameterAdd("csky_terrain_shadow_strength", RenderingServer.GlobalShaderParameterType.Float, 1f);
+        RenderingServer.GlobalShaderParameterAdd(StrengthParam, RenderingServer.GlobalShaderParameterType.Float, _strength);
     }
 
     /// <summary>Puts the defaults back, so every lit fragment reads lit.</summary>
@@ -146,8 +161,8 @@ internal sealed partial class TerrainShadow : Node
         RenderingServer.GlobalShaderParameterSet(SoftParam, Soft(baked));
     }
 
-    /// <summary>The sun's share at a world point under the published orientation, 1 lit, 0 shaded,
-    /// read as <c>csky_terrain_baked_sun</c> reads the texture. Off the rect, or with the defaults
+    /// <summary>The sun's share at a world point under the published orientation, 1 lit, 1 - <see cref="Strength"/>
+    /// shaded, read as <c>csky_terrain_baked_sun</c> reads the texture. Off the rect, or with the defaults
     /// published for the orientation, 1.</summary>
     public float SunAt(Vector3 world)
     {
@@ -166,7 +181,7 @@ internal sealed partial class TerrainShadow : Node
         var d = Texel(image, ix + 1, iy + 1);
         var texel = a.Lerp(b, fx).Lerp(c.Lerp(d, fx), fy);
         var soft = Soft(baked);
-        return TerrainShadowRaster.Lit(texel.X, texel.Y, world.Y, soft.X, soft.Y);
+        return TerrainShadowRaster.Lit(texel.X, texel.Y, world.Y, soft.X, soft.Y, Strength);
     }
 
     public override void _EnterTree() => Publish(_orientation);
