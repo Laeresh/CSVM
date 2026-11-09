@@ -90,6 +90,11 @@ follows:
 | 5 | NW Lighthouse | 2 | `C1B` |
 | 6 | Sky Haven (Rockies) | 7 | `C4` |
 
+The Environment words are the original's. The remake's Environment box and games list name each
+row's world by its one chapter name, the same in every mode, a remake-only rule described in
+[`../formats/instant-action.md`](../formats/instant-action.md#environment-mapping). The row numbers
+are unchanged.
+
 ⚠ **Above the Clouds is `C1C` in multiplayer and `C2B` in Instant Action.** The Instant Action
 launcher maps its clouds row to world 5 ([`../formats/instant-action.md`](../formats/instant-action.md));
 the multiplayer table above writes 3. `Loading.zrd` agrees with the table: its multiplayer dialogs

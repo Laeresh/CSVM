@@ -628,7 +628,8 @@ internal static class StuntRaceBotSuites
     }
 
     [Suite("stunt-race-bot-course-balmoral",
-        "a local C2 stunt race of one pane, two veteran Balmoral bots and a veteran Fury for 300 s: each bot's course "
+        "a local C2 stunt race of one pane, two veteran Balmoral bots and a veteran Fury for 300 s, on a copy of the "
+        + "shipped course that admits every plane, since the shipped one refuses the Balmoral: each bot's course "
         + "lines are fitted to its own airframe, so a Balmoral, 26 m across, flies p9's line knife-edge under the bridge "
         + "where the Fury flies it level, and clears p9 within 10 s of p8, where it took 50 to 110 s; it strikes the "
         + "world only past p12 and p17, whose tunnels no straight line takes a Balmoral through, where it struck the "
@@ -646,8 +647,23 @@ internal static class StuntRaceBotSuites
             return;
         }
 
+        // The shipped course refuses the Balmoral, so the race flies a copy that admits every plane.
+        var shipped = new CourseLibrary(CourseLibrary.ShippedRoot, null).Load("C2", CourseName, out string error);
+        ctx.Check(shipped is { Planes: not null } && !shipped.Admits(Flight.Hangar.StockAirframes.IdOf("player_balmoral")!.Value),
+            $"the shipped {CourseName} refuses the Balmoral {error}");
+        if (shipped == null)
+        {
+            return;
+        }
+
+        string root = System.IO.Path.Combine(ctx.ScratchDir, "stunt-race-bot-course-balmoral");
+        var library = new CourseLibrary(System.IO.Path.Combine(root, "shipped"), System.IO.Path.Combine(root, CourseLibrary.GameFolderName));
+        library.Save(shipped with { Planes = null }, CourseSource.GameFolder);
+        var copy = library.Load("C2", CourseName, out error);
+        ctx.Check(copy is { Planes: null } && copy.Hash == shipped.Hash,
+            $"the copy admits every plane and hashes as the shipped course ({copy?.Hash} for {shipped.Hash}) {error}");
         var ambient = NetCombatSuites.Ambient.Save();
-        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster, courses: library);
         try
         {
             var session = end.Session;

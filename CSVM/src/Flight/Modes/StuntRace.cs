@@ -16,7 +16,8 @@ public enum StuntRacePhase
     /// <summary>The window clock runs, and any pilot may start a run or rerun one.</summary>
     Open,
 
-    /// <summary>Time is up. A run in progress may still finish inside the cap; none may start.</summary>
+    /// <summary>Time is up. A run in progress may still finish inside the cap. Only a run on its
+    /// approach, from a live respawn held before time up, may start.</summary>
     FinalRun,
 
     /// <summary>The race is over and its board is due.</summary>
@@ -75,9 +76,13 @@ public sealed class Racer
     /// <summary>Runs completed, every zone cleared, that the race counted.</summary>
     public int RunsFinished { get; private set; }
 
-    /// <summary>Whether a counted run is in progress: started in the window, not yet completed
-    /// or thrown away.</summary>
+    /// <summary>Whether a counted run is in progress: started in the window, or on its approach,
+    /// and not yet completed or thrown away.</summary>
     public bool InRun { get; private set; }
+
+    /// <summary>Whether the run in progress is still on its approach: a live respawn held while the
+    /// window was open, its clock not yet started. It may start after time up.</summary>
+    public bool OnApproach { get; private set; }
 
     /// <summary>Zones the run in progress has cleared.</summary>
     public int CurrentZones { get; private set; }
@@ -110,12 +115,21 @@ public sealed class Racer
     {
         Left = true;
         InRun = false;
+        OnApproach = false;
+        Revision++;
+    }
+
+    internal void Approach()
+    {
+        InRun = true;
+        OnApproach = true;
         Revision++;
     }
 
     internal void Start()
     {
         InRun = true;
+        OnApproach = false;
         RunsStarted++;
         CurrentZones = 0;
         Array.Clear(_current);
@@ -127,13 +141,14 @@ public sealed class Racer
         if (!InRun)
             return;
         InRun = false;
+        OnApproach = false;
         Revision++;
     }
 
     // A first clearing of a course zone in the run in progress; the furthest run follows it.
     internal bool ClearZone(int zone, float runTime)
     {
-        if (!InRun || zone < 0 || zone >= _current.Length || _current[zone] != null)
+        if (!InRun || OnApproach || zone < 0 || zone >= _current.Length || _current[zone] != null)
             return false;
         _current[zone] = runTime;
         CurrentZones++;
@@ -188,6 +203,7 @@ public sealed class Racer
         RunsStarted = 0;
         RunsFinished = 0;
         InRun = false;
+        OnApproach = false;
         CurrentZones = 0;
         Array.Clear(_current);
         Array.Clear(_best);
@@ -199,11 +215,11 @@ public sealed class Racer
 /// The time-attack stunt race: one shared window over one course, every pilot flying as many runs
 /// as it allows, ranked by their best completed run. Engine-free bookkeeping fed by explicit
 /// events: the opening's length, time advanced, a run started, a zone cleared, a run finished or
-/// thrown away. A network host feeds the same calls from its guests' reports. A guest's race is
-/// a <see cref="Replicated"/> copy of the host's. <see cref="Follow"/> is the local wiring
-/// off a <see cref="StuntMission"/>. The window clock
-/// starts at the opening count's GO; at time up a run in progress may finish, inside
-/// <see cref="FinalRunCap"/>, and no run starts. Not a Node: it is freed with the session.
+/// thrown away. A network host feeds the same calls from its guests' reports, and a guest's race
+/// is a <see cref="Replicated"/> copy of the host's. The local wiring off a run is
+/// <see cref="Follow"/>; the race is not a Node and is freed with the session. The window
+/// clock starts at the opening's GO. Past time up a run in progress may finish inside
+/// <see cref="FinalRunCap"/>, and only a live respawn held before time up may start one.
 /// </summary>
 public sealed class StuntRace
 {
@@ -348,7 +364,7 @@ public sealed class StuntRace
     public void Follow(int index, StuntMission run)
     {
         run.RunStarted += () => RunStarted(index);
-        run.RunReset += () => RunAbandoned(index);
+        run.RunReset += () => RunReset(index);
         run.RunStopped += () => RunAbandoned(index);
         run.ZoneCompleted += zone =>
         {
@@ -436,19 +452,38 @@ public sealed class StuntRace
         return 0f;
     }
 
-    /// <summary>Player <paramref name="index"/>'s run clock started. Counted only while the window
-    /// is open; answers whether it was.</summary>
+    /// <summary>Player <paramref name="index"/>'s run clock started. Counted while the window is
+    /// open, or after time up for a run whose approach <see cref="RunReset"/> granted; answers
+    /// whether it was.</summary>
     public bool RunStarted(int index)
     {
         if (Replicated || Of(index) is not { Left: false } racer)
             return false;
-        if (!MayStartRun)
+        if (!MayStartRun && !racer.OnApproach)
         {
             racer.Stop();
             EndIfNoRunLeft();
             return false;
         }
         racer.Start();
+        return true;
+    }
+
+    /// <summary>Player <paramref name="index"/> threw the run in progress away for a fresh one.
+    /// While the window is open the fresh run's approach counts as a run in progress, which may
+    /// start after time up. Outside it, a new window's opening included, this is an abandon.
+    /// Answers whether the approach was granted.</summary>
+    public bool RunReset(int index)
+    {
+        if (Replicated || Of(index) is not { Left: false } racer)
+            return false;
+        if (!MayStartRun)
+        {
+            RunAbandoned(index);
+            return false;
+        }
+
+        racer.Approach();
         return true;
     }
 
@@ -490,7 +525,7 @@ public sealed class StuntRace
     public void RunFinished(int index, float runTime)
     {
         if (Replicated || Phase is not (StuntRacePhase.Open or StuntRacePhase.FinalRun)
-            || Of(index) is not { InRun: true, Left: false } racer)
+            || Of(index) is not { InRun: true, OnApproach: false, Left: false } racer)
             return;
         bool best = racer.Finish(runTime);
         Log.Info("flight",

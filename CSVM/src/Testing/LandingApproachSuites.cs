@@ -2400,10 +2400,12 @@ internal static class LandingApproachSuites
             // staged pose read in that dispatch is the one to watch.
             var host = world.Runtime.CallbackHost;
             float? moved = null;
+            float nearestOrigin = float.MaxValue;
             world.Runtime.CallbackHost = (code, anim, root) =>
             {
                 var before = rig.GlobalPosition;
                 bool hosted = host!(code, anim, root);
+                nearestOrigin = Mathf.Min(nearestOrigin, rig.GlobalPosition.Length());
                 if (code == CutsceneController.CodeOutOfFlight && moved == null)
                 {
                     moved = rig.GlobalPosition.DistanceTo(before);
@@ -2424,6 +2426,11 @@ internal static class LandingApproachSuites
 
             ctx.Check(moved is < 1f,
                 $"the code-11 dispatch leaves the aircraft where it flew, not at the world origin");
+            // The pickup is about 8.8 km out, so a staging onto the marker parked at the world origin reads well
+            // inside this.
+            nearestOrigin = Mathf.Min(nearestOrigin, rig.GlobalPosition.Length());
+            ctx.Check(nearestOrigin > 1000f,
+                $"no code the pickup's start raises, nor the tick after it, stages the aircraft near the world origin (nearest {nearestOrigin:0} m from it)");
             ctx.Check(cutscene.Playing,
                 $"'{pickup.Anim}' takes ownership of the session instead of ending immediately");
             var gated = ObjectiveForInactive(script, "pickup_objective");

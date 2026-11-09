@@ -50,16 +50,16 @@ public class HudModeSettingTests
     }
 
     // The one rule the flat targeting HUD and a stereo session's world markers share: only None
-    // outside the cockpit view keeps the lead marker alone.
+    // outside the cockpit view draws the markers without text.
     [Fact]
-    public void OnlyNoneOutsideTheCockpitIsLeadOnly()
+    public void OnlyNoneOutsideTheCockpitIsTextless()
     {
-        Assert.True(HudModeSetting.LeadOnly(HudMode.None, cockpitView: false));
-        Assert.False(HudModeSetting.LeadOnly(HudMode.None, cockpitView: true));
+        Assert.True(HudModeSetting.Textless(HudMode.None, cockpitView: false));
+        Assert.False(HudModeSetting.Textless(HudMode.None, cockpitView: true));
         foreach (var mode in new[] { HudMode.Full, HudMode.Minimal })
         {
-            Assert.False(HudModeSetting.LeadOnly(mode, cockpitView: false));
-            Assert.False(HudModeSetting.LeadOnly(mode, cockpitView: true));
+            Assert.False(HudModeSetting.Textless(mode, cockpitView: false));
+            Assert.False(HudModeSetting.Textless(mode, cockpitView: true));
         }
     }
 

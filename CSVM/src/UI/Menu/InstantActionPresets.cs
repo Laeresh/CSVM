@@ -6,14 +6,14 @@ namespace CSVM.UI.Menu;
 /// <summary>
 /// The original's Instant Action Table of Contents: 19 named preset scenarios that fill the whole
 /// setup screen when one is picked. Decoded from 19 records of 0x230 bytes at `0x0061b090`, applied
-/// by `FUN_004102c0` over the live setup struct at `0x0064ab5c`; the record layout, the per-preset
+/// by `FUN_004102c0` over the live setup struct at `0x0064ab5c`. The record layout, the per-preset
 /// configuration and the sentinel rules are in docs/formats/instant-action.md, "Table of Contents
-/// presets". The table below is transcribed from that page by NAME rather than by the record's own
-/// dropdown indices, so it stays diffable against the decode and cannot be silently invalidated by
-/// a roster reordering; <see cref="Resolve"/> does the name-to-index step against
-/// <see cref="InstantActionFeature"/>'s rosters, which are every presentation's single source of
-/// order. Presets fly STOCK airframes (a record's own two plane blocks are overwritten from the
-/// stock table at `0x00619f58`), so nothing here depends on the hangar.
+/// presets". The table below names each field (an environment by its chapter), not the record's
+/// dropdown indices, so a roster reordering cannot silently invalidate it. The indices come from
+/// <see cref="Resolve"/> against <see cref="InstantActionFeature"/>'s rosters, every
+/// presentation's single source of order. Presets fly STOCK airframes (a record's own two plane
+/// blocks are overwritten from the stock table at `0x00619f58`), so nothing here depends on the
+/// hangar.
 /// </summary>
 public static class InstantActionPresets
 {
@@ -28,70 +28,70 @@ public static class InstantActionPresets
     private const string UnsetSkill = "veteran";
 
     // The 19 presets in langui 3600-3618 order, transcribed from docs/formats/instant-action.md's
-    // own table. A row is name, mission type, environment, player aircraft, wingman count, wingman
-    // aircraft, then its waves in order. WingmanPlane is null wherever the count is 0: the record
-    // holds a value at +0x84 there, but the decode does not report one for those presets and the
-    // screen hides the field entirely at 0 wingmen, so there is nothing to apply.
+    // own table. A row is name, mission type, chapter, player aircraft, wingman count, wingman
+    // aircraft, then its waves in order. WingmanPlane is null wherever the count is 0. The record
+    // holds a value at +0x84 there, but the decode reports none for those presets. The screen hides
+    // the field at 0 wingmen, so there is nothing to apply.
     private static readonly Preset[] Table =
     {
-        new("Girl Trouble", "dogfight_squadron", "Sky Haven", "Firebrand", 2, "Peacemaker",
+        new("Girl Trouble", "dogfight_squadron", "C4", "Firebrand", 2, "Peacemaker",
             new Wave[] { new(4, "Medusa", "Kestrel", "veteran"), new(2, "Black Swan", "Fury", "ace") }),
-        new("Sour Grapes", "stunt_flying", "Manhattan", "Bloodhawk", 0, null,
+        new("Sour Grapes", "stunt_flying", "C5", "Bloodhawk", 0, null,
             new Wave[] { new(4, "Blake Aviation", "Bloodhawk", "veteran") }),
-        new("Me and My Big Mouth", "dogfight_ace", "the ocean", "Autogyro", 0, null,
+        new("Me and My Big Mouth", "dogfight_ace", "C1B", "Autogyro", 0, null,
             Array.Empty<Wave>()),
-        new("The Angry Luau", "zeppelin_run", "Hawaii", "Fury", 4, "Hellhound",
+        new("The Angry Luau", "zeppelin_run", "C3", "Fury", 4, "Hellhound",
             new Wave[] { new(6, "Fortune Hunter", "Devastator", "ace") }),
-        new("Hat Trick", "dogfight_squadron", "an airfield", "Brigand", 0, null,
+        new("Hat Trick", "dogfight_squadron", "C1", "Brigand", 0, null,
             new Wave[] { new(3, "Black Hat", "Warhawk", "veteran") }),
-        new("Seaside Show-Off", "stunt_flying", "the ocean", "Peacemaker", 2, "Kestrel",
+        new("Seaside Show-Off", "stunt_flying", "C1B", "Peacemaker", 2, "Kestrel",
             new Wave[] { new(4, "Hughes Aviation", "Fury", "veteran") }),
-        new("Two to Tango", "dogfight_ace", "Sky Haven", "Hellhound", 0, null,
+        new("Two to Tango", "dogfight_ace", "C4", "Hellhound", 0, null,
             Array.Empty<Wave>()),
-        new("Death of the Gemini", "zeppelin_run", "the clouds", "Kestrel", 4, "Kestrel",
+        new("Death of the Gemini", "zeppelin_run", "C2B", "Kestrel", 4, "Kestrel",
             new Wave[]
             {
                 new(6, "Hughes Aviation", "Bloodhawk", "ace"),
                 new(3, "Blake Aviation", "Peacemaker", "veteran"),
             }),
-        new("Hares and Tortoises", "dogfight_squadron", "a movie studio", "Bloodhawk", 2, "Bloodhawk",
+        new("Hares and Tortoises", "dogfight_squadron", "C2", "Bloodhawk", 2, "Bloodhawk",
             new Wave[]
             {
                 new(4, "Studio Security", "Autogyro", "novice"),
                 new(4, "Black Hat", "Warhawk", "veteran"),
             }),
-        new("Swan's Gauntlet", "stunt_flying", "an airfield", "Fury", 0, null,
+        new("Swan's Gauntlet", "stunt_flying", "C1", "Fury", 0, null,
             new Wave[] { new(4, "Black Swan", "Fury", "ace") }),
-        new("Aloha, Ace!", "dogfight_ace", "Hawaii", "Devastator", 0, null,
+        new("Aloha, Ace!", "dogfight_ace", "C3", "Devastator", 0, null,
             Array.Empty<Wave>()),
-        new("Black Hats and Hoplites", "zeppelin_run", "Sky Haven", "Autogyro", 2, "Autogyro",
+        new("Black Hats and Hoplites", "zeppelin_run", "C4", "Autogyro", 2, "Autogyro",
             new Wave[] { new(6, "Black Hat", "Brigand", "veteran") }),
-        new("From Russia with Hate", "dogfight_squadron", "the clouds", "Fury", 2, "Peacemaker",
+        new("From Russia with Hate", "dogfight_squadron", "C2B", "Fury", 2, "Peacemaker",
             new Wave[]
             {
                 new(4, "Russian", "Devastator", "novice"),
                 new(4, "Russian", "Devastator", "veteran"),
                 new(2, "Russian", "Devastator", "ace"),
             }),
-        new("Honor, Hollywood Style", "dogfight_ace", "a movie studio", "Brigand", 0, null,
+        new("Honor, Hollywood Style", "dogfight_ace", "C2", "Brigand", 0, null,
             Array.Empty<Wave>()),
-        new("Manhattan Tea Party", "zeppelin_run", "Manhattan", "Warhawk", 4, "Devastator",
+        new("Manhattan Tea Party", "zeppelin_run", "C5", "Warhawk", 4, "Devastator",
             new Wave[]
             {
                 new(6, "British", "Peacemaker", "veteran"),
                 new(4, "Sacred Trust", "Hellhound", "ace"),
             }),
-        new("Let's You, Me, and Him Fight", "dogfight_squadron", "the ocean", "Hellhound", 3, "Firebrand",
+        new("Let's You, Me, and Him Fight", "dogfight_squadron", "C1B", "Hellhound", 3, "Firebrand",
             new Wave[]
             {
                 new(4, "Russian", "Devastator", "veteran"),
                 new(4, "Fortune Hunter", "Kestrel", "ace"),
             }),
-        new("The Longest New York Minute", "dogfight_ace", "Manhattan", "Brigand", 0, null,
+        new("The Longest New York Minute", "dogfight_ace", "C5", "Brigand", 0, null,
             Array.Empty<Wave>()),
-        new("Rocky Mountain Hijinks", "stunt_flying", "Sky Haven", "Peacemaker", 0, null,
+        new("Rocky Mountain Hijinks", "stunt_flying", "C4", "Peacemaker", 0, null,
             new Wave[] { new(6, "Sacred Trust", "Warhawk", "veteran") }),
-        new("The Hollywood Brawl", "zeppelin_run", "a movie studio", "Devastator", 4, "Kestrel",
+        new("The Hollywood Brawl", "zeppelin_run", "C2", "Devastator", 4, "Kestrel",
             new Wave[]
             {
                 new(6, "Hollywood Knight", "Firebrand", "ace"),
@@ -115,8 +115,8 @@ public static class InstantActionPresets
             throw new ArgumentOutOfRangeException(nameof(index), index, $"there are {Table.Length} presets");
 
         var preset = Table[index];
-        int environmentIndex = IndexOf(InstantActionFeature.Environments, e => e.Name, preset.Environment, "environment", preset.Name);
-        string code = InstantActionFeature.Environments[environmentIndex].Code;
+        int environmentIndex = IndexOf(InstantActionFeature.Environments, e => e.Code, preset.Environment, "environment", preset.Name);
+        string code = preset.Environment;
         // The mission-type cursor indexes the FILTERED roster for that environment (Stunt Flying is
         // dropped where disallow_missions bars it), not the four-row master list.
         int missionTypeIndex = IndexOf(InstantActionFeature.MissionTypesFor(code), m => m.Key, preset.MissionType, "mission type", preset.Name);
@@ -165,7 +165,7 @@ public static class InstantActionPresets
     public readonly record struct AppliedWave(int Count, int MilitiaIndex, int AircraftIndex, int SkillIndex);
 
     /// <summary>One preset scenario as the decode reports it. <c>MissionType</c> is the `ia.json`
-    /// `mission_type` key; <c>Environment</c> is the environment's display name;
+    /// `mission_type` key; <c>Environment</c> is the environment's chapter code;
     /// <c>WingmanPlane</c> is null exactly when <c>NumWingmen</c> is 0.</summary>
     public sealed record Preset(
         string Name,

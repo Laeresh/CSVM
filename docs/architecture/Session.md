@@ -82,7 +82,8 @@ pilot with no run left (`RaceSpectate.cs`). `Begin` pins the aircraft (`FlightCo
 releases the pane camera (`CameraOwned`) and creates a `SpectatorCamera` at the crash view's last pose;
 a pilot still flying also leaves the cockpit view for the spectator's HUD and is held (`FlightControlHold.All`).
 It follows the first other rig still `InPlay`, or starts free, with the pilot's own device filter; a
-false result means the pane already has a spectator. `ReleaseControls` drops the hold while the
+false result means the pane already has a spectator. The pilot's seat keeps the pointer hidden while
+it spectates, and its spectator's look writes no mouse mode (`SeatHidesPointer`). `ReleaseControls` drops the hold while the
 spectator stays, and `HandBack` undoes all of it on every pane and frees the tracked spectators.
 
 ## src/Session/Roster/RaceSpectate.cs
@@ -602,7 +603,7 @@ bot field into seats: each bot a militia/airframe pair off the Instant Action mi
 torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
 unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
 `Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
-of a tier's effect. Under a lobby's outlaw list the draw passes over each airframe it refuses, asked as `AirframeAdmitted`, and each pair whose def it would strip, asked as `ArmsAdmitted`; a bot it leaves no airframe for is left out. `LegalFit` is the stock fit a bot flies under the list, each outlawed ammunition or rocket replaced by the first allowed one, never the torpedo. Only the host calls it; a guest reads the roster. Decodes:
+of a tier's effect. Under a lobby's outlaw list, or a race course's plane list, the draw passes over each airframe it refuses, asked as `AirframeAdmitted`, and each pair whose def it would strip, asked as `ArmsAdmitted`; a bot it leaves no airframe for is left out. `LegalFit` is the stock fit a bot flies under the list, each outlawed ammunition or rocket replaced by the first allowed one, never the torpedo. Only the host calls it; a guest reads the roster. Decodes:
 [../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 
 ## src/Session/Roster/HumanFlightAdapter.cs

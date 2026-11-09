@@ -185,10 +185,11 @@ public sealed partial class TargetHud : Control
     /// of it.</summary>
     public bool SpyglassOn { get; set; } = Spyglass.DefaultOn;
 
-    /// <summary>Whether the flat draw keeps the lead marker alone, the None HUD mode outside the
-    /// cockpit (<c>FlightHud.SetHudMode</c>). Set, no box, label, edge marker or spyglass is drawn,
-    /// while selection, the hostile tracker and the bracket gate still run.</summary>
-    public bool LeadOnly { get; set; }
+    /// <summary>Whether the flat draw keeps the selection's box, edge arrow and lead marker without
+    /// text: the None HUD mode outside the cockpit (<c>FlightHud.SetHudMode</c>). Set, no
+    /// label, other marker or spyglass is drawn, while selection, the hostile tracker and the bracket
+    /// gate still run.</summary>
+    public bool Textless { get; set; }
 
     /// <summary>Whether a stereo session draws this pane's markers in the world
     /// (<see cref="XrMarkers"/>). Set, this control draws none, and the hostile tracker still runs.
@@ -700,8 +701,9 @@ public sealed partial class TargetHud : Control
         var font = ChromeType.Face(this);
         int markerFont = MarkerFontSize(s);
         _drawn.Clear();
-        if (!LeadOnly)
-            WorldMarks(_drawn);
+        WorldMarks(_drawn);
+        if (Textless)
+            _drawn.RemoveAll(static m => m.Style != WorldMarkStyle.Selected);
         foreach (var mark in _drawn)
         {
             if (mark.Style == WorldMarkStyle.Selected)
@@ -936,7 +938,7 @@ public sealed partial class TargetHud : Control
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
     // _Draw. Both latch, and a latch that advanced per repaint would depend on how often the pane
     // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing, and
-    // neither does a lead-only one.
+    // neither does a textless one.
     private void StepSpyglass()
     {
         // ⚠ Do not release here under a headset: the stereo host answers the gate later in the
@@ -946,7 +948,7 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        if (!Visible || LeadOnly || Selected is not { Source: not null } sel
+        if (!Visible || Textless || Selected is not { Source: not null } sel
             || !GodotObject.IsInstanceValid(_camera))
         {
             ReleaseSpyglass();
@@ -991,7 +993,10 @@ public sealed partial class TargetHud : Control
         var placed = EdgeMarker.Resolve(sp, behind, Size);
         if (placed.OnScreen)
         {
-            DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines);
+            if (!Textless)
+                DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines);
+            else if (mark.Boxed)
+                DrawBrackets(this, sp, color, s);
             return;
         }
 
@@ -1008,6 +1013,8 @@ public sealed partial class TargetHud : Control
         }
 
         DrawArrow(this, placed.Tip, ShaftTail(placed.Anchor, placed.Dir, s, disc, discScale), placed.Dir, s, color);
+        if (Textless)
+            return;
         _labelLines.Clear();
         EdgeLines(mark, EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos), _labelLines);
         DrawLabelBlock(this, font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc, discScale), _labelLines, color, s, fontSize);

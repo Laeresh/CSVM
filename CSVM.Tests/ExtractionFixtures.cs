@@ -23,9 +23,10 @@ public static class ExtractionFixtures
     }
 
     /// <summary>A 32-bit PE with one section holding one <c>STRINGTABLE</c> block, number
-    /// <paramref name="block"/> (ids <c>(block - 1) * 16</c> onward). A null slot is unused.
+    /// <paramref name="block"/> (ids <c>(block - 1) * 16</c> onward) under <paramref name="language"/>.
+    /// A null slot is unused.
     /// </summary>
-    public static byte[] StringTablePe(int block, IReadOnlyList<string?> slots)
+    public static byte[] StringTablePe(int block, IReadOnlyList<string?> slots, int language = 0x409)
     {
         var table = new MemoryStream();
         for (int i = 0; i < 16; i++)
@@ -43,7 +44,7 @@ public static class ExtractionFixtures
         var rsrc = new byte[0x58 + (int)table.Length];
         WriteDirectory(rsrc, 0x00, 6, 0x80000000u | 0x18);
         WriteDirectory(rsrc, 0x18, (uint)block, 0x80000000u | 0x30);
-        WriteDirectory(rsrc, 0x30, 0x409, 0x48);
+        WriteDirectory(rsrc, 0x30, (uint)language, 0x48);
         BinaryPrimitives.WriteUInt32LittleEndian(rsrc.AsSpan(0x48), SectionRva + 0x58);
         BinaryPrimitives.WriteUInt32LittleEndian(rsrc.AsSpan(0x4C), (uint)table.Length);
         table.ToArray().CopyTo(rsrc, 0x58);

@@ -34,6 +34,10 @@ Standard Win32, no game-specific quirks, the work is just walking the PE resourc
   and the string's slot within it is `string_id & 15`.
 - Within a block, each of the 16 slots is a `u16` length followed by that many **UTF-16LE**
   code units. A length of 0 marks an unused slot, blocks are not required to be full.
+- A block's third directory level is its language ID. All 101 blocks carry `0x409` (US English) on
+  the English install and `0x407` (German) on the German disc, and `language.dll` and `strings.dll`
+  agree. The primary language is the ID's low 10 bits, `0x09` for English. The German disc's
+  `crimson.exe` is a small loader whose own resources say `0x409`, so it does not tell the two apart.
 
 ## Font prefix
 
@@ -248,7 +252,9 @@ included.
 
 `UiStringTable` builds `ui_strings.json` in memory, on the first read through `RofFiles`, one row
 per string with `id`, `symbol` (from `RESOURCE.H`, or null), `font` (the parsed `[FONTID]`),
-`text` (tag stripped) and `dll`. It reads `RESOURCE.H` out of `crimson.rof`.
+`text` (tag stripped), `dll` and `language` (the DLL's resource language ID). It reads `RESOURCE.H`
+out of `crimson.rof`. A table whose language is not English is a translation, and the menus then
+read each chapter's name from it (`MenuChapters.Name`).
 
 ## Evidence & limits
 

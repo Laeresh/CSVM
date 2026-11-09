@@ -130,6 +130,13 @@ public readonly record struct NetPlaneRules(bool AllowCustom, bool Outlawing, ul
     // The rocket-table row an unpicked pylon flies, the stock high-explosive load.
     private const int StockRocket = 1;
 
+    /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
+    /// The airframes a Stunt Race's course leaves out, bit n for airframe n
+    /// (<see cref="CSVM.Flight.Modes.Course.Limits"/>). They refuse as an outlawed airframe does,
+    /// ticked or not, and leave the outlaw list as it stands. Never on the wire, since every machine
+    /// reads them off the course; the rules a lobby keeps never hold them.</summary>
+    public ushort CourseBarred { get; init; }
+
     /// <summary>Whether flag <paramref name="flag"/> is set on the list, ticked or not.</summary>
     public bool Has(int flag) => flag is >= 0 and < Flags && (Outlawed & (1UL << flag)) != 0;
 
@@ -139,7 +146,8 @@ public readonly record struct NetPlaneRules(bool AllowCustom, bool Outlawing, ul
         : this with { Outlawed = outlawed ? Outlawed | (1UL << flag) : Outlawed & ~(1UL << flag) };
 
     /// <summary>Whether an airframe may fly.</summary>
-    public bool AirframeAllowed(int airframe) => airframe is >= 0 and <= 10 && !Counts(AirframeFlag + airframe);
+    public bool AirframeAllowed(int airframe) =>
+        airframe is >= 0 and <= 10 && !Counts(AirframeFlag + airframe) && (CourseBarred & (1 << airframe)) == 0;
 
     /// <summary>Whether an engine may fly. No engine never may, and the injector tiers not while
     /// nitro is outlawed.</summary>

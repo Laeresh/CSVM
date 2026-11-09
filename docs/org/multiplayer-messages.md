@@ -916,8 +916,8 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 | `0x6C` | Race touch | reliable, the seat's machine to every other, a guest's relayed by the host | seat at 4, window at 5, pool gate at 6 (16 bits), course pylon at 8 (left 0, right 1), three reserved bytes, the touch's height above the pylon's base at 12, the host's session clock at the touch at 16 (20 bytes) |
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
-the step after its count's GO, each zone's first clearing with its run time, the finish, and a
-rerun that throws the run away. A crash in the final run is reported as an abandon too, and the
+the step after its count's GO, each zone's first clearing with its run time, the finish, and an
+abandon when a held live respawn throws the run away. A crash in the final run is reported as an abandon too, and the
 host stops that run with the zones it reached. The owner numbers its runs from 1 within a window,
 and the window number is 0 for the first, one more for each rerun. The host takes a report only from the machine
 flying its seat and only under its own window. A start must carry a run number above the newest it
@@ -925,7 +925,8 @@ heard from that seat, and any other report must name that newest run, so a repea
 report of a run already superseded counts nothing. A zone or finish with no finite run time is dropped. The race
 then applies its own rules to what passes: a start counts only in the open window, by when it
 reaches the host, a finish after time up counts while the race runs, and nothing counts after the
-end. The host's own seats feed its race directly.
+end. Only a host seat's hold keeps its fresh run's place past time up, because the host's own seats
+feed its race directly; a guest reports its hold as the abandon.
 
 **The leaderboard and the clock.** The host sends a racer's line whenever its record of that racer
 changes, then its clock once a second (`MatchStateCadence`'s tick) and at once on every change of
@@ -1344,7 +1345,8 @@ planes, and its guests fly stock.
 The original seats no bot in a multiplayer match, so how the outlaw list binds a host's bots is a
 remake-only rule: it binds them as it binds the people. A bot's hand-set airframe is refused when
 the rules refuse a person's stock pick of it (airframe, stock engine, stock gun calibres), and a
-rules change puts a bot standing on one back on Random. The launch draws a Random bot only on an
+rules change puts a bot standing on one back on Random. So does a Stunt Race course whose `planes`
+list leaves its airframe out, whose bar (`NetPlaneRules.CourseBarred`) binds bots and people alike. The launch draws a Random bot only on an
 admitted airframe and only from the militia/airframe pairs whose militia def the list allows whole.
 An AI gun is a slug round of its calibre, and an ordnance id is the rocket-table row it sits on. The
 rocket rows cover the aerial torpedo: the list's rows are named by langui 3380+i, the rocket table's

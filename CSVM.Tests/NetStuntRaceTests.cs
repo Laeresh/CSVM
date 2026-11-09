@@ -244,6 +244,38 @@ public sealed class NetStuntRaceTests
     }
 
     [Fact]
+    public void AGuestsHoldBeforeTimeUpIsAnAbandonWhileAHostSeatsHoldKeepsItsFreshRunsPlace()
+    {
+        var f = Field();
+        var hostRun = StuntRaceTests.FakeMission(Zones);
+        var guestRun = StuntRaceTests.FakeMission(Zones);
+        f.Host.Feed(0, hostRun);
+        f.Guest.Feed(1, guestRun);
+        foreach (var run in new[] { hostRun, guestRun })
+        {
+            run.Tick(Dt);
+            run.Reset();
+        }
+
+        f.Pump();
+        var hostSeat = f.HostRace.Of(0)!;
+        var guestSeat = f.HostRace.Of(1)!;
+        Assert.Equal((2, 0), (f.Host.ReportsTaken, f.Host.ReportsRefused));
+        Assert.Equal((true, true), (hostSeat.InRun, hostSeat.OnApproach));
+        Assert.Equal((false, false), (guestSeat.InRun, guestSeat.OnApproach));
+
+        // The guest's hold crossed as an abandon, so the race refuses its start after time up; the host seat's armed approach admits its own.
+        Advance(f.HostRace, Window + 1f);
+        Assert.Equal(StuntRacePhase.FinalRun, f.HostRace.Phase);
+        hostRun.Tick(Dt);
+        guestRun.Tick(Dt);
+        f.Pump();
+        Assert.Equal(3, f.Host.ReportsTaken);
+        Assert.Equal((2, true), (hostSeat.RunsStarted, hostSeat.InRun));
+        Assert.Equal((1, false), (guestSeat.RunsStarted, guestSeat.InRun));
+    }
+
+    [Fact]
     public void AFinishPastTheCapIsRefusedAndTheGuestEndsOnlyOnTheHostsWord()
     {
         var f = Field();

@@ -27,7 +27,7 @@ internal static class HudModeSuites
         + "only where its option is on; Minimal takes the dials, tape and plate off and shows the text "
         + "block, built in its Attach slot under the dials when the option is off, keeping the "
         + "pipper, markers, messages and prompts; None keeps the pipper, the message stack and the "
-        + "prompts, the targeting HUD drawing the lead marker alone, and no text block; the cockpit "
+        + "prompts, the targeting HUD drawing its markers without text, and no text block; the cockpit "
         + "view is the same in all three modes and asks for no text block lines; a cutscene's hide takes everything in every mode; and "
         + "back in Full a late-built text block is hidden again where the option is off")]
     internal static void HudModeParts(TestContext ctx)
@@ -115,7 +115,7 @@ internal static class HudModeSuites
             string when = option ? "text block option on" : "text block option off";
             var full = Shown(untouched);
             hud.SetHudMode(HudMode.Full);
-            ctx.Check(Shown(hud).SequenceEqual(full) && !hud.TargetHud!.LeadOnly,
+            ctx.Check(Shown(hud).SequenceEqual(full) && !hud.TargetHud!.Textless,
                 $"{when}: Full shows exactly what a pane never given a mode shows ({Describe(hud)})");
             ctx.Check(full.Take(7).All(v => v) && full[7] == option,
                 $"…every part, the text block only with its option ({Describe(hud)})");
@@ -123,7 +123,7 @@ internal static class HudModeSuites
             var minimal = Shown(hud);
             ctx.Check(!minimal[0] && !minimal[1] && !minimal[2] && minimal[7],
                 $"{when}: Minimal takes the dials, tape and plate off and shows the text block ({Describe(hud)})");
-            ctx.Check(minimal[3] && minimal[4] && minimal[5] && minimal[6] && !hud.TargetHud!.LeadOnly,
+            ctx.Check(minimal[3] && minimal[4] && minimal[5] && minimal[6] && !hud.TargetHud!.Textless,
                 $"…keeping the pipper, the marker HUD, the messages and the prompts ({Describe(hud)})");
             var text = hud.TextBlock;
             ctx.Check(text != null && text.GetParent() == canvas && text.GetIndex() == 0 && text.GetIndex() < hud.Compass!.GetIndex(),
@@ -134,8 +134,8 @@ internal static class HudModeSuites
             var none = Shown(hud);
             ctx.Check(!none[0] && !none[1] && !none[2] && !none[7] && !hud.DrawsTextBlock,
                 $"{when}: None takes the dials, tape, plate and text block off ({Describe(hud)})");
-            ctx.Check(none[3] && none[4] && hud.TargetHud!.LeadOnly && none[5] && none[6],
-                $"…keeping the pipper, the targeting HUD at its lead marker alone, the messages and the prompts ({Describe(hud)})");
+            ctx.Check(none[3] && none[4] && hud.TargetHud!.Textless && none[5] && none[6],
+                $"…keeping the pipper, the targeting HUD's markers without text, the messages and the prompts ({Describe(hud)})");
 
             hud.SetHudMode(HudMode.Full);
             ctx.Check(Shown(hud).SequenceEqual(full) && hud.DrawsTextBlock == option,
@@ -147,7 +147,7 @@ internal static class HudModeSuites
             foreach (var mode in Modes)
             {
                 hud.SetHudMode(mode);
-                ctx.Check(Shown(hud).SequenceEqual(cockpit) && !hud.TargetHud!.LeadOnly && !hud.DrawsTextBlock,
+                ctx.Check(Shown(hud).SequenceEqual(cockpit) && !hud.TargetHud!.Textless && !hud.DrawsTextBlock,
                     $"{when}: the cockpit view in {mode} is the cockpit view as it was ({Describe(hud)})");
             }
 
@@ -193,7 +193,7 @@ internal static class HudModeSuites
     private static string Describe(FlightHud hud)
     {
         var v = Shown(hud);
-        return $"dials={v[0]} tape={v[1]} plate={v[2]} pipper={v[3]} markers={v[4]} leadOnly={hud.TargetHud!.LeadOnly} "
+        return $"dials={v[0]} tape={v[1]} plate={v[2]} pipper={v[3]} markers={v[4]} textless={hud.TargetHud!.Textless} "
             + $"messages={v[5]} prompts={v[6]} text={v[7]}";
     }
 

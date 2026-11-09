@@ -293,8 +293,8 @@ internal static class SeatFields
     /// <summary>A local Dogfight's or stunt race's seat roster, flown here with no wire. Its panes come
     /// first, then the spec's bots, the command line's or the join board's. Null without bots, so such a
     /// launch keeps its panes as its seats. Random planes and blank callsigns are drawn as a host draws
-    /// them.</summary>
-    internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, Messages messages)
+    /// them, under <paramref name="rules"/> where given (<see cref="CourseRules"/>).</summary>
+    internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, Messages messages, Net.NetPlaneRules? rules = null)
     {
         if (spec.VsBots.Count == 0)
         {
@@ -302,7 +302,7 @@ internal static class SeatFields
         }
 
         var seats = Net.NetSeats.LocalPanes(spec.Players);
-        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages));
+        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages, rules));
         Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         Log.Info("core", $"local roster of {seats.Count} seat(s), {seats.Count - spec.Players} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
@@ -361,7 +361,7 @@ internal static class SeatFields
     /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
     /// a stream of their own, a function of the master seed alone.</summary>
     internal static IReadOnlyList<Net.SeatedBot> ResolveBots(
-        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages)
+        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages, Net.NetPlaneRules? rules = null)
     {
         if (spec.VsBots.Count == 0)
         {
@@ -372,8 +372,22 @@ internal static class SeatFields
         return Session.Roster.BotSeats.Resolve(spec.VsBots,
             System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
             new System.Random(Rng.IntSeedFor(Rng.BotField)),
-            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin);
+            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin, rules);
     }
+
+    /// <summary>The rules a local race's bots draw under: the airframes the spec's course leaves
+    /// out barred (<see cref="Flight.Modes.Course.Limits"/>). Null where no course limits its planes.</summary>
+    internal static Net.NetPlaneRules? CourseRules(SessionSpec spec, Flight.Modes.CourseLibrary library) =>
+        spec is { Course: { } wanted, CourseRefusal: null }
+        && library.Load(wanted.Chapter, wanted.Name, out _) is { Planes: not null } course
+            ? course.Limits(default)
+            : null;
+
+    /// <summary>Why <paramref name="course"/> refuses the planes <paramref name="spec"/> names, each pane's and
+    /// each bot's that is not Random, or null where it admits them all (<see cref="Flight.Modes.Course.Refuses"/>).</summary>
+    internal static string? CoursePlaneRefusal(SessionSpec spec, Flight.Modes.Course course) =>
+        course.Refuses(System.Linq.Enumerable.Concat(spec.PlaneNames.Count > 0 ? spec.PlaneNames : new[] { spec.PlaneName },
+            System.Linq.Enumerable.OfType<string>(System.Linq.Enumerable.Select(spec.VsBots, bot => bot.Plane))));
 
     /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
     /// The militia/airframe pairs whose def's weapons <paramref name="rules"/> allow whole

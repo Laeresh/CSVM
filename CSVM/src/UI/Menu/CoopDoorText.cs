@@ -158,15 +158,16 @@ public static class CoopDoorText
     /// <summary>The games list's Mission Environment: a campaign mission's long name through
     /// <paramref name="missionName"/>, or its shortcode, such as "C2/M03", when
     /// <paramref name="fits"/> says the name overflows the column. A Dogfight names its lobby's
-    /// environment, and one from a host with no lobby names none.
+    /// environment in <paramref name="strings"/>, and one from a host with no lobby names none.
     /// </summary>
-    public static string Environment(SessionAdvertMessage advert, Func<int, string> missionName, Func<string, bool> fits)
+    public static string Environment(
+        SessionAdvertMessage advert, Func<int, string> missionName, Func<string, bool> fits, Mech3.UiStrings? strings = null)
     {
         ArgumentNullException.ThrowIfNull(missionName);
         ArgumentNullException.ThrowIfNull(fits);
         if (advert.Kind == NetSessionKind.Dogfight)
         {
-            return DogfightLobby.EnvironmentName(advert.MissionSeq);
+            return DogfightLobby.EnvironmentName(advert.MissionSeq, strings);
         }
 
         if (advert.Kind != NetSessionKind.CampaignCoop || !advert.HasMission)

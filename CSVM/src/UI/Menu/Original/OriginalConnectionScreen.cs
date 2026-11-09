@@ -260,7 +260,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             CoopDoorText.GameName(advert),
             CoopDoorText.PlayerCount(advert),
             CoopDoorText.MissionType(advert),
-            CoopDoorText.Environment(advert, MissionName, name => name.Length <= EnvironmentFit),
+            CoopDoorText.Environment(advert, MissionName, name => name.Length <= EnvironmentFit, _text.Strings),
             CoopDoorText.Status(game, _net()?.Version ?? NetBuildVersion.Unknown),
         };
     }

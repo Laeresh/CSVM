@@ -89,9 +89,9 @@ each name read allocates a finalizable `StringName`. A human aircraft carrying t
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
 per pane, and it owns its `TargetPool`. The split between the action handlers, which only mutate the
 class and the selection identity, and `Resolve`, the per-frame pass that re-sorts and re-finds the
-selection by entity before falling back to the list head, is the original's, and that one fallback is
-the entire lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed re-find. `NearestAfterKill`, the remake setting off by default, is the one departure: it moves the lost-selection re-resolve alone onto the nearest entry by distance, leaving the acquire and every class change on the head. `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
-Godot node dependency; pinned by the `target-selection` and `target-flag` suites. Decode:
+selection by entity before falling back to the list head, is the original's, and that fallback is
+the whole decoded lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed re-find. The two remake-only rules are `NearestAfterKill` (a setting, off by default, that moves the lost-selection re-resolve alone onto the nearest entry by distance, leaving the acquire and every class change on the head) and `ZoneFirst` (set on a race run's seats alone: Next Enemy pressed off the next zone (a course gate or a Danger Zone) and a zone's passing both select it). `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
+Godot node dependency; pinned by the `target-selection`, `target-flag` and `stunt-race-zone-first` suites. Decode:
 [../org/targeting.md](../org/targeting.md). Read `TargetHud.cs` for what draws the result.
 
 ## src/Flight/Weapons/SeatTargeting.cs
@@ -370,7 +370,7 @@ about 0.045 degrees, under one headset pixel). A marker within `XrMarkerLaw.Ring
 point (clamped to `MaxDistanceM`), facing the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
 arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
 `MarksInWorld` stops their own drawing; `AnswerSpyglass` then answers `TargetHud`'s spyglass gates off the
-head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). In the None HUD mode outside the cockpit (`TargetHud.LeadOnly`, from `Utils/HudModeSetting.cs`'s `LeadOnly`) it places no `WorldMark` card, ring arrow or picture and releases the spyglass. Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
+head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). In the None HUD mode outside the cockpit (`TargetHud.Textless`, from `Utils/HudModeSetting.cs`'s `Textless`) it places no `WorldMark` card, ring arrow or picture and releases the spyglass. Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
 
 ## src/Flight/Hud/XrSpyglassDisc.cs
 The spyglass picture in a stereo session: `Camera/SpyglassView.cs`'s texture, rendered once at
@@ -981,10 +981,10 @@ One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon 
 heading and sizes, with `FlownWay` the way an entry crosses it), the `SequenceEntry` list naming pool gates by id with a
 `GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come from the file's path;
 the name is the id everywhere (`--course=`, `--course-edit=`, the library, the score key), and the optional `title`, a
-string, is what a player sees (`DisplayName`, the name where it is blank). `Parse` reads a file or rejects it whole,
+string, is what a player sees (`DisplayName`, the name where it is blank). The optional `planes` (`Planes`, null for all) bars the other airframes through `Limits` (`NetPlaneRules.CourseBarred`), and `Refuses` names a launch plane it bars. `Parse` reads a file or rejects it whole,
 `ToJson` writes the same shape, `FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, `FromWord` its check of a lobby word (`WordFor` builds one, `FitsWire` says whether it can be sent), and `Hash`
-digests pool, sequence and start but not the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course
-bests, so a retitle keeps them. Read `CourseLibrary` for where the files live.
+digests pool, sequence and start but not the name, title, planes or ids; `ScoreStore.KeyFor` adds chapter and name for course
+bests, so a retitle or a new plane list keeps them. Read `CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
 A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its course pylons from the
@@ -1051,12 +1051,12 @@ controls. Read `CoursePylonCutTests.cs`.
 ## src/Flight/Modes/StuntRace.cs
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
 `BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
-(`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished` and `RunAbandoned`
-carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed. A `Racer`
-keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
-most zones and time to them. `MayStartRun` gates reruns, `MayRespawn` respawns, `BestImproved`
-records bests and `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by
-`TakeLine` and `TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
+(`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished`, `RunReset` and
+`RunAbandoned` carry each pilot's runs, a network host's entry points as much as `Follow`'s local
+feed, `RunReset` excepted, which only `Follow` calls. A live respawn held in the open window (`RunReset`)
+puts the `Racer` `OnApproach`, in a run until its clock starts, which may be after time up; outside the
+window it is an abandon. A `Racer` keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
+most zones and time to them. `MayStartRun` gates reruns, `MayRespawn` respawns, `BestImproved` records bests and `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by `TakeLine` and `TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
 
 ## src/Flight/Modes/MatchScores.cs
 What each network match scoring event is worth, engine-free: the nine `score_*` keys of
@@ -1134,7 +1134,7 @@ bracket box and label block and owns the colour table, the label layout, the sel
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture at `DiscRadius`/`DiscSide`, the decoded window times `HudMetrics.SpyglassScale`: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). `LeadOnly`, the None HUD mode outside the cockpit, draws the lead marker alone and holds no spyglass. In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+read after the flight rigs (`AfterFlightRigs`). `Textless`, the None HUD mode outside the cockpit, draws the selection's box and edge arrow and the lead marker, with no label or other marker, and holds no spyglass. In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
@@ -1259,9 +1259,9 @@ The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look,
 additions are `Frame(Aabb)`, `LookFrom(eye, target)` (keeping the free look's yaw and pitch in step), the `FollowNode`
 orbit lock (released by any translation input, re-locked by the target key through `OrbitLock.Next`
 over `GameSession.LockCandidateAircraft`'s roster) and a public `Camera` accessor; while locked the
-orbit answers the right stick and the triggers as well as the mouse. It is also the pane a pilot
-out of the mission watches from (`Session/Roster/SpectateHandoff.cs`), with `padDevices`/`useKeyboard`
-filtering each watcher to its own seat so two watchers move independently. Read `OrbitLock.cs` next.
+orbit answers the right stick and the triggers as well as the mouse. A pilot out of the mission
+watches from it (`SpectateHandoff.cs`) on its seat's own devices, the RMB look writing no mouse mode
+under the seat's hide (`SeatHidesPointer`); a debugging camera's look captures, then shows the pointer. Read `OrbitLock.cs` next.
 
 ## src/Flight/Camera/OrbitLock.cs
 `SpectatorCamera`'s re-lock rule, taken as positions and an index rather than nodes so it runs
@@ -1327,7 +1327,7 @@ display with somebody at the controls, so the test desktop and `--det` keep thei
 ## src/Flight/Camera/SeatMouse.cs
 The desktop mouse one flight seat holds while it flies: `MouseCapture`'s arithmetic plus the engine
 half it leaves out. `Step` takes the mouse on a wanted frame, hides the pointer unheld on a frame a
-cutscene has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
+cutscene or a spectator has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
 suite's stand-in); `Release` puts back only a capture or hide this seat made. `Stick` is the cursor offset
 the mouse-flying stick reads, off the virtual cursor while held and the pane's own pointer
 otherwise, and `LookTravel` is head-look's pan. `Allowed` is the session's once-resolved guard and
@@ -1519,7 +1519,7 @@ it decides per call. `KeyboardInputSource` reads through it. Read `AnalogAxes.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
 dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
 message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block.
-The text block is remake-only telemetry the original has no counterpart for, built in Full only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). `SetHudMode` takes `Utils/HudModeSetting.cs`'s mode every frame: outside the cockpit Minimal swaps the dials, tape and plate for the text block, and None leaves the pipper, `TargetHud.LeadOnly`'s lead marker, messages and prompts; `PostHudMode` posts a press's line into the pane's message stack, and `Launch/GameSession.cs`'s `StepHudMode` steps every local pane. `SetHudLayout` hands `HudLayoutEditor.cs`'s `Active` layout to the dials, tape and plate every frame, and `OpenLayoutEditor` shows all three under that editor. With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+The text block is remake-only telemetry the original has no counterpart for, built in Full only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). `SetHudMode` takes `Utils/HudModeSetting.cs`'s mode every frame: outside the cockpit Minimal swaps the dials, tape and plate for the text block, and None leaves the pipper, `TargetHud.Textless`'s textless markers, messages and prompts; `PostHudMode` posts a press's line into the pane's message stack, and `Launch/GameSession.cs`'s `StepHudMode` steps every local pane. `SetHudLayout` hands `HudLayoutEditor.cs`'s `Active` layout to the dials, tape and plate every frame, and `OpenLayoutEditor` shows all three under that editor. With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `SetSpectatorView` leaves the stunt run HUD alone up, the message stack off too, for a spectating pane. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,

@@ -1,4 +1,5 @@
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
@@ -221,6 +222,26 @@ public class OriginalShellTests
         Assert.Equal("C3", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
         Assert.Empty(step.Cues);
         Assert.Equal("Hawaii", Row(shell, OriginalLobbyScreen.EnvironmentKey).Label);
+    }
+
+    [Fact]
+    public void FreeFlightsMapBoxNamesEachChapterInTheInstallsTranslation()
+    {
+        string root = TestData.TempDir();
+        RofFiles.Bind(root, RofFiles.Of(new System.Collections.Generic.Dictionary<string, byte[]>
+        {
+            [RofFiles.UiStringsFile] = MenuChapterNamesTests.Json(MenuChapterNamesTests.German),
+        }));
+        var shell = Shell(out _, dataRoot: root);
+        shell.LocalLobby.Enter(OriginalScreen.FreeFlight);
+        Assert.Equal(MenuChapterNamesTests.TranslatedName("C1"), Row(shell, OriginalLobbyScreen.EnvironmentKey).Label);
+
+        Click(shell, OriginalLobbyScreen.EnvironmentKey);
+        for (int i = 0; i < OriginalRosters.Chapters.Count; i++)
+        {
+            Assert.Equal(MenuChapterNamesTests.TranslatedName(OriginalRosters.Chapters[i].Code),
+                Row(shell, OriginalLobbyScreen.EnvironmentKey + ":" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)).Label);
+        }
     }
 
     [Fact]
@@ -1003,13 +1024,13 @@ public class OriginalShellTests
     // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs. No
     // options reader by default, so the Options screen opens on the defaults and no test can reach
     // the player's own user://options.json.
-    private static OriginalShell Shell(out FreeFlightFeature free, System.Func<OptionsDef>? options = null)
+    private static OriginalShell Shell(out FreeFlightFeature free, System.Func<OptionsDef>? options = null, string? dataRoot = null)
     {
         free = new FreeFlightFeature();
         var setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure, options: options);
+        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure, options: options, dataRoot: dataRoot);
     }
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque

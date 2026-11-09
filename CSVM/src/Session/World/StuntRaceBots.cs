@@ -59,8 +59,10 @@ internal sealed class StuntRaceBots
     // The bot whose world queries decide the ends, every bot's world being the same.
     private readonly FlightController _lead;
 
-    // Whether every bot run's course lines have been fitted to the world (FitLines).
+    // Whether every bot run's course lines have been fitted to the world (FitLines), and how many
+    // lines have been so far, bot by bot.
     private bool _linesFit;
+    private int _linesFitted;
 
     private StuntRaceBots(StuntRace race, IReadOnlyList<PlayerRig> seats, List<(int, StuntBotObjective)> bots, bool runsSawWorld, FlightController lead)
     {
@@ -157,6 +159,7 @@ internal sealed class StuntRaceBots
             return;
         }
 
+        FitLineAhead();
         foreach (var (seat, objective) in _bots)
         {
             if (_seats[seat].Controller is { Crashed: true })
@@ -405,17 +408,42 @@ internal sealed class StuntRaceBots
     // in the physics space, and rays pass through them.
     private void FitLines()
     {
-        if (_linesFit || !GodotObject.IsInstanceValid(_lead))
+        while (!_linesFit && FitNextLine())
         {
-            return;
+        }
+    }
+
+    // One line a step while the field counts down. Fifteen bots' lines fitted at once cost about a
+    // second, which froze GO's frame. The opening count has the steps to spare. A bot stepping live
+    // before its own are laid fits the rest then (FitLines).
+    private void FitLineAhead()
+    {
+        if (!_linesFit && _bots.Exists(b => _seats[b.Seat].Controller is { StartCount.Running: true }))
+        {
+            FitNextLine();
+        }
+    }
+
+    // The next unfitted line, bot by bot: each run lays its own lines, so each is fitted to its own
+    // airframe. False, with nothing fitted, while the lead is gone.
+    private bool FitNextLine()
+    {
+        if (!GodotObject.IsInstanceValid(_lead))
+        {
+            return false;
         }
 
-        _linesFit = true;
-        foreach (var (seat, _) in _bots)
+        int entries = _lead.Stunt?.Zones.Count ?? 0;
+        int total = _bots.Count * entries;
+        if (_linesFitted < total)
         {
-            // Each run lays its own lines, so each is fitted to its own airframe.
-            _seats[seat].Controller?.Stunt?.FitLines(PlaneBlocked(seat));
+            int seat = _bots[_linesFitted / entries].Seat;
+            _seats[seat].Controller?.Stunt?.FitLine(PlaneBlocked(seat), _linesFitted % entries);
+            _linesFitted++;
         }
+
+        _linesFit = _linesFitted >= total;
+        return true;
     }
 
     // Whether the world blocks the seat's plane down a straight at the attitude it is flown there. The
