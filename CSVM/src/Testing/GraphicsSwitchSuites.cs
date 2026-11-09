@@ -947,7 +947,15 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(far.Count == drawn.Count && far.All(m => m.VisibilityRangeEnd > Mech3.VegetationModels.FarFarM && m.VisibilityRangeEnd < farReach)
                         && CardBands(withModel).All(b => b == new Vector2(Mech3.VegetationModels.FarNearM, Mech3.VegetationModels.FarFarM)) && EdgeModels(live) == edge,
                     $"a live move to Far draws the same cells ranged out past {Mech3.VegetationModels.FarFarM:0} m, with the far band on the cards");
+                Models(live, Utils.VegetationModelsSetting.Extreme);
+                var rich = kinds.Where(k => k.Rich?.Material is ShaderMaterial).ToList();
+                float reachSq = 1f / (Mech3.VegetationModels.ExtremeScale * Mech3.VegetationModels.ExtremeScale);
+                ctx.Check(rich.All(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.VegetationModels.ReachParam).AsSingle() == reachSq)
+                        && Handover(live) == "on" && Mech3.CanopyClumps.HandoverBand == new Vector2(Mech3.CanopyClumps.HandoverNearM, Mech3.CanopyClumps.HandoverFarM) * Mech3.VegetationModels.ExtremeScale,
+                    $"a live move to Extreme pushes every Rich card's fade and the clump handover out x{Mech3.VegetationModels.ExtremeScale:0.#} ({Mech3.CanopyClumps.HandoverBand})");
                 Models(live, Utils.VegetationModelsSetting.Near);
+                ctx.Check(rich.All(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.VegetationModels.ReachParam).AsSingle() == 1f) && Handover(live) == "on",
+                    $"and a move back to Near puts the fade and the handover back ({Mech3.CanopyClumps.HandoverBand})");
                 ctx.Check(ModelCells(models).All(m => m.VisibilityRangeEnd < reach) && CardBands(withModel).All(b => b == Mech3.VegetationModels.Band)
                         && ModelStamps(models).SequenceEqual(cards),
                     $"and a move back to Near draws the first cells at the near band");
@@ -1068,6 +1076,13 @@ internal static class GraphicsSwitchSuites
                 Models(live, VegetationModelsSetting.Near);
                 ctx.Check(far && models.Visible && Band(clumps) == Mech3.CanopyClumps.ModelBand && Held(clumps) > 0f && live.Session.Vegetation?.CanopyClumpField?.Models == models,
                     $"Far and Near draw the same crowns over the same band");
+                Models(live, VegetationModelsSetting.Extreme);
+                var pushed = new Vector2(Mech3.CanopyClumps.ModelNearM, Mech3.CanopyClumps.ModelFarM) * Mech3.VegetationModels.ExtremeScale;
+                ctx.Check(Band(model) == pushed && Band(clumps) == pushed && cells.All(m => m.VisibilityRangeEnd > pushed.Y && m.VisibilityRangeEnd < pushed.Y + (1.5f * Mech3.VegetationModels.CellM)),
+                    $"Extreme pushes the crowns' band to {pushed} and ranges their cells past it, with no rebuild");
+                Models(live, VegetationModelsSetting.Near);
+                ctx.Check(Band(model) == Mech3.CanopyClumps.ModelBand && cells.All(m => m.VisibilityRangeEnd < reach),
+                    $"and Near puts the band and the ranges back");
 
                 ApplyVegetation(live, VegetationQualitySetting.Original);
                 ctx.Check(live.Session.Vegetation?.CanopyClumpField == null && !models.IsInsideTree(), $"a live move to original draws no crown");
@@ -3293,7 +3308,7 @@ internal static class GraphicsSwitchSuites
             .Select(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.CanopyClumps.HandoverParam).AsVector2())
             .Distinct().ToList() ?? new();
         return bands.Count != 1 ? $"mixed ({bands.Count})"
-            : bands[0] == new Vector2(Mech3.CanopyClumps.HandoverNearM, Mech3.CanopyClumps.HandoverFarM) ? "on"
+            : bands[0] == Mech3.CanopyClumps.HandoverBand ? "on"
             : bands[0] == Vector2.Zero ? "off" : $"band {bands[0]}";
     }
 

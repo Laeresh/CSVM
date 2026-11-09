@@ -117,6 +117,8 @@ internal sealed class VegetationStage
         }
         // The crown models over painted canopy follow the 3D Vegetation word on standing clumps, with no rebuild.
         CanopyClumpField?.FollowModels();
+        if (CanopyClumpField is { HandsOver: true })
+            Mech3.CanopyClumps.Handover(Clutter?.ExportedKinds, true);
         if (!wanted || CanopyClumpField != null || _textures == null
             || Clutter?.ExportedKinds is not { } kinds || Clutter.Vegetation is not { } entry || Clutter.Canopy() is not { } mask)
             return;
