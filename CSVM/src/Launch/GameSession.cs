@@ -312,6 +312,7 @@ public partial class GameSession : Node3D
     private OceanStage? _ocean;
     private Effects.TerrainShadow? _terrainShadow;
     private Effects.CloudShadow? _cloudShadow;
+    private Effects.ProtoClouds? _protoClouds;
     // A full world stood for a plane, which the terrain shadow bake needs; false on a node subtree.
     private bool _fullWorld;
     private SceneBuilder? _worldScene;
@@ -863,6 +864,7 @@ public partial class GameSession : Node3D
         FollowTerrainShadow();
         BuildCloudShadow();
         _labs!.BuildCloudLab(() => _cloudShadow);
+        BuildProtoClouds();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -925,6 +927,7 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
         _sky?.FollowGraphicsMode();
+        _protoClouds?.Follow(enhanced);
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
         SwitchProfile.Mark("lights");
@@ -2812,6 +2815,28 @@ public partial class GameSession : Node3D
         _cloudShadow.Tune = tunes;
         _plane.AddChild(_cloudShadow);
         Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
+    }
+
+    // The throwaway cloud prototype, over a full weathered world alone; an unknown word warns and
+    // builds nothing. It hides the deck, the cloud field and the placed sprites itself.
+    private void BuildProtoClouds()
+    {
+        if (_spec.ProtoClouds is not { } word)
+            return;
+        var weather = _sky?.Weather;
+        if (!_fullWorld || _plane == null || weather == null)
+        {
+            Log.Warn("world", $"proto clouds: needs a flown or freecam world, nothing built");
+            return;
+        }
+        if (Effects.ProtoClouds.Parse(word) is not { } variant)
+        {
+            Log.Warn("world", $"proto clouds: unknown variant '{word}' (slab, boxes or shells), nothing built");
+            return;
+        }
+        _protoClouds = Effects.ProtoClouds.Create(variant, _plane, weather, _sky!.CloudField, _worldScene,
+            weather.FogVolumes, () => _rigs.Count > 0 ? _rigs[0].Camera : null);
+        _plane.AddChild(_protoClouds);
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

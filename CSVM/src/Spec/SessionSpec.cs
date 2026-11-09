@@ -1084,6 +1084,11 @@ public sealed record SessionSpec
     /// <summary><c>--debug-wake=speed[,turn]</c>: the wave ocean sails its first wake ship on an arc,
     /// at the speed in m/s and turning the degrees a second. A capture then shows a chosen speed and turn.</summary>
     public Godot.Vector2? DebugWake { get; private set; }
+
+    /// <summary><c>--proto-clouds[=slab|boxes|shells]</c>: the throwaway volumetric cloud prototype
+    /// (<c>Effects/ProtoClouds.cs</c>) in place of the deck and the cloud sprites, Enhanced only. Null
+    /// builds none; the bare flag reads <c>slab</c>.</summary>
+    public string? ProtoClouds { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-pointer=x,y[,down][,right]</c> (the Original presentation only): stand
     /// seat 0's pointer at that authored 800x600 point, its buttons held by the words that follow,
@@ -1537,6 +1542,8 @@ public sealed record SessionSpec
             else if (arg == "--debug-lighting") { s.DebugLighting ??= ""; }
             else if (arg.StartsWith("--debug-lighting=")) { s.DebugLighting = arg["--debug-lighting=".Length..]; }
             else if (arg.StartsWith("--debug-wake=")) { s.DebugWake = ParseDebugWake(arg["--debug-wake=".Length..]); }
+            else if (arg == "--proto-clouds") { s.ProtoClouds = Effects.ProtoClouds.DefaultWord; }
+            else if (arg.StartsWith("--proto-clouds=")) { s.ProtoClouds = arg["--proto-clouds=".Length..]; }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }
             else if (arg == "--dump-markers") { s.DumpMarkers = true; }
             else if (arg.StartsWith("--dump-markers=")) { s.DumpMarkers = true; s.DumpMarkersPlane = arg["--dump-markers=".Length..]; }

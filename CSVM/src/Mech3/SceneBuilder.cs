@@ -881,6 +881,18 @@ void fragment() {
         }
     }
 
+    /// <summary>Whether <paramref name="material"/> is a placed cloud sprite's, the one test the cloud
+    /// prototype (<c>Effects/ProtoClouds.cs</c>) hides the sprites by.</summary>
+    public bool IsPlacedCloudMaterial(Material material)
+    {
+        foreach (var swap in _pooledSwaps)
+        {
+            if (swap.Material == material)
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
     /// substitute closure reads a mutable painter, so changing the scheme and calling this

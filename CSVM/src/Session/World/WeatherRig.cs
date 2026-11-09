@@ -338,6 +338,13 @@ public sealed class WeatherRig
     /// <summary>The mission's parsed weather, null where the mission carries none.</summary>
     public WeatherState? Mission => _weather;
 
+    /// <summary>Gets the fvol volumes <see cref="SetFogVolumes"/> handed in, empty until then.</summary>
+    public IReadOnlyList<FogVolumeBox> FogVolumes => _fogVolumes;
+
+    /// <summary>Gets or sets whether every rig's deck copy is held hidden whatever the zone gate says.
+    /// The cloud prototype (<c>Effects/ProtoClouds.cs</c>) sets it while it draws in the deck's place.</summary>
+    public bool HideDeck { get; set; }
+
     /// <summary>Whether the zone the last zone apply lit the session with is a night zone
     /// (<see cref="IsNightZone"/>), false until one has.</summary>
     public bool NightApplied => _appliedZone is { } fog && IsNightZone(fog);
@@ -1000,7 +1007,7 @@ public sealed class WeatherRig
                 ? ZoneGate.OpenCullMask(rig.Camera.CullMask)
                 : ZoneGate.CullMask(rig.Camera.CullMask, gate);
             if (rig.Deck != null)
-                rig.Deck.Visible = _spec.NoZoneCull || ZoneGate.Draws(_deckZoneId, gate);
+                rig.Deck.Visible = !HideDeck && (_spec.NoZoneCull || ZoneGate.Draws(_deckZoneId, gate));
             // One dome per horizon zone, showing only at its own state; a chapter with a single
             // built dome keeps it at every state rather than render no sky at all
             // (docs/org/weather.md).

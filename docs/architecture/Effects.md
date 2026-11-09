@@ -170,6 +170,15 @@ session draws one `Tune`: the constants, or the chapter's entry from `CloudShado
 each tune's key, label, range and format, which the file, `Tune.Clamped`, `Tune.Describe` and the cloud lab all read.
 `CloudShadowPatternTests`.
 
+## src/Effects/ProtoClouds.cs
+PROTOTYPE, throwaway: volumetric clouds in place of the cloud deck, the fogvol cloud field and the placed cloud
+sprites, built by `--proto-clouds` under Enhanced alone (`Launch/GameSession.cs`'s `BuildProtoClouds`), cycled with
+Shift+F6. Three variants over the shared `shaders/csky_proto_clouds.gdshaderinc`: `slab`, one full-screen raymarch
+through the mission's cloud band with `csky_cloud_cover` as its coverage; `boxes`, a proxy box per fvol volume and per
+placed cloud over a puff map rasterised from the sprites' positions; `shells`, eroded sheets through the band with no
+march. It hides the originals through `WeatherRig.HideDeck`, the field's visibility and `SceneBuilder.IsPlacedCloudMaterial`,
+and `Follow` restores them on the faithful path. Read `CloudShadow.cs` next, whose pattern the slab and shells share.
+
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's
 `BuildCloudShadow`: one object per chapter with `darkness`, `ambient`, `size`, `coverage`, `softness`, `speed` and

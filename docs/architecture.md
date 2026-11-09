@@ -406,6 +406,7 @@ rows).
 - `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: the `csky_cloud_shadow*` globals every sun term reads, drawn by day in a cloudy mission.
 - `src/Effects/CloudShadowPattern.cs`, the cloud shadows' world-anchored noise pattern and its drift source (ceiling scroll, sideways wind, fixed), engine-free.
 - `src/Effects/CloudShadowChapters.cs`, the shipped per-chapter cloud shadow tunes in `CSVM/data/cloud_shadows.json`: read with warnings, and one chapter's entry written by the cloud lab.
+- `src/Effects/ProtoClouds.cs`, PROTOTYPE, throwaway: raymarched volumetric clouds in place of the deck, the cloud field and the placed cloud sprites (`--proto-clouds`), three techniques under comparison, Shift+F6 cycles.
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
