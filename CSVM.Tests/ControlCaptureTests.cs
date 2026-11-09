@@ -280,7 +280,7 @@ public class ControlCaptureTests
     }
 
     [Fact]
-    public void EscapeAndPadBCancelRatherThanBinding()
+    public void EscapeCancelsRatherThanBinding()
     {
         var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
@@ -289,10 +289,75 @@ public class ControlCaptureTests
         state.Keys.Add((int)Key.Escape);
         Assert.True(capture.Cancelled(state));
         Assert.Null(capture.Poll(state));
+    }
 
-        state.Keys.Clear();
+    /// <summary>A tap of B binds B on its release, so Fire Guns' shipped face button can be moved and
+    /// bound again (#336).</summary>
+    [Fact]
+    public void APadBTappedIsCapturedOnItsRelease()
+    {
+        double now = 0;
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true, clock: () => now);
+        capture.Arm(state);
+
         state.Buttons.Add((Seat, (int)JoyButton.B));
+        Assert.False(capture.Cancelled(state));
+        Assert.Null(capture.Poll(state));
+
+        now = ControlCapture.CancelHoldSeconds / 2;
+        state.Buttons.Clear();
+        Assert.False(capture.Cancelled(state));
+        Assert.Equal(new Binding(Seat, BindingControl.Button((int)JoyButton.B)), capture.Poll(state));
+    }
+
+    /// <summary>Held past <see cref="ControlCapture.CancelHoldSeconds"/>, B cancels instead, which
+    /// is a pad's way out of an armed capture.</summary>
+    [Fact]
+    public void APadBHeldCancelsTheCapture()
+    {
+        double now = 0;
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true, clock: () => now);
+        capture.Arm(state);
+
+        state.Buttons.Add((Seat, (int)JoyButton.B));
+        Assert.False(capture.Cancelled(state));
+        Assert.Null(capture.Poll(state));
+
+        now = ControlCapture.CancelHoldSeconds;
         Assert.True(capture.Cancelled(state));
+    }
+
+    [Fact]
+    public void APadBTapIsCapturedByPollAlone()
+    {
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true, clock: () => 0);
+        capture.Arm(state);
+
+        state.Buttons.Add((Seat, (int)JoyButton.B));
+        Assert.Null(capture.Poll(state));
+        state.Buttons.Clear();
+        Assert.Equal(new Binding(Seat, BindingControl.Button((int)JoyButton.B)), capture.Poll(state));
+    }
+
+    /// <summary>The B that opened the capture is masked until released, like any held control.</summary>
+    [Fact]
+    public void APadBStillHeldFromOpeningTheCaptureNeitherBindsNorCancels()
+    {
+        double now = 0;
+        var state = new FakeDevices(Seat);
+        state.Buttons.Add((Seat, (int)JoyButton.B));
+        var capture = new ControlCapture(Seat, readsKeyboard: true, clock: () => now);
+        capture.Arm(state);
+
+        now = ControlCapture.CancelHoldSeconds * 2;
+        Assert.False(capture.Cancelled(state));
+        Assert.Null(capture.Poll(state));
+
+        state.Buttons.Clear();
+        Assert.False(capture.Cancelled(state));
         Assert.Null(capture.Poll(state));
     }
 

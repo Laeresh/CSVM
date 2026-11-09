@@ -136,7 +136,7 @@ Shift, Ctrl or Alt carries them; a lone modifier resolves on release. A pad axis
 stamped by `PadDeadzoneFor(row)`: the stick's `DeadzoneFor(row)` on a flight row, `CapturedDeadzone`
 (0.5) elsewhere. Sticks are scanned through `StickCapture` (steered by `row` and `sticksOnly`), and so
 are the hand controllers: a trigger binds as its axis on a pull begun after `Arm`, its click let go,
-and `TakeListening` has the theater pointer swallow that pull. Escape and the pad's Back cancel.
+and `TakeListening` has the theater pointer swallow that pull. Escape cancels; B, held, cancels.
 
 ## src/Bindings/StickCapture.cs
 The stick half of a capture, over every identity the reader lists (`IStickDevices`): buttons 0..127,
