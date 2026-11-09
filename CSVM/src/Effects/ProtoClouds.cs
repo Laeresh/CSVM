@@ -29,6 +29,12 @@ internal sealed partial class ProtoClouds : Node3D
     private const float LayerMinDepthM = 900f;
     private const int ShellCount = 24;
     private const float DeckCover = 0.92f;
+    // The share of a deck torn open and the tears' size, and the shafts' haze under rain or a dry zone.
+    private const float DeckGaps = 0.35f;
+    private const float GapM = 3200f;
+    private const float RainShaftGain = 1f;
+    private const float HazeShaftGain = 0.3f;
+    private const float RiftSkyLift = 0.45f;
     private const float ShellSizeM = 36000f;
     private const float PuffMapSize = 128;
     private const float PuffRadiusM = 170f;
@@ -77,6 +83,9 @@ internal sealed partial class ProtoClouds : Node3D
 
     /// <summary>The variant drawing now.</summary>
     public Variant Current => _variant;
+
+    // The shafts' haze: a mission authoring rain or snow scatters the sun hard, a dry zone faintly.
+    private float ShaftGain => _weather.Mission?.Precip != null ? RainShaftGain : HazeShaftGain;
 
     /// <summary>The flag's word as a variant, or null for a word that names none.</summary>
     public static Variant? Parse(string word) => word.Trim().ToLowerInvariant() switch
@@ -164,7 +173,7 @@ internal sealed partial class ProtoClouds : Node3D
 
     private static string SharedHead(string extraRenderModes) => $$"""
         shader_type spatial;
-        render_mode blend_mix, unshaded, depth_draw_never, shadows_disabled, fog_disabled{{extraRenderModes}};
+        render_mode blend_premul_alpha, unshaded, depth_draw_never, shadows_disabled, fog_disabled{{extraRenderModes}};
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_proto_clouds.gdshaderinc"
 
@@ -184,25 +193,64 @@ internal sealed partial class ProtoClouds : Node3D
         uniform float deck_cover = 0.0;
         uniform float deck_depth_m = 150.0;
         uniform float heads_gain = 1.0;
+        // Rifts in the deck, the share opened and their size. Under it the light shafts: the sun
+        // scattered by the haze or rain below the layer, where the rifts let it through.
+        uniform float deck_gaps = 0.0;
+        uniform float gap_m = 3200.0;
+        // The haze's scattering per 10 km, about 1 under rain.
+        uniform float shaft_gain = 0.0;
+        uniform int shaft_steps = 16;
+        uniform float shaft_far_m = 6000.0;
+        uniform float shaft_height_m = 1500.0;
+        // How far from the zone fog colour toward white the sky above the layer stands, seen
+        // through the rifts; 0 leaves the Environment's panorama.
+        uniform float rift_sky_lift = 0.0;
         """;
 
     // The march, its lighting and the write, shared by every variant after its own PC_COVER.
     private static string SharedFunctions() => """
-        // The whole field at `p`: the cumulus heads over the variant's coverage, the deck under them.
-        float pc_density(vec3 p, float bottom, float top, float cover_scale) {
+        // The cumulus heads at `p` over the variant's coverage.
+        float pc_heads(vec3 p, float bottom, float top, float cover_scale) {
             float c = PC_COVER(p) * heads_gain * cover_scale;
-            float heads = csky_pc_density(p, bottom, top, c, detail_m, erosion);
-            float deck = csky_pc_deck_density(p, bottom, bottom + deck_depth_m, deck_cover, detail_m);
-            return max(heads, deck);
+            return csky_pc_density(p, bottom, top, c, detail_m, erosion);
         }
 
-        // The sun's share reaching `p`, three taps up the sun ray inside the layer.
-        float pc_sun(vec3 p, float step_m, float bottom, float top, float cover_scale) {
+        // The deck at `p`, torn by the rifts.
+        float pc_deck(vec3 p, float bottom) {
+            float deck = csky_pc_deck_density(p, bottom, bottom + deck_depth_m, deck_cover, detail_m);
+            return deck * csky_pc_deck_gaps(p, deck_gaps, gap_m);
+        }
+
+        // The whole field at `p`: the heads over the deck.
+        float pc_density(vec3 p, float bottom, float top, float cover_scale) {
+            return max(pc_heads(p, bottom, top, cover_scale), pc_deck(p, bottom));
+        }
+
+        // The deck's optical depth along the sun ray from `p`, two taps over the ray's span through
+        // the deck's own depth. The heads' taps are spaced for the whole layer and step over it.
+        float pc_deck_od(vec3 p, float bottom) {
+            if (deck_cover <= 0.0) {
+                return 0.0;
+            }
+            vec2 span = csky_pc_slab_span(p, csky_sun_dir, bottom, bottom + deck_depth_m);
+            if (span.y <= 0.0) {
+                return 0.0;
+            }
+            float dt = (span.y - span.x) * 0.5;
             float od = 0.0;
+            for (int i = 0; i < 2; i++) {
+                od += pc_deck(p + csky_sun_dir * (span.x + dt * (float(i) + 0.5)), bottom) * density_gain * dt;
+            }
+            return od;
+        }
+
+        // The sun's share reaching `p`: three taps up the sun ray through the heads, and the deck's span.
+        float pc_sun(vec3 p, float step_m, float bottom, float top, float cover_scale) {
+            float od = pc_deck_od(p, bottom);
             vec3 q = p;
             for (int i = 0; i < 3; i++) {
                 q += csky_sun_dir * step_m;
-                od += pc_density(q, bottom, top, cover_scale) * density_gain * step_m;
+                od += pc_heads(q, bottom, top, cover_scale) * density_gain * step_m;
             }
             return csky_pc_beer_powder(od);
         }
@@ -216,9 +264,47 @@ internal sealed partial class ProtoClouds : Node3D
             float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
             vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain * mix(0.5, 1.0, h);
             // The floor stands in for the multiple scattering a thick cloud's shaded side still gets.
-            float lit = mix(0.25, 1.0, sun_t);
+            // It is lower at the base, where a deck's underside and a cumulus base read dark.
+            float lit = mix(mix(0.12, 0.25, h), 1.0, sun_t);
             vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * lit * mix(0.6, 1.4, phase / (1.0 + phase));
             return (ambient + sun) * csky_world_light_at(cam) * csky_tune_cloud_tint;
+        }
+
+        // The sun's share reaching a point under the layer. Along the sun ray: the deck's span, then
+        // three taps through the heads above it. One where the ray misses the layer.
+        float pc_sun_through(vec3 p, float bottom, float top) {
+            float od = pc_deck_od(p, bottom);
+            vec2 heads = csky_pc_slab_span(p, csky_sun_dir, bottom + deck_depth_m, top);
+            if (heads.y > 0.0) {
+                float dt = min(heads.y - heads.x, (top - bottom) * 3.0) / 3.0;
+                for (int i = 0; i < 3; i++) {
+                    od += pc_heads(p + csky_sun_dir * (heads.x + dt * (float(i) + 0.5)), bottom, top, 1.0) * density_gain * dt;
+                }
+            }
+            return exp(-od);
+        }
+
+        // The light shafts under the layer: the sun in-scattered toward the eye by the haze below the
+        // deck. The march runs from the eye to `t_end`, each sample shadowed by the layer along the
+        // sun ray. The haze thins with height and the zone fog swallows the far samples.
+        vec3 pc_shafts(vec3 eye, vec3 dir, float t_end, float dither) {
+            float len = min(t_end, shaft_far_m);
+            if (len <= 1.0) {
+                return vec3(0.0);
+            }
+            float dt = len / float(shaft_steps);
+            float phase = csky_pc_phase(dot(dir, csky_sun_dir), 0.5) * 4.0 * 3.14159265;
+            float light = 0.0;
+            float t = dt * dither;
+            for (int i = 0; i < shaft_steps; i++) {
+                vec3 q = eye + dir * t;
+                float haze = exp(-max(q.y, 0.0) / shaft_height_m);
+                float reach = 1.0 - csky_fog_amount(q, eye);
+                light += pc_sun_through(q, layer_bottom, layer_top) * haze * reach * dt;
+                t += dt;
+            }
+            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * csky_world_light_at(eye);
+            return sun * light * shaft_gain * 0.00006 * phase;
         }
 
         // Marches `dir` from `t0` to `t1`, returning the lit colour premultiplied and the transmittance.
@@ -245,16 +331,16 @@ internal sealed partial class ProtoClouds : Node3D
             return vec4(col, trans);
         }
 
-        // Fogs the march's result at the entry point and writes it as a mixed surface.
-        void pc_write(vec4 marched, vec3 entry, vec3 cam, inout vec3 albedo, inout float alpha) {
+        // Fogs the march's result at the entry point and writes it premultiplied. The light shafts in
+        // front of it add on top, and `behind`, premultiplied over its alpha, shows under it.
+        void pc_write(vec4 marched, vec3 entry, vec3 cam, vec3 shafts, vec4 behind, inout vec3 albedo, inout float alpha) {
             float a = 1.0 - marched.a;
-            if (a <= 0.002) {
+            alpha = a + (1.0 - a) * behind.a;
+            if (alpha <= 0.002 && max(shafts.r, max(shafts.g, shafts.b)) <= 0.0005) {
                 discard;
             }
-            vec3 col = marched.rgb / a;
             float fog = csky_fog_amount(entry, cam);
-            albedo = mix(col, csky_fog_color_at(cam), fog);
-            alpha = a;
+            albedo = mix(marched.rgb, csky_fog_color_at(cam) * a, fog) + shafts + (1.0 - a) * behind.rgb;
         }
         """;
 
@@ -273,18 +359,32 @@ internal sealed partial class ProtoClouds : Node3D
             vec3 dir = csky_pc_ray_dir(SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX);
             float scene = csky_pc_scene_distance(texture(depth_texture, SCREEN_UV).r, SCREEN_UV, INV_PROJECTION_MATRIX);
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
-            if (span.y < 0.0) {
-                discard;
+            float dither = csky_pc_dither(FRAGCOORD.xy);
+            vec4 m = vec4(0.0, 0.0, 0.0, 1.0);
+            float t0 = 0.0;
+            if (span.y >= 0.0) {
+                t0 = span.x;
+                float t1 = min(min(span.y, scene), t0 + far_m);
+                if (t1 > t0) {
+                    m = pc_march(eye, dir, t0, t1, layer_bottom, layer_top, 1.0, dither);
+                }
             }
-            float t0 = span.x;
-            float t1 = min(min(span.y, scene), t0 + far_m);
-            if (t1 <= t0) {
-                discard;
+            // Under the layer the ray crosses the haze first, up to the layer, the scene or the cap.
+            vec3 shafts = vec3(0.0);
+            if (shaft_gain > 0.0 && eye.y < layer_bottom) {
+                shafts = pc_shafts(eye, dir, min(scene, span.y >= 0.0 ? span.x : shaft_far_m), dither);
             }
-            vec4 m = pc_march(eye, dir, t0, t1, layer_bottom, layer_top, 1.0, csky_pc_dither(FRAGCOORD.xy));
+            // A sky pixel whose ray leaves through the layer's top shows the lifted sky above it.
+            // The exit's fog closes the far rifts into the horizon.
+            vec4 behind = vec4(0.0);
+            if (rift_sky_lift > 0.0 && scene >= 1e8 && span.y >= 0.0 && dir.y > 0.0 && eye.y < layer_top) {
+                vec3 fog_rgb = csky_fog_color_at(eye);
+                float exit_fog = csky_fog_amount(eye + dir * span.y, eye);
+                behind = vec4(mix(mix(fog_rgb, vec3(1.0), rift_sky_lift), fog_rgb, exit_fog), 1.0);
+            }
             vec3 albedo = vec3(0.0);
             float alpha = 0.0;
-            pc_write(m, eye + dir * t0, eye, albedo, alpha);
+            pc_write(m, eye + dir * t0, eye, shafts, behind, albedo, alpha);
             ALBEDO = albedo;
             ALPHA = alpha;
         }
@@ -327,7 +427,7 @@ internal sealed partial class ProtoClouds : Node3D
             vec4 m = pc_march(eye, dir, t0, t1, box_min.y, box_max.y, 1.0, csky_pc_dither(FRAGCOORD.xy));
             vec3 albedo = vec3(0.0);
             float alpha = 0.0;
-            pc_write(m, eye + dir * t0, eye, albedo, alpha);
+            pc_write(m, eye + dir * t0, eye, vec3(0.0), vec4(0.0), albedo, alpha);
             ALBEDO = albedo;
             ALPHA = alpha;
         }
@@ -361,7 +461,8 @@ internal sealed partial class ProtoClouds : Node3D
             float sun_t = pc_sun(p, max((layer_top - layer_bottom) * 0.3, 20.0), layer_bottom, layer_top, 1.0);
             vec3 col = pc_light(p, dir, sun_t, eye);
             float fog = csky_fog_amount(p, eye);
-            ALBEDO = mix(col, csky_fog_color_at(eye), fog);
+            // Premultiplied, as the shared head blends.
+            ALBEDO = mix(col, csky_fog_color_at(eye), fog) * a;
             ALPHA = a;
         }
         """;
@@ -415,6 +516,12 @@ internal sealed partial class ProtoClouds : Node3D
         material.SetShaderParameter("deck_cover", _hasDeck ? DeckCover : 0f);
         material.SetShaderParameter("cover_bias", _hasDeck ? -0.3f : 0.15f);
         material.SetShaderParameter("heads_gain", _hasDeck ? 1.15f : 1f);
+        // A deck tears open in rifts and the sun falls through them in shafts. The shafts are strong
+        // where the mission authors rain and faint in a dry haze.
+        material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
+        material.SetShaderParameter("gap_m", GapM);
+        material.SetShaderParameter("shaft_gain", ShaftGain);
+        material.SetShaderParameter("rift_sky_lift", _hasDeck ? RiftSkyLift : 0f);
         return material;
     }
 
@@ -438,7 +545,7 @@ internal sealed partial class ProtoClouds : Node3D
         _built = root;
         AddChild(root);
         string layer = _bottom is { } b && _top is { } t ? $"layer {b:0}-{t:0} m" : "no cloud band";
-        Log.Info("world", $"proto clouds: variant={_variant.ToString().ToLowerInvariant()} {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count} (Shift+F6 cycles)");
+        Log.Info("world", $"proto clouds: variant={_variant.ToString().ToLowerInvariant()} {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00} gaps {(_hasDeck ? DeckGaps : 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count} (Shift+F6 cycles)");
     }
 
     private string BuildSlab(Node3D root)

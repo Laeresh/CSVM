@@ -99,6 +99,18 @@ float csky_pc_deck_density(vec3 p, float bottom, float deck_top, float cover, fl
     return body * prof;
 }
 
+// Rifts torn in the deck: a broad noise opens `gaps` of the sheet in tears about `gap_m` across,
+// with soft edges, so the sun reaches the ground below in patches and shafts. 1 with no gaps.
+float csky_pc_deck_gaps(vec3 p, float gaps, float gap_m) {
+    if (gaps <= 0.0) {
+        return 1.0;
+    }
+    float broad = csky_pc_noise3(vec3(p.x, 0.0, p.z) / gap_m, 3266489917u);
+    float fine = csky_pc_noise3(vec3(p.x, 11.0, p.z) / (gap_m * 0.37), 2246822507u);
+    float n = broad * 0.8 + fine * 0.2;
+    return smoothstep(gaps - 0.02, gaps + 0.04, n);
+}
+
 // Henyey-Greenstein phase: forward scattering lights a cloud's rim when the sun stands behind it.
 float csky_pc_phase(float cos_theta, float g) {
     float g2 = g * g;

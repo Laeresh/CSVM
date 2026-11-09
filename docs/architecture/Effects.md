@@ -176,7 +176,8 @@ sprites, built by `--proto-clouds` under Enhanced alone (`Launch/GameSession.cs`
 Shift+F6. Three variants over the shared `shaders/csky_proto_clouds.gdshaderinc`: `slab`, one full-screen raymarch
 through the mission's cloud band with `csky_cloud_cover` as its coverage; `boxes`, a proxy box per fvol volume and per
 placed cloud over a puff map rasterised from the sprites' positions; `shells`, eroded sheets through the band with no
-march. It hides the originals through `WeatherRig.HideDeck`, the field's visibility and `SceneBuilder.IsPlacedCloudMaterial`,
+march. A deck is torn by rifts, and the slab marches the haze under the layer for the sun's shafts through them. It
+hides the originals through `WeatherRig.HideDeck`, the field's visibility and `SceneBuilder.IsPlacedCloudMaterial`,
 and `Follow` restores them on the faithful path. Read `CloudShadow.cs` next, whose pattern the slab and shells share.
 
 ## src/Effects/ProtoGi.cs
