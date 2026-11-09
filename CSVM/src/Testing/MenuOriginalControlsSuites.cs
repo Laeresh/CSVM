@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Bindings;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
@@ -28,7 +29,8 @@ internal static class MenuOriginalControlsSuites
         + "KEYS AND BUTTONS button opens the decoded KEYS page on its Movement tab with the seven "
         + "category strips, the three authored column heads beside the port's Stick head and CANCEL CHANGES authored left of ACCEPT "
         + "CHANGES, a click on a control cell arms a capture on that row's own action and slot, "
-        + "Escape abandons it with the live keymap untouched, a second capture binds the key it is "
+        + "Escape abandons it with the live keymap untouched, a tap of the pad's B is captured "
+        + "without backing out of the page, a further capture binds the key it is "
         + "given, ACCEPT CHANGES returns to the CONTROLS page and writes player 1's keymap file "
         + "carrying it, the scrollbar of a category longer than its window keeps its top and its "
         + "arrows on the window's first line while only the thumb walks the track, a tab press "
@@ -334,6 +336,8 @@ internal static class MenuOriginalControlsSuites
             $"and nothing was bound to {BindingLabels.Name(action)}");
 
         devices.Flight.Keys.Clear();
+        PadB(ctx, host, seat, shell, fit, controls, devices, cell, action);
+
         Click(host, seat, shell, fit, cell);
         devices.Flight.Keys.Add((int)Godot.Key.M);
         Press(host, seat, MenuCommands.None);
@@ -349,6 +353,29 @@ internal static class MenuOriginalControlsSuites
         var saved = BindingStore.UserBindings().Load(1, MenuControlsSeats.PadOf(InputContext.Flight), readsKeyboard: true);
         ctx.Check(HoldsKey(saved.Map(InputContext.Flight).Bindings(action), Godot.Key.M),
             $"the saved keymap read back carries the rebind on {BindingLabels.Name(action)}");
+    }
+
+    // A tap of the pad's B is captured (#336). Its press is also the seat's MenuBack, which the armed
+    // capture swallows, so the KEYS page stays. B ships on Fire Guns, so the bind raises a steal,
+    // discarded here to leave the keymap as it was.
+    private static void PadB(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
+        ControlsFeature controls, ScriptedCaptureDevices devices, string cell, InputAction action)
+    {
+        Click(host, seat, shell, fit, cell);
+        devices.Flight.Buttons.Add((int)Godot.JoyButton.B);
+        Press(host, seat, new MenuCommands { Back = true });
+        ctx.Check(controls.Capturing, $"a pad's B going down neither binds nor cancels yet (\"{controls.Status}\")");
+
+        devices.Flight.Buttons.Clear();
+        Press(host, seat, MenuCommands.None);
+        var steal = controls.Pending;
+        ctx.Check(!controls.Capturing && steal is { } s && s.Action == action
+            && s.Binding.Control.Kind == ControlKind.Button && s.Binding.Control.Index == (int)Godot.JoyButton.B
+            && s.Losers.Contains(InputAction.FireGuns),
+            $"its release captures B for {BindingLabels.Name(action)}, offered as a steal from Fire Guns ({controls.Status})");
+        ctx.Check(shell.Screen == OriginalScreen.Keys, $"and the press did not back out of the KEYS page ({shell.Screen})");
+        controls.DiscardSteal();
     }
 
     // The list's scrollbar over the one category longer than its window: the bar spans the window,
