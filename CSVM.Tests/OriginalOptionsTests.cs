@@ -639,7 +639,7 @@ public class OriginalOptionsTests
 
         host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
         Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
-        Assert.Equal(7, host.Module.Video.Top);
+        Assert.Equal(8, host.Module.Video.Top);
         Assert.Equal("On", Row(host, OriginalVideoPage.VrModeKey).Label);
         StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
