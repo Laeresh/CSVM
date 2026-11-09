@@ -137,17 +137,18 @@ as a PNG: signature, `IHDR`, one deflated `IDAT` of unfiltered rows,
 
 ## src/Extraction/PeStringTable.cs
 `Read` walks a PE file's resource directory (type, block id, language) to each `STRINGTABLE`
-block and returns every used slot by id, ascending. Pure byte parsing over the section table's
-RVA map, so the original's DLLs read the same on every platform. A file that is not a PE throws.
+block and returns every used slot by id, ascending, and the first block's language ID. Pure byte
+parsing over the section table's RVA map, so the original's DLLs read the same on every platform.
+A file that is not a PE throws.
 `Section` returns one named section's bytes and its load address (image base included), which
 `Mech3/Messages.cs` needs to follow the pointers in `strings.dll`'s key table.
 
 ## src/Extraction/UiStringTable.cs
 `ParseSymbols` reads `RESOURCE.H`'s `#define IDS_...` lines (first definition of an id wins),
 `Rows` turns one DLL's table into `UiStringRow` values with the symbol joined and a single-line
-`[FONTID]` tag split into `Font`, and `ToJson` writes the array without a BOM. `TextById` is the
-first-row-wins text map `MenuLayoutDecoder` joins widget strings against. The runtime reader is
-`Mech3/UiStrings.cs`.
+`[FONTID]` tag split into `Font` and the DLL's language ID on each row, and `ToJson` writes the
+array without a BOM. `TextById` is the first-row-wins text map `MenuLayoutDecoder` joins widget
+strings against. The runtime reader is `Mech3/UiStrings.cs`.
 
 ## src/Extraction/MenuLayoutDecoder.cs
 `ReadTree` gathers the decode's inputs from a `RofFiles` view, and `Decode` and `ToJson` are the

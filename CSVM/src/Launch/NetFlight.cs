@@ -228,9 +228,9 @@ internal sealed class NetFlight
 
     /// <summary>A local Dogfight with bots flies a seat roster with no wire. The roster outlives a
     /// restart, and the next launch's take clears it. A launch on a wire keeps the field it has.
-    /// </summary>
-    public void SeatLocalField(SessionSpec spec, Messages messages) =>
-        _roster = _wire == null ? SeatFields.LocalVersusField(spec, messages) : _roster;
+    /// A Random bot draws only a plane the course admits.</summary>
+    public void SeatLocalField(SessionSpec spec, Messages messages, Flight.Modes.CourseLibrary courses) =>
+        _roster = _wire == null ? SeatFields.LocalVersusField(spec, messages, SeatFields.CourseRules(spec, courses)) : _roster;
 
     /// <summary>The wire a menu launch carried, kept for the session build. A host also builds the
     /// match's field here: the transport's peer list is the field, and only the door has seen it.

@@ -828,7 +828,7 @@ public sealed class FlightHud
         if (TargetHud != null)
         {
             TargetHud.Visible = readouts;
-            TargetHud.LeadOnly = HudModeSetting.LeadOnly(_hudMode, _cockpitView);
+            TargetHud.Textless = HudModeSetting.Textless(_hudMode, _cockpitView);
         }
         if (MessageStack != null)
             MessageStack.Visible = readouts; // screen-space, so the cockpit panel does not replace it

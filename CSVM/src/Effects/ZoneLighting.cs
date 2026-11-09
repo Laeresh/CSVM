@@ -154,12 +154,15 @@ public sealed record ZoneLighting
     /// <summary>TUNE. The sun's normal bias, paired with <see cref="ShadowBias"/>.</summary>
     public float NormalBias { get; init; } = 1.25f;
 
-    /// <summary>TUNE. The first cascade split as a fraction of the max distance, tighter than Godot's
-    /// 0.1/0.2/0.5: a player reads shadows within a few hundred metres.</summary>
-    public float Split1 { get; init; } = 0.12f;
+    /// <summary>TUNE. The first cascade split as a fraction of the max distance, 90 m of the 3000.
+    /// An aircraft's shadow on its own wings is read from this cascade. ⚠ Do not widen it toward
+    /// Godot's 0.1. At 360 m its texels reach 0.36 m on a 4096 atlas. A biplane's wing gap then
+    /// reads as dots and holes that change frame to frame (#326).</summary>
+    public float Split1 { get; init; } = 0.03f;
 
-    /// <summary>TUNE. The second cascade split.</summary>
-    public float Split2 { get; init; } = 0.17f;
+    /// <summary>TUNE. The second cascade split, the first cascade's old range, so shadows within a
+    /// few hundred metres keep the density a player reads them at.</summary>
+    public float Split2 { get; init; } = 0.12f;
 
     /// <summary>TUNE. The third cascade split; the outer cascades carry a skyline into the haze.</summary>
     public float Split3 { get; init; } = 0.42f;

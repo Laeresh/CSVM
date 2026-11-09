@@ -2,6 +2,10 @@ using System;
 using System.IO;
 using System.Linq;
 using CSVM.Flight.Modes;
+using CSVM.Launch;
+using CSVM.Net;
+using CSVM.Session.Roster;
+using CSVM.Spec;
 using Godot;
 using Xunit;
 
@@ -85,6 +89,70 @@ public class CourseTests
     }
 
     [Fact]
+    public void APlanesListRoundTripsLimitsTheRulesAndStaysOutOfTheHash()
+    {
+        var limited = Parse(Json.Replace("\"version\": 1,", "\"version\": 1, \"planes\": [\"player_fury\", \"player_autogyro\"],", StringComparison.Ordinal));
+        var again = Parse(limited.ToJson());
+
+        Assert.Equal(new[] { 7, 0 }, limited.Planes);
+        Assert.All(Enumerable.Range(0, 11), a => Assert.Equal(new[] { a }, Parse(Json.Replace("\"version\": 1,",
+            $"\"version\": 1, \"planes\": [\"{Flight.Hangar.StockAirframes.Node(a)}\"],", StringComparison.Ordinal)).Planes));
+        Assert.Equal(limited.Planes, again.Planes);
+        Assert.Equal(limited.ToJson(), again.ToJson());
+        Assert.Contains("\"player_fury\"", limited.ToJson(), StringComparison.Ordinal);
+        Assert.Equal(Parse(Json).Hash, limited.Hash);
+        Assert.True(limited.Admits(7) && limited.Admits(0) && !limited.Admits(2));
+        Assert.Equal("it admits only player_fury, player_autogyro, not player_balmoral",
+            limited.Refuses(new[] { "player_fury", "player_balmoral" }));
+        Assert.Null(limited.Refuses(new[] { "player_fury", "no_such_node" }));
+
+        // The bars refuse the airframe whatever Outlaw Components says, and leave the list as it stood.
+        var rules = new NetPlaneRules(AllowCustom: true, Outlawing: false, Outlawed: 1UL << NetPlaneRules.NitroFlag);
+        var raced = limited.Limits(rules);
+        Assert.Equal(PlaneRefusal.Airframe, raced.Refuses(2, null));
+        Assert.Equal((rules.AllowCustom, rules.Outlawing, rules.Outlawed), (raced.AllowCustom, raced.Outlawing, raced.Outlawed));
+        Assert.Equal(PlaneRefusal.None, raced.Refuses(7, new NetPlaneBuild { Airframe = 7, Engine = 4 }));
+        Assert.Equal(PlaneRefusal.Airframe, raced.Refuses(7, new NetPlaneBuild { Airframe = 2, Engine = 1 }));
+
+        // ABLE-TO-FAIL CONTROL: a file without the list admits every plane, writes none and bars nothing.
+        var open = Parse(Json);
+        Assert.Null(open.Planes);
+        Assert.DoesNotContain("planes", open.ToJson(), StringComparison.Ordinal);
+        Assert.True(Enumerable.Range(0, 11).All(open.Admits));
+        Assert.Equal(rules, open.Limits(rules));
+        Assert.Equal(PlaneRefusal.None, open.Limits(rules).Refuses(2, null));
+    }
+
+    [Fact]
+    public void ACommandLineLaunchOnAPlaneTheCourseRefusesIsRefusedAndItsRandomBotsDrawAroundIt()
+    {
+        var limited = Json.Replace("\"version\": 1,", "\"version\": 1, \"planes\": [\"player_fury\"],", StringComparison.Ordinal);
+        WriteCourse(_shipped, "C2", "Limited", limited);
+        WriteCourse(_shipped, "C2", "Open", Json);
+        var library = new CourseLibrary(_shipped, null);
+        var course = library.Load("C2", "Limited", out _)!;
+        SessionSpec Cli(string name, params string[] args) => SessionSpec.Parse(args.Prepend($"--course=C2/{name}").ToArray());
+
+        // What GameSession.ResolveCourse refuses the launch with, exit 1 on a command line.
+        Assert.Equal("it admits only player_fury, not player_balmoral",
+            SeatFields.CoursePlaneRefusal(Cli("Limited", "--plane=player_balmoral"), course));
+        Assert.Equal("it admits only player_fury, not player_balmoral",
+            SeatFields.CoursePlaneRefusal(Cli("Limited", "--plane=player_fury", "--vs-bot=player_fury,player_balmoral"), course));
+
+        // The Launcher's local roster: a Random bot draws under the course's bar.
+        var random = Cli("Limited", "--plane=player_fury", "--vs-bot=random");
+        Assert.Null(SeatFields.CoursePlaneRefusal(random, course));
+        var rules = SeatFields.CourseRules(random, library);
+        Assert.True(rules is { } barred && barred.AirframeAllowed(7) && !barred.AirframeAllowed(2));
+        Assert.All(Enumerable.Range(0, 50), seed => Assert.Equal("player_fury",
+            BotSeats.Resolve(random.VsBots, Array.Empty<string>(), Array.Empty<string>(), new Random(seed), rules: rules)[0].Plane));
+
+        // ABLE-TO-FAIL CONTROL: a course without the list bars nothing and refuses no plane.
+        Assert.Null(SeatFields.CourseRules(Cli("Open", "--plane=player_fury", "--vs-bot=random"), library));
+        Assert.Null(SeatFields.CoursePlaneRefusal(Cli("Open", "--plane=player_balmoral"), library.Load("C2", "Open", out _)!));
+    }
+
+    [Fact]
     public void LibraryDisplayNameFallsBackToTheFileName()
     {
         var library = new CourseLibrary(_shipped, _game);
@@ -136,6 +204,11 @@ public class CourseTests
     [InlineData("\"version\": 1,", "\"version\": 1, \"title\": 7,", "course \"title\" is not a string")]
     [InlineData("\"version\": 1,", "\"version\": 1, \"title\": null,", "course \"title\" is not a string")]
     [InlineData("\"sequence\": [", "\"sequence\": [ }", "")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"planes\": [],", "course \"planes\" is not a list of one or more")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"planes\": \"player_fury\",", "course \"planes\" is not a list of one or more")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"planes\": [\"player_fury\", \"Fury\"],", "names unknown plane \"Fury\", expected one of player_autogyro")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"planes\": [7],", "names unknown plane \"7\"")]
+    [InlineData("\"version\": 1,", "\"version\": 1, \"planes\": [\"player_fury\", \"PLAYER_FURY\"],", "names \"PLAYER_FURY\" twice")]
     public void RejectsAMalformedFileWithAReason(string from, string to, string reason)
     {
         Assert.Contains(from, Json, StringComparison.Ordinal);

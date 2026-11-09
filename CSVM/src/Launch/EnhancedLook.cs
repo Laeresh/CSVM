@@ -284,6 +284,7 @@ public static class EnhancedLook
             sun.Layers = fresh.Layers;
             sun.LightColor = fresh.LightColor;
             sun.LightSpecular = fresh.LightSpecular;
+            SunShadow.ClearRange(sun);
             SunShadow.Copy(fresh, sun, fresh.DirectionalShadowMaxDistance);
             sun.DirectionalShadowPancakeSize = fresh.DirectionalShadowPancakeSize;
             fresh.Free();
@@ -300,11 +301,9 @@ public static class EnhancedLook
         // it and a skyline several kilometres out.
         sun.ShadowEnabled = true;
         sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
-        sun.DirectionalShadowMaxDistance = ShadowMaxDistance;
         sun.DirectionalShadowFadeStart = Untuned.FadeStart;
-        sun.DirectionalShadowSplit1 = Untuned.Split1;
-        sun.DirectionalShadowSplit2 = Untuned.Split2;
-        sun.DirectionalShadowSplit3 = Untuned.Split3;
+        SunShadow.WriteDistance(sun, ShadowMaxDistance);
+        SunShadow.WriteSplits(sun, Untuned.Split1, Untuned.Split2, Untuned.Split3);
         sun.DirectionalShadowBlendSplits = true;
         sun.DirectionalShadowPancakeSize = ShadowPancakeSize;
         sun.ShadowBias = Untuned.ShadowBias;

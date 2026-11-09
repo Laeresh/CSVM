@@ -29,7 +29,7 @@ public sealed class SeatMouse
     public bool Holding => _capture.Holding;
 
     /// <summary>Whether this seat hides the pointer without holding it. The mode is the capture's,
-    /// but no motion is banked, so a mouse moved under a cutscene flies nothing.</summary>
+    /// but no motion is banked, so a mouse moved under a cutscene or a spectator flies nothing.</summary>
     public bool Hiding { get; private set; }
 
     /// <summary>The desktop mouse mode this seat reads and writes while set, standing in for

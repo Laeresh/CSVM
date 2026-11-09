@@ -15,12 +15,12 @@ global uniform float csky_clutter_fade_scale_sq = 1.0;
 
 // One instance's opacity: 1 inside near, 0 at or beyond far, a ramp LINEAR IN SQUARED DISTANCE
 // between, which is the original's own curve rather than a smoothstep. far² of 0 never fades.
-float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
+float csky_clutter_fade_alpha_reach(vec3 origin, vec3 camera, vec4 fade, float reach_sq) {
     if (fade.y <= 0.0) {
         return 1.0;
     }
     vec3 d = origin - camera;
-    float d2 = csky_clutter_fade_scale_sq * dot(d, d);
+    float d2 = csky_clutter_fade_scale_sq * reach_sq * dot(d, d);
     if (d2 <= fade.x) {
         return 1.0;
     }
@@ -28,6 +28,12 @@ float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
         return 0.0;
     }
     return (fade.y - d2) * fade.z;
+}
+
+// The same fade under the global scale alone. The Rich vegetation passes its own reach_sq (under 1
+// pushes the fade out) to the variant above, so a far 3D Vegetation word moves no other clutter.
+float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
+    return csky_clutter_fade_alpha_reach(origin, camera, fade, 1.0);
 }
 
 // Enhanced Graphics only: how far a clutter instance has darkened toward the fog colour under a night

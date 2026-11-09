@@ -4,7 +4,7 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// How far the Rich vegetation draws its near 3D models (<c>Mech3.VegetationModels</c>), one of
-/// <see cref="Words"/>: none, the near band or the far one. In <see cref="Lookup"/>,
+/// <see cref="Words"/>: none, the near band or the far one. Very Far and Extreme push the far band further. In <see cref="Lookup"/>,
 /// <c>--vegetation-models=</c> beats the saved <c>vegetationModels</c> option, which beats the
 /// <see cref="Key"/> config key, then <see cref="Default"/> on every machine. Under <c>--det</c> only
 /// the flag survives. It acts only while <see cref="VegetationQualitySetting.RichOn"/>. The VIDEO
@@ -24,15 +24,21 @@ public static class VegetationModelsSetting
     /// <summary>Models out to the far band.</summary>
     public const string Far = "far";
 
+    /// <summary>Models out to the far band at one and a half times its distance.</summary>
+    public const string VeryFar = "veryfar";
+
+    /// <summary>Models out to the far band at twice its distance.</summary>
+    public const string Extreme = "extreme";
+
     /// <summary>The word every machine runs with nothing set, the Deck and Linux included until a
     /// measurement there says otherwise, and under <c>--det</c>.</summary>
     public const string Default = Near;
 
     /// <summary>Every word, the cheaper first, the order the Options row offers them.</summary>
-    public static readonly IReadOnlyList<string> Words = new[] { Off, Near, Far };
+    public static readonly IReadOnlyList<string> Words = new[] { Off, Near, Far, VeryFar, Extreme };
 
     /// <summary>What the Options row shows for each of <see cref="Words"/>, index for index.</summary>
-    public static readonly IReadOnlyList<string> Labels = new[] { "Off", "Near", "Far" };
+    public static readonly IReadOnlyList<string> Labels = new[] { "Off", "Near", "Far", "Very Far", "Extreme" };
 
     /// <summary>The setting's registry entry, beaten by <c>--vegetation-models=</c>.</summary>
     public static readonly WordSetting Lookup = Register();
@@ -56,7 +62,7 @@ public static class VegetationModelsSetting
         Labels = VegetationModelsSetting.Labels,
         EnhancedOnly = true,
         Detail = static enhanced => enhanced
-            ? "Rich vegetation only: Near and Far draw the trees near you in 3D, Off keeps every tree a card. Applies at once."
+            ? "Rich vegetation only: Near to Extreme draw the trees near you in 3D, Off keeps every tree a card. Applies at once."
             : "Enhanced Graphics only: the original world's trees are always cards.",
         Shown = static _ => Word,
         Fallback = static _ => new ResolvedWord(Default, SettingSource.Default, null),

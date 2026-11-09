@@ -1489,6 +1489,10 @@ public partial class GameSession : Node3D
                 refusal = string.Create(CultureInfo.InvariantCulture,
                     $"its {course.Sequence.Count} sequence entries pass the {Net.RaceStandingMessage.MaxZones} a network race carries");
             }
+            else if (SeatFields.CoursePlaneRefusal(_spec, course) is { } planes)
+            {
+                refusal = planes;
+            }
             else if (StuntMission.ForCourse(course) is not { } run)
             {
                 refusal = "its sequence is empty";

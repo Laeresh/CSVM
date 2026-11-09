@@ -19,6 +19,7 @@ public static class WordSettings
         RenderScaleSetting.Lookup,
         AntiAliasingSetting.Lookup,
         ShadowQualitySetting.Lookup,
+        ShadowDistanceSetting.Lookup,
         WaterQualitySetting.Lookup,
         ViewDistance.Lookup,
         VegetationQualitySetting.Lookup,

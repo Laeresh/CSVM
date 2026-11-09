@@ -33,11 +33,13 @@ public sealed class PlaneBuilder
     /// tilt so the gunsight stays on the guns. Decode: docs/org/cameraViews.md.</summary>
     public const float HeadPitchOffsetRad = -0.08203f;
 
-    // TUNE, Enhanced only: metres the airframe reads the sun's shadow map out along its normal.
-    // Without it a skin lit by a low sun shows shadow acne, which the soft filter's rotated disc
-    // turns into a per-pixel dot grid. ⚠ Do not raise the sun's shared bias pair instead; that
-    // detaches every contact shadow. Measurement: docs/verification.md SHOT-43.
-    private const float AirframeShadowLookupOffset = 0.5f;
+    // TUNE, Enhanced only: metres the airframe reads the sun's shadow map out along its normal
+    // (docs/verification.md SHOT-43). Without it a skin lit by a low sun shows shadow acne, which
+    // the soft filter's rotated disc turns into a per-pixel dot grid. ⚠ Do not raise the sun's
+    // shared bias pair instead; that detaches every contact shadow. ⚠ Do not raise this back
+    // toward 0.5 either. A biplane's wing gap is about a metre and the offset spends it. The upper
+    // wing's shadow on the lower one then breaks into holes that move with the roll (#326).
+    private const float AirframeShadowLookupOffset = 0.2f;
 
     // The flare mesh is a SphericalY facade, posed through the facade look-at like every other
     // population of that class (docs/org/cloudCards.md), keeping the node's scale.

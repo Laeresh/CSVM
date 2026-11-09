@@ -26,7 +26,7 @@ internal static class NetLobbyEnvironmentSuites
     // The race window the host types into the Time box, in minutes, unlike the type's default.
     private const int RaceMinutes = 7;
 
-    // The race's environment row, NW Boeing Field, whose chapter ships a Danger Zone course.
+    // The race's environment row, Airfield, whose chapter ships a Danger Zone course.
     private const string RaceChapter = "C1";
 
     // Generous against the opening count's five seconds at the fixed step and the start gate.
@@ -145,8 +145,8 @@ internal static class NetLobbyEnvironmentSuites
     }
 
     [Suite("net-lobby-stunt-race",
-        "a two-seat Stunt Race launched through the lobby's own options and the menu's own spec on NW "
-        + "Boeing Field with a 7 minute Time box and Limited Lives left ticked: both machines fly C1's IA1 "
+        "a two-seat Stunt Race launched through the lobby's own options and the menu's own spec on the "
+        + "Airfield with a 7 minute Time box and Limited Lives left ticked: both machines fly C1's IA1 "
         + "with no lives limit, no Instant Action mission, no AI and no Dogfight match, load the same Danger "
         + "Zone course, put both seats on the one spawn (each local seat on the opening count's rails "
         + "behind it), and build a race holding both pilots with a 420 s window under the seats' "

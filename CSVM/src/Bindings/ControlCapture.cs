@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
@@ -20,9 +21,15 @@ public sealed class ControlCapture
     /// </summary>
     public const Key CancelKey = Key.Escape;
 
-    /// <summary>The pad button that cancels, on the same reasoning as <see cref="CancelKey"/>. It
-    /// is the seat's own Back, so the gesture is the one every other screen uses.</summary>
+    /// <summary>The pad button that cancels when held for <see cref="CancelHoldSeconds"/>. It is the
+    /// seat's own Back, so the gesture is the one every other screen uses. A pad has too few face
+    /// buttons to lose one, so a tap of it is captured like any other button, on its release.
+    /// A sticks-only capture never takes a pad button, so there a press cancels at once.</summary>
     public const JoyButton CancelButton = JoyButton.B;
+
+    /// <summary>How long <see cref="CancelButton"/> must be held to cancel rather than be bound.
+    /// TUNE, judged with a real pad.</summary>
+    public const double CancelHoldSeconds = 1.0;
 
     /// <summary>How near centre an axis must sit before the capture will accept a move on it. A
     /// stick that never returns to rest can never be latched. TUNE, judged with a real pad.</summary>
@@ -92,20 +99,28 @@ public sealed class ControlCapture
     private readonly bool _readsKeyboard;
     private readonly bool _sticksOnly;
     private readonly StickCapture _sticks;
+    private readonly Func<double> _clock;
     private int _pendingModifier = -1;
+
+    // When a fresh press of CancelButton went down, while it is still undecided between a tap
+    // (bound on release) and a hold (cancel).
+    private double? _cancelButtonSince;
 
     /// <summary>A capture for one seat, whose pad bindings sit on <paramref name="pad"/>. A pad-only
     /// splitscreen seat passes <paramref name="readsKeyboard"/> false, so it never binds the shared
     /// keyboard. The action being bound, <paramref name="row"/>, decides whether a stick axis becomes
     /// a full axis. With <paramref name="sticksOnly"/> it captures nothing but stick controls, and
-    /// Escape and the pad's Back still cancel.</summary>
-    public ControlCapture(DeviceId pad, bool readsKeyboard, InputAction? row = null, bool sticksOnly = false)
+    /// Escape and the pad's Back still cancel. <paramref name="clock"/> (seconds) times a held Back,
+    /// and defaults to the engine's.</summary>
+    public ControlCapture(
+        DeviceId pad, bool readsKeyboard, InputAction? row = null, bool sticksOnly = false, Func<double>? clock = null)
     {
         _pad = pad;
         _row = row;
         _readsKeyboard = readsKeyboard;
         _sticksOnly = sticksOnly;
         _sticks = new StickCapture(row);
+        _clock = clock ?? (() => Time.GetTicksMsec() / 1000.0);
     }
 
     /// <summary>Whether a capture that takes the hand triggers has armed or polled since the last call,
@@ -137,6 +152,7 @@ public sealed class ControlCapture
         _maskedXrButtons.Clear();
         _maskedXrAxes.Clear();
         _pendingModifier = -1;
+        _cancelButtonSince = null;
         _listening |= !_sticksOnly;
         _sticks.Arm(state);
         foreach (var axis in Axes)
@@ -177,13 +193,21 @@ public sealed class ControlCapture
     }
 
     /// <summary>Whether the player is asking to abandon the capture rather than to bind something.
-    /// Checked once a frame before <see cref="Poll"/>, since neither cancel control is ever
-    /// captured and both are masked by <see cref="Arm"/> like any other.</summary>
+    /// Checked once a frame before <see cref="Poll"/>. Both cancel controls are masked by
+    /// <see cref="Arm"/> like any other; <see cref="CancelButton"/> cancels only once held for
+    /// <see cref="CancelHoldSeconds"/>, and a shorter tap is left for <see cref="Poll"/> to bind.</summary>
     public bool Cancelled(IDeviceState state)
     {
         bool key = Fresh(_maskedKeys, (int)CancelKey, KeyDown(state, CancelKey));
         bool button = Fresh(_maskedButtons, (int)CancelButton, state.IsButtonDown(_pad, (int)CancelButton));
-        return key || button;
+        if (key || (button && _sticksOnly))
+            return true;
+        if (!button)
+            return false;
+
+        double now = _clock();
+        _cancelButtonSince ??= now;
+        return now - _cancelButtonSince.Value >= CancelHoldSeconds;
     }
 
     /// <summary>The control the player pressed since <see cref="Arm"/>, or null while none has
@@ -213,6 +237,18 @@ public sealed class ControlCapture
             if (button != CancelButton
                 && Fresh(_maskedButtons, (int)button, state.IsButtonDown(_pad, (int)button)))
                 return new Binding(_pad, BindingControl.Button((int)button));
+        }
+
+        // CancelButton is a tap or a hold, which only its release decides, so it binds once let go
+        // before Cancelled saw the hold run out. Timed here too, so a Poll without Cancelled still binds.
+        if (Fresh(_maskedButtons, (int)CancelButton, state.IsButtonDown(_pad, (int)CancelButton)))
+        {
+            _cancelButtonSince ??= _clock();
+        }
+        else if (_cancelButtonSince is not null && !state.IsButtonDown(_pad, (int)CancelButton))
+        {
+            _cancelButtonSince = null;
+            return new Binding(_pad, BindingControl.Button((int)CancelButton));
         }
 
         if (_sticks.PollPresses(state) is { } press)

@@ -103,13 +103,7 @@ public sealed class DogfightLobby
     /// respawn fan were authored for. A remake-only choice.</summary>
     public const int DefaultFillTo = 8;
 
-    // The Environment box's words in the string table's order, and the chapter each is flown on.
-    private static readonly string[] EnvironmentNames =
-    {
-        "Above the Clouds", "Hawai'ian Islands", "Hollywood Studio", "Manhattan",
-        "NW Boeing Field", "NW Lighthouse", "Sky Haven (Rockies)",
-    };
-
+    // The chapter each Environment row is flown on, in the string table's order.
     // ⚠ Above the Clouds is C1C, not Instant Action's clouds chapter C2B. The two ship the same MP1
     // and MP3 layouts, so the data alone cannot tell them apart; the row's number (below) does.
     private static readonly string[] EnvironmentChapters = { "C1C", "C3", "C2", "C5", "C1", "C1B", "C4" };
@@ -319,9 +313,17 @@ public sealed class DogfightLobby
     public NetPlaneBuild? Build => _picks[0].Build;
 
     /// <summary>The plane rules as this end stands on them: its own on the host, the host's word on
-    /// a guest. A guest that has heard nothing reads cleared rules, which allow no custom plane.
+    /// a guest. A guest that has heard nothing reads cleared rules, which allow no custom plane. A
+    /// Stunt Race's course bars the airframes it leaves out (<see cref="Flight.Modes.Course.Limits"/>).
     /// </summary>
-    public NetPlaneRules Rules => IsHost ? _rules : _wire.PlaneRules?.Rules ?? default;
+    public NetPlaneRules Rules
+    {
+        get
+        {
+            var rules = IsHost ? _rules : _wire.PlaneRules?.Rules ?? default;
+            return IsStuntRace(Options) && Course is { } course ? course.Limits(rules) : rules;
+        }
+    }
 
     /// <summary>Why the rules refuse this pilot's plane, or none.</summary>
     public PlaneRefusal Refusal => Rules.Refuses(Airframe, Build);
@@ -488,10 +490,10 @@ public sealed class DogfightLobby
         }
     }
 
-    /// <summary>The environment's words as the Environment box and the games list write them, or ""
-    /// outside the seven.</summary>
-    public static string EnvironmentName(int environment) =>
-        environment is >= 0 and < EnvironmentCount ? EnvironmentNames[environment] : "";
+    /// <summary>The environment's chapter name (<see cref="MenuChapters.Name"/>) as the Environment
+    /// box and the games list write it, or "" outside the seven.</summary>
+    public static string EnvironmentName(int environment, Mech3.UiStrings? strings = null) =>
+        environment is >= 0 and < EnvironmentCount ? MenuChapters.Name(EnvironmentChapters[environment], strings) : "";
 
     /// <summary>The chapter an environment is flown on.</summary>
     public static string ChapterOf(int environment) => EnvironmentChapters[Math.Clamp(environment, 0, EnvironmentCount - 1)];
@@ -572,7 +574,7 @@ public sealed class DogfightLobby
             or DogfightMissionType.ZeppelinVsZeppelin or DogfightMissionType.StuntRace;
 
     /// <summary>Whether the Environment box offers <paramref name="environment"/> under
-    /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and NW Lighthouse, the two
+    /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and The Ocean, the two
     /// chapters with no <c>MP2</c> map, as the mission script's type change does. Stunt Race greys
     /// a chapter that ships no Danger Zones (Above the Clouds) and has none of <paramref name="courses"/>.</summary>
     public static bool Offers(DogfightMissionType type, int environment, Func<string, IReadOnlyList<Flight.Modes.Course>>? courses = null) =>
@@ -751,7 +753,8 @@ public sealed class DogfightLobby
     /// course starts a new round and goes to every guest, and to each one that joins later. Refused
     /// on a guest, for a course <see cref="Flight.Modes.Course.FitsWire"/> leaves out, and outside a Stunt
     /// Race on the course's chapter. The Danger Zones are refused where the chapter ships none. An options change
-    /// off either drops the pick for the Danger Zones, or for the first course where the chapter has none.</summary>
+    /// off either drops the pick for the Danger Zones, or for the first course where the chapter has none.
+    /// A bot row on a plane the course refuses goes back to Random.</summary>
     public bool SetCourse(Flight.Modes.Course? course)
     {
         if (!IsHost || (course == null ? !ZonesUnder(_options) : !Flight.Modes.Course.FitsWire(course) || !StandsUnder(_options, course)))
@@ -769,6 +772,7 @@ public sealed class DogfightLobby
         _options = _options with { Epoch = NextEpoch() };
         _ready = false;
         _courseWord = course == null ? LobbyCourseMessage.None(_options.Epoch) : Flight.Modes.Course.WordFor(_options.Epoch, course);
+        ResetRefusedBots();
         return true;
     }
 
@@ -847,7 +851,7 @@ public sealed class DogfightLobby
 
     /// <summary>Whether <see cref="SetBotAirframe"/> takes <paramref name="airframe"/> under the
     /// plane rules, so the bot's plane list greys and steps over what it would refuse.</summary>
-    public bool AdmitsBotAirframe(int airframe) => airframe == DogfightLobbySeat.RandomAirframe || _rules.AdmitsStock(airframe);
+    public bool AdmitsBotAirframe(int airframe) => airframe == DogfightLobbySeat.RandomAirframe || Rules.AdmitsStock(airframe);
 
     /// <summary>Sets bot row <paramref name="id"/>'s skill tier.</summary>
     public bool SetBotSkill(int id, NetBotSkill skill) => EditsBots && _bots.SetSkill(id, skill);
@@ -1302,7 +1306,7 @@ public sealed class DogfightLobby
     // custom plane is the one that seat's build named.
     private bool Admits(int peer, CoopPickMessage pick, int local = 0) =>
         pick.Ready && pick.Epoch == _options.Epoch
-        && _rules.Refuses(pick.Airframe, _wire.BuildAt(peer, local)) == PlaneRefusal.None;
+        && Rules.Refuses(pick.Airframe, _wire.BuildAt(peer, local)) == PlaneRefusal.None;
 
     // The original's Ready check over every seat this machine flies, true when it refuses. An
     // outlawed ammunition or rocket also resets every gun's or pylon's to none, so the next Ready
@@ -1358,17 +1362,23 @@ public sealed class DogfightLobby
             _rules = changed;
             _options = _options with { Epoch = NextEpoch() };
             _ready = false;
-            // A bot has no Ready for the rules to refuse, so its pick is reset here instead.
-            foreach (var bot in new List<DogfightBot>(_bots.Rows))
-            {
-                if (!bot.RandomPlane && !changed.AdmitsStock(bot.Airframe))
-                {
-                    _bots.SetAirframe(bot.Id, DogfightLobbySeat.RandomAirframe);
-                }
-            }
+            ResetRefusedBots();
         }
 
         return true;
+    }
+
+    // A bot has no Ready for the rules to refuse, so a rules or course change resets its pick instead.
+    private void ResetRefusedBots()
+    {
+        var rules = Rules;
+        foreach (var bot in new List<DogfightBot>(_bots.Rows))
+        {
+            if (!bot.RandomPlane && !rules.AdmitsStock(bot.Airframe))
+            {
+                _bots.SetAirframe(bot.Id, DogfightLobbySeat.RandomAirframe);
+            }
+        }
     }
 
     // Every host change is a new round: the Ready marks under the old options clear.
@@ -1395,6 +1405,7 @@ public sealed class DogfightLobby
         {
             _course = kept;
             _courseWord = kept == null ? LobbyCourseMessage.None(_options.Epoch) : Flight.Modes.Course.WordFor(_options.Epoch, kept);
+            ResetRefusedBots();
         }
 
         return true;

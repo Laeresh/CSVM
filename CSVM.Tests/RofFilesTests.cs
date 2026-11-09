@@ -260,9 +260,20 @@ public class RofFilesTests
         PngImage.Decode(a) is { } x && PngImage.Decode(b) is { } y && x.Width == y.Width && x.Rgba.AsSpan().SequenceEqual(y.Rgba);
 
     // A JSON file by value: an older extractor wrote the two derived files with other whitespace,
-    // escaping and a byte order mark.
-    private static string Normalized(byte[] json) =>
-        System.Text.Json.Nodes.JsonNode.Parse(RofFiles.Of(new Dictionary<string, byte[]> { ["f"] = json }).Text("f")!)!.ToJsonString();
+    // escaping and a byte order mark. It wrote no string row's language either, so that is dropped.
+    private static string Normalized(byte[] json)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(RofFiles.Of(new Dictionary<string, byte[]> { ["f"] = json }).Text("f")!)!;
+        if (node is System.Text.Json.Nodes.JsonArray rows)
+        {
+            foreach (var row in rows.OfType<System.Text.Json.Nodes.JsonObject>())
+            {
+                row.Remove("language");
+            }
+        }
+
+        return node.ToJsonString();
+    }
 
     // A base archive holding one member in mixed case, which the shipped archive never has, so
     // the view's own mapping is what upper-cases it. Laid out as an install's GOSDATA/ASSETS.

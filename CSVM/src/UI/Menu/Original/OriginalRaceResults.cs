@@ -1,10 +1,25 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 
 namespace CSVM.UI.Menu.Original;
+
+/// <summary>The three lists the Original race board scrolls: the standings on the scores page, the
+/// pilots down the splits and the zones across them.</summary>
+public enum RaceResultsList
+{
+    /// <summary>The standings, under <see cref="OriginalRaceResults.ScoresBar"/>.</summary>
+    Scores,
+
+    /// <summary>The splits' pilots, under <see cref="OriginalRaceResults.SplitsBar"/>.</summary>
+    Splits,
+
+    /// <summary>The splits' zones, under <see cref="OriginalRaceResults.ZonesBar"/>.</summary>
+    Zones,
+}
 
 /// <summary>One pilot's best-run splits as drawn: the callsign and one cell per zone in course
 /// order, "-" where that run never cleared the zone. A pilot who left carries
@@ -88,6 +103,12 @@ public static class OriginalRaceResults
     /// <summary>The chat pane scroll bar's down arrow.</summary>
     public const int SplitsDownRow = 6;
 
+    /// <summary>The zone bar's left arrow, under the splits.</summary>
+    public const int ZonesLeftRow = 7;
+
+    /// <summary>The zone bar's right arrow.</summary>
+    public const int ZonesRightRow = 8;
+
     /// <summary>The words the Restart plaque carries.</summary>
     public const string RestartLabel = "Restart";
 
@@ -107,8 +128,17 @@ public static class OriginalRaceResults
     /// holds after it; a larger field scrolls under <see cref="SplitsBar"/>.</summary>
     public const int SplitRows = 7;
 
-    // The last slot, the splits' down arrow; the pointer's hit test walks every slot to it.
-    private const int LastSlot = SplitsDownRow;
+    /// <summary>The split column's width, a remake-only width: the width of the scores page's
+    /// Best column (<see cref="OriginalRaceTable"/>'s first figure cell). Every time under an hour
+    /// fits it. The width is fixed, so a course past <see cref="ZoneColumns"/> zones scrolls even where narrower columns would fit.</summary>
+    public const float SplitColumn = 62f;
+
+    /// <summary>The zones the chat pane shows side by side; a longer course scrolls across under
+    /// <see cref="ZonesBar"/>.</summary>
+    public const int ZoneColumns = (int)(ChatTextWidth / SplitColumn);
+
+    // The last slot, the zones' right arrow; the pointer's hit test walks every slot to it.
+    private const int LastSlot = ZonesRightRow;
 
     private const string Background = "MP_LOBBY_BACKGROUND.JPG";
     private const string LargeArt = "MP_B_LARGE.PNG";
@@ -130,9 +160,6 @@ public static class OriginalRaceResults
     private const float LineBoxY = 552f;
     private const float LineBoxWidth = 481f;
     private const float LineBoxHeight = 18f;
-
-    // A split column is never wider than the scores page's own numeric columns.
-    private const float SplitColumnMax = 62f;
 
     // The Game Scores tab, the fourth, which the scores page art draws picked.
     private const float ScoresTabX = 656f;
@@ -162,6 +189,14 @@ public static class OriginalRaceResults
     /// <summary>The splits' scroll bar, the lobby's chat pane bar borrowed with the pane.</summary>
     public static OriginalScrollBar SplitsBar => OriginalLobbyScreen.ChatBar(SplitRows);
 
+    /// <summary>The zones' scroll bar under the splits, remake-only: the chat bar's control turned
+    /// to read across. ⚠ Do not read its fields as authored points; it is held transposed. Its X is
+    /// the bar's authored y, and its Y and Height are the run along x. Its foot is the splits bar's,
+    /// under the splits' last line; the quarter-turned art stands 16 tall.</summary>
+    public static OriginalScrollBar ZonesBar =>
+        new(SplitsBar.Y + SplitsBar.Height - OriginalScrollBar.ArrowWidth, ChatX + ChatNameColumn, SplitColumn * ZoneColumns,
+            ZoneColumns, SplitsBar.Track);
+
     /// <summary>The slot each menu row stands on, in menu order: the plaques, then each scrolling
     /// list's two arrows. A withheld Restart leaves its plaque empty, so the exit keeps its own slot.
     /// </summary>
@@ -169,46 +204,54 @@ public static class OriginalRaceResults
     {
         ArgumentNullException.ThrowIfNull(sheet);
         var slots = new List<int>(sheet.Withheld == null ? AllSlots : WithheldSlots);
-        if (ScoresBar.Scrolls(sheet.Standings.Count))
+        foreach (var (list, back, on) in new[]
+                 {
+                     (RaceResultsList.Scores, ScoresUpRow, ScoresDownRow), (RaceResultsList.Splits, SplitsUpRow, SplitsDownRow),
+                     (RaceResultsList.Zones, ZonesLeftRow, ZonesRightRow),
+                 })
         {
-            slots.Add(ScoresUpRow);
-            slots.Add(ScoresDownRow);
-        }
-
-        if (SplitsBar.Scrolls(sheet.Splits.Count))
-        {
-            slots.Add(SplitsUpRow);
-            slots.Add(SplitsDownRow);
+            if (BarOf(list).Scrolls(CountOf(sheet, list)))
+            {
+                slots.Add(back);
+                slots.Add(on);
+            }
         }
 
         return slots;
     }
 
-    /// <summary>The two lists' first rows after a press on arrow <paramref name="slot"/>, each
+    /// <summary>The three lists' first rows after a press on arrow <paramref name="slot"/>, each
     /// clamped to its list; any other slot leaves them as they stand.</summary>
-    public static (int Scores, int Splits) Scrolled(RaceResultsSheet sheet, int slot, int scoresTop, int splitsTop)
+    public static (int Scores, int Splits, int Zones) Scrolled(RaceResultsSheet sheet, int slot,
+        (int Scores, int Splits, int Zones) tops)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         if (ArrowOf(slot) is not { } arrow)
         {
-            return (scoresTop, splitsTop);
+            return tops;
         }
 
-        int step = arrow.Down ? 1 : -1;
-        return arrow.Splits
-            ? (scoresTop, SplitsBar.Clamp(splitsTop + step, sheet.Splits.Count))
-            : (ScoresBar.Clamp(scoresTop + step, sheet.Standings.Count), splitsTop);
+        int top = BarOf(arrow.List).Clamp(TopOf(tops, arrow.List) + (arrow.Down ? 1 : -1), CountOf(sheet, arrow.List));
+        return arrow.List switch
+        {
+            RaceResultsList.Scores => tops with { Scores = top },
+            RaceResultsList.Splits => tops with { Splits = top },
+            _ => tops with { Zones = top },
+        };
     }
 
     /// <summary>One list's window at <paramref name="top"/> as the wheel and the thumb see it, read
-    /// as the lobby reads that list. It is the splits under <see cref="SplitsBar"/>, else the
-    /// standings under <see cref="ScoresBar"/>.</summary>
-    public static ListWindow Window(RaceResultsSheet sheet, bool splits, int top)
+    /// as the lobby reads that list. ⚠ Do not test the zones' window with the pointer as it stands.
+    /// It is <see cref="ZonesBar"/>'s own box, transposed as that bar is, so it takes (y, x) and an x drag.</summary>
+    public static ListWindow Window(RaceResultsSheet sheet, RaceResultsList list, int top)
     {
         ArgumentNullException.ThrowIfNull(sheet);
-        return splits
-            ? SplitsBar.Window(ChatX, sheet.Splits.Count, top)
-            : ScoresBar.Window(PageX + OriginalRaceTable.RowX, sheet.Standings.Count, top);
+        return list switch
+        {
+            RaceResultsList.Scores => ScoresBar.Window(PageX + OriginalRaceTable.RowX, sheet.Standings.Count, top),
+            RaceResultsList.Splits => SplitsBar.Window(ChatX, sheet.Splits.Count, top),
+            _ => ZonesBar.Window(ZonesBar.X, sheet.ZoneNames.Count, top),
+        };
     }
 
     /// <summary>The menu row whose plaque or arrow stands at an authored point, or -1 for none.</summary>
@@ -249,8 +292,11 @@ public static class OriginalRaceResults
     {
         if (ArrowOf(slot) is { } arrow)
         {
-            var bar = BarOf(arrow.Splits);
-            return (bar.X, arrow.Down ? bar.DownY : bar.Y, OriginalScrollBar.ArrowWidth, OriginalScrollBar.ArrowHeight);
+            var bar = BarOf(arrow.List);
+            float along = arrow.Down ? bar.DownY : bar.Y;
+            return arrow.List == RaceResultsList.Zones
+                ? (along, bar.X, OriginalScrollBar.ArrowHeight, OriginalScrollBar.ArrowWidth)
+                : (bar.X, along, OriginalScrollBar.ArrowWidth, OriginalScrollBar.ArrowHeight);
         }
 
         return (Plaques[slot].X, Plaques[slot].Y, Plaques[slot].Width, Plaques[slot].Height);
@@ -259,22 +305,23 @@ public static class OriginalRaceResults
     /// <summary>The screen for one frame. <paramref name="focus"/> is the menu row the cursor stands
     /// on and <paramref name="pressed"/> whether the pointer holds it. The two pick that plaque's
     /// strip frame and label tint as the lobby's plaques do. The standings show from
-    /// <paramref name="scoresTop"/> and the splits from <paramref name="splitsTop"/>.</summary>
+    /// <paramref name="scoresTop"/>, the splits' pilots from <paramref name="splitsTop"/> and their
+    /// zones from <paramref name="zonesTop"/>.</summary>
     public static ComposedBoard Compose(RaceResultsSheet sheet, UiStrings strings, int focus, bool pressed, int scoresTop = 0,
-        int splitsTop = 0)
+        int splitsTop = 0, int zonesTop = 0)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         ArgumentNullException.ThrowIfNull(strings);
         var layers = new BoardLayers();
         layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, Background), 0f, 0f));
-        scoresTop = ScoresBar.Clamp(scoresTop, sheet.Standings.Count);
-        splitsTop = SplitsBar.Clamp(splitsTop, sheet.Splits.Count);
-        OriginalRaceTable.Compose(sheet.Standings, PageX, PageY, strings, layers, scoresTop);
+        var tops = (Scores: ScoresBar.Clamp(scoresTop, sheet.Standings.Count), Splits: SplitsBar.Clamp(splitsTop, sheet.Splits.Count),
+            Zones: ZonesBar.Clamp(zonesTop, sheet.ZoneNames.Count));
+        OriginalRaceTable.Compose(sheet.Standings, PageX, PageY, strings, layers, tops.Scores);
         layers.Lines.Add(Line(strings, 10046, Title, 60f, 22f, 0f));
         layers.Lines.Add(Line(strings, 10507, MultiplayerBoardText.Word(strings, 10507, "Game Scores"),
             ScoresTabX, 30f, ScoresTabWidth, BoardJustify.Center));
         ComposeZoneKey(sheet, strings, layers);
-        ComposeSplits(sheet, strings, splitsTop, layers);
+        ComposeSplits(sheet, strings, tops.Splits, tops.Zones, layers);
         var face = MultiplayerBoardText.Regular(strings, 10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         string line = sheet.Withheld is { } withheld ? $"{sheet.Context}   ·   {withheld}" : sheet.Context;
@@ -285,7 +332,7 @@ public static class OriginalRaceResults
         {
             if (ArrowOf(slots[i]) is { } arrow)
             {
-                ComposeArrow(sheet, arrow, scoresTop, splitsTop, i == focus, i == focus && pressed, layers);
+                ComposeArrow(sheet, arrow, TopOf(tops, arrow.List), i == focus, i == focus && pressed, layers);
                 continue;
             }
 
@@ -321,44 +368,70 @@ public static class OriginalRaceResults
     }
 
     // The one reading of the arrow slots: which list a slot scrolls and which way, null for a plaque.
-    private static (bool Splits, bool Down)? ArrowOf(int slot) => slot switch
+    private static (RaceResultsList List, bool Down)? ArrowOf(int slot) => slot switch
     {
-        ScoresUpRow => (false, false),
-        ScoresDownRow => (false, true),
-        SplitsUpRow => (true, false),
-        SplitsDownRow => (true, true),
+        ScoresUpRow => (RaceResultsList.Scores, false),
+        ScoresDownRow => (RaceResultsList.Scores, true),
+        SplitsUpRow => (RaceResultsList.Splits, false),
+        SplitsDownRow => (RaceResultsList.Splits, true),
+        ZonesLeftRow => (RaceResultsList.Zones, false),
+        ZonesRightRow => (RaceResultsList.Zones, true),
         _ => null,
     };
 
-    private static OriginalScrollBar BarOf(bool splits) => splits ? SplitsBar : ScoresBar;
+    private static OriginalScrollBar BarOf(RaceResultsList list) => list switch
+    {
+        RaceResultsList.Scores => ScoresBar,
+        RaceResultsList.Splits => SplitsBar,
+        _ => ZonesBar,
+    };
+
+    private static int CountOf(RaceResultsSheet sheet, RaceResultsList list) => list switch
+    {
+        RaceResultsList.Scores => sheet.Standings.Count,
+        RaceResultsList.Splits => sheet.Splits.Count,
+        _ => sheet.ZoneNames.Count,
+    };
+
+    private static int TopOf((int Scores, int Splits, int Zones) tops, RaceResultsList list) => list switch
+    {
+        RaceResultsList.Scores => tops.Scores,
+        RaceResultsList.Splits => tops.Splits,
+        _ => tops.Zones,
+    };
 
     // A scroll arrow in its state, live while its list can move that way.
-    private static void ComposeArrow(RaceResultsSheet sheet, (bool Splits, bool Down) arrow, int scoresTop, int splitsTop, bool focused,
+    private static void ComposeArrow(RaceResultsSheet sheet, (RaceResultsList List, bool Down) arrow, int top, bool focused,
         bool pressed, BoardLayers layers)
     {
-        var bar = BarOf(arrow.Splits);
-        int top = arrow.Splits ? splitsTop : scoresTop;
-        int count = arrow.Splits ? sheet.Splits.Count : sheet.Standings.Count;
-        layers.Pictures.Add(bar.Arrow(arrow.Down, arrow.Down ? bar.CanDown(top, count) : bar.CanUp(top), focused, pressed));
+        var bar = BarOf(arrow.List);
+        int count = CountOf(sheet, arrow.List);
+        var picture = bar.Arrow(arrow.Down, arrow.Down ? bar.CanDown(top, count) : bar.CanUp(top), focused, pressed);
+        layers.Pictures.Add(arrow.List == RaceResultsList.Zones ? Across(picture) : picture);
     }
 
-    // The splits in the chat pane. The zone numbers stand on its first line, then one row per
-    // pilot in race order from the window's top, a centred cell per zone.
-    private static void ComposeSplits(RaceResultsSheet sheet, UiStrings strings, int top, BoardLayers layers)
+    // A picture of the transposed zone bar at its authored place, a quarter turn anticlockwise about
+    // its corner. The up arrow then points left and the thumb lies along the run.
+    private static BoardPicture Across(BoardPicture picture) =>
+        picture with { X = picture.Y, Y = picture.X + OriginalScrollBar.ArrowWidth, Revs = -0.25f, FromCorner = true };
+
+    // The splits in the chat pane, the zones from zonesTop across it. Their numbers stand on its
+    // first line, then one row per pilot in race order from the window's top, a centred cell per
+    // zone. A course wider than the pane draws the zone bar under the last row.
+    private static void ComposeSplits(RaceResultsSheet sheet, UiStrings strings, int top, int zonesTop, BoardLayers layers)
     {
         SplitsBar.Compose(ChatX, sheet.Splits.Count, top, layers);
         int zones = sheet.ZoneNames.Count;
-        if (zones == 0)
-        {
-            return;
-        }
-
-        float column = Math.Min(SplitColumnMax, ChatTextWidth / zones);
+        var across = new BoardLayers();
+        ZonesBar.Compose(ZonesBar.X, zones, zonesTop, across);
+        layers.Fills.AddRange(across.Fills.Select(f => f with { X = f.Y, Y = f.X, Width = f.Height, Height = f.Width }));
+        layers.Pictures.AddRange(across.Pictures.Select(Across));
         float left = ChatX + ChatNameColumn;
-        for (int zone = 0; zone < zones; zone++)
+        int shown = Math.Min(ZoneColumns, zones - zonesTop);
+        for (int column = 0; column < shown; column++)
         {
-            layers.Lines.Add(Line(strings, 10575, (zone + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                left + (column * zone), ChatY, column, BoardJustify.Center));
+            layers.Lines.Add(Line(strings, 10575, (zonesTop + column + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                left + (SplitColumn * column), ChatY, SplitColumn, BoardJustify.Center));
         }
 
         for (int i = 0; top + i < sheet.Splits.Count && i < SplitRows; i++)
@@ -368,9 +441,10 @@ public static class OriginalRaceResults
             var ink = row.Left ? Grey : Black;
             // A pilot wider than the name column scrolls in place rather than wrapping.
             layers.Lines.Add(Line(strings, 10575, row.Pilot, ChatX + 4f, y, ChatNameColumn - 8f, ink: ink) with { Marquee = true });
-            for (int zone = 0; zone < zones && zone < row.Cells.Count; zone++)
+            for (int column = 0; column < shown && zonesTop + column < row.Cells.Count; column++)
             {
-                layers.Lines.Add(Line(strings, 10575, row.Cells[zone], left + (column * zone), y, column, BoardJustify.Center, ink));
+                layers.Lines.Add(Line(strings, 10575, row.Cells[zonesTop + column], left + (SplitColumn * column), y, SplitColumn,
+                    BoardJustify.Center, ink));
             }
         }
     }

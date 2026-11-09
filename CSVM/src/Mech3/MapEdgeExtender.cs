@@ -733,7 +733,7 @@ public sealed partial class MapEdgeExtender : Node3D
             var mmi = Copies(kind.Mesh, rich?.Material ?? kind.Material, $"clutter_{kindIndex}", bodyRid, firstSlot);
             if (kind.Solid)
                 mmi.SetInstanceShaderParameter("node_bias", kind.NodeBias);
-            var draw = EdgeDraw.Of(mmi, kindIndex, kind.Mesh.GetAabb(), placements);
+            var draw = EdgeDraw.Of(mmi, kindIndex, kind.Mesh.GetAabb(), placements) with { Rich = rich != null };
             draw.ApplyRange();
             draws.Add(draw);
             cell.AddChild(mmi);
@@ -1124,7 +1124,8 @@ public sealed partial class MapEdgeExtender : Node3D
     // bounds. Under Enhanced the node stops drawing past that fade, as a map clutter cell does.
     // A near model's node (Near) stops past the word's band instead, in plain metres, and hides under Off.
     // It copies a whole edge cell's stamps in one node, which the map cuts into VegetationModels.CellM cells.
-    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, int Kind, float Far2, float Radius, bool NeverFades, bool Near = false)
+    // A Rich card's node (Rich) ranges at VegetationModels.Reach, as its shader fades.
+    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, int Kind, float Far2, float Radius, bool NeverFades, bool Near = false, bool Rich = false)
     {
         public static EdgeDraw Of(MultiMeshInstance3D node, int kind, Aabb meshBox,
             List<(Transform3D Xf, Color Fade, int Source)> placements)
@@ -1148,7 +1149,8 @@ public sealed partial class MapEdgeExtender : Node3D
             if (Near)
                 Node.Visible = VegetationModels.On;
             Node.VisibilityRangeEnd = Near ? VegetationModels.Band.Y + Radius
-                : ClutterInstances.RangeEnd(GraphicsMode.Enhanced, NeverFades, Far2, Radius, EffectsLevel.RegisteredScaleSq);
+                : ClutterInstances.RangeEnd(GraphicsMode.Enhanced, NeverFades, Far2, Radius,
+                    EffectsLevel.RegisteredScaleSq * (Rich ? VegetationModels.ReachSq : 1f));
         }
     }
 

@@ -824,9 +824,9 @@ internal static class MenuOriginalConnectionSuites
     [Suite("menu-original-lobby-stunt-race",
         "The Multiplayer Lobby's Stunt Race over the loopback: the host's Type list offers Stunt Race as its "
         + "fourth row, and picking it on Above the Clouds moves the Environment off that greyed row onto "
-        + "Hawai'ian Islands with the Time box at 5 on both ends. Every chapter without Danger Zones greys in the "
+        + "Hawaii with the Time box at 5 on both ends. Every chapter without Danger Zones greys in the "
         + "Environment list, every Mission Option but the Time box greys on the host, and both ends describe "
-        + "the race under the Type box. A typed Time reaches the guest. On NW Boeing Field, a chapter with a "
+        + "the race under the Type box. A typed Time reaches the guest. On Airfield, a chapter with a "
         + "shipped course, both ends show a Course box in the description's place, the guest's greyed on the "
         + "Danger Zones; the host's lists the Danger Zones and then the shipped course by title, and its pick "
         + "reaches the guest's box by title. Both LAUNCH! and the guest's launch leave as "
@@ -867,7 +867,7 @@ internal static class MenuOriginalConnectionSuites
             door.Lan.SearchAddress = Loopback;
         }
 
-        // Both doors list NW Boeing Field's shipped courses alone. Hawai'ian Islands ships one too, and
+        // Both doors list Airfield's shipped courses alone. Hawaii ships one too, and
         // without it the lobby still shows the race's description there.
         hostDoor.Courses = BoeingCourses;
         guestDoor.Courses = BoeingCourses;
@@ -3554,7 +3554,7 @@ internal static class MenuOriginalConnectionSuites
     // One team refuses LAUNCH!; the guest's own team lets it go, each seat carrying its team.
     // The Type list's fourth row, picked on Above the Clouds. The race moves to the next environment
     // with a course and arms the Time box at its default on both ends.
-    // The shipped courses of NW Boeing Field (C1), none for any other chapter.
+    // The shipped courses of Airfield (C1), none for any other chapter.
     private static IReadOnlyList<Course> BoeingCourses(string chapter) =>
         chapter == "C1" ? CourseLibrary.ShippedChoices(chapter) : Array.Empty<Course>();
 
@@ -3578,7 +3578,7 @@ internal static class MenuOriginalConnectionSuites
         bool picked = DogfightLobby.IsStuntRace(lobby.Options) && DogfightLobby.IsStuntRace(heard);
         ctx.Check(picked && lobby.Options is { Environment: 1, TimeMinutes: DogfightLobby.StuntRaceDefaultMinutes, Victory: DogfightVictory.Time }
                   && heard is { Environment: 1, TimeMinutes: DogfightLobby.StuntRaceDefaultMinutes },
-            $"Stunt Race leaves Above the Clouds for Hawai'ian Islands with Time at 5, on both ends ({lobby.Options.MissionType}/{heard.MissionType}, environment {heard.Environment}, time {heard.TimeMinutes})");
+            $"Stunt Race leaves Above the Clouds for Hawaii with Time at 5, on both ends ({lobby.Options.MissionType}/{heard.MissionType}, environment {heard.Environment}, time {heard.TimeMinutes})");
         ctx.Check(Row(guest.Shell, OriginalLobbyScreen.TypeKey) is { Label: DogfightLobby.StuntRaceName }
                   && Draws(host.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
                   && Draws(guest.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
@@ -3644,10 +3644,10 @@ internal static class MenuOriginalConnectionSuites
 
         var heard = guest.Door.Dogfight!.Options;
         ctx.Check(heard is { Environment: 4, TimeMinutes: 7 } && DogfightLobby.IsStuntRace(heard),
-            $"NW Boeing Field and a typed Time of 7 reach the guest ({heard.Environment}, {heard.TimeMinutes})");
+            $"Airfield and a typed Time of 7 reach the guest ({heard.Environment}, {heard.TimeMinutes})");
     }
 
-    // The Course box on NW Boeing Field, in the description's place on both ends. The host's lists the
+    // The Course box on Airfield, in the description's place on both ends. The host's lists the
     // Danger Zones, then the shipped course by title; its pick reaches the guest's, greyed. The course's name, or null.
     private static string? PickTheCourse(TestContext ctx, End host, End guest, List<End> ends)
     {

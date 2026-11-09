@@ -1228,7 +1228,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 // reach a list the page does not show.
                 return key == HiddenRemakeKey ? null : key == LivesKey ? LivesDropdown() : RaceTimeDropdown();
             case EnvironmentKey:
-                return new DropdownList(Names(InstantActionFeature.Environments, e => e.Name), ia.EnvironmentIndex,
+                return new DropdownList(Names(InstantActionFeature.Environments, e => MenuChapters.Name(e.Code, LoadoutStrings)), ia.EnvironmentIndex,
                     i => ia.AllowsEnvironment(i, ia.MissionType.Key), i =>
                     {
                         ia.SelectEnvironment(i);

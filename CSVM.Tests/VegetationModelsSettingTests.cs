@@ -42,6 +42,7 @@ public class VegetationModelsSettingTests
     public void TheFlagAndTheOptionsFileKeepAKnownWordAndDropAnUnknownOne()
     {
         Assert.Equal(VegetationModelsSetting.Off, SessionSpec.Parse(new[] { "--vegetation-models=off" }).WordFlags[VegetationModelsSetting.Lookup]);
+        Assert.Equal(VegetationModelsSetting.Extreme, SessionSpec.Parse(new[] { "--vegetation-models=extreme" }).WordFlags[VegetationModelsSetting.Lookup]);
         Assert.Null(SessionSpec.Parse(new[] { "--vegetation-models=on" }).WordFlags[VegetationModelsSetting.Lookup]);
         var kept = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [VegetationModelsSetting.Lookup] = VegetationModelsSetting.Far } }));
         Assert.Equal(VegetationModelsSetting.Far, kept?.Words[VegetationModelsSetting.Lookup]);
@@ -50,12 +51,14 @@ public class VegetationModelsSettingTests
         Assert.Null(dropped!.Words[VegetationModelsSetting.Lookup]);
     }
 
-    /// <summary>Near draws inside 400-600 m, Far inside 600-900 m, and Off draws no model, its band zero.</summary>
+    /// <summary>Each word's band in metres. Very Far and Extreme scale Far's by 1.5 and 2. Off's is zero.</summary>
     [Fact]
     public void EachWordDrawsItsBand()
     {
         Assert.Equal(new Vector2(400f, 600f), VegetationModels.BandFor(VegetationModelsSetting.Near));
         Assert.Equal(new Vector2(600f, 900f), VegetationModels.BandFor(VegetationModelsSetting.Far));
+        Assert.Equal(new Vector2(900f, 1350f), VegetationModels.BandFor(VegetationModelsSetting.VeryFar));
+        Assert.Equal(new Vector2(1200f, 1800f), VegetationModels.BandFor(VegetationModelsSetting.Extreme));
         Assert.True(VegetationModels.FarM < CanopyClumps.HandoverNearM && VegetationModels.FarFarM < CanopyClumps.HandoverNearM);
         Assert.Equal(Vector2.Zero, VegetationModels.BandFor(VegetationModelsSetting.Off));
     }
