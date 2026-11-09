@@ -139,7 +139,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 **Landed.** The prototype's playtest fixes are committed on `ccr-a18ce897-jqi2mk`; the record is in the commit message.
 
-**Verified.** <pending orchestrator run: the full battery runs on the tree after main is merged in.>
+**Verified.** The full battery on the plan tree with main merged in, A1, C21 and D33 landed: build, units 8411 passed / 0 failed / 6 skipped, engine 674 passed / 0 failed / 2 skipped with engine errors clean, goldens 41 shots hash-identical.
 
 **Original approach (kept for reference).**
 
@@ -308,7 +308,7 @@ stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second mu
 
 **Landed.** Only the slab remains, as `Session/World/VolumetricClouds.cs` over `shaders/csky_volumetric_clouds.gdshaderinc`, and GI is `Effects/GlobalIllumination.cs`, fixed at SDFGI plus SSIL and switched on or off. The boxes, the shells and both key handlers are gone, the `--proto-*` flags are plain switches until B11, and the clouds moved to `Session.World` because they drive `WeatherRig`, which `FamilyOrderTests` forbids from `Effects`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** 8-chapter `--freecam --graphics=enhanced` sweep with the clouds on: zero shader errors, every chapter's layer as before the rename (C3 and C5 draw none); C1 with the clouds off keeps its node and mesh counts. The full battery is green (A1's line).
 
 **Original approach (kept for reference).**
 
@@ -383,7 +383,7 @@ and judges the horizon. If far clouds read wrong, `haze_near_m` (8 km) becomes a
 
 **Landed.** `TerrainShadow.Strength` is the one owner of `csky_terrain_shadow_strength`: `WeatherRig.ShadowStrength` sets it, it writes the global and keeps the value, since the renderer reads no global back. `SunAt` passes it to `TerrainShadowRaster.Lit`, which now computes `1 - strength * clamp(...)` as the shader does, and `TerrainShadowRasterTests` checks that at strengths 0, 0.5 and 1.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The new theory passes, and the full battery is green with the `graphics-terrain-shadow` suite (`SunAt`'s only caller) passing (A1's line).
 
 **Original approach (kept for reference).**
 
