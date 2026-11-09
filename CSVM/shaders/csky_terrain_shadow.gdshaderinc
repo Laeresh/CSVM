@@ -11,6 +11,8 @@
 global uniform sampler2D csky_terrain_shadow;
 global uniform vec4 csky_terrain_shadow_rect;
 global uniform vec2 csky_terrain_shadow_soft;
+// The share of the sun the bake takes under full shade, 1 by default (WeatherRig.ShadowStrength).
+global uniform float csky_terrain_shadow_strength;
 
 // The bake's share of the sun at a world position: 1 lit, 0 in terrain shadow, a ramp over the
 // softness between. Off the rect everything is lit. Fetched texel by texel like the ocean mask, so no
@@ -31,7 +33,7 @@ float csky_terrain_baked_sun(vec3 world) {
     vec2 d = texelFetch(csky_terrain_shadow, clamp(i + ivec2(1, 1), ivec2(0), hi), 0).rg;
     vec2 texel = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
     float soft = max(texel.y * csky_terrain_shadow_soft.x, csky_terrain_shadow_soft.y);
-    return 1.0 - clamp((texel.x - world.y) / soft + 0.5, 0.0, 1.0);
+    return 1.0 - csky_terrain_shadow_strength * clamp((texel.x - world.y) / soft + 0.5, 0.0, 1.0);
 }
 
 // The sun's share reaching a world position, which every Enhanced ground, water, building and

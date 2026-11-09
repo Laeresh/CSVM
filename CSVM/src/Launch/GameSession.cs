@@ -861,6 +861,9 @@ public partial class GameSession : Node3D
         _fullWorld = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
         // Before the ocean stage, whose shore mask is baked from what draws.
         FollowShadowDecals();
+        // The cloud prototype holds the zone before the bake, so the sun it aims gets a terrain shadow.
+        if (_spec.ProtoClouds != null && GraphicsMode.Enhanced && _sky?.Weather is { } held)
+            held.HoldZone = true;
         FollowTerrainShadow();
         BuildCloudShadow();
         _labs!.BuildCloudLab(() => _cloudShadow);
@@ -1036,6 +1039,12 @@ public partial class GameSession : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (_spec.ProtoGi != null && @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F7, ShiftPressed: true })
+        {
+            CycleProtoGi();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         // A cutscene skips on any input, as the original's state core does; a stick's is polled in
         // PollStickSkip. ⚠ Escape is exempt: it is the way out of the session. ⚠ Pads count only
         // where this session reads pads at all, since a pad reports button 0 pressed on arrival.
@@ -2815,6 +2824,22 @@ public partial class GameSession : Node3D
         _cloudShadow.Tune = tunes;
         _plane.AddChild(_cloudShadow);
         Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
+    }
+
+    // The GI prototype's Shift+F7: the next mode onto every Environment, then the zone again, whose
+    // ambient steps aside while SDFGI stands.
+    private void CycleProtoGi()
+    {
+        Effects.ProtoGi.Cycle();
+        bool enhanced = GraphicsMode.Enhanced;
+        if (GetViewport().FindWorld3D()?.Environment is { } world)
+            EnhancedLook.ApplyEnvironment(world, enhanced, _spec.SkippedPasses);
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.Dressing.Pass?.Env is { } env)
+                EnhancedLook.ApplyEnvironment(env, enhanced, _spec.SkippedPasses);
+        }
+        _sky?.Weather?.ReapplyZone();
     }
 
     // The throwaway cloud prototype, over a full weathered world alone; an unknown word warns and

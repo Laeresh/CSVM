@@ -32,14 +32,22 @@ internal sealed partial class ProtoClouds : Node3D
     // The share of a deck torn open and the tears' size, and the shafts' haze under rain or a dry zone.
     private const float DeckGaps = 0.35f;
     private const float GapM = 3200f;
+    // The deck's depth (the shader's deck_depth_m) and the sun share it takes from the ground under it.
+    private const float DeckDepthM = 150f;
+    // The heads' edge band, billow and lean (the shader's head_soft, warp_m, shear_m), and erosion cell.
+    private const float HeadSoft = 0.16f;
+    private const float WarpM = 320f;
+    private const float ShearM = 260f;
+    private const float DetailM = 180f;
     private const float RainShaftGain = 1f;
     private const float HazeShaftGain = 0.3f;
-    private const float RiftSkyLift = 0.45f;
     private const float ShellSizeM = 36000f;
     private const float PuffMapSize = 128;
     private const float PuffRadiusM = 170f;
     private const float PlacedCloudDepthShare = 0.8f;
     private const float FallbackHalfExtentM = 20000f;
+    // How far above the highest placed cloud an authored band may sit and still count as the layer.
+    private const float SpriteBandMarginM = 1000f;
 
     private static readonly string Inv = CultureInfo.InvariantCulture.Name;
 
@@ -51,9 +59,15 @@ internal sealed partial class ProtoClouds : Node3D
     private readonly Func<Camera3D?> _camera;
     private readonly List<(MeshInstance3D Node, Aabb World)> _placedSprites = new();
     private readonly List<MeshInstance3D> _hidden = new();
-    private readonly float? _bottom;
-    private readonly float? _top;
     private readonly bool _hasDeck;
+    private readonly Dictionary<string, Shader> _shaders = new();
+    private readonly List<ShaderMaterial> _materials = new();
+    private float? _bottom;
+    private float? _top;
+    // The layer was fitted to the placed clouds, so the upper zone is no air above it to split the fog by.
+    private bool _fitted;
+    private float _appliedTaper = -1f;
+    private float _appliedShaft = -1f;
     private Variant _variant;
     private Node3D? _built;
     private bool _hiding;
@@ -81,11 +95,31 @@ internal sealed partial class ProtoClouds : Node3D
         Shells,
     }
 
+    /// <summary>Gets or sets how far the heads' noise threshold climbs toward each cloud's own top.
+    /// Higher rounds the crown into a fuller dome. The cloud lab's slider.</summary>
+    public static float Taper { get; set; } = 0.3f;
+
+    /// <summary>Gets or sets the light shafts' intensity over the mission's haze gain. The lighting lab's slider.</summary>
+    public static float ShaftScale { get; set; } = 1f;
+
+    /// <summary>Gets or sets the share of the sun the deck takes from the ground under it. An overcast
+    /// passes almost no direct sun. The cloud lab's slider.</summary>
+    public static float DeckSunTaken { get; set; } = 0.97f;
+
+    /// <summary>Gets or sets the share of the ambient light the deck takes from the ground under it,
+    /// through AO. Under SDFGI that dims the GI's bounce too. The cloud lab's slider.</summary>
+    public static float DeckAmbientTaken { get; set; } = 0.6f;
+
     /// <summary>The variant drawing now.</summary>
     public Variant Current => _variant;
 
+    // The heads' shape the slab and its ground shadow share: taper, edge band, billow, lean.
+    private static Vector4 HeadShape => new(Taper, HeadSoft, WarpM, ShearM);
+
     // The shafts' haze: a mission authoring rain or snow scatters the sun hard, a dry zone faintly.
     private float ShaftGain => _weather.Mission?.Precip != null ? RainShaftGain : HazeShaftGain;
+
+    private float CoverBias => _hasDeck ? -0.3f : 0.15f;
 
     /// <summary>The flag's word as a variant, or null for a word that names none.</summary>
     public static Variant? Parse(string word) => word.Trim().ToLowerInvariant() switch
@@ -95,6 +129,35 @@ internal sealed partial class ProtoClouds : Node3D
         "shells" => Variant.Shells,
         _ => null,
     };
+
+    /// <summary>A live, unsaved lab slider over one prototype knob, its label and value above it. The
+    /// slider takes no focus, so WASD keeps flying the camera after a click.</summary>
+    public static Control LabSlider(string name, float min, float max, Func<float> get, Action<float> set)
+    {
+        var box = new VBoxContainer();
+        var label = new Label { Modulate = new Color(1, 1, 1, 0.75f) };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        void Show() => label.Text = string.Create(CultureInfo.InvariantCulture, $"{name}  {get():0.00}  (prototype, not saved)");
+        Show();
+        var slider = new HSlider
+        {
+            MinValue = min,
+            MaxValue = max,
+            Step = (max - min) / 200f,
+            Value = get(),
+            FocusMode = Control.FocusModeEnum.None,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        slider.ValueChanged += v =>
+        {
+            set((float)v);
+            Show();
+        };
+        slider.DragEnded += _ => Log.Info("ui", $"proto clouds: {name} {get():0.00}");
+        box.AddChild(label);
+        box.AddChild(slider);
+        return box;
+    }
 
     /// <summary>The prototype over <paramref name="worldRoot"/>'s world: it hides the deck through
     /// <paramref name="weather"/>, the cloud <paramref name="field"/> and the sprites <paramref name="scene"/>
@@ -129,6 +192,7 @@ internal sealed partial class ProtoClouds : Node3D
     public override void _EnterTree()
     {
         CollectPlacedSprites();
+        FitLayerToSprites();
         Follow(GraphicsMode.Enhanced);
     }
 
@@ -145,6 +209,8 @@ internal sealed partial class ProtoClouds : Node3D
 
     public override void _Process(double delta)
     {
+        PublishGround(true);
+        FollowKnobs();
         // The shells ride the eye in X/Z, so the stack never shows an edge; Y is the layer's own.
         if (_built == null || _variant != Variant.Shells || _camera() is not { } cam)
             return;
@@ -166,6 +232,7 @@ internal sealed partial class ProtoClouds : Node3D
             FreeBuilt();
             Restore();
         }
+        PublishGround(enhanced);
         SetProcess(enhanced);
     }
 
@@ -176,6 +243,7 @@ internal sealed partial class ProtoClouds : Node3D
         render_mode blend_premul_alpha, unshaded, depth_draw_never, shadows_disabled, fog_disabled{{extraRenderModes}};
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_proto_clouds.gdshaderinc"
+        #include "res://shaders/csky_terrain_shadow.gdshaderinc"
 
         uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
         uniform float layer_bottom = 970.0;
@@ -188,6 +256,8 @@ internal sealed partial class ProtoClouds : Node3D
         uniform vec3 sun_rgb = vec3(0.8, 0.77, 0.72);
         uniform float ambient_gain = 0.5;
         uniform float far_m = 24000.0;
+        // Where a cloud starts hazing into the fog colour on its way to far_m, whatever the zone fog.
+        uniform float haze_near_m = 8000.0;
         // The stratus deck's share of the sky, 0 in a chapter without a deck, and its depth over the
         // layer floor. The heads' coverage gain is lower over a deck.
         uniform float deck_cover = 0.0;
@@ -205,6 +275,17 @@ internal sealed partial class ProtoClouds : Node3D
         // How far from the zone fog colour toward white the sky above the layer stands, seen
         // through the rifts; 0 leaves the Environment's panorama.
         uniform float rift_sky_lift = 0.0;
+        // The heads' shape (csky_pc_cover_shaped). `taper` rounds each cloud's crown toward its own
+        // top. The sample point billows by `warp_m` and leans `shear_m` downwind at the top.
+        uniform float taper = 0.3;
+        uniform float head_soft = 0.16;
+        uniform float warp_m = 320.0;
+        uniform float shear_m = 260.0;
+
+        // The heads' coverage at `p`, the function the ground shadow reads too.
+        float pc_cover_shaped(vec3 p) {
+            return csky_pc_cover_shaped(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
+        }
         """;
 
     // The march, its lighting and the write, shared by every variant after its own PC_COVER.
@@ -300,7 +381,9 @@ internal sealed partial class ProtoClouds : Node3D
                 vec3 q = eye + dir * t;
                 float haze = exp(-max(q.y, 0.0) / shaft_height_m);
                 float reach = 1.0 - csky_fog_amount(q, eye);
-                light += pc_sun_through(q, layer_bottom, layer_top) * haze * reach * dt;
+                // The terrain's baked sun shadow holds in the air too, so a hill's lee carries no shaft.
+                float sun_t = pc_sun_through(q, layer_bottom, layer_top) * csky_terrain_baked_sun(q);
+                light += sun_t * haze * reach * dt;
                 t += dt;
             }
             vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * csky_world_light_at(eye);
@@ -339,14 +422,14 @@ internal sealed partial class ProtoClouds : Node3D
             if (alpha <= 0.002 && max(shafts.r, max(shafts.g, shafts.b)) <= 0.0005) {
                 discard;
             }
-            float fog = csky_fog_amount(entry, cam);
+            float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam)));
             albedo = mix(marched.rgb, csky_fog_color_at(cam) * a, fog) + shafts + (1.0 - a) * behind.rgb;
         }
         """;
 
     // Variant A: one full-screen quad, the cloud shadows' pattern as the layer's coverage.
     private static string SlabShader() => $$"""
-        #define PC_COVER(p) (csky_cloud_cover(p) + cover_bias)
+        #define PC_COVER(p) pc_cover_shaped(p)
         {{SharedHead(", cull_disabled, depth_test_disabled")}}
         {{SharedFunctions()}}
 
@@ -358,8 +441,14 @@ internal sealed partial class ProtoClouds : Node3D
             vec3 eye = CAMERA_POSITION_WORLD;
             vec3 dir = csky_pc_ray_dir(SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX);
             float scene = csky_pc_scene_distance(texture(depth_texture, SCREEN_UV).r, SCREEN_UV, INV_PROJECTION_MATRIX);
+            // Past the full fog nothing is seen, so the dome, which writes depth, reads as open sky.
+            if (scene > csky_fog_range.y) {
+                scene = 1e9;
+            }
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
-            float dither = csky_pc_dither(FRAGCOORD.xy);
+            // The march's start offset moves by the golden ratio every frame. TAA then averages the
+            // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
+            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
             vec4 m = vec4(0.0, 0.0, 0.0, 1.0);
             float t0 = 0.0;
             if (span.y >= 0.0) {
@@ -367,6 +456,15 @@ internal sealed partial class ProtoClouds : Node3D
                 float t1 = min(min(span.y, scene), t0 + far_m);
                 if (t1 > t0) {
                     m = pc_march(eye, dir, t0, t1, layer_bottom, layer_top, 1.0, dither);
+                }
+                // A march cut off inside the layer leaves the rest of it to the fog, not the dome, by
+                // the layer left unmarched. A ray leaving just past the cap takes little.
+                float unmarched = min(span.y, scene) - t1;
+                if (unmarched > 1.0) {
+                    float rest = max(csky_fog_amount(eye + dir * t1, eye), smoothstep(haze_near_m, far_m, t1))
+                        * (1.0 - exp(-unmarched / 5000.0));
+                    m.rgb += m.a * rest * csky_fog_color_at(eye);
+                    m.a *= 1.0 - rest;
                 }
             }
             // Under the layer the ray crosses the haze first, up to the layer, the scene or the cap.
@@ -377,6 +475,10 @@ internal sealed partial class ProtoClouds : Node3D
             // A sky pixel whose ray leaves through the layer's top shows the lifted sky above it.
             // The exit's fog closes the far rifts into the horizon.
             vec4 behind = vec4(0.0);
+            // At or below the horizon, a sky pixel past the clipped sea shows the fog, not the dome's lower band.
+            if (scene >= 1e8 && span.y < 0.0 && dir.y <= 0.02) {
+                behind = vec4(csky_fog_color_at(eye), 1.0);
+            }
             if (rift_sky_lift > 0.0 && scene >= 1e8 && span.y >= 0.0 && dir.y > 0.0 && eye.y < layer_top) {
                 vec3 fog_rgb = csky_fog_color_at(eye);
                 float exit_fog = csky_fog_amount(eye + dir * span.y, eye);
@@ -435,7 +537,7 @@ internal sealed partial class ProtoClouds : Node3D
 
     // Variant C: horizontal sheets through the band, each shaded at its own altitude, no march.
     private static string ShellsShader() => $$"""
-        #define PC_COVER(p) (csky_cloud_cover(p) + cover_bias)
+        #define PC_COVER(p) pc_cover_shaped(p)
         {{SharedHead(", cull_disabled")}}
         {{SharedFunctions()}}
         uniform float shell_thickness_m = 12.0;
@@ -508,20 +610,26 @@ internal sealed partial class ProtoClouds : Node3D
 
     private ShaderMaterial MaterialOf(string code, float bottom, float top)
     {
-        var material = new ShaderMaterial { Shader = new Shader { Code = code }, RenderPriority = 120 };
+        // One Shader per source: a Shader per box compiled 1077 times on C1C's switch to boxes and hung.
+        if (!_shaders.TryGetValue(code, out var shader))
+            _shaders[code] = shader = new Shader { Code = code };
+        var material = new ShaderMaterial { Shader = shader, RenderPriority = 120 };
         material.SetShaderParameter("layer_bottom", bottom);
         material.SetShaderParameter("layer_top", top);
         // A deck chapter reads as a near-solid overcast with a few tall heads over it, formed only
         // where the pattern is strong. One without a deck draws fuller heads alone.
         material.SetShaderParameter("deck_cover", _hasDeck ? DeckCover : 0f);
-        material.SetShaderParameter("cover_bias", _hasDeck ? -0.3f : 0.15f);
+        material.SetShaderParameter("cover_bias", CoverBias);
+        material.SetShaderParameter("taper", Taper);
+        _materials.Add(material);
         material.SetShaderParameter("heads_gain", _hasDeck ? 1.15f : 1f);
         // A deck tears open in rifts and the sun falls through them in shafts. The shafts are strong
         // where the mission authors rain and faint in a dry haze.
         material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
         material.SetShaderParameter("gap_m", GapM);
-        material.SetShaderParameter("shaft_gain", ShaftGain);
-        material.SetShaderParameter("rift_sky_lift", _hasDeck ? RiftSkyLift : 0f);
+        material.SetShaderParameter("shaft_gain", ShaftGain * ShaftScale);
+        // Off: the held upper zone's dome is the sky a rift shows (WeatherRig.HoldZone).
+        material.SetShaderParameter("rift_sky_lift", 0f);
         return material;
     }
 
@@ -703,7 +811,12 @@ internal sealed partial class ProtoClouds : Node3D
             return;
         _hiding = true;
         _weather.HideDeck = true;
-        if (_field != null)
+        _weather.HoldZone = true;
+        WeatherRig.NightOff = true;
+        _weather.ReapplyZone();
+        var sun = _weather.SunOrientation;
+        Log.Info("world", $"proto clouds: zone held, night off, sun at {Mathf.RadToDeg(sun.X):0.#}° pitch / {Mathf.RadToDeg(sun.Y):0.#}° yaw, cloud shadows {(CloudShadow.Live?.Draws == true ? "drawn" : "not drawn")}");
+        if (_field != null && _bottom != null)
             _field.Visible = false;
         foreach (var (node, _) in _placedSprites)
         {
@@ -721,6 +834,9 @@ internal sealed partial class ProtoClouds : Node3D
             return;
         _hiding = false;
         _weather.HideDeck = false;
+        _weather.HoldZone = false;
+        WeatherRig.NightOff = false;
+        _weather.ReapplyZone();
         if (_field != null)
             _field.Visible = true;
         foreach (var node in _hidden)
@@ -733,9 +849,89 @@ internal sealed partial class ProtoClouds : Node3D
 
     private void FreeBuilt()
     {
+        _materials.Clear();
         if (_built == null)
             return;
         _built.QueueFree();
         _built = null;
+    }
+
+    // The ground shadow's globals (csky_cloud_shadow.gdshaderinc): the deck and its rifts, and the
+    // heads' pattern read where the sun ray meets them. Every frame, since a zone apply turns the sun.
+    private void PublishGround(bool on)
+    {
+        if (!on || _bottom is not { } bottom || _top is not { } top)
+        {
+            RenderingServer.GlobalShaderParameterSet("csky_pc_ground", Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun", new Vector4(0f, 1f, 0f, 0f));
+            RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
+            return;
+        }
+        // The fog splits at the layer: the held lower zone below it, the upper zone's range above it.
+        if (_weather.Mission is { } mission && !_fitted)
+        {
+            var upper = WeatherRig.FogRangeFor(mission.Zone(mission.ZoneForState(2)));
+            RenderingServer.GlobalShaderParameterSet("csky_pc_fog", new Vector4(bottom, upper.X, upper.Y, 0f));
+        }
+        else
+        {
+            RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
+        }
+        var sun = _weather.SunDirection;
+        float deckY = bottom + DeckDepthM * 0.4f;
+        RenderingServer.GlobalShaderParameterSet("csky_pc_ground",
+            new Vector4(deckY, _hasDeck ? DeckSunTaken : 0f, DeckGaps, GapM));
+        RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun",
+            new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
+        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", HeadShape);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_layer", new Vector4(bottom, top, DetailM, CoverBias));
+        // The slab's heads_gain and its erosion and density_gain defaults, so the ground marches its
+        // density, and the ambient share the deck takes.
+        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_density",
+            new Vector4(_hasDeck ? 1.15f : 1f, 0.55f, 0.025f, _hasDeck ? DeckAmbientTaken : 0f));
+    }
+
+    // A band authored far above every placed cloud is the original's "no band" altitude (C1B, C3,
+    // C5 at 10 km). The layer then spans the placed clouds' heights, or is absent with none placed.
+    // C5's fvols are ground fog banks, not a layer, so its fog field stays drawn (HideOriginals).
+    private void FitLayerToSprites()
+    {
+        if (_hasDeck)
+            return;
+        float lo = float.MaxValue, hi = float.MinValue;
+        foreach (var (_, world) in _placedSprites)
+        {
+            lo = Mathf.Min(lo, world.Position.Y);
+            hi = Mathf.Max(hi, world.End.Y);
+        }
+        float? band = _bottom;
+        if (band is { } b && b < hi + SpriteBandMarginM)
+            return;
+        string at = band is { } a ? $"at {a:0} m" : "absent";
+        if (_placedSprites.Count == 0)
+        {
+            _bottom = _top = null;
+            Log.Info("world", $"proto clouds: band {at} has no placed cloud under it, no layer drawn");
+            return;
+        }
+        _bottom = lo;
+        _top = Thickened(lo, hi);
+        _fitted = true;
+        Log.Info("world", $"proto clouds: band {at} stands clear of the {_placedSprites.Count} placed clouds, layer fitted to them at {lo:0}-{_top:0} m");
+    }
+
+    // Rewrites the two live knobs onto every built material when a lab moves one.
+    private void FollowKnobs()
+    {
+        float shaft = ShaftGain * ShaftScale;
+        if (Taper == _appliedTaper && shaft == _appliedShaft)
+            return;
+        _appliedTaper = Taper;
+        _appliedShaft = shaft;
+        foreach (var material in _materials)
+        {
+            material.SetShaderParameter("taper", Taper);
+            material.SetShaderParameter("shaft_gain", shaft);
+        }
     }
 }

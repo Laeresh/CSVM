@@ -18,8 +18,6 @@ internal static class ProtoGi
     private const int Cascades = 8;
     private const float MinCellSizeM = 1.5f;
     private const float BounceFeedback = 0.5f;
-    // Half energy: a procedural or panorama sky at full energy over-fills a flat world's ground.
-    private const float Energy = 0.5f;
     private const float SsilRadiusM = 20f;
     private const float SsilIntensity = 1.0f;
 
@@ -31,6 +29,14 @@ internal static class ProtoGi
         Ssil,
         Both,
     }
+
+    /// <summary>Gets or sets SDFGI's energy. Half by default: a sky at full energy over-fills a flat
+    /// world's ground. The lighting lab's slider.</summary>
+    public static float Energy { get; set; } = 0.5f;
+
+    /// <summary>Gets or sets the share of the zone's flat ambient kept while SDFGI stands, 0 by
+    /// default. The lighting lab's floor slider, for caves the GI's sky light cannot reach.</summary>
+    public static float AmbientFloor { get; set; }
 
     /// <summary>Gets the mode the launch asked for, Off until <see cref="Configure"/> runs.</summary>
     public static Mode Current { get; private set; }
@@ -51,6 +57,13 @@ internal static class ProtoGi
             "both" or "" => Mode.Both,
             _ => Unknown(word),
         };
+    }
+
+    /// <summary>Steps to the next mode (off, sdfgi, ssil, both) for Shift+F7; the caller re-applies it.</summary>
+    public static void Cycle()
+    {
+        Current = (Mode)(((int)Current + 1) % 4);
+        Log.Info("world", $"proto gi: cycled to {Current.ToString().ToLowerInvariant()} (Shift+F7)");
     }
 
     /// <summary>Writes the mode onto <paramref name="env"/>: on under Enhanced with a mode chosen, a

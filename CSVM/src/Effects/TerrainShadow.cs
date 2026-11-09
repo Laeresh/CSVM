@@ -20,6 +20,10 @@ namespace CSVM.Effects;
 /// </summary>
 internal sealed partial class TerrainShadow : Node
 {
+    // How long a bearing no load baked must stand before it is baked. A dragged lab slider then
+    // bakes once where it stops.
+    private const double OnDemandSettleSec = 0.25;
+
     // The globals csky_terrain_shadow.gdshaderinc declares: the live texture, its world rect, and the
     // penumbra's growth per metre of blocker distance with its one-texel floor.
     private static readonly StringName MapParam = "csky_terrain_shadow";
@@ -30,8 +34,14 @@ internal sealed partial class TerrainShadow : Node
     private static ImageTexture? _none;
 
     private readonly Dictionary<Vector3, Baked> _baked = new();
+    private Vector3[] _tris = Array.Empty<Vector3>();
     private Vector3 _orientation;
     private int _revision;
+    // The bearing waiting for its on-demand bake, how long it has stood, and the last such bake. The
+    // next one drops it, so a lab session holds one extra texture at most.
+    private Vector3? _pending;
+    private double _pendingSec;
+    private Vector3? _onDemand;
 
     private TerrainShadow()
     {
@@ -64,6 +74,7 @@ internal sealed partial class TerrainShadow : Node
         RenderingServer.GlobalShaderParameterAdd(MapParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _none);
         RenderingServer.GlobalShaderParameterAdd(RectParam, RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 0f, 1f, 1f));
         RenderingServer.GlobalShaderParameterAdd(SoftParam, RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(0f, 1f));
+        RenderingServer.GlobalShaderParameterAdd("csky_terrain_shadow_strength", RenderingServer.GlobalShaderParameterType.Float, 1f);
     }
 
     /// <summary>Puts the defaults back, so every lit fragment reads lit.</summary>
@@ -90,22 +101,14 @@ internal sealed partial class TerrainShadow : Node
         GC.Collect();
         if (tris.Length == 0)
             return null;
-        var result = new TerrainShadow { Name = "TerrainShadow" };
+        var result = new TerrainShadow { Name = "TerrainShadow", _tris = tris };
         var timing = new System.Text.StringBuilder(string.Create(CultureInfo.InvariantCulture, $"tris={tris.Length / 3} collect={OceanMask.Lap(ref t0):0}"));
         int k = 0;
         foreach (var orientation in orientations)
         {
             if (result._baked.ContainsKey(orientation))
                 continue;
-            // The light shines down its -Z, so +Z points at the sun, as WeatherRig.SunDirectionFor reads it.
-            var sun = Basis.FromEuler(orientation).Z.Normalized();
-            var raster = TerrainShadowRaster.Run(tris, sun, OceanMaskRaster.DefaultBands);
-            var image = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.Rgh, Halves(raster.Line, raster.Distance));
-            result._baked[orientation] = new Baked(TextureUpload.Create(image), sun);
-            result.Width = raster.Width;
-            result.Height = raster.Height;
-            result.Origin = raster.Origin;
-            result.Size = new Vector2(raster.Width * Cell, raster.Height * Cell);
+            var raster = result.BakeOne(orientation);
             if (png.Length > 0)
                 Dump(raster, k == 0 ? png : System.IO.Path.ChangeExtension(png, $".{k}.png"));
             timing.Append(string.Create(CultureInfo.InvariantCulture,
@@ -129,8 +132,15 @@ internal sealed partial class TerrainShadow : Node
         if (!ShadowQualitySetting.Sun.Cast || !_baked.TryGetValue(orientation, out var baked))
         {
             RenderingServer.GlobalShaderParameterSet(MapParam, _none);
+            // A bearing no load baked (a lab's sun offset, a re-aimed light) bakes once it settles.
+            if (ShadowQualitySetting.Sun.Cast && _tris.Length > 0)
+            {
+                _pending = orientation;
+                _pendingSec = 0.0;
+            }
             return;
         }
+        _pending = null;
         RenderingServer.GlobalShaderParameterSet(MapParam, baked.Texture);
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
         RenderingServer.GlobalShaderParameterSet(SoftParam, Soft(baked));
@@ -173,6 +183,18 @@ internal sealed partial class TerrainShadow : Node
     {
         if (Live == this && _revision != ShadowQualitySetting.Revision)
             Publish(_orientation);
+        if (Live != this || _pending is not { } pending || pending != _orientation)
+            return;
+        _pendingSec += delta;
+        if (_pendingSec < OnDemandSettleSec)
+            return;
+        long t0 = Stopwatch.GetTimestamp();
+        if (_onDemand is { } previous && _baked.Remove(previous, out var dropped))
+            dropped.Texture.Dispose();
+        BakeOne(pending);
+        _onDemand = pending;
+        Log.Info("world", $"terrain shadow: baked on demand for {Mathf.RadToDeg(pending.X):0.#}/{Mathf.RadToDeg(pending.Y):0.#} in {Stopwatch.GetElapsedTime(t0).TotalMilliseconds:0} ms");
+        Publish(pending);
     }
 
     // The penumbra's growth in height per metre of blocker distance under the level's angular
@@ -266,5 +288,20 @@ internal sealed partial class TerrainShadow : Node
         SceneBuilder.ClassifySurface(texture) == "water" || TextureArchive.IsPaintedShallows(texture);
 
     // One orientation's texture and the direction toward its sun.
+    // Bakes one orientation into the cache and returns its raster.
+    private TerrainShadowRaster.Result BakeOne(Vector3 orientation)
+    {
+        // The light shines down its -Z, so +Z points at the sun, as WeatherRig.SunDirectionFor reads it.
+        var sun = Basis.FromEuler(orientation).Z.Normalized();
+        var raster = TerrainShadowRaster.Run(_tris, sun, OceanMaskRaster.DefaultBands);
+        var image = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.Rgh, Halves(raster.Line, raster.Distance));
+        _baked[orientation] = new Baked(TextureUpload.Create(image), sun);
+        Width = raster.Width;
+        Height = raster.Height;
+        Origin = raster.Origin;
+        Size = new Vector2(raster.Width * Cell, raster.Height * Cell);
+        return raster;
+    }
+
     private sealed record Baked(ImageTexture Texture, Vector3 Sun);
 }

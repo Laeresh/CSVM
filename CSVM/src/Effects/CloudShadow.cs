@@ -88,6 +88,12 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd(EdgeParam, RenderingServer.GlobalShaderParameterType.Vec2, CloudShadowPattern.Edge);
         RenderingServer.GlobalShaderParameterAdd(TintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         RenderingServer.GlobalShaderParameterAdd(AmbientParam, RenderingServer.GlobalShaderParameterType.Float, 0f);
+        // The cloud prototype's ground shadow (ProtoClouds.PublishGround); a zero deck share leaves it off.
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_ground", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_ground_sun", RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 1f, 0f, 0f));
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_shape", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_layer", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_density", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         _registered = true;
         Published = OffValue;
         _publishedEdge = CloudShadowPattern.Edge;

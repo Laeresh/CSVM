@@ -207,7 +207,7 @@ internal sealed partial class CloudLab : Node
         foreach (var row in Rows())
             AddRow(box, row);
 
-        _tint = new CheckButton { Text = "Tint the shadows red", FocusMode = Control.FocusModeEnum.None };
+        _tint = new CheckButton { Text = "Tint the shadows (red heads, blue proto deck)", FocusMode = Control.FocusModeEnum.None };
         _tint.Toggled += on =>
         {
             if (_syncing || _clouds() is not { } c)
@@ -216,6 +216,9 @@ internal sealed partial class CloudLab : Node
             Log.Info("ui", $"cloud lab: {Describe()}");
         };
         box.AddChild(_tint);
+        box.AddChild(ProtoClouds.LabSlider("Proto clouds: head taper", 0f, 0.8f, () => ProtoClouds.Taper, v => ProtoClouds.Taper = v));
+        box.AddChild(ProtoClouds.LabSlider("Proto deck: sun taken", 0f, 1f, () => ProtoClouds.DeckSunTaken, v => ProtoClouds.DeckSunTaken = v));
+        box.AddChild(ProtoClouds.LabSlider("Proto deck: ambient taken", 0f, 1f, () => ProtoClouds.DeckAmbientTaken, v => ProtoClouds.DeckAmbientTaken = v));
 
         var buttons = new HBoxContainer();
         var save = new Button { Text = $"Save for {_chapter}", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };

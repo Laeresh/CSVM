@@ -320,6 +320,10 @@ public sealed class WeatherRig
     public static (Vector3 Diffuse, Vector3 Ambient) DefaultSunlightRgb =>
         (Vector3.One * WeatherState.DefaultDiffuse, Vector3.One * WeatherState.DefaultAmbient);
 
+    /// <summary>Gets or sets whether every zone lights as day, so a night look is the lighting tune's
+    /// alone. No energy cap, the pushed fog, day glint, cloud shadows. Set by the cloud prototype.</summary>
+    public static bool NightOff { get; set; }
+
     /// <summary>The fog this rig last wrote into the three <c>csky_fog_*</c> globals and
     /// <c>csky_world_light</c> (colour in linear, range and altitude in metres): the first rig's
     /// own. A mirror, because the renderer refuses to read a global back outside the editor; it is
@@ -341,9 +345,28 @@ public sealed class WeatherRig
     /// <summary>Gets the fvol volumes <see cref="SetFogVolumes"/> handed in, empty until then.</summary>
     public IReadOnlyList<FogVolumeBox> FogVolumes => _fogVolumes;
 
+    /// <summary>Gets or sets how dark terrain and object shadows fall, 1 fully shaded and 0 none: the
+    /// bake's share (csky_terrain_shadow_strength) and the sun's shadow-map opacity. The lighting lab's slider.</summary>
+    public float ShadowStrength
+    {
+        get => _sun.ShadowOpacity;
+        set
+        {
+            _sun.ShadowOpacity = value;
+            RenderingServer.GlobalShaderParameterSet("csky_terrain_shadow_strength", value);
+        }
+    }
+
     /// <summary>Gets or sets whether every rig's deck copy is held hidden whatever the zone gate says.
     /// The cloud prototype (<c>Effects/ProtoClouds.cs</c>) sets it while it draws in the deck's place.</summary>
     public bool HideDeck { get; set; }
+
+    /// <summary>Gets or sets whether every rig's camera weather state is held, so crossing the band
+    /// switches no zone. The whiteout stays clear too. Set by the cloud prototype beside <see cref="HideDeck"/>.</summary>
+    public bool HoldZone { get; set; }
+
+    /// <summary>The unit world direction toward the scene sun, the vector <see cref="WriteSunDirection"/> publishes.</summary>
+    public Vector3 SunDirection => (_sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis).Z.Normalized();
 
     /// <summary>Whether the zone the last zone apply lit the session with is a night zone
     /// (<see cref="IsNightZone"/>), false until one has.</summary>
@@ -484,9 +507,10 @@ public sealed class WeatherRig
     /// the enhanced energies and aims the light at the moon. Public so the rule can be pinned and a
     /// log line can say which side of it a zone fell on.</summary>
     public static bool IsNightZone(WeatherState.ZoneWeather fog)
-        => (fog.Moonlit && GraphicsMode.Enhanced)
-           || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
-               < NightFogLuminance);
+        => !NightOff
+           && ((fog.Moonlit && GraphicsMode.Enhanced)
+               || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
+                   < NightFogLuminance));
 
     /// <summary>The light's Euler rotation whose +Z is <paramref name="dir"/>, the inverse of the
     /// authored euler-to-direction mapping (docs/org/weather.md).</summary>
@@ -913,7 +937,7 @@ public sealed class WeatherRig
             // The binary's per-frame camera weather state (1/2/3), published on the rig; the fog
             // edge trigger below the loop consumes it. Logged only on a change, at debug
             // verbosity, since a flight spends whole minutes in one state.
-            if (_weather != null)
+            if (_weather != null && !HoldZone)
             {
                 int state = _weather.CameraWeatherState(camPos, _fogWhiteout.Armed, _fogVolumes);
                 if (state != rig.CameraWeatherState)
@@ -941,12 +965,12 @@ public sealed class WeatherRig
                 // --no-fog covers the whiteout too: flying into the cloud band would otherwise
                 // still white the pane out, which reads as "fog is not actually off". It covers
                 // the volume curtain for the same reason.
-                float band = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
+                float band = _spec.NoFog || HoldZone ? 0f : _weather.WhiteoutAmount(camPos.Y);
                 // The decompiled in-cloud flicker, applied only while the band opacity sits
                 // strictly inside (0,1), the binary's own guard. See docs/org/weather.md.
                 if (band > 0f && band < 1f)
                     band = ApplyBandFlicker(rig.Index, band, frameDt);
-                float volume = _spec.NoFog ? 0f : _fogWhiteout.Density(camPos);
+                float volume = _spec.NoFog || HoldZone ? 0f : _fogWhiteout.Density(camPos);
                 if (volume > 0f)
                 {
                     // Union of band and volume (a + b - a·b, the binary's own combiner), the
@@ -1012,8 +1036,11 @@ public sealed class WeatherRig
             // built dome keeps it at every state rather than render no sky at all
             // (docs/org/weather.md).
             bool gateDomes = !_spec.NoZoneCull && rig.HorizonDomes.Count > 1;
+            // Held under the cloud prototype, the sky is the upper zone's dome. The slab stands in for
+            // the overcast, and its rifts open onto that sky. The cull mask keeps the held lower state.
+            int domeGate = HoldZone && gateDomes ? rig.HorizonDomes.Max(d => d.ZoneId) : gate;
             foreach (var dome in rig.HorizonDomes)
-                dome.Node.Visible = !gateDomes || ZoneGate.Draws(dome.ZoneId, gate);
+                dome.Node.Visible = !gateDomes || ZoneGate.Draws(dome.ZoneId, domeGate);
         }
 
         if (rigs.Count > 0)
@@ -1106,8 +1133,9 @@ public sealed class WeatherRig
             return;
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = ambientColor;
-        // The GI prototype's SDFGI brings the sky light itself, so the flat fill steps aside.
-        env.AmbientLightEnergy = Effects.ProtoGi.SkyLightLive ? 0f : ambientEnergy;
+        // The GI prototype's SDFGI brings the sky light itself, so the flat fill steps aside down to a
+        // floor. A cave the sky cannot reach keeps that share of the zone's fill instead of going black.
+        env.AmbientLightEnergy = Effects.ProtoGi.SkyLightLive ? ambientEnergy * Effects.ProtoGi.AmbientFloor : ambientEnergy;
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class
@@ -1643,7 +1671,19 @@ public sealed class WeatherRig
             else if (dome == null && d.ZoneId <= 0)
                 dome = d.Node;
         }
-        return dome != null && SkyAnchorOrientation(dome, IsNightZone(fog)) is { } aimed ? aimed : fog.SunOrientation;
+        // Under the cloud prototype a day sky's moon card is the bright spot the shafts must fall from.
+        bool moon = IsNightZone(fog) || HoldZone;
+        if (dome != null && SkyAnchorOrientation(dome, moon) is { } aimed)
+            return aimed;
+        if (HoldZone)
+        {
+            foreach (var d in _domes)
+            {
+                if (SkyAnchorOrientation(d.Node, moon) is { } any)
+                    return any;
+            }
+        }
+        return fog.SunOrientation;
     }
 
     private string AimedSuffix(WeatherState.ZoneWeather fog)

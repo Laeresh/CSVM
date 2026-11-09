@@ -532,6 +532,20 @@ public sealed partial class LightingLab : Node
         }
         scroll.AddChild(rows);
         box.AddChild(scroll);
+        box.AddChild(Effects.ProtoClouds.LabSlider("Proto clouds: god ray intensity", 0f, 4f, () => Effects.ProtoClouds.ShaftScale, v => Effects.ProtoClouds.ShaftScale = v));
+        box.AddChild(Effects.ProtoClouds.LabSlider("Terrain + object shadow strength", 0f, 1f, () => _weather.ShadowStrength, v => _weather.ShadowStrength = v));
+        box.AddChild(Effects.ProtoClouds.LabSlider("Proto GI: ambient floor under SDFGI", 0f, 1f, () => Effects.ProtoGi.AmbientFloor, v =>
+        {
+            Effects.ProtoGi.AmbientFloor = v;
+            if (Effects.ProtoGi.SkyLightLive)
+                _weather.ReapplyZone();
+        }));
+        box.AddChild(Effects.ProtoClouds.LabSlider("Proto GI: SDFGI energy", 0f, 2f, () => Effects.ProtoGi.Energy, v =>
+        {
+            Effects.ProtoGi.Energy = v;
+            if (Effects.ProtoGi.SkyLightLive && GetViewport()?.FindWorld3D()?.Environment is { } env)
+                env.SdfgiEnergy = v;
+        }));
 
         // Three buttons outgrow the column at the default font, so they wrap onto a second line.
         var buttons = new HFlowContainer();
