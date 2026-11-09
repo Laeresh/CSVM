@@ -406,8 +406,7 @@ rows).
 - `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: the `csky_cloud_shadow*` globals every sun term reads, drawn by day in a cloudy mission.
 - `src/Effects/CloudShadowPattern.cs`, the cloud shadows' world-anchored noise pattern and its drift source (ceiling scroll, sideways wind, fixed), engine-free.
 - `src/Effects/CloudShadowChapters.cs`, the shipped per-chapter cloud shadow tunes in `CSVM/data/cloud_shadows.json`: read with warnings, and one chapter's entry written by the cloud lab.
-- `src/Effects/ProtoClouds.cs`, PROTOTYPE, throwaway: raymarched volumetric clouds in place of the deck, the cloud field and the placed cloud sprites (`--proto-clouds`), three techniques under comparison, with rifts in a deck and light shafts under them, Shift+F6 cycles.
-- `src/Effects/ProtoGi.cs`, PROTOTYPE, throwaway: Godot's SDFGI and SSIL over the Enhanced world (`--proto-gi`), the Environment switches sized for a chapter.
+- `src/Effects/GlobalIllumination.cs`, Godot's SDFGI plus SSIL over the Enhanced world (`--proto-gi`), the Environment switches sized for a chapter.
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
@@ -896,6 +895,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 
 - `src/Session/World/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
+- `src/Session/World/VolumetricClouds.cs`, the raymarched cloud slab in place of the deck, the cloud field and the placed cloud sprites (`--proto-clouds`), with rifts in a deck and light shafts under them.
 - `src/Session/World/LightingTable.cs`, the shipped Enhanced lighting tune in `CSVM/data/lighting.json`: per chapter, mission and zone sparse blocks and the mission `night` flag, read with warnings and written by the lighting lab.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.

@@ -170,24 +170,14 @@ session draws one `Tune`: the constants, or the chapter's entry from `CloudShado
 each tune's key, label, range and format, which the file, `Tune.Clamped`, `Tune.Describe` and the cloud lab all read.
 `CloudShadowPatternTests`.
 
-## src/Effects/ProtoClouds.cs
-PROTOTYPE, throwaway: volumetric clouds in place of the cloud deck, the fogvol cloud field and the placed cloud
-sprites, built by `--proto-clouds` under Enhanced alone (`Launch/GameSession.cs`'s `BuildProtoClouds`), cycled with
-Shift+F6. Three variants over the shared `shaders/csky_proto_clouds.gdshaderinc`: `slab`, one full-screen raymarch
-through the mission's cloud band with `csky_cloud_cover` as its coverage; `boxes`, a proxy box per fvol volume and per
-placed cloud over a puff map rasterised from the sprites' positions; `shells`, eroded sheets through the band with no
-march. A deck is torn by rifts, and the slab marches the haze under the layer for the sun's shafts through them. It
-hides the originals through `WeatherRig.HideDeck`, the field's visibility and `SceneBuilder.IsPlacedCloudMaterial`,
-and `Follow` restores them on the faithful path. Read `CloudShadow.cs` next, whose pattern the slab and shells share.
-
-## src/Effects/ProtoGi.cs
-PROTOTYPE, throwaway: Godot's real-time global illumination over the Enhanced world, behind `--proto-gi=sdfgi|ssil|both`.
-`Configure` reads the flag's word at launch (`Launch/Launcher.cs`), and `Apply` writes the mode onto the session
-Environment from `Launch/EnhancedLook.cs`'s `ApplyEnvironment`: SDFGI with eight cascades at a 1.5 m finest cell and
-half vertical scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While
-SDFGI stands (`SkyLightLive`) the zone apply writes a zero flat ambient, since the cascades carry the sky light. Off,
-or on the faithful path, every field takes a fresh Environment's value. Read `ProtoClouds.cs` next, the prototype it
-stands beside.
+## src/Effects/GlobalIllumination.cs
+Godot's real-time global illumination over the Enhanced world, behind `--proto-gi`: SDFGI plus SSIL, on or off.
+`Enabled` is set from the flag at launch (`Launch/Launcher.cs`), and `Apply` writes it onto the session Environment
+from `Launch/EnhancedLook.cs`'s `ApplyEnvironment`: SDFGI with eight cascades at a 1.5 m finest cell and half vertical
+scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While SDFGI stands
+(`SkyLightLive`) the zone apply keeps only `AmbientFloor` of the flat ambient, since the cascades carry the sky light;
+`Energy` and `AmbientFloor` are the lighting lab's live sliders. Off, or on the faithful path, every field takes a fresh
+Environment's value. Read `Session/World/VolumetricClouds.cs` next, the cloud option it stands beside.
 
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's

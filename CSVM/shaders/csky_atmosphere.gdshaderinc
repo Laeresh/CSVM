@@ -214,7 +214,7 @@ float csky_fog_amount(vec3 fog_world, vec3 camera_world) {
         fog_alt = view.zw;
     }
     float d = distance(fog_world.xz, camera_world.xz);
-    // The cloud prototype splits the ray at the layer: the share below it crosses the held lower
+    // The volumetric clouds split the ray at the layer: the share below it crosses the held lower
     // zone's fog, the share above it the upper zone's range (csky_pc_fog: layer, upper near/far).
     float above = 0.0;
     if (csky_pc_fog.x > 0.0 && csky_view_count <= 1) {

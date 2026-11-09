@@ -312,7 +312,7 @@ public partial class GameSession : Node3D
     private OceanStage? _ocean;
     private Effects.TerrainShadow? _terrainShadow;
     private Effects.CloudShadow? _cloudShadow;
-    private Effects.ProtoClouds? _protoClouds;
+    private VolumetricClouds? _volumetricClouds;
     // A full world stood for a plane, which the terrain shadow bake needs; false on a node subtree.
     private bool _fullWorld;
     private SceneBuilder? _worldScene;
@@ -861,13 +861,13 @@ public partial class GameSession : Node3D
         _fullWorld = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
         // Before the ocean stage, whose shore mask is baked from what draws.
         FollowShadowDecals();
-        // The cloud prototype holds the zone before the bake, so the sun it aims gets a terrain shadow.
-        if (_spec.ProtoClouds != null && GraphicsMode.Enhanced && _sky?.Weather is { } held)
+        // The volumetric clouds hold the zone before the bake, so the sun they aim gets a terrain shadow.
+        if (_spec.VolumetricClouds && GraphicsMode.Enhanced && _sky?.Weather is { } held)
             held.HoldZone = true;
         FollowTerrainShadow();
         BuildCloudShadow();
         _labs!.BuildCloudLab(() => _cloudShadow);
-        BuildProtoClouds();
+        BuildVolumetricClouds();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -930,7 +930,7 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
         _sky?.FollowGraphicsMode();
-        _protoClouds?.Follow(enhanced);
+        _volumetricClouds?.Follow(enhanced);
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
         SwitchProfile.Mark("lights");
@@ -1039,12 +1039,6 @@ public partial class GameSession : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (_spec.ProtoGi != null && @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F7, ShiftPressed: true })
-        {
-            CycleProtoGi();
-            GetViewport().SetInputAsHandled();
-            return;
-        }
         // A cutscene skips on any input, as the original's state core does; a stick's is polled in
         // PollStickSkip. ⚠ Escape is exempt: it is the way out of the session. ⚠ Pads count only
         // where this session reads pads at all, since a pad reports button 0 pressed on arrival.
@@ -2830,42 +2824,21 @@ public partial class GameSession : Node3D
         Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
     }
 
-    // The GI prototype's Shift+F7: the next mode onto every Environment, then the zone again, whose
-    // ambient steps aside while SDFGI stands.
-    private void CycleProtoGi()
+    // The volumetric clouds, over a full weathered world alone. They hide the deck, the cloud field
+    // and the placed sprites themselves.
+    private void BuildVolumetricClouds()
     {
-        Effects.ProtoGi.Cycle();
-        bool enhanced = GraphicsMode.Enhanced;
-        if (GetViewport().FindWorld3D()?.Environment is { } world)
-            EnhancedLook.ApplyEnvironment(world, enhanced, _spec.SkippedPasses);
-        foreach (var rig in _rigs)
-        {
-            if (rig.Controller?.Dressing.Pass?.Env is { } env)
-                EnhancedLook.ApplyEnvironment(env, enhanced, _spec.SkippedPasses);
-        }
-        _sky?.Weather?.ReapplyZone();
-    }
-
-    // The throwaway cloud prototype, over a full weathered world alone; an unknown word warns and
-    // builds nothing. It hides the deck, the cloud field and the placed sprites itself.
-    private void BuildProtoClouds()
-    {
-        if (_spec.ProtoClouds is not { } word)
+        if (!_spec.VolumetricClouds)
             return;
         var weather = _sky?.Weather;
         if (!_fullWorld || _plane == null || weather == null)
         {
-            Log.Warn("world", $"proto clouds: needs a flown or freecam world, nothing built");
+            Log.Warn("world", $"volumetric clouds: needs a flown or freecam world, nothing built");
             return;
         }
-        if (Effects.ProtoClouds.Parse(word) is not { } variant)
-        {
-            Log.Warn("world", $"proto clouds: unknown variant '{word}' (slab, boxes or shells), nothing built");
-            return;
-        }
-        _protoClouds = Effects.ProtoClouds.Create(variant, _plane, weather, _sky!.CloudField, _worldScene,
-            weather.FogVolumes, () => _rigs.Count > 0 ? _rigs[0].Camera : null, _unplacedWatch?.CloudDeck != null);
-        _plane.AddChild(_protoClouds);
+        _volumetricClouds = VolumetricClouds.Create(_plane, weather, _sky!.CloudField, _worldScene,
+            weather.FogVolumes, _unplacedWatch?.CloudDeck != null);
+        _plane.AddChild(_volumetricClouds);
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

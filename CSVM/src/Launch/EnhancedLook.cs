@@ -375,7 +375,7 @@ public static class EnhancedLook
         env.TonemapExposure = enhanced ? Untuned.Exposure : fresh.TonemapExposure;
         env.TonemapAgxWhite = enhanced ? Untuned.White : fresh.TonemapAgxWhite;
         ApplyGrade(env, enhanced);
-        Effects.ProtoGi.Apply(env, enhanced);
+        Effects.GlobalIllumination.Apply(env, enhanced);
     }
 
     /// <summary>The colour grade on one Environment: on under Enhanced with

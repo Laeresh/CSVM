@@ -532,18 +532,18 @@ public sealed partial class LightingLab : Node
         }
         scroll.AddChild(rows);
         box.AddChild(scroll);
-        box.AddChild(Effects.ProtoClouds.LabSlider("Proto clouds: god ray intensity", 0f, 4f, () => Effects.ProtoClouds.ShaftScale, v => Effects.ProtoClouds.ShaftScale = v));
-        box.AddChild(Effects.ProtoClouds.LabSlider("Terrain + object shadow strength", 0f, 1f, () => _weather.ShadowStrength, v => _weather.ShadowStrength = v));
-        box.AddChild(Effects.ProtoClouds.LabSlider("Proto GI: ambient floor under SDFGI", 0f, 1f, () => Effects.ProtoGi.AmbientFloor, v =>
+        box.AddChild(VolumetricClouds.LabSlider("Clouds: god ray intensity", 0f, 4f, () => VolumetricClouds.ShaftScale, v => VolumetricClouds.ShaftScale = v));
+        box.AddChild(VolumetricClouds.LabSlider("Terrain + object shadow strength", 0f, 1f, () => _weather.ShadowStrength, v => _weather.ShadowStrength = v));
+        box.AddChild(VolumetricClouds.LabSlider("GI: ambient floor under SDFGI", 0f, 1f, () => GlobalIllumination.AmbientFloor, v =>
         {
-            Effects.ProtoGi.AmbientFloor = v;
-            if (Effects.ProtoGi.SkyLightLive)
+            GlobalIllumination.AmbientFloor = v;
+            if (GlobalIllumination.SkyLightLive)
                 _weather.ReapplyZone();
         }));
-        box.AddChild(Effects.ProtoClouds.LabSlider("Proto GI: SDFGI energy", 0f, 2f, () => Effects.ProtoGi.Energy, v =>
+        box.AddChild(VolumetricClouds.LabSlider("GI: SDFGI energy", 0f, 2f, () => GlobalIllumination.Energy, v =>
         {
-            Effects.ProtoGi.Energy = v;
-            if (Effects.ProtoGi.SkyLightLive && GetViewport()?.FindWorld3D()?.Environment is { } env)
+            GlobalIllumination.Energy = v;
+            if (GlobalIllumination.SkyLightLive && GetViewport()?.FindWorld3D()?.Environment is { } env)
                 env.SdfgiEnergy = v;
         }));
 

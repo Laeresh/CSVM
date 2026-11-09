@@ -881,8 +881,8 @@ void fragment() {
         }
     }
 
-    /// <summary>Whether <paramref name="material"/> is a placed cloud sprite's, the one test the cloud
-    /// prototype (<c>Effects/ProtoClouds.cs</c>) hides the sprites by.</summary>
+    /// <summary>Whether <paramref name="material"/> is a placed cloud sprite's, the one test the
+    /// volumetric clouds (<c>Session/World/VolumetricClouds.cs</c>) hide the sprites by.</summary>
     public bool IsPlacedCloudMaterial(Material material)
     {
         foreach (var swap in _pooledSwaps)

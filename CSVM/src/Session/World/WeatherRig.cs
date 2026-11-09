@@ -358,7 +358,7 @@ public sealed class WeatherRig
     }
 
     /// <summary>Gets or sets whether every rig's deck copy is held hidden whatever the zone gate says.
-    /// The cloud prototype (<c>Effects/ProtoClouds.cs</c>) sets it while it draws in the deck's place.</summary>
+    /// <see cref="VolumetricClouds"/> sets it while it draws in the deck's place.</summary>
     public bool HideDeck { get; set; }
 
     /// <summary>Gets or sets whether every rig's camera weather state is held, so crossing the band
@@ -1135,7 +1135,7 @@ public sealed class WeatherRig
         env.AmbientLightColor = ambientColor;
         // The GI prototype's SDFGI brings the sky light itself, so the flat fill steps aside down to a
         // floor. A cave the sky cannot reach keeps that share of the zone's fill instead of going black.
-        env.AmbientLightEnergy = Effects.ProtoGi.SkyLightLive ? ambientEnergy * Effects.ProtoGi.AmbientFloor : ambientEnergy;
+        env.AmbientLightEnergy = Effects.GlobalIllumination.SkyLightLive ? ambientEnergy * Effects.GlobalIllumination.AmbientFloor : ambientEnergy;
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class

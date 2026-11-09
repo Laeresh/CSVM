@@ -533,7 +533,7 @@ public partial class Launcher : Node3D
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
-        // The cloud prototype's altitude-split fog (Effects/ProtoClouds.cs); a zero layer leaves it off.
+        // The volumetric clouds' altitude-split fog (Session/World/VolumetricClouds.cs); a zero layer leaves it off.
         RenderingServer.GlobalShaderParameterAdd("csky_pc_fog",
             RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         // The fullbright world's per-mission brightness from the weather's SUNLIGHT:
@@ -1487,7 +1487,7 @@ public partial class Launcher : Node3D
         // Enhanced mode alone: the faithful path's world is fullbright, so none of these passes has
         // anything to work on. The cockpit pass duplicates this Environment
         // (CockpitOverlay.NewOverlay) and inherits the settings.
-        Effects.ProtoGi.Configure(_spec.ProtoGi);
+        Effects.GlobalIllumination.Enabled = _spec.GlobalIllumination;
         if (GraphicsMode.Enhanced)
             EnhancedLook.ApplyEnvironment(_env, true, _spec.SkippedPasses);
         AddChild(new WorldEnvironment { Environment = _env });

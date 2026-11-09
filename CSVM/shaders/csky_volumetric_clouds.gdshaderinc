@@ -1,10 +1,9 @@
-#ifndef CSKY_PROTO_CLOUDS_INC
-#define CSKY_PROTO_CLOUDS_INC
+#ifndef CSKY_VOLUMETRIC_CLOUDS_INC
+#define CSKY_VOLUMETRIC_CLOUDS_INC
 
-// PROTOTYPE (Effects/ProtoClouds.cs, --proto-clouds): the density field, the sun march and the
-// screen-ray helpers the three volumetric cloud variants share. Throwaway code answering one
-// question, which raymarched cloud technique should replace the cloud deck and the cloud sprites
-// under Enhanced. Nothing outside the prototype includes it.
+// The volumetric cloud slab's helpers (Session/World/VolumetricClouds.cs): the deck's density, the
+// phase and transmittance terms, and the screen-ray helpers its full-screen march reads. Only
+// the slab's shader includes it.
 
 #include "res://shaders/csky_cloud_shadow.gdshaderinc"
 
@@ -67,20 +66,8 @@ vec2 csky_pc_slab_span(vec3 eye, vec3 dir, float bottom, float top) {
     return far <= near ? vec2(-1.0, -1.0) : vec2(near, far);
 }
 
-// The ray's entry and exit distances through an axis-aligned box, or a negative pair where it misses.
-vec2 csky_pc_box_span(vec3 eye, vec3 dir, vec3 box_min, vec3 box_max) {
-    vec3 inv = 1.0 / dir;
-    vec3 t_a = (box_min - eye) * inv;
-    vec3 t_b = (box_max - eye) * inv;
-    vec3 t_min = min(t_a, t_b);
-    vec3 t_max = max(t_a, t_b);
-    float near = max(max(t_min.x, t_min.y), max(t_min.z, 0.0));
-    float far = min(min(t_max.x, t_max.y), t_max.z);
-    return far <= near ? vec2(-1.0, -1.0) : vec2(near, far);
-}
-
-// A per-pixel jitter in [0, 1) off the screen position alone, so the march start dithers without
-// the clock: the prototype has no temporal filter to hide a moving pattern behind.
+// A per-pixel jitter in [0, 1) off the screen position alone. The slab adds its own per-frame
+// golden-ratio step on top, for TAA to average out.
 float csky_pc_dither(vec2 frag_coord) {
     return fract(52.9829189 * fract(0.06711056 * frag_coord.x + 0.00583715 * frag_coord.y));
 }

@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, remove the prototype scaffolding
 
-21. ☐ Delete boxes, shells, Shift+F6 and Shift+F7; rename out of `Proto`
+21. ☑ Delete boxes, shells, Shift+F6 and Shift+F7; rename out of `Proto`
 
 ### Wave D, defects and cost
 
@@ -304,7 +304,13 @@ stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second mu
 
 # Wave C, remove the prototype scaffolding
 
-## C21 ☐ Delete boxes, shells, Shift+F6 and Shift+F7; rename out of `Proto`
+## C21 ☑ Delete boxes, shells, Shift+F6 and Shift+F7; rename out of `Proto`
+
+**Landed.** Only the slab remains, as `Session/World/VolumetricClouds.cs` over `shaders/csky_volumetric_clouds.gdshaderinc`, and GI is `Effects/GlobalIllumination.cs`, fixed at SDFGI plus SSIL and switched on or off. The boxes, the shells and both key handlers are gone, the `--proto-*` flags are plain switches until B11, and the clouds moved to `Session.World` because they drive `WeatherRig`, which `FamilyOrderTests` forbids from `Effects`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Only the slab remains, and the files no longer use the prototype names: `ProtoClouds` becomes, for example, `VolumetricClouds`, and `ProtoGi` becomes `GlobalIllumination`. No Shift+F6 or Shift+F7 handler remains, and the "PROTOTYPE, throwaway" summaries are gone.
 
