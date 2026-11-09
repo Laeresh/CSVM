@@ -625,7 +625,7 @@
     "flyby-camera": 0.495,
     "stunt-scores-scripted": 0.457,
     "stunt-target-cycle": 0.03,
-    "stunt-race-gate-first": 0.06,
+    "stunt-race-zone-first": 0.06,
     "stunt-capture": 0.759,
     "stunt-respawn-tap-hold": 0.632,
     "stunt-start-count": 0.599,

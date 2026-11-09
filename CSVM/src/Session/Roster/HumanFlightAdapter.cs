@@ -690,7 +690,7 @@ internal sealed class HumanFlightAdapter
             controller.Targeting = new TargetSelection
             {
                 NearestAfterKill = _policy.NearestAfterKill,
-                GateFirst = _human.Race != null && controller.Stunt != null,
+                ZoneFirst = _human.Race != null && controller.Stunt != null,
             };
             controller.InitialTarget = _policy.TargetSelect;   // --target=, the scripted twin
 

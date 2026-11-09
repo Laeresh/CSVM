@@ -12,7 +12,7 @@ namespace CSVM.Testing;
 /// per-pilot <see cref="TargetSelection"/> the pilot HUD reads. Each pane cycles its own zones and one
 /// pane's step never moves the other's marker. A pilot who clears the course empties their own
 /// cycle alone. Also pins the marker the zone draws, which is the objective marker every other
-/// site takes rather than a style of its own. A race run's gate-first rule is pinned over a
+/// site takes rather than a style of its own. A race run's zone-first rule is pinned over a
 /// two-gate course beside two AI racers, against a solo run that keeps the decoded cycle.</summary>
 internal static class StuntTargetSuites
 {
@@ -108,26 +108,26 @@ internal static class StuntTargetSuites
         });
     }
 
-    [Suite("stunt-race-gate-first",
-        "a race run's Next Enemy takes the next gate in one press from any plane, ahead of a plane "
+    [Suite("stunt-race-zone-first",
+        "a race run's Next Enemy takes the next zone in one press from any plane, ahead of a plane "
         + "that just shot at the pilot, and from a cleared selection ahead of a nearer hostile round; "
-        + "passing a gate selects the next one with a plane or the gate selected and Nearest After "
+        + "passing a zone selects the next one with a plane or the zone selected and Nearest After "
         + "Kill on or off; outside a race the decoded cycle, the attacker queue, the round at the "
-        + "head and the kept or nearest pick on a passing stand as before")]
-    internal static void StuntRaceGateFirst(TestContext ctx)
+        + "head and the kept or nearest pick on a passing keep their non-race rules")]
+    internal static void StuntRaceZoneFirst(TestContext ctx)
     {
         foreach (bool race in new[] { true, false })
         {
             string mode = race ? "race" : "solo";
             var (run, sel) = NewRun(race, nearestAfterKill: false);
-            object gate = run.Zones[0];
-            ctx.Check(Is(sel, gate), $"[{mode}] the run starts on the first gate ({Picked(sel)})");
+            object zone = run.Zones[0];
+            ctx.Check(Is(sel, zone), $"[{mode}] the run starts on the first zone ({Picked(sel)})");
 
             Press(sel, run, previous: false);
-            ctx.Check(Is(sel, Lead), $"[{mode}] Next on the gate steps on to the plane ahead ({Picked(sel)})");
+            ctx.Check(Is(sel, Lead), $"[{mode}] Next on the zone steps on to the plane ahead ({Picked(sel)})");
 
             Press(sel, run, previous: false);
-            object fromPlane = race ? gate : Wing;
+            object fromPlane = race ? zone : Wing;
             ctx.Check(Is(sel, fromPlane), $"[{mode}] Next from that plane takes {Label(fromPlane)} ({Picked(sel)})");
 
             if (race)
@@ -137,10 +137,10 @@ internal static class StuntTargetSuites
 
             sel.RecordAttacker(Lead);
             Press(sel, run, previous: false);
-            object afterShot = race ? gate : Lead;
+            object afterShot = race ? zone : Lead;
             ctx.Check(Is(sel, afterShot), $"[{mode}] Next from Wing just after Lead shot at the pilot takes {Label(afterShot)} ({Picked(sel)})");
 
-            // A hostile round nearer than the gate takes the decoded head, which tells the two apart.
+            // A hostile round nearer than the zone takes the decoded head, which tells the two apart.
             // The pool admits a round only by its TARGETABLE flyout, and a flyout needs a pool.
             var rounds = new ProjectilePool(null!, null, null);
             try
@@ -169,12 +169,12 @@ internal static class StuntTargetSuites
                         Press(passSel, passRun, previous: true);
                     }
 
-                    PassFirstGate(passRun);
+                    PassFirstZone(passRun);
                     RebuildRace(passSel, passRun);
                     object next = passRun.Zones[1];
                     object expected = race ? next : onPlane ? Wing : nearest ? Lead : next;
                     ctx.Check(passRun.CompletedCount == 1 && Is(passSel, expected),
-                        $"[{mode}] passing a gate with {(onPlane ? "Wing" : "the gate")} selected and Nearest After Kill {(nearest ? "on" : "off")} selects {Label(expected)} ({Picked(passSel)}, {passRun.CompletedCount} passed)");
+                        $"[{mode}] passing a zone with {(onPlane ? "Wing" : "the zone")} selected and Nearest After Kill {(nearest ? "on" : "off")} selects {Label(expected)} ({Picked(passSel)}, {passRun.CompletedCount} passed)");
                 }
             }
         }
@@ -185,7 +185,7 @@ internal static class StuntTargetSuites
         var course = new Course("c1", "race", new SpawnPoint(GridPose, 0f), new[] { GateA, GateB },
             new[] { new SequenceEntry(GateA.Id, GateDirection.Forward), new SequenceEntry(GateB.Id, GateDirection.Forward) });
         var run = StuntMission.ForCourse(course)!;
-        var selection = new TargetSelection { GateFirst = race, NearestAfterKill = nearestAfterKill };
+        var selection = new TargetSelection { ZoneFirst = race, NearestAfterKill = nearestAfterKill };
         RebuildRace(selection, run);
         return (run, selection);
     }
@@ -219,8 +219,8 @@ internal static class StuntTargetSuites
         selection.Rebuild(planes, null, AimAssist.PlayerTeam, null, GridPose, Basis.Identity, gates);
     }
 
-    // One step straight through the first gate's opening, the way it is flown.
-    private static void PassFirstGate(StuntMission run)
+    // One step straight through the first zone's course gate, the way it is flown.
+    private static void PassFirstZone(StuntMission run)
     {
         var centre = GateA.Position + new Vector3(0f, GateA.Height / 2f, 0f);
         var along = GateA.Forward * 5f;

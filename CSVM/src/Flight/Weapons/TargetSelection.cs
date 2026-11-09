@@ -39,7 +39,7 @@ public sealed class TargetSelection
 
     private readonly List<TargetRef> _ordered = new();  // the active cycle, in cycle order
     private readonly List<object> _attackers = new();   // the queue 0x24 walks backwards
-    private readonly HashSet<object> _gates = new();    // GateFirst: the objectives the last pass held
+    private readonly HashSet<object> _zones = new();    // ZoneFirst: the objectives the last pass held
 
     // Sort's scratch, grown on demand: it runs per seat per rendered frame.
     private (int Sector, float DistSq, int Index)[] _sortKeys = System.Array.Empty<(int, float, int)>();
@@ -53,7 +53,7 @@ public sealed class TargetSelection
     private TargetClass? _resolvedClass;
     private bool _lostToDeath;
 
-    private bool _gateDue; // GateFirst: the next Resolve selects the first gate
+    private bool _zoneDue; // ZoneFirst: the next Resolve selects the first zone
 
     /// <summary>The pool this selector cycles over, rebuilt by <see cref="Rebuild"/>.</summary>
     public TargetPool Pool { get; } = new();
@@ -67,12 +67,12 @@ public sealed class TargetSelection
     public bool NearestAfterKill { get; set; }
 
     /// <summary>A remake-only rule for a race run, off everywhere else. Next Enemy pressed on anything
-    /// but the next gate (an objective on the Enemy cycle) selects the gate, ahead of the attacker
-    /// queue. Passing a gate selects the next one, whatever was selected and whatever
-    /// <see cref="NearestAfterKill"/> says.
+    /// but the next zone (a course gate or a Danger Zone) selects that zone, ahead of the attacker
+    /// queue. Passing a zone selects the next one, whatever was selected
+    /// and whatever <see cref="NearestAfterKill"/> says.
     /// ⚠ Never set it outside a race run: the decoded cycle and attacker queue are the original's
     /// rules (docs/org/targeting.md), and every other mode keeps them.</summary>
-    public bool GateFirst { get; set; }
+    public bool ZoneFirst { get; set; }
 
     /// <summary>Which cycle Next/Previous currently step, or <b>null for cleared</b>. Null is not
     /// "no target yet", it is `Target Nothing`, and it is why the clear STAYS cleared: with every
@@ -145,7 +145,7 @@ public sealed class TargetSelection
     /// ENTITY (<c>FUN_004b6490(current, 0)</c>). It takes the matching entry, or the list HEAD when
     /// that is gone. That rule is the whole decoded lifecycle. A dead target, a target that left the
     /// class and a class change all drop to the head, never to the dead entry's neighbour. In every
-    /// one of those cases the re-find simply fails. <see cref="GateFirst"/>'s gate passing is the
+    /// one of those cases the re-find simply fails. <see cref="ZoneFirst"/>'s zone passing is the
     /// remake-only step ahead of it.</summary>
     public void Resolve(Vector3 position, Basis basis)
     {
@@ -156,15 +156,15 @@ public sealed class TargetSelection
             Current = null;
             _resolvedClass = null;
             _lostToDeath = false;
-            _gates.Clear();
-            _gateDue = false;
+            _zones.Clear();
+            _zoneDue = false;
             return;
         }
 
-        if (GateFirst && GatePassed())
+        if (ZoneFirst && ZonePassed())
         {
             ActiveClass = cls = TargetClass.Enemy;
-            _gateDue = true;
+            _zoneDue = true;
         }
 
         var live = Pool.Of(cls);
@@ -175,8 +175,8 @@ public sealed class TargetSelection
 
         Sort(position, basis);
         bool lost = LostSelection(cls);
-        int idx = _gateDue ? FirstGate() : -1;
-        _gateDue = false;
+        int idx = _zoneDue ? FirstZone() : -1;
+        _zoneDue = false;
         if (idx < 0)
         {
             idx = IndexOfSelected();
@@ -203,11 +203,11 @@ public sealed class TargetSelection
     /// shipped asset, so wiring <c>snd_select</c> to it would be an invention.</summary>
     public void NextEnemy()
     {
-        // A cleared selection holds an empty pool, so it cannot see the gate; the next Resolve can.
-        if (GateFirst && (ActiveClass == null || GateToTake()))
+        // A cleared selection holds an empty pool, so it cannot see the zone; the next Resolve can.
+        if (ZoneFirst && (ActiveClass == null || ZoneToTake()))
         {
             ActiveClass = TargetClass.Enemy;
-            _gateDue = true;
+            _zoneDue = true;
             return;
         }
 
@@ -433,9 +433,9 @@ public sealed class TargetSelection
         return best;
     }
 
-    // GateFirst reads a passing off the pool: an objective the last pass held has left it. A run
-    // stops offering a cleared gate. True only while a next gate stands.
-    private bool GatePassed()
+    // ZoneFirst reads a passing off the pool: an objective the last pass held has left it. A run
+    // stops offering a cleared zone. True only while a next zone stands.
+    private bool ZonePassed()
     {
         int kept = 0;
         bool standing = false;
@@ -444,25 +444,25 @@ public sealed class TargetSelection
             if (t.Objective && t.Source is { } s)
             {
                 standing = true;
-                kept += _gates.Contains(s) ? 1 : 0;
+                kept += _zones.Contains(s) ? 1 : 0;
             }
         }
 
-        bool passed = kept < _gates.Count;
-        _gates.Clear();
+        bool passed = kept < _zones.Count;
+        _zones.Clear();
         foreach (var t in Pool.Enemy)
         {
             if (t.Objective && t.Source is { } s)
             {
-                _gates.Add(s);
+                _zones.Add(s);
             }
         }
 
         return passed && standing;
     }
 
-    // Whether GateFirst's Next Enemy goes to the gate: one stands and the selection is not on it.
-    private bool GateToTake()
+    // Whether ZoneFirst's Next Enemy goes to the zone: one stands and the selection is not on it.
+    private bool ZoneToTake()
     {
         bool standing = false;
         foreach (var t in Pool.Enemy)
@@ -482,7 +482,7 @@ public sealed class TargetSelection
     }
 
     // The first objective of the sorted cycle, or -1. Not the head: a hostile round sorts first too.
-    private int FirstGate()
+    private int FirstZone()
     {
         for (int i = 0; i < _ordered.Count; i++)
         {
