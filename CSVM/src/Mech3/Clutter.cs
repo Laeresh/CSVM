@@ -199,7 +199,8 @@ public sealed class ClutterBuilder
     /// the Original card's text never changes.</summary>
     public static string RichDecls => "\n#include \"res://shaders/csky_time.gdshaderinc\"\n" + TerrainShadowDecl
         + "varying float v_side;\nvarying flat float v_sun;\n"
-        + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";";
+        + "uniform vec2 " + CanopyClumps.HandoverParam + ";\nuniform vec2 " + VegetationModels.BandParam + ";\n"
+        + "uniform float " + VegetationModels.ReachParam + " = 1.0;";
 
     /// <summary>The half of a Rich card facing the sun's bearing gains, whatever its height.
     /// Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
@@ -230,7 +231,10 @@ public sealed class ClutterBuilder
     /// along a fixed breeze. It goes back through the face, so a hidden stamp's keep still
     /// collapses it. Periods of 12 s and 3 s divide ShaderTime.RolloverSecs, so the wrap shows no
     /// jump. The phase comes from the stamp's origin.</summary>
-    public static string RichVertexLines => "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
+    public static string RichVertexLines =>
+        "    v_alpha = csky_clutter_fade_alpha_reach(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM, " + VegetationModels.ReachParam + ");\n"
+        + "    keep = step(0.004, v_alpha) * live;\n"
+        + "    VERTEX.x *= MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0;\n"
         + "    v_side = sign(VERTEX.x);\n"
         + SunLine
         + "    if (" + CanopyClumps.HandoverParam + ".y > 0.0) {\n"
@@ -768,6 +772,8 @@ public sealed class ClutterBuilder
         foreach (var kind in ExportedKinds ?? System.Array.Empty<KindExport>())
         {
             // The word's band on the card and its model, zero for Off so the card draws at every distance.
+            (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
+            (kind.Near?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
             if (kind.Near != null)
             {
                 (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
@@ -1800,6 +1806,7 @@ public sealed class ClutterBuilder
             var rich = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv, spherical, blend, rich: true));
             if (tex != null)
                 rich.SetShaderParameter("albedo_tex", tex);
+            rich.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
             return rich;
         };
 

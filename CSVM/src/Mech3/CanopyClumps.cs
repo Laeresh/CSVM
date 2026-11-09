@@ -37,8 +37,8 @@ public static class CanopyClumps
     public const float PaintedRiseM = 16f;
 
     /// <summary>TUNE. The near crown models' band over painted canopy: they alone draw inside
-    /// <see cref="ModelNearM"/>, then dither over to the crowns by <see cref="ModelFarM"/>. Fixed, whatever the 3D
-    /// Vegetation word. A thin band: over a wide one a dithered hole shows painted ground, not a crown.</summary>
+    /// <see cref="ModelNearM"/>, then dither over to the crowns by <see cref="ModelFarM"/>. Very Far and Extreme scale
+    /// both (<see cref="ModelBand"/>). A thin band: over a wide one a dithered hole shows painted ground, not a crown.</summary>
     public const float ModelNearM = 950f, ModelFarM = 1000f;
 
     /// <summary>TUNE. How far a near crown model's top stands above the painted treetops, in metres at scale 1.
@@ -115,8 +115,13 @@ public static class CanopyClumps
 
     private static Shader? _shader;
 
-    /// <summary>The crown models' band: alone inside its near edge, dithered over to the clumps out to its far one.</summary>
-    public static Vector2 ModelBand => new(ModelNearM, ModelFarM);
+    /// <summary>The crown models' band: alone inside its near edge, dithered over to the clumps out to its far one.
+    /// A far 3D Vegetation word pushes it out by <see cref="VegetationModels.Reach"/>.</summary>
+    public static Vector2 ModelBand => new Vector2(ModelNearM, ModelFarM) * VegetationModels.Reach;
+
+    /// <summary>The handover band under the standing 3D Vegetation word: <see cref="HandoverNearM"/> to
+    /// <see cref="HandoverFarM"/>, pushed out by <see cref="VegetationModels.Reach"/> as the cards' fade is.</summary>
+    public static Vector2 HandoverBand => new Vector2(HandoverNearM, HandoverFarM) * VegetationModels.Reach;
 
     /// <summary>Whether a chapter draws clumps when <c>--canopy-clumps</c> does not say: C1 over its cards and
     /// C3 over its painted canopy. The other stamp-mask chapters were checked and left off.</summary>
@@ -308,7 +313,7 @@ public static class CanopyClumps
             if (!kind.Mass)
                 continue;
             // The near model hands over with its card, so a Very Far or Extreme band never draws it under a clump.
-            var band = on ? new Vector2(HandoverNearM, HandoverFarM) : Vector2.Zero;
+            var band = on ? HandoverBand : Vector2.Zero;
             (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, band);
             (kind.Near?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, band);
         }
@@ -372,7 +377,7 @@ public static class CanopyClumps
         material.SetShaderParameter("grade", grade);
         material.SetShaderParameter(HandoverParam, band);
         material.SetShaderParameter("grow", painted ? 1f : 0f);
-        var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f) { Tiles = tiles, TreesPerClump = meanTrees };
+        var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f) { Tiles = tiles, TreesPerClump = meanTrees, HandsOver = !painted };
         foreach (var chunk in clumps.GroupBy(c => (MathF.Floor(c.Base.X / ChunkM), MathF.Floor(c.Base.Z / ChunkM))))
             field.Root.AddChild(field.Draw(chunk.ToList(), Transform3D.Identity, string.Create(CultureInfo.InvariantCulture, $"chunk_{chunk.Key.Item1}_{chunk.Key.Item2}")));
         int chunks = field.Root.GetChildCount();
@@ -390,7 +395,7 @@ public static class CanopyClumps
 
     /// <summary>The clumps' fade-in band: the cards' handover band, or over painted canopy its own.</summary>
     public static Vector2 Band(bool painted) =>
-        painted ? new Vector2(PaintedNearM, PaintedFarM) : new Vector2(HandoverNearM, HandoverFarM);
+        painted ? new Vector2(PaintedNearM, PaintedFarM) : HandoverBand;
 
     // Gives every clear texel the mean colour of the solid ones. A filter, a resize or a mip level then
     // blends tree colour into an edge. The clear texels' black would darken the clumps far off. A near
@@ -717,6 +722,11 @@ public static class CanopyClumps
         // The clumps standing in each source area a copy was asked for, kept since the edge asks again per cell.
         private readonly Dictionary<Rect2, List<Clump>> _areas = new();
 
+        // The crown models' materials and cells, each cell with its pad past the band's far edge. A word change
+        // re-bands and re-ranges them with no rebuild.
+        private readonly List<ShaderMaterial> _crownMaterials = new();
+        private readonly List<(MultiMeshInstance3D Cell, float Pad)> _crownCells = new();
+
         internal Field(List<Clump> clumps, ShaderMaterial material, float margin)
         {
             _clumps = clumps;
@@ -744,6 +754,9 @@ public static class CanopyClumps
         /// <summary>The trees a clump carries on average, the rate's divisor.</summary>
         public float TreesPerClump { get; init; }
 
+        /// <summary>Whether the clumps take over from cards over <see cref="HandoverBand"/>, false over painted canopy.</summary>
+        public bool HandsOver { get; init; }
+
         /// <summary>The clumps standing in <paramref name="source"/>, drawn moved by <paramref name="mirror"/>;
         /// null where none stands.</summary>
         public MultiMeshInstance3D? Copy(Rect2 source, Transform3D mirror)
@@ -759,12 +772,21 @@ public static class CanopyClumps
         /// Risen over their own band, Off would draw only painted ground inside it.</summary>
         public void FollowModels()
         {
+            if (HandsOver)
+            {
+                _material.SetShaderParameter(HandoverParam, HandoverBand);
+                _edgeMaterial.SetShaderParameter(HandoverParam, HandoverBand);
+            }
             if (Models == null)
                 return;
             bool on = VegetationModels.On;
             Models.Visible = on;
             _material.SetShaderParameter(VegetationModels.BandParam, on ? ModelBand : Vector2.Zero);
             _material.SetShaderParameter(HeldParam, 1f);
+            foreach (var material in _crownMaterials)
+                material.SetShaderParameter(VegetationModels.BandParam, ModelBand);
+            foreach (var (cell, pad) in _crownCells)
+                cell.VisibilityRangeEnd = ModelBand.Y + pad;
         }
 
         // Stands the crown models in cells of VegetationModels.CellM, one MultiMesh per cell and shape, each ranged
@@ -774,12 +796,8 @@ public static class CanopyClumps
         {
             var boxes = models.Select(m => m.Mesh.GetAabb()).ToList();
             float width = boxes.Max(b => b.Size.X);
-            var materials = models.Select((m, i) =>
-            {
-                var material = VegetationModels.Material(m, lit: false, fogged: true, boxes[i].Size.X, canopy: true);
-                material.SetShaderParameter(VegetationModels.BandParam, ModelBand);
-                return material;
-            }).ToList();
+            var materials = models.Select((m, i) => VegetationModels.Material(m, lit: false, fogged: true, boxes[i].Size.X, canopy: true)).ToList();
+            _crownMaterials.AddRange(materials);
             Crowns = crowns;
             Models = new Node3D { Name = "canopy_models" };
             foreach (var cell in crowns.GroupBy(c => (MathF.Floor(c.At.X / VegetationModels.CellM), MathF.Floor(c.At.Z / VegetationModels.CellM), c.Shape)))
@@ -804,7 +822,7 @@ public static class CanopyClumps
                     mm.SetInstanceTransform(i, new Transform3D(basis, c.At - new Vector3(0f, sink * c.Scale, 0f) - offset));
                     mm.SetInstanceColor(i, c.Colour);
                 }
-                Models.AddChild(new MultiMeshInstance3D
+                var node = new MultiMeshInstance3D
                 {
                     Name = string.Create(CultureInfo.InvariantCulture, $"crowns_{cell.Key.Item1}_{cell.Key.Item2}_{cell.Key.Shape}"),
                     Multimesh = mm,
@@ -812,13 +830,14 @@ public static class CanopyClumps
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                     ExtraCullMargin = width,
                     Position = offset,
-                    VisibilityRangeEnd = ModelFarM + (bounds.Size * 0.5f).Length() + width,
                     Layers = VegetationModels.Layer,
-                });
+                };
+                _crownCells.Add((node, (bounds.Size * 0.5f).Length() + width));
+                Models.AddChild(node);
             }
             Root.AddChild(Models);
             FollowModels();
-            Log.Info("world", $"canopy models: {crowns.Count} crowns over {Models.GetChildCount()} cells from {string.Join(", ", models.Select(m => m.Source))}, sun-lit, top {ModelRiseM:0.#} m over the painted canopy, alone to {ModelNearM:0} m, dithered over to the crowns to {ModelFarM:0} m, the crowns held at their full height");
+            Log.Info("world", $"canopy models: {crowns.Count} crowns over {Models.GetChildCount()} cells from {string.Join(", ", models.Select(m => m.Source))}, sun-lit, top {ModelRiseM:0.#} m over the painted canopy, alone to {ModelBand.X:0} m, dithered over to the crowns to {ModelBand.Y:0} m, the crowns held at their full height");
         }
 
         internal MultiMeshInstance3D Draw(List<Clump> list, Transform3D moved, string name, ShaderMaterial? material = null)

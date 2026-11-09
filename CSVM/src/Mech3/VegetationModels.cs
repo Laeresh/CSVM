@@ -27,9 +27,12 @@ public static class VegetationModels
     public const float FarNearM = 600f, FarFarM = 900f;
 
     /// <summary>TUNE. How much further than the Far band the Very Far and Extreme words draw, both edges scaled.
-    /// Both pass the clump handover (1000 m), so a model hands over to the clumps with its card. Past a card's fade
-    /// the model goes with it, so the firs and palms gain the most.</summary>
+    /// The words push the Rich cards' fade and the clump handover out as far (<see cref="Reach"/>), so cards
+    /// still stand over the band.</summary>
     public const float VeryFarScale = 1.5f, ExtremeScale = 2f;
+
+    /// <summary>The shader parameter a Rich card and its model read <see cref="ReachSq"/> from.</summary>
+    public const string ReachParam = "vegetation_reach_sq";
 
     /// <summary>The edge of the square cells the models are cut into, so a pane reaches a handful of them.</summary>
     public const float CellM = 256f;
@@ -67,6 +70,18 @@ public static class VegetationModels
     /// <summary>The band both sides read under the standing <see cref="VegetationModelsSetting"/> word: near and
     /// far in metres, zero for Off.</summary>
     public static Vector2 Band => BandFor(VegetationModelsSetting.Word);
+
+    /// <summary>How much further the Rich cards fade and the clumps take over under the standing word. It is the
+    /// word's scale for Very Far and Extreme, 1 otherwise.</summary>
+    public static float Reach => VegetationModelsSetting.Word switch
+    {
+        VegetationModelsSetting.VeryFar => VeryFarScale,
+        VegetationModelsSetting.Extreme => ExtremeScale,
+        _ => 1f,
+    };
+
+    /// <summary><see cref="Reach"/> as the fade's squared-distance factor, which multiplies the clutter fade scale.</summary>
+    public static float ReachSq => 1f / (Reach * Reach);
 
     /// <summary>Whether the standing word draws models at all.</summary>
     public static bool On => Band.Y > 0f;
@@ -125,6 +140,8 @@ public static class VegetationModels
         material.SetShaderParameter("grade", model.Grade);
         material.SetShaderParameter("half_width", Math.Max(cardWidth / 2f, 0.1f));
         material.SetShaderParameter(BandParam, Band);
+        if (!canopy)
+            material.SetShaderParameter(ReachParam, ReachSq);
         return material;
     }
 
@@ -263,7 +280,7 @@ public static class VegetationModels
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
         uniform vec3 grade = vec3(1.0);
         uniform vec2 {{BandParam}};
-        {{(canopy ? "varying vec3 v_normal;" : $"uniform vec2 {CanopyClumps.HandoverParam};")}}
+        {{(canopy ? "varying vec3 v_normal;" : $"uniform vec2 {CanopyClumps.HandoverParam};\nuniform float {ReachParam} = 1.0;")}}
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
@@ -281,7 +298,7 @@ public static class VegetationModels
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
-            v_far = {{(canopy ? "1.0" : "csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM)")}};
+            v_far = {{(canopy ? "1.0" : $"csky_clutter_fade_alpha_reach(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM, {ReachParam})")}};
         {{(canopy ? "" : $"    if ({CanopyClumps.HandoverParam}.y > 0.0) {{\n        v_far *= 1.0 - {ClutterBuilder.HandoverShare};\n    }}")}}
             v_card = v_far * {{ClutterBuilder.ModelShare}};
             float live = step(1e-12, dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz));

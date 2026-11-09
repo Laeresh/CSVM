@@ -387,7 +387,9 @@ A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/Vege
 
 ## src/Utils/VegetationModelsSetting.cs
 How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (400 to 600 m, the default),
-`far` (600 to 900 m), `veryfar` (900 to 1350 m) or `extreme` (1200 to 1800 m); `VegetationModels.BandFor` holds the bands. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
+`far` (600 to 900 m), `veryfar` (900 to 1350 m) or `extreme` (1200 to 1800 m); `VegetationModels.BandFor` holds the bands.
+`veryfar` and `extreme` also push the Rich cards' fade, their cells' ranges, the clump handover and C3's crown models out 1.5x or 2x
+(`VegetationModels.Reach`), so the models stand where cards still draw; other clutter keeps the View Distance fade. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
 the saved `vegetationModels` word, the `graphics.vegetationModels` key, then `near` on every machine and under `--det`, the Steam Deck
 included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
