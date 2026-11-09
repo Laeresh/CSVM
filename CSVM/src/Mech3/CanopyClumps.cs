@@ -305,8 +305,12 @@ public static class CanopyClumps
     {
         foreach (var kind in kinds ?? Array.Empty<ClutterBuilder.KindExport>())
         {
-            if (kind.Mass)
-                (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, on ? new Vector2(HandoverNearM, HandoverFarM) : Vector2.Zero);
+            if (!kind.Mass)
+                continue;
+            // The near model hands over with its card, so a Very Far or Extreme band never draws it under a clump.
+            var band = on ? new Vector2(HandoverNearM, HandoverFarM) : Vector2.Zero;
+            (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, band);
+            (kind.Near?.Material as ShaderMaterial)?.SetShaderParameter(HandoverParam, band);
         }
     }
 

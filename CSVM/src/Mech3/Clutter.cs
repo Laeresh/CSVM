@@ -1307,7 +1307,13 @@ public sealed class ClutterBuilder
         if (model == null)
             return null;
         card.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
-        kind.ModelMaterial ??= VegetationModels.Material(model, kind.Lit, kind.Fogged, kind.Width);
+        if (kind.ModelMaterial == null)
+        {
+            // The card's handover band as it stands, so a model made after the clumps hands over with its card.
+            var material = VegetationModels.Material(model, kind.Lit, kind.Fogged, kind.Width);
+            material.SetShaderParameter(CanopyClumps.HandoverParam, card.GetShaderParameter(CanopyClumps.HandoverParam));
+            kind.ModelMaterial = material;
+        }
         return new ClutterInstances.Near(parent, model.Mesh, kind.ModelMaterial);
     }
 

@@ -26,6 +26,11 @@ public static class VegetationModels
     /// may fade first and take its model with it; the firs and palms fade past 1200 m.</summary>
     public const float FarNearM = 600f, FarFarM = 900f;
 
+    /// <summary>TUNE. How much further than the Far band the Very Far and Extreme words draw, both edges scaled.
+    /// Both pass the clump handover (1000 m), so a model hands over to the clumps with its card. Past a card's fade
+    /// the model goes with it, so the firs and palms gain the most.</summary>
+    public const float VeryFarScale = 1.5f, ExtremeScale = 2f;
+
     /// <summary>The edge of the square cells the models are cut into, so a pane reaches a handful of them.</summary>
     public const float CellM = 256f;
 
@@ -71,6 +76,8 @@ public static class VegetationModels
     {
         VegetationModelsSetting.Near => new Vector2(NearM, FarM),
         VegetationModelsSetting.Far => new Vector2(FarNearM, FarFarM),
+        VegetationModelsSetting.VeryFar => new Vector2(FarNearM, FarFarM) * VeryFarScale,
+        VegetationModelsSetting.Extreme => new Vector2(FarNearM, FarFarM) * ExtremeScale,
         _ => Vector2.Zero,
     };
 
@@ -243,8 +250,8 @@ public static class VegetationModels
         return new Model(mesh, TextureUpload.Create(image), grade, source);
     }
 
-    // The card's look on a mesh, under the card's own far fade (none on a canopy model). Over the band the model
-    // keeps the dither cells the card or the crowns give up, so a stamp never draws both or neither. It turns by
+    // The card's look on a mesh, under the card's own far fade and clump handover (neither on a canopy model). Over
+    // the band the model keeps the dither cells the card or the crowns give up, so a stamp never draws both or neither. It turns by
     // a hash of its stamp's origin, mirrors as its card does, leans in the card's breeze and gains on its sun half.
     // ⚠ Never light a card's model with the scene's lights: the card is unlit, and a lit model shows at the band.
     // A canopy crown alone takes the sun term about its mean (CrownLitLines); it hands over to painted crowns.
@@ -256,7 +263,7 @@ public static class VegetationModels
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
         uniform vec3 grade = vec3(1.0);
         uniform vec2 {{BandParam}};
-        {{(canopy ? "varying vec3 v_normal;" : "")}}
+        {{(canopy ? "varying vec3 v_normal;" : $"uniform vec2 {CanopyClumps.HandoverParam};")}}
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
@@ -275,6 +282,7 @@ public static class VegetationModels
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
             v_far = {{(canopy ? "1.0" : "csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM)")}};
+        {{(canopy ? "" : $"    if ({CanopyClumps.HandoverParam}.y > 0.0) {{\n        v_far *= 1.0 - {ClutterBuilder.HandoverShare};\n    }}")}}
             v_card = v_far * {{ClutterBuilder.ModelShare}};
             float live = step(1e-12, dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz));
             float keep = live * step(0.004, v_far - v_card);
