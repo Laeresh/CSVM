@@ -54,6 +54,10 @@ who leave it off.
 | 7 | Night or day under the clouds? | **A tuning matter.** `WeatherRig.NightOff` holds while the clouds are on; darkness comes from the `clouds` layer, not the night flag. |
 | 8 | What about the prototype's live lab sliders? | **They move into the real labs and save.** |
 | 9 | What does a placeholder band (10 km, or C2's 19 km) draw? | **It draws a layer fitted to the placed clouds' heights, or nothing when none are placed (C3, C5).** C5's fvol fog banks are not a layer, and its fog field stays drawn. |
+| 10 | Does a lab toggle save the video option? | **No, it switches for that flight only.** |
+| 11 | Both layers on: in which order? | **`gi` applies after `clouds`.** |
+| 12 | Where does terrain and object shadow strength live? | **The base zone tune**, not `clouds`: C1B's caves need it with the option off too. |
+| 13 | Goldens with the options on? | **No.** |
 
 ## ⚠ Read this before implementing anything
 
@@ -233,8 +237,8 @@ Global Illumination checkbox. Each switches the effect live through B12's path.
 **Evidence (confidence: lead-only).** This is the author's request (Decision 5). Both labs already carry live sliders, for example the lighting lab's
 SDFGI energy, which sets `env.SdfgiEnergy`.
 
-**Approach.** Each lab gets a checkbox that calls B12's setter.
-<TODO: does a lab toggle also save the video option, or is it live-only for the flight? Ask the author.>
+**Approach.** Each lab gets a checkbox that calls B12's setter. The toggle is live for that flight
+only and does not save the video option (Decision 10).
 
 **Model recommendation.** medium.
 
@@ -257,9 +261,9 @@ chapter and a chapter block over the defaults. Each block holds only the fields 
 lighting lab writes through `WithZone`, keeping every other key and its order.
 
 **Approach.** Parse `clouds` and `gi` as sparse `ZoneLighting` overlays inside a zone block, applied
-after the zone's own fields. Extend `WithZone` to write into the active overlay.
-<TODO: the order when both are on (clouds then gi, or a `clouds+gi` block of its own). The prototype
-showed the sun and ambient under the deck interact with SDFGI's sky light, so this needs the author's call.>
+after the zone's own fields. With both on, `gi` applies after `clouds` (Decision 11), so the lab
+edits `gi` while GI is on and `clouds` while only the clouds are. Extend `WithZone` to write into
+the active overlay.
 
 **Model recommendation.** high: merge semantics on a hand-edited data file that every chapter reads.
 
@@ -286,13 +290,11 @@ stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second mu
 
 **Approach.**
 - **The cloud fields** join the chapter's cloud tune beside coverage.
-- **The lighting fields** join the `clouds` and `gi` layers:
-  - god rays and shadow strength go in `clouds`;
-  - the floor and energy go in `gi`.
-- Shadow strength is not cloud-specific; C1B's caves are pitch black without it. It may belong in the base zone tune.
+- **The lighting fields:**
+  - god rays go in `clouds`;
+  - the ambient floor and SDFGI energy go in `gi`;
+  - shadow strength goes in the base zone tune (Decision 12).
 - Delete `LabSlider` once nothing uses it.
-
-<TODO: confirm shadow strength's home (base zone tune or `clouds`) with the author.>
 
 **Model recommendation.** medium.
 
@@ -415,8 +417,7 @@ dark in the original, are tuned dark through the `clouds` layer (Decision 7).
 
 **Model recommendation.** none: the author's judgement.
 
-**Verify.** The author's sign-off per chapter.
-<TODO: whether goldens with the options on are wanted.>
+**Verify.** The author's sign-off per chapter. No goldens with the options on (Decision 13).
 
 ## E42 ☐ Tests, docs and the full battery
 
